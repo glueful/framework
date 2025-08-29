@@ -6,6 +6,7 @@ namespace Glueful\Extensions\Services;
 
 use Glueful\Extensions\Services\Interfaces\ExtensionLoaderInterface;
 use Glueful\Extensions\Services\Interfaces\ExtensionConfigInterface;
+use Glueful\Extensions\Services\ComposerExtensionDiscovery;
 use Composer\Autoload\ClassLoader;
 use Glueful\Services\FileFinder;
 use Glueful\Services\FileManager;
@@ -49,6 +50,9 @@ class ExtensionLoader implements ExtensionLoaderInterface
 
     /** @var ClassLoader|null Composer autoloader instance for namespace registration */
     private ?ClassLoader $classLoader = null;
+
+    /** @var ComposerExtensionDiscovery|null Composer extension discovery service */
+    private ?ComposerExtensionDiscovery $composerDiscovery = null;
 
     /** @var bool Debug mode flag for verbose logging */
     private bool $debug = false;
@@ -99,6 +103,12 @@ class ExtensionLoader implements ExtensionLoaderInterface
                 }
             }
         }
+
+        // Initialize Composer extension discovery
+        if ($this->composerDiscovery === null) {
+            $this->composerDiscovery = new ComposerExtensionDiscovery(null, $this->logger);
+            $this->composerDiscovery->setDebugMode($this->debug);
+        }
     }
 
     /**
@@ -113,6 +123,11 @@ class ExtensionLoader implements ExtensionLoaderInterface
     public function setDebugMode(bool $enable = true): void
     {
         $this->debug = $enable;
+
+        // Apply debug mode to Composer discovery service
+        if ($this->composerDiscovery !== null) {
+            $this->composerDiscovery->setDebugMode($enable);
+        }
     }
 
     /**
@@ -519,6 +534,41 @@ class ExtensionLoader implements ExtensionLoaderInterface
 
     private function loadExtensionClass(string $name, string $path): ?string
     {
+        // Check if this is a Composer extension
+        $composerPackage = $this->composerDiscovery->getExtensionPackageByName($name);
+        if ($composerPackage) {
+            return $this->loadComposerExtensionClass($composerPackage);
+        }
+
+        // Load local extension (existing logic)
+        return $this->loadLocalExtensionClass($name, $path);
+    }
+
+    /**
+     * Load extension class from Composer package
+     */
+    private function loadComposerExtensionClass(array $composerPackage): ?string
+    {
+        $extensionClass = $composerPackage['extension_class'];
+
+        // Register autoloading for the package
+        $this->composerDiscovery->registerAutoloading($this->getClassLoader());
+
+        // Ensure the extension class exists and is autoloadable
+        if (!class_exists($extensionClass)) {
+            $this->debugLog("Composer extension class {$extensionClass} not found for package {$composerPackage['package_name']}");
+            return null;
+        }
+
+        $this->debugLog("Loaded Composer extension class: {$extensionClass}");
+        return $extensionClass;
+    }
+
+    /**
+     * Load extension class from local extension (original logic)
+     */
+    private function loadLocalExtensionClass(string $name, string $path): ?string
+    {
         $manifest = $this->loadManifest($path);
         if (!$manifest) {
             return null;
@@ -549,12 +599,85 @@ class ExtensionLoader implements ExtensionLoaderInterface
         return $this->loadedExtensions[$name]['class'] ?? null;
     }
 
+    /**
+     * Discover all available extensions from both local and Composer sources
+     *
+     * @return array Available extensions with metadata
+     */
+    public function discoverAvailableExtensions(): array
+    {
+        $extensions = [];
+
+        // Discover local extensions
+        $localExtensions = $this->discoverLocalExtensions();
+        foreach ($localExtensions as $extension) {
+            $extensions[$extension['name']] = $extension + ['source_type' => 'local'];
+        }
+
+        // Discover Composer extensions
+        $composerPackages = $this->composerDiscovery->discoverExtensionPackages();
+        foreach ($composerPackages as $package) {
+            $extensions[$package['extension_name']] = [
+                'name' => $package['extension_name'],
+                'path' => $package['install_path'],
+                'version' => $package['version'],
+                'description' => $package['description'],
+                'package_name' => $package['package_name'],
+                'extension_class' => $package['extension_class'],
+                'source_type' => 'composer'
+            ];
+        }
+
+        return $extensions;
+    }
+
+    /**
+     * Discover local extensions in the extensions directory
+     *
+     * @return array Local extensions
+     */
+    private function discoverLocalExtensions(): array
+    {
+        $extensions = [];
+        $extensionsPath = $this->getDefaultExtensionsPath();
+
+        if (!is_dir($extensionsPath)) {
+            return $extensions;
+        }
+
+        foreach (glob($extensionsPath . '/*', GLOB_ONLYDIR) as $extensionDir) {
+            $extensionName = basename($extensionDir);
+            $manifest = $this->loadManifest($extensionDir);
+
+            $extensions[] = [
+                'name' => $extensionName,
+                'path' => $extensionDir,
+                'version' => $manifest['version'] ?? '1.0.0',
+                'description' => $manifest['description'] ?? '',
+                'has_manifest' => $manifest !== null
+            ];
+        }
+
+        return $extensions;
+    }
+
     private function getExtensionPath(string $name): ?string
     {
+        // First check local extensions directory
         $extensionsPath = $this->getDefaultExtensionsPath();
-        $path = $extensionsPath . '/' . $name;
+        $localPath = $extensionsPath . '/' . $name;
 
-        return is_dir($path) ? $path : null;
+        if (is_dir($localPath)) {
+            return $localPath;
+        }
+
+        // Then check Composer packages
+        $composerPackage = $this->composerDiscovery->getExtensionPackageByName($name);
+        if ($composerPackage) {
+            return $composerPackage['install_path'];
+        }
+
+        return null;
     }
 
     private function getDefaultExtensionsPath(): string

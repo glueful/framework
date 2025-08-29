@@ -6,9 +6,7 @@ namespace Glueful\DI\ServiceProviders;
 
 use Glueful\DI\ServiceProviderInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
-use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Reference;
-use Glueful\DI\ServiceTags;
 use Glueful\DI\Container;
 use Symfony\Component\Config\Definition\Processor;
 use Glueful\Configuration\ConfigurationProcessor;
@@ -22,6 +20,8 @@ use Glueful\Configuration\Schema\HttpConfiguration;
 use Glueful\Configuration\Extension\ExtensionManifestSchema;
 use Glueful\Configuration\Tools\ConfigurationDumper;
 use Glueful\Configuration\Tools\IDESupport;
+use Glueful\Configuration\ConfigRepositoryInterface;
+use Glueful\Configuration\ConfigRepository;
 
 /**
  * Configuration Service Provider
@@ -58,6 +58,24 @@ class ConfigServiceProvider implements ServiceProviderInterface
 
         $container->register(IDESupport::class)
             ->setArguments([new Reference(ConfigurationProcessor::class)])
+            ->setPublic(true);
+
+        // Bind ConfigRepositoryInterface to implementation using resolved paths
+        $frameworkPath = $GLOBALS['config_paths']['framework'] ?? (dirname(__DIR__, 3) . '/config');
+        $applicationPath = $GLOBALS['config_paths']['application'] ?? (dirname(__DIR__, 3) . '/config');
+        $environment = $GLOBALS['app_environment'] ?? ($_ENV['APP_ENV'] ?? 'production');
+
+        $container->register(ConfigRepository::class)
+            ->setArguments([
+                $frameworkPath,
+                $applicationPath,
+                null, // cacheDir - will use default
+                null, // cacheEnabled - will use default based on environment
+                $environment
+            ])
+            ->setPublic(true);
+
+        $container->setAlias(ConfigRepositoryInterface::class, ConfigRepository::class)
             ->setPublic(true);
     }
 

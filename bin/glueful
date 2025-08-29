@@ -1,0 +1,49 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Glueful\Framework;
+use Glueful\Console\Application as ConsoleApplication;
+
+// Try local vendor autoload (package dev) then project vendor/bin context
+$paths = [
+    __DIR__ . '/../vendor/autoload.php',
+    __DIR__ . '/../../../autoload.php', // when executed from vendor/bin
+];
+
+$autoloaded = false;
+foreach ($paths as $path) {
+    if (file_exists($path)) {
+        require $path;
+        $autoloaded = true;
+        break;
+    }
+}
+
+if (!$autoloaded) {
+    fwrite(STDERR, "Error: Could not find Composer autoloader.\n");
+    exit(1);
+}
+
+// Determine app base path by walking up until we find composer.json
+$basePath = getcwd();
+while ($basePath && $basePath !== '/' && !file_exists($basePath . '/composer.json')) {
+    $basePath = dirname($basePath);
+}
+
+if (!$basePath || !file_exists($basePath . '/composer.json')) {
+    fwrite(STDERR, "Error: Could not locate application root (composer.json).\n");
+    exit(1);
+}
+
+try {
+    $framework = Framework::create($basePath);
+    $app = $framework->boot();
+    $container = $app->getContainer();
+    $console = new ConsoleApplication($container);
+    exit($console->run());
+} catch (Throwable $e) {
+    fwrite(STDERR, "Error: " . $e->getMessage() . "\n");
+    exit(1);
+}

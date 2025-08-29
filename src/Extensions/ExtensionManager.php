@@ -980,12 +980,16 @@ class ExtensionManager
                 $this->registerSpaConfigurations("Glueful\\Extensions\\{$extensionName}");
             }
         }
+    }
 
-        // Note: Extension initialization moved to initializeLoadedExtensions()
-        // to be called after DI container is fully ready
-
-        // Service providers are now loaded during container compilation
-        // $this->loadExtensionServiceProviders();
+    /**
+     * Discover all available extensions from local and Composer sources
+     *
+     * @return array Available extensions with source type information
+     */
+    public function discoverAvailableExtensions(): array
+    {
+        return $this->loader->discoverAvailableExtensions();
     }
 
     /**

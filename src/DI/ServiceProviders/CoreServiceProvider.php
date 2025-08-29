@@ -202,6 +202,24 @@ class CoreServiceProvider implements ServiceProviderInterface
         $handler = new \Monolog\Handler\StreamHandler($logPath, $logLevel);
         $logger->pushHandler($handler);
 
+        // Push standardized log processor
+        try {
+            $env = (string) (config('app.env', (string)($_ENV['APP_ENV'] ?? 'production')));
+            $version = 'dev';
+            if (class_exists('Composer\\InstalledVersions')) {
+                try {
+                    $version = (string) \Composer\InstalledVersions::getPrettyVersion('glueful/framework');
+                } catch (\Throwable) {
+                    $version = (string) config('app.version_full', '1.0.0');
+                }
+            } else {
+                $version = (string) config('app.version_full', '1.0.0');
+            }
+            $logger->pushProcessor(new \Glueful\Logging\StandardLogProcessor($env, $version));
+        } catch (\Throwable) {
+            // Processor is optional; ignore failures
+        }
+
         return $logger;
     }
 

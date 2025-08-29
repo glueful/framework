@@ -5,9 +5,6 @@ declare(strict_types=1);
 namespace Glueful;
 
 use Glueful\DI\Container;
-use Glueful\Http\Request;
-use Glueful\Http\Response;
-use Psr\Log\LoggerInterface;
 
 class Framework
 {
@@ -15,7 +12,9 @@ class Framework
     private string $configPath;
     private string $environment;
     private ?Container $container = null;
+    private ?Application $application = null;
     private bool $booted = false;
+    private bool $strictMode = true;
 
     public function __construct(string $basePath)
     {
@@ -43,27 +42,29 @@ class Framework
         return $clone;
     }
 
-    public function boot(): Application
+    public function boot(bool $allowReboot = false): Application
     {
         if ($this->booted) {
-            throw new \RuntimeException('Framework already booted');
+            if (!$allowReboot && $this->strictMode) {
+                throw new \RuntimeException('Framework already booted');
+            }
+            return $this->application; // Return existing application
         }
 
         // Initialize container and core services
         $this->container = $this->createContainer();
 
         // Create and return Application instance
-        $app = new Application($this->container);
-        $app->initialize();
+        $this->application = new Application($this->container);
+        $this->application->initialize();
 
         $this->booted = true;
-        return $app;
+        return $this->application;
     }
 
     private function createContainer(): Container
     {
-        // Load global helper functions (env, config, etc.)
-        require_once dirname(__DIR__) . '/helpers.php';
+        // Helpers are loaded via Composer autoload (autoload.files)
 
         // Initialize Dependency Injection Container with config hierarchy
         $container = \Glueful\DI\ContainerBootstrap::initialize(
@@ -119,6 +120,9 @@ class Framework
             );
         }
 
+        // Configure structured logging with standard fields
+        $this->configureStructuredLogging($container);
+
         return $container;
     }
 
@@ -135,5 +139,76 @@ class Framework
     public function getEnvironment(): string
     {
         return $this->environment;
+    }
+
+    public function isBooted(): bool
+    {
+        return $this->booted;
+    }
+
+    public function setStrictMode(bool $strict): self
+    {
+        $this->strictMode = $strict;
+        return $this;
+    }
+
+    public function getContainer(): ?Container
+    {
+        return $this->container;
+    }
+
+    public function getApplication(): ?Application
+    {
+        return $this->application;
+    }
+
+    private function configureStructuredLogging(Container $container): void
+    {
+        try {
+            $logger = $container->get(\Psr\Log\LoggerInterface::class);
+
+            // Add standard log processor for consistent structured fields
+            if ($logger instanceof \Monolog\Logger) {
+                $userIdResolver = function (): ?string {
+                    try {
+                        // Use global function if available (but may not exist yet)
+                        if (function_exists('auth')) {
+                            $auth = \call_user_func('auth');
+                            if (is_object($auth) && method_exists($auth, 'check') && $auth->check()) {
+                                return (string) $auth->id();
+                            }
+                        }
+                    } catch (\Throwable) {
+                        // Ignore auth errors during logging
+                    }
+                    return null;
+                };
+
+                $logger->pushProcessor(new \Glueful\Logging\StandardLogProcessor(
+                    $this->environment,
+                    $this->getFrameworkVersion(),
+                    $userIdResolver
+                ));
+            }
+        } catch (\Throwable $e) {
+            // Don't let logging configuration break the application
+            error_log("Failed to configure structured logging: " . $e->getMessage());
+        }
+    }
+
+    private function getFrameworkVersion(): string
+    {
+        if (class_exists('Composer\\InstalledVersions')) {
+            try {
+                $version = \Composer\InstalledVersions::getPrettyVersion('glueful/framework');
+                if (is_string($version) && $version !== '') {
+                    return $version;
+                }
+            } catch (\Throwable) {
+                // ignore and fallback
+            }
+        }
+        $v = config('app.version_full', '1.0.0');
+        return is_string($v) ? $v : '1.0.0';
     }
 }

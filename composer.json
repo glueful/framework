@@ -98,4 +98,8 @@
     },
     "minimum-stability": "stable",
     "prefer-stable": true
+,
+    "bin": [
+        "bin/glueful"
+    ]
 }

@@ -57,25 +57,34 @@ if (!function_exists('config')) {
      */
     function config(string $key, mixed $default = null): mixed
     {
-        static $config = [];
+        // Prefer repository-backed configuration if available
+        try {
+            if (function_exists('app')) {
+                $container = app();
+                if ($container && $container->has(\Glueful\Configuration\ConfigRepositoryInterface::class)) {
+                    $repo = $container->get(\Glueful\Configuration\ConfigRepositoryInterface::class);
+                    return $repo->get($key, $default);
+                }
+            }
+        } catch (\Throwable) {
+            // Fall back to legacy loader below
+        }
 
+        static $config = [];
         $segments = explode('.', $key);
         $file = array_shift($segments);
 
-        // Load config file if not cached
         if (!isset($config[$file])) {
             $config[$file] = loadConfigWithHierarchy($file);
         }
 
-        // Return entire config if no segments left
         if (empty($segments)) {
             return $config[$file];
         }
 
-        // Navigate through segments to get nested value
         $current = $config[$file];
         foreach ($segments as $segment) {
-            if (!isset($current[$segment])) {
+            if (!is_array($current) || !array_key_exists($segment, $current)) {
                 return $default;
             }
             $current = $current[$segment];
@@ -129,23 +138,47 @@ if (!function_exists('loadConfigWithHierarchy')) {
 
 if (!function_exists('mergeConfigs')) {
     /**
-     * Intelligently merge framework and application configs
+     * Deep merge framework and application configs with sensible semantics.
+     * - Associative arrays: recursively merged (app overrides framework)
+     * - Numeric arrays (lists): appended + de-duplicated
+     * - Per-key strategy: certain keys always treated as lists
      */
     function mergeConfigs(array $framework, array $application): array
     {
-        $result = $framework;
+        $listKeys = [
+            'middleware', 'providers', 'extensions', 'routes', 'listeners', 'handlers'
+        ];
 
-        foreach ($application as $key => $value) {
-            if (isset($result[$key]) && is_array($result[$key]) && is_array($value)) {
-                // Merge arrays (middleware, routes, extensions, etc.)
-                $result[$key] = array_merge($result[$key], $value);
-            } else {
-                // Override scalars (app name, debug, environment, etc.)
-                $result[$key] = $value;
+        $isAssoc = static function (array $arr): bool {
+            if ($arr === []) {
+                return false;
             }
-        }
+            return array_keys($arr) !== range(0, count($arr) - 1);
+        };
 
-        return $result;
+        $merge = function (array $a, array $b, array $path = []) use (&$merge, $listKeys, $isAssoc): array {
+            foreach ($b as $key => $value) {
+                $currentPath = array_merge($path, [$key]);
+                $treatAsList = in_array((string)$key, $listKeys, true);
+
+                if (array_key_exists($key, $a)) {
+                    if (is_array($a[$key]) && is_array($value)) {
+                        if ($treatAsList || (!$isAssoc($a[$key]) && !$isAssoc($value))) {
+                            $a[$key] = array_values(array_unique(array_merge($a[$key], $value)));
+                        } else {
+                            $a[$key] = $merge($a[$key], $value, $currentPath);
+                        }
+                    } else {
+                        $a[$key] = $value;
+                    }
+                } else {
+                    $a[$key] = $value;
+                }
+            }
+            return $a;
+        };
+
+        return $merge($framework, $application);
     }
 }
 
@@ -192,16 +225,25 @@ if (!function_exists('app')) {
      */
     function app(?string $abstract = null): mixed
     {
-        $container = $GLOBALS['container'] ?? null;
+        // Prefer the DI-managed reference
+        $container = \Glueful\DI\ContainerBootstrap::getContainer();
 
+        // Fallbacks for early bootstrap contexts
+        if (!$container && isset($GLOBALS['container'])) {
+            $container = $GLOBALS['container'];
+        }
         if (!$container) {
-            throw new \RuntimeException('DI container not initialized. Make sure bootstrap.php is loaded.');
+            // As a last resort, attempt to build/return a container via helper
+            try {
+                $container = container();
+            } catch (\Throwable) {
+                throw new \RuntimeException('DI container not initialized and cannot be created');
+            }
         }
 
         if ($abstract === null) {
             return $container;
         }
-
         return $container->get($abstract);
     }
 }
@@ -481,5 +523,27 @@ if (!function_exists('base_path')) {
         }
 
         return $basePath . '/' . ltrim($path, '/');
+    }
+}
+
+if (!function_exists('request_id')) {
+    /**
+     * Get unique request ID for current request
+     *
+     * Generates a unique identifier for the current request that persists
+     * throughout the entire request lifecycle. Useful for request tracing,
+     * correlation across logs, and debugging.
+     *
+     * @return string Unique request identifier
+     */
+    function request_id(): string
+    {
+        static $requestId = null;
+
+        if ($requestId === null) {
+            $requestId = uniqid('req_', true);
+        }
+
+        return $requestId;
     }
 }

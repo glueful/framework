@@ -70,4 +70,11 @@ interface ExtensionLoaderInterface
      * Get registered namespaces
      */
     public function getRegisteredNamespaces(): array;
+
+    /**
+     * Discover all available extensions from local and Composer sources
+     *
+     * @return array Available extensions with source type information
+     */
+    public function discoverAvailableExtensions(): array;
 }

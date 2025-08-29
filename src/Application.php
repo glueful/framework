@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Glueful;
 
 use Glueful\DI\Container;
-use Glueful\Http\{Request, Response, Router};
+use Glueful\Http\{Response, Router};
+use Psr\Http\Message\ServerRequestInterface;
 use Glueful\Extensions\ExtensionManager;
-use Glueful\Helpers\RoutesManager;
 use Glueful\Scheduler\JobScheduler;
 use Psr\Log\LoggerInterface;
 
@@ -61,10 +61,10 @@ class Application
         $this->initialized = true;
     }
 
-    public function handle(Request $request): Response
+    public function handle(ServerRequestInterface $request): Response
     {
         $startTime = microtime(true);
-        $requestId = uniqid('req-');
+        $requestId = request_id(); // Use consistent request_id() function
 
         $router = Router::getInstance(); // Router uses singleton pattern, not DI
         $response = $router->handleRequest($request);
@@ -86,9 +86,13 @@ class Application
         return $response;
     }
 
-    public function terminate(Request $request, Response $response): void
+    public function terminate(ServerRequestInterface $request, Response $response): void
     {
         // Cleanup, log final stats, etc.
+        // TODO: Implement cleanup logic, garbage collection, final logging
+
+        // Suppress unused parameter warnings - these are part of PSR interface
+        unset($request, $response);
     }
 
     private function initializeCore(): void
