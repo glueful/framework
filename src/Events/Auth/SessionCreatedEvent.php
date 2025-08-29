@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Auth;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
 /**
  * Session Created Event
@@ -15,7 +15,7 @@ use Symfony\Contracts\EventDispatcher\Event;
  *
  * @package Glueful\Events\Auth
  */
-class SessionCreatedEvent extends Event
+class SessionCreatedEvent extends BaseEvent
 {
     /**
      * @param array $sessionData Session data (uuid, username, email, etc.)
@@ -25,8 +25,14 @@ class SessionCreatedEvent extends Event
     public function __construct(
         private readonly array $sessionData,
         private readonly array $tokens,
-        private readonly array $metadata = []
+        array $metadata = []
     ) {
+        parent::__construct();
+
+        // Set metadata using BaseEvent's setMetadata method
+        foreach ($metadata as $key => $value) {
+            $this->setMetadata($key, $value);
+        }
     }
 
     /**
@@ -90,16 +96,6 @@ class SessionCreatedEvent extends Event
     }
 
     /**
-     * Get session metadata
-     *
-     * @return array Session metadata
-     */
-    public function getMetadata(): array
-    {
-        return $this->metadata;
-    }
-
-    /**
      * Get specific metadata value
      *
      * @param string $key Metadata key
@@ -108,6 +104,6 @@ class SessionCreatedEvent extends Event
      */
     public function getMetadataValue(string $key, mixed $default = null): mixed
     {
-        return $this->metadata[$key] ?? $default;
+        return $this->getMetadata($key) ?? $default;
     }
 }

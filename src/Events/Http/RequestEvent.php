@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Http;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
@@ -15,7 +15,7 @@ use Symfony\Component\HttpFoundation\Request;
  *
  * @package Glueful\Events\Http
  */
-class RequestEvent extends Event
+class RequestEvent extends BaseEvent
 {
     /**
      * @param Request $request HTTP request object
@@ -23,8 +23,14 @@ class RequestEvent extends Event
      */
     public function __construct(
         private readonly Request $request,
-        private readonly array $metadata = []
+        array $metadata = []
     ) {
+        parent::__construct();
+
+        // Set metadata using BaseEvent's setMetadata method
+        foreach ($metadata as $key => $value) {
+            $this->setMetadata($key, $value);
+        }
     }
 
     /**
@@ -37,15 +43,6 @@ class RequestEvent extends Event
         return $this->request;
     }
 
-    /**
-     * Get request metadata
-     *
-     * @return array Metadata
-     */
-    public function getMetadata(): array
-    {
-        return $this->metadata;
-    }
 
     /**
      * Get request method
@@ -124,7 +121,7 @@ class RequestEvent extends Event
      */
     public function getStartTime(): ?float
     {
-        return $this->metadata['start_time'] ?? null;
+        return $this->getMetadata('start_time') ?? null;
     }
 
     /**
@@ -134,6 +131,6 @@ class RequestEvent extends Event
      */
     public function getRouteInfo(): ?array
     {
-        return $this->metadata['route'] ?? null;
+        return $this->getMetadata('route') ?? null;
     }
 }

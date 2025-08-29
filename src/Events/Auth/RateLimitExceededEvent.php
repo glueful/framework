@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Auth;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
 /**
  * Rate Limit Exceeded Event
@@ -14,7 +14,7 @@ use Symfony\Contracts\EventDispatcher\Event;
  *
  * @package Glueful\Events\Auth
  */
-class RateLimitExceededEvent extends Event
+class RateLimitExceededEvent extends BaseEvent
 {
     /**
      * @param string $clientIp Client IP address
@@ -30,8 +30,14 @@ class RateLimitExceededEvent extends Event
         private readonly int $currentCount,
         private readonly int $limit,
         private readonly int $windowSeconds,
-        private readonly array $metadata = []
+        array $metadata = []
     ) {
+        parent::__construct();
+
+        // Set metadata using BaseEvent's setMetadata method
+        foreach ($metadata as $key => $value) {
+            $this->setMetadata($key, $value);
+        }
     }
 
     /**
@@ -84,15 +90,6 @@ class RateLimitExceededEvent extends Event
         return $this->windowSeconds;
     }
 
-    /**
-     * Get metadata
-     *
-     * @return array Metadata
-     */
-    public function getMetadata(): array
-    {
-        return $this->metadata;
-    }
 
     /**
      * Get how much the limit was exceeded by

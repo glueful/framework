@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Database;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
 /**
  * Entity Created Event
@@ -14,7 +14,7 @@ use Symfony\Contracts\EventDispatcher\Event;
  *
  * @package Glueful\Events\Database
  */
-class EntityCreatedEvent extends Event
+class EntityCreatedEvent extends BaseEvent
 {
     /**
      * @param mixed $entity The created entity/data
@@ -24,8 +24,14 @@ class EntityCreatedEvent extends Event
     public function __construct(
         private readonly mixed $entity,
         private readonly string $table,
-        private readonly array $metadata = []
+        array $metadata = []
     ) {
+        parent::__construct();
+
+        // Set metadata using BaseEvent's setMetadata method
+        foreach ($metadata as $key => $value) {
+            $this->setMetadata($key, $value);
+        }
     }
 
     /**
@@ -48,15 +54,6 @@ class EntityCreatedEvent extends Event
         return $this->table;
     }
 
-    /**
-     * Get metadata
-     *
-     * @return array Metadata
-     */
-    public function getMetadata(): array
-    {
-        return $this->metadata;
-    }
 
     /**
      * Get entity ID if available
@@ -89,7 +86,7 @@ class EntityCreatedEvent extends Event
             $tags[] = $this->table . ':' . $entityId;
         }
 
-        return array_merge($tags, $this->metadata['cache_tags'] ?? []);
+        return array_merge($tags, $this->getMetadata('cache_tags') ?? []);
     }
 
     /**

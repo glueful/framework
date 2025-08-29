@@ -50,6 +50,96 @@ The Glueful framework provides a comprehensive event system built on Symfony Eve
 - **Session analytics** for user behavior tracking
 - **Security event monitoring** for threat detection
 
+## Event System Abstraction Layer
+
+Glueful provides a complete abstraction layer over the underlying event system (Symfony EventDispatcher) to ensure framework consistency and future-proofing.
+
+### BaseEvent Class
+
+All Glueful events extend the `BaseEvent` class instead of directly extending Symfony's Event class:
+
+```php
+<?php
+
+namespace Glueful\Events;
+
+use Symfony\Contracts\EventDispatcher\Event as SymfonyEvent;
+
+abstract class BaseEvent extends SymfonyEvent
+{
+    private array $metadata = [];
+    private float $timestamp;
+    private ?string $eventId = null;
+    
+    public function __construct()
+    {
+        parent::__construct();
+        $this->timestamp = microtime(true);
+        $this->eventId = uniqid('evt_', true);
+    }
+    
+    // Framework-specific functionality
+    public function setMetadata(string $key, mixed $value): void { /* ... */ }
+    public function getMetadata(?string $key = null): mixed { /* ... */ }
+    public function getTimestamp(): float { /* ... */ }
+    public function getEventId(): string { /* ... */ }
+    public function getName(): string { /* ... */ }
+}
+```
+
+### Benefits of the Abstraction Layer
+
+1. **Framework Features**: All events automatically get event IDs, timestamps, and metadata support
+2. **Enhanced Logging**: BaseEvent instances receive special logging treatment in `Event::dispatch()`
+3. **Future-Proof**: Can change underlying implementation without breaking user code
+4. **Consistency**: Aligns with Glueful's philosophy of hiding implementation details
+5. **Extensibility**: Easy to add new framework-wide features to all events
+
+### Creating Custom Events
+
+When creating custom events, always extend BaseEvent instead of Symfony's Event:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace App\Events;
+
+use Glueful\Events\BaseEvent;
+
+class OrderShippedEvent extends BaseEvent
+{
+    public function __construct(
+        public readonly string $orderId,
+        public readonly string $trackingNumber
+    ) {
+        parent::__construct(); // Initialize BaseEvent features
+        
+        // Set metadata using BaseEvent's functionality
+        $this->setMetadata('source', 'order_service');
+        $this->setMetadata('priority', 'high');
+    }
+}
+```
+
+### Enhanced Event Dispatching
+
+BaseEvent instances receive enhanced logging automatically:
+
+```php
+use Glueful\Events\Event;
+
+$event = new OrderShippedEvent('123', 'TRACK456');
+Event::dispatch($event);
+
+// Automatically logs:
+// - Event ID: evt_64f1a2b3c4d5e
+// - Event Name: App\Events\OrderShippedEvent  
+// - Timestamp: 1693234567.123
+// - Any custom metadata
+```
+
 ## Framework vs Application Boundaries
 
 ### Framework Responsibilities
@@ -140,9 +230,9 @@ Event::listen(RateLimitExceededEvent::class, function($event) {
 ```php
 namespace Glueful\Events\Auth;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
-class UserAuthenticatedEvent extends Event
+class UserAuthenticatedEvent extends BaseEvent
 {
     public function __construct(
         public readonly string $userId,
@@ -184,9 +274,9 @@ Event::listen(UserAuthenticatedEvent::class, function(UserAuthenticatedEvent $ev
 ```php
 namespace Glueful\Events\Auth;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
-class AuthenticationFailedEvent extends Event
+class AuthenticationFailedEvent extends BaseEvent
 {
     public function __construct(
         public readonly string $attemptedUsername,
@@ -222,9 +312,9 @@ class AuthenticationFailedEvent extends Event
 ```php
 namespace Glueful\Events\Auth;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
-class SessionCreatedEvent extends Event
+class SessionCreatedEvent extends BaseEvent
 {
     public function __construct(
         public readonly string $sessionId,
@@ -255,9 +345,9 @@ class SessionCreatedEvent extends Event
 ```php
 namespace Glueful\Events\Auth;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
-class SessionDestroyedEvent extends Event
+class SessionDestroyedEvent extends BaseEvent
 {
     public function __construct(
         public readonly string $sessionId,
@@ -289,9 +379,9 @@ class SessionDestroyedEvent extends Event
 ```php
 namespace Glueful\Events\Security;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
-class RateLimitExceededEvent extends Event
+class RateLimitExceededEvent extends BaseEvent
 {
     public function __construct(
         public readonly string $clientIp,
@@ -347,9 +437,9 @@ Event::listen(RateLimitExceededEvent::class, function(RateLimitExceededEvent $ev
 ```php
 namespace Glueful\Events\Security;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
-class CSRFViolationEvent extends Event
+class CSRFViolationEvent extends BaseEvent
 {
     public function __construct(
         public readonly string $reason, // missing_token, invalid_token, expired_token
@@ -378,9 +468,9 @@ class CSRFViolationEvent extends Event
 ```php
 namespace Glueful\Events\Security;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
-class SuspiciousActivityDetectedEvent extends Event
+class SuspiciousActivityDetectedEvent extends BaseEvent
 {
     public function __construct(
         public readonly string $activityType,
@@ -413,9 +503,9 @@ class SuspiciousActivityDetectedEvent extends Event
 ```php
 namespace Glueful\Events\Analytics;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
-class SessionActivityEvent extends Event
+class SessionActivityEvent extends BaseEvent
 {
     public function __construct(
         public readonly string $sessionId,
@@ -474,9 +564,9 @@ Event::listen(SessionActivityEvent::class, function(SessionActivityEvent $event)
 ```php
 namespace Glueful\Events\Analytics;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
-class SessionPatternEvent extends Event
+class SessionPatternEvent extends BaseEvent
 {
     public function __construct(
         public readonly string $userId,
@@ -503,9 +593,9 @@ class SessionPatternEvent extends Event
 ```php
 namespace Glueful\Events\Http;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
-class RequestReceivedEvent extends Event
+class RequestReceivedEvent extends BaseEvent
 {
     public function __construct(
         public readonly Request $request,
@@ -538,9 +628,9 @@ class RequestReceivedEvent extends Event
 ```php
 namespace Glueful\Events\Http;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
-class ResponseSentEvent extends Event
+class ResponseSentEvent extends BaseEvent
 {
     public function __construct(
         public readonly Request $request,
@@ -576,9 +666,9 @@ class ResponseSentEvent extends Event
 ```php
 namespace Glueful\Events\Database;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
-class QueryExecutedEvent extends Event
+class QueryExecutedEvent extends BaseEvent
 {
     public function __construct(
         public readonly string $sql,
@@ -654,9 +744,9 @@ Event::listen(QueryExecutedEvent::class, function(QueryExecutedEvent $event) {
 ```php
 namespace Glueful\Events\Database;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
-class EntityLifecycleEvent extends Event
+class EntityLifecycleEvent extends BaseEvent
 {
     public function __construct(
         public readonly string $action, // created, updated, deleted
@@ -699,9 +789,9 @@ class EntityLifecycleEvent extends Event
 ```php
 namespace Glueful\Events\Cache;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
-class CacheOperationEvent extends Event
+class CacheOperationEvent extends BaseEvent
 {
     public function __construct(
         public readonly string $operation, // hit, miss, set, delete, invalidate
@@ -1059,9 +1149,9 @@ declare(strict_types=1);
 
 namespace App\Events;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
-class OrderShippedEvent extends Event
+class OrderShippedEvent extends BaseEvent
 {
     public function __construct(
         public readonly string $orderId,
@@ -1071,8 +1161,15 @@ class OrderShippedEvent extends Event
         public readonly array $items,
         public readonly array $shippingAddress,
         public readonly float $shippingCost,
-        public readonly array $metadata = []
-    ) {}
+        array $metadata = []
+    ) {
+        parent::__construct(); // Initialize BaseEvent features
+        
+        // Set metadata using BaseEvent's functionality
+        foreach ($metadata as $key => $value) {
+            $this->setMetadata($key, $value);
+        }
+    }
     
     public function getItemCount(): int
     {
@@ -1081,7 +1178,7 @@ class OrderShippedEvent extends Event
     
     public function isExpressShipping(): bool
     {
-        return ($this->metadata['shipping_method'] ?? '') === 'express';
+        return ($this->getMetadata('shipping_method') ?? '') === 'express';
     }
     
     public function isInternational(): bool
@@ -1387,7 +1484,7 @@ class EventMemoryMonitor
 
 **✅ Good Event Design**:
 ```php
-class UserProfileUpdatedEvent extends Event
+class UserProfileUpdatedEvent extends BaseEvent
 {
     public function __construct(
         public readonly string $userId,
@@ -1411,7 +1508,7 @@ class UserProfileUpdatedEvent extends Event
 
 **❌ Poor Event Design**:
 ```php
-class UserEvent extends Event
+class UserEvent extends BaseEvent
 {
     public $data; // Not readonly, not typed
     public $action; // Unclear what this represents

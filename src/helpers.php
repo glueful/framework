@@ -217,7 +217,16 @@ if (!function_exists('container')) {
      */
     function container(): \Glueful\DI\Container
     {
-        return \Glueful\DI\ContainerBootstrap::initialize();
+        // Try to get paths from globals first (if already initialized)
+        $basePath = $GLOBALS['base_path'] ?? dirname(__DIR__, 1);
+        $applicationConfigPath = $basePath . '/config';
+        $environment = $GLOBALS['app_environment'] ?? ($_ENV['APP_ENV'] ?? 'production');
+
+        return \Glueful\DI\ContainerBootstrap::initialize(
+            $basePath,
+            $applicationConfigPath,
+            $environment
+        );
     }
 }
 

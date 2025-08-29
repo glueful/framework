@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Auth;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
 /**
  * Session Destroyed Event
@@ -15,7 +15,7 @@ use Symfony\Contracts\EventDispatcher\Event;
  *
  * @package Glueful\Events\Auth
  */
-class SessionDestroyedEvent extends Event
+class SessionDestroyedEvent extends BaseEvent
 {
     /**
      * @param string $accessToken The access token that was revoked
@@ -27,8 +27,14 @@ class SessionDestroyedEvent extends Event
         private readonly string $accessToken,
         private readonly ?string $userUuid = null,
         private readonly string $reason = 'logout',
-        private readonly array $metadata = []
+        array $metadata = []
     ) {
+        parent::__construct();
+
+        // Set metadata using BaseEvent's setMetadata method
+        foreach ($metadata as $key => $value) {
+            $this->setMetadata($key, $value);
+        }
     }
 
     /**
@@ -61,15 +67,6 @@ class SessionDestroyedEvent extends Event
         return $this->reason;
     }
 
-    /**
-     * Get metadata
-     *
-     * @return array Metadata
-     */
-    public function getMetadata(): array
-    {
-        return $this->metadata;
-    }
 
     /**
      * Check if session was destroyed due to expiration

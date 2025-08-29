@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Http;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -16,7 +16,7 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * @package Glueful\Events\Http
  */
-class ResponseEvent extends Event
+class ResponseEvent extends BaseEvent
 {
     /**
      * @param Request $request Original HTTP request
@@ -26,8 +26,14 @@ class ResponseEvent extends Event
     public function __construct(
         private readonly Request $request,
         private readonly Response $response,
-        private readonly array $metadata = []
+        array $metadata = []
     ) {
+        parent::__construct();
+
+        // Set metadata using BaseEvent's setMetadata method
+        foreach ($metadata as $key => $value) {
+            $this->setMetadata($key, $value);
+        }
     }
 
     /**
@@ -50,15 +56,6 @@ class ResponseEvent extends Event
         return $this->response;
     }
 
-    /**
-     * Get response metadata
-     *
-     * @return array Metadata
-     */
-    public function getMetadata(): array
-    {
-        return $this->metadata;
-    }
 
     /**
      * Get response status code
@@ -98,7 +95,7 @@ class ResponseEvent extends Event
      */
     public function getProcessingTime(): ?float
     {
-        return $this->metadata['processing_time'] ?? null;
+        return $this->getMetadata('processing_time') ?? null;
     }
 
     /**
@@ -108,7 +105,7 @@ class ResponseEvent extends Event
      */
     public function getMemoryUsage(): ?int
     {
-        return $this->metadata['memory_usage'] ?? null;
+        return $this->getMetadata('memory_usage') ?? null;
     }
 
     /**
@@ -158,7 +155,7 @@ class ResponseEvent extends Event
      */
     public function isCached(): bool
     {
-        return $this->metadata['cached'] ?? false;
+        return $this->getMetadata('cached') ?? false;
     }
 
     /**
@@ -168,7 +165,7 @@ class ResponseEvent extends Event
      */
     public function getControllerInfo(): ?array
     {
-        return $this->metadata['controller'] ?? null;
+        return $this->getMetadata('controller') ?? null;
     }
 
     /**
@@ -178,6 +175,6 @@ class ResponseEvent extends Event
      */
     public function getQueryCount(): int
     {
-        return $this->metadata['query_count'] ?? 0;
+        return $this->getMetadata('query_count') ?? 0;
     }
 }

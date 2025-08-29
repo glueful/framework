@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Auth;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
 /**
  * Authentication Failed Event
@@ -14,7 +14,7 @@ use Symfony\Contracts\EventDispatcher\Event;
  *
  * @package Glueful\Events\Auth
  */
-class AuthenticationFailedEvent extends Event
+class AuthenticationFailedEvent extends BaseEvent
 {
     /**
      * @param string $username Attempted username/email
@@ -28,8 +28,14 @@ class AuthenticationFailedEvent extends Event
         private readonly string $reason,
         private readonly ?string $clientIp = null,
         private readonly ?string $userAgent = null,
-        private readonly array $metadata = []
+        array $metadata = []
     ) {
+        parent::__construct();
+
+        // Set metadata using BaseEvent's setMetadata method
+        foreach ($metadata as $key => $value) {
+            $this->setMetadata($key, $value);
+        }
     }
 
     /**
@@ -72,15 +78,6 @@ class AuthenticationFailedEvent extends Event
         return $this->userAgent;
     }
 
-    /**
-     * Get metadata
-     *
-     * @return array Metadata
-     */
-    public function getMetadata(): array
-    {
-        return $this->metadata;
-    }
 
     /**
      * Check if failure was due to invalid credentials
@@ -109,6 +106,6 @@ class AuthenticationFailedEvent extends Event
      */
     public function isSuspicious(): bool
     {
-        return $this->metadata['suspicious'] ?? false;
+        return $this->getMetadata('suspicious') ?? false;
     }
 }

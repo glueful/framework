@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Database;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
 /**
  * Query Executed Event
@@ -14,7 +14,7 @@ use Symfony\Contracts\EventDispatcher\Event;
  *
  * @package Glueful\Events\Database
  */
-class QueryExecutedEvent extends Event
+class QueryExecutedEvent extends BaseEvent
 {
     /**
      * @param string $sql SQL query
@@ -28,8 +28,14 @@ class QueryExecutedEvent extends Event
         private readonly array $bindings = [],
         private readonly float $executionTime = 0.0,
         private readonly string $connectionName = 'default',
-        private readonly array $metadata = []
+        array $metadata = []
     ) {
+        parent::__construct();
+
+        // Set metadata using BaseEvent's setMetadata method
+        foreach ($metadata as $key => $value) {
+            $this->setMetadata($key, $value);
+        }
     }
 
     /**
@@ -72,15 +78,6 @@ class QueryExecutedEvent extends Event
         return $this->connectionName;
     }
 
-    /**
-     * Get metadata
-     *
-     * @return array Metadata
-     */
-    public function getMetadata(): array
-    {
-        return $this->metadata;
-    }
 
     /**
      * Get full query with bindings interpolated

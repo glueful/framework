@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Webhook;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
 /**
  * Webhook Failed Event
@@ -13,7 +13,7 @@ use Symfony\Contracts\EventDispatcher\Event;
  * or other delivery issues. Allows applications to track failures and implement
  * fallback mechanisms.
  */
-class WebhookFailedEvent extends Event
+class WebhookFailedEvent extends BaseEvent
 {
     public function __construct(
         public readonly string $url,
@@ -22,6 +22,7 @@ class WebhookFailedEvent extends Event
         public readonly string $reason,
         public readonly float $durationMs
     ) {
+        parent::__construct();
     }
 
     /**

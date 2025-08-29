@@ -71,6 +71,17 @@ class Event
             ]);
         }
 
+        if ($event instanceof BaseEvent) {
+        // Add any framework-specific handling here
+            if (self::$logEvents && self::$logger) {
+                self::$logger->debug('Glueful event dispatched', [
+                'event_id' => $event->getEventId(),
+                'event_name' => $event->getName(),
+                'timestamp' => $event->getTimestamp()
+                ]);
+            }
+        }
+
         // If the event is already a Symfony event, dispatch directly
         if ($event instanceof SymfonyEvent) {
             return self::$dispatcher->dispatch($event, $eventName);

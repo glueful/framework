@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Events\Http;
 
 use Glueful\Exceptions\HttpException;
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
 /**
  * HTTP Client Failure Event
@@ -13,7 +13,7 @@ use Symfony\Contracts\EventDispatcher\Event;
  * Fired when HTTP client operations fail, allowing applications to handle
  * business-specific logging and error handling for external service failures.
  */
-class HttpClientFailureEvent extends Event
+class HttpClientFailureEvent extends BaseEvent
 {
     /**
      * Create a new HTTP client failure event
@@ -31,6 +31,7 @@ class HttpClientFailureEvent extends Event
         public readonly string $failureReason,
         public readonly array $context = []
     ) {
+        parent::__construct();
     }
 
     /**

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Cache;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
 /**
  * Cache Miss Event
@@ -14,7 +14,7 @@ use Symfony\Contracts\EventDispatcher\Event;
  *
  * @package Glueful\Events\Cache
  */
-class CacheMissEvent extends Event
+class CacheMissEvent extends BaseEvent
 {
     /**
      * @param string $key Cache key that was missed
@@ -26,6 +26,7 @@ class CacheMissEvent extends Event
         private readonly array $tags = [],
         private readonly mixed $valueLoader = null
     ) {
+        parent::__construct();
     }
 
     /**

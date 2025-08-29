@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Http;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 use Symfony\Component\HttpFoundation\Request;
 use Throwable;
 
@@ -16,7 +16,7 @@ use Throwable;
  *
  * @package Glueful\Events\Http
  */
-class ExceptionEvent extends Event
+class ExceptionEvent extends BaseEvent
 {
     /**
      * @param Request $request Original HTTP request
@@ -26,8 +26,14 @@ class ExceptionEvent extends Event
     public function __construct(
         private readonly Request $request,
         private readonly Throwable $exception,
-        private readonly array $metadata = []
+        array $metadata = []
     ) {
+        parent::__construct();
+
+        // Set metadata using BaseEvent's setMetadata method
+        foreach ($metadata as $key => $value) {
+            $this->setMetadata($key, $value);
+        }
     }
 
     /**
@@ -50,15 +56,6 @@ class ExceptionEvent extends Event
         return $this->exception;
     }
 
-    /**
-     * Get exception metadata
-     *
-     * @return array Metadata
-     */
-    public function getMetadata(): array
-    {
-        return $this->metadata;
-    }
 
     /**
      * Get exception message
@@ -177,7 +174,7 @@ class ExceptionEvent extends Event
      */
     public function isCritical(): bool
     {
-        return $this->metadata['critical'] ?? $this->isServerError();
+        return $this->getMetadata('critical') ?? $this->isServerError();
     }
 
     /**
@@ -209,7 +206,7 @@ class ExceptionEvent extends Event
      */
     public function getProcessingTime(): ?float
     {
-        return $this->metadata['processing_time'] ?? null;
+        return $this->getMetadata('processing_time') ?? null;
     }
 
     /**
@@ -219,6 +216,6 @@ class ExceptionEvent extends Event
      */
     public function getMemoryUsage(): ?int
     {
-        return $this->metadata['memory_usage'] ?? null;
+        return $this->getMetadata('memory_usage') ?? null;
     }
 }

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Traits;
 
+use Glueful\Events\Event;
+
 /**
  * InteractsWithQueue Trait
  *
@@ -62,9 +64,19 @@ trait InteractsWithQueue
         $event = new static(...$args);
 
         // Queue the event for async processing
-        // This would integrate with Glueful's queue system
-        if (function_exists('queue')) {
-            queue()->push(static::class, $event->toArray(), $event->queue, $event->delay);
+        // This integrates with Glueful's queue system via container
+        try {
+            if (function_exists('container')) {
+                $container = container();
+                if ($container && $container->has('queue')) {
+                    $queueManager = $container->get('queue');
+                    if (method_exists($queueManager, 'push')) {
+                        $queueManager->push(static::class, $event->toArray(), $event->queue, $event->delay);
+                    }
+                }
+            }
+        } catch (\Throwable) {
+            // Silently fail if queue system is not available
         }
 
         return $event;
@@ -77,15 +89,26 @@ trait InteractsWithQueue
     {
         $event = new static(...$args);
 
-        // This would integrate with Glueful's database transaction system
-        if (function_exists('db') && method_exists(db(), 'afterCommit')) {
-            db()->afterCommit(function () use ($event) {
-                Event::dispatch($event);
-            });
-        } else {
-            // Fallback to immediate dispatch
-            Event::dispatch($event);
+        // This integrates with Glueful's database transaction system via container
+        try {
+            if (function_exists('container')) {
+                $container = container();
+                if ($container && $container->has('db')) {
+                    $db = $container->get('db');
+                    if (method_exists($db, 'afterCommit')) {
+                        $db->afterCommit(function () use ($event) {
+                            Event::dispatch($event);
+                        });
+                        return $event;
+                    }
+                }
+            }
+        } catch (\Throwable) {
+            // Continue to fallback if database system is not available
         }
+
+        // Fallback to immediate dispatch
+        Event::dispatch($event);
 
         return $event;
     }

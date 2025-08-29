@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Webhook;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
 /**
  * Webhook Delivered Event
@@ -12,7 +12,7 @@ use Symfony\Contracts\EventDispatcher\Event;
  * Fired when a webhook is successfully delivered to a remote endpoint.
  * Allows applications to track webhook delivery success and metrics.
  */
-class WebhookDeliveredEvent extends Event
+class WebhookDeliveredEvent extends BaseEvent
 {
     public function __construct(
         public readonly string $url,
@@ -20,6 +20,7 @@ class WebhookDeliveredEvent extends Event
         public readonly int $statusCode,
         public readonly float $durationMs
     ) {
+        parent::__construct();
     }
 
     /**

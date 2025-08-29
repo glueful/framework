@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Cache;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
 /**
  * Cache Hit Event
@@ -14,7 +14,7 @@ use Symfony\Contracts\EventDispatcher\Event;
  *
  * @package Glueful\Events\Cache
  */
-class CacheHitEvent extends Event
+class CacheHitEvent extends BaseEvent
 {
     /**
      * @param string $key Cache key
@@ -28,6 +28,7 @@ class CacheHitEvent extends Event
         private readonly array $tags = [],
         private readonly float $retrievalTime = 0.0
     ) {
+        parent::__construct();
     }
 
     /**

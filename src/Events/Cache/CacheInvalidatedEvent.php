@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Cache;
 
-use Symfony\Contracts\EventDispatcher\Event;
+use Glueful\Events\BaseEvent;
 
 /**
  * Cache Invalidated Event
@@ -14,7 +14,7 @@ use Symfony\Contracts\EventDispatcher\Event;
  *
  * @package Glueful\Events\Cache
  */
-class CacheInvalidatedEvent extends Event
+class CacheInvalidatedEvent extends BaseEvent
 {
     /**
      * @param array $keys Invalidated cache keys
@@ -26,8 +26,14 @@ class CacheInvalidatedEvent extends Event
         private readonly array $keys = [],
         private readonly array $tags = [],
         private readonly string $reason = 'manual',
-        private readonly array $metadata = []
+        array $metadata = []
     ) {
+        parent::__construct();
+
+        // Set metadata using BaseEvent's setMetadata method
+        foreach ($metadata as $key => $value) {
+            $this->setMetadata($key, $value);
+        }
     }
 
     /**
@@ -60,15 +66,6 @@ class CacheInvalidatedEvent extends Event
         return $this->reason;
     }
 
-    /**
-     * Get metadata
-     *
-     * @return array Metadata
-     */
-    public function getMetadata(): array
-    {
-        return $this->metadata;
-    }
 
     /**
      * Get total invalidated entries count
@@ -77,7 +74,7 @@ class CacheInvalidatedEvent extends Event
      */
     public function getTotalCount(): int
     {
-        return count($this->keys) + ($this->metadata['tag_count'] ?? 0);
+        return count($this->keys) + ($this->getMetadata('tag_count') ?? 0);
     }
 
     /**
