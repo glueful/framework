@@ -691,7 +691,7 @@ class HealthController extends BaseController
     }
     private function getDiskUsage(): array
     {
-        $path = realpath(__DIR__ . '/../../storage');
+        $path = realpath(base_path('storage'));
         $totalSpace = disk_total_space($path);
         $freeSpace = disk_free_space($path);
         $usedSpace = $totalSpace - $freeSpace;

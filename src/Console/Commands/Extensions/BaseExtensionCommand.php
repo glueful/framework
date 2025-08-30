@@ -299,7 +299,7 @@ abstract class BaseExtensionCommand extends BaseCommand
      */
     protected function getExtensionPath(string $extensionName): string
     {
-        return dirname(__DIR__, 4) . "/extensions/{$extensionName}";
+        return base_path("extensions/{$extensionName}");
     }
 
     /**
@@ -342,7 +342,7 @@ abstract class BaseExtensionCommand extends BaseCommand
      */
     protected function getExtensionsDirectory(): string
     {
-        return dirname(__DIR__, 4) . '/extensions';
+        return base_path('extensions');
     }
 
     /**

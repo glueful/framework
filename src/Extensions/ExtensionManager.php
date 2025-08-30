@@ -1222,9 +1222,7 @@ class ExtensionManager
 
     private function getExtensionsPath(): string
     {
-        // Go up from api/Extensions to the project root
-        $projectRoot = dirname(__DIR__, 2); // Up 2 levels from api/Extensions/
-        return $projectRoot . '/extensions';
+        return base_path('extensions');
     }
 
     private function removeDirectory(string $dir): bool

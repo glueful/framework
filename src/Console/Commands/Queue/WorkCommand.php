@@ -155,7 +155,7 @@ class WorkCommand extends BaseQueueCommand
     private function initializeServices(): void
     {
         $logger = $this->getService(LoggerInterface::class);
-        $basePath = dirname(__DIR__, 5); // Path to glueful root
+        $basePath = base_path(); // Path to glueful root
 
         $processFactory = new ProcessFactory($logger, $basePath);
         $this->workerMonitor = $this->getService(WorkerMonitor::class);

@@ -75,7 +75,7 @@ class ServeCommand extends BaseCommand
         }
 
         // Get public directory
-        $publicDir = dirname(__DIR__, 3) . '/public';
+        $publicDir =  base_path('public');
         if (!is_dir($publicDir)) {
             $this->error('Public directory not found. Expected: ' . $publicDir);
             return self::FAILURE;

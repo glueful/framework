@@ -198,7 +198,7 @@ class AutoScaleCommand extends BaseQueueCommand
         $logger = $this->getService(LoggerInterface::class);
         $queueManager = $this->getService(QueueManager::class);
         $workerMonitor = $this->getService(WorkerMonitor::class);
-        $basePath = dirname(__DIR__, 5);
+        $basePath = base_path();
 
         $processFactory = new ProcessFactory($logger, $basePath);
         $this->processManager = new ProcessManager($processFactory, $workerMonitor, $logger, $this->config);

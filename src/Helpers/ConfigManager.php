@@ -28,13 +28,10 @@ class ConfigManager
             return;
         }
 
-        $configPath = $configPath ?: dirname(__DIR__, 2) . '/config';
+        $configPath = $configPath ?: base_path('config');
 
         // Improved environment detection with fallbacks
-        self::$environment = $_ENV['APP_ENV'] ?? null
-            ?: getenv('APP_ENV')
-            ?: $_SERVER['APP_ENV'] ?? null
-            ?: 'production';
+        self::$environment = env('APP_ENV', 'production');
 
         // Try to load from cache in production
         if (self::$environment === 'production' && self::loadFromCache($configPath)) {

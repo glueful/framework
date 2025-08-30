@@ -146,7 +146,7 @@ class CreateCommand extends BaseExtensionCommand
             }
 
             // Check if extension exists
-            $extensionPath = dirname(__DIR__, 4) . "/extensions/{$extensionName}";
+            $extensionPath = base_path("extensions/{$extensionName}");
             if ($this->fileManager->exists($extensionPath) && !$force) {
                 $this->error("Extension '{$extensionName}' already exists.");
                 $this->tip('Use --force to overwrite existing extension.');

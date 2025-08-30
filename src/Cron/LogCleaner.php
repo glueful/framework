@@ -98,7 +98,7 @@ class LogCleaner
             $message .= "Errors:\n- " . implode("\n- ", $this->stats['errors']) . "\n";
         }
 
-        $logFile = dirname(__DIR__, 2) . '/storage/logs/log-cleanup.log';
+        $logFile = base_path('storage/logs/log-cleanup.log');
         $logDir = dirname($logFile);
 
         if (!is_dir($logDir)) {

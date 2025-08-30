@@ -253,8 +253,8 @@ class ExtensionConfig implements ExtensionConfigInterface
      */
     private function getExtensionsPath(): string
     {
-        // Go up from api/Extensions/Services to the project root, then add extensions
-        return dirname(__DIR__, 3) . '/extensions';
+        // Use application base path helper
+        return base_path('extensions');
     }
 
     /**
@@ -567,9 +567,7 @@ class ExtensionConfig implements ExtensionConfigInterface
 
     private function getDefaultConfigPath(): string
     {
-        // Go up from api/Extensions/Services to the project root
-        $projectRoot = dirname(__DIR__, 3); // Up 3 levels from api/Extensions/Services/
-        return $projectRoot . '/extensions/extensions.json';
+        return base_path('extensions/extensions.json');
     }
 
     private function debugLog(string $message): void

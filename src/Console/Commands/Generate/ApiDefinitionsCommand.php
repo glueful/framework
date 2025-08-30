@@ -229,8 +229,8 @@ class ApiDefinitionsCommand extends BaseCommand
     /**
      * Clean all JSON definition directories
      *
-     * Removes all JSON files from both api-json-definitions and api-doc-json-definitions
-     * directories, including subdirectories in api-doc-json-definitions.
+     * Removes all JSON files from both api-json-definitions and json-definitions
+     * directories, including subdirectories in json-definitions.
      *
      * @return void
      */
@@ -245,7 +245,7 @@ class ApiDefinitionsCommand extends BaseCommand
 
         try {
             $jsonDefinitionsPath = config('app.paths.database_json_definitions');
-            $apiDocDefinitionsPath = config('app.paths.api_docs') . 'api-doc-json-definitions';
+            $apiDocDefinitionsPath = config('app.paths.api_docs') . 'json-definitions';
 
             // Clean api-json-definitions directory (just .json files)
             if ($fileManager->exists($jsonDefinitionsPath)) {
@@ -263,7 +263,7 @@ class ApiDefinitionsCommand extends BaseCommand
                 $this->line("Removed {$count} JSON files from {$jsonDefinitionsPath}");
             }
 
-            // Clean api-doc-json-definitions directory (including subdirectories)
+            // Clean json-definitions directory (including subdirectories)
             if ($fileManager->exists($apiDocDefinitionsPath)) {
                 $this->info("Cleaning API doc definitions from: {$apiDocDefinitionsPath}");
 

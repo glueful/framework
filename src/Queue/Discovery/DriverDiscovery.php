@@ -62,7 +62,7 @@ class DriverDiscovery
         $paths = $this->searchPaths;
 
         // Add dynamic extension paths
-        $basePath = dirname(__DIR__, 4);
+        $basePath = base_path();
         $extensionPaths = [
             $basePath . '/extensions/*/Queue/Drivers',
             $basePath . '/vendor/*/queue-drivers/src',

@@ -59,7 +59,7 @@ class PluginManager
      */
     public function loadPlugins(): void
     {
-        $basePath = dirname(__DIR__, 4);
+        $basePath = base_path();
         $pluginPaths = [
             $basePath . '/extensions/*/queue-plugin.php',
             $basePath . '/vendor/*/queue-plugins/*/plugin.php'

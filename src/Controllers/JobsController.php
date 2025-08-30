@@ -293,7 +293,7 @@ class JobsController extends BaseController
                 $rawJobs = $this->scheduler->getJobs();
 
                 // Load configuration jobs data directly from config file
-                $configFile = dirname(__DIR__, 2) . '/config/schedule.php';
+                $configFile = config_path('schedule.php');
                 $configJobs = [];
                 if (file_exists($configFile)) {
                     $scheduleConfig = require $configFile;

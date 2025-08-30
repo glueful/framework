@@ -255,7 +255,7 @@ class DeleteCommand extends BaseExtensionCommand
     {
         $this->info('Creating backup...');
 
-        $backupDir = dirname(__DIR__, 6) . '/storage/backups/extensions';
+        $backupDir = base_path('storage/backups/extensions');
         if (!$this->getFileManager()->exists($backupDir)) {
             $this->getFileManager()->createDirectory($backupDir, 0755);
         }
@@ -330,7 +330,7 @@ class DeleteCommand extends BaseExtensionCommand
             $this->line('');
             $this->info('Recovery instructions:');
             $this->line("To restore this extension from backup:");
-            $this->line("1. Extract backup: tar -xzf {$backupPath} -C " . dirname(dirname(__DIR__, 6) . "/extensions"));
+            $this->line("1. Extract backup: tar -xzf {$backupPath} -C " . base_path('extensions'));
             $this->line("2. Enable extension: php glueful extensions:enable {$extensionName}");
         }
 

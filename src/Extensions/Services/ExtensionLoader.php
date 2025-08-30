@@ -335,8 +335,8 @@ class ExtensionLoader implements ExtensionLoaderInterface
         if (!empty($extensionConfig) && isset($extensionConfig['autoload']['psr-4'])) {
             $autoloadConfig = $extensionConfig['autoload']['psr-4'];
 
-            // Use same approach as old ExtensionsManager: dirname(__DIR__, 2) but adjusted for our location
-            $projectRoot = dirname(__DIR__, 3);
+            // Resolve project root via helper
+            $projectRoot = base_path();
 
             foreach ($autoloadConfig as $namespace => $namespacePath) {
                 $fullPath = $projectRoot . '/' . trim($namespacePath, '/');
@@ -370,8 +370,8 @@ class ExtensionLoader implements ExtensionLoaderInterface
             return;
         }
 
-        // Use same approach as old ExtensionsManager: dirname(__DIR__, 2) but adjusted for our location
-        $projectRoot = dirname(__DIR__, 3);
+        // Resolve project root via helper
+        $projectRoot = base_path();
 
         // Load routes from the "provides.routes" section
         if (isset($extensionConfig['provides']['routes']) && is_array($extensionConfig['provides']['routes'])) {
@@ -430,8 +430,8 @@ class ExtensionLoader implements ExtensionLoaderInterface
 
         $this->debugLog("Found " . count($serviceProviders) . " service providers for {$name}");
 
-        // Use same approach as old ExtensionsManager: dirname(__DIR__, 2) but adjusted for our location
-        $projectRoot = dirname(__DIR__, 3);
+        // Resolve project root via helper
+        $projectRoot = base_path();
 
         foreach ($serviceProviders as $serviceProviderPath) {
             $absolutePath = $projectRoot . '/' . $serviceProviderPath;
@@ -556,7 +556,9 @@ class ExtensionLoader implements ExtensionLoaderInterface
 
         // Ensure the extension class exists and is autoloadable
         if (!class_exists($extensionClass)) {
-            $this->debugLog("Composer extension class {$extensionClass} not found for package {$composerPackage['package_name']}");
+            $this->debugLog(
+                "Composer extension class {$extensionClass} not found for package {$composerPackage['package_name']}"
+            );
             return null;
         }
 
@@ -608,17 +610,51 @@ class ExtensionLoader implements ExtensionLoaderInterface
     {
         $extensions = [];
 
-        // Discover local extensions
-        $localExtensions = $this->discoverLocalExtensions();
-        foreach ($localExtensions as $extension) {
-            $extensions[$extension['name']] = $extension + ['source_type' => 'local'];
+        // Check if local extensions are allowed based on configuration
+        $allowLocal = $this->isLocalExtensionsAllowed();
+        $conflictResolution = config('extensions.precedence.conflict_resolution', 'composer');
+        $logConflicts = config('extensions.precedence.log_conflicts', true);
+
+        // Discover local extensions (only if allowed)
+        if ($allowLocal) {
+            $localExtensions = $this->discoverLocalExtensions();
+            foreach ($localExtensions as $extension) {
+                $extensions[$extension['name']] = $extension + ['source_type' => 'local'];
+            }
+
+            $this->debugLog("Discovered " . count($localExtensions) . " local extensions (local discovery enabled)");
+        } else {
+            $this->debugLog("Skipping local extension discovery (disabled by configuration)");
         }
 
-        // Discover Composer extensions
+        // Discover Composer extensions (always enabled for security)
         $composerPackages = $this->composerDiscovery->discoverExtensionPackages();
         foreach ($composerPackages as $package) {
-            $extensions[$package['extension_name']] = [
-                'name' => $package['extension_name'],
+            $extensionName = $package['extension_name'];
+
+            // Check for conflicts with local extensions
+            if (isset($extensions[$extensionName]) && $extensions[$extensionName]['source_type'] === 'local') {
+                if ($logConflicts) {
+                    $this->debugLog("Extension conflict detected: '{$extensionName}' exists in both " .
+                        "local and Composer sources");
+                }
+
+                // Handle conflict based on resolution strategy
+                if ($conflictResolution === 'composer') {
+                    $this->debugLog("Resolving conflict: preferring Composer package for '{$extensionName}'");
+                    // Composer takes precedence - overwrite local
+                } elseif ($conflictResolution === 'local') {
+                    $this->debugLog("Resolving conflict: keeping local extension for '{$extensionName}'");
+                    continue; // Skip Composer version
+                } else { // 'error'
+                    $message = "Extension conflict: '{$extensionName}' found in both local and Composer sources. " .
+                        "Configure extensions.precedence.conflict_resolution to resolve.";
+                    throw new \RuntimeException($message);
+                }
+            }
+
+            $extensions[$extensionName] = [
+                'name' => $extensionName,
                 'path' => $package['install_path'],
                 'version' => $package['version'],
                 'description' => $package['description'],
@@ -627,6 +663,11 @@ class ExtensionLoader implements ExtensionLoaderInterface
                 'source_type' => 'composer'
             ];
         }
+
+        $localCount = count(array_filter($extensions, fn($ext) => $ext['source_type'] === 'local'));
+        $composerCount = count(array_filter($extensions, fn($ext) => $ext['source_type'] === 'composer'));
+        $this->debugLog("Total discovered extensions: " . count($extensions) .
+            " (local: {$localCount}, composer: {$composerCount})");
 
         return $extensions;
     }
@@ -682,9 +723,7 @@ class ExtensionLoader implements ExtensionLoaderInterface
 
     private function getDefaultExtensionsPath(): string
     {
-        // Go up from api/Extensions/Services to the project root
-        $projectRoot = dirname(__DIR__, 3); // Up 3 levels from api/Extensions/Services/
-        return $projectRoot . '/extensions';
+        return base_path('extensions');
     }
 
     private function loadManifest(string $path): ?array
@@ -762,6 +801,17 @@ class ExtensionLoader implements ExtensionLoaderInterface
         } catch (\Exception $e) {
             $this->debugLog("Failed to register service provider: " . $e->getMessage());
         }
+    }
+
+    /**
+     * Check if local extensions are allowed based on configuration
+     *
+     * @return bool True if local extensions can be discovered
+     */
+    private function isLocalExtensionsAllowed(): bool
+    {
+        // Get from extensions config with environment-aware default
+        return config('extensions.discovery.allow_local', env('APP_ENV') !== 'production');
     }
 
     private function debugLog(string $message): void

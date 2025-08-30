@@ -46,10 +46,10 @@ class ContainerFactory
     private static function setupParameters(ContainerBuilder $builder): void
     {
         // Add framework parameters
-        $builder->setParameter('glueful.env', $_ENV['APP_ENV'] ?? 'production');
-        $builder->setParameter('glueful.debug', $_ENV['APP_DEBUG'] ?? false);
+        $builder->setParameter('glueful.env', config('app.env', env('APP_ENV', 'production')));
+        $builder->setParameter('glueful.debug', (bool) config('app.debug', env('APP_DEBUG', false)));
         $builder->setParameter('glueful.version', '1.0.0');
-        $builder->setParameter('glueful.root_dir', dirname(__DIR__, 3));
+        $builder->setParameter('glueful.root_dir', base_path());
         $builder->setParameter('glueful.config_dir', 'config');
         $builder->setParameter('glueful.storage_dir', 'storage');
         $builder->setParameter('glueful.cache_dir', 'storage/cache');
@@ -61,12 +61,12 @@ class ContainerFactory
             'cache_ttl' => 3600,
             'lazy_loading' => true,
             'preload_common' => true,
-            'debug' => $_ENV['APP_DEBUG'] ?? false,
+            'debug' => (bool) config('app.debug', env('APP_DEBUG', false)),
         ]);
 
         // Add filesystem configuration parameters
         $builder->setParameter('filesystem.file_manager', [
-            'root_path' => dirname(__DIR__, 3),
+            'root_path' => base_path(),
             'temp_path' => 'storage/tmp',
             'max_file_size' => 10 * 1024 * 1024, // 10MB
             'allowed_extensions' => ['php', 'json', 'txt', 'md', 'yml', 'yaml'],
@@ -163,8 +163,7 @@ class ContainerFactory
     private static function loadExtensionServices(ContainerBuilder $builder): void
     {
         // Load extension services from extensions.json
-        $projectRoot = dirname(__DIR__, 2);
-        $extensionsConfig = $projectRoot . '/extensions/extensions.json';
+        $extensionsConfig = base_path('extensions/extensions.json');
         if (!file_exists($extensionsConfig)) {
             return;
         }
@@ -183,7 +182,7 @@ class ContainerFactory
             $serviceProviders = $config['provides']['services'] ?? [];
 
             foreach ($serviceProviders as $serviceProviderPath) {
-                $absolutePath = dirname(__DIR__, 2) . '/' . $serviceProviderPath;
+                $absolutePath = base_path($serviceProviderPath);
 
                 if (!file_exists($absolutePath)) {
                     continue;
@@ -248,8 +247,7 @@ class ContainerFactory
 
     private static function hasCompiledContainer(): bool
     {
-        $storageDir = config('app.paths.storage');
-        $containerFile = "{$storageDir}/container/CompiledContainer.php";
+        $containerFile = base_path('storage/container/CompiledContainer.php');
 
         if (!file_exists($containerFile)) {
             return false;
@@ -262,8 +260,7 @@ class ContainerFactory
 
     private static function loadCompiledContainer(): Container
     {
-        $storageDir = config('app.paths.storage');
-        $containerFile = "{$storageDir}/container/CompiledContainer.php";
+        $containerFile = base_path('storage/container/CompiledContainer.php');
 
         if (!file_exists($containerFile)) {
             // Fallback to development container if compiled doesn't exist

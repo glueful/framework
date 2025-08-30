@@ -539,8 +539,7 @@ class InfoCommand extends BaseExtensionCommand
         $namespaceRows = [];
         foreach ($autoload as $namespace => $path) {
             // Path is relative to project root, not extension directory
-            $projectRoot = dirname(__DIR__, 4); // Go up from api/Console/Commands/Extensions
-            $fullPath = $projectRoot . '/' . $path;
+            $fullPath = base_path($path);
             $pathExists = is_dir($fullPath) ? '<info>✓ Exists</info>' : '<error>✗ Missing</error>';
             $namespaceRows[] = [$namespace, $path, $pathExists];
         }
@@ -588,7 +587,7 @@ class InfoCommand extends BaseExtensionCommand
     private function scanExtensionsDirectory(?string $extensionName = null): array
     {
         $namespaces = [];
-        $extensionsDir = dirname(__DIR__, 6) . '/extensions';
+        $extensionsDir = base_path('extensions');
 
         if (!is_dir($extensionsDir)) {
             return $namespaces;
@@ -687,7 +686,7 @@ class InfoCommand extends BaseExtensionCommand
             $this->line("  Version: {$ns['version']}");
 
             // Check if path exists
-            $extensionPath = dirname(__DIR__, 6) . "/extensions/{$ns['extension']}/{$ns['path']}";
+            $extensionPath = base_path("extensions/{$ns['extension']}/{$ns['path']}");
             $pathExists = is_dir($extensionPath) ? '<info>✓ Exists</info>' : '<error>✗ Missing</error>';
             $this->line("  Path Status: {$pathExists}");
 
@@ -778,7 +777,7 @@ class InfoCommand extends BaseExtensionCommand
         $failedCount = 0;
 
         foreach ($namespaces as $ns) {
-            $extensionPath = dirname(__DIR__, 6) . "/extensions/{$ns['extension']}/{$ns['path']}";
+            $extensionPath = base_path("extensions/{$ns['extension']}/{$ns['path']}");
 
             if (is_dir($extensionPath)) {
                 $resolvedCount++;

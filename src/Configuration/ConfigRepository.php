@@ -22,7 +22,7 @@ final class ConfigRepository implements ConfigRepositoryInterface
         ?bool $cacheEnabled = null,
         ?string $environment = null
     ) {
-        $this->environment = $environment ?? ($_ENV['APP_ENV'] ?? 'production');
+        $this->environment = $environment ?? env('APP_ENV', 'production');
         $this->cacheEnabled = $cacheEnabled ?? ($this->environment === 'production');
 
         $cacheDir = $cacheDir ?? $this->getDefaultCacheDir();
@@ -157,7 +157,7 @@ final class ConfigRepository implements ConfigRepositoryInterface
     private function getDefaultCacheDir(): string
     {
         // Try to get from globals first (set by ContainerBootstrap)
-        $basePath = $GLOBALS['base_path'] ?? dirname(__DIR__, 2);
+        $basePath = $GLOBALS['base_path'] ?? dirname(__DIR__);
         $cacheDir = $basePath . '/storage/cache';
 
         // Ensure cache directory exists

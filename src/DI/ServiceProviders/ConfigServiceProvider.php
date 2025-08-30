@@ -62,8 +62,9 @@ class ConfigServiceProvider implements ServiceProviderInterface
 
         // Bind ConfigRepositoryInterface to implementation using resolved paths
         $frameworkPath = $GLOBALS['config_paths']['framework'] ?? (dirname(__DIR__, 3) . '/config');
-        $applicationPath = $GLOBALS['config_paths']['application'] ?? (dirname(__DIR__, 3) . '/config');
-        $environment = $GLOBALS['app_environment'] ?? ($_ENV['APP_ENV'] ?? 'production');
+        $applicationPath = $GLOBALS['config_paths']['application']
+            ?? (($GLOBALS['base_path'] ?? dirname(__DIR__, 3)) . '/config');
+        $environment = $GLOBALS['app_environment'] ?? env('APP_ENV', 'production');
 
         $container->register(ConfigRepository::class)
             ->setArguments([

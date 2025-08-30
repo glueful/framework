@@ -758,12 +758,11 @@ class Router
      */
     private function shouldUseCachedRoutes(): bool
     {
-        $environment = $_ENV['APP_ENV'] ?? 'development';
-        $debug = $_ENV['APP_DEBUG'] ?? 'true';
+        $environment = (string) config('app.env', env('APP_ENV', 'development'));
+        $debug = (bool) config('app.debug', env('APP_DEBUG', false));
 
         // Use cache only in production with debug disabled
-        return $environment === 'production' &&
-               (strtolower($debug) === 'false' || $debug === '0');
+        return $environment === 'production' && !$debug;
     }
 
     /**

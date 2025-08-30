@@ -133,7 +133,7 @@ class ControllerCommand extends BaseCommand
 
     private function createController(string $controllerName, bool $resource, bool $api, bool $force): string
     {
-        $controllersDir = dirname(__DIR__, 4) . '/Controllers';
+        $controllersDir = base_path('api/Controllers');
         $fileName = $controllerName . '.php';
         $filePath = $controllersDir . '/' . $fileName;
 

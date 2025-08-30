@@ -96,7 +96,7 @@ class KeyCommand extends BaseCommand
 
     private function validateEnvironment(): void
     {
-        $envPath = dirname(__DIR__, 4) . '/.env';
+        $envPath = $this->getEnvPath();
 
         if (!file_exists($envPath)) {
             throw new \Exception('.env file not found. Copy .env.example first.');
@@ -161,7 +161,7 @@ class KeyCommand extends BaseCommand
 
     private function updateEnvFile(string $key, string $value): void
     {
-        $envPath = dirname(__DIR__, 4) . '/.env';
+        $envPath = $this->getEnvPath();
         $envContent = file_get_contents($envPath);
 
         $pattern = "/^{$key}=.*$/m";
@@ -219,7 +219,7 @@ class KeyCommand extends BaseCommand
         $this->line('5. Ensure .env file has proper permissions (600 or 644)');
 
         // Check .env permissions
-        $envPath = dirname(__DIR__, 4) . '/.env';
+        $envPath = $this->getEnvPath();
         $permissions = substr(sprintf('%o', fileperms($envPath)), -3);
 
         if ($permissions !== '600' && $permissions !== '644') {
@@ -253,5 +253,13 @@ Examples:
 Note: Existing keys will not be overwritten unless --force is used
 or you confirm the overwrite when prompted.
 HELP;
+    }
+
+    /**
+     * Resolve the path to the application's .env file
+     */
+    private function getEnvPath(): string
+    {
+        return base_path('.env');
     }
 }

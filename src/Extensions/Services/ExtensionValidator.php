@@ -414,9 +414,7 @@ class ExtensionValidator implements ExtensionValidatorInterface
 
     private function getExtensionsPath(): string
     {
-        // Go up from api/Extensions/Services to the project root
-        $projectRoot = dirname(__DIR__, 3); // Up 3 levels from api/Extensions/Services/
-        return $projectRoot . '/extensions';
+        return base_path('extensions');
     }
 
     private function initializeSecurityPatterns(): void

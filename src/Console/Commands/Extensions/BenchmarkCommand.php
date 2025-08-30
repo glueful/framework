@@ -326,7 +326,7 @@ class BenchmarkCommand extends BaseExtensionCommand
 
     private function discoverExtensions(): array
     {
-        $extensionsDir = dirname(__DIR__, 6) . '/extensions';
+        $extensionsDir = base_path('extensions');
 
         if (!is_dir($extensionsDir)) {
             return [];
@@ -380,7 +380,7 @@ class BenchmarkCommand extends BaseExtensionCommand
 
     private function simulateAutoload(string $extensionName): void
     {
-        $extensionPath = dirname(__DIR__, 6) . "/extensions/{$extensionName}/src";
+        $extensionPath = base_path("extensions/{$extensionName}/src");
 
         if (is_dir($extensionPath)) {
             // Simulate checking for class files
@@ -398,7 +398,7 @@ class BenchmarkCommand extends BaseExtensionCommand
         $dependencies = [];
 
         foreach ($extensions as $extensionName) {
-            $configFile = dirname(__DIR__, 6) . "/extensions/{$extensionName}/extension.json";
+            $configFile = base_path("extensions/{$extensionName}/extension.json");
 
             if (file_exists($configFile)) {
                 $config = json_decode(file_get_contents($configFile), true);
@@ -429,7 +429,7 @@ class BenchmarkCommand extends BaseExtensionCommand
 
     private function simulateExtensionOperation(string $extensionName): void
     {
-        $extensionPath = dirname(__DIR__, 6) . "/extensions/{$extensionName}";
+        $extensionPath = base_path("extensions/{$extensionName}");
 
         // Simulate reading config
         $configFile = "{$extensionPath}/extension.json";

@@ -258,14 +258,14 @@ class InstallCommand extends BaseCommand
     private function validateEnvironment(bool $force, bool $quiet): void
     {
         // Check for .env file
-        $envPath = dirname(__DIR__, 3) . '/.env';
+        $envPath = base_path('.env');
 
         if (!file_exists($envPath)) {
             if (!$quiet) {
                 $this->warning('.env file not found. Creating from .env.example...');
             }
 
-            $examplePath = dirname(__DIR__, 3) . '/.env.example';
+            $examplePath = base_path('.env.example');
             if (file_exists($examplePath)) {
                 copy($examplePath, $envPath);
                 $this->success('Created .env file from .env.example');
@@ -566,7 +566,7 @@ class InstallCommand extends BaseCommand
 
     private function restoreExtensionsJson(): void
     {
-        $extensionsJsonPath = dirname(__DIR__, 3) . '/extensions/extensions.json';
+        $extensionsJsonPath = base_path('extensions/extensions.json');
         $backupPath = $extensionsJsonPath . '.backup';
 
         if (file_exists($backupPath)) {
@@ -707,7 +707,7 @@ HELP;
     private function validateDirectoryPermissions(): void
     {
         $directories = [
-            dirname(__DIR__, 3) . '/storage',
+            base_path('storage'),
         ];
 
         foreach ($directories as $dir) {
@@ -725,7 +725,7 @@ HELP;
 
     private function updateEnvFile(string $key, string $value): void
     {
-        $envPath = dirname(__DIR__, 3) . '/.env';
+        $envPath = base_path('.env');
 
         if (!file_exists($envPath)) {
             throw new \Exception('.env file not found');
@@ -847,7 +847,7 @@ HELP;
     private function checkSecurityHealth(): void
     {
         // Read keys directly from .env file to avoid caching issues
-        $envPath = dirname(__DIR__, 3) . '/.env';
+        $envPath = base_path('.env');
         if (file_exists($envPath)) {
             $envContent = file_get_contents($envPath);
 

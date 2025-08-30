@@ -197,7 +197,7 @@ class CoreServiceProvider implements ServiceProviderInterface
 
         // Set up framework log file with proper path
         $logPath = $channelConfig['path'] ?? (
-            dirname(__DIR__, 3) . '/storage/logs/framework-' . date('Y-m-d') . '.log'
+            base_path('storage/logs/framework-' . date('Y-m-d') . '.log')
         );
         $handler = new \Monolog\Handler\StreamHandler($logPath, $logLevel);
         $logger->pushHandler($handler);

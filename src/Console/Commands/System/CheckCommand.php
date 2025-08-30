@@ -149,7 +149,7 @@ class CheckCommand extends BaseCommand
         ];
 
         $issues = [];
-        $baseDir = dirname(__DIR__, 5); // Adjust path for new location
+        $baseDir = base_path();
 
         foreach ($dirs as $dir => $requiredPerms) {
             $path = "$baseDir/$dir";
@@ -190,7 +190,7 @@ class CheckCommand extends BaseCommand
         $issues = [];
 
         // Check for .env file
-        $envPath = dirname(__DIR__, 5) . '/.env'; // Adjust path for new location
+        $envPath = base_path('.env');
         if (!file_exists($envPath)) {
             $issues[] = '.env file not found - copy .env.example';
         }
@@ -227,15 +227,15 @@ class CheckCommand extends BaseCommand
         }
 
         // Check for common security files
-        $baseDir = dirname(__DIR__, 5); // Adjust path for new location
-        $publicEnv = "$baseDir/public/.env";
+        $baseDir = base_path();
+        $publicEnv = base_path('public/.env');
         if (file_exists($publicEnv)) {
             $issues[] = '.env file in public directory (critical security risk)';
         }
 
         // Production-specific security checks
         if ($production) {
-            $publicIndex = "$baseDir/public/index.php";
+            $publicIndex = base_path('public/index.php');
             if (file_exists($publicIndex)) {
                 $content = file_get_contents($publicIndex);
                 if (strpos($content, 'error_reporting(E_ALL)') !== false) {

@@ -405,8 +405,8 @@ class ProductionCommand extends BaseCommand
         $force = $input->getOption('force');
         $backup = $this->shouldCreateBackup($input);
 
-        $templatePath = dirname(__DIR__, 5) . '/.env.production';
-        $envPath = dirname(__DIR__, 5) . '/.env';
+        $templatePath = base_path('.env.production');
+        $envPath = base_path('.env');
 
         if (!file_exists($templatePath)) {
             $this->io->error('Production template (.env.production) not found.');
@@ -640,7 +640,7 @@ class ProductionCommand extends BaseCommand
 
     private function createBackup(): bool
     {
-        $envPath = dirname(__DIR__, 5) . '/.env';
+        $envPath = base_path('.env');
 
         if (!file_exists($envPath)) {
             return false;
@@ -658,7 +658,7 @@ class ProductionCommand extends BaseCommand
 
     private function updateEnvValue(string $key, string $value): bool
     {
-        $envPath = dirname(__DIR__, 5) . '/.env';
+        $envPath = base_path('.env');
 
         if (!file_exists($envPath)) {
             return false;

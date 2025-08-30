@@ -123,12 +123,13 @@ class DebugCommand extends BaseExtensionCommand
 
     private function getSystemDebugInfo(bool $includeMemory): array
     {
+        $extensionsDir = base_path('extensions');
         $info = [
             'php_version' => PHP_VERSION,
-            'extensions_dir' => dirname(__DIR__, 6) . '/extensions',
-            'extensions_dir_exists' => is_dir(dirname(__DIR__, 6) . '/extensions'),
-            'extensions_dir_readable' => is_readable(dirname(__DIR__, 6) . '/extensions'),
-            'extensions_dir_writable' => is_writable(dirname(__DIR__, 6) . '/extensions'),
+            'extensions_dir' => $extensionsDir,
+            'extensions_dir_exists' => is_dir($extensionsDir),
+            'extensions_dir_readable' => is_readable($extensionsDir),
+            'extensions_dir_writable' => is_writable($extensionsDir),
         ];
 
         if ($includeMemory) {
@@ -148,7 +149,7 @@ class DebugCommand extends BaseExtensionCommand
             'discovery_errors' => []
         ];
 
-        $extensionsDir = dirname(__DIR__, 6) . '/extensions';
+        $extensionsDir = base_path('extensions');
 
         if (!is_dir($extensionsDir)) {
             $info['discovery_errors'][] = 'Extensions directory does not exist';
@@ -209,7 +210,7 @@ class DebugCommand extends BaseExtensionCommand
             'namespace_conflicts' => []
         ];
 
-        $extensionsDir = dirname(__DIR__, 6) . '/extensions';
+        $extensionsDir = base_path('extensions');
 
         if (!is_dir($extensionsDir)) {
             return $info;
@@ -282,7 +283,7 @@ class DebugCommand extends BaseExtensionCommand
 
     private function getExtensionDebugInfo(string $extensionName, bool $verbose): array
     {
-        $extensionPath = dirname(__DIR__, 6) . "/extensions/{$extensionName}";
+        $extensionPath = base_path("extensions/{$extensionName}");
 
         $info = [
             'name' => $extensionName,
@@ -337,7 +338,7 @@ class DebugCommand extends BaseExtensionCommand
         $info['dependencies'] = [];
 
         foreach ($dependencies as $depName => $version) {
-            $depPath = dirname(__DIR__, 6) . "/extensions/{$depName}";
+            $depPath = base_path("extensions/{$depName}");
             $info['dependencies'][] = [
                 'name' => $depName,
                 'required_version' => $version,
@@ -358,7 +359,7 @@ class DebugCommand extends BaseExtensionCommand
     private function getAllExtensionsDebugInfo(): array
     {
         $extensions = [];
-        $extensionsDir = dirname(__DIR__, 6) . '/extensions';
+        $extensionsDir = base_path('extensions');
 
         if (!is_dir($extensionsDir)) {
             return $extensions;
@@ -384,7 +385,7 @@ class DebugCommand extends BaseExtensionCommand
         ];
 
         // Check global configuration
-        $extensionsDir = dirname(__DIR__, 6) . '/extensions';
+        $extensionsDir = base_path('extensions');
 
         if (!is_dir($extensionsDir)) {
             $info['global_config_issues'][] = 'Extensions directory missing';
@@ -445,7 +446,7 @@ class DebugCommand extends BaseExtensionCommand
     private function simulateExtensionOperations(): void
     {
         // Simulate typical extension operations for performance measurement
-        $extensionsDir = dirname(__DIR__, 6) . '/extensions';
+        $extensionsDir = base_path('extensions');
 
         if (is_dir($extensionsDir)) {
             $directories = scandir($extensionsDir);

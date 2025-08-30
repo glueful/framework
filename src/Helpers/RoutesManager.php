@@ -8,8 +8,6 @@ use Glueful\Services\FileFinder;
 
 class RoutesManager
 {
-    protected static string $routesDir = __DIR__ . '/../../routes';
-
     /**
      * Load all route files from the routes directory.
      * Skips loading if routes are already loaded from cache for performance.
@@ -21,11 +19,13 @@ class RoutesManager
             return;
         }
 
+        $routesDir = base_path('routes');
+
         $fileFinder = container()->get(FileFinder::class);
-        $routeFiles = $fileFinder->findRouteFiles([self::$routesDir]);
+        $routeFiles = $fileFinder->findRouteFiles([$routesDir]);
 
         if (!$routeFiles->valid()) {
-            throw new \Exception("No route files found in directory: " . self::$routesDir);
+            throw new \Exception("No route files found in directory: " . $routesDir);
         }
 
         foreach ($routeFiles as $file) {

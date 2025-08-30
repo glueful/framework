@@ -219,7 +219,7 @@ class MetricsController extends BaseController
         }
 
             // File system metrics
-            $storagePath = realpath(__DIR__ . '/../../storage');
+            $storagePath = realpath(base_path('storage'));
             $fileSystemMetrics = [
                 'storage_free_space' => $this->formatBytes(disk_free_space($storagePath)),
                 'storage_total_space' => $this->formatBytes(disk_total_space($storagePath)),
@@ -234,7 +234,7 @@ class MetricsController extends BaseController
             $metrics['file_system'] = $fileSystemMetrics;
 
             // Check for log files
-            $logPath = realpath(__DIR__ . '/../../storage/logs');
+            $logPath = realpath(base_path('storage/logs'));
             if ($logPath && is_dir($logPath)) {
                 $logFiles = glob($logPath . '/*.log');
                 $recentLogs = [];

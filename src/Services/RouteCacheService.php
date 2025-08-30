@@ -26,7 +26,7 @@ class RouteCacheService
     public function __construct()
     {
         // Use storage/cache directory for route cache
-        $this->cacheDir = dirname(__DIR__, 2) . '/storage/cache';
+        $this->cacheDir = base_path('storage/cache');
 
         // Ensure cache directory exists
         if (!is_dir($this->cacheDir)) {
@@ -173,7 +173,7 @@ class RouteCacheService
                 'created_at' => time(),
                 'php_version' => PHP_VERSION,
                 'framework_version' => '1.0.0', // TODO: Get from config
-                'environment' => $_ENV['APP_ENV'] ?? 'production'
+                'environment' => (string) config('app.env', env('APP_ENV', 'production'))
             ]
         ];
     }

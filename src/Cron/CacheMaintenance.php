@@ -25,7 +25,7 @@ class CacheMaintenance
     public function clearExpiredKeys(): void
     {
         try {
-            $cacheDir = dirname(__DIR__, 2) . '/storage/cache';
+            $cacheDir = base_path('storage/cache');
 
             if (!is_dir($cacheDir)) {
                 return;
@@ -119,7 +119,7 @@ class CacheMaintenance
     {
         // For file-based cache, we can reorganize files
         // For Redis/Memcached, this might involve compaction
-        $cacheDir = dirname(__DIR__, 2) . '/storage/cache';
+        $cacheDir = base_path('storage/cache');
 
         if (!is_dir($cacheDir)) {
             return;
@@ -163,7 +163,7 @@ class CacheMaintenance
     private function updateCacheStatistics(): void
     {
         // Update cache statistics file
-        $statsFile = dirname(__DIR__, 2) . '/storage/cache/stats.json';
+        $statsFile = base_path('storage/cache/stats.json');
         $stats = [
             'last_maintenance' => time(),
             'keys_removed' => $this->stats['expired_keys_removed'],
@@ -214,7 +214,7 @@ class CacheMaintenance
             $message .= "Errors:\n- " . implode("\n- ", $this->stats['errors']) . "\n";
         }
 
-        $logFile = dirname(__DIR__, 2) . '/storage/logs/cache-maintenance.log';
+        $logFile = base_path('storage/logs/cache-maintenance.log');
         $logDir = dirname($logFile);
 
         if (!is_dir($logDir)) {

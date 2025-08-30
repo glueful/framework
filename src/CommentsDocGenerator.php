@@ -54,9 +54,9 @@ class CommentsDocGenerator
         ?ExtensionManager $extensionsManager = null
     ) {
         $this->extensionsPath = $extensionsPath ?? config(('app.paths.project_extensions'));
-        $this->outputPath = $outputPath ?? dirname(__DIR__) . '/docs/api-doc-json-definitions/extensions';
-        $this->routesPath = $routesPath ?? dirname(__DIR__) . '/routes';
-        $this->routesOutputPath = $routesOutputPath ?? dirname(__DIR__) . '/docs/api-doc-json-definitions/routes';
+        $this->outputPath = $outputPath ?? base_path('docs/json-definitions/extensions');
+        $this->routesPath = $routesPath ?? base_path('routes');
+        $this->routesOutputPath = $routesOutputPath ?? base_path('docs/json-definitions/routes');
         $this->extensionsManager = $extensionsManager ?? container()->get(ExtensionManager::class);
     }
 

@@ -351,6 +351,7 @@ class ConstraintCompiler
     private function discoverDTOClasses(): array
     {
         $dtoClasses = [];
+        // DTOs live in the framework's src/DTOs directory (package-relative)
         $dtoPath = dirname(__DIR__) . '/DTOs';
 
         if (is_dir($dtoPath)) {

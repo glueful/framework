@@ -460,7 +460,7 @@ class ManageCommand extends BaseCommand
         }
 
         // Use FileFinder to discover cleanup candidates
-        $storagePath = dirname(__DIR__, 5) . '/storage/archives';
+        $storagePath = base_path('storage/archives');
         $archiveDir = config('archive.storage_path', $storagePath);
 
         if ($olderThan) {
@@ -627,7 +627,7 @@ class ManageCommand extends BaseCommand
         $this->io->text("Table size: " . $this->formatBytes($stats->currentSizeBytes));
 
         // Check available disk space
-        $storagePath = dirname(__DIR__, 5) . '/storage/archives';
+        $storagePath = base_path('storage/archives');
         $archiveDir = config('archive.storage_path', $storagePath);
         if (!$this->fileManager->exists($archiveDir)) {
             $this->fileManager->createDirectory($archiveDir);

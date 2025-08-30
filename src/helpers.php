@@ -122,7 +122,7 @@ if (!function_exists('loadConfigWithHierarchy')) {
             }
         }
 
-        // Fallback to current behavior if no paths configured
+        // Fallback to framework config if no paths configured (package-relative)
         if (empty($configPaths)) {
             $fallbackPath = dirname(__DIR__) . "/config/{$file}.php";
             if (file_exists($fallbackPath)) {
@@ -260,9 +260,9 @@ if (!function_exists('container')) {
     function container(): \Glueful\DI\Container
     {
         // Try to get paths from globals first (if already initialized)
-        $basePath = $GLOBALS['base_path'] ?? dirname(__DIR__, 1);
+        $basePath = $GLOBALS['base_path'] ?? dirname(__DIR__);
         $applicationConfigPath = $basePath . '/config';
-        $environment = $GLOBALS['app_environment'] ?? ($_ENV['APP_ENV'] ?? 'production');
+        $environment = $GLOBALS['app_environment'] ?? env('APP_ENV', 'development');
 
         return \Glueful\DI\ContainerBootstrap::initialize(
             $basePath,
@@ -452,18 +452,18 @@ if (!function_exists('storage_path')) {
      */
     function storage_path(string $path = ''): string
     {
-        $basePath = dirname(__DIR__, 2) . '/storage';
+        $base = base_path('storage');
 
-        if (empty($path)) {
-            return $basePath;
+        if ($path === '') {
+            return $base;
         }
 
-        $fullPath = $basePath . '/' . ltrim($path, '/');
+        $fullPath = $base . '/' . ltrim($path, '/');
 
-        // Create directory if it doesn't exist
-        $directory = dirname($fullPath);
-        if (!is_dir($directory)) {
-            mkdir($directory, 0755, true);
+        // Ensure parent directory exists for convenience
+        $dir = dirname($fullPath);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
         }
 
         return $fullPath;
@@ -482,13 +482,8 @@ if (!function_exists('resource_path')) {
      */
     function resource_path(string $path = ''): string
     {
-        $basePath = dirname(__DIR__, 2) . '/resources';
-
-        if (empty($path)) {
-            return $basePath;
-        }
-
-        return $basePath . '/' . ltrim($path, '/');
+        $base = base_path('resources');
+        return $path === '' ? $base : $base . '/' . ltrim($path, '/');
     }
 }
 
@@ -510,12 +505,12 @@ if (!function_exists('base_path')) {
             if ($container->hasParameter('app.base_path')) {
                 $basePath = $container->getParameter('app.base_path');
             } else {
-                // Fallback: assume we're in src/ directory, go up 2 levels
-                $basePath = dirname(__DIR__, 1);
+                // Fallback: assume we're in src/ directory, go up 1 level to project root
+                $basePath = dirname(__DIR__);
             }
         } catch (\Exception) {
             // Final fallback: assume we're in src/ directory, go up 1 level
-            $basePath = dirname(__DIR__, 1);
+            $basePath = dirname(__DIR__);
         }
 
         if (empty($path)) {
@@ -523,6 +518,68 @@ if (!function_exists('base_path')) {
         }
 
         return $basePath . '/' . ltrim($path, '/');
+    }
+}
+
+if (!function_exists('config_path')) {
+    /**
+     * Get configuration file path with smart framework/application fallback
+     *
+     * Returns the path to a configuration file, following the framework's hierarchy:
+     * 1. Application config directory (if file exists there)
+     * 2. Framework config directory (if file exists there)
+     * 3. Application config directory (default, even if file doesn't exist)
+     *
+     * @param string $path Relative path within config directory
+     * @return string Absolute path to config file or directory
+     */
+    function config_path(string $path = ''): string
+    {
+        // If no specific file requested, return app config directory
+        if (empty($path)) {
+            try {
+                $container = app();
+                if ($container->hasParameter('app.config_path')) {
+                    return $container->getParameter('app.config_path');
+                }
+            } catch (\Exception) {
+                // Fallback to base_path + '/config'
+            }
+            return base_path('config');
+        }
+
+        // For specific files, check both app and framework locations
+        $appConfigPath = null;
+        // Framework config directory (package-relative)
+        $frameworkConfigPath = dirname(__DIR__) . '/config';
+
+        try {
+            $container = app();
+            if ($container->hasParameter('app.config_path')) {
+                $appConfigPath = $container->getParameter('app.config_path');
+            } else {
+                $appConfigPath = base_path('config');
+            }
+        } catch (\Exception) {
+            $appConfigPath = base_path('config');
+        }
+
+        $normalizedPath = ltrim($path, '/');
+        $appFilePath = $appConfigPath . '/' . $normalizedPath;
+        $frameworkFilePath = $frameworkConfigPath . '/' . $normalizedPath;
+
+        // Return app path if file exists there
+        if (file_exists($appFilePath)) {
+            return $appFilePath;
+        }
+
+        // Return framework path if file exists there
+        if (file_exists($frameworkFilePath)) {
+            return $frameworkFilePath;
+        }
+
+        // Default to app path (for file creation, etc.)
+        return $appFilePath;
     }
 }
 

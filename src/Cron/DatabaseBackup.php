@@ -131,7 +131,7 @@ class DatabaseBackup
     public function cleanOldBackups(int $retentionDays): void
     {
         try {
-            $backupDir = dirname(__DIR__, 2) . '/storage/backups';
+            $backupDir = base_path('storage/backups');
 
             if (!is_dir($backupDir)) {
                 return;
@@ -172,7 +172,7 @@ class DatabaseBackup
             $message .= "Errors:\n- " . implode("\n- ", $this->stats['errors']) . "\n";
         }
 
-        $logFile = dirname(__DIR__, 2) . '/storage/logs/database-backup.log';
+        $logFile = base_path('storage/logs/database-backup.log');
         $logDir = dirname($logFile);
 
         if (!is_dir($logDir)) {

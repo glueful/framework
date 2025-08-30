@@ -199,7 +199,7 @@ class HealthService
         }
 
         // Check .env file exists
-        $envPath = dirname(__DIR__, 2) . '/.env';
+        $envPath = base_path('.env');
         if (!file_exists($envPath)) {
             $issues[] = '.env file not found';
         }

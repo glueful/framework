@@ -90,7 +90,7 @@ class CreateCommand extends BaseCommand
     private function createMigration(string $migrationName): string
     {
         // Get migrations directory
-        $migrationsDir = dirname(__DIR__, 4) . '/database/migrations';
+        $migrationsDir = base_path('database/migrations');
 
         // Get next migration number
         $nextNumber = $this->getNextMigrationNumber($migrationsDir);

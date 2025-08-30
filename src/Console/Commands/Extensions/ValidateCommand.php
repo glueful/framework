@@ -369,7 +369,7 @@ class ValidateCommand extends BaseExtensionCommand
         $results = [];
 
         // Check if extensions directory exists
-        $extensionsDir = dirname(__DIR__, 6) . '/extensions';
+        $extensionsDir = base_path('extensions');
         if (!is_dir($extensionsDir)) {
             if ($autoFix) {
                 mkdir($extensionsDir, 0755, true);
@@ -717,7 +717,7 @@ class ValidateCommand extends BaseExtensionCommand
     private function validateExtensionConfigs(bool $autoFix, bool $strict): array
     {
         $results = [];
-        $extensionsDir = dirname(__DIR__, 6) . '/extensions';
+        $extensionsDir = base_path('extensions');
 
         if (!is_dir($extensionsDir)) {
             return $results;
@@ -745,7 +745,7 @@ class ValidateCommand extends BaseExtensionCommand
     private function validateAllDependencies(): array
     {
         $results = [];
-        $extensionsDir = dirname(__DIR__, 6) . '/extensions';
+        $extensionsDir = base_path('extensions');
 
         if (!is_dir($extensionsDir)) {
             return $results;

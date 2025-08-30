@@ -782,7 +782,6 @@ class Utils
         // Check various indicators that we're in a test environment
         return defined('PHPUNIT_COMPOSER_INSTALL') ||
                (function_exists('env') && env('APP_ENV') === 'testing') ||
-               (isset($_ENV['APP_ENV']) && $_ENV['APP_ENV'] === 'testing') ||
                (php_sapi_name() === 'cli' && strpos($_SERVER['SCRIPT_NAME'] ?? '', 'phpunit') !== false);
     }
 }

@@ -82,7 +82,7 @@ class DocGenerator
     public function generateFromExtensions(?string $extensionsPath = null): void
     {
         if ($extensionsPath === null) {
-            $extensionsPath = dirname(__DIR__) . '/docs/api-doc-json-definitions/extensions';
+            $extensionsPath = base_path('docs/json-definitions/extensions');
         }
 
         if (!is_dir($extensionsPath)) {
@@ -160,7 +160,7 @@ class DocGenerator
     public function generateFromRoutes(?string $routesPath = null): void
     {
         if ($routesPath === null) {
-            $routesPath = dirname(__DIR__) . '/docs/api-doc-json-definitions/routes';
+            $routesPath = base_path('docs/json-definitions/routes');
         }
 
         if (!is_dir($routesPath)) {

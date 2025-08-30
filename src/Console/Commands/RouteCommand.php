@@ -286,10 +286,11 @@ class RouteCommand extends BaseCommand
             $output->writeln('<info>🔍 Route System Status:</info>');
             $output->writeln('');
 
-            // Environment info
-            $environment = $_ENV['APP_ENV'] ?? 'development';
-            $debug = $_ENV['APP_DEBUG'] ?? 'true';
-            $shouldUseCache = $environment === 'production' && (strtolower($debug) === 'false' || $debug === '0');
+            // Environment info (use configuration instead of direct $_ENV)
+            $environment = config('app.env');
+            $debugBool = (bool) config('app.debug');
+            $shouldUseCache = $environment === 'production' && !$debugBool;
+            $debug = $debugBool ? 'true' : 'false';
 
             $output->writeln("<info>Environment:</info> {$environment}");
             $output->writeln("<info>Debug mode:</info> {$debug}");
@@ -385,7 +386,7 @@ class RouteCommand extends BaseCommand
         $output->writeln("Error: {$e->getMessage()}");
         $output->writeln("File: {$e->getFile()}:{$e->getLine()}");
 
-        if (($_ENV['APP_DEBUG'] ?? 'false') === 'true') {
+        if (config('app.debug')) {
             $output->writeln('');
             $output->writeln('<comment>Stack trace:</comment>');
             $output->writeln($e->getTraceAsString());

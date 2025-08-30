@@ -191,7 +191,7 @@ class ApiDefinitionGenerator
 
         $docGenerator = new DocGenerator();
         $definitionsPath = config('app.paths.database_json_definitions');
-        $definitionsDocPath = config('app.paths.api_docs') . 'api-doc-json-definitions/';
+        $definitionsDocPath = config('app.paths.api_docs') . 'json-definitions/';
 
         // Process API doc definition files using FileFinder
         $fileFinder = container()->get(FileFinder::class);
@@ -228,7 +228,7 @@ class ApiDefinitionGenerator
 
         // Dynamically generate documentation for extensions with route files
         try {
-            $extensionDocsDir = config('app.paths.api_docs') . 'api-doc-json-definitions/extensions';
+            $extensionDocsDir = config('app.paths.api_docs') . 'json-definitions/extensions';
 
             // Create the extensions documentation directory if it doesn't exist
             if (!is_dir($extensionDocsDir)) {
@@ -236,7 +236,7 @@ class ApiDefinitionGenerator
             }
 
             // Create the routes documentation directory if it doesn't exist
-            $routesDocsDir = config('app.paths.api_docs') . 'api-doc-json-definitions/routes';
+            $routesDocsDir = config('app.paths.api_docs') . 'json-definitions/routes';
             if (!is_dir($routesDocsDir)) {
                 mkdir($routesDocsDir, 0755, true);
             }
@@ -248,7 +248,7 @@ class ApiDefinitionGenerator
                 $this->log("Forcing generation of extension documentation...");
 
                 // If forcing generation, handle each extension separately
-                $extensionDirs = $fileFinder->findExtensions(dirname(__DIR__) . '/extensions');
+                $extensionDirs = $fileFinder->findExtensions(base_path('extensions'));
                 $generatedFiles = [];
 
                 foreach ($extensionDirs as $extDir) {
@@ -264,7 +264,7 @@ class ApiDefinitionGenerator
                 }
 
                 // Force generation for main routes
-                $routeFiles = $fileFinder->findRouteFiles([dirname(__DIR__) . '/routes']);
+                $routeFiles = $fileFinder->findRouteFiles([base_path('routes')]);
                 foreach ($routeFiles as $routeFileObj) {
                     $routeFile = $routeFileObj->getPathname();
                     $routeName = $routeFileObj->getBasename('.php');

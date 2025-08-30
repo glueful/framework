@@ -435,14 +435,11 @@ class QueueManager
      */
     public static function createDefault(): self
     {
-        // Try to load from Glueful config
-        $configPath = dirname(__DIR__, 2) . '/config/queue.php';
+        // Load merged queue configuration using helper
+        $config = function_exists('loadConfigWithHierarchy')
+            ? loadConfigWithHierarchy('queue')
+            : [];
 
-        if (file_exists($configPath)) {
-            return self::fromConfigFile($configPath);
-        }
-
-        // Fallback to default configuration
-        return new self();
+        return new self($config);
     }
 }

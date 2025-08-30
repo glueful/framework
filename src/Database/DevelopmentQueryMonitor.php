@@ -353,7 +353,7 @@ class DevelopmentQueryMonitor
      */
     private static function logToFile(array $logEntry): void
     {
-        $logPath = dirname(__DIR__, 2) . '/storage/logs/queries-' . date('Y-m-d') . '.log';
+        $logPath = base_path('storage/logs/queries-' . date('Y-m-d') . '.log');
 
         $logLine = sprintf(
             "[%s] %.3fs - %s %s\n",

@@ -114,7 +114,7 @@ class DriverInfo
     private function isPackageInstalled(string $package): bool
     {
         // Simple check - in production you might want to use Composer's API
-        $vendorPath = dirname(__DIR__, 4) . '/vendor/' . $package;
+        $vendorPath = base_path('vendor/' . $package);
         return is_dir($vendorPath);
     }
 }

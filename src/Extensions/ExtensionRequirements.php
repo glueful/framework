@@ -50,7 +50,7 @@ class ExtensionRequirements extends ConfigurableService
         }
 
         // Check if extension exists locally (fallback)
-        $localPath = dirname(__DIR__, 3) . "/extensions/" . basename($extension);
+        $localPath = base_path('extensions/' . basename($extension));
         return is_dir($localPath);
     }
 

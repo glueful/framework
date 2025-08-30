@@ -240,7 +240,7 @@ class ConfigController extends BaseController
         $fileFinder = container()->get(FileFinder::class);
 
         // Determine config path
-        $configPath = dirname(__DIR__, 2) . '/config';
+        $configPath = config_path();
         $filePath = $configPath . '/' . $configName . '.php';
 
         // Check if config already exists
@@ -461,8 +461,8 @@ class ConfigController extends BaseController
      */
     private function loadAllConfigs(): array
     {
-        // Load config files directly from the config directory
-        $configPath = dirname(__DIR__, 2) . '/config';
+        // Load config files directly from the application config directory
+        $configPath = config_path();
         $configFiles = glob($configPath . '/*.php');
 
         if ($configFiles === false) {
@@ -520,7 +520,7 @@ class ConfigController extends BaseController
         // Use permission-aware caching for config file access
         return $this->cacheByPermission("config_file_{$configName}", function () use ($configName) {
             // First check core config files
-            $configPath = dirname(__DIR__, 2) . '/config';
+            $configPath = config_path();
             $filePath = $configPath . '/' . $configName . '.php';
 
             // Check if the core config file exists and is readable
@@ -554,7 +554,7 @@ class ConfigController extends BaseController
      */
     private function getConfigLastModified(string $configName): ?\DateTime
     {
-        $configPath = dirname(__DIR__, 2) . '/config';
+        $configPath = config_path();
         $filePath = $configPath . '/' . $configName . '.php';
 
         if (file_exists($filePath)) {
@@ -581,7 +581,7 @@ class ConfigController extends BaseController
 
             foreach ($enabledExtensionNames as $extensionName) {
                 // Check common config file locations in extensions directory
-                $extensionPath = dirname(__DIR__, 2) . '/extensions/' . $extensionName;
+                $extensionPath = base_path('extensions/' . $extensionName);
 
                 if (!is_dir($extensionPath)) {
                     continue;
@@ -625,7 +625,7 @@ class ConfigController extends BaseController
     {
         // Basic security: ensure file is within allowed paths
         $realPath = realpath($file);
-        $basePath = realpath(dirname(__DIR__, 2));
+        $basePath = realpath(base_path());
 
         if (!$realPath || !str_starts_with($realPath, $basePath)) {
             throw new SecurityException("Invalid config file path: {$file}");
@@ -798,7 +798,7 @@ class ConfigController extends BaseController
 
     private function persistConfigToFile(string $configName, array $config): bool
     {
-        $configPath = dirname(__DIR__, 2) . '/config';
+        $configPath = config_path();
         $filePath = $configPath . '/' . $configName . '.php';
 
         $configContent = "<?php\n\nreturn " . var_export($config, true) . ";\n";
@@ -808,7 +808,7 @@ class ConfigController extends BaseController
 
     private function updateEnvVariables(array $data): void
     {
-        $envPath = __DIR__ . '/../../.env';
+        $envPath = base_path('.env');
         if (!file_exists($envPath)) {
             return;
         }
@@ -862,7 +862,7 @@ class ConfigController extends BaseController
      */
     private function configFileExists(string $configName): bool
     {
-        $configPath = dirname(__DIR__, 2) . '/config';
+        $configPath = config_path();
         $filePath = $configPath . '/' . $configName . '.php';
         return file_exists($filePath) && is_readable($filePath);
     }

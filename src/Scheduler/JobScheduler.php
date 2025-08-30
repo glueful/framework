@@ -481,7 +481,7 @@ class JobScheduler
 
     public function loadCoreJobsFromConfig(): void
     {
-        $configFile = dirname(__DIR__, 2) . '/config/schedule.php';
+        $configFile = config_path('schedule.php');
         if (!file_exists($configFile)) {
             return;
         }

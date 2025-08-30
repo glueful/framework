@@ -18,7 +18,7 @@ class ContainerBootstrap
         }
 
         // Set up config hierarchy
-        $frameworkConfigPath = dirname(__DIR__) . '/config';  // Framework defaults
+        $frameworkConfigPath = dirname(__DIR__, 2) . '/config';  // Framework defaults
         self::initializeConfigSystem($basePath, $frameworkConfigPath, $applicationConfigPath, $environment);
 
         // Create container with proper environment detection
