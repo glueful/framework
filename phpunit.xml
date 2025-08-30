@@ -11,14 +11,20 @@
         <testsuite name="Integration">
             <directory>./tests/Integration</directory>
         </testsuite>
+        <testsuite name="Feature">
+            <directory>./tests/Feature</directory>
+        </testsuite>
+        <testsuite name="Performance">
+            <directory>./tests/Performance</directory>
+        </testsuite>
+        <testsuite name="Documentation">
+            <directory>./tests/Documentation</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>
             <directory>./api</directory>
         </include>
-        <exclude>
-            <directory>./api/api-json-definitions</directory>
-        </exclude>
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
