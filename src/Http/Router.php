@@ -8,6 +8,7 @@ use Symfony\Component\Routing\Route;
 use Symfony\Component\Routing\RouteCollection;
 use Symfony\Component\Routing\RequestContext;
 use Symfony\Component\Routing\Matcher\UrlMatcher;
+use Symfony\Component\Routing\Matcher\UrlMatcherInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -56,7 +57,12 @@ class Router
     private static ?Router $instance = null;
     private static RouteCollection $routes;
     private static RequestContext $context;
-    private static UrlMatcher $matcher;
+    private static UrlMatcherInterface $matcher;
+
+    /** @var UrlMatcherInterface|null Precompiled Symfony matcher (from cache) */
+    private static ?UrlMatcherInterface $compiledMatcher = null;
+    /** @var null|callable Factory that builds a compiled matcher given a RequestContext */
+    private static $compiledMatcherFactory = null;
 
     /** @var MiddlewareInterface[] PSR-15 middleware stack */
     private static array $middlewareStack = [];
@@ -106,6 +112,32 @@ class Router
     public static function getVersionPrefix(): string
     {
         return self::$versionPrefix;
+    }
+
+    /**
+     * Provide a factory that can create a compiled matcher from the current context
+     */
+    public static function setCompiledMatcherFactory(callable $factory): void
+    {
+        self::$compiledMatcherFactory = $factory;
+        self::$compiledMatcher = null; // re-init on next dispatch
+    }
+
+    /**
+     * Set a prebuilt compiled matcher directly
+     */
+    public static function setCompiledMatcher(UrlMatcherInterface $matcher): void
+    {
+        self::$compiledMatcher = $matcher;
+        self::$compiledMatcherFactory = null;
+    }
+
+    /**
+     * Check whether a compiled matcher or factory is configured
+     */
+    public static function hasCompiledMatcher(): bool
+    {
+        return self::$compiledMatcher !== null || self::$compiledMatcherFactory !== null;
     }
 
     /**
@@ -585,7 +617,27 @@ class Router
     public static function dispatch(Request $request): Response
     {
         self::$context->fromRequest($request);
-        self::$matcher = new UrlMatcher(self::$routes, self::$context);
+
+        // Prefer compiled matcher when available
+        if (self::$compiledMatcher !== null) {
+            self::$compiledMatcher->setContext(self::$context);
+            self::$matcher = self::$compiledMatcher;
+        } elseif (self::$compiledMatcherFactory !== null) {
+            try {
+                $factory = self::$compiledMatcherFactory;
+                $matcher = $factory(self::$context);
+                if ($matcher instanceof UrlMatcher) {
+                    self::$compiledMatcher = $matcher;
+                    self::$matcher = self::$compiledMatcher;
+                } else {
+                    self::$matcher = new UrlMatcher(self::$routes, self::$context);
+                }
+            } catch (\Throwable) {
+                self::$matcher = new UrlMatcher(self::$routes, self::$context);
+            }
+        } else {
+            self::$matcher = new UrlMatcher(self::$routes, self::$context);
+        }
 
         $pathInfo = $request->getPathInfo();
 

@@ -149,6 +149,26 @@ class Application
         $routesPath = config('app.routes_path', 'routes'); // User can configure via config/app.php
         $routesDir = $basePath . '/' . $routesPath;
 
+        $environment = (string) config('app.env', 'production');
+
+        // In production, prefer compiled matcher if present
+        if ($environment === 'production') {
+            $checksum = $this->computeRoutesChecksum($routesDir);
+            $hash = substr(sha1($checksum . '|' . $environment), 0, 8);
+            $cacheDir = $basePath . '/storage/cache';
+            if (!is_dir($cacheDir)) {
+                @mkdir($cacheDir, 0755, true);
+            }
+            $cacheFile = $cacheDir . "/routes_{$environment}_{$hash}.php";
+            if (file_exists($cacheFile)) {
+                $factory = require $cacheFile;
+                if (is_callable($factory)) {
+                    \Glueful\Http\Router::setCompiledMatcherFactory($factory);
+                    return;
+                }
+            }
+        }
+
         if (is_dir($routesDir)) {
             $fileFinder = $this->container->get(\Glueful\Services\FileFinder::class);
             $routeFiles = $fileFinder->findRouteFiles([$routesDir]);
@@ -157,6 +177,47 @@ class Application
                 include_once $file->getPathname();
             }
         }
+
+        // After loading, compile routes in production
+        if ($environment === 'production') {
+            $collection = \Glueful\Http\Router::getRoutes();
+            $checksum = $this->computeRoutesChecksum($routesDir);
+            $hash = substr(sha1($checksum . '|' . $environment), 0, 8);
+            $cacheDir = $basePath . '/storage/cache';
+            if (!is_dir($cacheDir)) {
+                @mkdir($cacheDir, 0755, true);
+            }
+            $cacheFile = $cacheDir . "/routes_{$environment}_{$hash}.php";
+            try {
+                $dumper = new \Symfony\Component\Routing\Matcher\Dumper\CompiledUrlMatcherDumper($collection);
+                $compiled = $dumper->dump();
+                $export = var_export($compiled, true);
+                $content = "<?php\n" .
+                    "return function(\\Symfony\\Component\\Routing\\RequestContext \\$context){ " .
+                    "\$compiled = {$export}; " .
+                    "return new \\Symfony\\Component\\Routing\\Matcher\\CompiledUrlMatcher(\$compiled, \\$context); " .
+                    "};\n";
+                file_put_contents($cacheFile, $content);
+                $factory = require $cacheFile;
+                if (is_callable($factory)) {
+                    \Glueful\Http\Router::setCompiledMatcherFactory($factory);
+                }
+            } catch (\Throwable $e) {
+                // Ignore compilation failures; continue with dynamic matching
+                unset($e);
+            }
+        }
+    }
+
+    private function computeRoutesChecksum(string $routesDir): string
+    {
+        $parts = [];
+        if (is_dir($routesDir)) {
+            foreach (glob($routesDir . '/*.php') as $file) {
+                $parts[] = md5_file($file) ?: '';
+            }
+        }
+        return md5(implode('|', $parts));
     }
 
     private function initializeScheduler(): void
