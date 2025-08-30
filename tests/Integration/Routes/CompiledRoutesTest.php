@@ -43,7 +43,7 @@ final class CompiledRoutesTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_compiled_routes_cache_is_created_and_used(): void
+    public function testCompiledRoutesCacheIsCreatedAndUsed(): void
     {
         Framework::create($this->baseDir)->withEnvironment('production')->boot(allowReboot: true);
 
@@ -64,7 +64,9 @@ final class CompiledRoutesTest extends TestCase
 
     private function rrmdir(string $dir): void
     {
-        if (!is_dir($dir)) { return; }
+        if (!is_dir($dir)) {
+            return;
+        }
         $it = new \RecursiveIteratorIterator(
             new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
             \RecursiveIteratorIterator::CHILD_FIRST
@@ -75,4 +77,3 @@ final class CompiledRoutesTest extends TestCase
         @rmdir($dir);
     }
 }
-

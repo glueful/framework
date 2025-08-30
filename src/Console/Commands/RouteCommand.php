@@ -289,6 +289,12 @@ class RouteCommand extends BaseCommand
 
             // Cache status
             $output->writeln('<info>Cache Status:</info>');
+            $output->writeln("<info>Compiled matcher active:</info> " . (Router::hasCompiledMatcher() ? '✅ Yes' : '❌ No'));
+            $hash = \Glueful\Services\RouteHash::computeEnvHash($environment);
+            $extCount = \Glueful\Services\RouteHash::countExtensionRouteFiles();
+            $output->writeln("<info>Current env/hash:</info> {$environment}/{$hash}");
+            $output->writeln("<info>Expected cache file:</info> {$cacheFile}");
+            $output->writeln("<info>Extension route files included:</info> {$extCount}");
             $output->writeln("<info>Cache file exists:</info> " . (file_exists($cacheFile) ? '✅ Yes' : '❌ No'));
 
             if (file_exists($cacheFile)) {

@@ -153,8 +153,7 @@ class Application
 
         // In production, prefer compiled matcher if present
         if ($environment === 'production') {
-            $checksum = $this->computeRoutesChecksum($routesDir);
-            $hash = substr(sha1($checksum . '|' . $environment), 0, 8);
+            $hash = \Glueful\Services\RouteHash::computeEnvHash($environment);
             $cacheDir = $basePath . '/storage/cache';
             if (!is_dir($cacheDir)) {
                 @mkdir($cacheDir, 0755, true);
@@ -181,8 +180,7 @@ class Application
         // After loading, compile routes in production
         if ($environment === 'production') {
             $collection = \Glueful\Http\Router::getRoutes();
-            $checksum = $this->computeRoutesChecksum($routesDir);
-            $hash = substr(sha1($checksum . '|' . $environment), 0, 8);
+            $hash = \Glueful\Services\RouteHash::computeEnvHash($environment);
             $cacheDir = $basePath . '/storage/cache';
             if (!is_dir($cacheDir)) {
                 @mkdir($cacheDir, 0755, true);
@@ -213,21 +211,8 @@ PHP;
 
     private function computeRoutesChecksum(string $routesDir): string
     {
-        $parts = [];
-        // App routes
-        if (is_dir($routesDir)) {
-            foreach (glob($routesDir . '/*.php') as $file) {
-                $parts[] = md5_file($file) ?: '';
-            }
-        }
-        // Extension routes (routes.php or src/routes.php per extension)
-        foreach (glob(base_path('extensions/*/routes.php')) ?: [] as $file) {
-            $parts[] = md5_file($file) ?: '';
-        }
-        foreach (glob(base_path('extensions/*/src/routes.php')) ?: [] as $file) {
-            $parts[] = md5_file($file) ?: '';
-        }
-        return md5(implode('|', $parts));
+        // Delegated to RouteHash to avoid drift; keep signature for BC with current calls
+        return \Glueful\Services\RouteHash::computeChecksum();
     }
 
     private function initializeScheduler(): void

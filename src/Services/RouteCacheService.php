@@ -37,29 +37,8 @@ class RouteCacheService
     public function getCacheFilePath(): string
     {
         $env = (string) config('app.env', env('APP_ENV', 'production'));
-        $hash = $this->computeRoutesHash();
+        $hash = \Glueful\Services\RouteHash::computeEnvHash($env);
         return $this->cacheDir . "/routes_{$env}_{$hash}.php";
-    }
-
-    private function computeRoutesHash(): string
-    {
-        $routesDir = base_path(config('app.routes_path', 'routes'));
-        $parts = [];
-        // App routes
-        if (is_dir($routesDir)) {
-            foreach (glob($routesDir . '/*.php') as $file) {
-                $parts[] = md5_file($file) ?: '';
-            }
-        }
-        // Extension routes
-        foreach (glob(base_path('extensions/*/routes.php')) ?: [] as $file) {
-            $parts[] = md5_file($file) ?: '';
-        }
-        foreach (glob(base_path('extensions/*/src/routes.php')) ?: [] as $file) {
-            $parts[] = md5_file($file) ?: '';
-        }
-        $env = (string) config('app.env', env('APP_ENV', 'production'));
-        return substr(sha1(implode('|', $parts) . '|' . $env), 0, 8);
     }
 
     /**

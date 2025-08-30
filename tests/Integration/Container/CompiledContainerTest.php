@@ -32,7 +32,7 @@ final class CompiledContainerTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_compiled_container_created_and_used(): void
+    public function testCompiledContainerCreatedAndUsed(): void
     {
         Framework::create($this->baseDir)->withEnvironment('production')->boot(allowReboot: true);
 
@@ -46,14 +46,17 @@ final class CompiledContainerTest extends TestCase
         $this->assertTrue($container->isCompiled());
     }
 
-    public function test_compiled_container_invalidates_on_config_change(): void
+    public function testCompiledContainerInvalidatesOnConfigChange(): void
     {
         Framework::create($this->baseDir)->withEnvironment('production')->boot(allowReboot: true);
         $first = $this->currentCompiledFile();
         $this->assertNotNull($first, 'Expected initial compiled container file');
 
         // Touch config to change hash
-        file_put_contents($this->baseDir . '/config/app.php', "<?php return ['env'=>'production','debug'=>false,'version_full'=>'1.0.1'];\n");
+        file_put_contents(
+            $this->baseDir . '/config/app.php',
+            "<?php return ['env'=>'production','debug'=>false,'version_full'=>'1.0.1'];\n"
+        );
 
         // Reset and boot again to pick up change
         ContainerBootstrap::reset();
@@ -81,7 +84,9 @@ final class CompiledContainerTest extends TestCase
 
     private function rrmdir(string $dir): void
     {
-        if (!is_dir($dir)) { return; }
+        if (!is_dir($dir)) {
+            return;
+        }
         $it = new \RecursiveIteratorIterator(
             new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
             \RecursiveIteratorIterator::CHILD_FIRST
@@ -92,4 +97,3 @@ final class CompiledContainerTest extends TestCase
         @rmdir($dir);
     }
 }
-
