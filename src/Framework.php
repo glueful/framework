@@ -76,6 +76,26 @@ class Framework
         // Make container globally available (for helper functions)
         $GLOBALS['container'] = $container;
 
+        // Log container compilation details for production visibility
+        try {
+            /** @var \Psr\Log\LoggerInterface $logger */
+            $logger = $container->get(\Psr\Log\LoggerInterface::class);
+            $info = [
+                'env' => (string) config('app.env', $this->environment),
+                'compiled' => \Glueful\DI\ContainerFactory::hasCompiledContainer(),
+            ];
+            if ($info['compiled']) {
+                // Derive current compiled file path
+                $ref = new \ReflectionClass(\Glueful\DI\ContainerFactory::class);
+                $m = $ref->getMethod('getCompiledContainerPath');
+                $m->setAccessible(true);
+                $info['file'] = $m->invoke(null);
+            }
+            $logger->info('DI container initialized', ['container' => $info]);
+        } catch (\Throwable) {
+            // Best-effort logging only
+        }
+
         // Validate security configuration in production
         if ($this->environment === 'production') {
             \Glueful\Security\SecurityManager::validateProductionEnvironment();

@@ -192,11 +192,13 @@ class Application
                 $dumper = new \Symfony\Component\Routing\Matcher\Dumper\CompiledUrlMatcherDumper($collection);
                 $compiled = $dumper->dump();
                 $export = var_export($compiled, true);
-                $content = "<?php\n" .
-                    "return function(\\Symfony\\Component\\Routing\\RequestContext \\$context){ " .
-                    "\$compiled = {$export}; " .
-                    "return new \\Symfony\\Component\\Routing\\Matcher\\CompiledUrlMatcher(\$compiled, \\$context); " .
-                    "};\n";
+                $content = <<<PHP
+<?php
+return function(\Symfony\Component\Routing\RequestContext \$context) {
+    \$compiled = {$export};
+    return new \Symfony\Component\Routing\Matcher\CompiledUrlMatcher(\$compiled, \$context);
+};
+PHP;
                 file_put_contents($cacheFile, $content);
                 $factory = require $cacheFile;
                 if (is_callable($factory)) {
@@ -212,10 +214,18 @@ class Application
     private function computeRoutesChecksum(string $routesDir): string
     {
         $parts = [];
+        // App routes
         if (is_dir($routesDir)) {
             foreach (glob($routesDir . '/*.php') as $file) {
                 $parts[] = md5_file($file) ?: '';
             }
+        }
+        // Extension routes (routes.php or src/routes.php per extension)
+        foreach (glob(base_path('extensions/*/routes.php')) ?: [] as $file) {
+            $parts[] = md5_file($file) ?: '';
+        }
+        foreach (glob(base_path('extensions/*/src/routes.php')) ?: [] as $file) {
+            $parts[] = md5_file($file) ?: '';
         }
         return md5(implode('|', $parts));
     }

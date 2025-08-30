@@ -157,45 +157,35 @@ class RouteCommand extends BaseCommand
 
         try {
             $cacheService = new RouteCacheService();
-            $cacheFile = $cacheService->getCacheFilePath();
+            $env = (string) config('app.env', 'production');
+            $cacheDir = base_path('storage/cache');
+            $pattern = $cacheDir . "/routes_{$env}_*.php";
+            $files = glob($pattern) ?: [];
 
             if ($verbose) {
-                $output->writeln("<comment>Cache file location: {$cacheFile}</comment>");
+                $output->writeln("<comment>Cache path pattern: {$pattern}</comment>");
                 $output->writeln('');
             }
 
-            if (!file_exists($cacheFile)) {
-                $output->writeln('<comment>ℹ️  No route cache file found.</comment>');
+            if (empty($files)) {
+                $output->writeln('<comment>ℹ️  No route cache files found.</comment>');
                 $output->writeln('Routes are already being loaded dynamically.');
                 return self::SUCCESS;
             }
 
-            // Get cache file info before deletion
-            $cacheSize = filesize($cacheFile);
-            $cacheModified = filemtime($cacheFile);
+            $output->writeln('<info>🗑️  Removing route cache files...</info>');
+            $totalFreed = 0;
+            foreach ($files as $file) {
+                $totalFreed += @filesize($file) ?: 0;
+                @unlink($file);
+            }
 
+            $output->writeln('<success>✅ Route cache cleared successfully!</success>');
             if ($verbose) {
-                $this->displayCacheInfo($output, $cacheSize, $cacheModified);
+                $this->displayClearResults($output, (int) $totalFreed, $pattern);
             }
-
-            // Remove the cache file
-            $output->writeln('<info>🗑️  Removing route cache...</info>');
-
-            if (unlink($cacheFile)) {
-                $output->writeln('<success>✅ Route cache cleared successfully!</success>');
-                $output->writeln('');
-
-                if ($verbose) {
-                    $this->displayClearResults($output, $cacheSize, $cacheFile);
-                }
-
-                $this->displayClearTips($output);
-                return self::SUCCESS;
-            } else {
-                $output->writeln('<error>❌ Failed to remove route cache file!</error>');
-                $output->writeln('Check file permissions and try again.');
-                return self::FAILURE;
-            }
+            $this->displayClearTips($output);
+            return self::SUCCESS;
         } catch (\Exception $e) {
             return $this->handleException($e, $output, 'Route cache clearing failed!');
         }
@@ -310,12 +300,6 @@ class RouteCommand extends BaseCommand
                 $output->writeln("<info>Cache file size:</info> " . $this->formatBytes($cacheSize));
                 $output->writeln("<info>Last modified:</info> " . date('Y-m-d H:i:s', $cacheModified));
                 $output->writeln("<info>Age:</info> " . $this->formatAge(time() - $cacheModified));
-
-                if ($isCacheValid) {
-                    $cached = include $cacheFile;
-                    $routeCount = count($cached['routes']);
-                    $output->writeln("<info>Cached routes:</info> {$routeCount}");
-                }
             }
 
             $output->writeln('');

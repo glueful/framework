@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\DI;
 
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Dumper\PhpDumper;
 use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
 use Symfony\Component\Config\FileLocator;
@@ -245,42 +246,102 @@ class ContainerFactory
         }
     }
 
-    private static function hasCompiledContainer(): bool
+    public static function hasCompiledContainer(): bool
     {
-        $containerFile = base_path('storage/container/CompiledContainer.php');
-
-        if (!file_exists($containerFile)) {
+        $file = self::getCompiledContainerPath();
+        if (!file_exists($file)) {
             return false;
         }
-
-        // Also check if the class would be loadable
-        require_once $containerFile;
-        return class_exists('Glueful\\DI\\Compiled\\CompiledContainer');
+        // Ensure class is available
+        require_once $file;
+        return class_exists(self::getCompiledContainerClass());
     }
 
     private static function loadCompiledContainer(): Container
     {
-        $containerFile = base_path('storage/container/CompiledContainer.php');
-
-        if (!file_exists($containerFile)) {
-            // Fallback to development container if compiled doesn't exist
+        $file = self::getCompiledContainerPath();
+        if (!file_exists($file)) {
             return self::buildDevelopmentContainer();
         }
 
-        require_once $containerFile;
-
-        // Compiled container class is generated at runtime by Symfony PhpDumper
-        // Use dynamic class instantiation to avoid static analysis errors
-        $containerClass = 'Glueful\\DI\\Compiled\\CompiledContainer';
-
-        if (!class_exists($containerClass)) {
-            // Fallback to development container if class doesn't exist
+        require_once $file;
+        $class = self::getCompiledContainerClass();
+        if (!class_exists($class)) {
             return self::buildDevelopmentContainer();
         }
 
-        /** @var \Symfony\Component\DependencyInjection\ContainerInterface $compiledContainer */
-        $compiledContainer = new $containerClass();
+        /** @var \Symfony\Component\DependencyInjection\ContainerInterface $compiled */
+        $compiled = new $class();
+        return new Container($compiled);
+    }
 
-        return new Container($compiledContainer);
+    private static function getCompiledContainerPath(): string
+    {
+        $env = (string) config('app.env', env('APP_ENV', 'production'));
+        $hash = self::computeConfigHash();
+        $dir = base_path('storage/container');
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+        return $dir . "/container_{$env}_{$hash}.php";
+    }
+
+    private static function getCompiledContainerClass(): string
+    {
+        $env = (string) config('app.env', env('APP_ENV', 'production'));
+        $hash = self::computeConfigHash();
+        return 'Glueful\\\\DI\\\\Compiled\\\\Container_' . $env . '_' . $hash;
+    }
+
+    private static function computeConfigHash(): string
+    {
+        $configDir = config_path();
+        $parts = [];
+        if (is_dir($configDir)) {
+            foreach (glob($configDir . '/*.php') as $file) {
+                $parts[] = md5_file($file) ?: '';
+            }
+        }
+        return substr(sha1(implode('|', $parts)), 0, 8);
+    }
+
+    /**
+     * Build, compile, and dump a production container for current config state
+     */
+    public static function buildProductionContainer(): Container
+    {
+        $builder = new ContainerBuilder();
+        self::configureContainer($builder);
+        $builder->compile();
+
+        $file = self::getCompiledContainerPath();
+        $class = self::getCompiledContainerClass();
+        $ns = 'Glueful\\\\DI\\\\Compiled';
+
+        try {
+            $dumper = new PhpDumper($builder);
+            $code = $dumper->dump([
+                'class' => basename(str_replace('\\\\', '/', $class)),
+                'namespace' => trim($ns, '\\'),
+                'base_class' => 'Symfony\\\\Component\\\\DependencyInjection\\\\Container',
+            ]);
+            file_put_contents($file, $code);
+            // Cleanup older compiled containers for this environment
+            $dir = dirname($file);
+            $env = (string) config('app.env', env('APP_ENV', 'production'));
+            foreach (glob($dir . "/container_{$env}_*.php") ?: [] as $old) {
+                if ($old !== $file) {
+                    @unlink($old);
+                }
+            }
+        } catch (\Throwable) {
+            // On failure, fall back to development container
+            return new Container($builder);
+        }
+
+        require_once $file;
+        /** @var \Symfony\Component\DependencyInjection\ContainerInterface $compiled */
+        $compiled = new (str_replace('\\\\', '\\', $class))();
+        return new Container($compiled);
     }
 }

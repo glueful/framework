@@ -23,7 +23,16 @@ class ContainerBootstrap
 
         // Create container with proper environment detection
         $isProduction = $environment === 'production' && !($_ENV['APP_DEBUG'] ?? false);
-        self::$container = ContainerFactory::create($isProduction);
+        if ($isProduction) {
+            // Prefer compiled container for production
+            if (ContainerFactory::hasCompiledContainer()) {
+                self::$container = ContainerFactory::create(true);
+            } else {
+                self::$container = ContainerFactory::buildProductionContainer();
+            }
+        } else {
+            self::$container = ContainerFactory::create(false);
+        }
 
         // Boot with all configs loaded
         self::bootContainer($basePath);
