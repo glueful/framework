@@ -40,6 +40,7 @@ class AutoScaleCommand extends BaseQueueCommand
     private ScheduledScaler $scheduledScaler;
     private ResourceMonitor $resourceMonitor;
     private StreamingMonitor $streamingMonitor;
+    /** @var array<string, mixed> */
     private array $config;
 
     protected function configure(): void
@@ -184,7 +185,7 @@ class AutoScaleCommand extends BaseQueueCommand
             };
         } catch (\Exception $e) {
             $this->error("Error: " . $e->getMessage());
-            if ($input->getOption('verbose')) {
+            if ((bool) $input->getOption('verbose')) {
                 $this->error($e->getTraceAsString());
             }
             return self::FAILURE;
@@ -212,9 +213,9 @@ class AutoScaleCommand extends BaseQueueCommand
     private function executeRun(InputInterface $input): int
     {
         $interval = (int) $input->getOption('interval');
-        $enableResourceChecks = !$input->getOption('no-resource-checks');
-        $enableScheduling = !$input->getOption('no-scheduling');
-        $enableStreaming = $input->getOption('streaming');
+        $enableResourceChecks = !(bool) $input->getOption('no-resource-checks');
+        $enableScheduling = !(bool) $input->getOption('no-scheduling');
+        $enableStreaming = (bool) $input->getOption('streaming');
 
         $this->info("🚀 Starting auto-scaling daemon");
         $this->line("Check interval: {$interval} seconds");
@@ -324,12 +325,12 @@ class AutoScaleCommand extends BaseQueueCommand
             'workers' => $this->processManager->getStatus(),
         ];
 
-        if ($detailed) {
+        if ((bool) $detailed) {
             $status['resource_trends'] = $this->resourceMonitor->getResourceTrends();
             $status['resource_history'] = $this->resourceMonitor->getResourceHistory(10);
         }
 
-        if ($json) {
+        if ((bool) $json) {
             $this->displayJson($status);
         } else {
             $this->displayStatusReport($status, $detailed);
@@ -340,16 +341,16 @@ class AutoScaleCommand extends BaseQueueCommand
 
     private function executeConfig(InputInterface $input): int
     {
-        if ($input->getOption('show')) {
+        if ((bool) $input->getOption('show')) {
             $this->displayConfiguration();
             return self::SUCCESS;
         }
 
-        if ($input->getOption('validate')) {
+        if ((bool) $input->getOption('validate')) {
             return $this->validateConfiguration();
         }
 
-        if ($input->getOption('reload')) {
+        if ((bool) $input->getOption('reload')) {
             $this->info("🔄 Reloading configuration...");
             $this->config = config('queue.workers', []);
             $this->success("Configuration reloaded successfully");
@@ -363,11 +364,11 @@ class AutoScaleCommand extends BaseQueueCommand
 
     private function executeSchedule(InputInterface $input): int
     {
-        if ($input->getOption('list')) {
+        if ((bool) $input->getOption('list')) {
             return $this->listSchedules();
         }
 
-        if ($input->getOption('preview')) {
+        if ((bool) $input->getOption('preview')) {
             $days = (int) $input->getOption('days');
             return $this->previewSchedules($days);
         }
@@ -378,19 +379,19 @@ class AutoScaleCommand extends BaseQueueCommand
 
     private function executeResources(InputInterface $input): int
     {
-        if ($input->getOption('current')) {
+        if ((bool) $input->getOption('current')) {
             $resources = $this->resourceMonitor->getCurrentResources();
             $this->displayResourceUsage($resources);
             return self::SUCCESS;
         }
 
-        if ($input->getOption('history')) {
+        if ((bool) $input->getOption('history')) {
             $history = $this->resourceMonitor->getResourceHistory(20);
             $this->displayResourceHistory($history);
             return self::SUCCESS;
         }
 
-        if ($input->getOption('trends')) {
+        if ((bool) $input->getOption('trends')) {
             $trends = $this->resourceMonitor->getResourceTrends();
             $this->displayResourceTrends($trends);
             return self::SUCCESS;
@@ -409,13 +410,13 @@ class AutoScaleCommand extends BaseQueueCommand
         $filterStr = $input->getOption('filter');
 
         $filters = [];
-        if ($filterStr) {
+        if ($filterStr !== null) {
             $filters = $this->parseFilters($filterStr);
         }
 
         $this->info("Starting real-time stream monitoring");
         $this->line("Format: {$format}");
-        if (!empty($filters)) {
+        if ($filters !== []) {
             $this->line("Filters: " . json_encode($filters));
         }
         $this->line();
@@ -425,7 +426,7 @@ class AutoScaleCommand extends BaseQueueCommand
         if (function_exists('pcntl_signal')) {
             pcntl_signal(SIGINT, function () use (&$streaming, $exportFile) {
                 $streaming = false;
-                if ($exportFile) {
+                if ($exportFile !== null) {
                     $this->streamingMonitor->exportOutput($exportFile);
                     echo "\nOutput exported to: {$exportFile}\n";
                 }
@@ -446,13 +447,16 @@ class AutoScaleCommand extends BaseQueueCommand
         return self::SUCCESS;
     }
 
+    /**
+     * @param array<string, mixed> $status
+     */
     private function displayStatusReport(array $status, bool $detailed): void
     {
         $this->info("📊 Auto-scaling Status Report");
         $this->line(str_repeat('=', 50));
 
         // Auto-scaling status
-        $autoEnabled = $status['auto_scaling']['enabled'] ? '✅ Enabled' : '❌ Disabled';
+        $autoEnabled = (bool) ($status['auto_scaling']['enabled'] ?? false) ? '✅ Enabled' : '❌ Disabled';
         $this->line("Auto-scaling: {$autoEnabled}");
 
         $historyCount = count($status['auto_scaling']['history']);
@@ -484,11 +488,14 @@ class AutoScaleCommand extends BaseQueueCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $status
+     */
     private function displayDetailedMetrics(array $status): void
     {
         // Recent scaling history
         $history = array_slice($status['auto_scaling']['history'], -5);
-        if (!empty($history)) {
+        if ($history !== []) {
             $this->line("\nRecent scaling actions:");
             foreach ($history as $action) {
                 $this->line(sprintf(
@@ -503,7 +510,7 @@ class AutoScaleCommand extends BaseQueueCommand
         }
 
         // Resource trends
-        if (isset($status['resource_trends']) && !($status['resource_trends']['insufficient_data'] ?? false)) {
+        if (isset($status['resource_trends']) && ($status['resource_trends']['insufficient_data'] ?? false) === false) {
             $trends = $status['resource_trends'];
             $this->line("\nResource trends:");
             $this->line(sprintf(
@@ -523,14 +530,14 @@ class AutoScaleCommand extends BaseQueueCommand
         // Process management
         $processConfig = $this->config['process'] ?? [];
         $this->line("Process Management:");
-        $this->line("  Enabled: " . ($processConfig['enabled'] ? 'Yes' : 'No'));
+        $this->line("  Enabled: " . ((bool) ($processConfig['enabled'] ?? false) ? 'Yes' : 'No'));
         $this->line("  Default workers: " . ($processConfig['default_workers'] ?? 2));
         $this->line("  Max workers per queue: " . ($processConfig['max_workers_per_queue'] ?? 10));
 
         // Auto-scaling
         $autoScaleConfig = $this->config['auto_scaling'] ?? [];
         $this->line("\nAuto-scaling:");
-        $this->line("  Enabled: " . ($autoScaleConfig['enabled'] ? 'Yes' : 'No'));
+        $this->line("  Enabled: " . ((bool) ($autoScaleConfig['enabled'] ?? false) ? 'Yes' : 'No'));
         $this->line("  Scale up threshold: " . ($autoScaleConfig['scale_up_threshold'] ?? 100));
         $this->line("  Scale down threshold: " . ($autoScaleConfig['scale_down_threshold'] ?? 10));
         $this->line("  Cooldown period: " . ($autoScaleConfig['cooldown_period'] ?? 300) . "s");
@@ -544,7 +551,7 @@ class AutoScaleCommand extends BaseQueueCommand
 
         // Validate process config
         $processConfig = $this->config['process'] ?? [];
-        if (empty($processConfig)) {
+        if ($processConfig === []) {
             $errors[] = "Process configuration is missing";
         } else {
             if (($processConfig['default_workers'] ?? 0) < 1) {
@@ -557,7 +564,7 @@ class AutoScaleCommand extends BaseQueueCommand
 
         // Validate auto-scaling config
         $autoScaleConfig = $this->config['auto_scaling'] ?? [];
-        if ($autoScaleConfig['enabled'] ?? false) {
+        if (($autoScaleConfig['enabled'] ?? false) === true) {
             $upThreshold = $autoScaleConfig['scale_up_threshold'] ?? 0;
             $downThreshold = $autoScaleConfig['scale_down_threshold'] ?? 0;
 
@@ -571,33 +578,33 @@ class AutoScaleCommand extends BaseQueueCommand
         }
 
         // Display results
-        if (empty($errors) && empty($warnings)) {
+        if ($errors === [] && $warnings === []) {
             $this->success("✅ Configuration is valid");
             return self::SUCCESS;
         }
 
-        if (!empty($errors)) {
+        if ($errors !== []) {
             $this->error("❌ Configuration errors found:");
             foreach ($errors as $error) {
                 $this->line("  • {$error}");
             }
         }
 
-        if (!empty($warnings)) {
+        if ($warnings !== []) {
             $this->warning("⚠️  Configuration warnings:");
             foreach ($warnings as $warning) {
                 $this->line("  • {$warning}");
             }
         }
 
-        return empty($errors) ? self::SUCCESS : self::FAILURE;
+        return $errors === [] ? self::SUCCESS : self::FAILURE;
     }
 
     private function listSchedules(): int
     {
         $schedules = $this->scheduledScaler->getSchedules();
 
-        if (empty($schedules)) {
+        if ($schedules === []) {
             $this->warning("No schedules configured");
             return self::SUCCESS;
         }
@@ -630,7 +637,7 @@ class AutoScaleCommand extends BaseQueueCommand
         $this->info("📅 Schedule Preview (next {$days} days)");
         $this->line(str_repeat('=', 60));
 
-        if (empty($preview)) {
+        if ($preview === []) {
             $this->warning("No scheduled runs in the next {$days} days");
             return self::SUCCESS;
         }
@@ -648,6 +655,9 @@ class AutoScaleCommand extends BaseQueueCommand
         return self::SUCCESS;
     }
 
+    /**
+     * @param array<string, mixed> $resources
+     */
     private function displayResourceUsage(array $resources): void
     {
         $this->info("💻 System Resources");
@@ -672,12 +682,15 @@ class AutoScaleCommand extends BaseQueueCommand
         ));
     }
 
+    /**
+     * @param array<string, mixed> $history
+     */
     private function displayResourceHistory(array $history): void
     {
         $this->info("📈 Resource Usage History");
         $this->line(str_repeat('=', 60));
 
-        if (empty($history)) {
+        if ($history === []) {
             $this->warning("No resource history available");
             return;
         }
@@ -694,12 +707,15 @@ class AutoScaleCommand extends BaseQueueCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $trends
+     */
     private function displayResourceTrends(array $trends): void
     {
         $this->info("📊 Resource Usage Trends");
         $this->line(str_repeat('=', 40));
 
-        if ($trends['insufficient_data'] ?? false) {
+        if (($trends['insufficient_data'] ?? false) === true) {
             $this->warning("Insufficient data for trend analysis");
             return;
         }
@@ -708,7 +724,7 @@ class AutoScaleCommand extends BaseQueueCommand
         $this->line(sprintf("CPU trend: %+.1f%%", $trends['cpu_trend']));
         $this->line(sprintf("Load trend: %+.2f", $trends['load_trend']));
 
-        if ($trends['trending_up']) {
+        if (($trends['trending_up'] ?? false) === true) {
             $this->warning("⬆️  Resources are trending upward");
         } else {
             $this->info("⬇️  Resources are stable or trending downward");
@@ -725,6 +741,9 @@ class AutoScaleCommand extends BaseQueueCommand
         echo sprintf("\r[%s] Workers: %d/%d running", date('H:i:s'), $runningWorkers, $totalWorkers);
     }
 
+    /**
+     * @return array<string, string>
+     */
     private function parseFilters(string $filterStr): array
     {
         $filters = [];

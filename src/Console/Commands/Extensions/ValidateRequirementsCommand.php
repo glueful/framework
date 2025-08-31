@@ -49,20 +49,20 @@ class ValidateRequirementsCommand extends BaseExtensionCommand
         try {
             // Load extension configuration
             $config = $this->getExtensionConfig();
-            if ($strict) {
+            if ((bool)$strict) {
                 $config['installation_mode'] = 'strict';
             }
 
             $requirements = new ExtensionRequirements($config);
 
             // Validate specific features or all enabled features
-            if (!empty($features)) {
+            if (count($features) > 0) {
                 $this->io->section('Validating specified features: ' . implode(', ', $features));
                 $requirements->validateFeatureRequirements($features);
             } else {
                 // Get enabled features from framework configuration
                 $enabledFeatures = $this->getEnabledFeatures();
-                if (!empty($enabledFeatures)) {
+                if (count($enabledFeatures) > 0) {
                     $this->io->section('Validating enabled features: ' . implode(', ', $enabledFeatures));
                     $requirements->validateFeatureRequirements($enabledFeatures);
                 }
@@ -81,6 +81,9 @@ class ValidateRequirementsCommand extends BaseExtensionCommand
         }
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getExtensionConfig(): array
     {
         $configPath = base_path('config/extensions.php');
@@ -93,19 +96,22 @@ class ValidateRequirementsCommand extends BaseExtensionCommand
         return require $configPath;
     }
 
+    /**
+     * @return array<int, string>
+     */
     private function getEnabledFeatures(): array
     {
         // Get enabled features from app configuration
         $features = [];
 
         // Check common feature flags
-        if (config('auth.enabled', true)) {
+        if ((bool)config('auth.enabled', true)) {
             $features[] = 'auth';
         }
-        if (config('notifications.enabled', false)) {
+        if ((bool)config('notifications.enabled', false)) {
             $features[] = 'notifications';
         }
-        if (config('admin.enabled', false)) {
+        if ((bool)config('admin.enabled', false)) {
             $features[] = 'admin';
         }
 
@@ -117,13 +123,13 @@ class ValidateRequirementsCommand extends BaseExtensionCommand
         $requiredExtensions = $requirements->getRequiredExtensions();
         $featureMappings = $requirements->getFeatureMappings();
 
-        if (empty($requiredExtensions) && empty($featureMappings)) {
+        if (count($requiredExtensions) === 0 && count($featureMappings) === 0) {
             $this->io->note('No extension requirements configured');
             return;
         }
 
         // Display feature mappings
-        if (!empty($featureMappings)) {
+        if (count($featureMappings) > 0) {
             $this->io->section('Feature Extension Mappings');
             $mappingTable = $this->io->createTable();
             $mappingTable->setHeaders(['Feature', 'Required Extension', 'Status']);
@@ -139,7 +145,7 @@ class ValidateRequirementsCommand extends BaseExtensionCommand
         }
 
         // Display required extensions
-        if (!empty($requiredExtensions)) {
+        if (count($requiredExtensions) > 0) {
             $this->io->section('Required Extensions');
             $extensionTable = $this->io->createTable();
             $extensionTable->setHeaders(['Extension', 'Status', 'Installation Command']);

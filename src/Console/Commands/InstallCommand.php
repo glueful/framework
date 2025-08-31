@@ -89,7 +89,7 @@ class InstallCommand extends BaseCommand
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $skipDatabase = $input->getOption('skip-database') || $input->getOption('skip-db');
+        $skipDatabase = (bool) $input->getOption('skip-database') || (bool) $input->getOption('skip-db');
         $skipKeys = $input->getOption('skip-keys');
         $skipAdmin = $input->getOption('skip-admin');
         $skipCache = $input->getOption('skip-cache');
@@ -97,7 +97,7 @@ class InstallCommand extends BaseCommand
         $quiet = $input->getOption('quiet');
 
         try {
-            if (!$quiet) {
+            if (!(bool) $quiet) {
                 $this->showWelcomeMessage();
             } else {
                 // In quiet mode, confirm environment variables are set
@@ -171,6 +171,9 @@ class InstallCommand extends BaseCommand
         $this->line('');
     }
 
+    /**
+     * @return array<int, array{number: int, description: string, callback: array{0: InstallCommand, 1: string}}>
+     */
     private function getInstallationSteps(bool $skipDatabase, bool $skipKeys, bool $skipAdmin, bool $skipCache): array
     {
         $steps = [
@@ -294,10 +297,10 @@ class InstallCommand extends BaseCommand
             'your-secure-app-key-here',
             null,
             ''
-        ]);
+        ], true);
 
-        if (empty($appKey) || $isAppKeyPlaceholder || $force) {
-            $newAppKey = $generator->generate(32);
+        if (($appKey === null || $appKey === '') || $isAppKeyPlaceholder || $force) {
+            $newAppKey = RandomStringGenerator::generate(32);
             $this->updateEnvFile('APP_KEY', $newAppKey);
             $this->line('✓ Generated APP_KEY');
         } else {
@@ -311,10 +314,10 @@ class InstallCommand extends BaseCommand
             'generate-secure-32-char-key-here',
             null,
             ''
-        ]);
+        ], true);
 
-        if (empty($tokenSalt) || $isTokenSaltPlaceholder || $force) {
-            $newTokenSalt = $generator->generate(32);
+        if (($tokenSalt === null || $tokenSalt === '') || $isTokenSaltPlaceholder || $force) {
+            $newTokenSalt = RandomStringGenerator::generate(32);
             $this->updateEnvFile('TOKEN_SALT', $newTokenSalt);
             $this->line('✓ Generated TOKEN_SALT');
         } else {
@@ -328,10 +331,10 @@ class InstallCommand extends BaseCommand
             'generate-secure-32-char-key-here',
             null,
             ''
-        ]);
+        ], true);
 
-        if (empty($jwtKey) || $isJwtKeyPlaceholder || $force) {
-            $newJwtKey = $generator->generate(64);
+        if (($jwtKey === null || $jwtKey === '') || $isJwtKeyPlaceholder || $force) {
+            $newJwtKey = RandomStringGenerator::generate(64);
             $this->updateEnvFile('JWT_KEY', $newJwtKey);
             $this->line('✓ Generated JWT_KEY');
         } else {
@@ -362,7 +365,7 @@ class InstallCommand extends BaseCommand
         // Test database connection
         try {
             $healthService = $this->installContainer->get(HealthService::class);
-            $dbHealth = $healthService->checkDatabase();
+            $dbHealth = HealthService::checkDatabase();
 
             if (!$dbHealth['status']) {
                 throw new \Exception('Database connection failed: ' . ($dbHealth['message'] ?? 'Unknown error'));
@@ -412,7 +415,7 @@ class InstallCommand extends BaseCommand
 
             // Initialize cache system
             $cacheStore = \Glueful\Helpers\CacheHelper::createCacheInstance();
-            if ($cacheStore) {
+            if ($cacheStore !== null) {
                 $this->line('✓ Cache system initialized successfully');
             } else {
                 throw new \Exception('Failed to initialize cache system');
@@ -456,7 +459,11 @@ class InstallCommand extends BaseCommand
             $email = $_ENV['ADMIN_EMAIL'] ?? getenv('ADMIN_EMAIL');
             $password = $_ENV['ADMIN_PASSWORD'] ?? getenv('ADMIN_PASSWORD');
 
-            if (empty($username) || empty($email) || empty($password)) {
+            if (
+                ($username === false || $username === '') ||
+                ($email === false || $email === '') ||
+                ($password === false || $password === '')
+            ) {
                 throw new \Exception(
                     'Missing required environment variables: ADMIN_USERNAME, ADMIN_EMAIL, ADMIN_PASSWORD'
                 );
@@ -475,7 +482,7 @@ class InstallCommand extends BaseCommand
             $confirmPassword = $this->secret('Confirm password');
 
             // Validate password
-            if (empty($password)) {
+            if ($password === '' || strlen($password) === 0) {
                 throw new \RuntimeException('Password cannot be empty', 400);
             }
 
@@ -499,7 +506,7 @@ class InstallCommand extends BaseCommand
                 ->orWhere('username', $username)
                 ->get();
 
-            if (!empty($existingUser)) {
+            if (count($existingUser) > 0) {
                 throw new \Exception("User with email '{$email}' or username '{$username}' already exists");
             }
 
@@ -520,9 +527,6 @@ class InstallCommand extends BaseCommand
 
             // Insert the admin user
             $userId = $db->table('users')->insert($userData);
-            if (!$userId) {
-                throw new \Exception('Failed to create admin user in database');
-            }
 
             // Assign superuser role using PermissionManager
             try {
@@ -609,7 +613,15 @@ class InstallCommand extends BaseCommand
 
         foreach ($services as $service => $method) {
             try {
-                $this->{$method}();
+                if ($method === 'checkDatabaseHealth') {
+                    $this->checkDatabaseHealth();
+                } elseif ($method === 'checkCacheHealth') {
+                    $this->checkCacheHealth();
+                } elseif ($method === 'checkSecurityHealth') {
+                    $this->checkSecurityHealth();
+                } else {
+                    throw new \Exception("Unknown health check method: {$method}");
+                }
                 $this->line("✓ {$service} validation passed");
             } catch (\Exception $e) {
                 $this->warning("⚠ {$service} validation warning: " . $e->getMessage());
@@ -699,7 +711,7 @@ HELP;
             }
         }
 
-        if (!empty($missingExtensions)) {
+        if (count($missingExtensions) > 0) {
             throw new \Exception('Missing PHP extensions: ' . implode(', ', $missingExtensions));
         }
     }
@@ -825,7 +837,7 @@ HELP;
     private function checkDatabaseHealth(): void
     {
         $healthService = $this->installContainer->get(HealthService::class);
-        $dbHealth = $healthService->checkDatabase();
+        $dbHealth = HealthService::checkDatabase();
 
         if (!$dbHealth['status']) {
             throw new \Exception('Database health check failed: ' . ($dbHealth['message'] ?? 'Unknown error'));
@@ -836,7 +848,7 @@ HELP;
     {
         try {
             $cacheStore = \Glueful\Helpers\CacheHelper::createCacheInstance();
-            if (!$cacheStore) {
+            if ($cacheStore === null) {
                 throw new \Exception('Cache instance could not be created');
             }
         } catch (\Exception $e) {
@@ -855,19 +867,23 @@ HELP;
             preg_match('/^TOKEN_SALT=(.*)$/m', $envContent, $tokenSaltMatches);
             preg_match('/^JWT_KEY=(.*)$/m', $envContent, $jwtKeyMatches);
 
-            $tokenSalt = $tokenSaltMatches[1] ?? '';
-            $jwtKey = $jwtKeyMatches[1] ?? '';
+            $tokenSalt = isset($tokenSaltMatches[1]) ? $tokenSaltMatches[1] : '';
+            $jwtKey = isset($jwtKeyMatches[1]) ? $jwtKeyMatches[1] : '';
         } else {
             // Fallback to config/env if .env file not found
-            $tokenSalt = config('session.token_salt') ?: env('TOKEN_SALT', '');
-            $jwtKey = config('session.jwt_key') ?: env('JWT_KEY', '');
+            $configTokenSalt = config('session.token_salt');
+            $envTokenSalt = env('TOKEN_SALT');
+            $tokenSalt = $configTokenSalt !== null ? $configTokenSalt : ($envTokenSalt !== null ? $envTokenSalt : '');
+            $configJwtKey = config('session.jwt_key');
+            $envJwtKey = env('JWT_KEY');
+            $jwtKey = $configJwtKey !== null ? $configJwtKey : ($envJwtKey !== null ? $envJwtKey : '');
         }
 
-        if (empty($tokenSalt)) {
+        if ($tokenSalt === '') {
             throw new \Exception('TOKEN_SALT is not set');
         }
 
-        if (empty($jwtKey)) {
+        if ($jwtKey === '') {
             throw new \Exception('JWT_KEY is not set');
         }
 

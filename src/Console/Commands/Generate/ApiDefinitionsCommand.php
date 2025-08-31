@@ -84,7 +84,7 @@ class ApiDefinitionsCommand extends BaseCommand
         $clean = $input->getOption('clean');
 
         // Validate table option requires database
-        if ($table && !$database) {
+        if (($table !== null && $table !== '') && !($database !== null && $database !== '')) {
             $this->error('Table option requires database option to be specified.');
             $this->tip('Use: --database=mydb --table=users');
             return self::FAILURE;
@@ -92,7 +92,7 @@ class ApiDefinitionsCommand extends BaseCommand
 
         try {
             // Clean existing definitions if requested
-            if ($clean) {
+            if ((bool)$clean) {
                 $this->cleanDefinitionDirectories();
                 $this->line(''); // Add blank line for visual separation
             }
@@ -104,7 +104,7 @@ class ApiDefinitionsCommand extends BaseCommand
             $this->displayGenerationScope($database, $table, $force);
 
             // Confirm if not forced and potentially destructive
-            if (!$force && !$this->confirmGeneration($database, $table)) {
+            if (!(bool)$force && !$this->confirmGeneration($database, $table)) {
                 $this->info('API documentation generation cancelled.');
                 return self::SUCCESS;
             }
@@ -127,25 +127,25 @@ class ApiDefinitionsCommand extends BaseCommand
         $this->info('Generation Scope:');
 
         $scope = [];
-        if ($database && $table) {
+        if (($database !== null && $database !== '') && ($table !== null && $table !== '')) {
             $scope[] = ['Target', "Table '{$table}' in database '{$database}'"];
-        } elseif ($database) {
+        } elseif ($database !== null && $database !== '') {
             $scope[] = ['Target', "All tables in database '{$database}'"];
         } else {
             $scope[] = ['Target', 'All tables in all databases'];
         }
 
         $scope[] = ['Force Overwrite', $force ? 'Yes' : 'No'];
-        $scope[] = ['Clean Before Generate', $this->input->getOption('clean') ? 'Yes' : 'No'];
+        $scope[] = ['Clean Before Generate', (bool)$this->input->getOption('clean') ? 'Yes' : 'No'];
 
         $this->table(['Property', 'Value'], $scope);
     }
 
     private function confirmGeneration(?string $database, ?string $table): bool
     {
-        if ($database && $table) {
+        if (($database !== null && $database !== '') && ($table !== null && $table !== '')) {
             return $this->confirm("Generate API definitions for table '{$table}' in database '{$database}'?", true);
-        } elseif ($database) {
+        } elseif ($database !== null && $database !== '') {
             return $this->confirm("Generate API definitions for all tables in database '{$database}'?", true);
         } else {
             return $this->confirm('Generate API definitions for all databases and tables?', false);
@@ -160,10 +160,10 @@ class ApiDefinitionsCommand extends BaseCommand
     ): void {
         $this->info('Generating API documentation...');
 
-        if ($database && $table) {
+        if (($database !== null && $database !== '') && ($table !== null && $table !== '')) {
             $this->line("Processing table: {$table}");
             $generator->generate($database, $table, $force);
-        } elseif ($database) {
+        } elseif ($database !== null && $database !== '') {
             $this->line("Processing database: {$database}");
             $generator->generate($database, null, $force);
         } else {
@@ -177,9 +177,9 @@ class ApiDefinitionsCommand extends BaseCommand
         $this->line('');
         $this->info('Generation completed successfully!');
 
-        if ($database && $table) {
+        if (($database !== null && $database !== '') && ($table !== null && $table !== '')) {
             $this->line("✓ Generated API documentation for table: {$table}");
-        } elseif ($database) {
+        } elseif ($database !== null && $database !== '') {
             $this->line("✓ Generated API documentation for database: {$database}");
         } else {
             $this->line('✓ Generated API documentation for all databases');

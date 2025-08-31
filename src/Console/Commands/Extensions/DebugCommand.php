@@ -71,7 +71,7 @@ class DebugCommand extends BaseExtensionCommand
         $focusAutoload = $input->getOption('autoload');
 
         try {
-            if (!$errorsOnly) {
+            if ($errorsOnly !== true) {
                 $this->info('Extension System Debug Information');
                 $this->line('==================================');
             }
@@ -79,7 +79,7 @@ class DebugCommand extends BaseExtensionCommand
             $debugInfo = [];
 
             // System overview
-            if (!$errorsOnly) {
+            if ($errorsOnly !== true) {
                 $debugInfo['system'] = $this->getSystemDebugInfo($includeMemory);
             }
 
@@ -87,14 +87,14 @@ class DebugCommand extends BaseExtensionCommand
             $debugInfo['discovery'] = $this->getDiscoveryDebugInfo();
 
             // Autoload information
-            if ($focusAutoload || $verbose) {
+            if ($focusAutoload === true || $verbose === true) {
                 $debugInfo['autoload'] = $this->getAutoloadDebugInfo();
             }
 
             // Individual extension debugging
-            if ($specificExtension) {
+            if ($specificExtension !== null && $specificExtension !== '') {
                 $debugInfo['extension'] = $this->getExtensionDebugInfo($specificExtension, $verbose);
-            } elseif ($verbose) {
+            } elseif ($verbose === true) {
                 $debugInfo['extensions'] = $this->getAllExtensionsDebugInfo();
             }
 
@@ -102,14 +102,14 @@ class DebugCommand extends BaseExtensionCommand
             $debugInfo['configuration'] = $this->getConfigurationDebugInfo();
 
             // Performance debugging
-            if ($verbose || $includeMemory) {
+            if ($verbose === true || $includeMemory === true) {
                 $debugInfo['performance'] = $this->getPerformanceDebugInfo();
             }
 
             // Display debug information
             $this->displayDebugInfo($debugInfo, $errorsOnly, $verbose);
 
-            if (!$errorsOnly) {
+            if ($errorsOnly !== true) {
                 $this->line('');
                 $this->success('Debug information collection completed!');
             }
@@ -121,6 +121,9 @@ class DebugCommand extends BaseExtensionCommand
         }
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getSystemDebugInfo(bool $includeMemory): array
     {
         $extensionsDir = base_path('extensions');
@@ -141,6 +144,9 @@ class DebugCommand extends BaseExtensionCommand
         return $info;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getDiscoveryDebugInfo(): array
     {
         $info = [
@@ -202,6 +208,9 @@ class DebugCommand extends BaseExtensionCommand
         return $info;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getAutoloadDebugInfo(): array
     {
         $info = [
@@ -230,7 +239,7 @@ class DebugCommand extends BaseExtensionCommand
             }
 
             $config = json_decode(file_get_contents($configFile), true);
-            if (!$config) {
+            if ($config === null) {
                 continue;
             }
 
@@ -281,6 +290,9 @@ class DebugCommand extends BaseExtensionCommand
         return $info;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getExtensionDebugInfo(string $extensionName, bool $verbose): array
     {
         $extensionPath = base_path("extensions/{$extensionName}");
@@ -356,6 +368,9 @@ class DebugCommand extends BaseExtensionCommand
         return $info;
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     private function getAllExtensionsDebugInfo(): array
     {
         $extensions = [];
@@ -377,6 +392,9 @@ class DebugCommand extends BaseExtensionCommand
         return $extensions;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getConfigurationDebugInfo(): array
     {
         $info = [
@@ -423,6 +441,9 @@ class DebugCommand extends BaseExtensionCommand
         return $info;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getPerformanceDebugInfo(): array
     {
         $startTime = microtime(true);
@@ -463,6 +484,9 @@ class DebugCommand extends BaseExtensionCommand
         }
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getFileStructure(string $path): array
     {
         $structure = [];
@@ -488,6 +512,9 @@ class DebugCommand extends BaseExtensionCommand
         return $structure;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getDirectorySize(string $path): array
     {
         $size = 0;
@@ -513,6 +540,9 @@ class DebugCommand extends BaseExtensionCommand
         ];
     }
 
+    /**
+     * @param array<string, mixed> $debugInfo
+     */
     private function displayDebugInfo(array $debugInfo, bool $errorsOnly, bool $verbose): void
     {
         if (!$errorsOnly && isset($debugInfo['system'])) {
@@ -540,6 +570,9 @@ class DebugCommand extends BaseExtensionCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $info
+     */
     private function displaySystemInfo(array $info): void
     {
         $this->line('');
@@ -548,9 +581,9 @@ class DebugCommand extends BaseExtensionCommand
         $rows = [
             ['PHP Version', $info['php_version']],
             ['Extensions Directory', $info['extensions_dir']],
-            ['Directory Exists', $info['extensions_dir_exists'] ? 'Yes' : 'No'],
-            ['Directory Readable', $info['extensions_dir_readable'] ? 'Yes' : 'No'],
-            ['Directory Writable', $info['extensions_dir_writable'] ? 'Yes' : 'No']
+            ['Directory Exists', (bool)($info['extensions_dir_exists'] ?? false) ? 'Yes' : 'No'],
+            ['Directory Readable', (bool)($info['extensions_dir_readable'] ?? false) ? 'Yes' : 'No'],
+            ['Directory Writable', (bool)($info['extensions_dir_writable'] ?? false) ? 'Yes' : 'No']
         ];
 
         if (isset($info['memory_usage'])) {
@@ -562,6 +595,9 @@ class DebugCommand extends BaseExtensionCommand
         $this->table(['Property', 'Value'], $rows);
     }
 
+    /**
+     * @param array<string, mixed> $info
+     */
     private function displayDiscoveryInfo(array $info, bool $errorsOnly): void
     {
         if (!$errorsOnly) {
@@ -570,7 +606,7 @@ class DebugCommand extends BaseExtensionCommand
             $this->line("Found " . count($info['discovered_extensions']) . " valid extensions");
         }
 
-        if (!empty($info['failed_discoveries'])) {
+        if (count($info['failed_discoveries']) > 0) {
             $this->line('');
             $this->error('Discovery Issues:');
             foreach ($info['failed_discoveries'] as $failure) {
@@ -578,7 +614,7 @@ class DebugCommand extends BaseExtensionCommand
             }
         }
 
-        if (!empty($info['discovery_errors'])) {
+        if (count($info['discovery_errors']) > 0) {
             $this->line('');
             $this->error('Discovery Errors:');
             foreach ($info['discovery_errors'] as $error) {
@@ -587,6 +623,9 @@ class DebugCommand extends BaseExtensionCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $info
+     */
     private function displayAutoloadInfo(array $info, bool $errorsOnly): void
     {
         if (!$errorsOnly) {
@@ -595,7 +634,7 @@ class DebugCommand extends BaseExtensionCommand
             $this->line("Total mappings: " . count($info['autoload_mappings']));
         }
 
-        if (!empty($info['path_issues'])) {
+        if (count($info['path_issues']) > 0) {
             $this->line('');
             $this->error('Autoload Path Issues:');
             foreach ($info['path_issues'] as $issue) {
@@ -603,7 +642,7 @@ class DebugCommand extends BaseExtensionCommand
             }
         }
 
-        if (!empty($info['namespace_conflicts'])) {
+        if (count($info['namespace_conflicts']) > 0) {
             $this->line('');
             $this->error('Namespace Conflicts:');
             foreach ($info['namespace_conflicts'] as $conflict) {
@@ -613,6 +652,9 @@ class DebugCommand extends BaseExtensionCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $info
+     */
     private function displayExtensionInfo(array $info, bool $verbose): void
     {
         $this->line('');
@@ -625,9 +667,9 @@ class DebugCommand extends BaseExtensionCommand
 
         $rows = [
             ['Path', $info['path']],
-            ['Exists', $info['exists'] ? 'Yes' : 'No'],
-            ['Config File', $info['config_file_exists'] ? 'Yes' : 'No'],
-            ['Enabled', $info['enabled'] ? 'Yes' : 'No'],
+            ['Exists', (bool)($info['exists'] ?? false) ? 'Yes' : 'No'],
+            ['Config File', (bool)($info['config_file_exists'] ?? false) ? 'Yes' : 'No'],
+            ['Enabled', (bool)($info['enabled'] ?? false) ? 'Yes' : 'No'],
             ['Version', $info['version']],
         ];
 
@@ -641,6 +683,9 @@ class DebugCommand extends BaseExtensionCommand
         }
     }
 
+    /**
+     * @param array<int, array<string, mixed>> $extensions
+     */
     private function displayAllExtensionsInfo(array $extensions): void
     {
         $this->line('');
@@ -648,21 +693,24 @@ class DebugCommand extends BaseExtensionCommand
 
         $rows = [];
         foreach ($extensions as $ext) {
-            $status = isset($ext['error']) ? 'Error' : ($ext['enabled'] ? 'Enabled' : 'Disabled');
+            $status = isset($ext['error']) ? 'Error' : ((bool)($ext['enabled'] ?? false) ? 'Enabled' : 'Disabled');
             $rows[] = [
                 $ext['name'],
                 $ext['version'] ?? 'unknown',
                 $status,
-                $ext['exists'] ? 'Yes' : 'No'
+                (bool)($ext['exists'] ?? false) ? 'Yes' : 'No'
             ];
         }
 
         $this->table(['Extension', 'Version', 'Status', 'Exists'], $rows);
     }
 
+    /**
+     * @param array<string, mixed> $info
+     */
     private function displayConfigurationInfo(array $info, bool $errorsOnly): void
     {
-        if (!empty($info['global_config_issues']) || !empty($info['extension_config_issues'])) {
+        if (count($info['global_config_issues']) > 0 || count($info['extension_config_issues']) > 0) {
             $this->line('');
             $this->error('Configuration Issues:');
 
@@ -679,6 +727,9 @@ class DebugCommand extends BaseExtensionCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $info
+     */
     private function displayPerformanceInfo(array $info): void
     {
         $this->line('');
@@ -700,7 +751,8 @@ class DebugCommand extends BaseExtensionCommand
         $units = ['B', 'KB', 'MB', 'GB'];
         $factor = 1024;
 
-        for ($i = 0; $i < count($units) && $bytes >= $factor; $i++) {
+        $i = 0;
+        for (; $i < count($units) && $bytes >= $factor; $i++) {
             $bytes /= $factor;
         }
 

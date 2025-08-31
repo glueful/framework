@@ -104,7 +104,7 @@ class ProfileCommand extends BaseCommand
 
         // Get query from arguments or file
         $query = $this->getQuery($input);
-        if (empty($query)) {
+        if ($query === '') {
             $this->io->error('No query provided. Use the query argument or --file option.');
             return self::FAILURE;
         }
@@ -129,7 +129,7 @@ class ProfileCommand extends BaseCommand
 
             // Compare with another query if requested
             $comparison = null;
-            if ($compareFile) {
+            if ($compareFile !== null && $compareFile !== '') {
                 $comparison = $this->compareQueries($query, $compareFile, $params);
             }
 
@@ -161,13 +161,13 @@ class ProfileCommand extends BaseCommand
     {
         // Get query from argument
         $query = $input->getArgument('query');
-        if (!empty($query)) {
+        if ($query !== '' && $query !== null) {
             return $query;
         }
 
         // Get query from file
         $file = $input->getOption('file');
-        if ($file) {
+        if ($file !== null && $file !== '') {
             if (!file_exists($file)) {
                 throw new \RuntimeException("Query file not found: {$file}");
             }
@@ -177,21 +177,28 @@ class ProfileCommand extends BaseCommand
         return '';
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function parseParams(?string $params): array
     {
-        if (empty($params)) {
+        if ($params === null || $params === '') {
             return [];
         }
 
         try {
             $decoded = json_decode($params, true, 512, JSON_THROW_ON_ERROR);
             return is_array($decoded) ? $decoded : [];
-        } catch (\JsonException $e) {
+        } catch (\JsonException) {
             $this->io->warning('Invalid JSON in parameters. Using empty parameters.');
             return [];
         }
     }
 
+    /**
+     * @param array<string, mixed> $params
+     * @return array<string, mixed>
+     */
     private function profileQuery(
         string $query,
         array $params,
@@ -206,7 +213,7 @@ class ProfileCommand extends BaseCommand
         // Show query being analyzed
         $this->io->text('<info>Query:</info>');
         $this->io->text($query);
-        if (!empty($params)) {
+        if (count($params) > 0) {
             $this->io->text('<info>Parameters:</info>');
             $this->io->text(json_encode($params, JSON_PRETTY_PRINT));
         }
@@ -229,7 +236,7 @@ class ProfileCommand extends BaseCommand
             });
 
             $recentProfiles = $this->profilerService->getRecentProfiles(1);
-            if (!empty($recentProfiles)) {
+            if (count($recentProfiles) > 0) {
                 $profile = $recentProfiles[0];
                 $profile['result_count'] = is_countable($result) ? count($result) : 'N/A';
                 $profile['result_sample'] = $this->getSampleResults($result, 3);
@@ -273,18 +280,26 @@ class ProfileCommand extends BaseCommand
         return $avgProfile;
     }
 
+    /**
+     * @param mixed $result
+     * @return array<int, mixed>
+     */
     private function getSampleResults($result, int $limit = 5): array
     {
-        if (!is_array($result) || empty($result)) {
+        if (!is_array($result) || count($result) === 0) {
             return [];
         }
 
         return array_slice($result, 0, $limit);
     }
 
+    /**
+     * @param array<int, array<string, mixed>> $profiles
+     * @return array<string, mixed>
+     */
     private function calculateBenchmarkStats(array $profiles, float $totalTime, int $benchmark): array
     {
-        if (empty($profiles)) {
+        if (count($profiles) === 0) {
             return [];
         }
 
@@ -303,6 +318,9 @@ class ProfileCommand extends BaseCommand
         ]);
     }
 
+    /**
+     * @param array<int, float> $values
+     */
     private function calculateVariance(array $values): float
     {
         $mean = array_sum($values) / count($values);
@@ -310,6 +328,10 @@ class ProfileCommand extends BaseCommand
         return $sumSquares / count($values);
     }
 
+    /**
+     * @param array<string, mixed> $params
+     * @return array<string, mixed>
+     */
     private function compareQueries(string $mainQuery, string $compareFile, array $params): array
     {
         if (!file_exists($compareFile)) {
@@ -330,6 +352,10 @@ class ProfileCommand extends BaseCommand
         ];
     }
 
+    /**
+     * @param array<string, mixed> $profile
+     * @param array<string, mixed>|null $comparison
+     */
     private function outputResults(array $profile, ?array $comparison, string $format): void
     {
         switch ($format) {
@@ -345,15 +371,23 @@ class ProfileCommand extends BaseCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $profile
+     * @param array<string, mixed>|null $comparison
+     */
     private function outputJson(array $profile, ?array $comparison): void
     {
         $output = ['profile' => $profile];
-        if ($comparison) {
+        if ($comparison !== null) {
             $output['comparison'] = $comparison;
         }
         $this->io->text(json_encode($output, JSON_PRETTY_PRINT));
     }
 
+    /**
+     * @param array<string, mixed> $profile
+     * @param array<string, mixed>|null $comparison
+     */
     private function outputTable(array $profile, ?array $comparison): void
     {
         $this->io->section('📈 Performance Metrics');
@@ -379,7 +413,11 @@ class ProfileCommand extends BaseCommand
         $this->io->table($rows[0], array_slice($rows, 1));
 
         // Show execution plan issues if available
-        if (isset($profile['plan_analysis']['issues']) && !empty($profile['plan_analysis']['issues'])) {
+        if (
+            isset($profile['plan_analysis']['issues']) &&
+            is_array($profile['plan_analysis']['issues']) &&
+            count($profile['plan_analysis']['issues']) > 0
+        ) {
             $this->io->section('⚠️ Execution Plan Issues');
             foreach ($profile['plan_analysis']['issues'] as $issue) {
                 $this->io->warning($issue);
@@ -387,11 +425,15 @@ class ProfileCommand extends BaseCommand
         }
 
         // Show comparison if available
-        if ($comparison) {
+        if ($comparison !== null) {
             $this->outputComparison($comparison);
         }
     }
 
+    /**
+     * @param array<string, mixed> $profile
+     * @param array<string, mixed>|null $comparison
+     */
     private function outputDetailed(array $profile, ?array $comparison): void
     {
         $this->outputTable($profile, $comparison);
@@ -403,7 +445,11 @@ class ProfileCommand extends BaseCommand
         }
 
         // Show patterns
-        if (isset($profile['patterns']) && !empty($profile['patterns'])) {
+        if (
+            isset($profile['patterns']) &&
+            is_array($profile['patterns']) &&
+            count($profile['patterns']) > 0
+        ) {
             $this->io->section('🧩 Query Patterns');
             foreach ($profile['patterns'] as $patternName => $info) {
                 $this->io->text("<info>Pattern:</info> {$patternName}");
@@ -414,7 +460,11 @@ class ProfileCommand extends BaseCommand
         }
 
         // Show result sample
-        if (!empty($profile['result_sample'])) {
+        if (
+            isset($profile['result_sample']) &&
+            is_array($profile['result_sample']) &&
+            count($profile['result_sample']) > 0
+        ) {
             $this->io->section('📋 Result Sample');
             foreach ($profile['result_sample'] as $i => $row) {
                 $this->io->text("Row " . ($i + 1) . ":");
@@ -424,6 +474,9 @@ class ProfileCommand extends BaseCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $comparison
+     */
     private function outputComparison(array $comparison): void
     {
         $this->io->section('⚖️ Performance Comparison');
@@ -449,7 +502,9 @@ class ProfileCommand extends BaseCommand
                 'Memory (bytes)',
                 $this->formatBytes($main['memory_delta'] ?? 0),
                 $this->formatBytes($compare['memory_delta'] ?? 0),
-                $this->formatBytes(($main['memory_delta'] ?? 0) - ($compare['memory_delta'] ?? 0))
+                $this->formatBytes(
+                    ($main['memory_delta'] ?? 0) - ($compare['memory_delta'] ?? 0)
+                )
             ]
         ];
 
@@ -464,6 +519,9 @@ class ProfileCommand extends BaseCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $profile
+     */
     private function showRecommendations(array $profile): void
     {
         $recommendations = [];
@@ -492,7 +550,7 @@ class ProfileCommand extends BaseCommand
             $recommendations = array_merge($recommendations, $profile['plan_analysis']['recommendations']);
         }
 
-        if (!empty($recommendations)) {
+        if (count($recommendations) > 0) {
             $this->io->section('💡 Optimization Recommendations');
             foreach ($recommendations as $recommendation) {
                 $this->io->text('• ' . $recommendation);
@@ -507,7 +565,7 @@ class ProfileCommand extends BaseCommand
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
 
         $bytes = max($bytes, 0);
-        $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+        $pow = floor(($bytes > 0 ? log($bytes) : 0) / log(1024));
         $pow = min($pow, count($units) - 1);
 
         $bytes /= (1 << (10 * $pow));

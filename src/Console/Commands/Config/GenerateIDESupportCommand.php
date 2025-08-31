@@ -55,11 +55,11 @@ This command generates IDE support files for better configuration editing experi
         $ideSupport = $this->getService(IDESupport::class);
         $outputDir = rtrim($input->getOption('output'), '/') . '/';
 
-        $generatePhpStorm = $input->getOption('phpstorm');
-        $generateVSCode = $input->getOption('vscode');
-        $generateJsonSchemas = $input->getOption('json-schemas');
-        $generateMeta = $input->getOption('meta');
-        $generateAll = $input->getOption('all');
+        $generatePhpStorm = (bool) $input->getOption('phpstorm');
+        $generateVSCode = (bool) $input->getOption('vscode');
+        $generateJsonSchemas = (bool) $input->getOption('json-schemas');
+        $generateMeta = (bool) $input->getOption('meta');
+        $generateAll = (bool) $input->getOption('all');
 
         // If no specific options, default to all
         if (!$generatePhpStorm && !$generateVSCode && !$generateJsonSchemas && !$generateMeta) {

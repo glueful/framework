@@ -75,24 +75,24 @@ class ContainerCompileCommand extends BaseCommand
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $outputDir = $input->getOption('output-dir');
-        $debug = $input->getOption('debug');
-        $validate = $input->getOption('validate');
-        $optimize = $input->getOption('optimize');
-        $force = $input->getOption('force');
-        $warmup = $input->getOption('warmup');
+        $outputDir = (string) $input->getOption('output-dir');
+        $debug = (bool) $input->getOption('debug');
+        $validate = (bool) $input->getOption('validate');
+        $optimize = (bool) $input->getOption('optimize');
+        $force = (bool) $input->getOption('force');
+        $warmup = (bool) $input->getOption('warmup');
 
         try {
             $this->info('Starting container compilation...');
             $this->line('');
 
             // Validation step
-            if ($validate) {
+            if ($validate === true) {
                 $this->validateContainerConfiguration();
             }
 
             // Check if compilation is needed
-            if (!$force && $this->isContainerFresh($outputDir)) {
+            if ($force === false && $this->isContainerFresh($outputDir)) {
                 $this->success('Container is already compiled and up to date.');
                 return self::SUCCESS;
             }
@@ -104,7 +104,7 @@ class ContainerCompileCommand extends BaseCommand
             $compileTime = $this->compileContainer($outputDir, $debug, $optimize);
 
             // Warm up if requested
-            if ($warmup) {
+            if ($warmup === true) {
                 $this->warmupContainer($outputDir);
             }
 
@@ -236,7 +236,7 @@ class ContainerCompileCommand extends BaseCommand
         }
     }
 
-    private function applyOptimizations($container): void
+    private function applyOptimizations(mixed $container): void
     {
         // Apply various optimizations to the container
         $this->line('  • Inlining small services');
@@ -247,7 +247,7 @@ class ContainerCompileCommand extends BaseCommand
         // that modify the $container parameter
     }
 
-    private function validateCompiledContainer($container): void
+    private function validateCompiledContainer(mixed $container): void
     {
         // Validate that the compiled container works correctly
         $this->line('  • Checking service definitions');
@@ -257,7 +257,7 @@ class ContainerCompileCommand extends BaseCommand
         // In a real implementation, we would validate the $container parameter
     }
 
-    private function dumpCompiledContainer($container, string $outputDir, bool $debug): void
+    private function dumpCompiledContainer(mixed $container, string $outputDir, bool $debug): void
     {
         // Generate the compiled container PHP file from the container definition
         $containerClass = 'CompiledContainer';
@@ -375,7 +375,7 @@ PHP;
             ['Container File Size', $this->formatFileSize($fileSize)],
             ['Optimization Level', $optimize ? 'Maximum' : 'Standard'],
             ['Environment', config('app.env', 'unknown')],
-            ['Debug Mode', config('app.debug', false) ? 'Enabled' : 'Disabled']
+            ['Debug Mode', (bool) config('app.debug', false) ? 'Enabled' : 'Disabled']
         ]);
 
         $this->line('');

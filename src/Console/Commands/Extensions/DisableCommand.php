@@ -65,14 +65,14 @@ class DisableCommand extends BaseExtensionCommand
             }
 
             // Check for dependent extensions
-            if ($checkDependents || !$force) {
+            if ($checkDependents === true || $force !== true) {
                 if (!$this->validateDependents($extensionsManager, $extensionName, $force)) {
                     return self::FAILURE;
                 }
             }
 
             // Confirm action if not forced
-            if (!$force && !$this->confirmDisable($extensionName)) {
+            if ($force !== true && !$this->confirmDisable($extensionName)) {
                 $this->info('Extension disable operation cancelled.');
                 return self::SUCCESS;
             }
@@ -111,12 +111,12 @@ class DisableCommand extends BaseExtensionCommand
     {
         $extension = $this->findExtension($manager, $name);
 
-        if (!$extension) {
+        if ($extension === null) {
             $this->error("Extension '{$name}' not found.");
             return false;
         }
 
-        if (!($extension['metadata']['enabled'] ?? false)) {
+        if (($extension['metadata']['enabled'] ?? false) !== true) {
             $this->warning("Extension '{$name}' is already disabled.");
             return false;
         }
@@ -133,17 +133,17 @@ class DisableCommand extends BaseExtensionCommand
 
         foreach ($extensions as $extension) {
             $metadata = $extension['metadata'];
-            if (!($metadata['enabled'] ?? false)) {
+            if (($metadata['enabled'] ?? false) !== true) {
                 continue; // Skip disabled extensions
             }
 
             $dependencies = $metadata['dependencies']['extensions'] ?? [];
-            if (in_array($name, $dependencies)) {
+            if (in_array($name, $dependencies, true)) {
                 $dependents[] = $extension['name'];
             }
         }
 
-        if (empty($dependents)) {
+        if (count($dependents) === 0) {
             $this->line('✓ No dependent extensions found');
             return true;
         }

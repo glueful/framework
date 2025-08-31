@@ -24,6 +24,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 )]
 class GetCommand extends BaseCommand
 {
+    /** @var CacheStore<mixed> */
     private CacheStore $cacheStore;
 
     public function __construct()
@@ -63,6 +64,9 @@ class GetCommand extends BaseCommand
         }
     }
 
+    /**
+     * @param mixed $value
+     */
     private function displayCacheEntry(string $key, $value): void
     {
         $this->info(sprintf('Cache entry for key: "%s"', $key));
@@ -84,6 +88,9 @@ class GetCommand extends BaseCommand
         $this->displayValue($value);
     }
 
+    /**
+     * @param mixed $value
+     */
     private function displayValue($value): void
     {
         if (is_string($value)) {
@@ -99,6 +106,9 @@ class GetCommand extends BaseCommand
         }
     }
 
+    /**
+     * @param mixed $value
+     */
     private function getValueType($value): string
     {
         $type = gettype($value);
@@ -110,6 +120,9 @@ class GetCommand extends BaseCommand
         return $type;
     }
 
+    /**
+     * @param mixed $value
+     */
     private function getValueSize($value): string
     {
         if (is_string($value)) {

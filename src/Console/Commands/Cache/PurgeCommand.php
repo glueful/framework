@@ -123,7 +123,7 @@ class PurgeCommand extends BaseCommand
 
         try {
             // Show cache statistics if requested
-            if ($input->getOption('stats')) {
+            if ((bool) $input->getOption('stats')) {
                 $this->displayCacheStats('before');
             }
 
@@ -131,7 +131,7 @@ class PurgeCommand extends BaseCommand
             $result = $this->executePurgeOperation($input);
 
             // Show statistics after purge if requested
-            if ($input->getOption('stats') && $result === self::SUCCESS) {
+            if ((bool) $input->getOption('stats') && $result === self::SUCCESS) {
                 $this->io->newLine();
                 $this->displayCacheStats('after');
             }
@@ -153,27 +153,27 @@ class PurgeCommand extends BaseCommand
 
     private function executePurgeOperation(InputInterface $input): int
     {
-        $dryRun = $input->getOption('dry-run');
-        $force = $input->getOption('force');
+        $dryRun = (bool) $input->getOption('dry-run');
+        $force = (bool) $input->getOption('force');
 
         if ($dryRun) {
             $this->io->warning('🧪 DRY RUN MODE - No actual purge operations will be performed');
         }
 
         // Handle different purge types
-        if ($input->getOption('all')) {
+        if ((bool) $input->getOption('all')) {
             return $this->purgeAll($dryRun, $force);
         }
 
-        if ($batchFile = $input->getOption('batch-file')) {
+        if (($batchFile = $input->getOption('batch-file')) !== null) {
             return $this->purgeBatch($batchFile, $dryRun);
         }
 
-        if ($url = $input->getOption('url')) {
+        if (($url = $input->getOption('url')) !== null) {
             return $this->purgeUrl($url, $dryRun);
         }
 
-        if ($tag = $input->getOption('tag')) {
+        if (($tag = $input->getOption('tag')) !== null) {
             return $this->purgeTag($tag, $dryRun);
         }
 
@@ -181,7 +181,7 @@ class PurgeCommand extends BaseCommand
 
         // Check if target argument provided
         $target = $input->getArgument('target');
-        if ($target) {
+        if ($target !== null) {
             // Auto-detect target type
             return $this->purgeTarget($target, $dryRun);
         }
@@ -319,7 +319,7 @@ class PurgeCommand extends BaseCommand
         }
 
         $lines = file($batchFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        if (empty($lines)) {
+        if ($lines === []) {
             $this->io->warning('Batch file is empty');
             return self::SUCCESS;
         }
@@ -345,7 +345,7 @@ class PurgeCommand extends BaseCommand
 
         foreach ($lines as $line) {
             $line = trim($line);
-            if (empty($line) || str_starts_with($line, '#')) {
+            if ($line === '' || str_starts_with($line, '#')) {
                 continue; // Skip comments and empty lines
             }
 
@@ -399,6 +399,7 @@ class PurgeCommand extends BaseCommand
 
         try {
             // Implementation would depend on edge cache service stats capabilities
+            // @phpstan-ignore-next-line - Method exists check is valid for dynamic capabilities
             if (method_exists($this->edgeCacheService, 'getStats')) {
                 $stats = $this->edgeCacheService->getStats();
 
@@ -427,7 +428,7 @@ class PurgeCommand extends BaseCommand
     {
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
         $bytes = max($bytes, 0);
-        $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+        $pow = floor(($bytes > 0 ? log($bytes) : 0) / log(1024));
         $pow = min($pow, count($units) - 1);
         $bytes /= (1024 ** $pow);
         return round($bytes, 2) . ' ' . $units[$pow];

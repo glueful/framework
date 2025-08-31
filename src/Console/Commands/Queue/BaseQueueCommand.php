@@ -20,7 +20,7 @@ abstract class BaseQueueCommand extends BaseCommand
     /**
      * Extract option value from arguments
      */
-    protected function extractOptionValue(array $args, string $option, $default = null)
+    protected function extractOptionValue(array<string> $args, string $option, mixed $default = null): mixed
     {
         // Handle --option=value format
         foreach ($args as $arg) {
@@ -30,7 +30,7 @@ abstract class BaseQueueCommand extends BaseCommand
         }
 
         // Handle --option value format
-        $index = array_search($option, $args);
+        $index = array_search($option, $args, true);
         if ($index !== false && isset($args[$index + 1])) {
             $nextArg = $args[$index + 1];
             // Make sure next argument is not another option
@@ -45,9 +45,9 @@ abstract class BaseQueueCommand extends BaseCommand
     /**
      * Check if option exists in arguments
      */
-    protected function hasOption(array $args, string $option): bool
+    protected function hasOption(array<string> $args, string $option): bool
     {
-        return in_array($option, $args) ||
+        return in_array($option, $args, true) ||
                (bool) array_filter($args, fn($arg) => str_starts_with($arg, $option . '='));
     }
 
@@ -102,7 +102,7 @@ abstract class BaseQueueCommand extends BaseCommand
     /**
      * Parse queue names from comma-separated string
      */
-    protected function parseQueues(?string $queues): array
+    protected function parseQueues(?string $queues): array<string>
     {
         if ($queues === null) {
             return ['default'];
@@ -139,7 +139,7 @@ abstract class BaseQueueCommand extends BaseCommand
     /**
      * Format number with thousand separators
      */
-    protected function formatNumber($number, int $decimals = 0): string
+    protected function formatNumber(int|float $number, int $decimals = 0): string
     {
         return number_format($number, $decimals);
     }
@@ -161,7 +161,7 @@ abstract class BaseQueueCommand extends BaseCommand
     /**
      * Display JSON output with proper formatting
      */
-    protected function displayJson($data, bool $pretty = true): void
+    protected function displayJson(mixed $data, bool $pretty = true): void
     {
         $flags = $pretty ? JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES : 0;
         $this->output->writeln(json_encode($data, $flags));
@@ -170,7 +170,7 @@ abstract class BaseQueueCommand extends BaseCommand
     /**
      * Get option value for args parsing
      */
-    protected function getOptionValue(array $args, string $option, $default = null)
+    protected function getOptionValue(array<string> $args, string $option, mixed $default = null): mixed
     {
         return $this->extractOptionValue($args, $option, $default);
     }

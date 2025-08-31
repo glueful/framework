@@ -27,6 +27,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 )]
 class ExpireCommand extends BaseCommand
 {
+    /** @var CacheStore<mixed> */
     private CacheStore $cacheStore;
 
     public function __construct()
@@ -89,7 +90,7 @@ class ExpireCommand extends BaseCommand
             }
 
             // Parse time input
-            $seconds = $humanTime
+            $seconds = ((bool) $humanTime)
                 ? $this->parseHumanTime($secondsInput)
                 : (int) $secondsInput;
 
@@ -106,7 +107,7 @@ class ExpireCommand extends BaseCommand
             $this->displayProposedChange($seconds, $currentTtl);
 
             // Confirm if not forced and it's a significant change
-            if (!$force && $this->isSignificantChange($currentTtl, $seconds)) {
+            if (!(bool) $force && $this->isSignificantChange($currentTtl, $seconds)) {
                 if (!$this->io->confirm('Continue with expiration change?', true)) {
                     $this->io->text('Operation cancelled.');
                     return self::SUCCESS;
@@ -122,7 +123,7 @@ class ExpireCommand extends BaseCommand
                 $this->io->text("Expires at: " . date('Y-m-d H:i:s', time() + $seconds));
 
                 // Verify if requested
-                if ($verify) {
+                if ((bool) $verify) {
                     $this->verifyExpiration($key, $seconds);
                 }
             } else {

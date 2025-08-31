@@ -78,7 +78,7 @@ class ControllerCommand extends BaseCommand
         try {
             $this->info("Generating controller: {$controllerName}");
 
-            if ($resource && $api) {
+            if ((bool)$resource && (bool)$api) {
                 $this->warning('Both --resource and --api flags provided. Using --api only.');
                 $resource = false;
             }
@@ -104,7 +104,7 @@ class ControllerCommand extends BaseCommand
     private function normalizeControllerName(string $name): string
     {
         // Remove any file extension
-        $name = preg_replace('/\.php$/', '', $name);
+        $name = preg_replace('/\.php$/', '', $name) ?? $name;
 
         // Ensure proper naming convention
         if (!str_ends_with($name, 'Controller')) {
@@ -117,12 +117,12 @@ class ControllerCommand extends BaseCommand
 
     private function validateControllerName(string $name): bool
     {
-        if (empty($name)) {
+        if (count([$name]) === 0 || $name === '') {
             $this->error('Controller name cannot be empty.');
             return false;
         }
 
-        if (!preg_match('/^[A-Z][a-zA-Z0-9]*Controller$/', $name)) {
+        if (!(bool)preg_match('/^[A-Z][a-zA-Z0-9]*Controller$/', $name)) {
             $this->error('Controller name must be in PascalCase and end with "Controller".');
             $this->tip('Example: TaskController, UserController, ApiController');
             return false;
@@ -186,7 +186,7 @@ class ControllerCommand extends BaseCommand
         $resourceName = str_replace('Controller', '', $controllerName);
 
         // Convert PascalCase to lowercase with underscores
-        $resourceName = strtolower(preg_replace('/(?<!^)[A-Z]/', '_$0', $resourceName));
+        $resourceName = strtolower(preg_replace('/(?<!^)[A-Z]/', '_$0', $resourceName) ?? $resourceName);
 
         return $resourceName;
     }

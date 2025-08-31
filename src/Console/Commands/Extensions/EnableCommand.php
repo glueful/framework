@@ -73,14 +73,14 @@ class EnableCommand extends BaseExtensionCommand
             }
 
             // Dependency validation
-            if ($checkDependencies || !$force) {
+            if ((bool)$checkDependencies || !(bool)$force) {
                 if (!$this->validateDependencies($extensionsManager, $extensionName)) {
                     return self::FAILURE;
                 }
             }
 
             // Confirm action if not forced
-            if (!$force && !$this->confirmEnable($extensionName)) {
+            if (!(bool)$force && !$this->confirmEnable($extensionName)) {
                 $this->info('Extension enable operation cancelled.');
                 return self::SUCCESS;
             }
@@ -121,7 +121,7 @@ class EnableCommand extends BaseExtensionCommand
     {
         $extension = $this->findExtension($manager, $name);
 
-        if (!$extension) {
+        if ($extension === null) {
             $this->error("Extension '{$name}' not found.");
 
             // Suggest similar extensions
@@ -129,7 +129,7 @@ class EnableCommand extends BaseExtensionCommand
             $available = array_map(fn($ext) => $ext['name'], $extensions);
             $suggestions = $this->findSimilarExtensions($name, $available);
 
-            if (!empty($suggestions)) {
+            if (count($suggestions) > 0) {
                 $this->line('');
                 $this->info('Did you mean:');
                 foreach ($suggestions as $suggestion) {
@@ -138,8 +138,8 @@ class EnableCommand extends BaseExtensionCommand
             } else {
                 $this->line('');
                 $this->info('Available extensions:');
-                foreach ($available as $extension) {
-                    $this->line("• {$extension}");
+                foreach ($available as $extensionName) {
+                    $this->line("• {$extensionName}");
                 }
             }
 
@@ -157,7 +157,7 @@ class EnableCommand extends BaseExtensionCommand
         $extension = $this->findExtension($manager, $name);
         $dependencies = $extension['metadata']['dependencies']['extensions'] ?? [];
 
-        if (empty($dependencies)) {
+        if (count($dependencies) === 0) {
             $this->line('✓ No dependencies required');
             return true;
         }
@@ -167,14 +167,14 @@ class EnableCommand extends BaseExtensionCommand
 
         foreach ($dependencies as $depName) {
             $depExtension = $this->findExtension($manager, $depName);
-            if (!$depExtension) {
+            if ($depExtension === null) {
                 $missingDeps[] = $depName;
-            } elseif (!($depExtension['metadata']['enabled'] ?? false)) {
+            } elseif (!(bool)($depExtension['metadata']['enabled'] ?? false)) {
                 $disabledDeps[] = $depName;
             }
         }
 
-        if (!empty($missingDeps)) {
+        if (count($missingDeps) > 0) {
             $this->error('Missing required dependencies:');
             foreach ($missingDeps as $dep) {
                 $this->line("• {$dep}");
@@ -182,7 +182,7 @@ class EnableCommand extends BaseExtensionCommand
             return false;
         }
 
-        if (!empty($disabledDeps)) {
+        if (count($disabledDeps) > 0) {
             $this->warning('Required dependencies are disabled:');
             foreach ($disabledDeps as $dep) {
                 $this->line("• {$dep}");

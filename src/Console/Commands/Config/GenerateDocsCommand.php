@@ -57,7 +57,7 @@ This command generates comprehensive documentation for all registered configurat
         $includeMinimal = $input->getOption('include-minimal');
 
         // Validate format
-        if (!in_array($format, ['yaml', 'xml'])) {
+        if (!in_array($format, ['yaml', 'xml'], true)) {
             $this->error("Invalid format '{$format}'. Supported formats: yaml, xml");
             return 1;
         }
@@ -74,7 +74,7 @@ This command generates comprehensive documentation for all registered configurat
         try {
             $configInfo = $dumper->getAllConfigInfo();
 
-            if (empty($configInfo)) {
+            if ($configInfo === []) {
                 $this->warning('No configuration schemas found.');
                 return 0;
             }
@@ -102,6 +102,8 @@ This command generates comprehensive documentation for all registered configurat
 
     /**
      * Generate documentation files for all configurations
+     *
+     * @param array<string, mixed> $configInfo
      */
     private function generateDocumentationFiles(
         ConfigurationDumper $dumper,
@@ -165,6 +167,8 @@ This command generates comprehensive documentation for all registered configurat
 
     /**
      * Generate template configuration file
+     *
+     * @param array<string, mixed> $info
      */
     private function generateTemplateFile(array $info, string $configName, string $outputDir): void
     {
@@ -189,6 +193,8 @@ This command generates comprehensive documentation for all registered configurat
 
     /**
      * Generate minimal configuration file
+     *
+     * @param array<string, mixed> $info
      */
     private function generateMinimalFile(array $info, string $configName, string $outputDir): void
     {
@@ -213,6 +219,8 @@ This command generates comprehensive documentation for all registered configurat
 
     /**
      * Generate index/summary file
+     *
+     * @param array<string, mixed> $configInfo
      */
     private function generateIndexFile(array $configInfo, string $outputDir, string $format): void
     {
@@ -225,6 +233,8 @@ This command generates comprehensive documentation for all registered configurat
 
     /**
      * Generate index content
+     *
+     * @param array<string, mixed> $configInfo
      */
     private function generateIndexContent(array $configInfo, string $format): string
     {
@@ -277,10 +287,12 @@ This command generates comprehensive documentation for all registered configurat
 
     /**
      * Format array as PHP code
+     *
+     * @param array<string, mixed> $array
      */
     private function formatArrayAsPhp(array $array, int $indent): string
     {
-        if (empty($array)) {
+        if ($array === []) {
             return '[]';
         }
 

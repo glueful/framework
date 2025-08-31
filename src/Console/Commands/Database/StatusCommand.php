@@ -68,7 +68,7 @@ class StatusCommand extends BaseCommand
             $this->displayServerInfo();
             $this->displayDatabaseMetrics();
 
-            if ($showDetails) {
+            if ($showDetails === true) {
                 $this->displayTableDetails();
             }
 
@@ -159,7 +159,7 @@ class StatusCommand extends BaseCommand
                 ['Total Tables', $tableCount],
                 ['Database Engine', ucfirst($driverName)],
                 ['Database Size', $this->formatBytes($totalSize)],
-                ['Connection Pooling', config('database.pooling.enabled', false) ? 'Enabled' : 'Disabled'],
+                ['Connection Pooling', (config('database.pooling.enabled', false) === true) ? 'Enabled' : 'Disabled'],
             ];
 
             $this->table($headers, $rows);
@@ -231,13 +231,16 @@ class StatusCommand extends BaseCommand
 
         $poolEnabled = config('database.pooling.enabled', false);
 
-        if ($poolEnabled) {
+        if ($poolEnabled === true) {
             $headers = ['Property', 'Value'];
             $rows = [
                 ['Pool Enabled', '<info>Yes</info>'],
                 ['Min Connections', config('database.pooling.min_connections', 5)],
                 ['Max Connections', config('database.pooling.max_connections', 20)],
-                ['Pool Manager', Connection::getPoolManager() ? '<info>Active</info>' : '<comment>Inactive</comment>'],
+                [
+                    'Pool Manager',
+                    (Connection::getPoolManager() !== null) ? '<info>Active</info>' : '<comment>Inactive</comment>'
+                ],
             ];
             $this->table($headers, $rows);
         } else {

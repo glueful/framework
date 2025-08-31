@@ -72,12 +72,12 @@ class InstallCommand extends BaseExtensionCommand
             // Use ExtensionManager for installation
             $extensionManager = $this->getService(ExtensionManager::class);
             $options = [];
-            if ($targetName) {
+            if ($targetName !== null && $targetName !== '') {
                 $options['name'] = $targetName;
             }
             $result = $extensionManager->install($source, $options);
 
-            if (!empty($result['error'])) {
+            if (isset($result['error']) && $result['error'] !== '') {
                 $this->error('Installation failed: ' . $result['error']);
                 return self::FAILURE;
             }
@@ -85,11 +85,11 @@ class InstallCommand extends BaseExtensionCommand
             $extensionName = $result['name'] ?? $targetName;
             $this->success("Extension '{$extensionName}' installed successfully!");
 
-            if (!empty($result['message'])) {
+            if (isset($result['message']) && $result['message'] !== '') {
                 $this->info($result['message']);
             }
 
-            if (!empty($result['warnings'])) {
+            if (isset($result['warnings']) && count($result['warnings']) > 0) {
                 foreach ($result['warnings'] as $warning) {
                     $this->warning($warning);
                 }
@@ -106,6 +106,9 @@ class InstallCommand extends BaseExtensionCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $config
+     */
     private function displayInstallationSummary(string $name, string $path, array $config): void
     {
         $this->line('');

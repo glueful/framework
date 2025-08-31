@@ -71,10 +71,10 @@ class RunCommand extends BaseCommand
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $force = $input->getOption('force');
-        $dryRun = $input->getOption('dry-run') || $input->getOption('pretend');
+        $dryRun = (bool) $input->getOption('dry-run') || (bool) $input->getOption('pretend');
 
         // Production safety check
-        if (!$force && !$this->confirmProduction('run database migrations')) {
+        if (!(bool) $force && !$this->confirmProduction('run database migrations')) {
             return self::FAILURE;
         }
 
@@ -83,7 +83,7 @@ class RunCommand extends BaseCommand
             $status = $this->migrationManager->getMigrationStatus();
             $pendingMigrations = $status['pending'];
 
-            if (empty($pendingMigrations)) {
+            if (count($pendingMigrations) === 0) {
                 $this->info('No pending migrations found.');
                 return self::SUCCESS;
             }
@@ -102,7 +102,7 @@ class RunCommand extends BaseCommand
 
             // Confirm execution if not forced
             if (
-                !$force && !$this->confirm(
+                !(bool) $force && !$this->confirm(
                     sprintf('Do you want to run %d migration(s)?', count($pendingMigrations)),
                     false
                 )
@@ -120,7 +120,7 @@ class RunCommand extends BaseCommand
             // Display execution results
             $this->displayExecutionResults($result, $pendingMigrations);
 
-            if (!empty($result['failed'])) {
+            if (isset($result['failed']) && count($result['failed']) > 0) {
                 throw new \Exception('Some migrations failed: ' . implode(', ', $result['failed']));
             }
 
@@ -133,6 +133,9 @@ class RunCommand extends BaseCommand
         }
     }
 
+    /**
+     * @param array<int, string> $migrations
+     */
     private function listPendingMigrations(array $migrations): void
     {
         $headers = ['Migration', 'Status'];
@@ -148,6 +151,10 @@ class RunCommand extends BaseCommand
         $this->table($headers, $rows);
     }
 
+    /**
+     * @param array<string, array<int, string>> $result
+     * @param array<int, string> $pendingMigrations
+     */
     private function displayExecutionResults(array $result, array $pendingMigrations): void
     {
         $headers = ['Migration', 'Status'];
@@ -156,12 +163,12 @@ class RunCommand extends BaseCommand
         foreach ($pendingMigrations as $migration) {
             $filename = basename($migration);
 
-            if (in_array($filename, $result['applied'])) {
+            if (in_array($filename, $result['applied'], true)) {
                 $rows[] = [
                     $filename,
                     '✅ Completed'
                 ];
-            } elseif (in_array($filename, $result['failed'])) {
+            } elseif (in_array($filename, $result['failed'], true)) {
                 $rows[] = [
                     $filename,
                     '❌ Failed'

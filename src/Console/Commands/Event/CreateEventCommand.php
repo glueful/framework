@@ -139,13 +139,16 @@ class CreateEventCommand extends BaseCommand
     /**
      * Parse event name and determine paths/namespaces
      */
+    /**
+     * @return array<string, string>
+     */
     private function parseEventName(string $eventName, ?string $type): array
     {
         // Remove .php extension if provided
         $eventName = str_replace('.php', '', $eventName);
 
         // Handle type option
-        if ($type) {
+        if ($type !== null && $type !== '') {
             $eventName = ucfirst($type) . '/' . $eventName;
         }
 
@@ -160,12 +163,12 @@ class CreateEventCommand extends BaseCommand
 
         // Build directory path using config
         $baseDir = config('app.paths.app_events');
-        $subDir = !empty($parts) ? DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $parts) : '';
+        $subDir = (count($parts) > 0) ? DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $parts) : '';
         $directory = $baseDir . $subDir;
         $filePath = $directory . DIRECTORY_SEPARATOR . $className . '.php';
 
         // Build namespace for application events
-        $namespace = 'App\\Events' . (!empty($parts) ? '\\' . implode('\\', $parts) : '');
+        $namespace = 'App\\Events' . ((count($parts) > 0) ? '\\' . implode('\\', $parts) : '');
 
         return [
             'className' => $className,
@@ -186,6 +189,9 @@ class CreateEventCommand extends BaseCommand
 
     /**
      * Create the event file
+     */
+    /**
+     * @param array<string, string> $eventInfo
      */
     private function createEvent(array $eventInfo): string
     {
@@ -208,6 +214,9 @@ class CreateEventCommand extends BaseCommand
 
     /**
      * Generate event class content
+     */
+    /**
+     * @param array<string, string> $eventInfo
      */
     private function generateEventContent(array $eventInfo): string
     {

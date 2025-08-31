@@ -86,7 +86,7 @@ class BenchmarkCommand extends BaseExtensionCommand
             $benchmarkResults['loading'] = $this->benchmarkExtensionLoading($iterations, $includeMemory);
 
             // Autoload performance benchmark
-            if ($focusAutoload || $detailed) {
+            if ($focusAutoload === true || $detailed === true) {
                 $benchmarkResults['autoload'] = $this->benchmarkAutoloadPerformance($iterations);
             }
 
@@ -94,7 +94,7 @@ class BenchmarkCommand extends BaseExtensionCommand
             $benchmarkResults['dependencies'] = $this->benchmarkDependencyResolution($iterations);
 
             // Individual extension benchmarks
-            if ($detailed) {
+            if ($detailed === true) {
                 $benchmarkResults['individual'] = $this->benchmarkIndividualExtensions($iterations, $includeMemory);
             }
 
@@ -111,6 +111,9 @@ class BenchmarkCommand extends BaseExtensionCommand
         }
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function benchmarkExtensionDiscovery(int $iterations): array
     {
         $this->info('Benchmarking extension discovery...');
@@ -151,6 +154,9 @@ class BenchmarkCommand extends BaseExtensionCommand
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function benchmarkExtensionLoading(int $iterations, bool $includeMemory): array
     {
         $this->info('Benchmarking extension loading...');
@@ -191,7 +197,7 @@ class BenchmarkCommand extends BaseExtensionCommand
             'total_time' => array_sum($times)
         ];
 
-        if ($includeMemory && !empty($memoryUsage)) {
+        if ($includeMemory && count($memoryUsage) > 0) {
             $result['avg_memory'] = array_sum($memoryUsage) / count($memoryUsage);
             $result['max_memory'] = max($memoryUsage);
         }
@@ -199,6 +205,9 @@ class BenchmarkCommand extends BaseExtensionCommand
         return $result;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function benchmarkAutoloadPerformance(int $iterations): array
     {
         $this->info('Benchmarking autoload performance...');
@@ -237,6 +246,9 @@ class BenchmarkCommand extends BaseExtensionCommand
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function benchmarkDependencyResolution(int $iterations): array
     {
         $this->info('Benchmarking dependency resolution...');
@@ -270,6 +282,9 @@ class BenchmarkCommand extends BaseExtensionCommand
         ];
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     private function benchmarkIndividualExtensions(int $iterations, bool $includeMemory): array
     {
         $this->info('Benchmarking individual extensions...');
@@ -314,7 +329,7 @@ class BenchmarkCommand extends BaseExtensionCommand
                 'max_time' => max($times)
             ];
 
-            if ($includeMemory && !empty($memoryUsage)) {
+            if ($includeMemory && count($memoryUsage) > 0) {
                 $result['avg_memory'] = array_sum($memoryUsage) / count($memoryUsage);
             }
 
@@ -324,6 +339,9 @@ class BenchmarkCommand extends BaseExtensionCommand
         return $results;
     }
 
+    /**
+     * @return array<int, string>
+     */
     private function discoverExtensions(): array
     {
         $extensionsDir = base_path('extensions');
@@ -363,7 +381,7 @@ class BenchmarkCommand extends BaseExtensionCommand
                 $workResult = strlen($name);
                 unset($workResult);
             }
-        } catch (\Exception $e) {
+        } catch (\Exception) {
             // Fallback simulation
             $extensions = $this->getAvailableExtensions();
             foreach ($extensions as $extension) {
@@ -373,6 +391,9 @@ class BenchmarkCommand extends BaseExtensionCommand
         }
     }
 
+    /**
+     * @return array<int, string>
+     */
     private function getAvailableExtensions(): array
     {
         return $this->discoverExtensions();
@@ -410,11 +431,11 @@ class BenchmarkCommand extends BaseExtensionCommand
         $resolved = [];
         $remaining = $dependencies;
 
-        while (!empty($remaining)) {
+        while (count($remaining) > 0) {
             $progress = false;
 
             foreach ($remaining as $ext => $deps) {
-                if (empty($deps) || array_diff(array_keys($deps), $resolved) === []) {
+                if (count($deps) === 0 || array_diff(array_keys($deps), $resolved) === []) {
                     $resolved[] = $ext;
                     unset($remaining[$ext]);
                     $progress = true;
@@ -445,6 +466,9 @@ class BenchmarkCommand extends BaseExtensionCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $results
+     */
     private function displayBenchmarkResults(array $results, string $format, bool $detailed): void
     {
         $this->line('');
@@ -463,6 +487,9 @@ class BenchmarkCommand extends BaseExtensionCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $results
+     */
     private function displayTableResults(array $results, bool $detailed): void
     {
         // Main benchmarks
@@ -504,11 +531,17 @@ class BenchmarkCommand extends BaseExtensionCommand
         $this->displayPerformanceSummary($results);
     }
 
+    /**
+     * @param array<string, mixed> $results
+     */
     private function displayJsonResults(array $results): void
     {
         $this->line(json_encode($results, JSON_PRETTY_PRINT));
     }
 
+    /**
+     * @param array<string, mixed> $results
+     */
     private function displayCsvResults(array $results): void
     {
         $this->line('benchmark,avg_time_ms,min_time_ms,max_time_ms,avg_memory_bytes');
@@ -538,6 +571,9 @@ class BenchmarkCommand extends BaseExtensionCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $results
+     */
     private function displayPerformanceSummary(array $results): void
     {
         $this->line('');
@@ -583,7 +619,8 @@ class BenchmarkCommand extends BaseExtensionCommand
         $units = ['B', 'KB', 'MB'];
         $factor = 1024;
 
-        for ($i = 0; $i < count($units) && $bytes >= $factor; $i++) {
+        $i = 0;
+        for (; $i < count($units) && $bytes >= $factor; $i++) {
             $bytes /= $factor;
         }
 

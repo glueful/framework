@@ -61,7 +61,7 @@ class KeyCommand extends BaseCommand
         $force = $input->getOption('force');
         $show = $input->getOption('show');
 
-        if ($jwtOnly && $appOnly) {
+        if ((bool)$jwtOnly && (bool)$appOnly) {
             $this->error('Cannot use both --jwt-only and --app-only options together.');
             return self::FAILURE;
         }
@@ -69,18 +69,18 @@ class KeyCommand extends BaseCommand
         try {
             $this->validateEnvironment();
 
-            if ($show) {
+            if ((bool)$show) {
                 $this->displaySecurityWarning();
             }
 
             $generator = new RandomStringGenerator();
             $results = [];
 
-            if (!$jwtOnly) {
+            if (!(bool)$jwtOnly) {
                 $results['APP_KEY'] = $this->generateAppKey($generator, $force);
             }
 
-            if (!$appOnly) {
+            if (!(bool)$appOnly) {
                 $results['JWT_KEY'] = $this->generateJwtKey($generator, $force);
             }
 
@@ -107,11 +107,14 @@ class KeyCommand extends BaseCommand
         }
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function generateAppKey(RandomStringGenerator $generator, bool $force): array
     {
         $currentKey = config('app.key');
 
-        if (!empty($currentKey) && !$force) {
+        if ($currentKey !== null && $currentKey !== '' && !$force) {
             if (!$this->confirm('APP_KEY already exists. Overwrite?', false)) {
                 return [
                     'status' => 'skipped',
@@ -122,7 +125,7 @@ class KeyCommand extends BaseCommand
         }
 
         $this->info('Generating APP_KEY...');
-        $newKey = $generator->generate(32);
+        $newKey = $generator::generate(32);
 
         $this->updateEnvFile('APP_KEY', $newKey);
 
@@ -133,11 +136,14 @@ class KeyCommand extends BaseCommand
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function generateJwtKey(RandomStringGenerator $generator, bool $force): array
     {
         $currentKey = config('jwt.key');
 
-        if (!empty($currentKey) && !$force) {
+        if ($currentKey !== null && $currentKey !== '' && !$force) {
             if (!$this->confirm('JWT_KEY already exists. Overwrite?', false)) {
                 return [
                     'status' => 'skipped',
@@ -148,7 +154,7 @@ class KeyCommand extends BaseCommand
         }
 
         $this->info('Generating JWT_KEY...');
-        $newKey = $generator->generate(64);
+        $newKey = $generator::generate(64);
 
         $this->updateEnvFile('JWT_KEY', $newKey);
 
@@ -191,6 +197,9 @@ class KeyCommand extends BaseCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $results
+     */
     private function displayResults(array $results, bool $show): void
     {
         $this->line('');
@@ -200,7 +209,7 @@ class KeyCommand extends BaseCommand
         $tableData = [];
         foreach ($results as $keyType => $result) {
             $status = $result['status'] === 'generated' ? '✓ Generated' : '• Skipped';
-            $value = ($show && $result['key']) ? $result['key'] : '••••••••••••••••';
+            $value = ($show && $result['key'] !== null) ? $result['key'] : '••••••••••••••••';
 
             $tableData[] = [$keyType, $status, $value];
         }

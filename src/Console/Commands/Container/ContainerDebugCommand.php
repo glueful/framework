@@ -11,6 +11,8 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\DependencyInjection\Exception\ServiceNotFoundException;
+use Throwable;
 
 /**
  * Container Debug Command
@@ -94,39 +96,39 @@ class ContainerDebugCommand extends BaseCommand
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $service = $input->getArgument('service');
-        $showServices = $input->getOption('services');
-        $showAliases = $input->getOption('aliases');
-        $showTags = $input->getOption('tags');
-        $showParameters = $input->getOption('parameters');
-        $showGraph = $input->getOption('graph');
-        $format = $input->getOption('format');
-        $showPrivate = $input->getOption('show-private');
-        $showArguments = $input->getOption('show-arguments');
+        $showServices = (bool) $input->getOption('services');
+        $showAliases = (bool) $input->getOption('aliases');
+        $showTags = (bool) $input->getOption('tags');
+        $showParameters = (bool) $input->getOption('parameters');
+        $showGraph = (bool) $input->getOption('graph');
+        $format = (string) $input->getOption('format');
+        $showPrivate = (bool) $input->getOption('show-private');
+        $showArguments = (bool) $input->getOption('show-arguments');
 
         try {
             $container = $this->getContainer();
 
-            if ($service) {
+            if ($service !== null) {
                 return $this->debugSpecificService($service, $showArguments, $format);
             }
 
-            if ($showServices) {
+            if ($showServices === true) {
                 return $this->listServices($showPrivate, $showArguments, $format);
             }
 
-            if ($showAliases) {
+            if ($showAliases === true) {
                 return $this->listAliases($format);
             }
 
-            if ($showTags) {
+            if ($showTags === true) {
                 return $this->listTaggedServices($format);
             }
 
-            if ($showParameters) {
+            if ($showParameters === true) {
                 return $this->listParameters($format);
             }
 
-            if ($showGraph) {
+            if ($showGraph === true) {
                 return $this->showDependencyGraph($format);
             }
 
@@ -138,6 +140,14 @@ class ContainerDebugCommand extends BaseCommand
         }
     }
 
+    /**
+     * @param string $serviceId
+     * @param bool $showArguments
+     * @param string $format
+     * @return int
+     * @throws ServiceNotFoundException
+     * @throws Throwable
+     */
     private function debugSpecificService(string $serviceId, bool $showArguments, string $format): int
     {
         $container = $this->getContainer();
@@ -147,7 +157,8 @@ class ContainerDebugCommand extends BaseCommand
             return self::FAILURE;
         }
 
-        $service = $container->get($serviceId);
+        /** @var object $service */
+        $service = $this->getServiceDynamic($serviceId);
         $serviceData = $this->getServiceDetails($serviceId, $service, $showArguments);
 
         if ($format === 'json') {
@@ -172,7 +183,8 @@ class ContainerDebugCommand extends BaseCommand
         foreach ($serviceIds as $serviceId) {
             try {
                 if ($container->has($serviceId)) {
-                    $service = $container->get($serviceId);
+                    /** @var object $service */
+                    $service = $this->getServiceDynamic($serviceId);
                     $services[] = $this->getServiceSummary($serviceId, $service, $showArguments);
                 }
             } catch (\Exception $e) {
@@ -200,8 +212,8 @@ class ContainerDebugCommand extends BaseCommand
                 $row = [
                     $service['id'],
                     $service['class'],
-                    $service['public'] ? 'Yes' : 'No',
-                    $service['synthetic'] ? 'Yes' : 'No'
+                    (bool) $service['public'] ? 'Yes' : 'No',
+                    (bool) $service['synthetic'] ? 'Yes' : 'No'
                 ];
                 if ($showArguments) {
                     $row[] = implode(', ', $service['arguments'] ?? []);
@@ -335,7 +347,7 @@ class ContainerDebugCommand extends BaseCommand
                 ['Container Class', $overview['container_class']],
                 ['Service Count', $overview['service_count']],
                 ['Environment', $overview['environment']],
-                ['Debug Mode', $overview['debug_mode'] ? 'Yes' : 'No'],
+                ['Debug Mode', (bool) $overview['debug_mode'] ? 'Yes' : 'No'],
                 ['Compiled', $overview['compiled'] ? 'Yes' : 'No']
             ]);
         }
@@ -343,6 +355,9 @@ class ContainerDebugCommand extends BaseCommand
         return self::SUCCESS;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getServiceDetails(string $serviceId, object $service, bool $showArguments): array
     {
         return [
@@ -356,6 +371,9 @@ class ContainerDebugCommand extends BaseCommand
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getServiceSummary(string $serviceId, object $service, bool $showArguments): array
     {
         return [
@@ -367,6 +385,9 @@ class ContainerDebugCommand extends BaseCommand
         ];
     }
 
+    /**
+     * @return array<string>
+     */
     private function getServiceIds(Container $container, bool $showPrivate): array
     {
         // This is a simplified version - in a real implementation we'd need
@@ -389,9 +410,12 @@ class ContainerDebugCommand extends BaseCommand
     private function isContainerCompiled(Container $container): bool
     {
         // Check if container is compiled (simplified check)
-        return !config('app.debug', false);
+        return !(bool) config('app.debug', false);
     }
 
+    /**
+     * @return array<string>
+     */
     private function getServiceArguments(object $service): array
     {
         // Use reflection to get constructor parameters
@@ -399,7 +423,7 @@ class ContainerDebugCommand extends BaseCommand
             $reflection = new \ReflectionClass($service);
             $constructor = $reflection->getConstructor();
 
-            if (!$constructor) {
+            if ($constructor === null) {
                 return [];
             }
 
@@ -408,7 +432,7 @@ class ContainerDebugCommand extends BaseCommand
                 $type = $param->getType();
                 $typeName = 'mixed';
 
-                if ($type) {
+                if ($type !== null) {
                     if ($type instanceof \ReflectionNamedType) {
                         $typeName = $type->getName();
                     } elseif (method_exists($type, '__toString')) {
@@ -424,6 +448,9 @@ class ContainerDebugCommand extends BaseCommand
         }
     }
 
+    /**
+     * @return array<string>
+     */
     private function getServiceProperties(object $service): array
     {
         try {
@@ -442,6 +469,9 @@ class ContainerDebugCommand extends BaseCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $serviceData
+     */
     private function displayServiceTable(array $serviceData): void
     {
         $this->info("Service: {$serviceData['id']}");
@@ -450,11 +480,11 @@ class ContainerDebugCommand extends BaseCommand
         $this->table(['Property', 'Value'], [
             ['ID', $serviceData['id']],
             ['Class', $serviceData['class']],
-            ['Public', $serviceData['public'] ? 'Yes' : 'No'],
-            ['Synthetic', $serviceData['synthetic'] ? 'Yes' : 'No']
+            ['Public', (bool) $serviceData['public'] ? 'Yes' : 'No'],
+            ['Synthetic', (bool) $serviceData['synthetic'] ? 'Yes' : 'No']
         ]);
 
-        if (!empty($serviceData['arguments'])) {
+        if ($serviceData['arguments'] !== []) {
             $this->line('');
             $this->info('Constructor Arguments:');
             foreach ($serviceData['arguments'] as $arg) {
@@ -462,7 +492,7 @@ class ContainerDebugCommand extends BaseCommand
             }
         }
 
-        if (!empty($serviceData['methods'])) {
+        if ($serviceData['methods'] !== []) {
             $this->line('');
             $this->info('Public Methods:');
             foreach (array_slice($serviceData['methods'], 0, 10) as $method) {
@@ -474,7 +504,7 @@ class ContainerDebugCommand extends BaseCommand
         }
     }
 
-    private function formatValue($value): string
+    private function formatValue(mixed $value): string
     {
         if (is_bool($value)) {
             return $value ? 'true' : 'false';
@@ -488,6 +518,9 @@ class ContainerDebugCommand extends BaseCommand
         return (string) $value;
     }
 
+    /**
+     * @param array<string, mixed> $data
+     */
     private function arrayToYaml(array $data): string
     {
         // Simple YAML converter - in production you'd use symfony/yaml

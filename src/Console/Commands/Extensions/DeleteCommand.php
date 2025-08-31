@@ -83,7 +83,7 @@ class DeleteCommand extends BaseExtensionCommand
             $extensionConfig = $this->loadExtensionConfig($extensionName);
 
             // Check if extension is enabled
-            if ($extensionConfig && ($extensionConfig['enabled'] ?? false)) {
+            if (is_array($extensionConfig) && (bool)($extensionConfig['enabled'] ?? false)) {
                 $this->warning("Extension '{$extensionName}' is currently enabled.");
                 $this->info("It will be disabled before deletion.");
             }
@@ -91,7 +91,7 @@ class DeleteCommand extends BaseExtensionCommand
             // Check for dependent extensions
             $extensionsManager = $this->getService(ExtensionManager::class);
             $dependents = $this->findDependentExtensions($extensionsManager, $extensionName);
-            if (!empty($dependents) && !$force) {
+            if (count($dependents) > 0 && !(bool)$force) {
                 $this->error("Cannot delete extension '{$extensionName}' - it has dependent extensions:");
                 foreach ($dependents as $dependent) {
                     $this->line("  • {$dependent}");
@@ -104,20 +104,23 @@ class DeleteCommand extends BaseExtensionCommand
             $deletionPlan = $this->planDeletion($extensionPath, $keepConfig);
             $this->displayDeletionPlan($deletionPlan, $dryRun);
 
-            if ($dryRun) {
+            if ((bool)$dryRun) {
                 $this->info('Dry run completed. No files were deleted.');
                 return self::SUCCESS;
             }
 
             // Confirmation prompt
-            if (!$force && !$this->confirm("Are you sure you want to delete extension '{$extensionName}'?", false)) {
+            if (
+                !(bool)$force &&
+                !$this->confirm("Are you sure you want to delete extension '{$extensionName}'?", false)
+            ) {
                 $this->info('Deletion cancelled.');
                 return self::SUCCESS;
             }
 
             // Create backup if requested
             $backupPath = null;
-            if ($backup) {
+            if ((bool)$backup) {
                 $backupPath = $this->createBackup($extensionPath, $extensionName);
             }
 
@@ -131,7 +134,7 @@ class DeleteCommand extends BaseExtensionCommand
                         return self::FAILURE;
                     }
                     $this->success("Extension '{$extensionName}' deleted successfully!");
-                    if (!empty($result['message'])) {
+                    if (isset($result['message']) && $result['message'] !== '') {
                         $this->info($result['message']);
                     }
                 } else {
@@ -147,7 +150,7 @@ class DeleteCommand extends BaseExtensionCommand
                 return self::FAILURE;
             }
 
-            if ($backupPath) {
+            if ($backupPath !== null) {
                 $this->info("Backup created at: {$backupPath}");
             }
 
@@ -162,6 +165,9 @@ class DeleteCommand extends BaseExtensionCommand
 
 
 
+    /**
+     * @return array<string, mixed>
+     */
     private function planDeletion(string $extensionPath, bool $keepConfig): array
     {
         $plan = [
@@ -204,11 +210,14 @@ class DeleteCommand extends BaseExtensionCommand
     private function isConfigFile(string $filename): bool
     {
         $configFiles = ['extension.json', 'config.php', 'settings.json', '.env'];
-        return in_array($filename, $configFiles) ||
+        return in_array($filename, $configFiles, true) ||
                str_starts_with($filename, 'config.') ||
                str_ends_with($filename, '.config');
     }
 
+    /**
+     * @param array<string, mixed> $plan
+     */
     private function displayDeletionPlan(array $plan, bool $dryRun): void
     {
         $this->line('');
@@ -242,7 +251,7 @@ class DeleteCommand extends BaseExtensionCommand
             $this->line("  ... and " . ($fileCount - 10) . " more files");
         }
 
-        if (!empty($plan['config_files'])) {
+        if (isset($plan['config_files']) && count($plan['config_files']) > 0) {
             $this->line('');
             $this->info('Config files to be preserved:');
             foreach ($plan['config_files'] as $file) {
@@ -279,28 +288,23 @@ class DeleteCommand extends BaseExtensionCommand
 
 
 
-    private function isDirectoryEmpty(string $path): bool
-    {
-        if (!$this->getFileManager()->exists($path) || !is_dir($path)) {
-            return true;
-        }
-
-        $contents = scandir($path);
-        return count($contents) <= 2; // Only . and .. entries
-    }
 
     private function formatBytes(int $bytes): string
     {
         $units = ['B', 'KB', 'MB', 'GB'];
         $factor = 1024;
 
-        for ($i = 0; $i < count($units) && $bytes >= $factor; $i++) {
+        $i = 0;
+        for (; $i < count($units) && $bytes >= $factor; $i++) {
             $bytes /= $factor;
         }
 
         return round($bytes, 1) . ' ' . $units[$i];
     }
 
+    /**
+     * @param array<string, mixed> $result
+     */
     private function displayDeletionSummary(string $extensionName, array $result, ?string $backupPath): void
     {
         $this->line('');
@@ -308,25 +312,25 @@ class DeleteCommand extends BaseExtensionCommand
 
         $summary = [
             ['Extension Name', $extensionName],
-            ['Status', $result['success'] ? 'Successfully Deleted' : 'Deletion Failed'],
-            ['Backup Created', $backupPath ? 'Yes' : 'No']
+            ['Status', (bool)($result['success'] ?? false) ? 'Successfully Deleted' : 'Deletion Failed'],
+            ['Backup Created', $backupPath !== null ? 'Yes' : 'No']
         ];
 
-        if (!empty($result['files_deleted'])) {
+        if (isset($result['files_deleted']) && $result['files_deleted'] !== '') {
             $summary[] = ['Files Deleted', $result['files_deleted']];
         }
 
-        if (!empty($result['size_freed'])) {
+        if (isset($result['size_freed']) && $result['size_freed'] !== '') {
             $summary[] = ['Data Freed', $result['size_freed']];
         }
 
-        if ($backupPath) {
+        if ($backupPath !== null) {
             $summary[] = ['Backup Location', basename($backupPath)];
         }
 
         $this->table(['Property', 'Value'], $summary);
 
-        if ($backupPath) {
+        if ($backupPath !== null) {
             $this->line('');
             $this->info('Recovery instructions:');
             $this->line("To restore this extension from backup:");

@@ -97,7 +97,7 @@ class CreateListenerCommand extends BaseCommand
             $this->line('  1. Implement your event handling logic in the ' . $methodName . '() method');
             $this->line('  2. Register the listener: Event::listen(EventClass::class, ['
                 . $listenerInfo['className'] . '::class, \'' . $methodName . '\'])');
-            if ($eventClass) {
+            if ($eventClass !== null && $eventClass !== '') {
                 $this->line('  3. Or inject as dependency in your service provider');
             }
 
@@ -135,6 +135,9 @@ class CreateListenerCommand extends BaseCommand
 
     /**
      * Parse listener name and determine paths/namespaces
+     */
+    /**
+     * @return array<string, string>
      */
     private function parseListenerName(string $listenerName): array
     {
@@ -174,6 +177,9 @@ class CreateListenerCommand extends BaseCommand
     /**
      * Create the listener file
      */
+    /**
+     * @param array<string, string> $listenerInfo
+     */
     private function createListener(array $listenerInfo, ?string $eventClass, string $methodName): string
     {
         // Create directory if it doesn't exist using FileManager
@@ -196,15 +202,20 @@ class CreateListenerCommand extends BaseCommand
     /**
      * Generate listener class content
      */
+    /**
+     * @param array<string, string> $listenerInfo
+     */
     private function generateListenerContent(array $listenerInfo, ?string $eventClass, string $methodName): string
     {
         $className = $listenerInfo['className'];
         $namespace = $listenerInfo['namespace'];
 
         // Determine event parameter and imports
-        $eventParameter = $eventClass ? $this->getEventClassName($eventClass) . ' $event' : '$event';
-        $eventImport = $eventClass ? "use {$eventClass};" : '';
-        $eventTypeHint = $eventClass ? $this->getEventClassName($eventClass) : 'object';
+        $eventParameter = ($eventClass !== null && $eventClass !== '') ?
+            $this->getEventClassName($eventClass) . ' $event' : '$event';
+        $eventImport = ($eventClass !== null && $eventClass !== '') ? "use {$eventClass};" : '';
+        $eventTypeHint = ($eventClass !== null && $eventClass !== '') ?
+            $this->getEventClassName($eventClass) : 'object';
 
         return <<<PHP
 <?php

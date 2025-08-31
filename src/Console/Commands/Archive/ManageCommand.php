@@ -199,7 +199,7 @@ class ManageCommand extends BaseCommand
     private function executeArchive(InputInterface $input): int
     {
         $table = $input->getArgument('table');
-        if (!$table) {
+        if ($table === null || $table === '') {
             $this->io->error('Table name is required for archive action');
             $this->io->text('Usage: archive:manage archive <table> [days]');
             return self::FAILURE;
@@ -213,7 +213,7 @@ class ManageCommand extends BaseCommand
 
         $this->io->title("🗄️ Archiving Table: {$table}");
 
-        if ($dryRun) {
+        if ((bool) $dryRun) {
             $this->io->warning('DRY RUN MODE - No changes will be made');
         }
 
@@ -223,11 +223,11 @@ class ManageCommand extends BaseCommand
         // Pre-archive checks
         $this->performPreArchiveChecks($table, $cutoffDate);
 
-        if ($backup && !$dryRun) {
+        if ((bool) $backup && !(bool) $dryRun) {
             $this->createTableBackup($table);
         }
 
-        if ($dryRun) {
+        if ((bool) $dryRun) {
             $this->io->success('Dry run completed. Use without --dry-run to execute.');
             return self::SUCCESS;
         }
@@ -251,7 +251,7 @@ class ManageCommand extends BaseCommand
                 $this->displayArchiveResults($result, $compress, $verifyIntegrity);
 
                 // Verify integrity if requested
-                if ($verifyIntegrity) {
+                if ((bool) $verifyIntegrity) {
                     $this->verifyArchiveIntegrity($result->archiveUuid);
                 }
             } else {
@@ -284,10 +284,10 @@ class ManageCommand extends BaseCommand
                 ['Storage Used', $this->formatBytes($summary->totalSizeBytes)],
             ];
 
-            if ($summary->oldestArchive) {
+            if ($summary->oldestArchive !== null) {
                 $statusRows[] = ['Oldest Archive', $summary->oldestArchive->format('Y-m-d H:i:s')];
             }
-            if ($summary->newestArchive) {
+            if ($summary->newestArchive !== null) {
                 $statusRows[] = ['Newest Archive', $summary->newestArchive->format('Y-m-d H:i:s')];
             }
 
@@ -295,16 +295,18 @@ class ManageCommand extends BaseCommand
 
             // Tables needing archival
             $tablesNeedingArchival = $this->archiveService->getTablesNeedingArchival();
-            if (!empty($tablesNeedingArchival)) {
+            if ($tablesNeedingArchival !== []) {
                 $this->io->section('⚠️ Tables Needing Archival');
                 foreach ($tablesNeedingArchival as $table) {
                     $stats = $this->archiveService->getTableStats($table);
-                    if ($stats) {
+                    if ($stats !== null) {
                         $this->io->text("📋 {$table}:");
                         $this->io->text("   Rows: " . number_format($stats->currentRowCount));
                         $this->io->text("   Size: " . $this->formatBytes($stats->currentSizeBytes));
-                        $this->io->text("   Last Archived: " .
-                                       ($stats->lastArchiveDate ? $stats->lastArchiveDate->format('Y-m-d') : 'Never'));
+                        $lastArchived = $stats->lastArchiveDate !== null
+                            ? $stats->lastArchiveDate->format('Y-m-d')
+                            : 'Never';
+                        $this->io->text("   Last Archived: " . $lastArchived);
                     }
                 }
             } else {
@@ -312,7 +314,7 @@ class ManageCommand extends BaseCommand
             }
 
             // Archive distribution by table
-            if (!empty($summary->tableBreakdown)) {
+            if ($summary->tableBreakdown !== []) {
                 $this->io->section('📈 Archive Distribution');
                 $tableRows = [['Table', 'Archives', 'Records', 'Size']];
                 foreach ($summary->tableBreakdown as $table => $stats) {
@@ -338,11 +340,13 @@ class ManageCommand extends BaseCommand
         $this->io->title('🔍 Archive Search');
 
         // Build search query
+        $startDateOption = $input->getOption('start-date');
+        $endDateOption = $input->getOption('end-date');
         $query = new ArchiveSearchQuery(
             userUuid: $input->getOption('user'),
             endpoint: $input->getOption('endpoint'),
-            startDate: $input->getOption('start-date') ? new \DateTime($input->getOption('start-date')) : null,
-            endDate: $input->getOption('end-date') ? new \DateTime($input->getOption('end-date')) : null,
+            startDate: ($startDateOption !== null && $startDateOption !== '') ? new \DateTime($startDateOption) : null,
+            endDate: ($endDateOption !== null && $endDateOption !== '') ? new \DateTime($endDateOption) : null,
             limit: (int) $input->getOption('limit')
         );
 
@@ -355,7 +359,7 @@ class ManageCommand extends BaseCommand
         $this->io->text("Found {$results->totalCount} results in " . number_format($results->searchTime, 3) . "s");
         $this->io->text("Archives searched: " . count($results->archivesSearched));
 
-        if (!empty($results->records)) {
+        if ($results->records !== []) {
             $format = $input->getOption('format');
             $this->displaySearchResults($results->records, $format);
         } else {
@@ -368,7 +372,7 @@ class ManageCommand extends BaseCommand
     private function executeVerify(InputInterface $input): int
     {
         $uuid = $input->getOption('uuid');
-        if (!$uuid) {
+        if ($uuid === null || $uuid === '') {
             $this->io->error('Archive UUID is required for verification');
             $this->io->text('Usage: archive:manage verify --uuid=<uuid>');
             return self::FAILURE;
@@ -394,7 +398,7 @@ class ManageCommand extends BaseCommand
 
         try {
             $healthChecker = new ArchiveHealthChecker(
-                $this->getService(\Glueful\Database\QueryBuilder::class)
+                $this->getService(\Glueful\Database\Connection::class)
             );
 
             $report = $healthChecker->getDetailedHealthReport();
@@ -406,7 +410,7 @@ class ManageCommand extends BaseCommand
             $this->io->newLine();
 
             // Display issues
-            if (!empty($report['issues'])) {
+            if ($report['issues'] !== []) {
                 $this->io->section('🚨 Critical Issues');
                 foreach ($report['issues'] as $issue) {
                     $this->io->error($issue);
@@ -414,7 +418,7 @@ class ManageCommand extends BaseCommand
             }
 
             // Display warnings
-            if (!empty($report['warnings'])) {
+            if ($report['warnings'] !== []) {
                 $this->io->section('⚠️ Warnings');
                 foreach ($report['warnings'] as $warning) {
                     $this->io->warning($warning);
@@ -422,12 +426,12 @@ class ManageCommand extends BaseCommand
             }
 
             // Display metrics
-            if (!empty($report['metrics'])) {
+            if ($report['metrics'] !== []) {
                 $this->displayHealthMetrics($report['metrics']);
             }
 
             // Display recommendations
-            if (!empty($report['recommendations'])) {
+            if ($report['recommendations'] !== []) {
                 $this->io->section('💡 Recommendations');
                 foreach ($report['recommendations'] as $recommendation) {
                     $this->io->text('• ' . $recommendation);
@@ -448,14 +452,14 @@ class ManageCommand extends BaseCommand
         $olderThan = $input->getOption('older-than');
         $dryRun = $input->getOption('dry-run');
 
-        if ($olderThan) {
+        if ($olderThan !== null && $olderThan !== '') {
             $cutoffDate = new \DateTime("-{$olderThan} days");
             $this->io->text("Cleaning archives older than {$olderThan} days (before {$cutoffDate->format('Y-m-d')})");
         } else {
             $this->io->text('Cleaning failed archives and orphaned files');
         }
 
-        if ($dryRun) {
+        if ((bool) $dryRun) {
             $this->io->warning('DRY RUN MODE - No changes will be made');
         }
 
@@ -463,11 +467,11 @@ class ManageCommand extends BaseCommand
         $storagePath = base_path('storage/archives');
         $archiveDir = config('archive.storage_path', $storagePath);
 
-        if ($olderThan) {
+        if ($olderThan !== null && $olderThan !== '') {
             $oldFiles = $this->fileFinder->findCacheFiles($archiveDir, '*.gz', "{$olderThan} days ago");
             $this->io->text("Found " . iterator_count($oldFiles) . " old archive files");
 
-            if (!$dryRun) {
+            if (!(bool) $dryRun) {
                 foreach ($oldFiles as $file) {
                     $this->fileManager->remove($file->getPathname());
                     $this->io->text("Removed: " . $file->getFilename());
@@ -483,18 +487,17 @@ class ManageCommand extends BaseCommand
     {
         $this->io->title('⚙️ Automatic Archiving');
 
-        $parallel = (int) $input->getOption('parallel');
         $dryRun = $input->getOption('dry-run');
 
         $tables = $this->archiveService->getTablesNeedingArchival();
-        if (empty($tables)) {
+        if ($tables === []) {
             $this->io->success('✅ No tables need archiving');
             return self::SUCCESS;
         }
 
         $this->io->text("Found " . count($tables) . " tables needing archival");
 
-        if ($dryRun) {
+        if ((bool) $dryRun) {
             $this->io->warning('DRY RUN MODE - No changes will be made');
             foreach ($tables as $table) {
                 $this->io->text("Would archive: {$table}");
@@ -513,7 +516,7 @@ class ManageCommand extends BaseCommand
                 $retentionPolicies = config('archive.retention_policies', []);
                 $policy = $retentionPolicies[$table] ?? null;
 
-                if (!$policy || !($policy['auto_archive'] ?? false)) {
+                if ($policy === null || !((bool) ($policy['auto_archive'] ?? false))) {
                     continue;
                 }
 
@@ -541,7 +544,7 @@ class ManageCommand extends BaseCommand
     private function executeList(InputInterface $input): int
     {
         $table = $input->getArgument('table');
-        if (!$table) {
+        if ($table === null || $table === '') {
             $this->io->error('Table name is required for list action');
             return self::FAILURE;
         }
@@ -550,7 +553,7 @@ class ManageCommand extends BaseCommand
 
         $archives = $this->archiveService->getTableArchives($table);
 
-        if (empty($archives)) {
+        if ($archives === []) {
             $this->io->warning("No archives found for table: {$table}");
             return self::SUCCESS;
         }
@@ -573,7 +576,7 @@ class ManageCommand extends BaseCommand
     private function executeRestore(InputInterface $input): int
     {
         $uuid = $input->getOption('uuid');
-        if (!$uuid) {
+        if ($uuid === null || $uuid === '') {
             $this->io->error('Archive UUID is required for restoration');
             return self::FAILURE;
         }
@@ -619,7 +622,7 @@ class ManageCommand extends BaseCommand
 
         // Check table exists and get stats
         $stats = $this->archiveService->getTableStats($table);
-        if (!$stats) {
+        if ($stats === null) {
             throw new \RuntimeException("Table '{$table}' not found or inaccessible");
         }
 
@@ -649,6 +652,9 @@ class ManageCommand extends BaseCommand
         $this->io->text("Backup created (implementation pending)");
     }
 
+    /**
+     * @param mixed $result
+     */
     private function displayArchiveResults($result, bool $compress, bool $verifyIntegrity): void
     {
         $this->io->section('📊 Archive Results');
@@ -683,16 +689,16 @@ class ManageCommand extends BaseCommand
     private function displaySearchParams(ArchiveSearchQuery $query): void
     {
         $params = [];
-        if ($query->userUuid) {
+        if ($query->userUuid !== null) {
             $params[] = "User: {$query->userUuid}";
         }
-        if ($query->endpoint) {
+        if ($query->endpoint !== null) {
             $params[] = "Endpoint: {$query->endpoint}";
         }
-        if ($query->startDate) {
+        if ($query->startDate !== null) {
             $params[] = "Start: {$query->startDate->format('Y-m-d')}";
         }
-        if ($query->endDate) {
+        if ($query->endDate !== null) {
             $params[] = "End: {$query->endDate->format('Y-m-d')}";
         }
         $params[] = "Limit: {$query->limit}";
@@ -700,6 +706,9 @@ class ManageCommand extends BaseCommand
         $this->io->text(implode(' | ', $params));
     }
 
+    /**
+     * @param array<array<string, mixed>> $records
+     */
     private function displaySearchResults(array $records, string $format): void
     {
         switch ($format) {
@@ -720,6 +729,9 @@ class ManageCommand extends BaseCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $metrics
+     */
     private function displayHealthMetrics(array $metrics): void
     {
         if (isset($metrics['storage'])) {
@@ -742,6 +754,9 @@ class ManageCommand extends BaseCommand
         }
     }
 
+    /**
+     * @param mixed $summary
+     */
     private function exportToCsv($summary): void
     {
         $filename = 'archive-export-' . date('Y-m-d-H-i-s') . '.csv';
@@ -749,13 +764,17 @@ class ManageCommand extends BaseCommand
         // Implementation would write CSV data
     }
 
+    /**
+     * @param array<array<string, mixed>> $records
+     */
     private function outputCsv(array $records): void
     {
-        if (empty($records)) {
+        if ($records === []) {
             return;
         }
 
         // Output CSV headers
+        /** @var array<string> $headers */
         $headers = array_keys($records[0]);
         $this->io->text(implode(',', $headers));
 
@@ -771,6 +790,7 @@ class ManageCommand extends BaseCommand
             return '0 B';
         }
 
+        /** @var array<string> $units */
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
         $pow = floor(log($bytes, 1024));
         $pow = min($pow, count($units) - 1);
@@ -781,7 +801,7 @@ class ManageCommand extends BaseCommand
     private function executeTrack(InputInterface $input): int
     {
         $table = $input->getArgument('table');
-        if (!$table) {
+        if ($table === null || $table === '') {
             $this->io->error('Table name is required for track action');
             $this->io->text('Usage: archive:manage track <table>');
             return self::FAILURE;
@@ -796,7 +816,7 @@ class ManageCommand extends BaseCommand
             // Get current table statistics
             $stats = $this->archiveService->getTableStats($table);
 
-            if ($stats) {
+            if ($stats !== null) {
                 $this->io->success('✅ Growth tracking updated');
                 $this->io->section('📊 Current Table Statistics');
                 $statsRows = [
@@ -806,7 +826,7 @@ class ManageCommand extends BaseCommand
                     ['Needs Archive', $stats->needsArchive ? 'Yes' : 'No'],
                 ];
 
-                if ($stats->lastArchiveDate) {
+                if ($stats->lastArchiveDate !== null) {
                     $statsRows[] = ['Last Archived', $stats->lastArchiveDate->format('Y-m-d H:i:s')];
                 } else {
                     $statsRows[] = ['Last Archived', 'Never'];

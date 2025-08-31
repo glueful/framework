@@ -53,12 +53,12 @@ This command validates configuration files against their registered schemas.
         $processor = $this->getService(ConfigurationProcessor::class);
         $configManager = $this->getService(ConfigManager::class);
 
-        if ($input->getOption('all')) {
+        if ((bool) $input->getOption('all')) {
             return $this->validateAllConfigs($processor, $configManager, $input->getOption('verbose'));
         }
 
         $configName = $input->getArgument('config');
-        if (!$configName) {
+        if ($configName === null) {
             $this->error('Please specify a config name or use --all flag');
             $this->showUsageHelp();
             return 1;
@@ -94,7 +94,7 @@ This command validates configuration files against their registered schemas.
                 $progressBar->setMessage("Validating {$configName}...");
 
                 try {
-                    $config = $configManager->get($configName);
+                    $config = $configManager::get($configName);
                     $processedConfig = $processor->processConfiguration($configName, $config);
 
                     $results[$configName] = [
@@ -162,7 +162,7 @@ This command validates configuration files against their registered schemas.
         $this->info("Validating configuration '{$configName}'...");
 
         try {
-            $config = $configManager->get($configName);
+            $config = $configManager::get($configName);
             $processedConfig = $processor->processConfiguration($configName, $config);
 
             $this->success("Configuration '{$configName}' is valid!");
@@ -189,6 +189,8 @@ This command validates configuration files against their registered schemas.
 
     /**
      * Display validation summary
+     *
+     * @param array<string, mixed> $results
      */
     private function displayValidationSummary(array $results, int $totalErrors): void
     {
@@ -200,7 +202,7 @@ This command validates configuration files against their registered schemas.
 
         foreach ($results as $configName => $result) {
             $status = $result['status'] === 'valid' ? '<info>✓ Valid</info>' : '<error>✗ Invalid</error>';
-            $error = $result['error'] ? substr($result['error'], 0, 60) . '...' : '-';
+            $error = $result['error'] !== null ? substr($result['error'], 0, 60) . '...' : '-';
             $rows[] = [$configName, $status, $error];
         }
 
@@ -224,6 +226,8 @@ This command validates configuration files against their registered schemas.
 
     /**
      * Display detailed error information
+     *
+     * @param array<string, mixed> $results
      */
     private function displayDetailedErrors(array $results): void
     {
@@ -243,6 +247,9 @@ This command validates configuration files against their registered schemas.
 
     /**
      * Display configuration details for verbose output
+     *
+     * @param array<string, mixed> $originalConfig
+     * @param array<string, mixed> $processedConfig
      */
     private function displayConfigDetails(
         string $configName,
@@ -255,7 +262,7 @@ This command validates configuration files against their registered schemas.
         $this->line("=====================");
 
         $schemaInfo = $processor->getSchemaInfo($configName);
-        if ($schemaInfo) {
+        if ($schemaInfo !== null) {
             $this->line("Schema: {$schemaInfo['name']} v{$schemaInfo['version']}");
             $this->line("Description: {$schemaInfo['description']}");
         }
@@ -271,6 +278,8 @@ This command validates configuration files against their registered schemas.
 
     /**
      * Display configuration structure recursively
+     *
+     * @param array<string, mixed> $config
      */
     private function displayConfigStructure(array $config, int $level): void
     {
@@ -305,7 +314,8 @@ This command validates configuration files against their registered schemas.
         $this->line("Configuration: {$configName}");
         $this->line("Error: " . $exception->getMessage());
 
-        if ($previous = $exception->getPrevious()) {
+        $previous = $exception->getPrevious();
+        if ($previous !== null) {
             $this->line("Underlying error: " . $previous->getMessage());
         }
     }
@@ -329,7 +339,7 @@ This command validates configuration files against their registered schemas.
     {
         $schemas = $processor->getAllSchemas();
 
-        if (empty($schemas)) {
+        if ($schemas === []) {
             $this->warning("No configuration schemas are registered.");
             return;
         }

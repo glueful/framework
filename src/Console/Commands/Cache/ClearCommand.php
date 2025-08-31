@@ -25,6 +25,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 )]
 class ClearCommand extends BaseCommand
 {
+    /** @var CacheStore<mixed> */
     private CacheStore $cacheStore;
 
     public function __construct()
@@ -65,25 +66,25 @@ class ClearCommand extends BaseCommand
         }
 
         // Show what will be cleared
-        if (!empty($tags)) {
+        if ($tags !== []) {
             $this->info(sprintf('Clearing cache for tags: %s', implode(', ', $tags)));
         } else {
             $this->info('Clearing all application cache...');
         }
 
         // Confirmation in production
-        if (!$force && !$this->confirmProduction('clear application cache')) {
+        if (!(bool) $force && !$this->confirmProduction('clear application cache')) {
             return self::FAILURE;
         }
 
         // Confirm if not forced
-        if (!$force && !$this->confirm('Are you sure you want to clear the cache?', false)) {
+        if (!(bool) $force && !$this->confirm('Are you sure you want to clear the cache?', false)) {
             $this->info('Cache clearing cancelled.');
             return self::SUCCESS;
         }
 
         try {
-            if (!empty($tags)) {
+            if ($tags !== []) {
                 // Clear specific tags
                 $this->clearCacheByTags($tags);
             } else {
@@ -110,21 +111,20 @@ class ClearCommand extends BaseCommand
         $this->line('✓ All cache entries cleared');
     }
 
+    /**
+     * @param array<string> $tags
+     */
     private function clearCacheByTags(array $tags): void
     {
         try {
-            // Check if cache store supports tagging
-            if (method_exists($this->cacheStore, 'invalidateTags')) {
-                $result = $this->cacheStore->invalidateTags($tags);
-                if ($result) {
-                    foreach ($tags as $tag) {
-                        $this->line(sprintf('✓ Cache tag "%s" cleared', $tag));
-                    }
-                } else {
-                    $this->warning('Failed to clear cache tags');
+            // Invalidate cache by tags
+            $result = $this->cacheStore->invalidateTags($tags);
+            if ($result) {
+                foreach ($tags as $tag) {
+                    $this->line(sprintf('✓ Cache tag "%s" cleared', $tag));
                 }
             } else {
-                $this->warning('Cache tagging is not supported by the current cache driver');
+                $this->warning('Failed to clear cache tags');
             }
         } catch (\Exception $e) {
             $this->error(sprintf('Failed to clear tags: %s', $e->getMessage()));

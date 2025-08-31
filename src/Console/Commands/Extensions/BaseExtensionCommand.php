@@ -30,6 +30,9 @@ abstract class BaseExtensionCommand extends BaseCommand
      * @param string $extensionName Extension name to find
      * @return array|null Extension data or null if not found
      */
+    /**
+     * @return array<string, mixed>|null
+     */
     protected function findExtension(ExtensionManager $manager, string $extensionName): ?array
     {
         if (!$manager->isInstalled($extensionName)) {
@@ -37,7 +40,7 @@ abstract class BaseExtensionCommand extends BaseCommand
         }
 
         $metadata = $manager->getExtensionMetadata($extensionName);
-        if (!$metadata) {
+        if ($metadata === null) {
             return null;
         }
 
@@ -60,6 +63,9 @@ abstract class BaseExtensionCommand extends BaseCommand
      * @param ExtensionManager $manager ExtensionManager instance
      * @return array Extensions keyed by name
      */
+    /**
+     * @return array<string, array<string, mixed>>
+     */
     protected function getExtensionsKeyed(ExtensionManager $manager): array
     {
         $installedExtensions = $manager->listInstalled();
@@ -68,7 +74,7 @@ abstract class BaseExtensionCommand extends BaseCommand
         foreach ($installedExtensions as $extensionData) {
             $extensionName = $extensionData['name'];
             $extension = $this->findExtension($manager, $extensionName);
-            if ($extension) {
+            if ($extension !== null) {
                 $keyed[$extensionName] = $extension;
             }
         }
@@ -106,6 +112,10 @@ abstract class BaseExtensionCommand extends BaseCommand
      * @param array $extension Extension data
      * @return array Array of dependency names
      */
+    /**
+     * @param array<string, mixed> $extension
+     * @return array<int, string>
+     */
     protected function getExtensionDependencies(array $extension): array
     {
         return $extension['metadata']['dependencies']['extensions'] ?? [];
@@ -118,6 +128,9 @@ abstract class BaseExtensionCommand extends BaseCommand
      * @param string $extensionName Extension name to check dependents for
      * @return array Array of dependent extension names
      */
+    /**
+     * @return array<int, string>
+     */
     protected function findDependentExtensions(ExtensionManager $manager, string $extensionName): array
     {
         $installedExtensions = $manager->listInstalled();
@@ -126,9 +139,9 @@ abstract class BaseExtensionCommand extends BaseCommand
         foreach ($installedExtensions as $extensionData) {
             $installedExtensionName = $extensionData['name'];
             $extension = $this->findExtension($manager, $installedExtensionName);
-            if ($extension) {
+            if ($extension !== null) {
                 $dependencies = $this->getExtensionDependencies($extension);
-                if (in_array($extensionName, $dependencies)) {
+                if (in_array($extensionName, $dependencies, true)) {
                     $dependents[] = $extension['name'];
                 }
             }
@@ -143,6 +156,10 @@ abstract class BaseExtensionCommand extends BaseCommand
      * @param string $input Input extension name
      * @param array $available Array of available extension names
      * @return array Array of similar extension names
+     */
+    /**
+     * @param array<int, string> $available
+     * @return array<int, string>
      */
     protected function findSimilarExtensions(string $input, array $available): array
     {
@@ -168,11 +185,14 @@ abstract class BaseExtensionCommand extends BaseCommand
      * @param array $available Array of available extension names
      * @return void
      */
+    /**
+     * @param array<int, string> $available
+     */
     protected function suggestSimilarExtensions(string $input, array $available): void
     {
         $suggestions = $this->findSimilarExtensions($input, $available);
 
-        if (!empty($suggestions)) {
+        if (count($suggestions) > 0) {
             $this->line('');
             $this->info('Did you mean:');
             foreach ($suggestions as $suggestion) {
@@ -217,7 +237,7 @@ abstract class BaseExtensionCommand extends BaseCommand
      */
     protected function isValidExtensionName(string $name): bool
     {
-        if (empty($name)) {
+        if ($name === '') {
             return false;
         }
 
@@ -247,6 +267,11 @@ abstract class BaseExtensionCommand extends BaseCommand
      * @param string $key Metadata key
      * @param mixed $default Default value if key not found
      * @return mixed Metadata value or default
+     */
+    /**
+     * @param array<string, mixed> $extension
+     * @param mixed $default
+     * @return mixed
      */
     protected function getExtensionMetadata(array $extension, string $key, $default = null)
     {
@@ -319,6 +344,9 @@ abstract class BaseExtensionCommand extends BaseCommand
      * @param string $extensionName Extension name
      * @return array|null Extension config or null if not found/invalid
      */
+    /**
+     * @return array<string, mixed>|null
+     */
     protected function loadExtensionConfig(string $extensionName): ?array
     {
         $configPath = $this->getExtensionConfigPath($extensionName);
@@ -350,6 +378,9 @@ abstract class BaseExtensionCommand extends BaseCommand
      *
      * @return array Array of extension directory names
      */
+    /**
+     * @return array<int, string>
+     */
     protected function findExtensionDirectories(): array
     {
         $extensionsDir = $this->getExtensionsDirectory();
@@ -377,10 +408,13 @@ abstract class BaseExtensionCommand extends BaseCommand
      * @param string $subdirectory Optional subdirectory (e.g., 'src')
      * @return array Array of PHP file paths
      */
+    /**
+     * @return array<int, string>
+     */
     protected function findExtensionPhpFiles(string $extensionName, string $subdirectory = ''): array
     {
         $searchPath = $this->getExtensionPath($extensionName);
-        if ($subdirectory) {
+        if ($subdirectory !== '') {
             $searchPath .= '/' . ltrim($subdirectory, '/');
         }
 
@@ -409,7 +443,8 @@ abstract class BaseExtensionCommand extends BaseCommand
         $units = ['B', 'KB', 'MB', 'GB'];
         $factor = 1024;
 
-        for ($i = 0; $i < count($units) && $bytes >= $factor; $i++) {
+        $i = 0;
+        for (; $i < count($units) && $bytes >= $factor; $i++) {
             $bytes /= $factor;
         }
 

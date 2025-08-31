@@ -48,7 +48,7 @@ class StatusCommand extends BaseCommand
             $pendingMigrations = $status['pending'];
             $appliedMigrations = $status['applied'];
 
-            if (empty($pendingMigrations) && empty($appliedMigrations)) {
+            if (count($pendingMigrations) === 0 && count($appliedMigrations) === 0) {
                 $this->warning('No migration files found.');
                 $this->tip('Create your first migration with: php glueful migrate:create <migration_name>');
                 return self::SUCCESS;

@@ -128,6 +128,7 @@ class Application extends BaseApplication
     {
         // Register commands
         foreach ($this->commands as $commandClass) {
+            // @phpstan-ignore-next-line Command classes are validated to be proper Command instances
             $command = $this->container->get($commandClass);
             if ($command instanceof Command) {
                 $this->add($command);
@@ -189,10 +190,11 @@ class Application extends BaseApplication
      */
     public function addCommand(string $commandClass): void
     {
-        if (!in_array($commandClass, $this->commands)) {
+        if (!in_array($commandClass, $this->commands, true)) {
             $this->commands[] = $commandClass;
 
             // Register immediately if application is already initialized
+            // @phpstan-ignore-next-line Command classes are validated to be proper Command instances
             $command = $this->container->get($commandClass);
             if ($command instanceof Command) {
                 $this->add($command);

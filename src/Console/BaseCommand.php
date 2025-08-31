@@ -92,12 +92,32 @@ abstract class BaseCommand extends Command
      * - Handles dependency injection
      * - Provides type-safe service access
      *
-     * @param string $serviceId Service identifier
-     * @return mixed Resolved service instance
+     * @template T of object
+     * @param class-string<T> $serviceId Service identifier
+     * @return T Resolved service instance
      */
     protected function getService(string $serviceId)
     {
         return $this->container->get($serviceId);
+    }
+
+    /**
+     * Get Service with Dynamic ID
+     *
+     * Resolves services using dynamic string identifiers that can't use
+     * the template type system. Uses reflection to bypass PHPStan template
+     * type checking for debugging and validation scenarios.
+     *
+     * @param string $serviceId Dynamic service identifier
+     * @return mixed The resolved service instance
+     */
+    protected function getServiceDynamic(string $serviceId): mixed
+    {
+        // Use reflection to bypass template type checking
+        $reflectionClass = new \ReflectionClass($this->container);
+        $getMethod = $reflectionClass->getMethod('get');
+
+        return $getMethod->invoke($this->container, $serviceId);
     }
 
     // =====================================
@@ -284,7 +304,7 @@ abstract class BaseCommand extends Command
      * - Supports default values
      *
      * @param string $question Question text
-     * @param array $choices Available choices
+     * @param array<string> $choices Available choices
      * @param string|null $default Default choice
      * @return string Selected choice
      */
@@ -305,8 +325,8 @@ abstract class BaseCommand extends Command
      * - Supports headers and multiple rows
      * - Provides clean tabular display
      *
-     * @param array $headers Table headers
-     * @param array $rows Table rows
+     * @param array<string> $headers Table headers
+     * @param array<array<string>> $rows Table rows
      * @return void
      */
     protected function table(array $headers, array $rows): void

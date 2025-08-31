@@ -71,7 +71,7 @@ class RollbackCommand extends BaseCommand
         }
 
         // Production safety check
-        if (!$force && !$this->confirmProduction('rollback database migrations')) {
+        if (!(bool) $force && !$this->confirmProduction('rollback database migrations')) {
             return self::FAILURE;
         }
 
@@ -79,14 +79,14 @@ class RollbackCommand extends BaseCommand
             // Get applied migrations to potentially rollback
             $appliedMigrations = $this->migrationManager->getAppliedMigrationsList();
 
-            if (empty($appliedMigrations)) {
+            if (count($appliedMigrations) === 0) {
                 $this->info('No migrations to rollback.');
                 return self::SUCCESS;
             }
 
             $this->info(sprintf('Found %d applied migration(s)', count($appliedMigrations)));
 
-            if ($dryRun) {
+            if ((bool) $dryRun) {
                 $this->warning('DRY RUN MODE - No actual rollbacks will be executed');
                 $this->warning(sprintf('Would rollback %d step(s)', $steps));
                 return self::SUCCESS;
@@ -94,7 +94,7 @@ class RollbackCommand extends BaseCommand
 
             // Confirm execution if not forced
             if (
-                !$force && !$this->confirm(
+                !(bool) $force && !$this->confirm(
                     sprintf('Do you want to rollback %d migration step(s)?', $steps),
                     false
                 )
@@ -107,7 +107,7 @@ class RollbackCommand extends BaseCommand
             $result = $this->migrationManager->rollback($steps);
 
             // Display results
-            if (!empty($result['reverted'])) {
+            if (isset($result['reverted']) && count($result['reverted']) > 0) {
                 $this->success('Migrations rolled back successfully!');
                 foreach ($result['reverted'] as $reverted) {
                     $this->line('✓ Rolled back: ' . $reverted);
@@ -116,7 +116,7 @@ class RollbackCommand extends BaseCommand
                 $this->info('No migrations were rolled back.');
             }
 
-            if (!empty($result['failed'])) {
+            if (isset($result['failed']) && count($result['failed']) > 0) {
                 $this->error('Some rollbacks failed:');
                 foreach ($result['failed'] as $failed) {
                     $this->line('✗ Failed: ' . $failed);

@@ -63,7 +63,7 @@ class ResetCommand extends BaseCommand
             // Get all tables
             $tables = $schema->getTables();
 
-            if (empty($tables)) {
+            if (count($tables) === 0) {
                 $this->info('No tables found in the database.');
                 return self::SUCCESS;
             }
@@ -71,19 +71,19 @@ class ResetCommand extends BaseCommand
             // Display warning
             $this->displayWarning($tables);
 
-            if ($dryRun) {
+            if ($dryRun === true) {
                 $this->displayDryRun($tables);
                 return self::SUCCESS;
             }
 
             // Require force flag or confirmation
-            if (!$force && !$this->confirmReset()) {
+            if ($force !== true && !$this->confirmReset()) {
                 $this->info('Database reset cancelled.');
                 return self::SUCCESS;
             }
 
             // Additional production check
-            if (!$force && !$this->confirmProduction('reset the entire database')) {
+            if ($force !== true && !$this->confirmProduction('reset the entire database')) {
                 return self::FAILURE;
             }
 
@@ -100,6 +100,9 @@ class ResetCommand extends BaseCommand
         }
     }
 
+    /**
+     * @param array<int, string> $tables
+     */
     private function displayWarning(array $tables): void
     {
         $this->warning('⚠️  DATABASE RESET WARNING ⚠️');
@@ -130,6 +133,9 @@ class ResetCommand extends BaseCommand
         $this->warning('Make sure you have a backup before proceeding!');
     }
 
+    /**
+     * @param array<int, string> $tables
+     */
     private function displayDryRun(array $tables): void
     {
         $this->line('');
@@ -171,6 +177,9 @@ class ResetCommand extends BaseCommand
         return true;
     }
 
+    /**
+     * @param array<int, string> $tables
+     */
     private function executeReset(array $tables): void
     {
         $schema = $this->connection->getSchemaBuilder();

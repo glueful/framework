@@ -25,6 +25,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 )]
 class SetCommand extends BaseCommand
 {
+    /** @var CacheStore<mixed> */
     private CacheStore $cacheStore;
 
     public function __construct()
@@ -101,6 +102,9 @@ class SetCommand extends BaseCommand
         }
     }
 
+    /**
+     * @return mixed
+     */
     private function processValue(string $rawValue, bool $isJson)
     {
         if ($isJson) {
@@ -129,6 +133,9 @@ class SetCommand extends BaseCommand
         return $rawValue;
     }
 
+    /**
+     * @param mixed $value
+     */
     private function displaySetInfo(string $key, $value, int $ttl): void
     {
         $this->line('');

@@ -117,12 +117,12 @@ class InfoCommand extends BaseExtensionCommand
         $filter = $input->getOption('filter');
 
         // Validate options
-        if (!in_array($status, ['enabled', 'disabled', 'all'])) {
+        if (!in_array($status, ['enabled', 'disabled', 'all'], true)) {
             $this->error("Invalid status filter: {$status}. Use: enabled, disabled, or all");
             return self::FAILURE;
         }
 
-        if (!in_array($format, ['table', 'json', 'compact'])) {
+        if (!in_array($format, ['table', 'json', 'compact'], true)) {
             $this->error("Invalid format: {$format}. Use: table, json, or compact");
             return self::FAILURE;
         }
@@ -130,7 +130,7 @@ class InfoCommand extends BaseExtensionCommand
         try {
             $extensionsManager = $this->getService(ExtensionManager::class);
 
-            if ($namespaceFocus) {
+            if ((bool)$namespaceFocus) {
                 // Namespace-focused mode
                 return $this->executeNamespaceMode(
                     $extensionsManager,
@@ -140,7 +140,7 @@ class InfoCommand extends BaseExtensionCommand
                     $detailed,
                     $filter
                 );
-            } elseif ($extensionName) {
+            } elseif ($extensionName !== null && $extensionName !== '') {
                 // Detailed info for specific extension
                 return $this->executeDetailedMode($extensionsManager, $extensionName);
             } else {
@@ -170,7 +170,7 @@ class InfoCommand extends BaseExtensionCommand
 
         $extensions = $this->getFilteredExtensions($manager, $status);
 
-        if (empty($extensions)) {
+        if (count($extensions) === 0) {
             $this->warning("No extensions found with status: {$status}");
             $this->displayInstallationTip();
             return self::SUCCESS;
@@ -186,7 +186,7 @@ class InfoCommand extends BaseExtensionCommand
     {
         $extension = $this->findExtension($manager, $extensionName);
 
-        if (!$extension) {
+        if ($extension === null) {
             $this->error("Extension '{$extensionName}' not found.");
             $extensions = $manager->listInstalled();
             $available = $extensions;
@@ -206,7 +206,7 @@ class InfoCommand extends BaseExtensionCommand
         bool $detailed,
         ?string $filter
     ): int {
-        if ($extensionName) {
+        if ($extensionName !== null && $extensionName !== '') {
             $this->info("Extension Namespaces: {$extensionName}");
         } else {
             $this->info('Extension Namespaces');
@@ -216,8 +216,8 @@ class InfoCommand extends BaseExtensionCommand
         // Get namespaces
         $namespaces = $this->collectNamespaces($manager, $extensionName);
 
-        if (empty($namespaces)) {
-            if ($extensionName) {
+        if (count($namespaces) === 0) {
+            if ($extensionName !== null && $extensionName !== '') {
                 $this->warning("No namespaces found for extension: {$extensionName}");
             } else {
                 $this->warning('No extension namespaces found');
@@ -226,7 +226,7 @@ class InfoCommand extends BaseExtensionCommand
         }
 
         // Apply filter if provided
-        if ($filter) {
+        if ($filter !== null && $filter !== '') {
             $namespaces = $this->filterNamespaces($namespaces, $filter);
             $this->info("Filtered namespaces (pattern: {$filter}):");
         }
@@ -235,7 +235,7 @@ class InfoCommand extends BaseExtensionCommand
         $this->displayNamespaces($namespaces, $detailed);
 
         // Check for conflicts if requested
-        if ($checkConflicts && !$extensionName) {
+        if ($checkConflicts && ($extensionName === null || $extensionName === '')) {
             $this->checkNamespaceConflicts($namespaces);
         }
 
@@ -250,6 +250,12 @@ class InfoCommand extends BaseExtensionCommand
         return self::SUCCESS;
     }
 
+    /**
+     * Get filtered extensions based on status
+     * @param ExtensionManager $manager
+     * @param string $status
+     * @return array<string, array<string, mixed>>
+     */
     private function getFilteredExtensions(ExtensionManager $manager, string $status): array
     {
         $allExtensions = $this->getExtensionsKeyed($manager);
@@ -259,11 +265,18 @@ class InfoCommand extends BaseExtensionCommand
         }
 
         return array_filter($allExtensions, function ($extension) use ($status) {
-            $isEnabled = $extension['metadata']['enabled'] ?? false;
+            $isEnabled = (bool)($extension['metadata']['enabled'] ?? false);
             return ($status === 'enabled' && $isEnabled) || ($status === 'disabled' && !$isEnabled);
         });
     }
 
+    /**
+     * Display extensions in the specified format
+     * @param array<string, array<string, mixed>> $extensions
+     * @param string $format
+     * @param bool $showAutoload
+     * @param bool $showDependencies
+     */
     private function displayExtensions(
         array $extensions,
         string $format,
@@ -282,6 +295,12 @@ class InfoCommand extends BaseExtensionCommand
         }
     }
 
+    /**
+     * Display extensions in table format
+     * @param array<string, array<string, mixed>> $extensions
+     * @param bool $showAutoload
+     * @param bool $showDependencies
+     */
     private function displayTableFormat(array $extensions, bool $showAutoload, bool $showDependencies): void
     {
         $headers = ['Name', 'Status', 'Version', 'Description'];
@@ -298,7 +317,8 @@ class InfoCommand extends BaseExtensionCommand
         foreach ($extensions as $extension) {
             $name = $extension['name'];
             $metadata = $extension['metadata'];
-            $status = $metadata['enabled'] ? '<info>✓ Enabled</info>' : '<comment>• Disabled</comment>';
+            $isEnabled = (bool)($metadata['enabled'] ?? false);
+            $status = $isEnabled ? '<info>✓ Enabled</info>' : '<comment>• Disabled</comment>';
             $version = $metadata['version'] ?? 'Unknown';
             $description = $this->truncateText($metadata['description'] ?? 'No description', 50);
 
@@ -311,7 +331,7 @@ class InfoCommand extends BaseExtensionCommand
 
             if ($showDependencies) {
                 $deps = $metadata['dependencies']['extensions'] ?? [];
-                $row[] = empty($deps) ? 'None' : implode(', ', $deps);
+                $row[] = count($deps) === 0 ? 'None' : implode(', ', $deps);
             }
 
             $rows[] = $row;
@@ -320,26 +340,38 @@ class InfoCommand extends BaseExtensionCommand
         $this->table($headers, $rows);
     }
 
+    /**
+     * Display extensions in JSON format
+     * @param array<string, array<string, mixed>> $extensions
+     */
     private function displayJsonFormat(array $extensions): void
     {
         $this->line(json_encode($extensions, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     }
 
+    /**
+     * Display extensions in compact format
+     * @param array<string, array<string, mixed>> $extensions
+     */
     private function displayCompactFormat(array $extensions): void
     {
         foreach ($extensions as $extension) {
             $name = $extension['name'];
             $metadata = $extension['metadata'];
-            $status = $metadata['enabled'] ? '✓' : '•';
+            $status = (bool)($metadata['enabled'] ?? false) ? '✓' : '•';
             $version = $metadata['version'] ?? 'Unknown';
             $this->line("{$status} {$name} ({$version})");
         }
     }
 
+    /**
+     * Display extensions summary
+     * @param array<string, array<string, mixed>> $extensions
+     */
     private function displaySummary(array $extensions): void
     {
-        $enabled = array_filter($extensions, fn($ext) => $ext['metadata']['enabled'] ?? false);
-        $disabled = array_filter($extensions, fn($ext) => !($ext['metadata']['enabled'] ?? false));
+        $enabled = array_filter($extensions, fn($ext) => (bool)($ext['metadata']['enabled'] ?? false));
+        $disabled = array_filter($extensions, fn($ext) => !(bool)($ext['metadata']['enabled'] ?? false));
 
         $this->line('');
         $this->info('Summary:');
@@ -359,6 +391,12 @@ class InfoCommand extends BaseExtensionCommand
         $this->line('• Place extensions in the extensions/ directory');
     }
 
+    /**
+     * Display detailed extension information
+     * @param string $name
+     * @param array<string, mixed> $extension
+     * @param ExtensionManager $manager
+     */
     private function displayExtensionInfo(string $name, array $extension, ExtensionManager $manager): void
     {
         $this->info("Extension Information: {$name}");
@@ -383,9 +421,14 @@ class InfoCommand extends BaseExtensionCommand
         $this->displayExtensionNamespaces($name, $extension);
     }
 
+    /**
+     * Display basic extension information
+     * @param string $name
+     * @param array<string, mixed> $extension
+     */
     private function displayBasicInfo(string $name, array $extension): void
     {
-        $status = $extension['enabled'] ? '<info>✓ Enabled</info>' : '<comment>• Disabled</comment>';
+        $status = (bool)($extension['enabled'] ?? false) ? '<info>✓ Enabled</info>' : '<comment>• Disabled</comment>';
 
         $basicInfo = [
             ['Name', $name],
@@ -404,6 +447,11 @@ class InfoCommand extends BaseExtensionCommand
         $this->table(['Property', 'Value'], $basicInfo);
     }
 
+    /**
+     * Display extension dependencies
+     * @param array<string, mixed> $extension
+     * @param ExtensionManager $manager
+     */
     private function displayDependencies(array $extension, ExtensionManager $manager): void
     {
         $this->line('');
@@ -411,7 +459,7 @@ class InfoCommand extends BaseExtensionCommand
 
         $dependencies = $extension['dependencies']['extensions'] ?? [];
 
-        if (empty($dependencies)) {
+        if (count($dependencies) === 0) {
             $this->line('  None');
             return;
         }
@@ -420,8 +468,8 @@ class InfoCommand extends BaseExtensionCommand
         foreach ($dependencies as $depName) {
             $depExtension = $this->findExtension($manager, $depName);
             $depStatus = 'Not Found';
-            if ($depExtension) {
-                $depStatus = $depExtension['metadata']['enabled'] ?
+            if ($depExtension !== null) {
+                $depStatus = (bool)($depExtension['metadata']['enabled'] ?? false) ?
                     '<info>✓ Enabled</info>' : '<comment>• Disabled</comment>';
             }
             $depRows[] = [$depName, 'Latest', $depStatus];
@@ -439,15 +487,16 @@ class InfoCommand extends BaseExtensionCommand
         $allExtensions = $this->getExtensionsKeyed($manager);
         foreach ($allExtensions as $extension) {
             $deps = $extension['metadata']['dependencies']['extensions'] ?? [];
-            if (in_array($name, $deps)) {
+            if (in_array($name, $deps, true)) {
                 $dependents[] = [
                     $extension['name'],
-                    $extension['metadata']['enabled'] ? '<info>✓ Enabled</info>' : '<comment>• Disabled</comment>'
+                    (bool)($extension['metadata']['enabled'] ?? false) ?
+                        '<info>✓ Enabled</info>' : '<comment>• Disabled</comment>'
                 ];
             }
         }
 
-        if (empty($dependents)) {
+        if (count($dependents) === 0) {
             $this->line('  None');
             return;
         }
@@ -455,6 +504,11 @@ class InfoCommand extends BaseExtensionCommand
         $this->table(['Extension', 'Status'], $dependents);
     }
 
+    /**
+     * Display extension file information
+     * @param string $name
+     * @param array<string, mixed> $extension
+     */
     private function displayFileInfo(string $name, array $extension): void
     {
         $this->line('');
@@ -486,6 +540,10 @@ class InfoCommand extends BaseExtensionCommand
         $this->table(['Property', 'Value'], $fileInfo);
     }
 
+    /**
+     * Display extension configuration
+     * @param array<string, mixed> $extension
+     */
     private function displayConfiguration(array $extension): void
     {
         $this->line('');
@@ -493,7 +551,7 @@ class InfoCommand extends BaseExtensionCommand
 
         $config = $extension['config'] ?? [];
 
-        if (empty($config)) {
+        if (count($config) === 0) {
             $this->line('  No configuration options defined');
             return;
         }
@@ -507,6 +565,11 @@ class InfoCommand extends BaseExtensionCommand
         $this->table(['Option', 'Value'], $configRows);
     }
 
+    /**
+     * Display extension namespaces
+     * @param string $name
+     * @param array<string, mixed> $extension
+     */
     private function displayExtensionNamespaces(string $name, array $extension): void
     {
         $this->line('');
@@ -531,7 +594,7 @@ class InfoCommand extends BaseExtensionCommand
             }
         }
 
-        if (empty($autoload)) {
+        if (count($autoload) === 0) {
             $this->line('  No PSR-4 namespaces defined');
             return;
         }
@@ -547,6 +610,12 @@ class InfoCommand extends BaseExtensionCommand
         $this->table(['Namespace', 'Path', 'Status'], $namespaceRows);
     }
 
+    /**
+     * Collect namespaces from extensions
+     * @param ExtensionManager $manager
+     * @param string|null $extensionName
+     * @return array<int, array<string, mixed>>
+     */
     private function collectNamespaces(ExtensionManager $manager, ?string $extensionName = null): array
     {
         $namespaces = [];
@@ -556,7 +625,7 @@ class InfoCommand extends BaseExtensionCommand
 
             foreach ($extensions as $extension) {
                 // Filter by specific extension if provided
-                if ($extensionName && $extension['name'] !== $extensionName) {
+                if ($extensionName !== null && $extensionName !== '' && $extension['name'] !== $extensionName) {
                     continue;
                 }
 
@@ -584,6 +653,11 @@ class InfoCommand extends BaseExtensionCommand
         return $namespaces;
     }
 
+    /**
+     * Scan extensions directory for namespaces
+     * @param string|null $extensionName
+     * @return array<int, array<string, mixed>>
+     */
     private function scanExtensionsDirectory(?string $extensionName = null): array
     {
         $namespaces = [];
@@ -600,7 +674,7 @@ class InfoCommand extends BaseExtensionCommand
             }
 
             // Filter by specific extension if provided
-            if ($extensionName && $dir !== $extensionName) {
+            if ($extensionName !== null && $extensionName !== '' && $dir !== $extensionName) {
                 continue;
             }
 
@@ -610,7 +684,7 @@ class InfoCommand extends BaseExtensionCommand
             }
 
             $config = json_decode(file_get_contents($configFile), true);
-            if (!$config) {
+            if ($config === null || $config === false) {
                 continue;
             }
 
@@ -630,6 +704,12 @@ class InfoCommand extends BaseExtensionCommand
         return $namespaces;
     }
 
+    /**
+     * Filter namespaces by pattern
+     * @param array<int, array<string, mixed>> $namespaces
+     * @param string $pattern
+     * @return array<int, array<string, mixed>>
+     */
     private function filterNamespaces(array $namespaces, string $pattern): array
     {
         return array_filter($namespaces, function ($namespace) use ($pattern) {
@@ -638,6 +718,11 @@ class InfoCommand extends BaseExtensionCommand
         });
     }
 
+    /**
+     * Display namespaces
+     * @param array<int, array<string, mixed>> $namespaces
+     * @param bool $detailed
+     */
     private function displayNamespaces(array $namespaces, bool $detailed): void
     {
         if ($detailed) {
@@ -647,13 +732,17 @@ class InfoCommand extends BaseExtensionCommand
         }
     }
 
+    /**
+     * Display namespaces in compact format
+     * @param array<int, array<string, mixed>> $namespaces
+     */
     private function displayCompactNamespaces(array $namespaces): void
     {
         $this->line('');
 
         $rows = [];
         foreach ($namespaces as $ns) {
-            $status = $ns['enabled'] ? '<info>✓</info>' : '<comment>•</comment>';
+            $status = (bool)($ns['enabled'] ?? false) ? '<info>✓</info>' : '<comment>•</comment>';
             $type = $ns['type'] === 'core' ? '<comment>Core</comment>' : 'Optional';
 
             $rows[] = [
@@ -668,6 +757,10 @@ class InfoCommand extends BaseExtensionCommand
         $this->table(['Namespace', 'Extension', 'Status', 'Type', 'Version'], $rows);
     }
 
+    /**
+     * Display namespaces in detailed format
+     * @param array<int, array<string, mixed>> $namespaces
+     */
     private function displayDetailedNamespaces(array $namespaces): void
     {
         foreach ($namespaces as $index => $ns) {
@@ -675,7 +768,7 @@ class InfoCommand extends BaseExtensionCommand
                 $this->line('');
             }
 
-            $status = $ns['enabled'] ? '<info>Enabled</info>' : '<comment>Disabled</comment>';
+            $status = (bool)($ns['enabled'] ?? false) ? '<info>Enabled</info>' : '<comment>Disabled</comment>';
             $type = $ns['type'] === 'core' ? '<comment>Core</comment>' : 'Optional';
 
             $this->info("Namespace: {$ns['namespace']}");
@@ -707,7 +800,7 @@ class InfoCommand extends BaseExtensionCommand
 
         // Check if there are PHP files in the path
         $files = glob("{$path}/*.php");
-        if (empty($files)) {
+        if ($files === false || count($files) === 0) {
             return true; // No files to check
         }
 
@@ -716,6 +809,10 @@ class InfoCommand extends BaseExtensionCommand
         return true;
     }
 
+    /**
+     * Check for namespace conflicts
+     * @param array<int, array<string, mixed>> $namespaces
+     */
     private function checkNamespaceConflicts(array $namespaces): void
     {
         $this->line('');
@@ -744,7 +841,7 @@ class InfoCommand extends BaseExtensionCommand
             }
         }
 
-        if (empty($conflicts)) {
+        if (count($conflicts) === 0) {
             $this->line('<info>✓ No namespace conflicts detected</info>');
             return;
         }
@@ -756,7 +853,7 @@ class InfoCommand extends BaseExtensionCommand
             $this->line("<error>Conflict in namespace: {$conflict['namespace']}</error>");
 
             foreach ($conflict['extensions'] as $ext) {
-                $status = $ext['enabled'] ? 'enabled' : 'disabled';
+                $status = (bool)($ext['enabled'] ?? false) ? 'enabled' : 'disabled';
                 $this->line("  • {$ext['extension']} ({$status})");
             }
 
@@ -764,6 +861,10 @@ class InfoCommand extends BaseExtensionCommand
         }
     }
 
+    /**
+     * Show performance metrics for namespaces
+     * @param array<int, array<string, mixed>> $namespaces
+     */
     private function showPerformanceMetrics(array $namespaces): void
     {
         $this->line('');
@@ -811,13 +912,17 @@ class InfoCommand extends BaseExtensionCommand
         }
     }
 
+    /**
+     * Display namespace summary
+     * @param array<int, array<string, mixed>> $namespaces
+     */
     private function displayNamespaceSummary(array $namespaces): void
     {
         $this->line('');
         $this->info('Summary:');
 
-        $enabledCount = count(array_filter($namespaces, fn($ns) => $ns['enabled']));
-        $coreCount = count(array_filter($namespaces, fn($ns) => $ns['type'] === 'core'));
+        $enabledCount = count(array_filter($namespaces, fn($ns) => (bool)($ns['enabled'] ?? false)));
+        $coreCount = count(array_filter($namespaces, fn($ns) => ($ns['type'] ?? '') === 'core'));
         $uniqueExtensions = count(array_unique(array_column($namespaces, 'extension')));
 
         $summary = [
@@ -843,7 +948,7 @@ class InfoCommand extends BaseExtensionCommand
     /**
      * Format author information for display
      *
-     * @param string|array $author Author data
+     * @param string|array<string, mixed> $author Author data
      * @return string Formatted author string
      */
     private function formatAuthor($author): string
@@ -853,10 +958,10 @@ class InfoCommand extends BaseExtensionCommand
             $email = $author['email'] ?? null;
             $url = $author['url'] ?? null;
             $formatted = $name;
-            if ($email) {
+            if ($email !== null && $email !== '') {
                 $formatted .= " <{$email}>";
             }
-            if ($url) {
+            if ($url !== null && $url !== '') {
                 $formatted .= " ({$url})";
             }
             return $formatted;

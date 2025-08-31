@@ -23,6 +23,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 )]
 class StatusCommand extends BaseCommand
 {
+    /** @var CacheStore<mixed> */
     private CacheStore $cacheStore;
 
     public function __construct()
@@ -79,7 +80,7 @@ class StatusCommand extends BaseCommand
         try {
             $stats = $this->cacheStore->getStats();
 
-            if (empty($stats)) {
+            if ($stats === []) {
                 $this->line('  No statistics available for this cache driver.');
                 return;
             }
@@ -105,7 +106,7 @@ class StatusCommand extends BaseCommand
         try {
             $capabilities = $this->cacheStore->getCapabilities();
 
-            if (empty($capabilities)) {
+            if ($capabilities === []) {
                 $this->line('  No capability information available.');
                 return;
             }
@@ -134,6 +135,9 @@ class StatusCommand extends BaseCommand
         $this->tip('Check your cache configuration in config/cache.php');
     }
 
+    /**
+     * @param mixed $value
+     */
     private function formatStatValue($value): string
     {
         if (is_bool($value)) {

@@ -25,6 +25,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 )]
 class DeleteCommand extends BaseCommand
 {
+    /** @var CacheStore<mixed> */
     private CacheStore $cacheStore;
 
     public function __construct()
@@ -63,7 +64,7 @@ class DeleteCommand extends BaseCommand
         $force = $input->getOption('force');
 
         try {
-            if ($isPattern) {
+            if ((bool) $isPattern) {
                 return $this->deleteByPattern($key, $force);
             } else {
                 return $this->deleteSingleKey($key, $force);
@@ -103,12 +104,6 @@ class DeleteCommand extends BaseCommand
 
     private function deleteByPattern(string $pattern, bool $force): int
     {
-        // Check if pattern deletion is supported
-        if (!method_exists($this->cacheStore, 'deletePattern')) {
-            $this->error('Pattern deletion is not supported by the current cache driver.');
-            $this->tip('Try deleting individual keys instead.');
-            return self::FAILURE;
-        }
 
         // Show warning for pattern deletion
         $this->warning(sprintf('About to delete all cache keys matching pattern: "%s"', $pattern));

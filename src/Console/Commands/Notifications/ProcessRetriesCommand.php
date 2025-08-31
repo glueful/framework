@@ -71,7 +71,7 @@ class ProcessRetriesCommand extends BaseCommand
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $limit = (int) $input->getOption('limit');
-        $dryRun = $input->getOption('dry-run');
+        $dryRun = (bool) $input->getOption('dry-run');
         $channel = $input->getOption('channel');
         $priority = $input->getOption('priority');
 
@@ -93,12 +93,12 @@ class ProcessRetriesCommand extends BaseCommand
                 'dry_run' => $dryRun
             ];
 
-            if ($channel) {
+            if ((bool) $channel) {
                 $options['channel'] = $channel;
                 $this->info("📋 Filtering by channel: $channel");
             }
 
-            if ($priority) {
+            if ((bool) $priority) {
                 $options['priority'] = $priority;
                 $this->info("🎯 Filtering by priority: $priority");
             }
@@ -150,6 +150,9 @@ class ProcessRetriesCommand extends BaseCommand
         );
     }
 
+    /**
+     * @param array<string, mixed> $results
+     */
     private function displayResults(array $results, bool $dryRun): void
     {
         $this->line('');
@@ -173,7 +176,7 @@ class ProcessRetriesCommand extends BaseCommand
         $this->table(['Metric', 'Count'], $tableData);
 
         // Show additional statistics if available
-        if (!empty($results['by_channel'])) {
+        if (isset($results['by_channel']) && count($results['by_channel']) > 0) {
             $this->line('');
             $this->info('📊 Results by Channel:');
             foreach ($results['by_channel'] as $channel => $count) {
@@ -181,7 +184,7 @@ class ProcessRetriesCommand extends BaseCommand
             }
         }
 
-        if (!empty($results['by_priority'])) {
+        if (isset($results['by_priority']) && count($results['by_priority']) > 0) {
             $this->line('');
             $this->info('🎯 Results by Priority:');
             foreach ($results['by_priority'] as $priority => $count) {

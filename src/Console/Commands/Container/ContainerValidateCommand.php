@@ -88,13 +88,13 @@ class ContainerValidateCommand extends BaseCommand
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $service = $input->getOption('service');
-        $checkInstantiation = $input->getOption('check-instantiation');
-        $checkCircular = $input->getOption('check-circular');
-        $checkInterfaces = $input->getOption('check-interfaces');
-        $checkProviders = $input->getOption('check-providers');
-        $strict = $input->getOption('strict');
-        $format = $input->getOption('format');
-        $fix = $input->getOption('fix');
+        $checkInstantiation = (bool) $input->getOption('check-instantiation');
+        $checkCircular = (bool) $input->getOption('check-circular');
+        $checkInterfaces = (bool) $input->getOption('check-interfaces');
+        $checkProviders = (bool) $input->getOption('check-providers');
+        $strict = (bool) $input->getOption('strict');
+        $format = (string) $input->getOption('format');
+        $fix = (bool) $input->getOption('fix');
 
         try {
             $this->info('Starting container validation...');
@@ -115,7 +115,7 @@ class ContainerValidateCommand extends BaseCommand
             }
 
             // Service-specific validation
-            if ($service) {
+            if ($service !== null) {
                 $serviceResult = $this->validateSpecificService($service, $checkInstantiation);
                 $validationResults['service'] = $serviceResult;
                 if ($serviceResult['status'] === 'error') {
@@ -136,7 +136,7 @@ class ContainerValidateCommand extends BaseCommand
             }
 
             // Circular dependency check
-            if ($checkCircular) {
+            if ($checkCircular === true) {
                 $circularResult = $this->validateCircularDependencies();
                 $validationResults['circular'] = $circularResult;
                 if ($circularResult['status'] === 'error') {
@@ -148,7 +148,7 @@ class ContainerValidateCommand extends BaseCommand
             }
 
             // Interface validation
-            if ($checkInterfaces) {
+            if ($checkInterfaces === true) {
                 $interfaceResult = $this->validateInterfaces();
                 $validationResults['interfaces'] = $interfaceResult;
                 if ($interfaceResult['status'] === 'error') {
@@ -160,7 +160,7 @@ class ContainerValidateCommand extends BaseCommand
             }
 
             // Service provider validation
-            if ($checkProviders) {
+            if ($checkProviders === true) {
                 $providerResult = $this->validateServiceProviders();
                 $validationResults['providers'] = $providerResult;
                 if ($providerResult['status'] === 'error') {
@@ -172,7 +172,7 @@ class ContainerValidateCommand extends BaseCommand
             }
 
             // Auto-fix if requested
-            if ($fix && ($hasErrors || $hasWarnings)) {
+            if ($fix === true && ($hasErrors === true || $hasWarnings === true)) {
                 $this->attemptAutoFix($validationResults);
             }
 
@@ -183,7 +183,7 @@ class ContainerValidateCommand extends BaseCommand
             if ($hasErrors) {
                 $this->error('Container validation failed with errors.');
                 return self::FAILURE;
-            } elseif ($hasWarnings && $strict) {
+            } elseif ($hasWarnings === true && $strict === true) {
                 $this->warning('Container validation completed with warnings (strict mode).');
                 return self::FAILURE;
             } elseif ($hasWarnings) {
@@ -205,6 +205,9 @@ class ContainerValidateCommand extends BaseCommand
         }
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function validateBasicContainer(): array
     {
         $this->info('Validating basic container configuration...');
@@ -219,7 +222,7 @@ class ContainerValidateCommand extends BaseCommand
 
             // Check environment configuration
             $env = config('app.env');
-            if (empty($env)) {
+            if ($env === null || $env === '') {
                 $issues[] = 'APP_ENV not configured';
                 $status = 'warning';
             } else {
@@ -230,7 +233,7 @@ class ContainerValidateCommand extends BaseCommand
             $requiredConfigs = ['database.driver', 'cache.driver'];
             foreach ($requiredConfigs as $config) {
                 $value = config($config);
-                if (empty($value)) {
+                if ($value === null || $value === '') {
                     $issues[] = "Missing configuration: {$config}";
                     $status = 'warning';
                 }
@@ -248,6 +251,9 @@ class ContainerValidateCommand extends BaseCommand
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function validateSpecificService(string $serviceId, bool $checkInstantiation): array
     {
         $this->info("Validating service: {$serviceId}...");
@@ -275,7 +281,7 @@ class ContainerValidateCommand extends BaseCommand
             // Test instantiation if requested
             if ($checkInstantiation) {
                 try {
-                    $service = $container->get($serviceId);
+                    $service = $this->getServiceDynamic($serviceId);
                     $this->line("✓ Service '{$serviceId}' instantiated successfully");
 
                     // Check service type
@@ -299,6 +305,9 @@ class ContainerValidateCommand extends BaseCommand
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function validateAllServices(bool $checkInstantiation): array
     {
         $this->info('Validating all services...');
@@ -325,7 +334,8 @@ class ContainerValidateCommand extends BaseCommand
                     }
 
                     if ($checkInstantiation) {
-                        $container->get($serviceId);
+                        $service = $this->getServiceDynamic($serviceId);
+                        assert($service instanceof \stdClass || is_object($service));
                     }
                 } catch (\Exception $e) {
                     $issues[] = "Service '{$serviceId}': " . $e->getMessage();
@@ -353,6 +363,9 @@ class ContainerValidateCommand extends BaseCommand
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function validateCircularDependencies(): array
     {
         $this->info('Checking for circular dependencies...');
@@ -378,7 +391,7 @@ class ContainerValidateCommand extends BaseCommand
             }
         }
 
-        if (empty($issues)) {
+        if ($issues === []) {
             $this->line('✓ No circular dependencies found');
         }
 
@@ -390,6 +403,11 @@ class ContainerValidateCommand extends BaseCommand
         ];
     }
 
+    /**
+     * @param array<string, array<string>> $dependencies
+     * @param array<string, bool> $visited
+     * @param array<string, bool> $recursionStack
+     */
     private function hasCircularDependency(
         string $service,
         array $dependencies,
@@ -415,6 +433,9 @@ class ContainerValidateCommand extends BaseCommand
         return false;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function validateInterfaces(): array
     {
         $this->info('Validating interface implementations...');
@@ -446,6 +467,9 @@ class ContainerValidateCommand extends BaseCommand
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function validateServiceProviders(): array
     {
         $this->info('Validating service providers...');
@@ -479,7 +503,8 @@ class ContainerValidateCommand extends BaseCommand
 
                     // Check if it implements ServiceProviderInterface
                     $interfaces = class_implements($fullClassName);
-                    if (!in_array('Glueful\\DI\\ServiceProviderInterface', $interfaces ?: [])) {
+                    $interfacesList = $interfaces !== false ? $interfaces : [];
+                    if (!in_array('Glueful\\DI\\ServiceProviderInterface', $interfacesList, true)) {
                         $issues[] = "Provider {$className} doesn't implement ServiceProviderInterface";
                         $status = 'warning';
                     }
@@ -503,6 +528,9 @@ class ContainerValidateCommand extends BaseCommand
         ];
     }
 
+    /**
+     * @param array<string, mixed> $validationResults
+     */
     private function attemptAutoFix(array $validationResults): void
     {
         $this->info('Attempting to fix validation issues...');
@@ -544,6 +572,9 @@ class ContainerValidateCommand extends BaseCommand
         return false;
     }
 
+    /**
+     * @param array<string, mixed> $results
+     */
     private function displayValidationResults(array $results, string $format): void
     {
         if ($format === 'json') {
@@ -583,7 +614,7 @@ class ContainerValidateCommand extends BaseCommand
 
         // Show detailed issues
         foreach ($results as $result) {
-            if (!empty($result['issues'])) {
+            if ($result['issues'] !== []) {
                 $this->line('');
                 $this->warning("Issues in {$result['name']}:");
                 foreach ($result['issues'] as $issue) {
@@ -593,6 +624,9 @@ class ContainerValidateCommand extends BaseCommand
         }
     }
 
+    /**
+     * @return array<string>
+     */
     private function getServiceList(): array
     {
         // Return a list of core services to validate
@@ -605,6 +639,9 @@ class ContainerValidateCommand extends BaseCommand
         ];
     }
 
+    /**
+     * @param array<string, mixed> $data
+     */
     private function arrayToYaml(array $data): string
     {
         // Simple YAML converter

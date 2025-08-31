@@ -140,14 +140,14 @@ class CreateCommand extends BaseExtensionCommand
             // Get template path
             $templatePath = $this->getTemplatePath($templateType, $templateDir);
 
-            if ($preview) {
+            if ($preview === true) {
                 $this->previewTemplate($templatePath, $templateVars);
                 return self::SUCCESS;
             }
 
             // Check if extension exists
             $extensionPath = base_path("extensions/{$extensionName}");
-            if ($this->fileManager->exists($extensionPath) && !$force) {
+            if ($this->fileManager->exists($extensionPath) && $force !== true) {
                 $this->error("Extension '{$extensionName}' already exists.");
                 $this->tip('Use --force to overwrite existing extension.');
                 return self::FAILURE;
@@ -168,7 +168,7 @@ class CreateCommand extends BaseExtensionCommand
 
     private function validateExtensionName(string $name): bool
     {
-        if (empty($name)) {
+        if ($name === '') {
             $this->error('Extension name cannot be empty.');
             return false;
         }
@@ -186,12 +186,12 @@ class CreateCommand extends BaseExtensionCommand
     {
         $builtInTemplates = ['api', 'middleware', 'service', 'full', 'custom'];
 
-        if (in_array($type, $builtInTemplates)) {
+        if (in_array($type, $builtInTemplates, true)) {
             return true;
         }
 
         // Check if it's a custom template
-        if ($customDir && $this->fileManager->exists($customDir)) {
+        if ($customDir !== null && $customDir !== '' && $this->fileManager->exists($customDir)) {
             $templatePath = "{$customDir}/{$type}";
             if (is_dir($templatePath)) {
                 return true;
@@ -204,7 +204,7 @@ class CreateCommand extends BaseExtensionCommand
             $this->line("• {$template}");
         }
 
-        if ($customDir) {
+        if ($customDir !== null && $customDir !== '') {
             $this->info("\nCustom templates in {$customDir}:");
             if ($this->fileManager->exists($customDir)) {
                 $customTemplates = $this->fileFinder->findDirectories($customDir, '*', 0);
@@ -218,6 +218,10 @@ class CreateCommand extends BaseExtensionCommand
         return false;
     }
 
+    /**
+     * @param array<int, string> $vars
+     * @return array<string, string>
+     */
     private function parseTemplateVars(
         array $vars,
         string $extensionName,
@@ -250,7 +254,7 @@ class CreateCommand extends BaseExtensionCommand
 
     private function getTemplatePath(string $type, ?string $customDir): string
     {
-        if ($customDir && $this->fileManager->exists($customDir)) {
+        if ($customDir !== null && $customDir !== '' && $this->fileManager->exists($customDir)) {
             $customPath = "{$customDir}/{$type}";
             if (is_dir($customPath)) {
                 return $customPath;
@@ -642,6 +646,9 @@ PHP;
         );
     }
 
+    /**
+     * @param array<string, string> $vars
+     */
     private function previewTemplate(string $templatePath, array $vars): void
     {
         $this->info('Template Preview:');
@@ -699,6 +706,9 @@ PHP;
         }
     }
 
+    /**
+     * @param array<string, string> $vars
+     */
     private function displaySampleFiles(string $templatePath, array $vars): void
     {
         $sampleFiles = ['manifest.json'];
@@ -714,6 +724,9 @@ PHP;
         }
     }
 
+    /**
+     * @param array<string, string> $vars
+     */
     private function generateFromTemplate(string $templatePath, string $targetPath, array $vars, bool $force): void
     {
         $this->info('Generating extension from template...');
@@ -730,6 +743,9 @@ PHP;
         $this->line('✓ Extension generated from template');
     }
 
+    /**
+     * @param array<string, string> $vars
+     */
     private function processTemplateDirectory(string $sourcePath, string $targetPath, array $vars): void
     {
         if (!is_dir($sourcePath)) {
@@ -759,6 +775,9 @@ PHP;
         }
     }
 
+    /**
+     * @param array<string, string> $vars
+     */
     private function processTemplate(string $content, array $vars): string
     {
         foreach ($vars as $key => $value) {

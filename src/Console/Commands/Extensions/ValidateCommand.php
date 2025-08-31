@@ -95,7 +95,7 @@ class ValidateCommand extends BaseExtensionCommand
         $configOnly = $input->getOption('config-only');
 
         try {
-            if ($extensionName) {
+            if ($extensionName !== null && $extensionName !== '') {
                 // Validate specific extension
                 return $this->validateSingleExtension(
                     $extensionName,
@@ -106,7 +106,7 @@ class ValidateCommand extends BaseExtensionCommand
                     $focusStructure,
                     $configOnly
                 );
-            } elseif ($validateAll) {
+            } elseif ((bool)$validateAll) {
                 // Validate all extensions and global config
                 return $this->validateAllExtensions(
                     $strict,
@@ -148,11 +148,11 @@ class ValidateCommand extends BaseExtensionCommand
             // Use the new ExtensionManager validation system
             $validationResult = $extensionsManager->validate($extensionName);
 
-            if (!$validationResult || !$validationResult['valid']) {
+            if ($validationResult === null || !$validationResult['valid']) {
                 // Handle simple error response for non-existent extensions
                 if (
                     isset($validationResult['issues']) &&
-                    in_array('Extension not found', $validationResult['issues'])
+                    in_array('Extension not found', $validationResult['issues'], true)
                 ) {
                     $this->error("Extension '{$extensionName}' not found.");
                     return self::FAILURE;
@@ -177,7 +177,7 @@ class ValidateCommand extends BaseExtensionCommand
 
             $hasErrors = array_filter($results, fn($result) => $result['type'] === 'error');
 
-            if (empty($hasErrors)) {
+            if (count($hasErrors) === 0) {
                 $this->success("✅ Extension '{$extensionName}' validation passed!");
                 return self::SUCCESS;
             } else {
@@ -245,7 +245,7 @@ class ValidateCommand extends BaseExtensionCommand
 
                     // Check if this extension passed validation
                     $hasErrors = array_filter($extensionResults, fn($result) => $result['type'] === 'error');
-                    if (empty($hasErrors)) {
+                    if (count($hasErrors) === 0) {
                         $validExtensions++;
                     }
                 } catch (\Exception $e) {
@@ -268,7 +268,7 @@ class ValidateCommand extends BaseExtensionCommand
 
             $hasErrors = array_filter($allResults, fn($result) => $result['type'] === 'error');
 
-            if (empty($hasErrors)) {
+            if (count($hasErrors) === 0) {
                 $this->success('✅ All extensions validation passed!');
                 return self::SUCCESS;
             } else {
@@ -312,7 +312,7 @@ class ValidateCommand extends BaseExtensionCommand
 
         $hasErrors = array_filter($validationResults, fn($result) => $result['type'] === 'error');
 
-        if (empty($hasErrors)) {
+        if (count($hasErrors) === 0) {
             $this->success('✅ Global extensions configuration validation passed!');
             return self::SUCCESS;
         } else {
@@ -321,6 +321,17 @@ class ValidateCommand extends BaseExtensionCommand
         }
     }
 
+    /**
+     * @param string $path
+     * @param string $name
+     * @param bool $autoFix
+     * @param bool $strict
+     * @param bool $validateSchema
+     * @param bool $focusDependencies
+     * @param bool $focusStructure
+     * @param bool $configOnly
+     * @return array<int, array<string, mixed>>
+     */
     private function performSingleExtensionValidation(
         string $path,
         string $name,
@@ -364,6 +375,10 @@ class ValidateCommand extends BaseExtensionCommand
         return $results;
     }
 
+    /**
+     * @param bool $autoFix
+     * @return array<int, array<string, mixed>>
+     */
     private function performGlobalConfigValidation(bool $autoFix): array
     {
         $results = [];
@@ -419,6 +434,12 @@ class ValidateCommand extends BaseExtensionCommand
         return $results;
     }
 
+    /**
+     * @param string $path
+     * @param string $name
+     * @param bool $autoFix
+     * @return array<int, array<string, mixed>>
+     */
     private function validateStructure(string $path, string $name, bool $autoFix): array
     {
         $results = [];
@@ -463,6 +484,12 @@ class ValidateCommand extends BaseExtensionCommand
         return $results;
     }
 
+    /**
+     * @param string $path
+     * @param string $name
+     * @param bool $autoFix
+     * @return array<int, array<string, mixed>>
+     */
     private function validateConfiguration(string $path, string $name, bool $autoFix): array
     {
         $results = [];
@@ -488,6 +515,14 @@ class ValidateCommand extends BaseExtensionCommand
 
         // Parse JSON
         $configContent = file_get_contents($configFile);
+        if ($configContent === false) {
+            $results[] = [
+                'type' => 'error',
+                'message' => 'Could not read configuration file extension.json',
+                'category' => "Extension: {$name}"
+            ];
+            return $results;
+        }
         $config = json_decode($configContent, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
@@ -504,7 +539,7 @@ class ValidateCommand extends BaseExtensionCommand
         $recommendedFields = ['description', 'author', 'license'];
 
         foreach ($requiredFields as $field) {
-            if (!isset($config[$field]) || empty($config[$field])) {
+            if (!isset($config[$field]) || $config[$field] === '' || $config[$field] === false) {
                 $results[] = [
                     'type' => 'error',
                     'message' => "Missing required field in extension.json: {$field}",
@@ -520,7 +555,7 @@ class ValidateCommand extends BaseExtensionCommand
         }
 
         foreach ($recommendedFields as $field) {
-            if (!isset($config[$field]) || empty($config[$field])) {
+            if (!isset($config[$field]) || $config[$field] === '' || $config[$field] === false) {
                 $results[] = [
                     'type' => 'warning',
                     'message' => "Missing recommended field in extension.json: {$field}",
@@ -530,7 +565,7 @@ class ValidateCommand extends BaseExtensionCommand
         }
 
         // Validate name matches directory
-        if (isset($config['name']) && $config['name'] !== $name) {
+        if (isset($config['name']) && is_string($config['name']) && $config['name'] !== $name) {
             $results[] = [
                 'type' => 'warning',
                 'message' => "Extension name in config ('{$config['name']}') doesn't match directory name ('{$name}')",
@@ -539,7 +574,11 @@ class ValidateCommand extends BaseExtensionCommand
         }
 
         // Validate version format
-        if (isset($config['version']) && !preg_match('/^\d+\.\d+\.\d+/', $config['version'])) {
+        if (
+            isset($config['version']) &&
+            is_string($config['version']) &&
+            preg_match('/^\d+\.\d+\.\d+/', $config['version']) === 0
+        ) {
             $results[] = [
                 'type' => 'warning',
                 'message' => "Version '{$config['version']}' doesn't follow semantic versioning",
@@ -555,6 +594,11 @@ class ValidateCommand extends BaseExtensionCommand
         return $results;
     }
 
+    /**
+     * @param string $path
+     * @param string $name
+     * @return array<int, array<string, mixed>>
+     */
     private function validateExtensionDependencies(string $path, string $name): array
     {
         $results = [];
@@ -564,10 +608,17 @@ class ValidateCommand extends BaseExtensionCommand
             return [];
         }
 
-        $config = json_decode(file_get_contents($configFile), true);
+        $configContent = file_get_contents($configFile);
+        if ($configContent === false) {
+            return [];
+        }
+        $config = json_decode($configContent, true);
+        if ($config === null) {
+            return [];
+        }
         $dependencies = $config['dependencies'] ?? [];
 
-        if (empty($dependencies)) {
+        if (count($dependencies) === 0) {
             $results[] = [
                 'type' => 'info',
                 'message' => 'No dependencies defined',
@@ -582,7 +633,7 @@ class ValidateCommand extends BaseExtensionCommand
             foreach ($dependencies as $depName => $version) {
                 unset($version); // Version validation could be added here in future
                 $depExtension = $this->findExtension($extensionsManager, $depName);
-                if (!$depExtension) {
+                if ($depExtension === null) {
                     $results[] = [
                         'type' => 'error',
                         'message' => "Dependency not found: {$depName}",
@@ -601,6 +652,10 @@ class ValidateCommand extends BaseExtensionCommand
         return $results;
     }
 
+    /**
+     * @param string $path
+     * @return array<int, array<string, mixed>>
+     */
     private function validatePermissions(string $path): array
     {
         $results = [];
@@ -645,6 +700,11 @@ class ValidateCommand extends BaseExtensionCommand
         return $results;
     }
 
+    /**
+     * @param string $path
+     * @param string $name
+     * @return array<int, array<string, mixed>>
+     */
     private function validateStrict(string $path, string $name): array
     {
         $results = [];
@@ -691,6 +751,11 @@ class ValidateCommand extends BaseExtensionCommand
         return $results;
     }
 
+    /**
+     * @param string $path
+     * @param string $name
+     * @return array<int, array<string, mixed>>
+     */
     private function validateJsonSchema(string $path, string $name): array
     {
         unset($path); // Schema path validation could be added here in future
@@ -703,6 +768,9 @@ class ValidateCommand extends BaseExtensionCommand
         ]];
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     private function validateGlobalJsonSchema(): array
     {
         // This would validate against a JSON schema if one exists
@@ -714,6 +782,11 @@ class ValidateCommand extends BaseExtensionCommand
         ]];
     }
 
+    /**
+     * @param bool $autoFix
+     * @param bool $strict
+     * @return array<int, array<string, mixed>>
+     */
     private function validateExtensionConfigs(bool $autoFix, bool $strict): array
     {
         $results = [];
@@ -724,6 +797,9 @@ class ValidateCommand extends BaseExtensionCommand
         }
 
         $directories = scandir($extensionsDir);
+        if ($directories === false) {
+            return $results;
+        }
 
         foreach ($directories as $dir) {
             if ($dir === '.' || $dir === '..' || !is_dir("{$extensionsDir}/{$dir}")) {
@@ -742,6 +818,9 @@ class ValidateCommand extends BaseExtensionCommand
         return $results;
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     private function validateAllDependencies(): array
     {
         $results = [];
@@ -754,6 +833,9 @@ class ValidateCommand extends BaseExtensionCommand
         // Collect all extensions and their dependencies
         $extensions = [];
         $directories = scandir($extensionsDir);
+        if ($directories === false) {
+            return $results;
+        }
 
         foreach ($directories as $dir) {
             if ($dir === '.' || $dir === '..' || !is_dir("{$extensionsDir}/{$dir}")) {
@@ -765,8 +847,12 @@ class ValidateCommand extends BaseExtensionCommand
                 continue;
             }
 
-            $config = json_decode(file_get_contents($configFile), true);
-            if (!$config) {
+            $configContent = file_get_contents($configFile);
+            if ($configContent === false) {
+                continue;
+            }
+            $config = json_decode($configContent, true);
+            if ($config === null) {
                 continue;
             }
 
@@ -802,7 +888,7 @@ class ValidateCommand extends BaseExtensionCommand
             ];
         }
 
-        if (empty($results)) {
+        if (count($results) === 0) {
             $results[] = [
                 'type' => 'success',
                 'message' => 'All dependencies are valid',
@@ -813,6 +899,12 @@ class ValidateCommand extends BaseExtensionCommand
         return $results;
     }
 
+    /**
+     * @param array<string, mixed> $autoload
+     * @param string $extensionName
+     * @param string $extensionPath
+     * @return array<int, array<string, mixed>>
+     */
     private function validateAutoload(array $autoload, string $extensionName, string $extensionPath): array
     {
         $results = [];
@@ -856,6 +948,10 @@ class ValidateCommand extends BaseExtensionCommand
         return $results;
     }
 
+    /**
+     * @param array<string, mixed> $extensions
+     * @return array<int, array<string, mixed>>
+     */
     private function detectCircularDependencies(array $extensions): array
     {
         $cycles = [];
@@ -878,6 +974,15 @@ class ValidateCommand extends BaseExtensionCommand
         return $cycles;
     }
 
+    /**
+     * @param string $current
+     * @param array<string, mixed> $extensions
+     * @param array<string, bool> &$visited
+     * @param array<string, bool> &$recursionStack
+     * @param array<int, string> $path
+     * @param array<int, array<string, mixed>> &$cycles
+     * @return void
+     */
     private function detectCircularDependenciesRecursive(
         string $current,
         array $extensions,
@@ -904,8 +1009,12 @@ class ValidateCommand extends BaseExtensionCommand
                     );
                 } elseif (isset($recursionStack[$dependency]) && $recursionStack[$dependency]) {
                     // Found a cycle
-                    $cycleStart = array_search($dependency, $path);
-                    $cycle = array_slice($path, $cycleStart);
+                    $cycleStart = array_search($dependency, $path, true);
+                    if ($cycleStart !== false) {
+                        $cycle = array_slice($path, $cycleStart);
+                    } else {
+                        $cycle = [];
+                    }
                     $cycle[] = $dependency; // Complete the cycle
                     $cycles[] = $cycle;
                 }
@@ -935,6 +1044,10 @@ class ValidateCommand extends BaseExtensionCommand
         file_put_contents($configFile, json_encode($defaultConfig, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     }
 
+    /**
+     * @param array<int, array<string, mixed>> $results
+     * @return void
+     */
     private function displayValidationResults(array $results): void
     {
         $this->line('');
@@ -970,14 +1083,19 @@ class ValidateCommand extends BaseExtensionCommand
 
         $this->line('');
         $this->table(['Status', 'Count'], [
-            ['✅ Passed', $successCount],
-            ['⚠️  Warnings', $warningCount],
-            ['❌ Errors', $errorCount]
+            ['✅ Passed', (string)$successCount],
+            ['⚠️  Warnings', (string)$warningCount],
+            ['❌ Errors', (string)$errorCount]
         ]);
     }
 
     /**
      * Convert new validation results to old display format
+     */
+    /**
+     * @param array<string, mixed> $validationResult
+     * @param string $extensionName
+     * @return array<int, array<string, mixed>>
      */
     private function convertValidationResults(array $validationResult, string $extensionName): array
     {
@@ -985,7 +1103,7 @@ class ValidateCommand extends BaseExtensionCommand
         $category = "Extension: {$extensionName}";
 
         // Structure validation
-        if (isset($validationResult['structure_valid']) && $validationResult['structure_valid']) {
+        if (isset($validationResult['structure_valid']) && (bool)$validationResult['structure_valid']) {
             $results[] = [
                 'type' => 'success',
                 'message' => 'Extension structure is valid',
@@ -994,7 +1112,7 @@ class ValidateCommand extends BaseExtensionCommand
         }
 
         // Syntax validation
-        if (isset($validationResult['syntax_valid']) && $validationResult['syntax_valid']) {
+        if (isset($validationResult['syntax_valid']) && (bool)$validationResult['syntax_valid']) {
             $results[] = [
                 'type' => 'success',
                 'message' => 'Extension syntax is valid',
@@ -1039,7 +1157,7 @@ class ValidateCommand extends BaseExtensionCommand
         }
 
         // Overall validation status
-        if ($validationResult['valid']) {
+        if ((bool)$validationResult['valid']) {
             $results[] = [
                 'type' => 'success',
                 'message' => 'Overall validation passed',
@@ -1052,6 +1170,10 @@ class ValidateCommand extends BaseExtensionCommand
 
     /**
      * Validate global configuration using the new ExtensionManager
+     */
+    /**
+     * @param ExtensionManager $extensionsManager
+     * @return array<int, array<string, mixed>>
      */
     private function validateGlobalConfigurationNew(ExtensionManager $extensionsManager): array
     {
@@ -1092,7 +1214,7 @@ class ValidateCommand extends BaseExtensionCommand
                 }
             }
 
-            if (empty($missingCore)) {
+            if (count($missingCore) === 0) {
                 $results[] = [
                     'type' => 'success',
                     'message' => 'Core extensions are installed',
