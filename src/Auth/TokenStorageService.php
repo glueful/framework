@@ -23,6 +23,7 @@ use Glueful\Events\Event;
 class TokenStorageService implements TokenStorageInterface
 {
     private Connection $db;
+    /** @var CacheStore<string>|null */
     private ?CacheStore $cache;
 
     private bool $useTransactions;
@@ -30,6 +31,9 @@ class TokenStorageService implements TokenStorageInterface
     private int $cacheDefaultTtl;
     private ?RequestContext $requestContext;
 
+    /**
+     * @param CacheStore<string>|null $cache
+     */
     public function __construct(
         ?CacheStore $cache = null,
         ?Connection $db = null,
@@ -62,7 +66,7 @@ class TokenStorageService implements TokenStorageInterface
 
             // Calculate expiration times
             // For remember_me tokens, use the JWT token's actual expiration time
-            if (!empty($sessionData['remember_me'])) {
+            if (isset($sessionData['remember_me']) && (bool)$sessionData['remember_me']) {
                 $accessExpiresAt = $this->getJwtTokenExpiration($tokens['access_token']);
             } else {
                 $accessExpiresAt = date('Y-m-d H:i:s', time() + $tokens['expires_in']);
@@ -86,7 +90,7 @@ class TokenStorageService implements TokenStorageInterface
                 'updated_at' => date('Y-m-d H:i:s'),
                 'last_token_refresh' => date('Y-m-d H:i:s'),
                 'token_fingerprint' => hash('sha256', $tokens['access_token']),
-                'remember_me' => !empty($sessionData['remember_me']) ? 1 : 0
+                'remember_me' => (isset($sessionData['remember_me']) && (bool)$sessionData['remember_me']) ? 1 : 0
             ];
 
             // Store in database
@@ -142,7 +146,7 @@ class TokenStorageService implements TokenStorageInterface
 
             // Calculate new expiration times
             // For remember_me tokens, use the JWT token's actual expiration time
-            if (!empty($existingSession['remember_me'])) {
+            if (isset($existingSession['remember_me']) && (bool)$existingSession['remember_me']) {
                 $accessExpiresAt = $this->getJwtTokenExpiration($newTokens['access_token']);
             } else {
                 $accessExpiresAt = date('Y-m-d H:i:s', time() + $newTokens['expires_in']);
@@ -163,7 +167,9 @@ class TokenStorageService implements TokenStorageInterface
                 ->where(['refresh_token' => $sessionIdentifier, 'status' => 'active'])
                 ->update($updateData);
 
-            if ($success === false) {
+            /** @var int|false $success */
+            $success = $success;
+            if ((int)$success <= 0) {
                 throw new \Exception('Failed to update session in database');
             }
 
@@ -197,7 +203,7 @@ class TokenStorageService implements TokenStorageInterface
         if ($this->cache !== null) {
             $cacheKey = "session_token:{$accessToken}";
             $cachedSession = $this->resolveCacheReference($cacheKey);
-            if ($cachedSession) {
+            if ($cachedSession !== null) {
                 return json_decode($cachedSession, true);
             }
         }
@@ -211,13 +217,13 @@ class TokenStorageService implements TokenStorageInterface
             ->where('access_expires_at', '>', $now)
             ->get();
 
-        if (empty($result)) {
+        if ($result === []) {
             return null;
         }
 
         $session = $result[0];
         // Store in cache for future requests
-        if ($this->cache !== null && $session) {
+        if ($this->cache !== null) {
             $this->cacheSessionData($session, $accessToken);
         }
 
@@ -235,7 +241,7 @@ class TokenStorageService implements TokenStorageInterface
         if ($this->cache !== null) {
             $cacheKey = "session_refresh:{$refreshToken}";
             $cachedSession = $this->resolveCacheReference($cacheKey);
-            if ($cachedSession) {
+            if ($cachedSession !== null) {
                 return json_decode($cachedSession, true);
             }
         }
@@ -246,14 +252,14 @@ class TokenStorageService implements TokenStorageInterface
             ->where(['refresh_token' => $refreshToken, 'status' => 'active'])
             ->get();
 
-        if (empty($result)) {
+        if ($result === []) {
             return null;
         }
 
         $session = $result[0];
 
         // Store in cache for future requests
-        if ($this->cache !== null && $session) {
+        if ($this->cache !== null) {
             $this->cacheSessionData($session, null, $refreshToken);
         }
 
@@ -274,7 +280,7 @@ class TokenStorageService implements TokenStorageInterface
             $session = $this->getSessionByRefreshToken($sessionIdentifier)
                 ?? $this->getSessionByAccessToken($sessionIdentifier);
 
-            if (!$session) {
+            if ($session === null) {
                 return false;
             }
 
@@ -283,7 +289,9 @@ class TokenStorageService implements TokenStorageInterface
                 ->where(['uuid' => $session['uuid']])
                 ->update(['status' => 'revoked']);
 
-            if (!$success) {
+            /** @var int|false $success */
+            $success = $success;
+            if ((int)$success <= 0) {
                 throw new \Exception('Failed to revoke session in database');
             }
 
@@ -342,7 +350,9 @@ class TokenStorageService implements TokenStorageInterface
                     'revoked_at' => date('Y-m-d H:i:s')
                 ]);
 
-            if (!$success) {
+            /** @var int|false $success */
+            $success = $success;
+            if ((int)$success <= 0) {
                 throw new \Exception('Failed to revoke user sessions in database');
             }
 
@@ -432,22 +442,22 @@ class TokenStorageService implements TokenStorageInterface
             // Get from cache
             $cacheKey = CacheHelper::sessionKey($sessionIdentifier, 'refresh');
             $cachedData = null;
-            if ($this->cache !== null) {
-                try {
-                    $cachedData = $this->cache->get($cacheKey);
-                } catch (\Exception $e) {
-                    // Cache failure - continue without cache
-                    error_log("Cache get failed for key '{$cacheKey}': " . $e->getMessage());
-                }
+            /** @var CacheStore<string> $cache */
+            $cache = $this->cache; // non-null due to guard above
+            try {
+                $cachedData = $cache->get($cacheKey);
+            } catch (\Exception $e) {
+                // Cache failure - continue without cache
+                error_log("Cache get failed for key '{$cacheKey}': " . $e->getMessage());
             }
-            $cacheSession = $cachedData ? json_decode($cachedData, true) : null;
+            $cacheSession = ($cachedData !== null) ? json_decode($cachedData, true) : null;
 
             // Compare critical fields
-            if (!$dbSession && !$cacheSession) {
+            if ($dbSession === null && $cacheSession === null) {
                 return true; // Consistently empty
             }
 
-            if (!$dbSession || !$cacheSession) {
+            if ($dbSession === null || $cacheSession === null) {
                 return false; // One exists, other doesn't
             }
 
@@ -517,12 +527,19 @@ class TokenStorageService implements TokenStorageInterface
 
     // Private helper methods
 
+    /**
+     * @param array<string, mixed> $sessionData
+     */
     private function storeSessionInDatabase(array $sessionData): bool
     {
         $result = $this->db->table($this->sessionTable)->insert($sessionData);
         return $result > 0;
     }
 
+    /**
+     * @param array<string, mixed> $sessionData
+     * @param array{access_token: string, refresh_token: string}|array<string, mixed> $tokens
+     */
     private function storeSessionInCache(array $sessionData, array $tokens, string $sessionId): void
     {
         // Store session data with access token as key
@@ -549,6 +566,10 @@ class TokenStorageService implements TokenStorageInterface
         $this->cache->set($refreshCacheKey, $canonicalKey, $refreshTtl);
     }
 
+    /**
+     * @param array<string, mixed> $sessionData
+     * @param array{access_token: string, refresh_token: string}|array<string, mixed> $newTokens
+     */
     private function updateSessionInCache(array $sessionData, array $newTokens): void
     {
         // Remove old cache entries
@@ -574,9 +595,12 @@ class TokenStorageService implements TokenStorageInterface
         $this->cache->set("session_refresh:{$newTokens['refresh_token']}", $canonicalKey, $refreshTtl);
     }
 
+    /**
+     * @param array<string, mixed> $session
+     */
     private function cacheSessionData(array $session, ?string $accessToken = null, ?string $refreshToken = null): void
     {
-        if (!$accessToken && !$refreshToken) {
+        if ($accessToken === null && $refreshToken === null) {
             return;
         }
 
@@ -589,11 +613,11 @@ class TokenStorageService implements TokenStorageInterface
         $this->cache->set($canonicalKey, $sessionDataJson, $maxTtl);
 
         // Store references with appropriate TTLs
-        if ($accessToken) {
+        if ($accessToken !== null) {
             $this->cache->set("session_token:{$accessToken}", $canonicalKey, $this->cacheDefaultTtl);
         }
 
-        if ($refreshToken) {
+        if ($refreshToken !== null) {
             $this->cache->set("session_refresh:{$refreshToken}", $canonicalKey, $refreshTtl);
         }
     }
@@ -622,6 +646,9 @@ class TokenStorageService implements TokenStorageInterface
         return $cachedValue;
     }
 
+    /**
+     * @param array<string, mixed> $session
+     */
     private function clearSessionCache(array $session): void
     {
         if (isset($session['access_token'])) {
@@ -638,6 +665,9 @@ class TokenStorageService implements TokenStorageInterface
         }
     }
 
+    /**
+     * @return array<string, mixed>|null
+     */
     private function getSessionFromDatabase(string $sessionIdentifier): ?array
     {
         // Try refresh token first
@@ -646,7 +676,7 @@ class TokenStorageService implements TokenStorageInterface
             ->where(['refresh_token' => $sessionIdentifier, 'status' => 'active'])
             ->get();
 
-        if (!empty($result)) {
+        if ($result !== []) {
             return $result[0];
         }
 
@@ -656,7 +686,7 @@ class TokenStorageService implements TokenStorageInterface
             ->where(['access_token' => $sessionIdentifier, 'status' => 'active'])
             ->get();
 
-        return !empty($result) ? $result[0] : null;
+        return $result !== [] ? $result[0] : null;
     }
 
     /**
@@ -675,13 +705,18 @@ class TokenStorageService implements TokenStorageInterface
             }
 
             // Decode the payload (second part)
-            $payload = json_decode(base64_decode($parts[1]), true);
-            if (!$payload || !isset($payload['exp'])) {
+            $decoded = base64_decode($parts[1], true);
+            if ($decoded === false) {
+                throw new \Exception('JWT base64 decoding failed');
+            }
+            $payload = json_decode($decoded, true);
+            if (!is_array($payload) || !array_key_exists('exp', $payload)) {
                 throw new \Exception('JWT token missing expiration claim');
             }
 
             // Convert Unix timestamp to MySQL datetime format
-            return date('Y-m-d H:i:s', $payload['exp']);
+            $exp = is_int($payload['exp']) ? $payload['exp'] : (int)$payload['exp'];
+            return date('Y-m-d H:i:s', $exp);
         } catch (\Exception $e) {
             // Fallback to standard access token lifetime if JWT parsing fails
             return date('Y-m-d H:i:s', time() + (int)config('session.access_token_lifetime', 3600));

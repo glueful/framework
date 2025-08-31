@@ -20,6 +20,24 @@ namespace Glueful\Auth;
  *
  * @package Glueful\Auth
  */
+/**
+ * @phpstan-type AuthSessionUser array{
+ *   uuid?: string,
+ *   permissions?: array<string, list<string>>|list<string>,
+ *   roles?: list<string>|list<array{name: string}>
+ * }
+ * @phpstan-type AuthSessionPayload array{
+ *   id: string,
+ *   token: string,
+ *   user: AuthSessionUser,
+ *   created_at: int,
+ *   last_activity: int,
+ *   provider: string,
+ *   permissions_loaded_at?: int,
+ *   ip_address?: string,
+ *   user_agent?: string
+ * }
+ */
 class SessionQueryBuilder
 {
     private string $managerClass;
@@ -301,6 +319,7 @@ class SessionQueryBuilder
      * Execute query and get results
      *
      * @return array Array of matching sessions
+     * @phpstan-return list<AuthSessionPayload>
      */
     public function get(): array
     {
@@ -333,6 +352,7 @@ class SessionQueryBuilder
      * Get first matching session
      *
      * @return array|null First matching session or null
+     * @phpstan-return AuthSessionPayload|null
      */
     public function first(): ?array
     {
@@ -354,6 +374,7 @@ class SessionQueryBuilder
      * Get all sessions from cache indexes
      *
      * @return array All active sessions
+     * @phpstan-return list<AuthSessionPayload>
      */
     private function getAllSessions(): array
     {
@@ -388,6 +409,8 @@ class SessionQueryBuilder
      *
      * @param array $sessions Input sessions
      * @return array Filtered sessions
+     * @phpstan-param list<AuthSessionPayload> $sessions
+     * @phpstan-return list<AuthSessionPayload>
      */
     private function applyFilters(array $sessions): array
     {
@@ -395,9 +418,9 @@ class SessionQueryBuilder
             return $sessions;
         }
 
-        return array_filter($sessions, function ($session) {
+        return array_values(array_filter($sessions, function ($session) {
             return $this->evaluateConditions($session, $this->conditions);
-        });
+        }));
     }
 
     /**
@@ -407,6 +430,8 @@ class SessionQueryBuilder
      * @param array $conditions Conditions to evaluate
      * @param string $logic Logic operator (and/or)
      * @return bool Whether session matches conditions
+     * @phpstan-param AuthSessionPayload $session
+     * @phpstan-param list<array<string, mixed>> $conditions
      */
     private function evaluateConditions(array $session, array $conditions, string $logic = 'and'): bool
     {
@@ -431,7 +456,7 @@ class SessionQueryBuilder
             }
         }
 
-        return $logic === 'and' ? !in_array(false, $results) : in_array(true, $results);
+        return $logic === 'and' ? !in_array(false, $results, true) : in_array(true, $results, true);
     }
 
     /**
@@ -440,6 +465,8 @@ class SessionQueryBuilder
      * @param array $session Session data
      * @param array $condition Condition to evaluate
      * @return bool Whether condition matches
+     * @phpstan-param AuthSessionPayload $session
+     * @phpstan-param array{type:string,operator:string,value:mixed} $condition
      */
     private function evaluateCondition(array $session, array $condition): bool
     {
@@ -488,6 +515,9 @@ class SessionQueryBuilder
 
     /**
      * Evaluate provider condition
+     *
+     * @phpstan-param AuthSessionPayload $session
+     * @phpstan-param string|list<string> $value
      */
     private function evaluateProviderCondition(array $session, string $operator, $value): bool
     {
@@ -497,7 +527,7 @@ class SessionQueryBuilder
             case '=':
                 return $sessionProvider === $value;
             case 'in':
-                return in_array($sessionProvider, $value);
+                return in_array($sessionProvider, $value, true);
             default:
                 return false;
         }
@@ -505,6 +535,9 @@ class SessionQueryBuilder
 
     /**
      * Evaluate user role condition
+     *
+     * @phpstan-param AuthSessionPayload $session
+     * @phpstan-param string $value
      */
     private function evaluateUserRoleCondition(array $session, string $operator, $value): bool
     {
@@ -512,7 +545,7 @@ class SessionQueryBuilder
 
         switch ($operator) {
             case '=':
-                return in_array($value, array_column($userRoles, 'name'));
+                return in_array($value, array_column($userRoles, 'name'), true);
             default:
                 return false;
         }
@@ -520,6 +553,9 @@ class SessionQueryBuilder
 
     /**
      * Evaluate user permission condition
+     *
+     * @phpstan-param AuthSessionPayload $session
+     * @phpstan-param string $value
      */
     private function evaluateUserPermissionCondition(array $session, string $operator, $value): bool
     {
@@ -529,7 +565,7 @@ class SessionQueryBuilder
             case 'has':
                 // Check if user has specific permission
                 foreach ($userPermissions as $resource => $actions) {
-                    if (is_array($actions) && in_array($value, $actions)) {
+                    if (is_array($actions) && in_array($value, $actions, true)) {
                         return true;
                     }
                 }
@@ -541,6 +577,9 @@ class SessionQueryBuilder
 
     /**
      * Evaluate user roles condition
+     *
+     * @phpstan-param AuthSessionPayload $session
+     * @phpstan-param list<string> $value
      */
     private function evaluateUserRolesCondition(array $session, string $operator, $value): bool
     {
@@ -558,6 +597,9 @@ class SessionQueryBuilder
 
     /**
      * Evaluate last activity condition
+     *
+     * @phpstan-param AuthSessionPayload $session
+     * @phpstan-param int $value
      */
     private function evaluateLastActivityCondition(array $session, string $operator, $value): bool
     {
@@ -577,6 +619,9 @@ class SessionQueryBuilder
 
     /**
      * Evaluate created at condition
+     *
+     * @phpstan-param AuthSessionPayload $session
+     * @phpstan-param array{0:int,1:int} $value
      */
     private function evaluateCreatedAtCondition(array $session, string $operator, $value): bool
     {
@@ -592,6 +637,9 @@ class SessionQueryBuilder
 
     /**
      * Evaluate user UUID condition
+     *
+     * @phpstan-param AuthSessionPayload $session
+     * @phpstan-param string|list<string> $value
      */
     private function evaluateUserUuidCondition(array $session, string $operator, $value): bool
     {
@@ -601,7 +649,7 @@ class SessionQueryBuilder
             case '=':
                 return $userUuid === $value;
             case 'in':
-                return in_array($userUuid, $value);
+                return in_array($userUuid, $value, true);
             default:
                 return false;
         }
@@ -609,6 +657,9 @@ class SessionQueryBuilder
 
     /**
      * Evaluate IP address condition
+     *
+     * @phpstan-param AuthSessionPayload $session
+     * @phpstan-param string $value
      */
     private function evaluateIpAddressCondition(array $session, string $operator, $value): bool
     {
@@ -631,6 +682,9 @@ class SessionQueryBuilder
 
     /**
      * Evaluate user agent condition
+     *
+     * @phpstan-param AuthSessionPayload $session
+     * @phpstan-param string $value
      */
     private function evaluateUserAgentCondition(array $session, string $operator, $value): bool
     {
@@ -650,6 +704,8 @@ class SessionQueryBuilder
 
     /**
      * Evaluate custom condition
+     *
+     * @phpstan-param AuthSessionPayload $session
      */
     private function evaluateCustomCondition(array $session, callable $callback): bool
     {
@@ -665,6 +721,8 @@ class SessionQueryBuilder
      *
      * @param array $sessions Sessions to sort
      * @return array Sorted sessions
+     * @phpstan-param list<AuthSessionPayload> $sessions
+     * @phpstan-return list<AuthSessionPayload>
      */
     private function applySorting(array $sessions): array
     {
@@ -695,8 +753,11 @@ class SessionQueryBuilder
 
     /**
      * Get value from session by field path
+     *
+     * @phpstan-param AuthSessionPayload $session
+     * @return mixed
      */
-    private function getSessionValue(array $session, string $field)
+    private function getSessionValue(array $session, string $field): mixed
     {
         $keys = explode('.', $field);
         $value = $session;
@@ -714,8 +775,11 @@ class SessionQueryBuilder
 
     /**
      * Compare two values for sorting
+     *
+     * @param mixed $a
+     * @param mixed $b
      */
-    private function compareValues($a, $b): int
+    private function compareValues(mixed $a, mixed $b): int
     {
         if ($a === $b) {
             return 0;
@@ -733,6 +797,8 @@ class SessionQueryBuilder
      *
      * @param array $sessions Sessions to paginate
      * @return array Paginated sessions
+     * @phpstan-param list<AuthSessionPayload> $sessions
+     * @phpstan-return list<AuthSessionPayload>
      */
     private function applyPagination(array $sessions): array
     {
@@ -756,11 +822,11 @@ class SessionQueryBuilder
     {
         $parts = [];
 
-        if (!empty($this->conditions)) {
+        if ($this->conditions !== []) {
             $parts[] = 'WHERE ' . $this->conditionsToString($this->conditions);
         }
 
-        if (!empty($this->sorts)) {
+        if ($this->sorts !== []) {
             $sortParts = [];
             foreach ($this->sorts as $sort) {
                 $sortParts[] = $sort['field'] . ' ' . strtoupper($sort['direction']);
@@ -781,6 +847,8 @@ class SessionQueryBuilder
 
     /**
      * Convert conditions to string representation
+     *
+     * @phpstan-param list<array<string, mixed>> $conditions
      */
     private function conditionsToString(array $conditions): string
     {

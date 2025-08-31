@@ -36,8 +36,15 @@ class SessionTransaction
     private string $transactionId;
     private float $startTime;
     private SessionCacheManager $sessionCacheManager;
+    /**
+     * @var CacheStore<mixed>
+     */
     private CacheStore $cache;
 
+    /**
+     * @param SessionCacheManager|null $sessionCacheManager
+     * @param CacheStore<mixed>|null $cache
+     */
     public function __construct(?SessionCacheManager $sessionCacheManager = null, ?CacheStore $cache = null)
     {
         $this->transactionId = uniqid('session_tx_', true);
@@ -122,7 +129,7 @@ class SessionTransaction
             $this->active = false;
 
 
-            return empty($rollbackErrors);
+            return $rollbackErrors === [];
         } catch (\Exception $e) {
             $this->errors[] = 'Rollback failed: ' . $e->getMessage();
             return false;
@@ -213,6 +220,8 @@ class SessionTransaction
      * @param array $criteria Session selection criteria
      * @param array $updates Updates to apply
      * @return int Number of sessions updated
+     * @phpstan-param array<string, mixed> $criteria
+     * @phpstan-param array<string, mixed> $updates
      */
     public function updateSessionsWhere(array $criteria, array $updates): int
     {
@@ -281,6 +290,8 @@ class SessionTransaction
      *
      * @param array $sessionsData Array of session data
      * @return array Array of created session IDs
+     * @phpstan-param list<array<string, mixed>> $sessionsData
+     * @phpstan-return list<string>
      */
     public function createSessions(array $sessionsData): array
     {
@@ -387,13 +398,14 @@ class SessionTransaction
      */
     public function hasErrors(): bool
     {
-        return !empty($this->errors);
+        return $this->errors !== [];
     }
 
     /**
      * Get all errors
      *
      * @return array Array of error messages
+     * @phpstan-return list<string>
      */
     public function getErrors(): array
     {
@@ -404,6 +416,7 @@ class SessionTransaction
      * Get transaction statistics
      *
      * @return array Transaction statistics
+     * @phpstan-return array<string, mixed>
      */
     public function getStats(): array
     {
@@ -440,6 +453,7 @@ class SessionTransaction
      *
      * @param array $operation Rollback operation
      * @return void
+     * @phpstan-param array{type:string,session_data?:array<string, mixed>,token?:string} $operation
      */
     private function executeRollbackOperation(array $operation): void
     {
@@ -462,6 +476,7 @@ class SessionTransaction
      *
      * @param array $sessionData Session data to restore
      * @return void
+     * @phpstan-param array<string, mixed> $sessionData
      */
     private function restoreSession(array $sessionData): void
     {

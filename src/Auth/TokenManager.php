@@ -7,6 +7,7 @@ namespace Glueful\Auth;
 use Glueful\Database\Connection;
 use Glueful\Helpers\Utils;
 use Glueful\Http\RequestContext;
+use Glueful\Auth\Interfaces\AuthenticationProviderInterface;
 
 /**
  * Token Management System
@@ -92,10 +93,10 @@ class TokenManager
      * // Returns: ['access_token' => '...', 'refresh_token' => '...']
      * ```
      *
-     * @param array $userData User data to encode in tokens (must include 'uuid')
+     * @param array<string, mixed> $userData User data to encode in tokens (must include 'uuid')
      * @param int|null $accessTokenLifetime Access token lifetime in seconds (default from config)
      * @param int|null $refreshTokenLifetime Refresh token lifetime in seconds (default from config)
-     * @return array Token pair with 'access_token' and 'refresh_token' keys
+     * @return array{access_token: string, refresh_token: string, expires_in: int} Token pair with 'access_token' and 'refresh_token' keys
      * @throws \InvalidArgumentException If userData is empty or missing required fields
      * @throws \RuntimeException If JWT key is not configured or token generation fails
      * @throws \Glueful\Exceptions\AuthenticationException If token encoding fails
@@ -116,7 +117,7 @@ class TokenManager
 
         // Add remember-me indicator to token payload if applicable
         $tokenPayload = $userData;
-        if (isset($userData['remember_me']) && $userData['remember_me']) {
+        if (isset($userData['remember_me']) && (bool)$userData['remember_me'] === true) {
             $tokenPayload['persistent'] = true;
         }
 
@@ -223,7 +224,7 @@ class TokenManager
      * @param string $refreshToken The current refresh token to exchange
      * @param string|null $provider Authentication provider name to use for refresh
      * @param RequestContext|null $requestContext Request context for session tracking
-     * @return array|null New token pair with 'access_token' and 'refresh_token', or null if invalid
+     * @return array<string, mixed>|null New token pair with 'access_token' and 'refresh_token', or null if invalid
      * @throws \InvalidArgumentException If refresh token format is invalid
      * @throws \Glueful\Exceptions\DatabaseException If session lookup or update fails
      * @throws \Glueful\Exceptions\AuthenticationException If token refresh fails
@@ -249,9 +250,9 @@ class TokenManager
         $tokens = null;
 
         // If provider is explicitly specified, use it
-        if ($provider && $authManager) {
+        if ($provider !== null && $authManager !== null) {
             $authProvider = $authManager->getProvider($provider);
-            if ($authProvider) {
+            if ($authProvider !== null) {
                 $tokens = $authProvider->refreshTokens($refreshToken, $sessionData);
             }
         }
@@ -264,11 +265,11 @@ class TokenManager
                 ->where(['refresh_token' => $refreshToken])
                 ->get();
 
-            if (!empty($result) && isset($result[0]['provider']) && $result[0]['provider'] !== 'jwt') {
+            if ($result !== [] && isset($result[0]['provider']) && $result[0]['provider'] !== 'jwt') {
                 $storedProvider = $result[0]['provider'];
-                if ($authManager) {
+                if ($authManager !== null) {
                     $authProvider = $authManager->getProvider($storedProvider);
-                    if ($authProvider) {
+                    if ($authProvider !== null) {
                         $tokens = $authProvider->refreshTokens($refreshToken, $sessionData);
                     }
                 }
@@ -306,6 +307,9 @@ class TokenManager
      * @param string $refreshToken Refresh token
      * @return array|null Session data or null if invalid
      */
+    /**
+     * @return array{uuid: string, created_at: string}|null
+     */
     private static function getSessionFromRefreshToken(string $refreshToken): ?array
     {
         $db = self::getDb();
@@ -315,7 +319,7 @@ class TokenManager
             ->where(['refresh_token' => $refreshToken, 'status' => 'active'])
             ->get();
 
-        if (empty($result)) {
+        if ($result === []) {
             return null;
         }
 
@@ -334,9 +338,9 @@ class TokenManager
      * Ensures all user objects contain required fields with proper defaults.
      * Fetches missing profile data from database if needed.
      *
-     * @param array $user Raw user data from authentication provider
+     * @param array<string, mixed> $user Raw user data from authentication provider
      * @param string|null $provider Provider name (jwt, admin, ldap, saml, etc.)
-     * @return array Normalized user data with consistent structure
+     * @return array<string, mixed> Normalized user data with consistent structure
      */
     private static function normalizeUserData(array $user, ?string $provider = null): array
     {
@@ -354,7 +358,7 @@ class TokenManager
         $normalizedUser['provider'] = $provider ?? 'jwt';
 
         // Ensure profile data exists
-        if (!isset($normalizedUser['profile']) || empty($normalizedUser['profile'])) {
+        if (!isset($normalizedUser['profile']) || (is_array($normalizedUser['profile']) && $normalizedUser['profile'] === [])) {
             // Try to fetch profile data from database
             $userRepository = new \Glueful\Repository\UserRepository();
             $profileData = $userRepository->getProfile($normalizedUser['uuid']);
@@ -428,10 +432,14 @@ class TokenManager
      * @throws \Glueful\Exceptions\AuthenticationException If token generation fails
      * @throws \RuntimeException If authentication provider is not available
      */
+    /**
+     * @param array<string, mixed> $user
+     * @return array<string, mixed>
+     */
     public static function createUserSession(array $user, ?string $provider = null): array
     {
         // Add validation to ensure we have valid user data
-        if (empty($user) || !isset($user['uuid'])) {
+        if ($user === [] || !isset($user['uuid'])) {
             return [];  // Return empty array that will be caught as failure
         }
 
@@ -439,11 +447,12 @@ class TokenManager
         $user = self::normalizeUserData($user, $provider);
 
         // Adjust token lifetime based on remember-me preference
-        $accessTokenLifetime = $user['remember_me']
+        $rememberMe = (bool)($user['remember_me'] ?? false);
+        $accessTokenLifetime = $rememberMe
             ? (int)config('session.remember_expiration', 30 * 24 * 3600) // 30 days
             : (int)config('session.access_token_lifetime', 3600);          // 1 hour
 
-        $refreshTokenLifetime = $user['remember_me']
+        $refreshTokenLifetime = $rememberMe
             ? (int)config('session.remember_expiration', 60 * 24 * 3600) // 60 days
             : (int)config('session.refresh_token_lifetime', 7 * 24 * 3600); // 7 days
 
@@ -653,7 +662,7 @@ class TokenManager
         if (class_exists('\\Glueful\\Auth\\AuthenticationService')) {
             try {
                 $authService = call_user_func(['\\Glueful\\Auth\\AuthenticationService', 'getInstance']);
-                if ($authService && method_exists($authService, 'getAuthManager')) {
+                if ($authService !== null && method_exists($authService, 'getAuthManager')) {
                     return $authService->getAuthManager();
                 }
             } catch (\Throwable) {
@@ -676,26 +685,26 @@ class TokenManager
      * Helper method to retrieve all registered providers from the AuthenticationManager.
      *
      * @param AuthenticationManager $authManager The authentication manager instance
-     * @return array Array of AuthenticationProviderInterface instances
+     * @return array<int, AuthenticationProviderInterface> Array of AuthenticationProviderInterface instances
      */
     private static function getAvailableProviders(AuthenticationManager $authManager): array
     {
         $providers = [];
 
-        // Try to call a method to get all providers if it exists
-        if (method_exists($authManager, 'getProviders')) {
-            try {
-                return $authManager->getProviders();
-            } catch (\Throwable) {
-                // Silently fail and continue with fallback
-            }
+        // Try to call a method to get all providers
+        try {
+            /** @var array<int, AuthenticationProviderInterface> $all */
+            $all = $authManager->getProviders();
+            return $all;
+        } catch (\Throwable) {
+            // Silently fail and continue with fallback
         }
 
         // Fallback: try to get known providers individually
         foreach (['jwt', 'api_key', 'oauth', 'saml'] as $providerName) {
             try {
                 $provider = $authManager->getProvider($providerName);
-                if ($provider) {
+                if ($provider !== null) {
                     $providers[] = $provider;
                 }
             } catch (\Throwable) {
