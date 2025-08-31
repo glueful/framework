@@ -18,7 +18,7 @@ class EnvironmentConfigLoader
      *
      * @param string $configPath Base configuration directory path
      * @param string $environment Environment name (e.g., 'production', 'local', 'testing')
-     * @return array Merged configuration array
+     * @return array<string, mixed> Merged configuration array
      */
     public function loadEnvironmentConfig(string $configPath, string $environment): array
     {
@@ -44,6 +44,9 @@ class EnvironmentConfigLoader
      *
      * @param string $path Directory path
      * @return array Configuration array indexed by filename
+     */
+    /**
+     * @return array<string, mixed>
      */
     private function loadConfigDirectory(string $path): array
     {
@@ -74,6 +77,11 @@ class EnvironmentConfigLoader
      * @param array $base Base configuration array
      * @param array $overrides Override configuration array
      * @return array Merged configuration
+     */
+    /**
+     * @param array<string, mixed> $base
+     * @param array<string, mixed> $overrides
+     * @return array<string, mixed>
      */
     private function deepMerge(array $base, array $overrides): array
     {
@@ -110,6 +118,9 @@ class EnvironmentConfigLoader
      *
      * @param string $configPath Base configuration directory path
      * @return array List of environment names
+     */
+    /**
+     * @return array<string>
      */
     public function getAvailableEnvironments(string $configPath): array
     {
@@ -153,6 +164,6 @@ class EnvironmentConfigLoader
         }
 
         // Check if there are any PHP config files in the environment directory
-        return !empty(glob($envConfigPath . '/*.php'));
+        return (glob($envConfigPath . '/*.php') !== false ? glob($envConfigPath . '/*.php') : []) !== [];
     }
 }

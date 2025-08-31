@@ -16,8 +16,8 @@ class ConfigValidator
     /**
      * Validate entire configuration array
      *
-     * @param array $config Complete merged configuration
-     * @return array List of validation error messages (empty if valid)
+     * @param array<string, mixed> $config Complete merged configuration
+     * @return array<string> List of validation error messages (empty if valid)
      */
     public function validate(array $config): array
     {
@@ -58,13 +58,15 @@ class ConfigValidator
 
     /**
      * Validate app configuration section
+     * @param array<string, mixed> $config
+     * @return array<string>
      */
     private function validateAppConfig(array $config): array
     {
         $violations = [];
 
         // Validate required fields
-        if (empty($config['name'])) {
+        if (($config['name'] ?? '') === '') {
             $violations[] = 'app.name is required and cannot be empty';
         }
 
@@ -72,7 +74,7 @@ class ConfigValidator
             $violations[] = 'app.version must be in format "v1.0" or "1.0.0"';
         }
 
-        if (isset($config['timezone']) && !in_array($config['timezone'], timezone_identifiers_list())) {
+        if (isset($config['timezone']) && !in_array($config['timezone'], timezone_identifiers_list(), true)) {
             $violations[] = 'app.timezone must be a valid timezone identifier';
         }
 
@@ -118,6 +120,8 @@ class ConfigValidator
 
     /**
      * Validate database configuration section
+     * @param array<string, mixed> $config
+     * @return array<string>
      */
     private function validateDatabaseConfig(array $config): array
     {
@@ -125,7 +129,7 @@ class ConfigValidator
 
         // Validate engine/default connection
         $defaultEngine = $config['engine'] ?? $config['default'] ?? null;
-        if (empty($defaultEngine)) {
+        if (($defaultEngine ?? '') === '') {
             $violations[] = 'database.engine (or database.default) is required';
         }
 
@@ -177,6 +181,8 @@ class ConfigValidator
 
     /**
      * Validate individual database connection configuration
+     * @param array<string, mixed> $connection
+     * @return array<string>
      */
     private function validateConnectionConfig(array $connection, string $prefix): array
     {
@@ -185,10 +191,10 @@ class ConfigValidator
 
         switch ($driver) {
             case 'mysql':
-                if (empty($connection['host']) && empty($connection['socket'])) {
+                if (($connection['host'] ?? '') === '' && ($connection['socket'] ?? '') === '') {
                     $violations[] = "{$prefix}.host or {$prefix}.socket is required for MySQL";
                 }
-                if (empty($connection['database']) && empty($connection['db'])) {
+                if (($connection['database'] ?? '') === '' && ($connection['db'] ?? '') === '') {
                     $violations[] = "{$prefix}.database (or db) is required for MySQL";
                 }
                 if (
@@ -203,23 +209,23 @@ class ConfigValidator
 
             case 'pgsql':
             case 'postgresql':
-                if (empty($connection['host'])) {
+                if (($connection['host'] ?? '') === '') {
                     $violations[] = "{$prefix}.host is required for PostgreSQL";
                 }
-                if (empty($connection['database']) && empty($connection['db'])) {
+                if (($connection['database'] ?? '') === '' && ($connection['db'] ?? '') === '') {
                     $violations[] = "{$prefix}.database (or db) is required for PostgreSQL";
                 }
                 break;
 
             case 'sqlite':
                 $dbPath = $connection['database'] ?? $connection['primary'] ?? null;
-                if (empty($dbPath)) {
+                if (($dbPath ?? '') === '') {
                     $violations[] = "{$prefix}.database (or primary) is required for SQLite";
                 }
                 break;
 
             default:
-                if (!empty($driver)) {
+                if (($driver ?? '') !== '') {
                     $violations[] = "{$prefix}.driver '{$driver}' is not supported (use mysql, pgsql, or sqlite)";
                 }
         }
@@ -229,6 +235,8 @@ class ConfigValidator
 
     /**
      * Validate security configuration section
+     * @param array<string, mixed> $config
+     * @return array<string>
      */
     private function validateSecurityConfig(array $config): array
     {
@@ -246,6 +254,8 @@ class ConfigValidator
 
     /**
      * Validate cache configuration section
+     * @param array<string, mixed> $config
+     * @return array<string>
      */
     private function validateCacheConfig(array $config): array
     {
@@ -264,6 +274,8 @@ class ConfigValidator
 
     /**
      * Validate queue configuration section
+     * @param array<string, mixed> $config
+     * @return array<string>
      */
     private function validateQueueConfig(array $config): array
     {
@@ -282,6 +294,8 @@ class ConfigValidator
 
     /**
      * Validate session configuration section
+     * @param array<string, mixed> $config
+     * @return array<string>
      */
     private function validateSessionConfig(array $config): array
     {
@@ -306,8 +320,8 @@ class ConfigValidator
      * Validate specific configuration section
      *
      * @param string $section Section name (e.g., 'app', 'database')
-     * @param array $config Section configuration
-     * @return array Validation errors
+     * @param array<string, mixed> $config Section configuration
+     * @return array<string> Validation errors
      */
     public function validateSection(string $section, array $config): array
     {

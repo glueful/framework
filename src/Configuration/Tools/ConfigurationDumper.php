@@ -53,6 +53,9 @@ class ConfigurationDumper
     /**
      * Generate a configuration template with default values
      */
+    /**
+     * @return array<string, mixed>
+     */
     public function generateConfigTemplate(string $configName): array
     {
         $schema = $this->getSchema($configName);
@@ -66,6 +69,9 @@ class ConfigurationDumper
     /**
      * Generate minimal configuration with only required fields
      */
+    /**
+     * @return array<string, mixed>
+     */
     public function generateMinimalConfig(string $configName): array
     {
         $schema = $this->getSchema($configName);
@@ -78,6 +84,9 @@ class ConfigurationDumper
 
     /**
      * Get configuration information for all registered schemas
+     */
+    /**
+     * @return array<string, mixed>
      */
     public function getAllConfigInfo(): array
     {
@@ -96,6 +105,9 @@ class ConfigurationDumper
 
     /**
      * Generate configuration documentation in multiple formats
+     */
+    /**
+     * @return array<string, mixed>
      */
     public function generateDocumentation(string $configName): array
     {
@@ -116,6 +128,9 @@ class ConfigurationDumper
     /**
      * Analyze schema structure for documentation purposes
      */
+    /**
+     * @return array<string, mixed>
+     */
     public function analyzeSchemaStructure(string $configName): array
     {
         $schema = $this->getSchema($configName);
@@ -128,7 +143,7 @@ class ConfigurationDumper
     /**
      * Get a registered schema by name
      */
-    private function getSchema(string $configName)
+    private function getSchema(string $configName): object
     {
         $schemas = $this->processor->getAllSchemas();
         if (!isset($schemas[$configName])) {
@@ -188,6 +203,9 @@ class ConfigurationDumper
 
     /**
      * Analyze node structure for documentation
+     */
+    /**
+     * @return array<string, mixed>
      */
     private function analyzeNode(NodeInterface $node): array
     {

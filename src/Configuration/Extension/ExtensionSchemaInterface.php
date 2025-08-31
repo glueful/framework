@@ -28,6 +28,7 @@ interface ExtensionSchemaInterface extends ConfigurationInterface
 
     /**
      * Get the manifest versions this schema supports
+     * @return array<string>
      */
     public function getSupportedManifestVersions(): array;
 }

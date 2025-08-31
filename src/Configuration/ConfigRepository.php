@@ -9,6 +9,7 @@ use Glueful\Configuration\ConfigValidator;
 
 final class ConfigRepository implements ConfigRepositoryInterface
 {
+    /** @var array<string, mixed> */
     private array $config = [];
     private bool $loaded = false;
     private readonly bool $cacheEnabled;
@@ -73,6 +74,9 @@ final class ConfigRepository implements ConfigRepositoryInterface
         return $this->get($key, null) !== null;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function all(): array
     {
         return $this->config;
@@ -107,6 +111,9 @@ final class ConfigRepository implements ConfigRepositoryInterface
         }
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function loadConfigDirectory(string $path): array
     {
         // Use EnvironmentConfigLoader for environment-aware loading
@@ -114,6 +121,11 @@ final class ConfigRepository implements ConfigRepositoryInterface
         return $loader->loadEnvironmentConfig($path, $this->environment);
     }
 
+    /**
+     * @param array<string, mixed> $base
+     * @param array<string, mixed> $overrides
+     * @return array<string, mixed>
+     */
     private function deepMerge(array $base, array $overrides): array
     {
         $merged = $base;
@@ -180,6 +192,9 @@ final class ConfigRepository implements ConfigRepositoryInterface
         return $cacheTime >= $configTime;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function loadCachedConfig(): array
     {
         $cached = require $this->cacheFile;
@@ -217,11 +232,14 @@ final class ConfigRepository implements ConfigRepositoryInterface
         // Check application config times (base + environment)
         $this->addConfigTimes($times, $this->applicationConfigPath);
 
-        return empty($times) ? 0 : max($times);
+        return $times === [] ? 0 : max($times);
     }
 
     /**
      * Add modification times for base and environment-specific config files
+     */
+    /**
+     * @param array<int> $times
      */
     private function addConfigTimes(array &$times, string $configPath): void
     {
@@ -263,7 +281,7 @@ final class ConfigRepository implements ConfigRepositoryInterface
     /**
      * Validate the current configuration manually
      *
-     * @return array List of validation errors (empty if valid)
+     * @return array<string> List of validation errors (empty if valid)
      */
     public function validateConfig(): array
     {
@@ -286,7 +304,7 @@ final class ConfigRepository implements ConfigRepositoryInterface
         $validator = new ConfigValidator();
         $violations = $validator->validate($this->config);
 
-        if (!empty($violations)) {
+        if ($violations !== []) {
             $message = "Configuration validation failed:\n" . implode("\n", $violations);
             error_log("Configuration validation errors: " . $message);
 

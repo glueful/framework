@@ -30,6 +30,7 @@ class IDESupport
 
     /**
      * Generate PhpStorm configuration for configuration schemas
+     * @return array<string, mixed>
      */
     public function generatePhpStormConfig(): array
     {
@@ -60,6 +61,9 @@ class IDESupport
     /**
      * Generate VS Code configuration for configuration schemas
      */
+    /**
+     * @return array<string, mixed>
+     */
     public function generateVSCodeConfig(): array
     {
         $schemas = $this->processor->getAllSchemas();
@@ -85,7 +89,10 @@ class IDESupport
     /**
      * Generate JSON Schema for a configuration schema
      */
-    public function generateJsonSchema($schema): array
+    /**
+     * @return array<string, mixed>
+     */
+    public function generateJsonSchema(mixed $schema): array
     {
         $treeBuilder = $schema->getConfigTreeBuilder();
         $tree = $treeBuilder->buildTree();
@@ -99,7 +106,7 @@ class IDESupport
         ];
 
         $properties = $this->convertNodeToJsonSchema($tree);
-        if (!empty($properties)) {
+        if ($properties !== []) {
             $jsonSchema = array_merge($jsonSchema, $properties);
         }
 
@@ -108,6 +115,9 @@ class IDESupport
 
     /**
      * Generate individual JSON schema files for each configuration
+     */
+    /**
+     * @return array<string, mixed>
      */
     public function generateSchemaFiles(): array
     {
@@ -166,6 +176,9 @@ class IDESupport
     /**
      * Convert Symfony Config node to JSON Schema
      */
+    /**
+     * @return array<string, mixed>
+     */
     private function convertNodeToJsonSchema(NodeInterface $node): array
     {
         $schema = [];
@@ -179,7 +192,7 @@ class IDESupport
                 $childName = $child->getName();
                 $childSchema = $this->convertNodeToJsonSchema($child);
 
-                if (!empty($childSchema)) {
+                if ($childSchema !== []) {
                     $schema['properties'][$childName] = $childSchema;
                 }
 
@@ -188,7 +201,7 @@ class IDESupport
                 }
             }
 
-            if (!empty($required)) {
+            if ($required !== []) {
                 $schema['required'] = $required;
             }
 
@@ -228,6 +241,9 @@ class IDESupport
     /**
      * Extract configuration keys for PhpStorm meta
      */
+    /**
+     * @return array<string>
+     */
     private function extractConfigKeys(NodeInterface $node, string $prefix = ''): array
     {
         $keys = [];
@@ -235,7 +251,7 @@ class IDESupport
         if ($node instanceof ArrayNode) {
             foreach ($node->getChildren() as $child) {
                 $childName = $child->getName();
-                $fullKey = $prefix ? "{$prefix}.{$childName}" : $childName;
+                $fullKey = $prefix !== '' ? "{$prefix}.{$childName}" : $childName;
                 $keys[] = "'{$fullKey}'";
 
                 // Recursively extract nested keys (limit depth to avoid too many keys)
@@ -251,6 +267,9 @@ class IDESupport
 
     /**
      * Generate autocomplete suggestions for configuration values
+     */
+    /**
+     * @return array<string, mixed>
      */
     public function generateAutocompleteSuggestions(): array
     {
@@ -270,6 +289,9 @@ class IDESupport
     /**
      * Extract autocomplete suggestions from node
      */
+    /**
+     * @return array<string, mixed>
+     */
     private function extractSuggestions(NodeInterface $node): array
     {
         $suggestions = [];
@@ -281,7 +303,7 @@ class IDESupport
         } elseif ($node instanceof ArrayNode) {
             foreach ($node->getChildren() as $child) {
                 $childSuggestions = $this->extractSuggestions($child);
-                if (!empty($childSuggestions)) {
+                if ($childSuggestions !== []) {
                     $suggestions[$child->getName()] = $childSuggestions;
                 }
             }

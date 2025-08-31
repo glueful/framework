@@ -771,14 +771,14 @@ class QueueConfiguration implements ConfigurationInterface
             ->end()
             ->validate()
                 ->ifTrue(function ($v) {
-                    return $v['security']['encryption']['enabled'] && empty($v['security']['encryption']['key']);
+                    return $v['security']['encryption']['enabled'] && ($v['security']['encryption']['key'] ?? '') === '';
                 })
                 ->thenInvalid('Encryption key is required when encryption is enabled')
             ->end()
             ->validate()
                 ->ifTrue(function ($v) {
                     return $v['security']['authentication']['enabled'] &&
-                           empty($v['security']['authentication']['token']);
+                           ($v['security']['authentication']['token'] ?? '') === '';
                 })
                 ->thenInvalid('Authentication token is required when authentication is enabled')
             ->end();

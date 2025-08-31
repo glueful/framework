@@ -80,7 +80,7 @@ class ExtensionManifestSchema implements ExtensionSchemaInterface
                         ->scalarNode('email')
                             ->validate()
                                 ->ifTrue(function ($v) {
-                                    return !empty($v) && !filter_var($v, FILTER_VALIDATE_EMAIL);
+                                    return $v !== '' && !filter_var($v, FILTER_VALIDATE_EMAIL);
                                 })
                                 ->thenInvalid('Author email must be a valid email address')
                             ->end()
@@ -89,7 +89,7 @@ class ExtensionManifestSchema implements ExtensionSchemaInterface
                         ->scalarNode('url')
                             ->validate()
                                 ->ifTrue(function ($v) {
-                                    return !empty($v) && !filter_var($v, FILTER_VALIDATE_URL);
+                                    return $v !== '' && !filter_var($v, FILTER_VALIDATE_URL);
                                 })
                                 ->thenInvalid('Author URL must be a valid URL')
                             ->end()
@@ -293,7 +293,7 @@ class ExtensionManifestSchema implements ExtensionSchemaInterface
                         ->scalarNode('color')
                             ->validate()
                                 ->ifTrue(function ($v) {
-                                    return !empty($v) && !preg_match('/^#[0-9A-Fa-f]{6}$/', $v);
+                                    return $v !== '' && !preg_match('/^#[0-9A-Fa-f]{6}$/', $v);
                                 })
                                 ->thenInvalid('Gallery banner color must be a valid hex color')
                             ->end()
@@ -317,7 +317,7 @@ class ExtensionManifestSchema implements ExtensionSchemaInterface
                         ->scalarNode('url')
                             ->validate()
                                 ->ifTrue(function ($v) {
-                                    return !empty($v) && !filter_var($v, FILTER_VALIDATE_URL);
+                                    return $v !== '' && !filter_var($v, FILTER_VALIDATE_URL);
                                 })
                                 ->thenInvalid('Repository URL must be a valid URL')
                             ->end()
@@ -331,7 +331,7 @@ class ExtensionManifestSchema implements ExtensionSchemaInterface
                         ->scalarNode('documentation')
                             ->validate()
                                 ->ifTrue(function ($v) {
-                                    return !empty($v) && !filter_var($v, FILTER_VALIDATE_URL);
+                                    return $v !== '' && !filter_var($v, FILTER_VALIDATE_URL);
                                 })
                                 ->thenInvalid('Documentation URL must be a valid URL')
                             ->end()
@@ -340,7 +340,7 @@ class ExtensionManifestSchema implements ExtensionSchemaInterface
                         ->scalarNode('issues')
                             ->validate()
                                 ->ifTrue(function ($v) {
-                                    return !empty($v) && !filter_var($v, FILTER_VALIDATE_URL);
+                                    return $v !== '' && !filter_var($v, FILTER_VALIDATE_URL);
                                 })
                                 ->thenInvalid('Issues URL must be a valid URL')
                             ->end()
@@ -349,7 +349,7 @@ class ExtensionManifestSchema implements ExtensionSchemaInterface
                         ->scalarNode('email')
                             ->validate()
                                 ->ifTrue(function ($v) {
-                                    return !empty($v) && !filter_var($v, FILTER_VALIDATE_EMAIL);
+                                    return $v !== '' && !filter_var($v, FILTER_VALIDATE_EMAIL);
                                 })
                                 ->thenInvalid('Support email must be a valid email address')
                             ->end()
@@ -410,20 +410,20 @@ class ExtensionManifestSchema implements ExtensionSchemaInterface
             ->end()
             ->validate()
                 ->ifTrue(function ($v) {
-                    return !empty($v['dependencies']['extensions']) &&
-                           in_array($v['id'], $v['dependencies']['extensions']);
+                    return ($v['dependencies']['extensions'] ?? []) !== [] &&
+                           in_array($v['id'], $v['dependencies']['extensions'], true);
                 })
                 ->thenInvalid('Extension cannot depend on itself')
             ->end()
             ->validate()
                 ->ifTrue(function ($v) {
-                    return $v['manifestVersion'] === '2.0' && empty($v['main_class']);
+                    return $v['manifestVersion'] === '2.0' && ($v['main_class'] ?? '') === '';
                 })
                 ->thenInvalid('Manifest version 2.0 requires main_class to be specified')
             ->end()
             ->validate()
                 ->ifTrue(function ($v) {
-                    return !empty($v['autoload']['psr-4']) && empty($v['main_class']);
+                    return ($v['autoload']['psr-4'] ?? []) !== [] && ($v['main_class'] ?? '') === '';
                 })
                 ->thenInvalid('PSR-4 autoload requires main_class to be specified')
             ->end();
@@ -446,6 +446,9 @@ class ExtensionManifestSchema implements ExtensionSchemaInterface
         return '1.0.0';
     }
 
+    /**
+     * @return array<string>
+     */
     public function getSupportedManifestVersions(): array
     {
         return ['1.0', '2.0'];

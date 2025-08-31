@@ -17,6 +17,7 @@ use Glueful\Configuration\Exceptions\ConfigurationException;
  */
 class SchemaManager
 {
+    /** @var array<string, object> */
     private array $schemas = [];
 
     public function __construct(private Processor $processor)
@@ -41,6 +42,7 @@ class SchemaManager
 
     /**
      * Get all registered schemas
+     * @return array<string, object>
      */
     public function getAllSchemas(): array
     {
@@ -65,6 +67,7 @@ class SchemaManager
 
     /**
      * Get schema names
+     * @return array<string>
      */
     public function getSchemaNames(): array
     {

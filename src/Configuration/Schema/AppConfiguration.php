@@ -45,7 +45,7 @@ class AppConfiguration implements ConfigurationInterface
                     ->defaultValue('UTC')
                     ->validate()
                         ->ifTrue(function ($v) {
-                            return !in_array($v, timezone_identifiers_list());
+                            return !in_array($v, timezone_identifiers_list(), true);
                         })
                         ->thenInvalid('Invalid timezone: %s')
                     ->end()

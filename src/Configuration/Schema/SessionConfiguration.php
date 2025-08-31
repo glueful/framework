@@ -311,21 +311,21 @@ class SessionConfiguration implements ConfigurationInterface
                 ->ifTrue(function ($v) {
                     return $v['security']['ip_binding']['enabled'] &&
                            $v['security']['ip_binding']['strict_mode'] &&
-                           !empty($v['security']['ip_binding']['trusted_proxies']);
+                           ($v['security']['ip_binding']['trusted_proxies'] ?? []) !== [];
                 })
                 ->thenInvalid('Trusted proxies should not be used with strict IP binding mode')
             ->end()
             ->validate()
                 ->ifTrue(function ($v) {
                     return $v['storage']['driver'] === 'redis' &&
-                           empty($v['storage']['redis']['host']);
+                           ($v['storage']['redis']['host'] ?? '') === '';
                 })
                 ->thenInvalid('Redis host is required when using Redis storage driver')
             ->end()
             ->validate()
                 ->ifTrue(function ($v) {
                     return $v['storage']['driver'] === 'file' &&
-                           empty($v['storage']['file']['path']);
+                           ($v['storage']['file']['path'] ?? '') === '';
                 })
                 ->thenInvalid('File path is required when using file storage driver')
             ->end();

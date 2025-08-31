@@ -22,7 +22,9 @@ use Psr\Log\LoggerInterface;
  */
 class ConfigurationProcessor
 {
+    /** @var array<string, ConfigurationInterface> */
     private array $schemas = [];
+    /** @var array<string, array<string, mixed>> */
     private array $processedConfigs = [];
 
     public function __construct(
@@ -50,6 +52,8 @@ class ConfigurationProcessor
 
     /**
      * Process configuration data against its registered schema
+     * @param array<string, mixed> $configs
+     * @return array<string, mixed>
      */
     public function processConfiguration(string $configName, array $configs): array
     {
@@ -92,6 +96,10 @@ class ConfigurationProcessor
     /**
      * Validate configuration without storing the processed result
      */
+    /**
+     * @param array<string, mixed> $config
+     * @return array<string, mixed>
+     */
     public function validateConfiguration(string $configName, array $config): array
     {
         return $this->processConfiguration($configName, $config);
@@ -99,6 +107,9 @@ class ConfigurationProcessor
 
     /**
      * Get previously processed configuration
+     */
+    /**
+     * @return array<string, mixed>|null
      */
     public function getProcessedConfiguration(string $configName): ?array
     {
@@ -108,6 +119,9 @@ class ConfigurationProcessor
     /**
      * Get all registered schemas
      */
+    /**
+     * @return array<string, ConfigurationInterface>
+     */
     public function getAllSchemas(): array
     {
         return $this->schemas;
@@ -116,10 +130,13 @@ class ConfigurationProcessor
     /**
      * Get schema information for a specific configuration
      */
+    /**
+     * @return array<string, mixed>|null
+     */
     public function getSchemaInfo(string $configName): ?array
     {
         $schema = $this->schemas[$configName] ?? null;
-        if (!$schema) {
+        if ($schema === null) {
             return null;
         }
 
@@ -159,6 +176,9 @@ class ConfigurationProcessor
     /**
      * Get summary of all registered schemas
      */
+    /**
+     * @return array<string, mixed>
+     */
     public function getSchemaSummary(): array
     {
         $summary = [];
@@ -196,6 +216,9 @@ class ConfigurationProcessor
     /**
      * Get all extension schemas
      */
+    /**
+     * @return array<string, mixed>
+     */
     public function getExtensionSchemas(): array
     {
         $extensionSchemas = [];
@@ -211,6 +234,9 @@ class ConfigurationProcessor
 
     /**
      * Get extension schemas by extension name
+     */
+    /**
+     * @return array<string, mixed>
      */
     public function getExtensionSchemasByExtension(string $extensionName): array
     {
@@ -230,6 +256,10 @@ class ConfigurationProcessor
 
     /**
      * Process extension manifest data
+     */
+    /**
+     * @param array<string, mixed> $manifestData
+     * @return array<string, mixed>
      */
     public function processExtensionManifest(array $manifestData): array
     {

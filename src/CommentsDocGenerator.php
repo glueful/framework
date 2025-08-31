@@ -31,7 +31,7 @@ class CommentsDocGenerator
     /** @var string Output directory for generated routes documentation */
     private string $routesOutputPath;
 
-    /** @var array Processed route information */
+    /** @var array<string, mixed> Processed route information */
     private array $routeData = [];
 
     /** @var ExtensionManager Extensions manager for checking enabled extensions */
@@ -65,7 +65,7 @@ class CommentsDocGenerator
      *
      * Scans enabled extensions and routes directories and generates documentation
      *
-     * @return array List of generated documentation files
+     * @return array<string> List of generated documentation files
      */
     public function generateAll(): array
     {
@@ -75,12 +75,12 @@ class CommentsDocGenerator
         $enabledExtensions = $this->extensionsManager->listEnabled();
         foreach ($enabledExtensions as $extensionName) {
             $extensionPath = $this->extensionsManager->getExtensionPath($extensionName);
-            if ($extensionPath) {
+            if ($extensionPath !== null) {
                 $routeFile = $extensionPath . '/src/routes.php';
 
                 if (file_exists($routeFile)) {
                     $docFile = $this->generateForExtension($extensionName, $routeFile);
-                    if ($docFile) {
+                    if ($docFile !== null) {
                         $generatedFiles[] = $docFile;
                     }
                 }
@@ -99,7 +99,7 @@ class CommentsDocGenerator
      *
      * Scans the routes directory and generates documentation for each route file
      *
-     * @return array List of generated documentation files
+     * @return array<string> List of generated documentation files
      */
     public function generateForRoutes(): array
     {
@@ -118,7 +118,7 @@ class CommentsDocGenerator
             $routeFile = $routeFileObj->getPathname();
             $routeName = basename($routeFile, '.php');
             $docFile = $this->generateForRouteFile($routeName, $routeFile);
-            if ($docFile) {
+            if ($docFile !== null) {
                 $generatedFiles[] = $docFile;
             }
         }
@@ -142,7 +142,7 @@ class CommentsDocGenerator
         // Parse routes file to extract doc comments
         $this->parseRouteDocComments($routeFile);
 
-        if (empty($this->routeData)) {
+        if ($this->routeData === []) {
             return null;
         }
 
@@ -159,7 +159,7 @@ class CommentsDocGenerator
      * Generate OpenAPI specification for a route file
      *
      * @param string $routeName Route file name
-     * @return array OpenAPI specification
+     * @return array<string, mixed> OpenAPI specification
      */
     private function generateRouteOpenApiSpec(string $routeName): array
     {
@@ -209,7 +209,7 @@ class CommentsDocGenerator
             ];
 
             // Add request body if present
-            if (!empty($route['requestBody'])) {
+            if (($route['requestBody'] ?? []) !== []) {
                 $operation['requestBody'] = [
                     'required' => true,
                     'content' => [
@@ -221,12 +221,12 @@ class CommentsDocGenerator
             }
 
             // Add security requirement if authentication is required
-            if ($route['requiresAuth']) {
+            if ((bool)($route['requiresAuth'] ?? false)) {
                 $operation['security'] = [['BearerAuth' => []]];
             }
 
             // Add path parameters if any
-            if (!empty($route['pathParams'])) {
+            if (($route['pathParams'] ?? []) !== []) {
                 $operation['parameters'] = $route['pathParams'];
             }
 
@@ -284,7 +284,7 @@ class CommentsDocGenerator
         // Parse routes file to extract doc comments
         $this->parseRouteDocComments($routeFile);
 
-        if (empty($this->routeData)) {
+        if ($this->routeData === []) {
             return null;
         }
 
@@ -357,7 +357,7 @@ class CommentsDocGenerator
 
                 // If no explicit parameters were defined but path contains parameters,
                 // extract them from the path
-                if (empty($pathParams) && strpos($routePath, '{') !== false) {
+                if ($pathParams === [] && strpos($routePath, '{') !== false) {
                     $pathParams = $this->extractPathParameters($routePath);
                 }
 
@@ -367,7 +367,7 @@ class CommentsDocGenerator
                     'path' => $routePath,
                     'summary' => $summary,
                     'description' => $description,
-                    'tag' => $tag ?: $this->deriveTagFromPath($routePath),
+                    'tag' => $tag !== '' ? $tag : $this->deriveTagFromPath($routePath),
                     'requiresAuth' => $requiresAuth,
                     'responses' => $responses,
                     'requestBody' => $requestBody,
@@ -386,7 +386,7 @@ class CommentsDocGenerator
      * Format: @requestBody field1:type[enum]="description" field2:type="description" {required=field1,field2}
      *
      * @param string $docComment Doc comment to parse
-     * @return array|null Request body schema or null if not found
+     * @return array<string, mixed>|null Request body schema or null if not found
      */
     private function extractSimplifiedRequestBody(string $docComment): ?array
     {
@@ -419,16 +419,16 @@ class CommentsDocGenerator
         foreach ($fieldMatches as $match) {
             $name = $match[1];
             $type = $match[2];
-            $enum = isset($match[3]) && !empty($match[3]) ? array_map('trim', explode(',', $match[3])) : null;
+            $enum = isset($match[3]) && $match[3] !== '' ? array_map('trim', explode(',', $match[3])) : null;
             $description = $match[4] ?? '';
 
             $property = ['type' => $type];
 
-            if ($enum) {
+            if ($enum !== null) {
                 $property['enum'] = $enum;
             }
 
-            if ($description) {
+            if ($description !== '') {
                 $property['description'] = $description;
             }
 
@@ -440,7 +440,7 @@ class CommentsDocGenerator
             'properties' => $properties
         ];
 
-        if (!empty($required)) {
+        if ($required !== []) {
             $schema['required'] = $required;
         }
 
@@ -452,7 +452,7 @@ class CommentsDocGenerator
      * Format: @response code contentType "description" {schema}
      *
      * @param string $docComment Doc comment to parse
-     * @return array Response definitions
+     * @return array<string, mixed> Response definitions
      */
     private function extractSimplifiedResponses(string $docComment): array
     {
@@ -468,7 +468,7 @@ class CommentsDocGenerator
 
         foreach ($responseMatches as $i => $match) {
             $statusCode = $match[1][0];
-            $contentType = !empty($match[2][0]) ? $match[2][0] : 'application/json';
+            $contentType = $match[2][0] !== '' ? $match[2][0] : 'application/json';
             $description = $match[3][0];
 
             // Find the position after the quoted description
@@ -495,7 +495,9 @@ class CommentsDocGenerator
                 $schema = $this->parseSimplifiedSchema($schemaContent);
 
                 $responses[$statusCode] = [
-                    'description' => $description ?: $this->getDefaultResponseDescription($statusCode),
+                    'description' => $description !== ''
+                        ? $description
+                        : $this->getDefaultResponseDescription($statusCode),
                     'content' => [
                         $contentType => [
                             'schema' => $schema
@@ -504,14 +506,16 @@ class CommentsDocGenerator
                 ];
             } else {
                 $responses[$statusCode] = [
-                    'description' => $description ?: $this->getDefaultResponseDescription($statusCode)
+                    'description' => $description !== ''
+                        ? $description
+                        : $this->getDefaultResponseDescription($statusCode)
                 ];
             }
         }
 
 
         // Add default responses if none specified
-        if (empty($responses)) {
+        if ($responses === []) {
             $responses = [
                 '200' => [
                     'description' => 'Successful operation'
@@ -533,7 +537,7 @@ class CommentsDocGenerator
      * Format: {field1:type="description", field2:{nestedField:type}}
      *
      * @param string $schemaStr Schema string to parse
-     * @return array Parsed schema
+     * @return array<string, mixed> Parsed schema
      */
     private function parseSimplifiedSchema(string $schemaStr): array
     {
@@ -705,7 +709,7 @@ class CommentsDocGenerator
                     $property['enum'] = array_map('trim', explode(',', $match[3]));
                 }
 
-                if ($description) {
+                if ($description !== '') {
                     $property['description'] = $description;
                 }
 
@@ -731,7 +735,7 @@ class CommentsDocGenerator
      * Format: @param name location type required "description"
      *
      * @param string $docComment Doc comment to parse
-     * @return array Parameter definitions
+     * @return array<int, array<string, mixed>> Parameter definitions
      */
     private function extractSimplifiedParameters(string $docComment): array
     {
@@ -786,7 +790,7 @@ class CommentsDocGenerator
      * Extract path parameters from a route path
      *
      * @param string $path Route path
-     * @return array Path parameters
+     * @return array<int, array<string, mixed>> Path parameters
      */
     private function extractPathParameters(string $path): array
     {
@@ -830,7 +834,7 @@ class CommentsDocGenerator
      * Generate OpenAPI specification from parsed route data
      *
      * @param string $extensionName Extension name
-     * @return array OpenAPI specification
+     * @return array<string, mixed> OpenAPI specification
      */
     private function generateOpenApiSpec(string $extensionName): array
     {
@@ -880,7 +884,7 @@ class CommentsDocGenerator
             ];
 
             // Add request body if present
-            if (!empty($route['requestBody'])) {
+            if (($route['requestBody'] ?? []) !== []) {
                 $operation['requestBody'] = [
                     'required' => true,
                     'content' => [
@@ -892,12 +896,12 @@ class CommentsDocGenerator
             }
 
             // Add security requirement if authentication is required
-            if ($route['requiresAuth']) {
+            if ((bool)($route['requiresAuth'] ?? false)) {
                 $operation['security'] = [['BearerAuth' => []]];
             }
 
             // Add path parameters if any
-            if (!empty($route['pathParams'])) {
+            if (($route['pathParams'] ?? []) !== []) {
                 $operation['parameters'] = $route['pathParams'];
             }
 

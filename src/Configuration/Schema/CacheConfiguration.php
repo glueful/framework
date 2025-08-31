@@ -295,13 +295,13 @@ class CacheConfiguration implements ConfigurationInterface
             ->end()
             ->validate()
                 ->ifTrue(function ($v) {
-                    return $v['enable_tags'] && !in_array($v['tags_store'], ['redis', 'memcached']);
+                    return $v['enable_tags'] && !in_array($v['tags_store'], ['redis', 'memcached'], true);
                 })
                 ->thenInvalid('Cache tags require Redis or Memcached as tags_store')
             ->end()
             ->validate()
                 ->ifTrue(function ($v) {
-                    return $v['distributed']['enabled'] && empty($v['distributed']['nodes']);
+                    return $v['distributed']['enabled'] && ($v['distributed']['nodes'] ?? []) === [];
                 })
                 ->thenInvalid('Distributed caching requires at least one node to be configured')
             ->end();
