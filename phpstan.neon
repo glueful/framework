@@ -1,3 +1,9 @@
+includes:
+    - vendor/phpstan/phpstan-strict-rules/rules.neon
+    - vendor/phpstan/phpstan-deprecation-rules/rules.neon
+    - vendor/phpstan/phpstan-phpunit/extension.neon
+    - vendor/phpstan/phpstan-phpunit/rules.neon
+
 parameters:
     level: 6
     paths:
@@ -23,28 +29,7 @@ parameters:
     reportUnmatchedIgnoredErrors: false
     ignoreErrors:
         - '#Instanceof between mixed and Monolog\\Handler\\AbstractProcessingHandler will always evaluate to false\.#'
-
-        # TimThumb.php specific issues
-        - '#Property Glueful\\Services\\TimThumb::\$[a-zA-Z0-9]+ is never read, only written\.#'
-        - '#Property Glueful\\Services\\TimThumb::\$docRoot is unused\.#'
-        - '#Property Glueful\\Services\\TimThumb::\$is404 is unused\.#'
-        - '#Property Glueful\\Services\\TimThumb::\$lastURLError is unused\.#'
-        - '#Property Glueful\\Services\\TimThumb::\$localImage is unused\.#'
-        - '#Property Glueful\\Services\\TimThumb::\$localImageMTime is unused\.#'
-        - '#Property Glueful\\Services\\TimThumb::\$url is unused\.#'
-        - '#Property Glueful\\Services\\TimThumb::\$myHost is unused\.#'
-        - '#Property Glueful\\Services\\TimThumb::\$isURL is unused\.#'
-        - '#Property Glueful\\Services\\TimThumb::\$cacheFile is unused\.#'
-        - '#Property Glueful\\Services\\TimThumb::\$errors is unused\.#'
-        - '#Property Glueful\\Services\\TimThumb::\$startTime is unused\.#'
-        - '#Property Glueful\\Services\\TimThumb::\$lastBenchTime is unused\.#'
-        - '#Property Glueful\\Services\\TimThumb::\$cropTop is unused\.#'
-        - '#Property Glueful\\Services\\TimThumb::\$salt is unused\.#'
-        - '#Negated boolean expression is always false\.#'
-        - '#Method Glueful\\Services\\TimThumb::createImage\(\) never returns null so it can be removed from the return type\.#'
-        - '#Match arm is unreachable because previous comparison is always true\.#'
-        - '#Offset ''mime'' on array\{.*\} in isset\(\) always exists and is not nullable\.#'
-
+        
         # EmailVerification.php issues with unknown class
         - '#Property Glueful\\Security\\EmailVerification::\$emailProvider has unknown class Glueful\\Extensions\\EmailNotification\\EmailNotificationProvider as its type\.#'
         - '#Instantiated class Glueful\\Extensions\\EmailNotification\\EmailNotificationProvider not found\.#'
