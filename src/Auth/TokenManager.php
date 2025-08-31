@@ -157,12 +157,12 @@ class TokenManager
         $isValid = false;
 
         // If provider is explicitly specified, use it
-        if ($provider && $authManager) {
+        if ($provider !== null && $authManager !== null) {
             $authProvider = $authManager->getProvider($provider);
-            if ($authProvider) {
+            if ($authProvider !== null) {
                 $isValid = $authProvider->validateToken($token) && !self::isTokenRevoked($token);
             }
-        } elseif ($authManager) {
+        } elseif ($authManager !== null) {
             // We need to loop through the available providers
             $providers = self::getAvailableProviders($authManager);
             foreach ($providers as $authProvider) {
@@ -257,7 +257,7 @@ class TokenManager
         }
 
         // If no explicit provider but we have stored provider in session
-        if (!$tokens) {
+        if ($tokens === null) {
             $db = self::getDb();
             $result = $db->table('auth_sessions')
                 ->select(['provider'])
@@ -276,14 +276,14 @@ class TokenManager
         }
 
         // Default to standard JWT token generation for backward compatibility
-        if (!$tokens) {
+        if ($tokens === null) {
             // Get remember_me status from the session to determine token lifetime
             $db = self::getDb();
             $sessionResult = $db->table('auth_sessions')
                 ->select(['remember_me'])
                 ->where(['refresh_token' => $refreshToken])
                 ->get();
-            $rememberMe = !empty($sessionResult[0]['remember_me']);
+            $rememberMe = (bool)($sessionResult[0]['remember_me'] ?? false);
             // Set appropriate token lifetime based on remember_me
             $accessTokenLifetime = $rememberMe
                 ? (int)config('session.remember_expiration', 30 * 24 * 3600)  // 30 days
@@ -449,9 +449,9 @@ class TokenManager
 
         // Use authentication provider if specified and available
         $authManager = self::getAuthManager();
-        if ($provider && $authManager) {
+        if ($provider !== null && $authManager !== null) {
             $authProvider = $authManager->getProvider($provider);
-            if ($authProvider) {
+            if ($authProvider !== null) {
                 $tokens = $authProvider->generateTokens($user, $accessTokenLifetime, $refreshTokenLifetime);
             } else {
                 // Fall back to default token generation
@@ -486,7 +486,7 @@ class TokenManager
         $oidcUser = [
             'id' => $user['uuid'],
             'email' => $user['email'] ?? null,
-            'email_verified' => !empty($user['email_verified_at']),
+            'email_verified' => (bool)($user['email_verified_at'] ?? false),
             'username' => $user['username'] ?? null,
             'locale' => $user['locale'] ?? 'en-US',
             'updated_at' => isset($user['updated_at']) ? strtotime($user['updated_at']) : time()
@@ -497,13 +497,13 @@ class TokenManager
             $firstName = $user['profile']['first_name'] ?? '';
             $lastName = $user['profile']['last_name'] ?? '';
 
-            if ($firstName || $lastName) {
+            if ($firstName !== '' || $lastName !== '') {
                 $oidcUser['name'] = trim($firstName . ' ' . $lastName);
-                $oidcUser['given_name'] = $firstName ?: null;
-                $oidcUser['family_name'] = $lastName ?: null;
+                $oidcUser['given_name'] = ($firstName !== '' ? $firstName : null);
+                $oidcUser['family_name'] = ($lastName !== '' ? $lastName : null);
             }
 
-            if (!empty($user['profile']['photo_url'])) {
+            if (isset($user['profile']['photo_url']) && $user['profile']['photo_url'] !== '') {
                 $oidcUser['picture'] = $user['profile']['photo_url'];
             }
         }
@@ -537,7 +537,7 @@ class TokenManager
             ->where(['access_token' => $token])
             ->get();
 
-        return !empty($result) && $result[0]['status'] === "revoked";
+        return $result !== [] && $result[0]['status'] === "revoked";
     }
 
     /**
@@ -586,7 +586,7 @@ class TokenManager
         $authorization_header = $requestContext->getAuthorizationHeader();
 
         // Fallback to getallheaders() (case-insensitive)
-        if (!$authorization_header && function_exists('getallheaders')) {
+        if (($authorization_header === null || $authorization_header === '') && function_exists('getallheaders')) {
             foreach (getallheaders() as $name => $value) {
                 if (strcasecmp($name, 'Authorization') === 0) {
                     $authorization_header = $value;
@@ -596,7 +596,7 @@ class TokenManager
         }
 
         // Fallback to apache_request_headers() (case-insensitive)
-        if (!$authorization_header && function_exists('apache_request_headers')) {
+        if (($authorization_header === null || $authorization_header === '') && function_exists('apache_request_headers')) {
             foreach (apache_request_headers() as $name => $value) {
                 if (strcasecmp($name, 'Authorization') === 0) {
                     $authorization_header = $value;
@@ -606,7 +606,7 @@ class TokenManager
         }
 
         // Extract Bearer token using preg_match (handles extra spaces)
-        if ($authorization_header && preg_match('/Bearer\s+(.+)/i', $authorization_header, $matches)) {
+        if ($authorization_header !== null && $authorization_header !== '' && preg_match('/Bearer\s+(.+)/i', $authorization_header, $matches)) {
             return trim($matches[1]);
         }
 
@@ -627,13 +627,13 @@ class TokenManager
     public static function isTokenCompatibleWithProvider(string $token, string $providerName): bool
     {
         $authManager = self::getAuthManager();
-        if (!$authManager) {
+        if ($authManager === null) {
             // If no authentication manager is active, only jwt tokens are supported
             return $providerName === 'jwt';
         }
 
         $provider = $authManager->getProvider($providerName);
-        if (!$provider) {
+        if ($provider === null) {
             return false;
         }
 

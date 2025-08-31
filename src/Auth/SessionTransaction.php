@@ -24,8 +24,11 @@ use Glueful\Helpers\CacheHelper;
  */
 class SessionTransaction
 {
+    /** @var list<array<string, mixed>> */
     private array $operations = [];
+    /** @var list<array<string, mixed>> */
     private array $rollbackOperations = [];
+    /** @var list<string> */
     private array $errors = [];
     private bool $active = false;
     private bool $committed = false;
@@ -129,7 +132,7 @@ class SessionTransaction
     /**
      * Invalidate sessions matching criteria
      *
-     * @param array $criteria Session selection criteria
+     * @param array<string, mixed> $criteria Session selection criteria
      * @return int Number of sessions invalidated
      */
     public function invalidateSessionsWhere(array $criteria): int

@@ -42,6 +42,25 @@ use Glueful\Exceptions\BusinessLogicException;
 class Connection implements DatabaseInterface
 {
     /**
+     * @phpstan-type MySqlConfig array{
+     *   host?: string, db?: string, port?: int, charset?: string,
+     *   user?: string|null, pass?: string|null, strict?: bool
+     * }
+     * @phpstan-type PgSqlConfig array{
+     *   host?: string, db?: string, port?: int, sslmode?: string,
+     *   schema?: string, user?: string|null, pass?: string|null
+     * }
+     * @phpstan-type SqliteConfig array{primary: string}
+     * @phpstan-type PoolingConfig array{enabled?: bool}
+     * @phpstan-type DatabaseConfig array{
+     *   engine?: string,
+     *   pooling?: PoolingConfig,
+     *   mysql?: MySqlConfig,
+     *   pgsql?: PgSqlConfig,
+     *   sqlite?: SqliteConfig
+     * }
+     */
+    /**
      * @var array<string, PDO> Connection pool indexed by engine type
      */
     protected static array $instances = [];
@@ -72,7 +91,8 @@ class Connection implements DatabaseInterface
     protected string $engine;
 
     /**
-     * @var array Database configuration
+     * @var array<string, mixed> Database configuration
+     * @phpstan-var DatabaseConfig
      */
     protected array $config;
 
@@ -141,7 +161,8 @@ class Connection implements DatabaseInterface
     /**
      * Load database configuration
      *
-     * @return array Complete database configuration
+     * @return array<string, mixed> Complete database configuration
+     * @phpstan-return DatabaseConfig
      */
     private function loadConfig(): array
     {
@@ -206,6 +227,10 @@ class Connection implements DatabaseInterface
      * @param  array  $config Engine-specific configuration
      * @return string Formatted DSN string
      * @throws \Glueful\Exceptions\BusinessLogicException For unsupported engines
+     */
+    /**
+     * @param array<string, mixed> $config
+     * @phpstan-param MySqlConfig|PgSqlConfig|SqliteConfig $config
      */
     private function buildDSN(string $engine, array $config): string
     {

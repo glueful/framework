@@ -67,7 +67,7 @@ class SessionAnalytics
         $allSessions = $this->getAllActiveSessions();
 
         // Apply filters if provided
-        if (!empty($filters)) {
+        if ($filters !== []) {
             $allSessions = $this->applyFilters($allSessions, $filters);
         }
 

@@ -28,7 +28,7 @@ interface AuthenticationProviderInterface
      * returns user information if authentication is successful.
      *
      * @param Request $request The HTTP request to authenticate
-     * @return array|null User data if authenticated, null otherwise
+     * @return array<string, mixed>|null User data if authenticated, null otherwise
      */
     public function authenticate(Request $request): ?array;
 
@@ -37,7 +37,7 @@ interface AuthenticationProviderInterface
      *
      * Determines if the authenticated user has admin permissions.
      *
-     * @param array $userData User data from successful authentication
+     * @param array<string, mixed> $userData User data from successful authentication
      * @return bool True if user has admin privileges, false otherwise
      */
     public function isAdmin(array $userData): bool;
@@ -74,10 +74,10 @@ interface AuthenticationProviderInterface
      *
      * Creates access and refresh tokens for a user.
      *
-     * @param array $userData User data to encode in tokens
+     * @param array<string, mixed> $userData User data to encode in tokens
      * @param int|null $accessTokenLifetime Access token lifetime in seconds
      * @param int|null $refreshTokenLifetime Refresh token lifetime in seconds
-     * @return array Token pair with access_token and refresh_token
+     * @return array{access_token: string, refresh_token: string, expires_in?: int}|array<string, mixed>
      */
     public function generateTokens(
         array $userData,
@@ -91,8 +91,8 @@ interface AuthenticationProviderInterface
      * Generates new token pair using refresh token.
      *
      * @param string $refreshToken Current refresh token
-     * @param array $sessionData Session data associated with the refresh token
-     * @return array|null New token pair or null if invalid
+     * @param array<string, mixed> $sessionData Session data associated with the refresh token
+     * @return array{access_token: string, refresh_token: string, expires_in?: int}|null
      */
     public function refreshTokens(string $refreshToken, array $sessionData): ?array;
 }

@@ -33,7 +33,7 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
         try {
             // Extract token from Authorization header
             $token = $this->extractTokenFromRequest($request);
-            if (!$token) {
+            if ($token === '') {
                 $this->lastError = 'No authentication token provided';
                 return null;
             }
@@ -41,14 +41,14 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
             // Validate token and get session data using TokenStorageService
             $tokenStorage = new TokenStorageService();
             $sessionData = $tokenStorage->getSessionByAccessToken($token);
-            if (!$sessionData) {
+            if ($sessionData === null) {
                 $this->lastError = 'Invalid or expired authentication token';
                 return null;
             }
 
             // Decode JWT token to get the full user data
             $payload = JWTService::decode($token);
-            if (!$payload) {
+            if ($payload === null) {
                 $this->lastError = 'Invalid JWT token payload';
                 return null;
             }
@@ -79,13 +79,13 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
 
         // Fallback to is_admin flag if no UUID available
         if (!isset($user['uuid'])) {
-            return !empty($user['is_admin']);
+            return (bool)($user['is_admin'] ?? false);
         }
 
         // Check if permission system is available
         if (!PermissionHelper::isAvailable()) {
             // Fall back to is_admin flag
-            return !empty($user['is_admin']);
+            return (bool)($user['is_admin'] ?? false);
         }
 
         // Check if user has admin access using PermissionHelper
@@ -95,7 +95,7 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
         );
 
         // If permission check fails, fall back to is_admin flag as safety net
-        if (!$hasAdminAccess && !empty($user['is_admin'])) {
+        if ($hasAdminAccess === false && (bool)($user['is_admin'] ?? false)) {
             error_log("Admin permission check failed for user {$user['uuid']}, falling back to is_admin flag");
             return true;
         }
@@ -121,7 +121,7 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
     {
         $authHeader = $request->headers->get('Authorization');
 
-        if (!$authHeader) {
+        if ($authHeader === null || $authHeader === '') {
             return null;
         }
 
@@ -162,7 +162,7 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
 
             // Try to decode the header (first part)
             $headerJson = base64_decode(strtr($parts[0], '-_', '+/'));
-            if (!$headerJson) {
+            if ($headerJson === false || $headerJson === '') {
                 return false;
             }
 

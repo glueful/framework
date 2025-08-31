@@ -13,8 +13,8 @@ interface TokenStorageInterface
     /**
      * Store a new session with tokens in both database and cache
      *
-     * @param array $sessionData Session information including user data
-     * @param array $tokens Token pair (access_token, refresh_token, expires_in, token_type)
+     * @param array<string, mixed> $sessionData Session information including user data
+     * @param array{access_token: string, refresh_token: string, expires_in?: int, token_type?: string}|array<string, mixed> $tokens Token pair
      * @return bool True on success, false on failure
      */
     public function storeSession(array $sessionData, array $tokens): bool;
@@ -23,7 +23,7 @@ interface TokenStorageInterface
      * Update existing session with new tokens
      *
      * @param string $sessionIdentifier Session ID or refresh token to identify session
-     * @param array $newTokens New token pair
+     * @param array{access_token: string, refresh_token: string, expires_in?: int}|array<string, mixed> $newTokens New token pair
      * @return bool True on success, false on failure
      */
     public function updateSessionTokens(string $sessionIdentifier, array $newTokens): bool;
@@ -32,7 +32,7 @@ interface TokenStorageInterface
      * Retrieve session data by access token
      *
      * @param string $accessToken Access token to look up
-     * @return array|null Session data or null if not found
+     * @return array<string, mixed>|null Session data or null if not found
      */
     public function getSessionByAccessToken(string $accessToken): ?array;
 
@@ -40,7 +40,7 @@ interface TokenStorageInterface
      * Retrieve session data by refresh token
      *
      * @param string $refreshToken Refresh token to look up
-     * @return array|null Session data or null if not found
+     * @return array<string, mixed>|null Session data or null if not found
      */
     public function getSessionByRefreshToken(string $refreshToken): ?array;
 
@@ -78,7 +78,7 @@ interface TokenStorageInterface
     /**
      * Get storage layer health status
      *
-     * @return array Health status of database and cache layers
+     * @return array<string, mixed> Health status of database and cache layers
      */
     public function getStorageHealth(): array;
 }

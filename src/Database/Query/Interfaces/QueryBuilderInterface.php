@@ -27,6 +27,8 @@ interface QueryBuilderInterface
 
     /**
      * Set columns to select
+     *
+     * @param array<string|\Glueful\Database\RawExpression> $columns
      */
     public function select(array $columns = ['*']);
 
@@ -132,6 +134,8 @@ interface QueryBuilderInterface
 
     /**
      * Execute query and return all results
+     *
+     * @return list<array<string,mixed>>
      */
     public function get(): array;
 
@@ -147,6 +151,18 @@ interface QueryBuilderInterface
 
     /**
      * Execute paginated query
+     *
+     * @return array{
+     *   data: list<array<string,mixed>>,
+     *   current_page: int,
+     *   per_page: int,
+     *   total: int,
+     *   last_page: int,
+     *   has_more: bool,
+     *   from: int,
+     *   to: int,
+     *   execution_time_ms: int
+     * }
      */
     public function paginate(int $page = 1, int $perPage = 10): array;
 

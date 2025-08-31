@@ -15,11 +15,36 @@ interface PaginationBuilderInterface
 {
     /**
      * Execute paginated query
+     *
+     * @return array{
+     *   data: list<array<string,mixed>>,
+     *   current_page: int,
+     *   per_page: int,
+     *   total: int,
+     *   last_page: int,
+     *   has_more: bool,
+     *   from: int,
+     *   to: int,
+     *   execution_time_ms: int
+     * }
      */
     public function paginate(int $page = 1, int $perPage = 10): array;
 
     /**
      * Execute paginated query with SQL and bindings
+     *
+     * @param array<string, scalar|array|null> $bindings
+     * @return array{
+     *   data: list<array<string,mixed>>,
+     *   current_page: int,
+     *   per_page: int,
+     *   total: int,
+     *   last_page: int,
+     *   has_more: bool,
+     *   from: int,
+     *   to: int,
+     *   execution_time_ms: int
+     * }
      */
     public function paginateQuery(string $sql, array $bindings, int $page = 1, int $perPage = 10): array;
 
@@ -40,6 +65,16 @@ interface PaginationBuilderInterface
 
     /**
      * Get pagination metadata
+     *
+     * @return array{
+     *   current_page: int,
+     *   per_page: int,
+     *   total: int,
+     *   last_page: int,
+     *   has_more: bool,
+     *   from: int,
+     *   to: int
+     * }
      */
     public function getPaginationMeta(int $total, int $page, int $perPage): array;
 }

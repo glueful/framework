@@ -102,6 +102,7 @@ class ContainerFactory
 
     private static function loadServiceProviders(ContainerBuilder $builder): void
     {
+        /** @var array<ServiceProviderInterface> $providers */
         $providers = self::getServiceProviders();
 
         foreach ($providers as $provider) {
@@ -114,8 +115,12 @@ class ContainerFactory
         }
     }
 
+    /**
+     * @return array<ServiceProviderInterface>
+     */
     private static function getServiceProviders(): array
     {
+        /** @var array<ServiceProviderInterface> $providers */
         $providers = [];
 
         // Get service provider instances from their registration files

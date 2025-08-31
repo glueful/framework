@@ -24,6 +24,8 @@ interface ServiceProviderInterface
 
     /**
      * Get compiler passes for advanced service processing
+     *
+     * @return array<CompilerPassInterface>
      */
     public function getCompilerPasses(): array;
 

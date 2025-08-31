@@ -28,6 +28,18 @@ class PaginationBuilder implements PaginationBuilderInterface
 
     /**
      * Execute paginated query
+     *
+     * @return array{
+     *   data: list<array<string,mixed>>,
+     *   current_page: int,
+     *   per_page: int,
+     *   total: int,
+     *   last_page: int,
+     *   has_more: bool,
+     *   from: int,
+     *   to: int,
+     *   execution_time_ms: int
+     * }
      */
     public function paginate(int $page = 1, int $perPage = 10): array
     {
@@ -36,6 +48,19 @@ class PaginationBuilder implements PaginationBuilderInterface
 
     /**
      * Execute paginated query with SQL and bindings
+     *
+     * @param array<string, scalar|array|null> $bindings
+     * @return array{
+     *   data: list<array<string,mixed>>,
+     *   current_page: int,
+     *   per_page: int,
+     *   total: int,
+     *   last_page: int,
+     *   has_more: bool,
+     *   from: int,
+     *   to: int,
+     *   execution_time_ms: int
+     * }
      */
     public function paginateQuery(string $sql, array $bindings, int $page = 1, int $perPage = 10): array
     {
@@ -80,11 +105,11 @@ class PaginationBuilder implements PaginationBuilderInterface
 
         return array_merge(
             [
-            'data' => $data,
+                'data' => $data,
             ],
             $meta,
             [
-            'execution_time_ms' => $executionTime
+                'execution_time_ms' => $executionTime
             ]
         );
     }
@@ -130,6 +155,16 @@ class PaginationBuilder implements PaginationBuilderInterface
 
     /**
      * Get pagination metadata
+     *
+     * @return array{
+     *   current_page: int,
+     *   per_page: int,
+     *   total: int,
+     *   last_page: int,
+     *   has_more: bool,
+     *   from: int,
+     *   to: int
+     * }
      */
     public function getPaginationMeta(int $total, int $page, int $perPage): array
     {

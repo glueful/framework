@@ -26,14 +26,32 @@ use Glueful\Security\SecureSerializer;
  */
 class RequestUserContext
 {
+    /**
+     * @phpstan-type AuthSessionUser array{
+     *   uuid?: string,
+     *   username?: string,
+     *   roles?: list<string>,
+     *   permissions?: array<string, list<string>>|list<string>,
+     *   permission_hash?: string|null
+     * }
+     * @phpstan-type AuthSessionPayload array{
+     *   id?: string,
+     *   token?: string,
+     *   user: AuthSessionUser,
+     *   created_at?: int,
+     *   last_activity?: int,
+     *   provider?: string,
+     *   permissions_loaded_at?: int
+     * }
+     */
     /** @var array<string, self> Request-scoped instances */
     private static array $instances = [];
 
     /** @var string|null Cached authentication token */
     private ?string $token = null;
 
-    /** @var array|null Cached session data */
-    private ?array $sessionData = null;
+    /** @var array<string, mixed>|null Cached session data */
+    private ?array $sessionData = null; // @phpstan-var AuthSessionPayload|null
 
     /** @var User|null Cached user object */
     private ?User $user = null;
@@ -176,7 +194,8 @@ class RequestUserContext
     /**
      * Get session data
      *
-     * @return array|null Session data or null
+     * @return array<string, mixed>|null Session data or null
+     * @phpstan-return AuthSessionPayload|null
      */
     public function getSessionData(): ?array
     {

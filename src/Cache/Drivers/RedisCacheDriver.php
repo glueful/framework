@@ -15,6 +15,9 @@ use Glueful\Cache\CacheStore;
  *
  * Implements cache operations using Redis backend.
  * Provides sorted set support and automatic serialization.
+ *
+ * @template TValue
+ * @implements CacheStore<TValue>
  */
 class RedisCacheDriver implements CacheStore
 {
@@ -81,7 +84,7 @@ class RedisCacheDriver implements CacheStore
      * @param string $key Set key
      * @param int $start Start index
      * @param int $stop End index
-     * @return array Range of members
+     * @return list<string> Range of members
      */
     public function zrange(string $key, int $start, int $stop): array
     {
@@ -119,7 +122,7 @@ class RedisCacheDriver implements CacheStore
      *
      * @param string $key Cache key
      * @param mixed $default Default value if key not found
-     * @return mixed Cached value or default if not found
+     * @return TValue|null Cached value or default if not found
      * @throws InvalidArgumentException If key is invalid
      */
     public function get(string $key, mixed $default = null): mixed
@@ -135,7 +138,7 @@ class RedisCacheDriver implements CacheStore
      * Serializes and stores value with expiration.
      *
      * @param string $key Cache key
-     * @param mixed $value Value to store
+     * @param TValue $value Value to store
      * @param null|int|\DateInterval $ttl Time to live
      * @return bool True if stored successfully
      * @throws InvalidArgumentException If key is invalid
@@ -158,7 +161,7 @@ class RedisCacheDriver implements CacheStore
      * Uses Redis SET command with NX and EX options for atomic operation.
      *
      * @param string $key Cache key
-     * @param mixed $value Value to store
+     * @param TValue $value Value to store
      * @param int $ttl Time to live in seconds
      * @return bool True if key was set (didn't exist), false if key already exists
      */
@@ -172,8 +175,8 @@ class RedisCacheDriver implements CacheStore
     /**
      * Get multiple cached values
      *
-     * @param array $keys Array of cache keys
-     * @return array Indexed array of values (same order as keys, null for missing keys)
+     * @param list<string> $keys Array of cache keys
+     * @return array<string, TValue|null> Values indexed by key (driver returns list in same order)
      */
     public function mget(array $keys): array
     {
@@ -185,10 +188,11 @@ class RedisCacheDriver implements CacheStore
         $result = [];
 
         for ($i = 0; $i < count($keys); $i++) {
+            $key = $keys[$i];
             if ($values[$i] !== false) {
-                $result[] = $this->serializer->unserialize($values[$i]);
+                $result[$key] = $this->serializer->unserialize($values[$i]);
             } else {
-                $result[] = null;
+                $result[$key] = null;
             }
         }
 
@@ -330,7 +334,7 @@ class RedisCacheDriver implements CacheStore
      * Uses Redis SCAN command to efficiently retrieve keys.
      *
      * @param string $pattern Optional pattern to filter keys
-     * @return array List of cache keys
+     * @return list<string> List of cache keys
      */
     public function getKeys(string $pattern = '*'): array
     {
@@ -357,7 +361,7 @@ class RedisCacheDriver implements CacheStore
      *
      * Returns Redis server information and statistics.
      *
-     * @return array Cache statistics
+     * @return array<string, mixed> Cache statistics
      */
     public function getStats(): array
     {
@@ -543,7 +547,7 @@ class RedisCacheDriver implements CacheStore
      * Add tags to a cache key for grouped invalidation
      *
      * @param string $key Cache key
-     * @param array $tags Array of tags to associate with the key
+     * @param list<string> $tags Array of tags to associate with the key
      * @return bool True if tags added successfully
      */
     public function addTags(string $key, array $tags): bool
@@ -556,7 +560,7 @@ class RedisCacheDriver implements CacheStore
     /**
      * Invalidate all cache entries with specified tags
      *
-     * @param array $tags Array of tags to invalidate
+     * @param list<string> $tags Array of tags to invalidate
      * @return bool True if invalidation successful
      */
     public function invalidateTags(array $tags): bool

@@ -13,6 +13,14 @@ use Glueful\Helpers\CacheHelper;
  * through a pluggable adapter system. CDN adapters can be implemented
  * as extensions.
  */
+/**
+ * @phpstan-type EdgeCacheConfig array{
+ *   enabled?: bool,
+ *   provider?: string,
+ *   default_ttl?: int,
+ *   headers?: array<string, string>
+ * }
+ */
 class EdgeCacheService
 {
     /**
@@ -32,7 +40,8 @@ class EdgeCacheService
     /**
      * The edge cache configuration
      *
-     * @var array
+     * @var array<string, mixed>
+     * @phpstan-var EdgeCacheConfig
      */
     private $config;
 

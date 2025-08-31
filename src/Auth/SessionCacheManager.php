@@ -19,6 +19,22 @@ use Glueful\Auth\TokenStorageService;
  * This class focuses purely on session data management,
  * delegating all token operations to TokenManager.
  */
+/**
+ * @phpstan-type AuthSessionUser array{
+ *   uuid?: string,
+ *   permissions?: array<string, list<string>>|list<string>,
+ *   roles?: list<string>
+ * }
+ * @phpstan-type AuthSessionPayload array{
+ *   id: string,
+ *   token: string,
+ *   user: AuthSessionUser,
+ *   created_at: int,
+ *   last_activity: int,
+ *   provider: string,
+ *   permissions_loaded_at?: int
+ * }
+ */
 class SessionCacheManager
 {
     private const SESSION_PREFIX = 'session:';
@@ -277,7 +293,8 @@ class SessionCacheManager
      *
      * @param string $token Authentication token
      * @param string|null $provider Optional provider hint
-     * @return array|null Session data or null if invalid
+     * @return array<string, mixed>|null Session data or null if invalid
+     * @phpstan-return AuthSessionPayload|null
      */
     public function getSession(string $token, ?string $provider = null): ?array
     {

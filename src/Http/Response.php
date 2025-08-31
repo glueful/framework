@@ -14,6 +14,37 @@ use Glueful\Serialization\Context\SerializationContext;
  *
  * Provides clean, standardized HTTP response formatting for the API.
  * Built on Symfony's JsonResponse for full middleware compatibility.
+ *
+ * @phpstan-type SuccessResponse array{
+ *   success: true,
+ *   message: string,
+ *   data: mixed
+ * }
+ *
+ * @phpstan-type PaginatedResponse array{
+ *   success: true,
+ *   message: string,
+ *   data: list<mixed>,
+ *   current_page: int,
+ *   per_page: int,
+ *   total: int,
+ *   total_pages: int,
+ *   has_next_page: bool,
+ *   has_previous_page: bool
+ * }
+ *
+ * @phpstan-type ErrorDetail array{
+ *   code: int,
+ *   timestamp: string,
+ *   request_id: string,
+ *   details?: array<string, mixed>
+ * }
+ *
+ * @phpstan-type ErrorResponse array{
+ *   success: false,
+ *   message: string,
+ *   error: ErrorDetail
+ * }
  */
 class Response extends JsonResponse
 {
@@ -55,6 +86,8 @@ class Response extends JsonResponse
 
     /**
      * Create successful response with optional serialization
+     *
+     * @return self  Returns JSON matching SuccessResponse shape
      */
     public static function success(
         mixed $data = null,
@@ -76,6 +109,9 @@ class Response extends JsonResponse
 
     /**
      * Create paginated response with serialization support
+     *
+     * @param list<mixed> $items
+     * @return self  Returns JSON matching PaginatedResponse shape
      */
     public static function paginated(
         array $items,
@@ -112,6 +148,8 @@ class Response extends JsonResponse
 
     /**
      * Create created response (HTTP 201)
+     *
+     * @return self  Returns JSON matching SuccessResponse shape
      */
     public static function created(
         mixed $data = null,
@@ -141,6 +179,8 @@ class Response extends JsonResponse
 
     /**
      * Create error response
+     *
+     * @return self  Returns JSON matching ErrorResponse shape
      */
     public static function error(
         string $message,
@@ -166,6 +206,9 @@ class Response extends JsonResponse
 
     /**
      * Create validation error response (HTTP 422)
+     *
+     * @param array<string, mixed> $errors
+     * @return self  Returns JSON matching ErrorResponse shape
      */
     public static function validation(
         array $errors,
@@ -217,6 +260,10 @@ class Response extends JsonResponse
 
     /**
      * Create successful response with custom metadata (flattened structure)
+     *
+     * @param list<mixed> $data
+     * @param array<string, scalar|array|null> $meta
+     * @return self  Returns JSON with SuccessResponse plus flattened meta fields
      */
     public static function successWithMeta(
         array $data,

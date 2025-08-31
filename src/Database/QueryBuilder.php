@@ -94,6 +94,8 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @param array<string|RawExpression> $columns
      */
     public function select(array $columns = ['*']): static
     {
@@ -401,6 +403,8 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @return list<array<string,mixed>>
      */
     public function get(): array
     {
@@ -501,6 +505,18 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @return array{
+     *   data: list<array<string,mixed>>,
+     *   current_page: int,
+     *   per_page: int,
+     *   total: int,
+     *   last_page: int,
+     *   has_more: bool,
+     *   from: int,
+     *   to: int,
+     *   execution_time_ms: int
+     * }
      */
     public function paginate(int $page = 1, int $perPage = 10): array
     {

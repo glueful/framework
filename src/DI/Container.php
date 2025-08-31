@@ -17,6 +17,11 @@ class Container implements ContainerInterface
     ) {
     }
 
+    /**
+     * @template T of object
+     * @param class-string<T> $id
+     * @return T
+     */
     public function get(string $id): mixed
     {
         try {
@@ -40,6 +45,18 @@ class Container implements ContainerInterface
             }
             throw $e;
         }
+    }
+
+    /**
+     * Optional variant of get() with generic return.
+     *
+     * @template T of object
+     * @param class-string<T> $id
+     * @return T|null
+     */
+    public function getOptional(string $id): mixed
+    {
+        return $this->has($id) ? $this->get($id) : null;
     }
 
     public function has(string $id): bool
@@ -67,6 +84,9 @@ class Container implements ContainerInterface
         return $this->container->hasParameter($name);
     }
 
+    /**
+     * @return array<string>
+     */
     public function getServiceIds(): array
     {
         // Handle both ContainerBuilder and compiled containers

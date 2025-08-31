@@ -18,6 +18,7 @@ use Glueful\Services\FileFinder;
 class ApiDefinitionGenerator
 {
     private bool $runFromConsole;
+    /** @var array<string, bool> Map of generated filename => true */
     private array $generatedFiles = [];
     private string $dbResource;
     private SchemaBuilderInterface $schema;
@@ -68,7 +69,7 @@ class ApiDefinitionGenerator
     {
         if ($this->runFromConsole) {
             // Start output buffering if not already started
-            if (!ob_get_level()) {
+            if (ob_get_level() === 0) {
                 ob_start();
             }
 
@@ -110,7 +111,7 @@ class ApiDefinitionGenerator
     ): void {
         $this->generateDatabaseDefinitions($specificDatabase);
 
-        if ($tableName) {
+        if ($tableName !== null && $tableName !== '') {
             $this->generateTableDefinition($specificDatabase, $tableName);
         }
 
@@ -244,7 +245,7 @@ class ApiDefinitionGenerator
             // Use the CommentsDocGenerator to auto-generate docs from route files
             $extDocGen = new CommentsDocGenerator();
 
-            if ($forceGenerate) {
+            if ($forceGenerate === true) {
                 $this->log("Forcing generation of extension documentation...");
 
                 // If forcing generation, handle each extension separately
@@ -257,7 +258,7 @@ class ApiDefinitionGenerator
 
                     if (file_exists($routeFile)) {
                         $docFile = $extDocGen->generateForExtension($extName, $routeFile, true);
-                        if ($docFile) {
+                        if (is_string($docFile) && $docFile !== '') {
                             $generatedFiles[] = $docFile;
                         }
                     }
@@ -269,7 +270,7 @@ class ApiDefinitionGenerator
                     $routeFile = $routeFileObj->getPathname();
                     $routeName = $routeFileObj->getBasename('.php');
                     $docFile = $extDocGen->generateForRouteFile($routeName, $routeFile, true);
-                    if ($docFile) {
+                    if (is_string($docFile) && $docFile !== '') {
                         $generatedFiles[] = $docFile;
                     }
                 }
@@ -277,7 +278,7 @@ class ApiDefinitionGenerator
                 // Normal generation for extensions
                 $generatedExtFiles = $extDocGen->generateAll();
 
-                if (!empty($generatedExtFiles)) {
+                if ($generatedExtFiles !== []) {
                     $this->log("Dynamically generated documentation for " . count($generatedExtFiles) . " extensions");
                     foreach ($generatedExtFiles as $file) {
                         $this->log("Generated: " . basename($file));
@@ -307,7 +308,7 @@ class ApiDefinitionGenerator
             mkdir(dirname($outputPath), 0755, true);
         }
 
-        if (file_put_contents($outputPath, $swaggerJson)) {
+        if (file_put_contents($outputPath, $swaggerJson) !== false) {
             $this->log("API documentation generated successfully at: $outputPath");
         } else {
             $this->log("Failed to write API documentation to: $outputPath");
@@ -363,6 +364,9 @@ class ApiDefinitionGenerator
         }
     }
 
+    /**
+     * @param array<array<string, mixed>> $columns
+     */
     private function generateTableDefinitionFromColumns(string $dbResource, string $tableName, array $columns): void
     {
         $filename = \config('app.paths.database_json_definitions') . "$dbResource.$tableName.json";

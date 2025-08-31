@@ -10,13 +10,16 @@ namespace Glueful\Cache\Drivers;
  * Defines required methods for cache driver implementations.
  * Supports basic caching, sorted sets, and key operations.
  */
+/**
+ * @template TValue
+ */
 interface CacheDriverInterface
 {
     /**
      * Get cached value
      *
      * @param string $key Cache key
-     * @return mixed Cached value or null if not found
+     * @return TValue|null Cached value or null if not found
      */
     public function get(string $key): mixed;
 
@@ -24,7 +27,7 @@ interface CacheDriverInterface
      * Store value in cache
      *
      * @param string $key Cache key
-     * @param mixed $value Value to store
+     * @param TValue $value Value to store
      * @param int $ttl Time to live in seconds
      * @return bool True if stored successfully
      */
@@ -33,15 +36,15 @@ interface CacheDriverInterface
     /**
      * Get multiple cached values
      *
-     * @param array $keys Array of cache keys
-     * @return array Indexed array of values (same order as keys, null for missing keys)
+     * @param list<string> $keys
+     * @return array<string, TValue|null> Indexed by key
      */
     public function mget(array $keys): array;
 
     /**
      * Store multiple values in cache
      *
-     * @param array $values Associative array of key => value pairs
+     * @param array<string, TValue> $values Associative array of key => value pairs
      * @param int $ttl Time to live in seconds
      * @return bool True if all values stored successfully
      */
@@ -111,7 +114,7 @@ interface CacheDriverInterface
      * @param string $key Set key
      * @param int $start Start index
      * @param int $stop End index
-     * @return array Range of members
+     * @return list<string> Range of members
      */
     public function zrange(string $key, int $start, int $stop): array;
 
@@ -144,21 +147,21 @@ interface CacheDriverInterface
      * Get all cache keys
      *
      * @param string $pattern Optional pattern to filter keys
-     * @return array List of cache keys
+     * @return list<string> List of cache keys
      */
     public function getKeys(string $pattern = '*'): array;
 
     /**
      * Get cache statistics and information
      *
-     * @return array Cache statistics
+     * @return array<string, mixed> Cache statistics
      */
     public function getStats(): array;
 
     /**
      * Get all cache keys
      *
-     * @return array List of all cache keys
+     * @return list<string> List of all cache keys
      */
     public function getAllKeys(): array;
 }

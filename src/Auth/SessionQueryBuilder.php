@@ -23,7 +23,9 @@ namespace Glueful\Auth;
 class SessionQueryBuilder
 {
     private string $managerClass;
+    /** @var list<array<string, mixed>> */
     private array $conditions = [];
+    /** @var list<array{field: string, direction: string}> */
     private array $sorts = [];
     private ?int $limit = null;
     private ?int $offset = null;
@@ -48,7 +50,7 @@ class SessionQueryBuilder
     /**
      * Filter by multiple providers
      *
-     * @param array $providers Array of provider names
+     * @param list<string> $providers Array of provider names
      * @return self
      */
     public function whereProviderIn(array $providers): self
@@ -135,7 +137,7 @@ class SessionQueryBuilder
     /**
      * Filter by multiple users
      *
-     * @param array $userUuids Array of user UUIDs
+     * @param list<string> $userUuids Array of user UUIDs
      * @return self
      */
     public function whereUserIn(array $userUuids): self
@@ -183,7 +185,7 @@ class SessionQueryBuilder
     /**
      * Filter sessions where user has any of the specified roles
      *
-     * @param array $roles Array of role names
+     * @param list<string> $roles Array of role names
      * @return self
      */
     public function whereUserHasAnyRole(array $roles): self
@@ -195,7 +197,7 @@ class SessionQueryBuilder
     /**
      * Filter sessions where user has all specified roles
      *
-     * @param array $roles Array of role names
+     * @param list<string> $roles Array of role names
      * @return self
      */
     public function whereUserHasAllRoles(array $roles): self
@@ -389,7 +391,7 @@ class SessionQueryBuilder
      */
     private function applyFilters(array $sessions): array
     {
-        if (empty($this->conditions)) {
+        if ($this->conditions === []) {
             return $sessions;
         }
 
@@ -408,7 +410,7 @@ class SessionQueryBuilder
      */
     private function evaluateConditions(array $session, array $conditions, string $logic = 'and'): bool
     {
-        if (empty($conditions)) {
+        if ($conditions === []) {
             return true;
         }
 
@@ -546,9 +548,9 @@ class SessionQueryBuilder
 
         switch ($operator) {
             case 'intersects':
-                return !empty(array_intersect($userRoles, $value));
+                return array_intersect($userRoles, $value) !== [];
             case 'contains_all':
-                return empty(array_diff($value, $userRoles));
+                return array_diff($value, $userRoles) === [];
             default:
                 return false;
         }
@@ -613,7 +615,7 @@ class SessionQueryBuilder
         // IP address might be stored in session metadata or extracted from request
         $ipAddress = $session['ip_address'] ?? $_SERVER['REMOTE_ADDR'] ?? null;
 
-        if (!$ipAddress) {
+        if ($ipAddress === null || $ipAddress === '') {
             return false;
         }
 
@@ -634,7 +636,7 @@ class SessionQueryBuilder
     {
         $userAgent = $session['user_agent'] ?? $_SERVER['HTTP_USER_AGENT'] ?? null;
 
-        if (!$userAgent) {
+        if ($userAgent === null || $userAgent === '') {
             return false;
         }
 
@@ -666,7 +668,7 @@ class SessionQueryBuilder
      */
     private function applySorting(array $sessions): array
     {
-        if (empty($this->sorts)) {
+        if ($this->sorts === []) {
             return $sessions;
         }
 

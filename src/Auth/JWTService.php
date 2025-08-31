@@ -18,7 +18,7 @@ class JWTService
     /** @var string Default hashing algorithm */
     private static string $algorithm = 'HS256';
 
-    /** @var array Storage for invalidated tokens */
+    /** @var array<string, int> Storage for invalidated tokens (token => timestamp) */
     private static array $invalidatedTokens = [];
 
     /**
@@ -43,7 +43,7 @@ class JWTService
      *
      * Creates a signed JWT token with provided payload and expiration.
      *
-     * @param array $payload Token payload data
+     * @param array<string, mixed> $payload Token payload data
      * @param int $expiration Token lifetime in seconds
      * @return string Generated JWT token
      */
@@ -99,7 +99,7 @@ class JWTService
      * Verifies and decodes JWT token into payload data.
      *
      * @param string $token JWT token to decode
-     * @return array|null Decoded payload or null if invalid
+     * @return array<string, mixed>|null Decoded payload or null if invalid
      */
     public static function decode(string $token): ?array
     {
@@ -194,7 +194,7 @@ class JWTService
      * as it does not verify the token's authenticity.
      *
      * @param string $token JWT token
-     * @return array|null Decoded payload or null if malformed
+     * @return array<string, mixed>|null Decoded payload or null if malformed
      */
     public static function getPayloadWithoutValidation(string $token): ?array
     {
@@ -218,7 +218,7 @@ class JWTService
      * Gets payload claims excluding JWT metadata.
      *
      * @param string $token JWT token
-     * @return array|null Claims or null if invalid
+     * @return array<string, mixed>|null Claims or null if invalid
      */
     public static function extractClaims(string $token): ?array
     {

@@ -43,7 +43,7 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
             // Extract API key from request
             $apiKey = $this->extractApiKeyFromRequest($request);
 
-            if (!$apiKey) {
+            if ($apiKey === null || $apiKey === '') {
                 // Silently fail with a less alarming message so other auth methods can be tried
                 $this->lastError = 'API key not found in request';
                 return null;
@@ -52,13 +52,14 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
             // Validate the API key and get associated user
             $userData = $this->userRepository->findByApiKey($apiKey);
 
-            if (!$userData) {
+            if ($userData === null) {
                 $this->lastError = 'Invalid API key';
                 return null;
             }
 
             // Check if the API key is still valid
-            if ($userData['api_key_expires_at'] && strtotime($userData['api_key_expires_at']) < time()) {
+            $expiresAt = $userData['api_key_expires_at'] ?? null;
+            if (is_string($expiresAt) && $expiresAt !== '' && strtotime($expiresAt) < time()) {
                 $this->lastError = 'Expired API key';
                 return null;
             }
@@ -85,13 +86,13 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
 
         // Fallback to is_admin flag if no UUID available
         if (!isset($user['uuid'])) {
-            return !empty($user['is_admin']);
+            return (bool)($user['is_admin'] ?? false);
         }
 
         // Check if permission system is available
         if (!PermissionHelper::isAvailable()) {
             // Fall back to is_admin flag
-            return !empty($user['is_admin']);
+            return (bool)($user['is_admin'] ?? false);
         }
 
         // Check if user has admin access using PermissionHelper
@@ -101,7 +102,7 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
         );
 
         // If permission check fails, fall back to is_admin flag as safety net
-        if (!$hasAdminAccess && !empty($user['is_admin'])) {
+        if ($hasAdminAccess === false && (bool)($user['is_admin'] ?? false)) {
             error_log("Admin permission check failed for user {$user['uuid']}, falling back to is_admin flag");
             return true;
         }
@@ -127,19 +128,19 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
     {
         // Check for API key in the X-API-Key header (preferred)
         $apiKey = $request->headers->get('X-API-Key');
-        if ($apiKey) {
+        if ($apiKey !== null && $apiKey !== '') {
             return $apiKey;
         }
 
         // Check for API key in the query string
         $apiKey = $request->query->get('api_key');
-        if ($apiKey) {
+        if (is_string($apiKey) && $apiKey !== '') {
             return $apiKey;
         }
 
         // Check for API key in the Authorization header with "ApiKey" prefix
         $authHeader = $request->headers->get('Authorization');
-        if ($authHeader && strpos($authHeader, 'ApiKey ') === 0) {
+        if ($authHeader !== null && $authHeader !== '' && strpos($authHeader, 'ApiKey ') === 0) {
             return substr($authHeader, 7);
         }
 
@@ -155,13 +156,14 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
             // Check if the API key exists and is valid in the database
             $userData = $this->userRepository->findByApiKey($token);
 
-            if (!$userData) {
+            if ($userData === null) {
                 $this->lastError = 'Invalid API key';
                 return false;
             }
 
             // Check if the API key is still valid
-            if ($userData['api_key_expires_at'] && strtotime($userData['api_key_expires_at']) < time()) {
+            $expiresAt = $userData['api_key_expires_at'] ?? null;
+            if (is_string($expiresAt) && $expiresAt !== '' && strtotime($expiresAt) < time()) {
                 $this->lastError = 'Expired API key';
                 return false;
             }
@@ -196,7 +198,7 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
             // Instead, we just return the API key as the access token
             $apiKey = $userData['api_key'] ?? '';
 
-            if (empty($apiKey)) {
+            if ($apiKey === '') {
                 $this->lastError = 'No API key available for user';
                 return [
                     'access_token' => '',
@@ -207,7 +209,11 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
 
             // Calculate expiration based on the API key expiration date in userData
             $expiresIn = 0;
-            if (isset($userData['api_key_expires_at']) && !empty($userData['api_key_expires_at'])) {
+            if (
+                isset($userData['api_key_expires_at']) &&
+                is_string($userData['api_key_expires_at']) &&
+                $userData['api_key_expires_at'] !== ''
+            ) {
                 $expiresTimestamp = strtotime($userData['api_key_expires_at']);
                 if ($expiresTimestamp !== false) {
                     $expiresIn = max(0, $expiresTimestamp - time());
@@ -240,17 +246,14 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
 
             $userData = $this->userRepository->findByApiKey($refreshToken);
 
-            if (!$userData) {
+            if ($userData === null) {
                 $this->lastError = 'Invalid API key';
                 return null;
             }
 
             // Check if the API key has expired
-            if (
-                isset($userData['api_key_expires_at']) &&
-                !empty($userData['api_key_expires_at']) &&
-                strtotime($userData['api_key_expires_at']) < time()
-            ) {
+            $expiresAt = $userData['api_key_expires_at'] ?? null;
+            if (is_string($expiresAt) && $expiresAt !== '' && strtotime($expiresAt) < time()) {
                 $this->lastError = 'Expired API key';
                 return null;
             }

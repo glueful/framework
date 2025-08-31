@@ -684,7 +684,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
      *
      * @param mixed $level Log level
      * @param string|\Stringable $message Log message
-     * @param array $context Additional context data
+     * @param array<string, mixed> $context Additional context data
      * @return void
      */
     public function log($level, $message, array $context = []): void
@@ -805,6 +805,9 @@ class LogManager implements LoggerInterface, LogManagerInterface
      * @param Level|mixed $level Log level (from Monolog\Level)
      * @param string|null $channel Optional channel override
      * @return void
+     */
+    /**
+     * @param array<string, mixed> $context
      */
     public function logWithChannel($message, array $context = [], $level = Level::Info, ?string $channel = null): void
     {
@@ -1462,6 +1465,9 @@ class LogManager implements LoggerInterface, LogManagerInterface
      * @param array $context
      * @return void
      */
+    /**
+     * @param array<string, mixed> $context
+     */
     public function emergency($message, array $context = []): void
     {
         $this->log(Level::Emergency, $message, $context);
@@ -1473,6 +1479,9 @@ class LogManager implements LoggerInterface, LogManagerInterface
      * @param string|\Stringable $message
      * @param array $context
      * @return void
+     */
+    /**
+     * @param array<string, mixed> $context
      */
     public function alert($message, array $context = []): void
     {
@@ -1486,6 +1495,9 @@ class LogManager implements LoggerInterface, LogManagerInterface
      * @param array $context
      * @return void
      */
+    /**
+     * @param array<string, mixed> $context
+     */
     public function critical($message, array $context = []): void
     {
         $this->log(Level::Critical, $message, $context);
@@ -1497,6 +1509,9 @@ class LogManager implements LoggerInterface, LogManagerInterface
      * @param string|\Stringable $message
      * @param array $context
      * @return void
+     */
+    /**
+     * @param array<string, mixed> $context
      */
     public function error($message, array $context = []): void
     {
@@ -1510,6 +1525,9 @@ class LogManager implements LoggerInterface, LogManagerInterface
      * @param array $context
      * @return void
      */
+    /**
+     * @param array<string, mixed> $context
+     */
     public function warning($message, array $context = []): void
     {
         $this->log(Level::Warning, $message, $context);
@@ -1521,6 +1539,9 @@ class LogManager implements LoggerInterface, LogManagerInterface
      * @param string|\Stringable $message
      * @param array $context
      * @return void
+     */
+    /**
+     * @param array<string, mixed> $context
      */
     public function notice($message, array $context = []): void
     {
@@ -1534,6 +1555,9 @@ class LogManager implements LoggerInterface, LogManagerInterface
      * @param array $context
      * @return void
      */
+    /**
+     * @param array<string, mixed> $context
+     */
     public function info($message, array $context = []): void
     {
         $this->log(Level::Info, $message, $context);
@@ -1545,6 +1569,9 @@ class LogManager implements LoggerInterface, LogManagerInterface
      * @param string|\Stringable $message
      * @param array $context
      * @return void
+     */
+    /**
+     * @param array<string, mixed> $context
      */
     public function debug($message, array $context = []): void
     {

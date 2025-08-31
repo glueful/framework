@@ -86,16 +86,16 @@ class AuthenticationService
      * Can work with different authentication providers depending on
      * the format of credentials provided.
      *
-     * @param array $credentials User credentials
+     * @param array<string, mixed> $credentials User credentials
      * @param string|null $providerName Optional name of the provider to use
-     * @return array|null Authentication result or null if failed
+     * @return array<string, mixed>|null Authentication result or null if failed
      */
     public function authenticate(array $credentials, ?string $providerName = null): ?array
     {
         // If a specific provider is requested, try to use it
-        if ($providerName) {
+        if ($providerName !== null && $providerName !== '') {
             $provider = $this->authManager->getProvider($providerName);
-            if (!$provider) {
+            if ($provider === null) {
                 // Provider not found
                 return null;
             }
@@ -117,7 +117,7 @@ class AuthenticationService
 
         // Default flow for username/password authentication
         // Validate required fields
-        if (!$this->validateCredentials($credentials)) {
+        if ($this->validateCredentials($credentials) === false) {
             return null;
         }
 
@@ -135,7 +135,7 @@ class AuthenticationService
         }
 
         // If user not found or is an array of error messages
-        if (!$user) {
+        if ($user === null) {
             return null;
         }
 
@@ -143,12 +143,12 @@ class AuthenticationService
         $passwordDTO = new PasswordDTO();
         $passwordDTO->password = $credentials['password'];
 
-        if (!$this->validator->validate($passwordDTO)) {
+        if ($this->validator->validate($passwordDTO) === false) {
             return null;
         }
 
         // Verify password against hash
-        if (!isset($user['password']) || !$this->passwordHasher->verify($credentials['password'], $user['password'])) {
+        if (!isset($user['password']) || $this->passwordHasher->verify($credentials['password'], $user['password']) === false) {
             return null;
         }
 
@@ -172,7 +172,7 @@ class AuthenticationService
             $this->userRepository->update($userData['uuid'], [
                 'ip_address' => $clientIp,
                 'user_agent' => substr($userAgent, 0, 512), // Limit to field size
-                'x_forwarded_for_ip_address' => $xForwardedFor ? substr($xForwardedFor, 0, 40) : null,
+                'x_forwarded_for_ip_address' => ($xForwardedFor !== null && $xForwardedFor !== '') ? substr($xForwardedFor, 0, 40) : null,
                 'last_login_date' => date('Y-m-d H:i:s')
             ]);
         } catch (\Exception $e) {
@@ -200,7 +200,7 @@ class AuthenticationService
      */
     public function terminateSession(string $token): bool
     {
-        if (!$token) {
+        if ($token === '') {
             return false;
         }
         // SessionCacheManager->destroySession() handles token revocation
@@ -213,11 +213,11 @@ class AuthenticationService
      * Checks if token is valid and session exists.
      *
      * @param string $token Authentication token
-     * @return array|null Session data if valid
+     * @return array<string, mixed>|null Session data if valid
      */
     public static function validateAccessToken(string $token): ?array
     {
-        if (!TokenManager::validateAccessToken($token)) {
+        if (TokenManager::validateAccessToken($token) === false) {
             return null;
         }
 
@@ -231,7 +231,7 @@ class AuthenticationService
      *
      * Ensures required fields are present.
      *
-     * @param array $credentials User credentials
+     * @param array<string, mixed> $credentials User credentials
      * @return bool Validity status
      */
     public function validateCredentials(array $credentials): bool
@@ -260,7 +260,7 @@ class AuthenticationService
         // Extract token from Authorization header
         $authHeader = $request->headers->get('Authorization');
 
-        if (!$authHeader) {
+        if ($authHeader === null || $authHeader === '') {
             return null;
         }
 
@@ -277,8 +277,8 @@ class AuthenticationService
      *
      * Prepares user data for storage in session.
      *
-     * @param array $user Raw user data
-     * @return array Formatted user data
+     * @param array<string, mixed> $user Raw user data
+     * @return array<string, mixed> Formatted user data
      */
     private function formatUserData(array $user): array
     {
@@ -298,19 +298,19 @@ class AuthenticationService
      * Works with any authentication provider.
      *
      * @param string $token Current authentication token
-     * @return array|null Response with new token and updated permissions or null if failed
+     * @return array<string, mixed>|null Response with new token and updated permissions or null if failed
      */
     public function refreshPermissions(string $token): ?array
     {
         // Get current session
         $session = $this->sessionCacheManager->getSession($token);
-        if (!$session) {
+        if ($session === null) {
             return null;
         }
 
         // Get user UUID from session
         $userUuid = $session['user']['uuid'] ?? null;
-        if (!$userUuid) {
+        if ($userUuid === null || $userUuid === '') {
             return null;
         }
 
@@ -326,7 +326,7 @@ class AuthenticationService
         // Use appropriate provider to generate a new token
         $authProvider = $this->authManager->getProvider($provider);
 
-        if ($authProvider) {
+        if ($authProvider !== null) {
             // Generate new token using the same provider that created the original token
             $tokenLifetime = (int)config('session.access_token_lifetime');
 
@@ -381,7 +381,7 @@ class AuthenticationService
         $passwordDTO = new PasswordDTO();
         $passwordDTO->password = $password;
 
-        if (!$this->validator->validate($passwordDTO)) {
+        if ($this->validator->validate($passwordDTO) === false) {
             return false;
         }
 
@@ -422,7 +422,7 @@ class AuthenticationService
             : $this->userRepository->findByUuid($identifier);
 
         // Return true if user was found and is properly formatted
-        return !empty($user) && is_array($user);
+        return is_array($user) && $user !== [];
     }
 
     /**
@@ -442,21 +442,24 @@ class AuthenticationService
      * - Sessions with explicitly revoked tokens cannot be refreshed
      *
      * @param string $refreshToken Current refresh token
-     * @return array|null New token pair or null if refresh token is invalid
+     * @return array<string, mixed>|null New token pair or null if refresh token is invalid
+     */
+    /**
+     * @return array<string, mixed>|null
      */
     public function refreshTokens(string $refreshToken): ?array
     {
         // Get new token pair from TokenManager
         $tokens = TokenManager::refreshTokens($refreshToken);
 
-        if (!$tokens) {
+        if ($tokens === null || $tokens === []) {
             return null;
         }
 
         // Get user data from refresh token
         $userData = $this->getUserDataFromRefreshToken($refreshToken);
 
-        if (!$userData) {
+        if ($userData === null) {
             return null;
         }
 
@@ -464,7 +467,7 @@ class AuthenticationService
         // This ensures both database and cache are updated atomically
         $success = $this->tokenStorage->updateSessionTokens($refreshToken, $tokens);
 
-        if (!$success) {
+        if ($success === false) {
             return null;
         }
 
@@ -472,7 +475,7 @@ class AuthenticationService
         $oidcUser = [
             'id' => $userData['uuid'],
             'email' => $userData['email'] ?? null,
-            'email_verified' => !empty($userData['email_verified_at']),
+            'email_verified' => (bool)($userData['email_verified_at'] ?? false),
             'username' => $userData['username'] ?? null,
             'locale' => $userData['locale'] ?? 'en-US',
             'updated_at' => isset($userData['updated_at']) ? strtotime($userData['updated_at']) : time()
@@ -483,13 +486,13 @@ class AuthenticationService
             $firstName = $userData['profile']['first_name'] ?? '';
             $lastName = $userData['profile']['last_name'] ?? '';
 
-            if ($firstName || $lastName) {
+            if ($firstName !== '' || $lastName !== '') {
                 $oidcUser['name'] = trim($firstName . ' ' . $lastName);
-                $oidcUser['given_name'] = $firstName ?: null;
-                $oidcUser['family_name'] = $lastName ?: null;
+                $oidcUser['given_name'] = ($firstName !== '' ? $firstName : null);
+                $oidcUser['family_name'] = ($lastName !== '' ? $lastName : null);
             }
 
-            if (!empty($userData['profile']['photo_url'])) {
+            if (isset($userData['profile']['photo_url']) && $userData['profile']['photo_url'] !== '') {
                 $oidcUser['picture'] = $userData['profile']['photo_url'];
             }
         }
@@ -522,10 +525,13 @@ class AuthenticationService
      * 4. Return sanitized user data
      *
      * @param string $refreshToken The refresh token to look up
-     * @return array|null User data array with profile information, or null if token is invalid/expired
+     * @return array<string, mixed>|null User data array with profile information, or null if token is invalid/expired
      * @throws \Glueful\Exceptions\DatabaseException If database query fails
      * @throws \PDOException If database connection fails
      * @throws \InvalidArgumentException If refresh token format is invalid
+     */
+    /**
+     * @return array<string, mixed>|null
      */
     private function getUserDataFromRefreshToken(string $refreshToken): ?array
     {
@@ -538,14 +544,14 @@ class AuthenticationService
             ->limit(1)
             ->get();
 
-        if (empty($result)) {
+        if ($result === []) {
             return null;
         }
 
         $userUuid = $result[0]['user_uuid'];
         $user = $this->userRepository->findByUuid($userUuid);
 
-        if (empty($user)) {
+        if ($user === null || $user === []) {
             return null;
         }
 
@@ -571,7 +577,7 @@ class AuthenticationService
     public static function checkAuth($request): bool
     {
         // Ensure we're working with a Request object
-        if (!$request instanceof Request) {
+        if (!($request instanceof Request)) {
             // Convert global variables to a Request object
             $request = Request::createFromGlobals();
         }
@@ -594,7 +600,7 @@ class AuthenticationService
     public static function checkAdminAuth($request): bool
     {
         // Ensure we're working with a Request object
-        if (!$request instanceof Request) {
+        if (!($request instanceof Request)) {
             // Convert global variables to a Request object
             $request = Request::createFromGlobals();
         }
@@ -603,7 +609,7 @@ class AuthenticationService
         $authManager = AuthBootstrap::getManager();
         $userData = $authManager->authenticate($request);
 
-        if (!$userData) {
+        if ($userData === null) {
             return false;
         }
 
@@ -620,8 +626,8 @@ class AuthenticationService
      * like JWT tokens, API keys, OAuth, etc.
      *
      * @param Request $request The request to authenticate
-     * @param array $providers Names of providers to try (e.g. 'jwt', 'api_key')
-     * @return array|null User data if authenticated, null otherwise
+     * @param list<string> $providers Names of providers to try (e.g. 'jwt', 'api_key')
+     * @return array<string, mixed>|null User data if authenticated, null otherwise
      */
     public static function authenticateWithProviders(Request $request, array $providers = ['jwt', 'api_key']): ?array
     {

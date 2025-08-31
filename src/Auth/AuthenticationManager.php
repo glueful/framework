@@ -21,7 +21,7 @@ use Glueful\Auth\Interfaces\AuthenticationProviderInterface;
  */
 class AuthenticationManager
 {
-    /** @var AuthenticationProviderInterface[] */
+    /** @var array<string, AuthenticationProviderInterface> */
     private array $providers = [];
 
     /** @var AuthenticationProviderInterface|null */
@@ -37,7 +37,7 @@ class AuthenticationManager
      */
     public function __construct(?AuthenticationProviderInterface $defaultProvider = null)
     {
-        if ($defaultProvider) {
+        if ($defaultProvider !== null) {
             $this->setDefaultProvider($defaultProvider);
         } else {
             // Create default JWT provider if none specified
@@ -84,7 +84,7 @@ class AuthenticationManager
     /**
      * Get all registered providers
      *
-     * @return AuthenticationProviderInterface[] Array of all registered providers
+     * @return array<string, AuthenticationProviderInterface> Array of all registered providers
      */
     public function getProviders(): array
     {
@@ -97,7 +97,7 @@ class AuthenticationManager
      * Attempts authentication using the default provider.
      *
      * @param Request $request The HTTP request to authenticate
-     * @return array|null User data if authenticated, null otherwise
+     * @return array<string, mixed>|null User data if authenticated, null otherwise
      */
     public function authenticate(Request $request): ?array
     {
@@ -110,13 +110,13 @@ class AuthenticationManager
      *
      * @param string $providerName The name of the provider to use
      * @param Request $request The HTTP request to authenticate
-     * @return array|null User data if authenticated, null otherwise
+     * @return array<string, mixed>|null User data if authenticated, null otherwise
      */
     public function authenticateWithProvider(string $providerName, Request $request): ?array
     {
         $provider = $this->getProvider($providerName);
 
-        if (!$provider) {
+        if ($provider === null) {
             $this->lastError = "Authentication provider '$providerName' not found";
             return null;
         }
@@ -131,9 +131,9 @@ class AuthenticationManager
      * When multiple providers fail, it will use a more generic error message
      * rather than exposing the specific error from any one provider.
      *
-     * @param array $providerNames Names of providers to try
+     * @param list<string> $providerNames Names of providers to try
      * @param Request $request The HTTP request to authenticate
-     * @return array|null User data if authenticated by any provider, null otherwise
+     * @return array<string, mixed>|null User data if authenticated by any provider, null otherwise
      */
     public function authenticateWithProviders(array $providerNames, Request $request): ?array
     {
@@ -141,18 +141,18 @@ class AuthenticationManager
 
         foreach ($providerNames as $name) {
             $result = $this->authenticateWithProvider($name, $request);
-            if ($result) {
+            if ($result !== null) {
                 return $result;
             }
 
             // Store each provider's error message
-            if ($this->lastError) {
+            if ($this->lastError !== null && $this->lastError !== '') {
                 $errors[$name] = $this->lastError;
             }
         }
 
         // Only set a generic error message if all providers failed
-        if (!empty($errors)) {
+        if ($errors !== []) {
             $this->lastError = "Authentication failed. Please provide valid credentials.";
         }
 
@@ -165,14 +165,14 @@ class AuthenticationManager
      * Uses the permission system to check if the user has system.access permission.
      * This ensures consistent permission checking across the application.
      *
-     * @param array $userData User data from authentication
+     * @param array<string, mixed> $userData User data from authentication
      * @return bool True if user has admin privileges
      */
     public function isAdmin(array $userData): bool
     {
         // Extract user UUID for permission checking
         $userUuid = $userData['uuid'] ?? null;
-        if (!$userUuid) {
+        if ($userUuid === null || $userUuid === '') {
             error_log('AuthenticationManager::isAdmin: No user UUID found in user data');
             return false;
         }
@@ -233,13 +233,13 @@ class AuthenticationManager
      *
      * @param AuthenticationProviderInterface $provider The provider to use
      * @param Request $request The HTTP request to authenticate
-     * @return array|null User data if authenticated, null otherwise
+     * @return array<string, mixed>|null User data if authenticated, null otherwise
      */
     private function authenticateWith(AuthenticationProviderInterface $provider, Request $request): ?array
     {
         $userData = $provider->authenticate($request);
 
-        if (!$userData) {
+        if ($userData === null) {
             $this->lastError = $provider->getError();
         }
 
@@ -251,7 +251,7 @@ class AuthenticationManager
      *
      * Records authentication events for audit and monitoring purposes.
      *
-     * @param array $userData User data from authentication
+     * @param array<string, mixed> $userData User data from authentication
      * @param Request $request The HTTP request
      * @return void
      */

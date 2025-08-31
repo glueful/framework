@@ -17,11 +17,17 @@ use Psr\Http\Message\ServerRequestInterface;
 class RequestContext
 {
     private ServerRequestInterface $request;
+    /** @var array<string, mixed> */
     private array $serverParams;
+    /** @var array<string, string> */
     private array $cookieParams;
+    /** @var array<string, string|list<string>> */
     private array $queryParams;
+    /** @var array<string, mixed> */
     private array $parsedBody;
+    /** @var array<mixed> */
     private array $uploadedFiles;
+    /** @var array<string, mixed> */
     private array $attributes;
 
     public function __construct(ServerRequestInterface $request)
@@ -276,7 +282,7 @@ class RequestContext
     /**
      * Get all headers
      *
-     * @return array
+     * @return array<string, list<string>>
      */
     public function getHeaders(): array
     {

@@ -14,17 +14,43 @@ use Psr\SimpleCache\CacheInterface;
  * with consistent implementation of advanced features like pattern deletion,
  * counters, sorted sets, and introspection methods.
  */
+/**
+ * @template TValue
+ */
 interface CacheStore extends CacheInterface
 {
-    // PSR-16 methods are inherited:
-    // get(string $key, mixed $default = null): mixed
-    // set(string $key, mixed $value, null|int|\DateInterval $ttl = null): bool
-    // delete(string $key): bool
-    // clear(): bool
-    // getMultiple(iterable $keys, mixed $default = null): iterable
-    // setMultiple(iterable $values, null|int|\DateInterval $ttl = null): bool
-    // deleteMultiple(iterable $keys): bool
-    // has(string $key): bool
+    // PSR-16 methods re-declared with generics:
+    /**
+     * @return TValue|null
+     */
+    public function get(string $key, mixed $default = null): mixed;
+
+    /**
+     * @param TValue $value
+     */
+    public function set(string $key, mixed $value, null|int|\DateInterval $ttl = null): bool;
+
+    public function delete(string $key): bool;
+
+    public function clear(): bool;
+
+    /**
+     * @param iterable<string> $keys
+     * @return iterable<string, TValue|null>
+     */
+    public function getMultiple(iterable $keys, mixed $default = null): iterable;
+
+    /**
+     * @param iterable<string, TValue> $values
+     */
+    public function setMultiple(iterable $values, null|int|\DateInterval $ttl = null): bool;
+
+    /**
+     * @param iterable<string> $keys
+     */
+    public function deleteMultiple(iterable $keys): bool;
+
+    public function has(string $key): bool;
 
     /**
      * Set value only if key does not exist (atomic operation)
@@ -34,20 +60,23 @@ interface CacheStore extends CacheInterface
      * @param int $ttl Time to live in seconds
      * @return bool True if key was set (didn't exist), false if key already exists
      */
+    /**
+     * @param TValue $value
+     */
     public function setNx(string $key, mixed $value, int $ttl = 3600): bool;
 
     /**
      * Get multiple cached values (alias for PSR-16 getMultiple for backward compatibility)
      *
-     * @param array $keys Array of cache keys
-     * @return array Indexed array of values (same order as keys, null for missing keys)
+     * @param list<string> $keys
+     * @return array<string, TValue|null>
      */
     public function mget(array $keys): array;
 
     /**
      * Store multiple values in cache (alias for PSR-16 setMultiple for backward compatibility)
      *
-     * @param array $values Associative array of key => value pairs
+     * @param array<string, TValue> $values
      * @param int $ttl Time to live in seconds
      * @return bool True if all values stored successfully
      */
@@ -119,7 +148,7 @@ interface CacheStore extends CacheInterface
      * @param string $key Set key
      * @param int $start Start index
      * @param int $stop End index
-     * @return array Range of members
+     * @return list<string> Range of members
      */
     public function zrange(string $key, int $start, int $stop): array;
 
@@ -152,21 +181,21 @@ interface CacheStore extends CacheInterface
      * Get all cache keys
      *
      * @param string $pattern Optional pattern to filter keys
-     * @return array List of cache keys
+     * @return list<string> List of cache keys
      */
     public function getKeys(string $pattern = '*'): array;
 
     /**
      * Get cache statistics and information
      *
-     * @return array Cache statistics
+     * @return array<string, mixed> Cache statistics
      */
     public function getStats(): array;
 
     /**
      * Get all cache keys
      *
-     * @return array List of all cache keys
+     * @return list<string> List of all cache keys
      */
     public function getAllKeys(): array;
 
@@ -181,7 +210,7 @@ interface CacheStore extends CacheInterface
     /**
      * Get cache driver capabilities
      *
-     * @return array Driver capabilities and features
+     * @return array<string, mixed> Driver capabilities and features
      */
     public function getCapabilities(): array;
 
@@ -189,7 +218,7 @@ interface CacheStore extends CacheInterface
      * Add tags to a cache key for grouped invalidation
      *
      * @param string $key Cache key
-     * @param array $tags Array of tags to associate with the key
+     * @param list<string> $tags Array of tags to associate with the key
      * @return bool True if tags added successfully
      */
     public function addTags(string $key, array $tags): bool;
@@ -197,7 +226,7 @@ interface CacheStore extends CacheInterface
     /**
      * Invalidate all cache entries with specified tags
      *
-     * @param array $tags Array of tags to invalidate
+     * @param list<string> $tags Array of tags to invalidate
      * @return bool True if invalidation successful
      */
     public function invalidateTags(array $tags): bool;

@@ -19,14 +19,14 @@ parameters:
         - src/api-json-definitions/  # API definitions
     
     # Enable proper autoloading
-    autoload_files:
+    bootstrapFiles:
         - vendor/autoload.php
     
     # Improve analysis quality
     treatPhpDocTypesAsCertain: false
-    checkMissingIterableValueType: false
-    checkGenericClassInNonGenericObjectType: false
-    reportUnmatchedIgnoredErrors: false
+    # Deprecated in recent PHPStan; omit to avoid warnings
+    checkGenericClassInNonGenericObjectType: true
+    reportUnmatchedIgnoredErrors: true
     ignoreErrors:
         - '#Instanceof between mixed and Monolog\\Handler\\AbstractProcessingHandler will always evaluate to false\.#'
         
@@ -46,7 +46,7 @@ parameters:
         
         # Container and DI patterns
         - '#Method Glueful\\DI\\Container::get\(\) invoked with [0-9]+ parameter, 1 required\.#'
-        - '#Parameter #1 \$id of method Glueful\\DI\\Container::get\(\) expects string, .* given\.#'
+        - '#Parameter \#1 \$id of method Glueful\\DI\\Container::get\(\) expects string, .* given\.#'
         
         # Configuration array access patterns
         - '#Offset .* does not exist on array.*\.#'

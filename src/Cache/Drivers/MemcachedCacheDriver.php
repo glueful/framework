@@ -14,6 +14,9 @@ use Glueful\Cache\CacheStore;
  *
  * Implements cache operations using Memcached backend.
  * Provides sorted set emulation using stored arrays.
+ *
+ * @template TValue
+ * @implements CacheStore<TValue>
  */
 class MemcachedCacheDriver implements CacheStore
 {
@@ -122,7 +125,7 @@ class MemcachedCacheDriver implements CacheStore
      *
      * @param string $key Cache key
      * @param mixed $default Default value if key not found
-     * @return mixed Value or default if not found
+     * @return TValue|null Value or default if not found
      * @throws InvalidArgumentException If key is invalid
      */
     public function get(string $key, mixed $default = null): mixed
@@ -136,7 +139,7 @@ class MemcachedCacheDriver implements CacheStore
      * Store value in cache (PSR-16 compatible)
      *
      * @param string $key Cache key
-     * @param mixed $value Value to store
+     * @param TValue $value Value to store
      * @param null|int|\DateInterval $ttl Time to live
      * @return bool True if stored successfully
      * @throws InvalidArgumentException If key is invalid
@@ -154,7 +157,7 @@ class MemcachedCacheDriver implements CacheStore
      * Uses Memcached's add() method which only sets if key doesn't exist.
      *
      * @param string $key Cache key
-     * @param mixed $value Value to store
+     * @param TValue $value Value to store
      * @param int $ttl Time to live in seconds
      * @return bool True if key was set (didn't exist), false if key already exists
      */
@@ -167,8 +170,8 @@ class MemcachedCacheDriver implements CacheStore
     /**
      * Get multiple cached values
      *
-     * @param array $keys Array of cache keys
-     * @return array Indexed array of values (same order as keys, null for missing keys)
+     * @param list<string> $keys Array of cache keys
+     * @return array<string, TValue|null> Indexed array by key (driver returns list in same order)
      */
     public function mget(array $keys): array
     {
@@ -179,9 +182,9 @@ class MemcachedCacheDriver implements CacheStore
         $values = $this->memcached->getMulti($keys);
         $result = [];
 
-        // Ensure values are returned in the same order as keys
+        // Return values indexed by key; include missing keys with null
         foreach ($keys as $key) {
-            $result[] = $values[$key] ?? null;
+            $result[$key] = $values[$key] ?? null;
         }
 
         return $result;
@@ -190,7 +193,7 @@ class MemcachedCacheDriver implements CacheStore
     /**
      * Store multiple values in cache
      *
-     * @param array $values Associative array of key => value pairs
+     * @param array<string, TValue> $values Associative array of key => value pairs
      * @param int $ttl Time to live in seconds
      * @return bool True if all values stored successfully
      */
@@ -300,7 +303,7 @@ class MemcachedCacheDriver implements CacheStore
      * This method returns an empty array as keys cannot be retrieved.
      *
      * @param string $pattern Optional pattern to filter keys
-     * @return array List of cache keys (always empty for Memcached)
+     * @return list<string> List of cache keys (always empty for Memcached)
      */
     public function getKeys(string $pattern = '*'): array
     {
@@ -313,7 +316,7 @@ class MemcachedCacheDriver implements CacheStore
      *
      * Returns Memcached server statistics.
      *
-     * @return array Cache statistics
+     * @return array<string, mixed> Cache statistics
      */
     public function getStats(): array
     {
@@ -376,7 +379,7 @@ class MemcachedCacheDriver implements CacheStore
      * Note: Memcached doesn't support key enumeration natively.
      * This method returns an empty array as keys cannot be retrieved.
      *
-     * @return array List of all cache keys (always empty for Memcached)
+     * @return list<string> List of all cache keys (always empty for Memcached)
      */
     public function getAllKeys(): array
     {
@@ -519,7 +522,7 @@ class MemcachedCacheDriver implements CacheStore
      * Add tags to a cache key for grouped invalidation
      *
      * @param string $key Cache key
-     * @param array $tags Array of tags to associate with the key
+     * @param list<string> $tags Array of tags to associate with the key
      * @return bool True if tags added successfully
      */
     public function addTags(string $key, array $tags): bool
@@ -532,7 +535,7 @@ class MemcachedCacheDriver implements CacheStore
     /**
      * Invalidate all cache entries with specified tags
      *
-     * @param array $tags Array of tags to invalidate
+     * @param list<string> $tags Array of tags to invalidate
      * @return bool True if invalidation successful
      */
     public function invalidateTags(array $tags): bool

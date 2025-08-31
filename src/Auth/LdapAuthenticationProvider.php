@@ -60,7 +60,7 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
             $password = $request->request->get('password') ?? $request->query->get('password');
 
             // Check if we have credentials to authenticate
-            if (!$username || !$password) {
+            if ($username === null || $username === '' || $password === null || $password === '') {
                 // This is not an LDAP authentication attempt
                 return null;
             }
@@ -70,14 +70,14 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
                     $request->query->get('ldap_server') ??
                     $this->getDefaultServerId();
 
-            if (!$this->setCurrentServer($serverId)) {
+            if ($this->setCurrentServer($serverId) === false) {
                 $this->lastError = "Invalid LDAP server: {$serverId}";
                 return null;
             }
 
             // Get the connection for the current server
             $connection = $this->getConnection();
-            if (!$connection) {
+            if ($connection === null) {
                 $this->lastError = "Failed to get LDAP connection for server: {$serverId}";
                 return null;
             }
@@ -98,21 +98,21 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
 
             // Get user details from LDAP
             $ldapUser = $this->findLdapUser($username, $serverId);
-            if (!$ldapUser) {
+            if ($ldapUser === null) {
                 $this->lastError = "User authenticated but not found in LDAP directory";
                 return null;
             }
 
             // Get LDAP attributes and map to user data
             $userData = $this->mapLdapAttributesToUserData($ldapUser, $serverId);
-            if (!$userData) {
+            if ($userData === null) {
                 $this->lastError = "Failed to map LDAP attributes to user data";
                 return null;
             }
 
             // Find or create user in our system
             $user = $this->userRepository->findOrCreateFromLdap($userData);
-            if (!$user) {
+            if ($user === null) {
                 $this->lastError = "Failed to create or retrieve user from LDAP data";
                 return null;
             }
@@ -179,11 +179,12 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
     {
         try {
             // Decode the token
-            $payload = json_decode(base64_decode($token), true);
+            $decoded = base64_decode($token);
+            $payload = is_string($decoded) ? json_decode($decoded, true) : null;
 
             // Check if it's a valid LDAP token
             if (
-                !$payload ||
+                !is_array($payload) ||
                 !isset($payload['auth_method']) ||
                 $payload['auth_method'] !== 'ldap' ||
                 !isset($payload['sub']) ||
@@ -201,7 +202,7 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
 
             // Validate the user exists
             $user = $this->userRepository->findByUuid($payload['sub']);
-            if (!$user) {
+            if ($user === null) {
                 $this->lastError = 'User not found';
                 return false;
             }
@@ -219,10 +220,11 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
     public function canHandleToken(string $token): bool
     {
         try {
-            $payload = json_decode(base64_decode($token), true);
+            $decoded = base64_decode($token);
+            $payload = is_string($decoded) ? json_decode($decoded, true) : null;
 
             // Check if this is an LDAP token based on its structure
-            return $payload &&
+            return is_array($payload) &&
                    isset($payload['auth_method']) &&
                    $payload['auth_method'] === 'ldap';
         } catch (\Throwable $e) {
@@ -347,7 +349,7 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
         // Register connections for each server
         foreach ($this->ldapConfig['servers'] as $serverId => $config) {
             // Skip servers with incomplete configuration
-            if (empty($config['hosts']) || empty($config['base_dn'])) {
+            if (!isset($config['hosts']) || $config['hosts'] === [] || !isset($config['base_dn']) || $config['base_dn'] === '') {
                 continue;
             }
 
@@ -376,7 +378,7 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
         }
 
         // Set default connection if we have at least one
-        if (!empty($this->connections)) {
+        if ($this->connections !== []) {
             Container::setDefaultConnection($this->connections[0]);
         }
     }

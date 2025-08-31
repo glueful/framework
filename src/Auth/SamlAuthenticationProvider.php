@@ -62,7 +62,7 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
                      $request->query->get('idp') ??
                      $this->getDefaultIdpId();
 
-            if (!$this->setCurrentIdp($idpId)) {
+            if ($this->setCurrentIdp($idpId) === false) {
                 $this->lastError = "Invalid identity provider: {$idpId}";
                 return null;
             }
@@ -93,14 +93,14 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
 
             // Map SAML attributes to user data
             $userData = $this->mapSamlAttributesToUserData($attributes, $nameId, $idpId);
-            if (!$userData) {
+            if ($userData === null) {
                 $this->lastError = 'Failed to map SAML attributes to user data';
                 return null;
             }
 
             // Find or create the user in our system
             $user = $this->userRepository->findOrCreateFromSaml($userData);
-            if (!$user) {
+            if ($user === null) {
                 $this->lastError = 'Failed to create or retrieve user from SAML data';
                 return null;
             }
@@ -171,11 +171,12 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
     {
         try {
             // Decode the token
-            $payload = json_decode(base64_decode($token), true);
+            $decoded = base64_decode($token);
+            $payload = is_string($decoded) ? json_decode($decoded, true) : null;
 
             // Check if it's a valid SAML token
             if (
-                !$payload ||
+                !is_array($payload) ||
                 !isset($payload['saml_name_id']) ||
                 !isset($payload['saml_idp']) ||
                 !isset($payload['exp'])
@@ -191,7 +192,7 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
             }
             // Validate the user exists
             $user = $this->userRepository->findByUuid($payload['sub']);
-            if (!$user) {
+            if ($user === null) {
                 $this->lastError = 'User not found';
                 return false;
             }
@@ -209,10 +210,11 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
     public function canHandleToken(string $token): bool
     {
         try {
-            $payload = json_decode(base64_decode($token), true);
+            $decoded = base64_decode($token);
+            $payload = is_string($decoded) ? json_decode($decoded, true) : null;
 
             // Check if this is a SAML token based on its structure
-            return $payload &&
+            return is_array($payload) &&
                 isset($payload['auth_method']) &&
                 $payload['auth_method'] === 'saml' &&
                 isset($payload['saml_name_id']) &&
@@ -444,7 +446,7 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
             $attributes,
             $mapping['email'] ?? ['email', 'mail', 'emailaddress']
         );
-        if (empty($userData['email'])) {
+        if (!isset($userData['email']) || $userData['email'] === '') {
             // If no explicit email attribute, try to use nameId if it looks like an email
             if (filter_var($nameId, FILTER_VALIDATE_EMAIL)) {
                 $userData['email'] = $nameId;
@@ -461,7 +463,7 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
         );
 
         // If no name found, use part of email
-        if (empty($userData['name'])) {
+        if (!isset($userData['name']) || $userData['name'] === '') {
             $userData['name'] = explode('@', $userData['email'])[0];
         }
 
@@ -482,7 +484,7 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
             $mapping['roles'] ?? ['roles', 'groups', 'memberof']
         );
 
-        if (!empty($roleValues) && isset($idpConfig['role_mapping'])) {
+        if ($roleValues !== [] && isset($idpConfig['role_mapping'])) {
             $userData['roles'] = $this->mapSamlRolesToSystemRoles($roleValues, $idpConfig['role_mapping']);
         }
 
@@ -501,7 +503,7 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
         $mappedNames = (array) $mappedNames;
 
         foreach ($mappedNames as $name) {
-            if (isset($attributes[$name]) && !empty($attributes[$name][0])) {
+            if (isset($attributes[$name][0]) && $attributes[$name][0] !== '') {
                 return $attributes[$name][0];
             }
         }

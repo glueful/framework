@@ -62,7 +62,7 @@ class AuthBootstrap
 
         foreach ($configuredProviders as $name => $providerClass) {
             // Skip if already registered
-            if ($manager->getProvider($name)) {
+            if ($manager->getProvider($name) !== null) {
                 continue;
             }
 

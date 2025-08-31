@@ -49,6 +49,9 @@ class TokenStorageService implements TokenStorageInterface
 
     /**
      * Store a new session with tokens in both database and cache
+     *
+     * @param array<string, mixed> $sessionData
+     * @param array{access_token: string, refresh_token: string, expires_in?: int}|array<string, mixed> $tokens
      */
     public function storeSession(array $sessionData, array $tokens): bool
     {
@@ -88,7 +91,7 @@ class TokenStorageService implements TokenStorageInterface
 
             // Store in database
             $success = $this->storeSessionInDatabase($dbSessionData);
-            if (!$success) {
+            if ($success === false) {
                 throw new \Exception('Failed to store session in database');
             }
 
@@ -121,6 +124,8 @@ class TokenStorageService implements TokenStorageInterface
 
     /**
      * Update existing session with new tokens
+     *
+     * @param array{access_token: string, refresh_token: string, expires_in?: int}|array<string, mixed> $newTokens
      */
     public function updateSessionTokens(string $sessionIdentifier, array $newTokens): bool
     {
@@ -131,7 +136,7 @@ class TokenStorageService implements TokenStorageInterface
 
             // Get existing session data
             $existingSession = $this->getSessionByRefreshToken($sessionIdentifier);
-            if (!$existingSession) {
+            if ($existingSession === null) {
                 throw new \Exception('Session not found for update');
             }
 
@@ -158,7 +163,7 @@ class TokenStorageService implements TokenStorageInterface
                 ->where(['refresh_token' => $sessionIdentifier, 'status' => 'active'])
                 ->update($updateData);
 
-            if (!$success) {
+            if ($success === false) {
                 throw new \Exception('Failed to update session in database');
             }
 
@@ -183,6 +188,8 @@ class TokenStorageService implements TokenStorageInterface
 
     /**
      * Retrieve session data by access token
+     *
+     * @return array<string, mixed>|null
      */
     public function getSessionByAccessToken(string $accessToken): ?array
     {
@@ -219,6 +226,8 @@ class TokenStorageService implements TokenStorageInterface
 
     /**
      * Retrieve session data by refresh token
+     *
+     * @return array<string, mixed>|null
      */
     public function getSessionByRefreshToken(string $refreshToken): ?array
     {
@@ -375,7 +384,7 @@ class TokenStorageService implements TokenStorageInterface
                 ->get();
 
             // Update expired sessions using bulk update to avoid N+1 queries
-            if (!empty($expiredSessions)) {
+            if ($expiredSessions !== []) {
                 // Use raw SQL for efficient bulk update with IN clause
                 $sessionIds = array_column($expiredSessions, 'uuid');
                 $placeholders = str_repeat('?,', count($sessionIds) - 1) . '?';

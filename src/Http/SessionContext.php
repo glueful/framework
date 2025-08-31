@@ -15,6 +15,7 @@ namespace Glueful\Http;
 class SessionContext
 {
     private bool $started = false;
+    /** @var array<string, mixed> */
     private array $sessionData = [];
 
     /**

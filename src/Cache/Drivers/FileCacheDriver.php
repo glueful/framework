@@ -17,6 +17,9 @@ use Glueful\Services\FileFinder;
  *
  * Provides file-based caching as a fallback when Redis/Memcached are unavailable.
  * Implements CacheStore with file system storage.
+ *
+ * @template TValue
+ * @implements CacheStore<TValue>
  */
 class FileCacheDriver implements CacheStore
 {
@@ -102,7 +105,7 @@ class FileCacheDriver implements CacheStore
      * Load data from file using FileManager
      *
      * @param string $path File path
-     * @return mixed Loaded data or null
+     * @return TValue|null Loaded data or null
      */
     private function loadFromFile(string $path): mixed
     {
@@ -123,7 +126,7 @@ class FileCacheDriver implements CacheStore
      *
      * @param string $key Cache key
      * @param mixed $default Default value if key not found
-     * @return mixed Cached value or default if not found
+     * @return TValue|null Cached value or default if not found
      * @throws PSRInvalidArgumentException If key is invalid
      */
     public function get(string $key, mixed $default = null): mixed
@@ -184,7 +187,7 @@ class FileCacheDriver implements CacheStore
      * Uses file locking to ensure atomicity.
      *
      * @param string $key Cache key
-     * @param mixed $value Value to store
+     * @param TValue $value Value to store
      * @param int $ttl Time to live in seconds
      * @return bool True if key was set (didn't exist), false if key already exists
      */
@@ -238,15 +241,15 @@ class FileCacheDriver implements CacheStore
     /**
      * Get multiple cached values
      *
-     * @param array $keys Array of cache keys
-     * @return array Indexed array of values (same order as keys, null for missing keys)
+     * @param list<string> $keys Array of cache keys
+     * @return array<string, TValue|null> Values indexed by key (driver returns list in same order)
      */
     public function mget(array $keys): array
     {
         $result = [];
 
         foreach ($keys as $key) {
-            $result[] = $this->get($key);
+            $result[$key] = $this->get($key);
         }
 
         return $result;
@@ -255,7 +258,7 @@ class FileCacheDriver implements CacheStore
     /**
      * Store multiple values in cache
      *
-     * @param array $values Associative array of key => value pairs
+     * @param array<string, TValue> $values Associative array of key => value pairs
      * @param int $ttl Time to live in seconds
      * @return bool True if all values stored successfully
      */
