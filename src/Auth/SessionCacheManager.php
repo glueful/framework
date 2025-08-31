@@ -6,6 +6,9 @@ namespace Glueful\Auth;
 
 use Glueful\Cache\CacheStore;
 use Glueful\Auth\TokenStorageService;
+use Glueful\Interfaces\Permission\PermissionProviderInterface;
+use Glueful\Interfaces\Permission\RbacPermissionProviderInterface;
+use Glueful\Queue\QueueManager;
 
 /**
  * Session Cache Management System
@@ -44,25 +47,29 @@ class SessionCacheManager
     private const DEFAULT_TTL = 3600; // 1 hour
     private const PERMISSIONS_TTL = 1800; // 30 minutes
 
-    /** @var CacheStore Cache driver service */
+    /**
+     * @var CacheStore<mixed> Cache driver service
+     */
     private CacheStore $cache;
 
     /** @var int Session TTL */
     private int $ttl;
 
-    /** @var array Provider configurations */
+    /**
+     * @var array<string, array<string, mixed>> Provider configurations
+     */
     private array $providerConfigs;
 
-    /** @var object|null Permission service */
-    private ?object $permissionService = null;
+    /** @var PermissionProviderInterface|null Permission service */
+    private ?PermissionProviderInterface $permissionService = null;
 
-    /** @var object|null Queue service */
-    private ?object $queueService = null;
+    /** @var QueueManager|null Queue service */
+    private ?QueueManager $queueService = null;
 
     /**
      * Constructor
      *
-     * @param CacheStore $cache Cache driver service
+     * @param CacheStore<mixed> $cache Cache driver service
      */
     public function __construct(CacheStore $cache)
     {
@@ -81,12 +88,8 @@ class SessionCacheManager
             // Try to get services from DI container using the container() helper
             if (function_exists('container')) {
                 $container = container();
-
-                // Try to resolve queue service
-                if ($container->has('queue.service')) {
-                    $this->queueService = $container->get('queue.service');
-                } elseif ($container->has('QueueService')) {
-                    $this->queueService = $container->get('QueueService');
+                if ($container->has(QueueManager::class)) {
+                    $this->queueService = $container->get(QueueManager::class);
                 }
             }
 
@@ -94,7 +97,10 @@ class SessionCacheManager
             if (class_exists('Glueful\\Permissions\\PermissionManager')) {
                 $manager = \Glueful\Permissions\PermissionManager::getInstance();
                 if ($manager->hasActiveProvider()) {
-                    $this->permissionService = $manager->getProvider();
+                    $provider = $manager->getProvider();
+                    if ($provider instanceof PermissionProviderInterface) {
+                        $this->permissionService = $provider;
+                    }
                 }
             }
         } catch (\Throwable $e) {
@@ -108,7 +114,7 @@ class SessionCacheManager
      */
     public function setPermissionService(?object $service): void
     {
-        $this->permissionService = $service;
+        $this->permissionService = $service instanceof PermissionProviderInterface ? $service : null;
     }
 
     /**
@@ -116,7 +122,7 @@ class SessionCacheManager
      */
     public function setQueueService(?object $service): void
     {
-        $this->queueService = $service;
+        $this->queueService = $service instanceof QueueManager ? $service : null;
     }
 
     /**
@@ -125,7 +131,7 @@ class SessionCacheManager
      * Creates and stores session data in cache.
      * Supports multiple authentication providers.
      *
-     * @param array $userData User and permission data
+     * @param array<string, mixed> $userData User and permission data
      * @param string $token Access token for the session
      * @param string|null $provider Authentication provider (jwt, apikey, etc.)
      * @param int|null $ttl Custom time-to-live in seconds
@@ -255,7 +261,7 @@ class SessionCacheManager
         $sessions = array_diff($sessions, [$sessionId]);
 
         // If no sessions left, delete the index entirely
-        if (empty($sessions)) {
+        if ($sessions === []) {
             return $this->cache->delete($indexKey);
         }
 
@@ -270,6 +276,7 @@ class SessionCacheManager
      *
      * @param string $provider Provider name (jwt, apikey, etc.)
      * @return array Array of session data
+     * @phpstan-return list<AuthSessionPayload>
      */
     public function getSessionsByProvider(string $provider): array
     {
@@ -278,7 +285,7 @@ class SessionCacheManager
         $indexKey = self::PROVIDER_INDEX_PREFIX . $provider;
         $sessionIds = $this->cache->get($indexKey) ?? [];
 
-        if (empty($sessionIds)) {
+        if ($sessionIds === []) {
             return [];
         }
 
@@ -301,12 +308,12 @@ class SessionCacheManager
         // Use TokenStorageService to get session data directly
         $tokenStorage = new TokenStorageService();
         $sessionData = $tokenStorage->getSessionByAccessToken($token);
-        if (!$sessionData) {
+        if ($sessionData === null) {
             return null;
         }
 
         // If provider is specified, validate it matches the session's provider
-        if ($provider && isset($sessionData['provider']) && $sessionData['provider'] !== $provider) {
+        if ($provider !== null && isset($sessionData['provider']) && $sessionData['provider'] !== $provider) {
             return null;
         }
 
@@ -365,12 +372,12 @@ class SessionCacheManager
         $session = $this->cache->get(self::SESSION_PREFIX . $sessionId);
 
         // Remove from provider index if provider information is available
-        if ($session && isset($session['provider'])) {
+        if ($session !== null && isset($session['provider'])) {
             $this->removeSessionFromProviderIndex($session['provider'], $sessionId);
         }
 
         // Remove from user index if user information is available
-        if ($session && isset($session['user']['uuid'])) {
+        if ($session !== null && isset($session['user']['uuid'])) {
             $this->removeSessionFromUserIndex($session['user']['uuid'], $sessionId);
         }
 
@@ -415,12 +422,12 @@ class SessionCacheManager
         $tokenStorage = new TokenStorageService();
         $sessionData = $tokenStorage->getSessionByAccessToken($token);
 
-        if (!$sessionData) {
+        if ($sessionData === null) {
             return false;
         }
 
         // If provider is specified, validate it matches
-        if ($provider && isset($sessionData['provider']) && $sessionData['provider'] !== $provider) {
+        if ($provider !== null && isset($sessionData['provider']) && $sessionData['provider'] !== $provider) {
             return false;
         }
 
@@ -441,7 +448,7 @@ class SessionCacheManager
      * Updates session with new data and token.
      *
      * @param string $oldToken Current token
-     * @param array $newData Updated session data
+     * @param array<string, mixed> $newData Updated session data
      * @param string $newToken New authentication token
      * @param string|null $provider Provider name (optional)
      * @return bool Success status
@@ -457,7 +464,7 @@ class SessionCacheManager
 
         // Get current session data
         $currentSession = $tokenStorage->getSessionByAccessToken($oldToken);
-        if (!$currentSession) {
+        if ($currentSession === null) {
             return false;
         }
 
@@ -498,11 +505,12 @@ class SessionCacheManager
      *
      * @param string|null $provider Optional provider hint
      * @return array|null Session data or null if not authenticated
+     * @phpstan-return AuthSessionPayload|null
      */
     public function getCurrentSession(?string $provider = null): ?array
     {
         $token = TokenManager::extractTokenFromRequest();
-        if (!$token) {
+        if ($token === null || $token === '') {
             return null;
         }
 
@@ -517,12 +525,13 @@ class SessionCacheManager
      * @param string $token Authentication token
      * @param string|null $provider Optional provider hint
      * @return array|null Session data or null if invalid
+     * @phpstan-return AuthSessionPayload|null
      */
     public function getSessionWithValidPermissions(string $token, ?string $provider = null): ?array
     {
         $session = $this->getSession($token, $provider);
 
-        if (!$session) {
+        if ($session === null) {
             return null;
         }
 
@@ -532,7 +541,7 @@ class SessionCacheManager
         if ($permissionsAge > self::PERMISSIONS_TTL) {
             // Queue background permission refresh for next request
             $userUuid = $session['user']['uuid'] ?? null;
-            if ($userUuid) {
+            if ($userUuid !== null && $userUuid !== '') {
                 $this->queuePermissionRefresh($userUuid, $token);
             }
         }
@@ -569,7 +578,7 @@ class SessionCacheManager
         $success = true;
         foreach ($sessionIds as $sessionId) {
             $session = $this->cache->get(self::SESSION_PREFIX . $sessionId);
-            if ($session && isset($session['token'])) {
+            if ($session !== null && isset($session['token'])) {
                 // Use destroySession to properly clean up token mappings as well
                 $result = $this->destroySession($session['token'], $provider);
                 $success = $success && $result;
@@ -588,24 +597,20 @@ class SessionCacheManager
      *
      * Pre-loads user permissions and roles using DI-injected permission service.
      *
-     * @param array $userData Base user data
-     * @return array Enhanced user data with permissions
+     * @param array<string, mixed> $userData Base user data
+     * @return array<string, mixed> Enhanced user data with permissions
      */
     private function enhanceUserDataWithPermissions(array $userData): array
     {
         $userUuid = $userData['uuid'] ?? null;
 
-        if (!$userUuid) {
+        if ($userUuid === null || $userUuid === '') {
             return $userData;
         }
 
         try {
             $permissions = $this->loadUserPermissions($userUuid);
             $roles = $this->loadUserRoles($userUuid);
-
-            // Ensure we have arrays (defensive programming)
-            $permissions = is_array($permissions) ? $permissions : [];
-            $roles = is_array($roles) ? $roles : [];
 
             return array_merge($userData, [
             'permissions' => $permissions,
@@ -627,13 +632,13 @@ class SessionCacheManager
      * Load user permissions using RBAC permission provider
      *
      * @param string $userUuid User UUID
-     * @return array User permissions grouped by resource
+     * @return array<string, list<string>>|list<string> User permissions grouped by resource
      */
     private function loadUserPermissions(string $userUuid): array
     {
         try {
             // 1. Use initialized permission service (PermissionManager's provider)
-            if ($this->permissionService && method_exists($this->permissionService, 'getUserPermissions')) {
+            if ($this->permissionService !== null) {
                 return $this->permissionService->getUserPermissions($userUuid);
             }
 
@@ -641,8 +646,9 @@ class SessionCacheManager
             if (function_exists('container')) {
                 try {
                     $container = container();
-                    if ($container->has('rbac.repository.user_permission')) {
-                        $userPermRepo = $container->get('rbac.repository.user_permission');
+                    $symfony = $container->getSymfonyContainer();
+                    if ($symfony->has('rbac.repository.user_permission')) {
+                        $userPermRepo = $symfony->get('rbac.repository.user_permission');
                         if (method_exists($userPermRepo, 'getUserPermissions')) {
                             return $userPermRepo->getUserPermissions($userUuid);
                         }
@@ -663,26 +669,24 @@ class SessionCacheManager
      * Load user roles using RBAC role service
      *
      * @param string $userUuid User UUID
-     * @return array User roles with hierarchy information
+     * @return list<string> User roles with hierarchy information
      */
     private function loadUserRoles(string $userUuid): array
     {
         try {
             // 1. Use DI-injected RBAC service first (most efficient)
-            if ($this->permissionService && method_exists($this->permissionService, 'getUserRoles')) {
+            if ($this->permissionService instanceof RbacPermissionProviderInterface) {
                 $result = $this->permissionService->getUserRoles($userUuid);
-                // Only return if we got a valid result, otherwise continue to fallbacks
-                if (is_array($result)) {
-                    return $result;
-                }
+                return $result;
             }
 
             // 2. Try RBAC role service directly (preferred - includes caching)
             if (function_exists('container')) {
                 try {
                     $container = container();
-                    if ($container->has('rbac.role_service')) {
-                        $roleService = $container->get('rbac.role_service');
+                    $symfony = $container->getSymfonyContainer();
+                    if ($symfony->has('rbac.role_service')) {
+                        $roleService = $symfony->get('rbac.role_service');
                         if (method_exists($roleService, 'getUserRoles')) {
                             $result = $roleService->getUserRoles($userUuid);
                             // Only return if we got a valid result, otherwise continue to fallbacks
@@ -701,8 +705,9 @@ class SessionCacheManager
             if (function_exists('container')) {
                 try {
                     $container = container();
-                    if ($container->has('rbac.repository.user_role')) {
-                        $userRoleRepo = $container->get('rbac.repository.user_role');
+                    $symfony = $container->getSymfonyContainer();
+                    if ($symfony->has('rbac.repository.user_role')) {
+                        $userRoleRepo = $symfony->get('rbac.repository.user_role');
                         if (method_exists($userRoleRepo, 'getUserRoles')) {
                             return $userRoleRepo->getUserRoles($userUuid);
                         }
@@ -713,15 +718,14 @@ class SessionCacheManager
                 }
             }
 
-            // 4. Try PermissionManager provider (only if it's an RBAC provider with getUserRoles)
+            // 4. Try PermissionManager provider (only if it's an RBAC provider)
             if (class_exists('Glueful\\Permissions\\PermissionManager')) {
                 $manager = \Glueful\Permissions\PermissionManager::getInstance();
                 if ($manager->hasActiveProvider()) {
                     $provider = $manager->getProvider();
-                    // Only call getUserRoles if the provider actually has this method
-                    if ($provider && method_exists($provider, 'getUserRoles')) {
-                        $result = call_user_func([$provider, 'getUserRoles'], $userUuid);
-                        return is_array($result) ? $result : [];
+                    if ($provider instanceof RbacPermissionProviderInterface) {
+                        $result = $provider->getUserRoles($userUuid);
+                        return $result;
                     }
                 }
             }
@@ -738,7 +742,7 @@ class SessionCacheManager
      * Cache user permissions separately for faster access
      *
      * @param string $userUuid User UUID
-     * @param array $permissions User permissions
+     * @param array<string, list<string>>|list<string> $permissions User permissions
      * @return bool Success status
      */
     private function cacheUserPermissions(string $userUuid, array $permissions): bool
@@ -757,6 +761,7 @@ class SessionCacheManager
      *
      * @param string $userUuid User UUID
      * @return array|null Cached permissions or null if not found
+     * @phpstan-return array<string, list<string>>|list<string>|null
      */
     public function getCachedUserPermissions(string $userUuid): ?array
     {
@@ -785,7 +790,7 @@ class SessionCacheManager
             $success = $this->cache->delete($cacheKey);
 
             // 2. Invalidate RBAC permission provider cache if available
-            if ($this->permissionService && method_exists($this->permissionService, 'invalidateUserCache')) {
+            if ($this->permissionService !== null) {
                 $this->permissionService->invalidateUserCache($userUuid);
             }
 
@@ -794,7 +799,7 @@ class SessionCacheManager
                 $manager = \Glueful\Permissions\PermissionManager::getInstance();
                 if ($manager->hasActiveProvider()) {
                     $provider = $manager->getProvider();
-                    if ($provider && method_exists($provider, 'invalidateUserCache')) {
+                    if ($provider instanceof PermissionProviderInterface) {
                         $provider->invalidateUserCache($userUuid);
                     }
                 }
@@ -832,12 +837,12 @@ class SessionCacheManager
     private function queuePermissionRefresh(string $userUuid, string $token): void
     {
         try {
-            // Use DI-injected queue service first
-            if ($this->queueService && method_exists($this->queueService, 'dispatch')) {
-                $this->queueService->dispatch('RefreshUserPermissionsJob', [
-                'user_uuid' => $userUuid,
-                'token' => $token,
-                'queued_at' => time()
+            // Use DI-injected queue manager if available
+            if ($this->queueService !== null) {
+                $this->queueService->push('RefreshUserPermissionsJob', [
+                    'user_uuid' => $userUuid,
+                    'token' => $token,
+                    'queued_at' => time()
                 ]);
                 return;
             }
@@ -862,7 +867,7 @@ class SessionCacheManager
         try {
             // Get current session
             $session = $this->getSession($token);
-            if (!$session) {
+            if ($session === null) {
                 return false;
             }
 
@@ -879,7 +884,7 @@ class SessionCacheManager
             // Get session data from TokenStorageService to find session ID
             $tokenStorage = new TokenStorageService();
             $sessionData = $tokenStorage->getSessionByAccessToken($token);
-            if ($sessionData) {
+            if ($sessionData !== null) {
                 $ttl = $this->getProviderTtl($session['provider'] ?? 'jwt');
                 $success = $this->cache->set(self::SESSION_PREFIX . $sessionData['uuid'], $session, $ttl);
 
@@ -938,6 +943,7 @@ class SessionCacheManager
      *
      * @param string $userUuid User UUID
      * @return array Array of session data
+     * @phpstan-return list<AuthSessionPayload>
      */
     private function findUserSessions(string $userUuid): array
     {
@@ -976,6 +982,7 @@ class SessionCacheManager
      *
      * @param string $userUuid User UUID
      * @return array Array of session data
+     * @phpstan-return list<AuthSessionPayload>
      */
     public function getUserSessions(string $userUuid): array
     {
@@ -1023,6 +1030,7 @@ class SessionCacheManager
      *
      * @param array $session Session data
      * @return bool True if permissions are valid
+     * @phpstan-param AuthSessionPayload $session
      */
     private function areSessionPermissionsValid(array $session): bool
     {
@@ -1058,8 +1066,9 @@ class SessionCacheManager
      * Uses RBAC-style optimization patterns for maximum performance.
      *
      * @param string $token Authentication token
-     * @param array $context Additional context for permission loading (reserved for future use)
+     * @param array<string, mixed> $context Additional context for permission loading (reserved for future use)
      * @return array|null Session data with optimized permissions
+     * @phpstan-return AuthSessionPayload|null
      */
     public function getOptimizedSession(string $token, array $context = []): ?array
     {
@@ -1067,7 +1076,7 @@ class SessionCacheManager
         unset($context); // Acknowledge unused parameter until context-aware loading is implemented
 
         $session = $this->getSession($token);
-        if (!$session) {
+        if ($session === null) {
             return null;
         }
 
@@ -1079,7 +1088,7 @@ class SessionCacheManager
 
         // Permissions need refresh - load fresh data
         $userUuid = $session['user']['uuid'] ?? null;
-        if ($userUuid) {
+        if ($userUuid !== null && $userUuid !== '') {
             try {
                 $permissions = $this->loadUserPermissions($userUuid);
                 $roles = $this->loadUserRoles($userUuid);
@@ -1093,7 +1102,7 @@ class SessionCacheManager
                 // Store updated session
                 $tokenStorage = new TokenStorageService();
                 $sessionData = $tokenStorage->getSessionByAccessToken($token);
-                if ($sessionData) {
+                if ($sessionData !== null) {
                     $ttl = $this->getProviderTtl($session['provider'] ?? 'jwt');
                     $this->cache->set(self::SESSION_PREFIX . $sessionData['uuid'], $session, $ttl);
 
@@ -1114,12 +1123,12 @@ class SessionCacheManager
      *
      * Optimizes permission loading for bulk operations.
      *
-     * @param array $userUuids Array of user UUIDs
-     * @return array Associative array of userUuid => permissions
+     * @param list<string> $userUuids Array of user UUIDs
+     * @return array<string, array<string, list<string>>|list<string>> Associative array of userUuid => permissions
      */
     public function batchLoadUserPermissions(array $userUuids): array
     {
-        if (empty($userUuids)) {
+        if ($userUuids === []) {
             return [];
         }
 
@@ -1137,10 +1146,10 @@ class SessionCacheManager
         }
 
         // Load missing permissions
-        if (!empty($missing)) {
+        if ($missing !== []) {
             try {
                 // Try batch loading if RBAC provider supports it
-                if ($this->permissionService && method_exists($this->permissionService, 'batchGetUserPermissions')) {
+                if ($this->permissionService instanceof RbacPermissionProviderInterface) {
                     $batchResults = $this->permissionService->batchGetUserPermissions($missing);
                     foreach ($batchResults as $userUuid => $permissions) {
                         $results[$userUuid] = $permissions;
@@ -1169,12 +1178,13 @@ class SessionCacheManager
     /**
      * Batch retrieve sessions to avoid N+1 cache calls
      *
-     * @param array $sessionIds Array of session IDs
+     * @param list<string> $sessionIds Array of session IDs
      * @return array Array of valid sessions
+     * @phpstan-return list<AuthSessionPayload>
      */
     private function batchGetSessions(array $sessionIds): array
     {
-        if (empty($sessionIds)) {
+        if ($sessionIds === []) {
             return [];
         }
 
@@ -1203,6 +1213,7 @@ class SessionCacheManager
      *
      * @param string $provider Provider name
      * @return array Sessions for the provider
+     * @phpstan-return list<AuthSessionPayload>
      */
     public function getSessionsByProviderForQuery(string $provider): array
     {
@@ -1278,7 +1289,7 @@ class SessionCacheManager
     /**
      * Invalidate sessions matching criteria
      *
-     * @param array $criteria Selection criteria
+     * @param array<string, mixed> $criteria Selection criteria
      * @return int Number of sessions invalidated
      */
     public function invalidateSessionsWhere(array $criteria): int
@@ -1298,8 +1309,8 @@ class SessionCacheManager
     /**
      * Update sessions matching criteria
      *
-     * @param array $criteria Selection criteria
-     * @param array $updates Updates to apply
+     * @param array<string, mixed> $criteria Selection criteria
+     * @param array<string, mixed> $updates Updates to apply
      * @return int Number of sessions updated
      */
     public function updateSessionsWhere(array $criteria, array $updates): int
@@ -1319,8 +1330,8 @@ class SessionCacheManager
     /**
      * Create bulk sessions
      *
-     * @param array $sessionsData Array of session data
-     * @return array Array of created session IDs
+     * @param list<array<string, mixed>> $sessionsData Array of session data
+     * @return list<string> Array of created session IDs
      */
     public function createBulkSessions(array $sessionsData): array
     {

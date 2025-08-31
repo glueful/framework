@@ -43,7 +43,7 @@ return [
     ],
 
     'encryption' => [
-        'enabled' => !empty(env('ARCHIVE_ENCRYPTION_KEY')),
+        'enabled' => is_string(env('ARCHIVE_ENCRYPTION_KEY')) && env('ARCHIVE_ENCRYPTION_KEY') !== '',
         'key' => env('ARCHIVE_ENCRYPTION_KEY') ?? null,
         'algorithm' => 'AES-256-GCM',
     ],

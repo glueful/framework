@@ -28,7 +28,11 @@ class SessionAnalytics
     private const ANALYTICS_PREFIX = 'session_analytics:';
     private const METRICS_TTL = 3600; // 1 hour
 
-    /** @var CacheStore Cache driver service */
+    /**
+     * Cache driver service
+     *
+     * @var CacheStore<mixed>
+     */
     private CacheStore $cache;
 
     /** @var SessionCacheManager Session cache manager service */
@@ -37,7 +41,7 @@ class SessionAnalytics
     /**
      * Constructor
      *
-     * @param CacheStore|null $cache Cache driver service
+     * @param CacheStore<mixed>|null $cache Cache driver service
      * @param SessionCacheManager|null $sessionCacheManager Session cache manager service
      */
     public function __construct(
@@ -56,8 +60,8 @@ class SessionAnalytics
     /**
      * Get comprehensive session analytics
      *
-     * @param array $filters Optional filters for analysis
-     * @return array Detailed session metrics
+     * @param array<string, mixed> $filters Optional filters for analysis
+     * @return array<string, mixed> Detailed session metrics
      */
     public function getSessionAnalytics(array $filters = []): array
     {
@@ -99,7 +103,7 @@ class SessionAnalytics
     /**
      * Get real-time session metrics
      *
-     * @return array Real-time metrics
+     * @return array<string, mixed> Real-time metrics
      */
     public function getRealTimeMetrics(): array
     {
@@ -134,7 +138,7 @@ class SessionAnalytics
      *
      * @param int $hours Number of hours to analyze
      * @param int $interval Interval in minutes
-     * @return array Trend data
+     * @return list<array<string, int|float|string>> Trend data
      */
     public function getSessionTrends(int $hours = 24, int $interval = 60): array
     {
@@ -157,8 +161,8 @@ class SessionAnalytics
     /**
      * Find sessions with complex criteria
      *
-     * @param array $criteria Search criteria
-     * @return array Matching sessions
+     * @param array<string, mixed> $criteria Search criteria
+     * @return list<array<string, mixed>> Matching sessions
      */
     public function findSessionsWithCriteria(array $criteria): array
     {
@@ -230,7 +234,7 @@ class SessionAnalytics
      * Get session security events
      *
      * @param int $hours Hours to look back
-     * @return array Security events
+     * @return array<string, mixed> Security events
      */
     public function getSecurityEvents(int $hours = 24): array
     {
@@ -258,8 +262,8 @@ class SessionAnalytics
     /**
      * Analyze sessions by provider
      *
-     * @param array $sessions Sessions to analyze
-     * @return array Provider analysis
+     * @param list<array<string, mixed>> $sessions Sessions to analyze
+     * @return array<string, array<string, int|float>> Provider analysis
      */
     private function analyzeByProvider(array $sessions): array
     {
@@ -295,7 +299,8 @@ class SessionAnalytics
 
         // Calculate averages
         foreach ($providers as $provider => &$data) {
-            $data['avg_duration'] = $data['total_duration'] / $data['count'];
+            // Each provider entry is created only when at least one session exists.
+            $data['avg_duration'] = $data['total_duration'] / max(1, $data['count']);
         }
 
         return $providers;
@@ -304,8 +309,8 @@ class SessionAnalytics
     /**
      * Analyze sessions by user role
      *
-     * @param array $sessions Sessions to analyze
-     * @return array Role analysis
+     * @param list<array<string, mixed>> $sessions Sessions to analyze
+     * @return array<string, array<string, int>> Role analysis
      */
     private function analyzeByUserRole(array $sessions): array
     {
@@ -314,7 +319,7 @@ class SessionAnalytics
         foreach ($sessions as $session) {
             $userRoles = $session['user']['roles'] ?? [];
 
-            if (empty($userRoles)) {
+            if ($userRoles === []) {
                 $roleNames = ['no_role'];
             } else {
                 $roleNames = array_column($userRoles, 'name');
@@ -333,7 +338,7 @@ class SessionAnalytics
                 $roles[$role]['session_count']++;
 
                 $userUuid = $session['user']['uuid'] ?? '';
-                if ($userUuid && !in_array($userUuid, $roles[$role]['unique_users'])) {
+                if ($userUuid !== '' && !in_array($userUuid, $roles[$role]['unique_users'], true)) {
                     $roles[$role]['unique_users'][] = $userUuid;
                 }
 
@@ -355,8 +360,8 @@ class SessionAnalytics
     /**
      * Analyze sessions by time range
      *
-     * @param array $sessions Sessions to analyze
-     * @return array Time range analysis
+     * @param list<array<string, mixed>> $sessions Sessions to analyze
+     * @return array<string, array<string, int>> Time range analysis
      */
     private function analyzeByTimeRange(array $sessions): array
     {
@@ -390,7 +395,7 @@ class SessionAnalytics
                 if ($createdAt >= $threshold) {
                     $analysis[$range]['new_sessions']++;
 
-                    if ($userUuid && !in_array($userUuid, $analysis[$range]['unique_users'])) {
+                    if ($userUuid !== '' && !in_array($userUuid, $analysis[$range]['unique_users'], true)) {
                         $analysis[$range]['unique_users'][] = $userUuid;
                     }
                     break; // Session belongs to first matching range
@@ -415,8 +420,8 @@ class SessionAnalytics
     /**
      * Analyze geographic distribution
      *
-     * @param array $sessions Sessions to analyze
-     * @return array Geographic analysis
+     * @param list<array<string, mixed>> $sessions Sessions to analyze
+     * @return array<string, mixed> Geographic analysis
      */
     private function analyzeGeographicDistribution(array $sessions): array
     {
@@ -462,8 +467,8 @@ class SessionAnalytics
     /**
      * Analyze device types and browsers
      *
-     * @param array $sessions Sessions to analyze
-     * @return array Device analysis
+     * @param list<array<string, mixed>> $sessions Sessions to analyze
+     * @return array<string, array<string, int>> Device analysis
      */
     private function analyzeDeviceTypes(array $sessions): array
     {
@@ -499,12 +504,12 @@ class SessionAnalytics
     /**
      * Get performance metrics
      *
-     * @param array $sessions Sessions to analyze
-     * @return array Performance metrics
+     * @param list<array<string, mixed>> $sessions Sessions to analyze
+     * @return array<string, int|float> Performance metrics
      */
     private function getPerformanceMetrics(array $sessions): array
     {
-        if (empty($sessions)) {
+        if ($sessions === []) {
             return [
                 'avg_session_duration' => 0,
                 'peak_concurrent_sessions' => 0,
@@ -542,8 +547,8 @@ class SessionAnalytics
     /**
      * Analyze user activity patterns
      *
-     * @param array $sessions Sessions to analyze
-     * @return array Activity analysis
+     * @param list<array<string, mixed>> $sessions Sessions to analyze
+     * @return array<string, mixed> Activity analysis
      */
     private function analyzeUserActivity(array $sessions): array
     {
@@ -599,8 +604,8 @@ class SessionAnalytics
     /**
      * Analyze session duration patterns
      *
-     * @param array $sessions Sessions to analyze
-     * @return array Duration analysis
+     * @param list<array<string, mixed>> $sessions Sessions to analyze
+     * @return array<string, int|float|array<string, int>> Duration analysis
      */
     private function analyzeSessionDuration(array $sessions): array
     {
@@ -632,10 +637,10 @@ class SessionAnalytics
         }
 
         return [
-            'avg_duration' => !empty($durations) ? array_sum($durations) / count($durations) : 0,
+            'avg_duration' => (count($durations) > 0) ? array_sum($durations) / count($durations) : 0,
             'median_duration' => $this->calculateMedian($durations),
-            'min_duration' => !empty($durations) ? min($durations) : 0,
-            'max_duration' => !empty($durations) ? max($durations) : 0,
+            'min_duration' => (count($durations) > 0) ? min($durations) : 0,
+            'max_duration' => (count($durations) > 0) ? max($durations) : 0,
             'duration_buckets' => $bucketCounts
         ];
     }
@@ -643,8 +648,8 @@ class SessionAnalytics
     /**
      * Analyze concurrent sessions
      *
-     * @param array $sessions Sessions to analyze
-     * @return array Concurrency analysis
+     * @param list<array<string, mixed>> $sessions Sessions to analyze
+     * @return array<string, int|float|array<int, int>> Concurrency analysis
      */
     private function analyzeConcurrentSessions(array $sessions): array
     {
@@ -667,8 +672,8 @@ class SessionAnalytics
 
         return [
             'users_with_multiple_sessions' => count($usersWithMultipleSessions),
-            'max_sessions_per_user' => !empty($userSessions) ? max($userSessions) : 0,
-            'avg_sessions_per_user' => !empty($userSessions) ? array_sum($userSessions) / count($userSessions) : 0,
+            'max_sessions_per_user' => (count($userSessions) > 0) ? max($userSessions) : 0,
+            'avg_sessions_per_user' => (count($userSessions) > 0) ? array_sum($userSessions) / count($userSessions) : 0,
             'concurrency_distribution' => $concurrencyLevels
         ];
     }
@@ -676,7 +681,7 @@ class SessionAnalytics
     /**
      * Get all active sessions from cache
      *
-     * @return array All active sessions
+     * @return list<array<string, mixed>> All active sessions
      */
     private function getAllActiveSessions(): array
     {
@@ -687,9 +692,9 @@ class SessionAnalytics
     /**
      * Apply filters to sessions
      *
-     * @param array $sessions Input sessions
-     * @param array $filters Filters to apply
-     * @return array Filtered sessions
+     * @param list<array<string, mixed>> $sessions Input sessions
+     * @param array<string, mixed> $filters Filters to apply
+     * @return list<array<string, mixed>> Filtered sessions
      */
     private function applyFilters(array $sessions, array $filters): array
     {
@@ -716,8 +721,8 @@ class SessionAnalytics
     /**
      * Cache analytics results
      *
-     * @param array $analytics Analytics data
-     * @param array $filters Filters used
+     * @param array<string, mixed> $analytics Analytics data
+     * @param array<string, mixed> $filters Filters used
      * @return void
      */
     private function cacheAnalytics(array $analytics, array $filters): void
@@ -730,6 +735,9 @@ class SessionAnalytics
      * Helper methods for calculations
      */
 
+    /**
+     * @param list<array<string, mixed>> $sessions
+     */
     private function countActiveSessions(array $sessions): int
     {
         return count(array_filter($sessions, function ($session) {
@@ -738,6 +746,9 @@ class SessionAnalytics
         }));
     }
 
+    /**
+     * @param list<array<string, mixed>> $sessions
+     */
     private function countIdleSessions(array $sessions): int
     {
         return count(array_filter($sessions, function ($session) {
@@ -747,6 +758,9 @@ class SessionAnalytics
         }));
     }
 
+    /**
+     * @param list<array<string, mixed>> $sessions
+     */
     private function countExpiredSessions(array $sessions): int
     {
         return count(array_filter($sessions, function ($session) {
@@ -755,6 +769,9 @@ class SessionAnalytics
         }));
     }
 
+    /**
+     * @param list<array<string, mixed>> $sessions
+     */
     private function countSessionsInTimeframe(array $sessions, int $seconds): int
     {
         $threshold = time() - $seconds;
@@ -763,6 +780,9 @@ class SessionAnalytics
         }));
     }
 
+    /**
+     * @param list<array<string, mixed>> $sessions
+     */
     private function countUniqueUsers(array $sessions): int
     {
         $users = array_unique(array_filter(array_map(function ($session) {
@@ -771,9 +791,12 @@ class SessionAnalytics
         return count($users);
     }
 
+    /**
+     * @param list<array<string, mixed>> $sessions
+     */
     private function calculateAverageSessionAge(array $sessions): float
     {
-        if (empty($sessions)) {
+        if ($sessions === []) {
             return 0;
         }
 
@@ -788,9 +811,12 @@ class SessionAnalytics
         return $totalAge / count($sessions);
     }
 
+    /**
+     * @param list<int|float> $values
+     */
     private function calculateMedian(array $values): float
     {
-        if (empty($values)) {
+        if ($values === []) {
             return 0;
         }
 
@@ -825,6 +851,9 @@ class SessionAnalytics
     }
 
     // Placeholder methods for geolocation and user agent parsing
+    /**
+     * @return array{country?: string, city?: string}
+     */
     private function getGeolocationData(string $ip): array
     {
         // In real implementation, use GeoIP service
@@ -837,6 +866,9 @@ class SessionAnalytics
         return $parts[0] . '.' . $parts[1] . '.x.x';
     }
 
+    /**
+     * @return array{device?: string, browser?: string, platform?: string}
+     */
     private function parseUserAgent(string $userAgent): array
     {
         // Basic user agent parsing - in real implementation use proper library
@@ -888,26 +920,41 @@ class SessionAnalytics
         return 0;
     }
 
+    /**
+     * @return array<string, int>
+     */
     private function getFailedLoginAttempts(int $hours): array
     {
         return ['count' => 0, 'unique_ips' => 0];
     }
 
+    /**
+     * @return array<string, int|list<string>>
+     */
     private function getSuspiciousLocationLogins(int $hours): array
     {
         return ['count' => 0, 'locations' => []];
     }
 
+    /**
+     * @return array<string, int|list<string>>
+     */
     private function getConcurrentSessionViolations(int $hours): array
     {
         return ['count' => 0, 'users' => []];
     }
 
+    /**
+     * @return array<string, int|list<string>>
+     */
     private function getSessionHijackingAttempts(int $hours): array
     {
         return ['count' => 0, 'patterns' => []];
     }
 
+    /**
+     * @return array<string, int|list<string>>
+     */
     private function getUnusualActivityPatterns(int $hours): array
     {
         return ['count' => 0, 'patterns' => []];
@@ -919,12 +966,16 @@ class SessionAnalytics
         return ip2long($ip) >= ip2long($start) && ip2long($ip) <= ip2long($end);
     }
 
+    /**
+     * @param array<string, list<string>> $permissions
+     * @param list<string> $required
+     */
     private function hasPermissionCombination(array $permissions, array $required): bool
     {
         foreach ($required as $permission) {
             $found = false;
             foreach ($permissions as $resource => $actions) {
-                if (is_array($actions) && in_array($permission, $actions)) {
+                if (is_array($actions) && in_array($permission, $actions, true)) {
                     $found = true;
                     break;
                 }
@@ -936,6 +987,10 @@ class SessionAnalytics
         return true;
     }
 
+    /**
+     * @param array<string, mixed> $session
+     * @param array<string, mixed> $constraint
+     */
     private function matchesGeographicConstraint(array $session, array $constraint): bool
     {
         // Placeholder for geographic matching logic

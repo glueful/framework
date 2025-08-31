@@ -31,10 +31,11 @@ class JWTService
     private static function initialize(): void
     {
         if (!isset(self::$key)) {
-            self::$key = config('session.jwt_key');
-            if (!self::$key) {
+            $configured = config('session.jwt_key');
+            if (!is_string($configured) || $configured === '') {
                 throw new \RuntimeException('JWT key not configured');
             }
+            self::$key = $configured;
         }
     }
 
@@ -132,7 +133,7 @@ class JWTService
 
         // Decode payload
         $payload = json_decode(self::base64UrlDecode($payloadEncoded), true);
-        if (!$payload) {
+        if (!is_array($payload)) {
             return null;
         }
 
@@ -180,7 +181,10 @@ class JWTService
      */
     private static function base64UrlDecode(string $data): string
     {
-        return base64_decode(strtr($data, '-_', '+/') . str_repeat('=', 3 - (3 + strlen($data)) % 4));
+        $b64 = strtr($data, '-_', '+/');
+        $b64 .= str_repeat('=', (4 - strlen($b64) % 4) % 4);
+        $decoded = base64_decode($b64, true);
+        return $decoded === false ? '' : $decoded;
     }
 
     /**
@@ -223,7 +227,7 @@ class JWTService
     public static function extractClaims(string $token): ?array
     {
         $payload = self::decode($token);
-        return $payload ? array_diff_key($payload, array_flip(['iat', 'exp', 'jti'])) : null;
+        return is_array($payload) ? array_diff_key($payload, array_flip(['iat', 'exp', 'jti'])) : null;
     }
 
     /**
@@ -237,6 +241,6 @@ class JWTService
     public static function isExpired(string $token): bool
     {
         $payload = self::decode($token);
-        return !$payload || (isset($payload['exp']) && $payload['exp'] < time());
+        return $payload === null || (isset($payload['exp']) && $payload['exp'] < time());
     }
 }

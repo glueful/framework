@@ -16,11 +16,12 @@ return [
         'default_mode' => 0755,
         'enable_logging' => env('FILE_MANAGER_LOGGING', true),
         'max_path_length' => env('FILE_MAX_PATH_LENGTH', 4096),
-        'allowed_extensions' => env('FILE_ALLOWED_EXTENSIONS') ? 
-            explode(',', env('FILE_ALLOWED_EXTENSIONS')) : null,
+        'allowed_extensions' => (is_string(env('FILE_ALLOWED_EXTENSIONS')) && env('FILE_ALLOWED_EXTENSIONS') !== '')
+            ? explode(',', env('FILE_ALLOWED_EXTENSIONS'))
+            : null,
         'forbidden_paths' => [
             '/etc',
-            '/usr', 
+            '/usr',
             '/var/log',
             '/sys',
             '/proc',

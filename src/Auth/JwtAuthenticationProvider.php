@@ -160,8 +160,10 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
                 return false;
             }
 
-            // Try to decode the header (first part)
-            $headerJson = base64_decode(strtr($parts[0], '-_', '+/'));
+            // Try to decode the header (first part) with base64url handling
+            $b64 = strtr($parts[0], '-_', '+/');
+            $b64 .= str_repeat('=', (4 - strlen($b64) % 4) % 4);
+            $headerJson = base64_decode($b64, true);
             if ($headerJson === false || $headerJson === '') {
                 return false;
             }

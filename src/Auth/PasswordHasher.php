@@ -19,13 +19,15 @@ class PasswordHasher
 
     /**
      * Default options for password_hash
+     *
+     * @var array<string, int>
      */
     private array $options;
 
     /**
      * Constructor
      *
-     * @param array $options Optional password hashing options
+     * @param array<string, int> $options Optional password hashing options
      */
     public function __construct(array $options = [])
     {
@@ -92,7 +94,7 @@ class PasswordHasher
      * - Options (cost, etc.)
      *
      * @param string $hash Password hash to analyze
-     * @return array Hash information
+     * @return array{algo:int, algoName:string, options: array<string, mixed>} Hash information
      */
     public function getInfo(string $hash): array
     {

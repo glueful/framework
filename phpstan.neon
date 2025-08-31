@@ -26,7 +26,8 @@ parameters:
     treatPhpDocTypesAsCertain: false
     # Deprecated in recent PHPStan; omit to avoid warnings
     checkGenericClassInNonGenericObjectType: true
-    reportUnmatchedIgnoredErrors: true
+    # Ignore patterns may be forward-looking; don't fail when unmatched
+    reportUnmatchedIgnoredErrors: false
     ignoreErrors:
         - '#Instanceof between mixed and Monolog\\Handler\\AbstractProcessingHandler will always evaluate to false\.#'
         

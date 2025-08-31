@@ -28,13 +28,17 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
     /** @var UserRepository User repository for looking up and creating users */
     private UserRepository $userRepository;
 
-    /** @var array LDAP configuration including server settings */
+    /**
+     * @var array<string, mixed> LDAP configuration including server settings
+     */
     private array $ldapConfig;
 
     /** @var string Current LDAP server ID */
     private string $currentServerId = '';
 
-    /** @var array Map of connection IDs to LdapRecord connection instances */
+    /**
+     * @var list<string> Map of connection IDs (server identifiers)
+     */
     private array $connections = [];
 
     /**
@@ -140,13 +144,13 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
 
         // Fallback to is_admin flag if no UUID available
         if (!isset($user['uuid'])) {
-            return !empty($user['is_admin']);
+            return (bool)($user['is_admin'] ?? false);
         }
 
         // Check if permission system is available
         if (!PermissionHelper::isAvailable()) {
             // Fall back to is_admin flag
-            return !empty($user['is_admin']);
+            return (bool)($user['is_admin'] ?? false);
         }
 
         // Check if user has admin access using PermissionHelper
@@ -156,7 +160,7 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
         );
 
         // If permission check fails, fall back to is_admin flag as safety net
-        if (!$hasAdminAccess && !empty($user['is_admin'])) {
+        if ($hasAdminAccess === false && (bool)($user['is_admin'] ?? false)) {
             error_log("Admin permission check failed for user {$user['uuid']}, falling back to is_admin flag");
             return true;
         }
@@ -179,8 +183,8 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
     {
         try {
             // Decode the token
-            $decoded = base64_decode($token);
-            $payload = is_string($decoded) ? json_decode($decoded, true) : null;
+            $decoded = base64_decode($token, true);
+            $payload = $decoded !== false ? json_decode($decoded, true) : null;
 
             // Check if it's a valid LDAP token
             if (
@@ -220,8 +224,8 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
     public function canHandleToken(string $token): bool
     {
         try {
-            $decoded = base64_decode($token);
-            $payload = is_string($decoded) ? json_decode($decoded, true) : null;
+            $decoded = base64_decode($token, true);
+            $payload = $decoded !== false ? json_decode($decoded, true) : null;
 
             // Check if this is an LDAP token based on its structure
             return is_array($payload) &&
@@ -298,12 +302,13 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
     {
         try {
             // Decode refresh token
-            $payload = json_decode(base64_decode($refreshToken), true);
+            $b64 = base64_decode($refreshToken, true);
+            $payload = $b64 !== false ? json_decode($b64, true) : null;
 
             // Validate refresh token format
             // Validate refresh token format
             if (
-                !$payload ||
+                !is_array($payload) ||
                 !isset($payload['sub']) ||
                 !isset($payload['auth_method']) ||
                 $payload['auth_method'] !== 'ldap' ||
@@ -321,7 +326,7 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
 
             // Find the user
             $user = $this->userRepository->findByUuid($payload['sub']);
-            if (!$user) {
+            if ($user === null) {
                 $this->lastError = 'User not found';
                 return null;
             }
@@ -423,7 +428,7 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
     private function getConnection(): ?Connection
     {
         try {
-            if (empty($this->currentServerId)) {
+            if ($this->currentServerId === '') {
                 $this->currentServerId = $this->getDefaultServerId();
             }
 
@@ -474,11 +479,13 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
             $serverConfig = $this->ldapConfig['servers'][$serverId] ?? [];
 
             // Set connection for query
-            $query = (new LdapUser())->setConnection($serverId);
+            $model = new LdapUser();
+            $model->setConnection($serverId);
+            $query = $model->newQuery();
 
             // Set search base if specified
-            if (!empty($serverConfig['user_search_base'])) {
-                $query = $query->in($serverConfig['user_search_base']);
+            if (isset($serverConfig['user_search_base']) && $serverConfig['user_search_base'] !== '') {
+                $query->in($serverConfig['user_search_base']);
             }
 
             // Determine attribute to search by
@@ -497,7 +504,7 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
             $user = $query->where($searchAttribute, '=', $searchUsername)->first();
 
             // If not found and using sAMAccountName, try with userPrincipalName
-            if (!$user && $searchAttribute === 'sAMAccountName') {
+            if ($user === null && $searchAttribute === 'sAMAccountName') {
                 // If username contains @ it might be a UPN
                 if (strpos($username, '@') !== false) {
                     $user = $query->where('userPrincipalName', '=', $username)->first();
@@ -519,6 +526,11 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
      * @param string $serverId Server ID
      * @return array|null Mapped user data
      */
+    /**
+     * Map LDAP attributes to framework user data.
+     *
+     * @return array<string, mixed>|null
+     */
     private function mapLdapAttributesToUserData(LdapUser $ldapUser, string $serverId): ?array
     {
         try {
@@ -536,7 +548,7 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
 
                 foreach ($ldapAttributes as $attr) {
                     $value = $ldapUser->getFirstAttribute($attr);
-                    if ($value) {
+                    if (is_string($value) && $value !== '') {
                         $userData[$userField] = $value;
                         break;
                     }
@@ -544,15 +556,18 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
             }
 
             // Email is required
-            if (empty($userData['email'])) {
+            if (!isset($userData['email']) || $userData['email'] === '') {
                 // Try to use userPrincipalName as email if it looks like an email
                 $upn = $ldapUser->getFirstAttribute('userPrincipalName');
-                if ($upn && strpos($upn, '@') !== false) {
+                if (is_string($upn) && $upn !== '' && strpos($upn, '@') !== false) {
                     $userData['email'] = $upn;
                 } else {
                     // Try to construct from sAMAccountName + domain suffix
                     $sAMAccountName = $ldapUser->getFirstAttribute('sAMAccountName');
-                    if ($sAMAccountName && !empty($serverConfig['account_suffix'])) {
+                    if (
+                        is_string($sAMAccountName) && $sAMAccountName !== '' &&
+                        isset($serverConfig['account_suffix']) && is_string($serverConfig['account_suffix']) && $serverConfig['account_suffix'] !== ''
+                    ) {
                         $userData['email'] = $sAMAccountName . $serverConfig['account_suffix'];
                     } else {
                         $this->lastError = "Unable to determine email for LDAP user";
@@ -562,24 +577,24 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
             }
 
             // Ensure we have a name
-            if (empty($userData['name'])) {
+            if (!isset($userData['name']) || $userData['name'] === '') {
                 // Try common name attributes
                 foreach (['cn', 'displayName', 'name'] as $nameAttr) {
                     $name = $ldapUser->getFirstAttribute($nameAttr);
-                    if ($name) {
+                    if (is_string($name) && $name !== '') {
                         $userData['name'] = $name;
                         break;
                     }
                 }
 
                 // Fall back to username
-                if (empty($userData['name'])) {
+                if (!isset($userData['name']) || $userData['name'] === '') {
                     $userData['name'] = explode('@', $userData['email'])[0];
                 }
             }
 
             // Get group memberships if configured
-            if (!empty($serverConfig['group_mapping'])) {
+            if (isset($serverConfig['group_mapping']) && is_array($serverConfig['group_mapping']) && $serverConfig['group_mapping'] !== []) {
                 $userData['roles'] = $this->getUserRolesFromGroups($ldapUser, $serverId);
             }
 
@@ -596,6 +611,9 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
      * @param LdapUser $ldapUser LDAP user object
      * @param string $serverId Server ID
      * @return array User roles
+     */
+    /**
+     * @return list<array{name: string}>
      */
     private function getUserRolesFromGroups(LdapUser $ldapUser, string $serverId): array
     {
@@ -650,6 +668,9 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
      *
      * @return array Default attribute mapping
      */
+    /**
+     * @return array<string, list<string>>
+     */
     private function getDefaultAttributeMapping(): array
     {
         return [
@@ -669,6 +690,9 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
      * Load LDAP configuration
      *
      * @return array Configuration array
+     */
+    /**
+     * @return array{default_server: string, servers: array<string, array<string, mixed>>}
      */
     private function loadLdapConfiguration(): array
     {

@@ -25,7 +25,9 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
     /** @var UserRepository User repository for looking up and creating users */
     private UserRepository $userRepository;
 
-    /** @var array SAML configuration including IdP settings */
+    /**
+     * @var array<string, mixed> SAML configuration including IdP settings
+     */
     private array $samlConfig;
 
     /** @var SamlAuth|null SAML authentication object */
@@ -75,7 +77,7 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
 
             // Check for errors
             $errors = $this->samlAuth->getErrors();
-            if (!empty($errors)) {
+            if ($errors !== []) {
                 $this->lastError = 'SAML authentication failed: ' . implode(', ', $errors);
                 return null;
             }
@@ -132,13 +134,13 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
 
         // Fallback to is_admin flag if no UUID available
         if (!isset($user['uuid'])) {
-            return !empty($user['is_admin']);
+            return (bool)($user['is_admin'] ?? false);
         }
 
         // Check if permission system is available
         if (!PermissionHelper::isAvailable()) {
             // Fall back to is_admin flag
-            return !empty($user['is_admin']);
+            return (bool)($user['is_admin'] ?? false);
         }
 
         // Check if user has admin access using PermissionHelper
@@ -148,7 +150,7 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
         );
 
         // If permission check fails, fall back to is_admin flag as safety net
-        if (!$hasAdminAccess && !empty($user['is_admin'])) {
+        if ($hasAdminAccess === false && (bool)($user['is_admin'] ?? false)) {
             error_log("Admin permission check failed for user {$user['uuid']}, falling back to is_admin flag");
             return true;
         }
@@ -171,8 +173,8 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
     {
         try {
             // Decode the token
-            $decoded = base64_decode($token);
-            $payload = is_string($decoded) ? json_decode($decoded, true) : null;
+            $decoded = base64_decode($token, true);
+            $payload = $decoded !== false ? json_decode($decoded, true) : null;
 
             // Check if it's a valid SAML token
             if (
@@ -210,8 +212,8 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
     public function canHandleToken(string $token): bool
     {
         try {
-            $decoded = base64_decode($token);
-            $payload = is_string($decoded) ? json_decode($decoded, true) : null;
+            $decoded = base64_decode($token, true);
+            $payload = $decoded !== false ? json_decode($decoded, true) : null;
 
             // Check if this is a SAML token based on its structure
             return is_array($payload) &&
@@ -296,11 +298,12 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
     {
         try {
             // Decode refresh token
-            $payload = json_decode(base64_decode($refreshToken), true);
+            $b64 = base64_decode($refreshToken, true);
+            $payload = $b64 !== false ? json_decode($b64, true) : null;
 
             // Validate refresh token format
             if (
-                !$payload ||
+                !is_array($payload) ||
                 !isset($payload['sub']) ||
                 !isset($payload['saml_idp']) ||
                 !isset($payload['saml_name_id']) ||
@@ -319,7 +322,7 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
 
             // Find the user
             $user = $this->userRepository->findByUuid($payload['sub']);
-            if (!$user) {
+            if ($user === null) {
                 $this->lastError = 'User not found';
                 return null;
             }
@@ -347,7 +350,7 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
     private function initializeSamlAuth(Request $request): void
     {
         // Ensure we have a current IdP set
-        if (empty($this->currentIdpId)) {
+        if ($this->currentIdpId === '') {
             throw new \Exception('No Identity Provider selected');
         }
 
@@ -362,13 +365,13 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
      * Generate SAML settings for the current IdP
      *
      * @param Request $request Current request for URL generation
-     * @return array SAML settings array
+     * @return array<string, mixed> SAML settings array
      */
     private function getSamlSettings(Request $request): array
     {
         // Get configuration for current IdP
         $idpConfig = $this->samlConfig['providers'][$this->currentIdpId] ?? null;
-        if (!$idpConfig) {
+        if (!is_array($idpConfig)) {
             throw new \Exception("Configuration for IdP '{$this->currentIdpId}' not found");
         }
 
@@ -427,11 +430,15 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
      * @param string $idpId Identity provider ID
      * @return array|null Mapped user data
      */
+    /**
+     * @param array<string, list<string>> $attributes SAML attributes from assertion
+     * @return array<string, mixed>|null Mapped user data
+     */
     private function mapSamlAttributesToUserData(array $attributes, string $nameId, string $idpId): ?array
     {
         // Get attribute mapping for the IdP
         $idpConfig = $this->samlConfig['providers'][$idpId] ?? null;
-        if (!$idpConfig) {
+        if (!is_array($idpConfig)) {
             return null;
         }
 
@@ -498,6 +505,10 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
      * @param array|string $mappedNames Possible attribute names
      * @return string|null First found attribute value or null
      */
+    /**
+     * @param array<string, list<string>> $attributes
+     * @param list<string>|string $mappedNames
+     */
     private function extractFirstMappedAttribute(array $attributes, $mappedNames): ?string
     {
         $mappedNames = (array) $mappedNames;
@@ -517,6 +528,11 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
      * @param array $attributes SAML attributes
      * @param array|string $mappedNames Possible attribute names
      * @return array All found attribute values
+     */
+    /**
+     * @param array<string, list<string>> $attributes
+     * @param list<string>|string $mappedNames
+     * @return list<string>
      */
     private function extractMappedAttributes(array $attributes, $mappedNames): array
     {
@@ -538,6 +554,11 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
      * @param array $samlRoles Roles from SAML assertion
      * @param array $roleMapping Mapping configuration
      * @return array System roles
+     */
+    /**
+     * @param list<string> $samlRoles
+     * @param array<string, string> $roleMapping
+     * @return list<array{name: string}>
      */
     private function mapSamlRolesToSystemRoles(array $samlRoles, array $roleMapping): array
     {
@@ -603,6 +624,13 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
      *
      * @return array Configuration array
      */
+    /**
+     * @return array{
+     *   debug: bool,
+     *   default_idp: string,
+     *   providers: array<string, array<string, mixed>>
+     * }
+     */
     private function loadSamlConfiguration(): array
     {
         // In a real implementation, this would load from config files
@@ -644,6 +672,9 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
      *
      * @return array Default attribute mapping
      */
+    /**
+     * @return array<string, list<string>>
+     */
     private function getDefaultAttributeMapping(): array
     {
         return [
@@ -677,7 +708,7 @@ class SamlAuthenticationProvider implements AuthenticationProviderInterface
         $metadata = $settings->getSPMetadata();
 
         $errors = $settings->validateMetadata($metadata);
-        if (!empty($errors)) {
+        if ($errors !== []) {
             throw new \Exception('Invalid metadata: ' . implode(', ', $errors));
         }
 

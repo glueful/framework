@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace Glueful;
 
 use Glueful\DI\Container;
-use Glueful\Http\{Response, Router};
-use Psr\Http\Message\ServerRequestInterface;
+use Glueful\Http\Router;
 use Glueful\Extensions\ExtensionManager;
 use Glueful\Scheduler\JobScheduler;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class Application
 {
@@ -62,13 +63,13 @@ class Application
         $this->initialized = true;
     }
 
-    public function handle(ServerRequestInterface $request): Response
+    public function handle(Request $request): HttpResponse
     {
         $startTime = microtime(true);
         $requestId = request_id(); // Use consistent request_id() function
 
-        $router = Router::getInstance(); // Router uses singleton pattern, not DI
-        $response = $router->handleRequest($request);
+        // Dispatch via router using Symfony Request
+        $response = Router::dispatch($request);
 
         $totalTime = round((microtime(true) - $startTime) * 1000, 2);
         $this->logger->info(
@@ -77,7 +78,7 @@ class Application
             'type' => 'framework',
             'request_id' => $requestId,
             'method' => $request->getMethod(),
-            'uri' => $request->getUri()->getPath(),
+            'uri' => $request->getPathInfo(),
             'time_ms' => $totalTime,
             'status' => $response->getStatusCode(),
             'timestamp' => date('c')
@@ -87,7 +88,7 @@ class Application
         return $response;
     }
 
-    public function terminate(ServerRequestInterface $request, Response $response): void
+    public function terminate(Request $request, HttpResponse $response): void
     {
         // Cleanup, log final stats, etc.
         // TODO: Implement cleanup logic, garbage collection, final logging
@@ -116,13 +117,13 @@ class Application
         \Glueful\Auth\AuthBootstrap::initialize();
 
         // Initialize database connection if needed
-        if (!defined('SKIP_DB_INIT') && config('database.auto_connect', true)) {
+        if (!defined('SKIP_DB_INIT') && (bool) config('database.auto_connect', true)) {
             $this->logger->debug("Initializing database connection...");
             new \Glueful\Database\Connection();
         }
 
         // Initialize cache if enabled
-        if (config('cache.enabled', true)) {
+        if ((bool) config('cache.enabled', true)) {
             $this->logger->debug("Initializing cache services...");
             \Glueful\Helpers\Utils::initializeCacheDriver();
         }
