@@ -23,7 +23,7 @@ class RedisNode extends CacheNode
      * Initialize Redis node
      *
      * @param string $id Node identifier
-     * @param array $config Node configuration
+     * @param array<string, mixed> $config Node configuration
      */
     public function __construct(string $id, array $config)
     {
@@ -55,7 +55,7 @@ class RedisNode extends CacheNode
             }
 
             // Authenticate if password is set
-            if (!empty($password)) {
+            if ($password !== '') {
                 $authenticated = $this->redis->auth($password);
                 if (!$authenticated) {
                     error_log("Redis authentication failed for node {$this->id}");
@@ -178,7 +178,7 @@ class RedisNode extends CacheNode
         }
 
         try {
-            return $this->redis->flushDb();
+            return $this->redis->flushDB();
         } catch (\Exception $e) {
             error_log("Redis clear error for node {$this->id}: " . $e->getMessage());
             return false;
@@ -208,7 +208,7 @@ class RedisNode extends CacheNode
     /**
      * Get node status
      *
-     * @return array Status information
+     * @return array<string, mixed> Status information
      */
     public function getStatus(): array
     {
@@ -263,7 +263,7 @@ class RedisNode extends CacheNode
      * Get keys from a tag set
      *
      * @param string $tag Tag name
-     * @return array Keys in the tag set
+     * @return array<string> Keys in the tag set
      */
     public function getTaggedKeys(string $tag): array
     {

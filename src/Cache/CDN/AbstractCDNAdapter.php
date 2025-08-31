@@ -13,7 +13,7 @@ abstract class AbstractCDNAdapter implements CDNAdapterInterface
     /**
      * Configuration for the CDN adapter
      *
-     * @var array
+     * @var array<string, mixed>
      */
     protected array $config;
 
@@ -27,12 +27,12 @@ abstract class AbstractCDNAdapter implements CDNAdapterInterface
     /**
      * Constructor for CDN adapters
      *
-     * @param array $config Configuration options for the adapter
+     * @param array<string, mixed> $config Configuration options for the adapter
      */
     public function __construct(array $config = [])
     {
         $this->config = $config;
-        $this->defaultTtl = $config['default_ttl'] ?? 3600; // Default: 1 hour
+        $this->defaultTtl = (int)($config['default_ttl'] ?? 3600); // Default: 1 hour
     }
 
     /**
@@ -73,6 +73,13 @@ abstract class AbstractCDNAdapter implements CDNAdapterInterface
 
     /**
      * {@inheritdoc}
+     * @return array{
+     *   provider: string,
+     *   status: string,
+     *   cache_hit_ratio: int|float|null,
+     *   edge_requests: int|null,
+     *   origin_requests: int|null
+     * }
      */
     public function getStats(): array
     {
@@ -88,6 +95,7 @@ abstract class AbstractCDNAdapter implements CDNAdapterInterface
 
     /**
      * {@inheritdoc}
+     * @return array<string, string>
      */
     public function generateCacheHeaders(string $route, ?string $contentType = null): array
     {
@@ -104,8 +112,10 @@ abstract class AbstractCDNAdapter implements CDNAdapterInterface
         ];
 
         // Add vary headers if specified
-        if (!empty($routeConfig['vary_by'])) {
-            $headers['Vary'] = implode(', ', $routeConfig['vary_by']);
+        if (isset($routeConfig['vary_by']) && $routeConfig['vary_by'] !== []) {
+            /** @var list<string> $vary */
+            $vary = $routeConfig['vary_by'];
+            $headers['Vary'] = implode(', ', $vary);
         }
 
         return $headers;
@@ -141,12 +151,13 @@ abstract class AbstractCDNAdapter implements CDNAdapterInterface
 
     /**
      * {@inheritdoc}
+     * @return array{provider: string, configured: bool, enabled: bool}
      */
     public function getStatus(): array
     {
         return [
             'provider' => $this->getProviderName(),
-            'configured' => !empty($this->config),
+            'configured' => $this->config !== [],
             'enabled' => $this->config['enabled'] ?? false
         ];
     }
@@ -157,8 +168,12 @@ abstract class AbstractCDNAdapter implements CDNAdapterInterface
      * @param string $route The route name
      * @return array The route-specific configuration
      */
+    /**
+     * @return array{ttl?: int, vary_by?: list<string>}
+     */
     protected function getRouteConfig(string $route): array
     {
+        /** @var array<string, array{ttl?: int, vary_by?: list<string>}>|array{} $rules */
         $rules = $this->config['rules'] ?? [];
 
         // Check for exact route match

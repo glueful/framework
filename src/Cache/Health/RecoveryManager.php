@@ -21,13 +21,13 @@ class RecoveryManager
     /** @var FailoverManager Failover manager instance */
     private $failoverManager;
 
-    /** @var array Configuration for recovery */
+    /** @var array<string, mixed> Configuration for recovery */
     private $config;
 
-    /** @var array Status of recovery operations */
+    /** @var array<string, array<string, mixed>> Status of recovery operations */
     private $recoveryStatus = [];
 
-    /** @var array Event subscribers for recovery events */
+    /** @var array<string, array<callable>> Event subscribers for recovery events */
     private $subscribers = [];
 
     /**
@@ -35,7 +35,7 @@ class RecoveryManager
      *
      * @param NodeHealthChecker $healthChecker Health checker instance
      * @param FailoverManager $failoverManager Failover manager instance
-     * @param array $config Configuration for recovery
+     * @param array<string, mixed> $config Configuration for recovery
      */
     public function __construct(
         NodeHealthChecker $healthChecker,
@@ -59,7 +59,7 @@ class RecoveryManager
         $health = $this->healthChecker->getNodeHealth($nodeId);
 
         // Node was previously unhealthy but is now healthy
-        return !($health['healthy'] ?? true) && $this->healthChecker->isHealthy($node, true);
+        return !(bool)($health['healthy'] ?? true) && $this->healthChecker->isHealthy($node, true);
     }
 
     /**
@@ -74,7 +74,7 @@ class RecoveryManager
         $nodeId = $node->getId();
 
         // Check if already in recovery
-        if (isset($this->recoveryStatus[$nodeId]) && $this->recoveryStatus[$nodeId]['in_progress']) {
+        if (isset($this->recoveryStatus[$nodeId]) && (bool)($this->recoveryStatus[$nodeId]['in_progress'] ?? false)) {
             return false;
         }
 
@@ -127,7 +127,7 @@ class RecoveryManager
                 return $healthyNode->getId() !== $nodeId;
             });
 
-            if (empty($healthyNodes)) {
+            if ($healthyNodes === []) {
                 throw new \RuntimeException("No healthy nodes available for synchronization");
             }
 
@@ -211,7 +211,7 @@ class RecoveryManager
      * Get keys from a node
      *
      * @param CacheNode $node Cache node
-     * @return array List of keys
+     * @return array<string> List of keys
      */
     private function getNodeKeys(CacheNode $node): array
     {
@@ -278,7 +278,7 @@ class RecoveryManager
             $this->recoveryStatus[$nodeId]['completed_at'] = time();
             $this->recoveryStatus[$nodeId]['success'] = $success;
 
-            if (!$success && $errorMessage) {
+            if (!$success && $errorMessage !== '') {
                 $this->recoveryStatus[$nodeId]['error'] = $errorMessage;
             }
         }
@@ -288,7 +288,7 @@ class RecoveryManager
      * Get recovery status for a node
      *
      * @param string $nodeId Node identifier
-     * @return array Recovery status
+     * @return array<string, mixed> Recovery status
      */
     public function getRecoveryStatus(string $nodeId): array
     {
@@ -321,7 +321,7 @@ class RecoveryManager
      * Notify subscribers of an event
      *
      * @param string $event Event name
-     * @param array $data Event data
+     * @param array<string, mixed> $data Event data
      * @return void
      */
     private function notifySubscribers(string $event, array $data): void

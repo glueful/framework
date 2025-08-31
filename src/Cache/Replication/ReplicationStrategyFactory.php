@@ -17,14 +17,14 @@ use Glueful\Cache\Replication\KeyPatternShardingStrategy;
  */
 class ReplicationStrategyFactory
 {
-    /** @var array Registered strategies */
+    /** @var array<string, ReplicationStrategyInterface> Registered strategies */
     private static array $strategies = [];
 
     /**
      * Get a replication strategy instance
      *
      * @param string $strategy Strategy name
-     * @param array $config Configuration for the strategy
+     * @param array<string, mixed> $config Configuration for the strategy
      * @return ReplicationStrategyInterface Strategy instance
      * @throws \InvalidArgumentException If strategy is unknown
      */
@@ -60,7 +60,7 @@ class ReplicationStrategyFactory
     /**
      * Create a consistent hashing strategy
      *
-     * @param array $config Configuration
+     * @param array<string, mixed> $config Configuration
      * @return ConsistentHashingStrategy
      */
     private static function createConsistentHashingStrategy(array $config): ConsistentHashingStrategy
@@ -74,7 +74,7 @@ class ReplicationStrategyFactory
     /**
      * Create a primary-replica strategy
      *
-     * @param array $config Configuration
+     * @param array<string, mixed> $config Configuration
      * @return PrimaryReplicaStrategy
      */
     private static function createPrimaryReplicaStrategy(array $config): PrimaryReplicaStrategy
@@ -87,7 +87,7 @@ class ReplicationStrategyFactory
     /**
      * Create a key pattern sharding strategy
      *
-     * @param array $config Configuration
+     * @param array<string, mixed> $config Configuration
      * @return KeyPatternShardingStrategy
      */
     private static function createKeyPatternShardingStrategy(array $config): KeyPatternShardingStrategy

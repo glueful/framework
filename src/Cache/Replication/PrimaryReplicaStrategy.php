@@ -33,7 +33,7 @@ class PrimaryReplicaStrategy implements ReplicationStrategyInterface
      */
     public function getNodesForKey(string $key, array $allNodes): array
     {
-        if (empty($allNodes)) {
+        if ($allNodes === []) {
             return [];
         }
 

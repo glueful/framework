@@ -18,13 +18,13 @@ class FailoverManager
     /** @var NodeHealthChecker Health checker instance */
     private $healthChecker;
 
-    /** @var array Circuit breakers for nodes */
+    /** @var array<string, CircuitBreaker> Circuit breakers for nodes */
     private $circuitBreakers = [];
 
-    /** @var array Configuration for failover */
+    /** @var array<string, mixed> Configuration for failover */
     private $config;
 
-    /** @var array Event subscribers for failover events */
+    /** @var array<string, array<callable>> Event subscribers for failover events */
     private $subscribers = [];
 
     /** @var bool Whether automatic failover is enabled */
@@ -37,7 +37,7 @@ class FailoverManager
      * Initialize failover manager
      *
      * @param NodeHealthChecker $healthChecker Health checker instance
-     * @param array $config Configuration for failover
+     * @param array<string, mixed> $config Configuration for failover
      */
     public function __construct(NodeHealthChecker $healthChecker, array $config = [])
     {
@@ -87,8 +87,8 @@ class FailoverManager
     /**
      * Filter available nodes from a list
      *
-     * @param array $nodes List of cache nodes
-     * @return array Available nodes
+     * @param array<CacheNode> $nodes List of cache nodes
+     * @return array<CacheNode> Available nodes
      */
     public function filterAvailableNodes(array $nodes): array
     {
@@ -155,7 +155,7 @@ class FailoverManager
      *
      * @param CacheNode $failedNode Failed node
      * @param CacheNodeManager $nodeManager Node manager instance
-     * @return array Backup nodes
+     * @return array<CacheNode> Backup nodes
      */
     public function findBackupNodes(CacheNode $failedNode, CacheNodeManager $nodeManager): array
     {
@@ -208,7 +208,7 @@ class FailoverManager
      * Notify subscribers of an event
      *
      * @param string $event Event name
-     * @param array $data Event data
+     * @param array<string, mixed> $data Event data
      * @return void
      */
     private function notifySubscribers(string $event, array $data): void

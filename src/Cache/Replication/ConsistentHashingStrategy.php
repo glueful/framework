@@ -38,13 +38,13 @@ class ConsistentHashingStrategy implements ReplicationStrategyInterface
      */
     public function getNodesForKey(string $key, array $allNodes): array
     {
-        if (empty($allNodes)) {
+        if ($allNodes === []) {
             return [];
         }
 
         // Build the hash ring
         $hashRing = $this->buildHashRing($allNodes);
-        if (empty($hashRing)) {
+        if ($hashRing === []) {
             return [];
         }
 
@@ -118,8 +118,8 @@ class ConsistentHashingStrategy implements ReplicationStrategyInterface
     /**
      * Build the hash ring from available nodes
      *
-     * @param array $nodes Available nodes
-     * @return array Hash ring mapping hashes to node IDs
+     * @param array<CacheNode> $nodes Available nodes
+     * @return array<string, string> Hash ring mapping hashes to node IDs
      */
     private function buildHashRing(array $nodes): array
     {

@@ -26,7 +26,7 @@ class EdgeCacheService
     /**
      * The cache store instance
      *
-     * @var CacheStore|null
+     * @var CacheStore<mixed>|null
      */
     private ?CacheStore $cacheStore = null;
 
@@ -48,7 +48,7 @@ class EdgeCacheService
     /**
      * Constructor for the Edge Cache Service
      *
-     * @param CacheStore|null $cacheStore The cache store to use
+     * @param CacheStore<mixed>|null $cacheStore The cache store to use
      * @param CDNAdapterInterface|null $cdnAdapter A specific CDN adapter to use
      */
     public function __construct(?CacheStore $cacheStore = null, ?CDNAdapterInterface $cdnAdapter = null)
@@ -79,7 +79,7 @@ class EdgeCacheService
      *
      * @param string $route The route name
      * @param string|null $contentType The content type of the response
-     * @return array The cache headers
+     * @return array<string, string> The cache headers
      */
     public function generateCacheHeaders(string $route, ?string $contentType = null): array
     {
@@ -137,7 +137,7 @@ class EdgeCacheService
     /**
      * Get cache statistics from the CDN
      *
-     * @return array The cache statistics
+     * @return array<string, mixed> The cache statistics
      */
     public function getStats(): array
     {
@@ -221,7 +221,7 @@ class EdgeCacheService
     private function resolveCDNAdapter(): ?CDNAdapterInterface
     {
         // If no provider is configured, return null
-        if (empty($this->config['provider'])) {
+        if (($this->config['provider'] ?? '') === '') {
             return null;
         }
 

@@ -39,7 +39,7 @@ class CircuitBreaker
     /** @var int Reset timeout in seconds */
     private $resetTimeout;
 
-    /** @var array Configuration for the circuit */
+    /** @var array<string, mixed> Configuration for the circuit */
     private $config;
 
     /**
@@ -47,7 +47,7 @@ class CircuitBreaker
      *
      * @param int $failureThreshold Number of failures before opening circuit
      * @param int $resetTimeout Time in seconds before attempting reset
-     * @param array $config Additional configuration
+     * @param array<string, mixed> $config Additional configuration
      */
     public function __construct(int $failureThreshold = 5, int $resetTimeout = 60, array $config = [])
     {
@@ -192,7 +192,7 @@ class CircuitBreaker
     /**
      * Get circuit statistics
      *
-     * @return array Circuit statistics
+     * @return array<string, mixed> Circuit statistics
      */
     public function getStats(): array
     {

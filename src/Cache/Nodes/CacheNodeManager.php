@@ -16,10 +16,10 @@ use Glueful\Cache\Health\HealthMonitoringService;
  */
 class CacheNodeManager
 {
-    /** @var array Cache node registry with nodes and their weights */
+    /** @var array<string, array<string, mixed>> Cache node registry with nodes and their weights */
     private $nodes = [];
 
-    /** @var array Hash ring for consistent hashing */
+    /** @var array<string, string> Hash ring for consistent hashing */
     private $hashRing = [];
 
     /** @var int Number of virtual nodes per physical node for consistent hashing */
@@ -28,19 +28,19 @@ class CacheNodeManager
     /** @var int Default number of replicas for each key */
     private $defaultReplicas = 2;
 
-    /** @var array Replication strategy configuration */
+    /** @var array<string, array<string, mixed>> Replication strategy configuration */
     private $strategyConfig = [];
 
     /** @var HealthMonitoringService|null Health monitoring service */
     private $healthMonitor = null;
 
-    /** @var array Failover configuration */
+    /** @var array<string, mixed> Failover configuration */
     private $failoverConfig = [];
 
     /**
      * Initialize node manager with configuration
      *
-     * @param array $nodeConfigs Node configuration array
+     * @param array<int, array<string, mixed>> $nodeConfigs Node configuration array
      */
     public function __construct(array $nodeConfigs = [])
     {
@@ -54,7 +54,7 @@ class CacheNodeManager
     /**
      * Add a cache node
      *
-     * @param array $config Node configuration
+     * @param array<string, mixed> $config Node configuration
      * @return void
      */
     public function addNode(array $config): void
@@ -92,7 +92,7 @@ class CacheNodeManager
     /**
      * Get all available cache nodes
      *
-     * @return array All node instances
+     * @return array<CacheNode> All node instances
      */
     public function getAllNodes(): array
     {
@@ -109,7 +109,7 @@ class CacheNodeManager
      *
      * @param string $key Cache key
      * @param string $strategy Replication strategy
-     * @return array Array of node instances
+     * @return array<CacheNode> Array of node instances
      * @throws \InvalidArgumentException If strategy is unknown
      */
     public function getNodesForKey(string $key, string $strategy = 'consistent-hashing'): array
@@ -135,15 +135,15 @@ class CacheNodeManager
      *
      * @param string $key Cache key
      * @param int $replicas Number of replicas to return
-     * @return array Selected node instances
+     * @return array<CacheNode> Selected node instances
      */
     public function getNodesConsistentHashing(string $key, int $replicas = 0): array
     {
-        if (empty($this->hashRing)) {
+        if ($this->hashRing === []) {
             return [];
         }
 
-        $replicas = $replicas ?: $this->defaultReplicas;
+        $replicas = $replicas !== 0 ? $replicas : $this->defaultReplicas;
         $keyHash = $this->hashKey($key);
         $selectedNodes = [];
         $nodeIds = [];
@@ -176,7 +176,7 @@ class CacheNodeManager
             $nodeId = $this->hashRing[$hash];
 
             // Only take unique nodes
-            if (!in_array($nodeId, $nodeIds)) {
+            if (!in_array($nodeId, $nodeIds, true)) {
                 $nodeIds[] = $nodeId;
                 $selectedNodes[] = $this->nodes[$nodeId]['node'];
                 $count++;
@@ -197,11 +197,11 @@ class CacheNodeManager
      * Get nodes using primary-replica strategy
      *
      * @param string $key Cache key
-     * @return array Primary and replica nodes
+     * @return array<CacheNode> Primary and replica nodes
      */
     public function getPrimaryReplicaNodes(string $key): array
     {
-        if (empty($this->nodes)) {
+        if ($this->nodes === []) {
             return [];
         }
 
@@ -328,7 +328,7 @@ class CacheNodeManager
      * Configure a replication strategy
      *
      * @param string $strategy Strategy name
-     * @param array $config Configuration options
+     * @param array<string, mixed> $config Configuration options
      * @return self
      */
     public function configureStrategy(string $strategy, array $config): self
@@ -340,7 +340,7 @@ class CacheNodeManager
     /**
      * Initialize health monitoring
      *
-     * @param array $config Health monitoring configuration
+     * @param array<string, mixed> $config Health monitoring configuration
      * @return HealthMonitoringService Health monitoring service instance
      */
     public function initializeHealthMonitoring(array $config = []): HealthMonitoringService
@@ -359,7 +359,7 @@ class CacheNodeManager
      *
      * @param string $key Cache key
      * @param string $strategy Replication strategy
-     * @return array Array of healthy node instances
+     * @return array<CacheNode> Array of healthy node instances
      */
     public function getHealthyNodesForKey(string $key, string $strategy = 'consistent-hashing'): array
     {
@@ -375,7 +375,7 @@ class CacheNodeManager
     /**
      * Check health of all nodes
      *
-     * @return array Health status for all nodes
+     * @return array<string, mixed> Health status for all nodes
      */
     public function checkNodesHealth(): array
     {
@@ -390,7 +390,7 @@ class CacheNodeManager
     /**
      * Set failover configuration
      *
-     * @param array $config Failover configuration
+     * @param array<string, mixed> $config Failover configuration
      * @return self
      */
     public function setFailoverConfig(array $config): self

@@ -170,7 +170,7 @@ class FileCacheDriver implements CacheStore
         $seconds = $this->normalizeTtl($ttl);
         $meta = [
             'created' => time(),
-            'expires' => ($seconds && $seconds > 0) ? time() + $seconds : 0,
+            'expires' => ($seconds !== null && $seconds > 0) ? time() + $seconds : 0,
             'ttl' => $seconds ?? 0
         ];
 
@@ -387,7 +387,7 @@ class FileCacheDriver implements CacheStore
      * Add to sorted set
      *
      * @param string $key Set key
-     * @param array $scoreValues Score-value pairs
+     * @param array<string, int|float> $scoreValues Score-value pairs
      * @return bool True if added successfully
      */
     public function zadd(string $key, array $scoreValues): bool
@@ -396,11 +396,11 @@ class FileCacheDriver implements CacheStore
         $metaPath = $this->getFilePath($key, self::META_EXT);
 
         // Load existing set or create new one
-        $zset = $this->loadFromFile($zsetPath) ?: [];
+        $zset = $this->loadFromFile($zsetPath) ?? [];
 
-        // Add or update elements
-        foreach ($scoreValues as $score => $value) {
-            $zset[$value] = $score;
+        // Add or update elements (member => score)
+        foreach ($scoreValues as $member => $score) {
+            $zset[$member] = $score;
         }
 
         // Save metadata if it doesn't exist
@@ -434,7 +434,7 @@ class FileCacheDriver implements CacheStore
             return 0;
         }
 
-        $zset = $this->loadFromFile($zsetPath) ?: [];
+        $zset = $this->loadFromFile($zsetPath) ?? [];
         $count = 0;
 
         foreach ($zset as $value => $score) {
@@ -465,7 +465,7 @@ class FileCacheDriver implements CacheStore
             return 0;
         }
 
-        $zset = $this->loadFromFile($zsetPath) ?: [];
+        $zset = $this->loadFromFile($zsetPath) ?? [];
         return count($zset);
     }
 
@@ -475,7 +475,7 @@ class FileCacheDriver implements CacheStore
      * @param string $key Set key
      * @param int $start Start index
      * @param int $stop End index
-     * @return array Range of members
+     * @return list<string> Range of members
      */
     public function zrange(string $key, int $start, int $stop): array
     {
@@ -485,7 +485,7 @@ class FileCacheDriver implements CacheStore
             return [];
         }
 
-        $zset = $this->loadFromFile($zsetPath) ?: [];
+        $zset = $this->loadFromFile($zsetPath) ?? [];
 
         // Sort by score
         asort($zset);
@@ -601,7 +601,7 @@ class FileCacheDriver implements CacheStore
      * Scans the cache directory for cache files.
      *
      * @param string $pattern Optional pattern to filter keys
-     * @return array List of cache keys
+     * @return list<string> List of cache keys
      */
     public function getKeys(string $pattern = '*'): array
     {
@@ -630,7 +630,7 @@ class FileCacheDriver implements CacheStore
      *
      * Returns file cache statistics.
      *
-     * @return array Cache statistics
+     * @return array<string, mixed> Cache statistics
      */
     public function getStats(): array
     {
@@ -654,6 +654,9 @@ class FileCacheDriver implements CacheStore
                 }
             }
 
+            $dfs = disk_free_space($this->directory);
+            $dfsInt = $dfs !== false ? $dfs : 0;
+
             return [
                 'driver' => 'file',
                 'directory' => $this->directory,
@@ -663,8 +666,8 @@ class FileCacheDriver implements CacheStore
                 'active_keys' => $totalFiles - $expiredCount,
                 'total_size' => $totalSize,
                 'total_size_human' => $this->formatBytes($totalSize),
-                'disk_free_space' => disk_free_space($this->directory),
-                'disk_free_space_human' => $this->formatBytes((int)(disk_free_space($this->directory) ?: 0)),
+                'disk_free_space' => $dfsInt,
+                'disk_free_space_human' => $this->formatBytes((int)$dfsInt),
             ];
         } catch (\Exception $e) {
             return [
@@ -679,7 +682,7 @@ class FileCacheDriver implements CacheStore
      *
      * Scans the cache directory for all cache files.
      *
-     * @return array List of all cache keys
+     * @return list<string> List of all cache keys
      */
     public function getAllKeys(): array
     {
@@ -718,9 +721,9 @@ class FileCacheDriver implements CacheStore
     /**
      * Get multiple cached values (PSR-16)
      *
-     * @param iterable $keys Cache keys
+     * @param iterable<mixed> $keys Cache keys
      * @param mixed $default Default value for missing keys
-     * @return iterable Values in same order as keys
+     * @return iterable<string, mixed|null> Values in same order as keys
      * @throws PSRInvalidArgumentException If any key is invalid
      */
     public function getMultiple(iterable $keys, mixed $default = null): iterable
@@ -738,7 +741,7 @@ class FileCacheDriver implements CacheStore
     /**
      * Store multiple values in cache (PSR-16)
      *
-     * @param iterable $values Key-value pairs
+     * @param iterable<mixed, mixed> $values Key-value pairs
      * @param null|int|\DateInterval $ttl Time to live
      * @return bool True if all values stored successfully
      * @throws PSRInvalidArgumentException If any key is invalid
@@ -758,7 +761,7 @@ class FileCacheDriver implements CacheStore
     /**
      * Delete multiple cache keys (PSR-16)
      *
-     * @param iterable $keys Cache keys
+     * @param iterable<mixed> $keys Cache keys
      * @return bool True if all keys deleted successfully
      * @throws PSRInvalidArgumentException If any key is invalid
      */
@@ -788,7 +791,7 @@ class FileCacheDriver implements CacheStore
     /**
      * Get cache driver capabilities
      *
-     * @return array Driver capabilities and features
+     * @return array<string, mixed> Driver capabilities and features
      */
     public function getCapabilities(): array
     {
@@ -818,7 +821,7 @@ class FileCacheDriver implements CacheStore
      * Add tags to a cache key for grouped invalidation
      *
      * @param string $key Cache key
-     * @param array $tags Array of tags to associate with the key
+     * @param list<string> $tags Array of tags to associate with the key
      * @return bool True if tags added successfully
      */
     public function addTags(string $key, array $tags): bool
@@ -831,7 +834,7 @@ class FileCacheDriver implements CacheStore
     /**
      * Invalidate all cache entries with specified tags
      *
-     * @param array $tags Array of tags to invalidate
+     * @param list<string> $tags Array of tags to invalidate
      * @return bool True if invalidation successful
      */
     public function invalidateTags(array $tags): bool
@@ -921,6 +924,6 @@ class FileCacheDriver implements CacheStore
             return $future->getTimestamp() - $now->getTimestamp();
         }
 
-        return max(1, (int) $ttl);
+        return max(1, $ttl);
     }
 }

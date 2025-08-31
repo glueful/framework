@@ -22,7 +22,7 @@ class FileNode extends CacheNode
      * Initialize File node
      *
      * @param string $id Node identifier
-     * @param array $config Node configuration
+     * @param array<string, mixed> $config Node configuration
      */
     public function __construct(string $id, array $config)
     {
@@ -164,7 +164,7 @@ class FileNode extends CacheNode
             // Check expiration
             $meta = json_decode(file_get_contents($metaPath), true);
 
-            if ($meta && isset($meta['expires']) && $meta['expires'] > 0 && $meta['expires'] < time()) {
+            if (is_array($meta) && isset($meta['expires']) && (int)($meta['expires']) > 0 && (int)($meta['expires']) < time()) {
                 // Expired, delete files
                 unlink($filePath);
                 unlink($metaPath);
@@ -283,7 +283,7 @@ class FileNode extends CacheNode
             // Check expiration
             $meta = json_decode(file_get_contents($metaPath), true);
 
-            if ($meta && isset($meta['expires']) && $meta['expires'] > 0 && $meta['expires'] < time()) {
+            if (is_array($meta) && isset($meta['expires']) && (int)($meta['expires']) > 0 && (int)($meta['expires']) < time()) {
                 // Expired
                 return false;
             }
@@ -298,7 +298,7 @@ class FileNode extends CacheNode
     /**
      * Get node status
      *
-     * @return array Status information
+     * @return array<string, mixed> Status information
      */
     public function getStatus(): array
     {
@@ -382,7 +382,8 @@ class FileNode extends CacheNode
             $tagSet = [];
 
             if (file_exists($tagPath)) {
-                $tagSet = unserialize(file_get_contents($tagPath)) ?: [];
+                $result = unserialize(file_get_contents($tagPath));
+            $tagSet = is_array($result) ? $result : [];
             }
 
             // Add the key with score
@@ -400,7 +401,7 @@ class FileNode extends CacheNode
      * Get keys from a tag set
      *
      * @param string $tag Tag name
-     * @return array Keys in the tag set
+     * @return array<string> Keys in the tag set
      */
     public function getTaggedKeys(string $tag): array
     {
@@ -415,7 +416,8 @@ class FileNode extends CacheNode
         }
 
         try {
-            $tagSet = unserialize(file_get_contents($tagPath)) ?: [];
+            $result = unserialize(file_get_contents($tagPath));
+            $tagSet = is_array($result) ? $result : [];
             return array_keys($tagSet);
         } catch (\Exception $e) {
             error_log("File cache getTaggedKeys error for node {$this->id}: " . $e->getMessage());

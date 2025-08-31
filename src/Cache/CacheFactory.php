@@ -25,20 +25,22 @@ class CacheFactory
      * Handles connection setup and error handling.
      *
      * @param string $driverOverride Optional driver override
-     * @return CacheStore Configured cache driver
+     * @return CacheStore<mixed> Configured cache driver
      * @throws \Glueful\Exceptions\DatabaseException If connection fails
      * @throws \Glueful\Exceptions\BusinessLogicException If cache type is not supported
      */
     public static function create(string $driverOverride = ''): CacheStore
     {
-        $cacheType = $driverOverride ?: config('cache.default', 'redis');
+        $cacheType = $driverOverride !== ''
+            ? $driverOverride
+            : (string) config('cache.default', 'redis');
 
         if ($cacheType === 'redis') {
             $redis = new Redis();
-            $host = config('cache.stores.redis.host') ?: env('REDIS_HOST', '127.0.0.1');
-            $port = (int)(config('cache.stores.redis.port') ?: env('REDIS_PORT', 6379));
-            $timeout = (float)(config('cache.stores.redis.timeout') ?: env('REDIS_TIMEOUT', 2.5));
-            $password = config('cache.stores.redis.password') ?: env('REDIS_PASSWORD', null);
+            $host = config('cache.stores.redis.host', null) ?? env('REDIS_HOST', '127.0.0.1');
+            $port = (int) (config('cache.stores.redis.port', null) ?? env('REDIS_PORT', 6379));
+            $timeout = (float) (config('cache.stores.redis.timeout', null) ?? env('REDIS_TIMEOUT', 2.5));
+            $password = config('cache.stores.redis.password', null) ?? env('REDIS_PASSWORD');
 
             try {
                 // Set connection timeout to prevent long hangs
@@ -51,7 +53,7 @@ class CacheFactory
                 }
 
                 // Authenticate if password is set
-                if (!empty($password)) {
+                if (is_string($password) && $password !== '') {
                     $authenticated = $redis->auth($password);
                     if (!$authenticated) {
                         throw DatabaseException::connectionFailed(
@@ -61,7 +63,7 @@ class CacheFactory
                 }
 
                 // Select database if specified
-                $database = (int)(config('cache.stores.redis.database') ?: env('REDIS_DB', 0));
+                $database = (int) (config('cache.stores.redis.database', null) ?? env('REDIS_DB', 0));
                 if ($database > 0) {
                     $redis->select($database);
                 }
@@ -86,14 +88,14 @@ class CacheFactory
         if ($cacheType === 'memcached') {
             try {
                 $memcached = new Memcached();
-                $host = config('cache.stores.memcached.host') ?: env('MEMCACHED_HOST', '127.0.0.1');
-                $port = (int)(config('cache.stores.memcached.port') ?: env('MEMCACHED_PORT', 11211));
+                $host = config('cache.stores.memcached.host', null) ?? env('MEMCACHED_HOST', '127.0.0.1');
+                $port = (int) (config('cache.stores.memcached.port', null) ?? env('MEMCACHED_PORT', 11211));
 
                 $memcached->addServer($host, $port);
 
                 // Check if server is added successfully
                 $serverList = $memcached->getServerList();
-                if (empty($serverList)) {
+                if (count($serverList) === 0) {
                     throw DatabaseException::connectionFailed(
                         "Failed to add Memcached server at {$host}:{$port}"
                     );
@@ -119,7 +121,8 @@ class CacheFactory
         }
 
         // Fall back to file-based caching if enabled
-        if ($cacheType === 'file' || ($driverOverride === '' && config('cache.fallback_to_file', false))) {
+        $fallbackToFile = (bool) config('cache.fallback_to_file', false);
+        if ($cacheType === 'file' || ($driverOverride === '' && $fallbackToFile)) {
             return self::createFileDriver();
         }
 
@@ -132,7 +135,7 @@ class CacheFactory
     /**
      * Create a file-based cache driver as fallback
      *
-     * @return CacheStore File-based cache driver
+     * @return CacheStore<mixed> File-based cache driver
      */
     private static function createFileDriver(): CacheStore
     {

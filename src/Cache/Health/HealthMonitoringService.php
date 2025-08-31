@@ -26,7 +26,7 @@ class HealthMonitoringService
     /** @var CacheNodeManager Node manager instance */
     private $nodeManager;
 
-    /** @var array Monitoring configuration */
+    /** @var array<string, mixed> Monitoring configuration */
     private $config;
 
     /** @var bool Whether monitoring is enabled */
@@ -36,7 +36,7 @@ class HealthMonitoringService
      * Initialize health monitoring service
      *
      * @param CacheNodeManager $nodeManager Node manager instance
-     * @param array $config Monitoring configuration
+     * @param array<string, mixed> $config Monitoring configuration
      */
     public function __construct(CacheNodeManager $nodeManager, array $config = [])
     {
@@ -65,7 +65,7 @@ class HealthMonitoringService
     /**
      * Check all nodes health and manage failover/recovery
      *
-     * @return array Health status for all nodes
+     * @return array<string, mixed> Health status for all nodes
      */
     public function monitorNodes(): array
     {
@@ -110,7 +110,7 @@ class HealthMonitoringService
      *
      * @param string $key Cache key
      * @param string $strategy Replication strategy
-     * @return array Available nodes
+     * @return array<\Glueful\Cache\Nodes\CacheNode> Available nodes
      */
     public function getAvailableNodesForKey(string $key, string $strategy): array
     {
@@ -125,7 +125,7 @@ class HealthMonitoringService
         $availableNodes = $this->failoverManager->filterAvailableNodes($nodes);
 
         // If no available nodes, fall back to any available node
-        if (empty($availableNodes)) {
+        if ($availableNodes === []) {
             $allNodes = $this->nodeManager->getAllNodes();
             $availableNodes = $this->failoverManager->filterAvailableNodes($allNodes);
         }
@@ -142,7 +142,7 @@ class HealthMonitoringService
     private function getCircuitState(string $nodeId): string
     {
         $circuitBreaker = $this->getCircuitBreaker($nodeId);
-        return $circuitBreaker ? $circuitBreaker->getState() : 'unknown';
+        return $circuitBreaker !== null ? $circuitBreaker->getState() : 'unknown';
     }
 
     /**
@@ -176,7 +176,7 @@ class HealthMonitoringService
         // Listen for node failure events
         $this->failoverManager->subscribe('node.failure', function ($data) {
             // Log failure
-            if (isset($this->config['logging']) && $this->config['logging']['enabled']) {
+            if (isset($this->config['logging']) && ($this->config['logging']['enabled'] ?? false) === true) {
                 // In a real implementation, use a proper logger
                 error_log("Cache node failure: Node {$data['node_id']} - {$data['reason']}");
             }
@@ -185,7 +185,7 @@ class HealthMonitoringService
         // Listen for node recovery events
         $this->failoverManager->subscribe('node.recovery', function ($data) {
             // Log recovery
-            if (isset($this->config['logging']) && $this->config['logging']['enabled']) {
+            if (isset($this->config['logging']) && ($this->config['logging']['enabled'] ?? false) === true) {
                 // In a real implementation, use a proper logger
                 error_log("Cache node recovery: Node {$data['node_id']} has recovered");
             }
@@ -194,7 +194,7 @@ class HealthMonitoringService
         // Listen for recovery completion events
         $this->recoveryManager->subscribe('recovery.completed', function ($data) {
             // Log recovery completion
-            if (isset($this->config['logging']) && $this->config['logging']['enabled']) {
+            if (isset($this->config['logging']) && ($this->config['logging']['enabled'] ?? false) === true) {
                 // In a real implementation, use a proper logger
                 error_log("Cache node recovery completed: Node {$data['node_id']} synchronized 
                 {$data['synchronized_keys']} keys");

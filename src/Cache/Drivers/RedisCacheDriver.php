@@ -42,7 +42,7 @@ class RedisCacheDriver implements CacheStore
      * Add to sorted set
      *
      * @param string $key Set key
-     * @param array $scoreValues Score-value pairs
+     * @param array<string, float|int> $scoreValues Score-value pairs
      * @return bool True if added successfully
      */
     public function zadd(string $key, array $scoreValues): bool
@@ -112,7 +112,7 @@ class RedisCacheDriver implements CacheStore
     public function del(string $key): bool
     {
         $result = $this->redis->del($key);
-        return is_numeric($result) && (int)$result > 0;
+        return is_numeric($result) && $result > 0;
     }
 
     /**
@@ -180,7 +180,7 @@ class RedisCacheDriver implements CacheStore
      */
     public function mget(array $keys): array
     {
-        if (empty($keys)) {
+        if ($keys === []) {
             return [];
         }
 
@@ -206,9 +206,12 @@ class RedisCacheDriver implements CacheStore
      * @param int $ttl Time to live in seconds
      * @return bool True if all values stored successfully
      */
+    /**
+     * @param array<string, mixed> $values
+     */
     public function mset(array $values, int $ttl = 3600): bool
     {
-        if (empty($values)) {
+        if ($values === []) {
             return true;
         }
 
@@ -222,7 +225,7 @@ class RedisCacheDriver implements CacheStore
         $results = $pipe->exec();
 
         // Check if all operations succeeded
-        return !in_array(false, $results);
+        return !in_array(false, $results, true);
     }
 
     /**
@@ -316,7 +319,7 @@ class RedisCacheDriver implements CacheStore
             // Use SCAN to iterate through keys matching the pattern
             do {
                 $keys = $this->redis->scan($iterator, $pattern, 100);
-                if ($keys !== false && !empty($keys)) {
+                if ($keys !== false && $keys !== []) {
                     $result = $this->redis->del($keys);
                     $deletedCount += $result;
                 }
@@ -411,6 +414,9 @@ class RedisCacheDriver implements CacheStore
      *
      * @return array List of all cache keys
      */
+    /**
+     * @return list<string>
+     */
     public function getAllKeys(): array
     {
         return $this->getKeys('*');
@@ -438,6 +444,10 @@ class RedisCacheDriver implements CacheStore
      * @return iterable Values in same order as keys
      * @throws InvalidArgumentException If any key is invalid
      */
+    /**
+     * @param iterable<mixed> $keys
+     * @return iterable<string, mixed>
+     */
     public function getMultiple(iterable $keys, mixed $default = null): iterable
     {
         $keyArray = is_array($keys) ? $keys : iterator_to_array($keys);
@@ -446,7 +456,7 @@ class RedisCacheDriver implements CacheStore
             $this->validateKey($key);
         }
 
-        if (empty($keyArray)) {
+        if ($keyArray === []) {
             return [];
         }
 
@@ -467,7 +477,7 @@ class RedisCacheDriver implements CacheStore
     /**
      * Store multiple values in cache (PSR-16)
      *
-     * @param iterable $values Key-value pairs
+     * @param iterable<mixed, mixed> $values Key-value pairs
      * @param null|int|\DateInterval $ttl Time to live
      * @return bool True if all values stored successfully
      * @throws InvalidArgumentException If any key is invalid
@@ -486,7 +496,7 @@ class RedisCacheDriver implements CacheStore
     /**
      * Delete multiple cache keys (PSR-16)
      *
-     * @param iterable $keys Cache keys
+     * @param iterable<mixed> $keys Cache keys
      * @return bool True if all keys deleted successfully
      * @throws InvalidArgumentException If any key is invalid
      */
@@ -498,7 +508,7 @@ class RedisCacheDriver implements CacheStore
             $this->validateKey($key);
         }
 
-        if (empty($keyArray)) {
+        if ($keyArray === []) {
             return true;
         }
 
@@ -521,6 +531,9 @@ class RedisCacheDriver implements CacheStore
      * Get cache driver capabilities
      *
      * @return array Driver capabilities and features
+     */
+    /**
+     * @return array<string, mixed>
      */
     public function getCapabilities(): array
     {
@@ -598,6 +611,9 @@ class RedisCacheDriver implements CacheStore
      * @param array $info Redis info array
      * @return float Hit rate as percentage
      */
+    /**
+     * @param array<string, mixed> $info
+     */
     private function calculateHitRate(array $info): float
     {
         $hits = $info['keyspace_hits'] ?? 0;
@@ -648,6 +664,6 @@ class RedisCacheDriver implements CacheStore
             return $future->getTimestamp() - $now->getTimestamp();
         }
 
-        return max(1, (int) $ttl);
+        return max(1, $ttl);
     }
 }

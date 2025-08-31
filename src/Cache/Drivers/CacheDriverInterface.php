@@ -85,7 +85,7 @@ interface CacheDriverInterface
      * Add to sorted set
      *
      * @param string $key Set key
-     * @param array $scoreValues Score-value pairs
+     * @param array<string, int|float> $scoreValues Score-value pairs
      * @return bool True if added successfully
      */
     public function zadd(string $key, array $scoreValues): bool;

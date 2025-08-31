@@ -39,14 +39,14 @@ class MemcachedCacheDriver implements CacheStore
      * Emulates Redis ZADD using array storage.
      *
      * @param string $key Set key
-     * @param array $scoreValues Score-value pairs
+     * @param array<string, int|float> $scoreValues Score-value pairs
      * @return bool True if added successfully
      */
     public function zadd(string $key, array $scoreValues): bool
     {
         $timestamps = $this->memcached->get($key) ?? [];
-        foreach ($scoreValues as $score => $value) {
-            $timestamps[$value] = $score;
+        foreach ($scoreValues as $member => $score) {
+            $timestamps[$member] = $score;
         }
         return $this->memcached->set($key, $timestamps);
     }
@@ -88,12 +88,12 @@ class MemcachedCacheDriver implements CacheStore
      * @param string $key Set key
      * @param int $start Start index
      * @param int $stop End index
-     * @return array Range of members
+     * @return list<string> Range of members
      */
     public function zrange(string $key, int $start, int $stop): array
     {
         $timestamps = $this->memcached->get($key) ?? [];
-        ksort($timestamps);
+        asort($timestamps); // sort by score ascending
         return array_slice(array_keys($timestamps), $start, $stop - $start + 1);
     }
 
@@ -175,7 +175,7 @@ class MemcachedCacheDriver implements CacheStore
      */
     public function mget(array $keys): array
     {
-        if (empty($keys)) {
+        if ($keys === []) {
             return [];
         }
 
@@ -199,7 +199,7 @@ class MemcachedCacheDriver implements CacheStore
      */
     public function mset(array $values, int $ttl = 3600): bool
     {
-        if (empty($values)) {
+        if ($values === []) {
             return true;
         }
 
@@ -323,7 +323,7 @@ class MemcachedCacheDriver implements CacheStore
         try {
             $stats = $this->memcached->getStats();
 
-            if (empty($stats)) {
+            if ($stats === []) {
                 return [
                     'driver' => 'memcached',
                     'error' => 'No server statistics available'
@@ -403,9 +403,9 @@ class MemcachedCacheDriver implements CacheStore
     /**
      * Get multiple cached values (PSR-16)
      *
-     * @param iterable $keys Cache keys
+     * @param iterable<mixed> $keys Cache keys
      * @param mixed $default Default value for missing keys
-     * @return iterable Values in same order as keys
+     * @return iterable<string, mixed|null> Values in same order as keys
      * @throws InvalidArgumentException If any key is invalid
      */
     public function getMultiple(iterable $keys, mixed $default = null): iterable
@@ -416,7 +416,7 @@ class MemcachedCacheDriver implements CacheStore
             $this->validateKey($key);
         }
 
-        if (empty($keyArray)) {
+        if ($keyArray === []) {
             return [];
         }
 
@@ -433,7 +433,7 @@ class MemcachedCacheDriver implements CacheStore
     /**
      * Store multiple values in cache (PSR-16)
      *
-     * @param iterable $values Key-value pairs
+     * @param iterable<mixed, mixed> $values Key-value pairs
      * @param null|int|\DateInterval $ttl Time to live
      * @return bool True if all values stored successfully
      * @throws InvalidArgumentException If any key is invalid
@@ -452,7 +452,7 @@ class MemcachedCacheDriver implements CacheStore
     /**
      * Delete multiple cache keys (PSR-16)
      *
-     * @param iterable $keys Cache keys
+     * @param iterable<mixed> $keys Cache keys
      * @return bool True if all keys deleted successfully
      * @throws InvalidArgumentException If any key is invalid
      */
@@ -464,7 +464,7 @@ class MemcachedCacheDriver implements CacheStore
             $this->validateKey($key);
         }
 
-        if (empty($keyArray)) {
+        if ($keyArray === []) {
             return true;
         }
 
@@ -489,7 +489,7 @@ class MemcachedCacheDriver implements CacheStore
     /**
      * Get cache driver capabilities
      *
-     * @return array Driver capabilities and features
+     * @return array<string, mixed> Driver capabilities and features
      */
     public function getCapabilities(): array
     {
@@ -570,7 +570,7 @@ class MemcachedCacheDriver implements CacheStore
     /**
      * Calculate cache hit rate from Memcached stats
      *
-     * @param array $stats Server statistics
+     * @param array<string, mixed> $stats Server statistics
      * @return float Hit rate as percentage
      */
     private function calculateHitRate(array $stats): float
@@ -626,6 +626,6 @@ class MemcachedCacheDriver implements CacheStore
             return $future->getTimestamp() - $now->getTimestamp();
         }
 
-        return max(1, (int) $ttl);
+        return max(1, $ttl);
     }
 }

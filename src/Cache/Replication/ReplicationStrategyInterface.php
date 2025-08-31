@@ -18,8 +18,8 @@ interface ReplicationStrategyInterface
      * Get nodes for a specific key
      *
      * @param string $key Cache key
-     * @param array $allNodes All available cache nodes
-     * @return array Selected nodes for the key
+     * @param array<CacheNode> $allNodes All available cache nodes
+     * @return array<CacheNode> Selected nodes for the key
      */
     public function getNodesForKey(string $key, array $allNodes): array;
 

@@ -13,10 +13,12 @@ use Glueful\Helpers\CacheHelper;
  *
  * Provides a distributed caching system that coordinates multiple cache nodes
  * with support for different replication strategies.
+ *
+ * @implements CacheStore<mixed>
  */
 class DistributedCacheService implements CacheStore
 {
-    /** @var CacheStore Primary cache store */
+    /** @var CacheStore<mixed> Primary cache store */
     private CacheStore $primaryCache;
 
     /** @var Nodes\CacheNodeManager Node management service */
@@ -37,8 +39,8 @@ class DistributedCacheService implements CacheStore
     /**
      * Initialize the distributed cache service
      *
-     * @param CacheStore|null $primaryCache Primary cache store
-     * @param array $config Configuration parameters
+     * @param CacheStore<mixed>|null $primaryCache Primary cache store
+     * @param array<string, mixed> $config Configuration parameters
      */
     public function __construct(?CacheStore $primaryCache = null, array $config = [])
     {
@@ -66,7 +68,7 @@ class DistributedCacheService implements CacheStore
     /**
      * Configure replication strategies
      *
-     * @param array $strategies Strategies configuration
+     * @param array<string, mixed> $strategies Strategies configuration
      * @return void
      */
     private function configureStrategies(array $strategies): void
@@ -79,7 +81,7 @@ class DistributedCacheService implements CacheStore
     /**
      * Create cache instance with proper fallback handling
      *
-     * @return CacheStore|null Cache instance or null if unavailable
+     * @return CacheStore<mixed>|null Cache instance or null if unavailable
      */
     private function createCacheInstance(): ?CacheStore
     {
@@ -94,7 +96,7 @@ class DistributedCacheService implements CacheStore
     /**
      * Initialize health monitoring
      *
-     * @param array $config Health monitoring configuration
+     * @param array<string, mixed> $config Health monitoring configuration
      * @return void
      */
     private function initializeHealthMonitoring(array $config): void
@@ -269,7 +271,7 @@ class DistributedCacheService implements CacheStore
      * Add tags to a cache key
      *
      * @param string $key Cache key
-     * @param array $tags Tags to associate
+     * @param list<string> $tags Tags to associate
      * @return bool True if tags added successfully
      */
     public function addTags(string $key, array $tags): bool
@@ -298,7 +300,7 @@ class DistributedCacheService implements CacheStore
     /**
      * Invalidate cache entries by tags
      *
-     * @param array $tags Tags to invalidate
+     * @param list<string> $tags Tags to invalidate
      * @return bool True if invalidation succeeded
      */
     public function invalidateTags(array $tags): bool
@@ -398,9 +400,9 @@ class DistributedCacheService implements CacheStore
     /**
      * Get multiple values from cache
      *
-     * @param iterable $keys Cache keys
+     * @param iterable<mixed> $keys Cache keys
      * @param mixed $default Default value
-     * @return iterable Values
+     * @return iterable<string, mixed|null> Values
      */
     public function getMultiple(iterable $keys, mixed $default = null): iterable
     {
@@ -414,7 +416,7 @@ class DistributedCacheService implements CacheStore
     /**
      * Set multiple values in cache
      *
-     * @param iterable $values Key-value pairs
+     * @param iterable<mixed, mixed> $values Key-value pairs
      * @param null|int|\DateInterval $ttl Time to live
      * @return bool Success status
      */
@@ -430,7 +432,7 @@ class DistributedCacheService implements CacheStore
     /**
      * Delete multiple values from cache
      *
-     * @param iterable $keys Cache keys
+     * @param iterable<mixed> $keys Cache keys
      * @return bool Success status
      */
     public function deleteMultiple(iterable $keys): bool
@@ -460,8 +462,8 @@ class DistributedCacheService implements CacheStore
     /**
      * Get multiple values (alias for getMultiple)
      *
-     * @param array $keys Cache keys
-     * @return array Values
+     * @param list<string> $keys Cache keys
+     * @return array<string, mixed|null> Values
      */
     public function mget(array $keys): array
     {
@@ -471,7 +473,7 @@ class DistributedCacheService implements CacheStore
     /**
      * Set multiple values (alias for setMultiple)
      *
-     * @param array $values Key-value pairs
+     * @param array<string, mixed> $values Key-value pairs
      * @param int $ttl Time to live
      * @return bool Success status
      */
@@ -519,7 +521,7 @@ class DistributedCacheService implements CacheStore
      * Add to sorted set
      *
      * @param string $key Set key
-     * @param array $scoreValues Score-value pairs
+     * @param array<string, int|float> $scoreValues Score-value pairs
      * @return bool Success status
      */
     public function zadd(string $key, array $scoreValues): bool
@@ -557,7 +559,7 @@ class DistributedCacheService implements CacheStore
      * @param string $key Set key
      * @param int $start Start index
      * @param int $stop End index
-     * @return array Range of members
+     * @return list<string> Range of members
      */
     public function zrange(string $key, int $start, int $stop): array
     {
@@ -602,7 +604,7 @@ class DistributedCacheService implements CacheStore
      * Get cache keys
      *
      * @param string $pattern Pattern to filter
-     * @return array List of keys
+     * @return list<string> List of keys
      */
     public function getKeys(string $pattern = '*'): array
     {
@@ -612,7 +614,7 @@ class DistributedCacheService implements CacheStore
     /**
      * Get cache statistics
      *
-     * @return array Cache statistics
+     * @return array<string, mixed> Cache statistics
      */
     public function getStats(): array
     {
@@ -622,7 +624,7 @@ class DistributedCacheService implements CacheStore
     /**
      * Get all cache keys
      *
-     * @return array List of all keys
+     * @return list<string> List of all keys
      */
     public function getAllKeys(): array
     {
@@ -643,7 +645,7 @@ class DistributedCacheService implements CacheStore
     /**
      * Get cache driver capabilities
      *
-     * @return array Driver capabilities
+     * @return array<string, mixed> Driver capabilities
      */
     public function getCapabilities(): array
     {

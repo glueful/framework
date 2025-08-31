@@ -19,14 +19,14 @@ abstract class CacheNode
     /** @var string Unique node identifier */
     protected $id;
 
-    /** @var array Node configuration */
+    /** @var array<string, mixed> Node configuration */
     protected $config;
 
     /**
      * Initialize cache node
      *
      * @param string $id Node identifier
-     * @param array $config Node configuration
+     * @param array<string, mixed> $config Node configuration
      */
     public function __construct(string $id, array $config)
     {
@@ -47,7 +47,7 @@ abstract class CacheNode
     /**
      * Get node configuration
      *
-     * @return array Configuration array
+     * @return array<string, mixed> Configuration array
      */
     public function getConfig(): array
     {
@@ -98,7 +98,7 @@ abstract class CacheNode
     /**
      * Get node status
      *
-     * @return array Status information
+     * @return array<string, mixed> Status information
      */
     abstract public function getStatus(): array;
 
@@ -116,7 +116,7 @@ abstract class CacheNode
      * Get keys from a tag set
      *
      * @param string $tag Tag name
-     * @return array Keys in the tag set
+     * @return array<string> Keys in the tag set
      */
     abstract public function getTaggedKeys(string $tag): array;
 
@@ -124,7 +124,7 @@ abstract class CacheNode
      * Create appropriate node instance based on driver type
      *
      * @param string $driver Driver type
-     * @param array $config Configuration array
+     * @param array<string, mixed> $config Configuration array
      * @return self Node instance
      * @throws \InvalidArgumentException If driver is not supported
      */

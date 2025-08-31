@@ -14,7 +14,7 @@ use Glueful\Cache\Nodes\CacheNode;
  */
 class NodeHealthChecker
 {
-    /** @var array Health status registry for nodes */
+    /** @var array<string, array<string, mixed>> Health status registry for nodes */
     private $nodeHealth = [];
 
     /** @var int Default timeout for health check operations in seconds */
@@ -26,7 +26,7 @@ class NodeHealthChecker
     /** @var int Number of failures before marking a node as unhealthy */
     private $failureThreshold;
 
-    /** @var array Timestamps of last health checks */
+    /** @var array<string, int> Timestamps of last health checks */
     private $lastChecks = [];
 
     /**
@@ -148,7 +148,7 @@ class NodeHealthChecker
      * Get health information for a node
      *
      * @param string $nodeId Node identifier
-     * @return array Health information
+     * @return array<string, mixed> Health information
      */
     public function getNodeHealth(string $nodeId): array
     {
@@ -163,7 +163,7 @@ class NodeHealthChecker
     /**
      * Get all nodes health status
      *
-     * @return array All nodes health information
+     * @return array<string, array<string, mixed>> All nodes health information
      */
     public function getAllNodesHealth(): array
     {

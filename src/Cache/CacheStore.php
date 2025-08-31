@@ -35,18 +35,18 @@ interface CacheStore extends CacheInterface
     public function clear(): bool;
 
     /**
-     * @param iterable<string> $keys
+     * @param iterable<mixed> $keys
      * @return iterable<string, TValue|null>
      */
     public function getMultiple(iterable $keys, mixed $default = null): iterable;
 
     /**
-     * @param iterable<string, TValue> $values
+     * @param iterable<mixed, mixed> $values
      */
     public function setMultiple(iterable $values, null|int|\DateInterval $ttl = null): bool;
 
     /**
-     * @param iterable<string> $keys
+     * @param iterable<mixed> $keys
      */
     public function deleteMultiple(iterable $keys): bool;
 
@@ -119,7 +119,7 @@ interface CacheStore extends CacheInterface
      * Add to sorted set
      *
      * @param string $key Set key
-     * @param array $scoreValues Score-value pairs
+     * @param array<string, int|float> $scoreValues Map of member => score
      * @return bool True if added successfully
      */
     public function zadd(string $key, array $scoreValues): bool;

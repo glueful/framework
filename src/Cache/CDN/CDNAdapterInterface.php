@@ -37,7 +37,13 @@ interface CDNAdapterInterface
     /**
      * Get cache statistics from the CDN
      *
-     * @return array The cache statistics
+     * @return array{
+     *   provider: string,
+     *   status: string,
+     *   cache_hit_ratio: int|float|null,
+     *   edge_requests: int|null,
+     *   origin_requests: int|null
+     * } The cache statistics
      */
     public function getStats(): array;
 
@@ -46,7 +52,7 @@ interface CDNAdapterInterface
      *
      * @param string $route The route name for which to generate headers
      * @param string|null $contentType The content type of the response
-     * @return array Key-value pairs of headers to add to the response
+     * @return array<string, string> Key-value pairs of headers to add to the response
      */
     public function generateCacheHeaders(string $route, ?string $contentType = null): array;
 
@@ -69,7 +75,7 @@ interface CDNAdapterInterface
     /**
      * Get adapter status
      *
-     * @return array Status information including connectivity, configuration state, etc.
+     * @return array{provider: string, configured: bool, enabled: bool} Status information including connectivity and configuration state
      */
     public function getStatus(): array;
 }

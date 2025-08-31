@@ -16,22 +16,29 @@ use Glueful\Helpers\CacheHelper;
  */
 class CacheWarmupService
 {
+    /**
+     * @var CacheStore<mixed>
+     */
     private CacheStore $cache;
     private Connection $db;
 
+    /**
+     * @param CacheStore<mixed>|null $cache
+     */
     public function __construct(?CacheStore $cache = null, ?Connection $connection = null)
     {
         // Set up cache - try provided instance or get from container
-        $this->cache = $cache;
-
-        // If no cache provided, try to get from helper
-        if ($this->cache === null) {
-            $this->cache = CacheHelper::createCacheInstance();
-            if ($this->cache === null) {
+        if ($cache !== null) {
+            $this->cache = $cache;
+        } else {
+            // If no cache provided, try to get from helper
+            $created = CacheHelper::createCacheInstance();
+            if ($created === null) {
                 throw new \RuntimeException(
                     'CacheStore is required for warmup service: Unable to create cache instance.'
                 );
             }
+            $this->cache = $created;
         }
 
         // Set up database connection
@@ -47,30 +54,56 @@ class CacheWarmupService
         'metadata' => 'warmupMetadata'
     ];
 
-    /** @var array Warmup statistics */
+    /**
+     * @var array{
+     *   total_items: int,
+     *   cache_hits: int,
+     *   cache_misses: int,
+     *   errors: int,
+     *   start_time: float,
+     *   end_time: float
+     * }
+     */
     private static array $stats = [
         'total_items' => 0,
         'cache_hits' => 0,
         'cache_misses' => 0,
         'errors' => 0,
-        'start_time' => 0,
-        'end_time' => 0
+        'start_time' => 0.0,
+        'end_time' => 0.0
     ];
 
     /**
      * Warm up all critical cache data
      */
+    /**
+     * @param list<string> $strategies
+     * @return array{
+     *   status: string,
+     *   duration: float,
+     *   statistics: array{
+     *     total_items: int,
+     *     cache_hits: int,
+     *     cache_misses: int,
+     *     errors: int,
+     *     start_time: float,
+     *     end_time: float
+     *   },
+     *   results: array<string, array{status: string, items: int, message: string}>
+     * }
+     */
     public function warmupAll(array $strategies = []): array
     {
         self::$stats['start_time'] = microtime(true);
-        $strategies = $strategies ?: array_keys(self::$strategies);
+        if ($strategies === []) {
+            $strategies = array_keys(self::$strategies);
+        }
         $results = [];
 
         foreach ($strategies as $strategy) {
             if (isset(self::$strategies[$strategy])) {
-                $method = self::$strategies[$strategy];
                 try {
-                    $result = $this->$method();
+                    $result = $this->executeStrategy($strategy);
                     $results[$strategy] = $result;
                     self::$stats['total_items'] += $result['items'] ?? 0;
                 } catch (\Exception $e) {
@@ -101,6 +134,9 @@ class CacheWarmupService
      *
      * @used-by self::warmupAll() Called dynamically
      * @internal This method is called dynamically through the $strategies array
+     */
+    /**
+     * @return array{status: string, items: int, message: string}
      */
     private function warmupConfiguration(): array
     {
@@ -147,6 +183,9 @@ class CacheWarmupService
      *
      * @used-by self::warmupAll() Called dynamically
      * @internal This method is called dynamically through the $strategies array
+     */
+    /**
+     * @return array{status: string, items: int, message: string}
      */
     private function warmupPermissions(): array
     {
@@ -203,6 +242,9 @@ class CacheWarmupService
      * @used-by self::warmupAll() Called dynamically
      * @internal This method is called dynamically through the $strategies array
      */
+    /**
+     * @return array{status: string, items: int, message: string}
+     */
     private function warmupRoles(): array
     {
         if (!$this->tableExists('roles')) {
@@ -256,6 +298,9 @@ class CacheWarmupService
      * @used-by self::warmupAll() Called dynamically
      * @internal This method is called dynamically through the $strategies array
      */
+    /**
+     * @return array{status: string, items: int, message: string}
+     */
     private function warmupActiveUsers(): array
     {
         if (!$this->tableExists('users')) {
@@ -307,6 +352,9 @@ class CacheWarmupService
      * @used-by self::warmupAll() Called dynamically
      * @internal This method is called dynamically through the $strategies array
      */
+    /**
+     * @return array{status: string, items: int, message: string}
+     */
     private function warmupMetadata(): array
     {
         $items = 0;
@@ -339,6 +387,9 @@ class CacheWarmupService
      * Schedule periodic cache warmup
      *
      * @api Public API method for console commands and controllers
+     */
+    /**
+     * @param array{interval?: int, strategies?: list<string>} $options
      */
     public function scheduleWarmup(array $options = []): void
     {
@@ -378,6 +429,16 @@ class CacheWarmupService
      *
      * @api Public API method for monitoring and debugging
      */
+    /**
+     * @return array{
+     *   total_items: int,
+     *   cache_hits: int,
+     *   cache_misses: int,
+     *   errors: int,
+     *   start_time: float,
+     *   end_time: float
+     * }
+     */
     public static function getStats(): array
     {
         return self::$stats;
@@ -387,6 +448,21 @@ class CacheWarmupService
      * Get last warmup result
      *
      * @api Public API method for monitoring cache warmup status
+     */
+    /**
+     * @return array{
+     *   status: string,
+     *   duration: float,
+     *   statistics: array{
+     *     total_items: int,
+     *     cache_hits: int,
+     *     cache_misses: int,
+     *     errors: int,
+     *     start_time: float,
+     *     end_time: float
+     *   },
+     *   results: array<string, array{status: string, items: int, message: string}>
+     * }|null
      */
     public function getLastWarmupResult(): ?array
     {
@@ -431,8 +507,32 @@ class CacheWarmupService
             'cache_hits' => 0,
             'cache_misses' => 0,
             'errors' => 0,
-            'start_time' => 0,
-            'end_time' => 0
+            'start_time' => 0.0,
+            'end_time' => 0.0
         ];
+    }
+
+    /**
+     * Execute a warmup strategy by name.
+     *
+     * @param string $strategy
+     * @return array{status: string, items: int, message: string}
+     */
+    private function executeStrategy(string $strategy): array
+    {
+        switch ($strategy) {
+            case 'config':
+                return $this->warmupConfiguration();
+            case 'permissions':
+                return $this->warmupPermissions();
+            case 'roles':
+                return $this->warmupRoles();
+            case 'users':
+                return $this->warmupActiveUsers();
+            case 'metadata':
+                return $this->warmupMetadata();
+            default:
+                return ['status' => 'skipped', 'items' => 0, 'message' => 'Unknown strategy'];
+        }
     }
 }

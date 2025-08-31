@@ -9,11 +9,24 @@ class CacheTaggingService
 {
     use DatabaseConnectionTrait;
 
+    /**
+     * @var array<string, array<int, string>>
+     */
     private static array $tagMappings = [];
+
+    /**
+     * @var array<string, array<int, string>>
+     */
     private static array $keyTags = [];
     private static bool $enabled = true;
+    /**
+     * @var CacheStore<mixed>|null
+     */
     private static ?CacheStore $cache = null;
 
+    /**
+     * @var array<string, array<int, string>>
+     */
     private static array $predefinedTags = [
         'config' => ['app_config', 'database_config', 'cache_config'],
         'permissions' => ['user_permissions', 'role_permissions', 'permission_definitions'],
@@ -40,6 +53,9 @@ class CacheTaggingService
         return self::$enabled && self::getCacheInstance() !== null;
     }
 
+    /**
+     * @return CacheStore<mixed>|null
+     */
     private static function getCacheInstance(): ?CacheStore
     {
         if (self::$cache === null) {
@@ -48,6 +64,9 @@ class CacheTaggingService
         return self::$cache;
     }
 
+    /**
+     * @param list<string> $tags
+     */
     public static function tagCache(string $key, array $tags): void
     {
         if (!self::isEnabled()) {
@@ -67,6 +86,9 @@ class CacheTaggingService
         self::persistTagMappings();
     }
 
+    /**
+     * @return array<int, string>
+     */
     public static function getKeyTags(string $key): array
     {
         if (!self::isEnabled()) {
@@ -77,6 +99,9 @@ class CacheTaggingService
         return self::$keyTags[$key] ?? [];
     }
 
+    /**
+     * @return array<int, string>
+     */
     public static function getTaggedKeys(string $tag): array
     {
         if (!self::isEnabled()) {
@@ -87,6 +112,19 @@ class CacheTaggingService
         return self::$tagMappings[$tag] ?? [];
     }
 
+    /**
+     * @return (
+     *     array{
+     *         status: string,
+     *         tag: string,
+     *         invalidated: array<int, string>,
+     *         failed: array<int, string>,
+     *         total_keys: int,
+     *         success_count: int,
+     *         failure_count: int
+     *     }
+     * )|array{status: 'disabled'}
+     */
     public static function invalidateByTag(string $tag): array
     {
         if (!self::isEnabled()) {
@@ -133,6 +171,22 @@ class CacheTaggingService
         ];
     }
 
+    /**
+     * @param list<string> $tags
+     * @return (
+     *     array{
+     *         status: string,
+     *         tags: array<int, string>,
+     *         results: array<string, array<string, mixed>>,
+     *         total_invalidated: int,
+     *         total_failed: int,
+     *         summary: array{
+     *             invalidated_keys: array<int, string>,
+     *             failed_keys: array<int, string>
+     *         }
+     *     }
+     * )|array{status: 'disabled'}
+     */
     public static function invalidateByTags(array $tags): array
     {
         if (!self::isEnabled()) {
@@ -169,6 +223,9 @@ class CacheTaggingService
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public static function invalidateRelated(string $category): array
     {
         if (!self::isEnabled()) {
@@ -177,7 +234,7 @@ class CacheTaggingService
 
         $tags = self::$predefinedTags[$category] ?? [];
 
-        if (empty($tags)) {
+        if ($tags === []) {
             return [
                 'status' => 'error',
                 'message' => "Unknown category: $category",
@@ -188,6 +245,9 @@ class CacheTaggingService
         return self::invalidateByTags($tags);
     }
 
+    /**
+     * @param list<string> $tags
+     */
     public static function addPredefinedTag(string $category, array $tags): void
     {
         if (!isset(self::$predefinedTags[$category])) {
@@ -199,11 +259,26 @@ class CacheTaggingService
         );
     }
 
+    /**
+     * @return array<string, array<int, string>>
+     */
     public static function getPredefinedTags(): array
     {
         return self::$predefinedTags;
     }
 
+    /**
+     * @return (
+     *   array{
+     *     total_tags: int,
+     *     total_tagged_keys: int,
+     *     tags: array<string, array{
+     *       key_count: int,
+     *       keys: array<int, string>
+     *     }>
+     *   }
+     * )|array{status: 'disabled'}
+     */
     public static function getTagStats(): array
     {
         if (!self::isEnabled()) {
@@ -228,6 +303,17 @@ class CacheTaggingService
         return $stats;
     }
 
+    /**
+     * @return (
+     *   array{
+     *     status: string,
+     *     cleaned_keys: array<int, string>,
+     *     cleaned_tags: array<int, string>,
+     *     key_count: int,
+     *     tag_count: int
+     *   }
+     * )|array{status: 'disabled'}
+     */
     public static function cleanup(): array
     {
         if (!self::isEnabled()) {
@@ -259,7 +345,7 @@ class CacheTaggingService
         }
 
         foreach (self::$tagMappings as $tag => $keys) {
-            if (empty($keys)) {
+            if ($keys === []) {
                 unset(self::$tagMappings[$tag]);
                 $cleanedTags[] = $tag;
             }
@@ -281,10 +367,10 @@ class CacheTaggingService
         if (isset(self::$tagMappings[$tag])) {
             self::$tagMappings[$tag] = array_filter(
                 self::$tagMappings[$tag],
-                fn($k) => $k !== $key
+                fn(string $k): bool => $k !== $key
             );
 
-            if (empty(self::$tagMappings[$tag])) {
+            if (self::$tagMappings[$tag] === []) {
                 unset(self::$tagMappings[$tag]);
             }
         }
@@ -292,10 +378,10 @@ class CacheTaggingService
         if (isset(self::$keyTags[$key])) {
             self::$keyTags[$key] = array_filter(
                 self::$keyTags[$key],
-                fn($t) => $t !== $tag
+                fn(string $t): bool => $t !== $tag
             );
 
-            if (empty(self::$keyTags[$key])) {
+            if (self::$keyTags[$key] === []) {
                 unset(self::$keyTags[$key]);
             }
         }
@@ -322,11 +408,13 @@ class CacheTaggingService
                 }
             }
 
-            if ($mappings !== null) {
+            if (is_array($mappings)) {
+                /** @var array<string, array<int, string>> $mappings */
                 self::$tagMappings = $mappings;
             }
 
-            if ($keyTags !== null) {
+            if (is_array($keyTags)) {
+                /** @var array<string, array<int, string>> $keyTags */
                 self::$keyTags = $keyTags;
             }
 

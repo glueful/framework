@@ -15,7 +15,7 @@ use Glueful\Cache\Nodes\CacheNode;
  */
 class KeyPatternShardingStrategy implements ReplicationStrategyInterface
 {
-    /** @var array Mapping of patterns to node selectors */
+    /** @var array<string, mixed> Mapping of patterns to node selectors */
     private $patternMap = [];
 
     /** @var ReplicationStrategyInterface Fallback strategy for keys not matching any pattern */
@@ -24,13 +24,13 @@ class KeyPatternShardingStrategy implements ReplicationStrategyInterface
     /**
      * Initialize strategy
      *
-     * @param array $patternMap Pattern-to-nodeset mapping
+     * @param array<string, mixed> $patternMap Pattern-to-nodeset mapping
      * @param ReplicationStrategyInterface $fallbackStrategy Fallback strategy
      */
     public function __construct(array $patternMap = [], ?ReplicationStrategyInterface $fallbackStrategy = null)
     {
         $this->patternMap = $patternMap;
-        $this->fallbackStrategy = $fallbackStrategy ?: new ConsistentHashingStrategy();
+        $this->fallbackStrategy = $fallbackStrategy !== null ? $fallbackStrategy : new ConsistentHashingStrategy();
     }
 
     /**
@@ -38,7 +38,7 @@ class KeyPatternShardingStrategy implements ReplicationStrategyInterface
      */
     public function getNodesForKey(string $key, array $allNodes): array
     {
-        if (empty($allNodes)) {
+        if ($allNodes === []) {
             return [];
         }
 
@@ -95,9 +95,9 @@ class KeyPatternShardingStrategy implements ReplicationStrategyInterface
     /**
      * Select nodes by their IDs
      *
-     * @param array $nodeIds Node IDs to select
-     * @param array $allNodes All available nodes
-     * @return array Selected nodes
+     * @param array<string> $nodeIds Node IDs to select
+     * @param array<CacheNode> $allNodes All available nodes
+     * @return array<CacheNode> Selected nodes
      */
     private function selectNodesByIds(array $nodeIds, array $allNodes): array
     {

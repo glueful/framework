@@ -23,7 +23,7 @@ class MemcachedNode extends CacheNode
      * Initialize Memcached node
      *
      * @param string $id Node identifier
-     * @param array $config Node configuration
+     * @param array<string, mixed> $config Node configuration
      */
     public function __construct(string $id, array $config)
     {
@@ -48,7 +48,7 @@ class MemcachedNode extends CacheNode
 
             // Check if server is added successfully
             $serverList = $this->memcached->getServerList();
-            if (empty($serverList)) {
+            if ($serverList === []) {
                 error_log("Failed to add Memcached server for node {$this->id} at {$host}:{$port}");
                 return false;
             }
@@ -198,7 +198,7 @@ class MemcachedNode extends CacheNode
     /**
      * Get node status
      *
-     * @return array Status information
+     * @return array<string, mixed> Status information
      */
     public function getStatus(): array
     {
@@ -214,7 +214,7 @@ class MemcachedNode extends CacheNode
             try {
                 $serverStats = $this->memcached->getStats();
 
-                if (!empty($serverStats)) {
+                if ($serverStats !== []) {
                     $host = key($serverStats);
                     $stats = $serverStats[$host];
 
@@ -273,7 +273,7 @@ class MemcachedNode extends CacheNode
      * Get keys from a tag set
      *
      * @param string $tag Tag name
-     * @return array Keys in the tag set
+     * @return array<string> Keys in the tag set
      */
     public function getTaggedKeys(string $tag): array
     {

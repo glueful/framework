@@ -6,9 +6,18 @@ use Glueful\Helpers\CacheHelper;
 
 class CacheInvalidationService
 {
+    /**
+     * @var array<string, array{tags?: list<string>, keys?: list<string>}>
+     */
     private static array $patterns = [];
     private static bool $enabled = true;
+    /**
+     * @var CacheStore<mixed>|null
+     */
     private static ?CacheStore $cache = null;
+    /**
+     * @var array{invalidations:int, patterns_matched:int, keys_invalidated:int, errors:int}
+     */
     private static array $stats = [
         'invalidations' => 0,
         'patterns_matched' => 0,
@@ -16,6 +25,9 @@ class CacheInvalidationService
         'errors' => 0
     ];
 
+    /**
+     * @var array<string, array{tags?: list<string>, keys?: list<string>}>
+     */
     private static array $defaultPatterns = [
         'user_updated' => [
             'tags' => ['user_data', 'user_sessions', 'user_permissions'],
@@ -67,6 +79,9 @@ class CacheInvalidationService
         return self::$enabled && self::getCacheInstance() !== null && CacheTaggingService::isEnabled();
     }
 
+    /**
+     * @return CacheStore<mixed>|null
+     */
     private static function getCacheInstance(): ?CacheStore
     {
         if (self::$cache === null) {
@@ -80,6 +95,9 @@ class CacheInvalidationService
         return self::$cache;
     }
 
+    /**
+     * @param array{tags?: list<string>, keys?: list<string>} $pattern
+     */
     public static function registerPattern(string $event, array $pattern): void
     {
         if (!self::isEnabled()) {
@@ -90,6 +108,9 @@ class CacheInvalidationService
         self::$patterns[$event] = $pattern;
     }
 
+    /**
+     * @param array<string, array{tags?: list<string>, keys?: list<string>}> $patterns
+     */
     public static function registerPatterns(array $patterns): void
     {
         foreach ($patterns as $event => $pattern) {
@@ -102,11 +123,18 @@ class CacheInvalidationService
         unset(self::$patterns[$event]);
     }
 
+    /**
+     * @return array<string, array{tags?: list<string>, keys?: list<string>}>
+     */
     public static function getPatterns(): array
     {
         return self::$patterns;
     }
 
+    /**
+     * @param array<string, string|int|list<string|int>> $context
+     * @return array<string, mixed>
+     */
     public static function invalidateByEvent(string $event, array $context = []): array
     {
         if (!self::isEnabled()) {
@@ -182,6 +210,11 @@ class CacheInvalidationService
         return $results;
     }
 
+    /**
+     * @param list<string> $events
+     * @param array<string, string|int|list<string|int>> $context
+     * @return array<string, mixed>
+     */
     public static function invalidateByEvents(array $events, array $context = []): array
     {
         if (!self::isEnabled()) {
@@ -223,6 +256,9 @@ class CacheInvalidationService
         return $results;
     }
 
+    /**
+     * @param array<string, mixed> $data
+     */
     public static function onEvent(string $event, array $data = []): void
     {
         if (!self::isEnabled()) {
@@ -236,7 +272,10 @@ class CacheInvalidationService
         }
     }
 
-    public static function registerWithEventDispatcher($dispatcher = null): void
+    /**
+     * @param null|object $dispatcher Dispatcher with addListener(string, callable): void
+     */
+    public static function registerWithEventDispatcher(?object $dispatcher = null): void
     {
         if (!self::isEnabled()) {
             return;
@@ -254,6 +293,14 @@ class CacheInvalidationService
         }
     }
 
+    /**
+     * @return array{
+     *   enabled: bool,
+     *   registered_patterns: int,
+     *   statistics: array{invalidations:int, patterns_matched:int, keys_invalidated:int, errors:int},
+     *   patterns: list<string>
+     * }
+     */
     public static function getStats(): array
     {
         return [
@@ -274,6 +321,9 @@ class CacheInvalidationService
         ];
     }
 
+    /**
+     * @return array<string, int|string>
+     */
     public static function warmupPatterns(): array
     {
         if (!self::isEnabled()) {
@@ -296,6 +346,9 @@ class CacheInvalidationService
         }
     }
 
+    /**
+     * @param array{tags?: list<string>, keys?: list<string>} $pattern
+     */
     private static function validatePattern(array $pattern): void
     {
         if (!isset($pattern['tags']) && !isset($pattern['keys'])) {
@@ -311,6 +364,10 @@ class CacheInvalidationService
         }
     }
 
+    /**
+     * @param array<string, string|int|list<string|int>> $context
+     * @return list<string>
+     */
     private static function expandKeyPattern(string $pattern, array $context): array
     {
         $keys = [];
@@ -323,7 +380,7 @@ class CacheInvalidationService
         preg_match_all('/\{(\w+)\}/', $pattern, $matches);
         $placeholders = $matches[1];
 
-        if (empty($placeholders)) {
+        if (count($placeholders) === 0) {
             $keys[] = $pattern;
             return $keys;
         }
@@ -335,7 +392,7 @@ class CacheInvalidationService
                 if (is_array($value)) {
                     foreach ($value as $val) {
                         $tempPattern = str_replace('{' . $placeholder . '}', $val, $expandedPattern);
-                        if (!in_array($tempPattern, $keys)) {
+                        if (!in_array($tempPattern, $keys, true)) {
                             $keys[] = $tempPattern;
                         }
                     }
@@ -347,7 +404,7 @@ class CacheInvalidationService
             }
         }
 
-        if (!in_array($expandedPattern, $keys) && !strpos($expandedPattern, '{')) {
+        if (!in_array($expandedPattern, $keys, true) && strpos($expandedPattern, '{') === false) {
             $keys[] = $expandedPattern;
         }
 
