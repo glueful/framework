@@ -58,6 +58,12 @@ class RouteCommand extends BaseCommand
                  'v',
                  InputOption::VALUE_NONE,
                  'Show verbose output'
+             )
+             ->addOption(
+                 'env',
+                 null,
+                 InputOption::VALUE_REQUIRED,
+                 'Environment override (e.g., production)'
              );
     }
 
@@ -87,7 +93,11 @@ class RouteCommand extends BaseCommand
 
         try {
             $cacheService = new RouteCacheService();
-            $cacheFile = $cacheService->getCacheFilePath();
+            $envOverride = $input->getOption('env');
+            $env = $envOverride ?: (string) config('app.env', 'production');
+            $cacheDir = base_path('storage/cache');
+            $hash = \Glueful\Services\RouteHash::computeEnvHash($env);
+            $cacheFile = $cacheDir . "/routes_{$env}_{$hash}.php";
 
             // Check if cache already exists
             if (!$force && file_exists($cacheFile)) {
@@ -127,7 +137,11 @@ class RouteCommand extends BaseCommand
             $output->writeln('<info>💾 Compiling routes to cache...</info>');
             $compileStartTime = microtime(true);
 
-            $result = $cacheService->cacheRoutes($router);
+            $envOverride = $input->getOption('env');
+            $env = $envOverride ?: (string) config('app.env', 'production');
+            $cacheDir = base_path('storage/cache');
+            $hash = \Glueful\Services\RouteHash::computeEnvHash($env);
+            $result = $cacheService->cacheRoutes($router, $env);
 
             $compileTime = microtime(true) - $compileStartTime;
             $totalTime = microtime(true) - $startTime;
@@ -135,6 +149,8 @@ class RouteCommand extends BaseCommand
             if ($result['success']) {
                 $output->writeln('<success>✅ Route cache created successfully!</success>');
                 $output->writeln('');
+                $output->writeln("<info>Built cache for:</info> env={$env} hash={$hash}");
+                $output->writeln("<info>Cache file:</info> {$result['cache_file']}");
                 $this->displayCacheStats($output, $result, $analyze, $loadTime, $compileTime, $totalTime, $memoryUsed);
                 $this->displayCacheTips($output);
                 return self::SUCCESS;
@@ -157,7 +173,8 @@ class RouteCommand extends BaseCommand
 
         try {
             $cacheService = new RouteCacheService();
-            $env = (string) config('app.env', 'production');
+            $envOverride = $input->getOption('env');
+            $env = $envOverride ?: (string) config('app.env', 'production');
             $cacheDir = base_path('storage/cache');
             $pattern = $cacheDir . "/routes_{$env}_*.php";
             $files = glob($pattern) ?: [];
@@ -199,6 +216,10 @@ class RouteCommand extends BaseCommand
         $verbose = $input->getOption('verbose');
 
         try {
+            $envOverride = $input->getOption('env');
+            if (!empty($envOverride)) {
+                $output->writeln("<comment>Environment override:</comment> {$envOverride}");
+            }
             // Initialize router to load routes
             $router = Router::getInstance();
             $extensionManager = container()->get(ExtensionManager::class);
@@ -270,14 +291,26 @@ class RouteCommand extends BaseCommand
     {
         try {
             $cacheService = new RouteCacheService();
-            $cacheFile = $cacheService->getCacheFilePath();
-            $isCacheValid = $cacheService->isCacheValid();
+            $envOverride = $input->getOption('env');
+            $environment = $envOverride ?: (string) config('app.env', 'production');
+            $cacheDir = base_path('storage/cache');
+            $hash = \Glueful\Services\RouteHash::computeEnvHash($environment);
+            $cacheFile = $cacheDir . "/routes_{$environment}_{$hash}.php";
+            $isCacheValid = false;
+            if (file_exists($cacheFile)) {
+                try {
+                    $res = include $cacheFile;
+                    $isCacheValid = is_callable($res) || $res instanceof \Symfony\Component\Routing\Matcher\UrlMatcherInterface;
+                } catch (\Throwable) {
+                    $isCacheValid = false;
+                }
+            }
 
             $output->writeln('<info>🔍 Route System Status:</info>');
             $output->writeln('');
 
             // Environment info (use configuration instead of direct $_ENV)
-            $environment = config('app.env');
+            // $environment already set above (respects --env override)
             $debugBool = (bool) config('app.debug');
             $shouldUseCache = $environment === 'production' && !$debugBool;
             $debug = $debugBool ? 'true' : 'false';

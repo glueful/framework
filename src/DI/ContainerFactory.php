@@ -122,6 +122,8 @@ class ContainerFactory
         $providerClasses = [
             \Glueful\DI\ServiceProviders\CoreServiceProvider::class,
             \Glueful\DI\ServiceProviders\ConfigServiceProvider::class,
+            \Glueful\DI\ServiceProviders\AutoConfigServiceProvider::class,
+
             \Glueful\DI\ServiceProviders\VarDumperServiceProvider::class,
             \Glueful\DI\ServiceProviders\ConsoleServiceProvider::class,
             \Glueful\DI\ServiceProviders\ValidatorServiceProvider::class,

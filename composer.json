@@ -81,13 +81,32 @@
             "Glueful\\Tests\\": "tests/"
         }
     },
-    "scripts": {
+  "scripts": {
         "test": "vendor/bin/phpunit",
         "test:unit": "vendor/bin/phpunit --testsuite Unit",
         "test:integration": "vendor/bin/phpunit --testsuite Integration",
         "test:coverage": "vendor/bin/phpunit --coverage-html coverage",
+        "analyse": "vendor/bin/phpstan analyse src --no-progress --memory-limit=512M",
+        "analyse:strict": "vendor/bin/phpstan analyse src --level=8 --no-progress",
+        "analyse:changed": "bash -lc 'BASE=$(git merge-base origin/main HEAD 2>/dev/null || git merge-base main HEAD 2>/dev/null || echo HEAD~1); CHANGED=$(git diff --name-only --diff-filter=AMR $BASE...HEAD | grep ^src/ || true); if [ -z \"$CHANGED\" ]; then echo \"No changed files under src/.\"; else echo \"Analysing changed files:\n$CHANGED\"; vendor/bin/phpstan analyse --no-progress $CHANGED; fi'",
         "phpcs": "vendor/bin/phpcs",
-        "phpcbf": "vendor/bin/phpcbf"
+        "phpcbf": "vendor/bin/phpcbf",
+        "format": "@phpcbf",
+        "ci": [
+            "@test",
+            "@analyse",
+            "@phpcs"
+        ],
+        "ci:fast": [
+            "@test",
+            "@analyse:changed",
+            "@phpcs"
+        ],
+        "optimize": [
+            "@composer dump-autoload --optimize --classmap-authoritative",
+            "php -r \"function_exists('opcache_reset') ? opcache_reset() : null;\"",
+            "echo 'Framework optimized for production'"
+        ]
     },
     "config": {
         "allow-plugins": {

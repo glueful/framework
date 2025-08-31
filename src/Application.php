@@ -46,6 +46,7 @@ class Application
         $this->loadExtensions();
         $this->loadRoutes();
         $this->initializeScheduler();
+        $this->addDevelopmentMiddleware();
 
         $this->logger->info(
             'Framework initialization completed',
@@ -219,6 +220,32 @@ PHP;
     {
         if (PHP_SAPI === 'cli') {
             $this->container->get(JobScheduler::class);
+        }
+    }
+
+    private function addDevelopmentMiddleware(): void
+    {
+        $env = (string) config('app.env', 'production');
+        if ($env !== 'development') {
+            return;
+        }
+
+        $devMiddlewares = [
+            'Glueful\\Http\\Middleware\\DebugBarMiddleware',
+            'Glueful\\Http\\Middleware\\QueryLoggerMiddleware',
+            'Glueful\\Http\\Middleware\\DevelopmentExceptionMiddleware',
+        ];
+
+        foreach ($devMiddlewares as $class) {
+            if (class_exists($class)) {
+                try {
+                    $instance = new $class();
+                    if ($instance instanceof \Glueful\Http\Middleware\MiddlewareInterface) {
+                        \Glueful\Http\Router::addMiddleware($instance);
+                    }
+                } catch (\Throwable) {
+                }
+            }
         }
     }
 

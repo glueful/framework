@@ -34,9 +34,9 @@ class RouteCacheService
     /**
      * Get the full path to the route cache file
      */
-    public function getCacheFilePath(): string
+    public function getCacheFilePath(?string $env = null): string
     {
-        $env = (string) config('app.env', env('APP_ENV', 'production'));
+        $env = $env ?? (string) config('app.env', env('APP_ENV', 'production'));
         $hash = \Glueful\Services\RouteHash::computeEnvHash($env);
         return $this->cacheDir . "/routes_{$env}_{$hash}.php";
     }
@@ -72,10 +72,10 @@ class RouteCacheService
      * @param Router $router The router instance (used to access RouteCollection)
      * @return array Result array with success status and metadata
      */
-    public function cacheRoutes(Router $router): array
+    public function cacheRoutes(Router $router, ?string $env = null): array
     {
         try {
-            $cacheFile = $this->getCacheFilePath();
+            $cacheFile = $this->getCacheFilePath($env);
 
             // Get RouteCollection from Router directly
             $routes = Router::getRoutes();
@@ -117,8 +117,8 @@ PHP;
             ];
 
             // Cleanup older caches for this environment
-            $env = (string) config('app.env', env('APP_ENV', 'production'));
-            foreach (glob($this->cacheDir . "/routes_{$env}_*.php") ?: [] as $old) {
+            $envForCleanup = $env ?? (string) config('app.env', env('APP_ENV', 'production'));
+            foreach (glob($this->cacheDir . "/routes_{$envForCleanup}_*.php") ?: [] as $old) {
                 if ($old !== $cacheFile) {
                     @unlink($old);
                 }

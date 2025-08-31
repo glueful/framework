@@ -19,7 +19,27 @@ class Container implements ContainerInterface
 
     public function get(string $id): mixed
     {
-        return $this->container->get($id);
+        try {
+            return $this->container->get($id);
+        } catch (\Throwable $e) {
+            $class = get_class($e);
+            if ($class === '\\Symfony\\Component\\DependencyInjection\\Exception\\ServiceNotFoundException'
+                || str_contains($class, 'ServiceNotFound')) {
+                $suggestion = $this->findClosestServiceId($id);
+                $available = $this->getServiceIds();
+                $preview = array_slice($available, 0, 10);
+                $message = "Service [{$id}] not found.";
+                if ($suggestion !== null) {
+                    $message .= " Did you mean [{$suggestion}]?";
+                }
+                if (!empty($preview)) {
+                    $more = max(count($available) - count($preview), 0);
+                    $message .= " Available services: " . implode(', ', $preview) . ($more > 0 ? "... and {$more} more." : '');
+                }
+                throw new \Symfony\Component\DependencyInjection\Exception\ServiceNotFoundException($id, previous: $e, message: $message);
+            }
+            throw $e;
+        }
     }
 
     public function has(string $id): bool
@@ -61,6 +81,21 @@ class Container implements ContainerInterface
 
         // Fallback for basic containers - return empty array
         return [];
+    }
+
+    private function findClosestServiceId(string $needle): ?string
+    {
+        $services = $this->getServiceIds();
+        $closest = null;
+        $distance = -1;
+        foreach ($services as $service) {
+            $lev = levenshtein($needle, (string) $service);
+            if ($lev <= 3 && ($distance < 0 || $lev < $distance)) {
+                $closest = (string) $service;
+                $distance = $lev;
+            }
+        }
+        return $closest;
     }
 
     /**

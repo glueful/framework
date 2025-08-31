@@ -970,6 +970,7 @@ class ExtensionManager
      */
     public function loadEnabledExtensions(): void
     {
+        $this->autoEnableDiscoveredExtensionsIfConfigured();
         $enabledExtensions = $this->config->getEnabledExtensions();
 
         foreach ($enabledExtensions as $extensionName) {
@@ -978,6 +979,32 @@ class ExtensionManager
 
                 // Register SPA configurations after loading
                 $this->registerSpaConfigurations("Glueful\\Extensions\\{$extensionName}");
+            }
+        }
+    }
+
+    private function autoEnableDiscoveredExtensionsIfConfigured(): void
+    {
+        try {
+            $autoComposer = (bool) config('extensions.loading.auto_enable_composer', false);
+            $autoLocal = (bool) config('extensions.loading.auto_enable_local', env('APP_ENV') === 'development');
+            if (!$autoComposer && !$autoLocal) {
+                return;
+            }
+
+            $discovered = $this->discoverAvailableExtensions();
+            foreach ($discovered as $name => $info) {
+                $source = (string) ($info['source_type'] ?? '');
+                if (($source === 'composer' && !$autoComposer) || ($source === 'local' && !$autoLocal)) {
+                    continue;
+                }
+                if (!$this->config->isEnabled($name)) {
+                    $this->config->enableExtension($name);
+                }
+            }
+        } catch (\Throwable $e) {
+            if ($this->logger) {
+                $this->logger->warning('Auto-enable extensions failed: ' . $e->getMessage());
             }
         }
     }
