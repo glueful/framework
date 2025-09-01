@@ -23,11 +23,11 @@ class ConfigurableConnectionPool extends ConnectionPool
     /**
      * Create a new configurable connection pool
      *
-     * @param array          $config   Pool configuration options
+     * @param array<string, mixed> $config   Pool configuration options
      * @param string         $dsn      Database connection string
      * @param string|null    $username Database username
      * @param string|null    $password Database password
-     * @param array          $options  PDO connection options
+     * @param array<string, mixed> $options  PDO connection options
      * @param DatabaseDriver $driver   Database driver
      */
     public function __construct(
@@ -209,7 +209,7 @@ class ConfigurableConnectionPool extends ConnectionPool
     /**
      * Get pool configuration statistics
      *
-     * @return array Configuration summary
+     * @return array<string, mixed> Configuration summary
      */
     public function getConfigurationSummary(): array
     {
@@ -242,7 +242,7 @@ class ConfigurableConnectionPool extends ConnectionPool
     /**
      * Calculate a performance score based on configuration
      *
-     * @param  array $config Resolved configuration
+     * @param  array<string, mixed> $config Resolved configuration
      * @return int Score from 1-100
      */
     private function calculatePerformanceScore(array $config): int

@@ -7,6 +7,7 @@ use Glueful\Helpers\ConfigManager;
 
 class DatabaseBackup
 {
+    /** @var array{backup_created: bool, backup_file: string, backup_size: int, old_backups_deleted: int, errors: string[]} */
     private array $stats = [
         'backup_created' => false,
         'backup_file' => '',
@@ -16,6 +17,7 @@ class DatabaseBackup
     ];
 
     private Connection $connection;
+    /** @var array<string, mixed> */
     private array $config;
 
     public function __construct()
@@ -168,7 +170,7 @@ class DatabaseBackup
             $this->stats['old_backups_deleted']
         );
 
-        if (!empty($this->stats['errors'])) {
+        if (count($this->stats['errors']) > 0) {
             $message .= "Errors:\n- " . implode("\n- ", $this->stats['errors']) . "\n";
         }
 
@@ -194,7 +196,11 @@ class DatabaseBackup
         return round($bytes / (1024 ** $i), 2) . ' ' . $units[$i];
     }
 
-    public function handle(array $parameters = []): mixed
+    /**
+     * @param array<string, mixed> $parameters
+     * @return array{backup_created: bool, backup_file: string, backup_size: int, old_backups_deleted: int, errors: string[]}
+     */
+    public function handle(array $parameters = []): array
     {
         $retentionDays = $parameters['retention_days'] ?? 7;
 

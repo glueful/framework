@@ -9,6 +9,7 @@ use Glueful\Database\Connection;
 
 class SessionCleaner
 {
+    /** @var array{expired_access: int, expired_refresh: int, old_revoked: int, errors: string[]} */
     private array $stats = [
         'expired_access' => 0,
         'expired_refresh' => 0,
@@ -82,7 +83,7 @@ class SessionCleaner
             $this->stats['old_revoked']
         );
 
-        if (!empty($this->stats['errors'])) {
+        if (count($this->stats['errors']) > 0) {
             $message .= "Errors:\n- " . implode("\n- ", $this->stats['errors']) . "\n";
         }
 
@@ -104,7 +105,11 @@ class SessionCleaner
         $this->logResults();
     }
 
-    public function handle(array $parameters = []): mixed
+    /**
+     * @param array<string, mixed> $parameters
+     * @return array{expired_access: int, expired_refresh: int, old_revoked: int, errors: string[]}
+     */
+    public function handle(array $parameters = []): array
     {
         $this->run();
         return $this->stats;

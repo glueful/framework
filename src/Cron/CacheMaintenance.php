@@ -7,6 +7,7 @@ use Glueful\Cache\CacheStore;
 
 class CacheMaintenance
 {
+    /** @var array{cache_cleared: bool, expired_keys_removed: int, cache_size_before: int, cache_size_after: int, errors: string[]} */
     private array $stats = [
         'cache_cleared' => false,
         'expired_keys_removed' => 0,
@@ -15,6 +16,7 @@ class CacheMaintenance
         'errors' => []
     ];
 
+    /** @var CacheStore<mixed> */
     private CacheStore $cache;
 
     public function __construct()
@@ -210,7 +212,7 @@ class CacheMaintenance
             $this->formatBytes($this->stats['cache_size_after'])
         );
 
-        if (!empty($this->stats['errors'])) {
+        if (count($this->stats['errors']) > 0) {
             $message .= "Errors:\n- " . implode("\n- ", $this->stats['errors']) . "\n";
         }
 
@@ -236,7 +238,11 @@ class CacheMaintenance
         return round($bytes / (1024 ** $i), 2) . ' ' . $units[$i];
     }
 
-    public function handle(array $parameters = []): mixed
+    /**
+     * @param array<string, mixed> $parameters
+     * @return array{cache_cleared: bool, expired_keys_removed: int, cache_size_before: int, cache_size_after: int, errors: string[]}
+     */
+    public function handle(array $parameters = []): array
     {
         // Parameters are reserved for future configuration options
         unset($parameters);

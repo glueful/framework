@@ -11,6 +11,11 @@ use Attribute;
 #[Attribute(Attribute::TARGET_METHOD)]
 class CacheResult
 {
+    /**
+     * @param int $ttl
+     * @param string $keyPrefix
+     * @param array<int, string> $tags
+     */
     public function __construct(
         public int $ttl = 3600,
         public string $keyPrefix = '',

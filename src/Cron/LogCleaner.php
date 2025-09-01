@@ -6,6 +6,7 @@ use Glueful\Database\Connection;
 
 class LogCleaner
 {
+    /** @var array{deleted_files: int, deleted_db_logs: int, bytes_freed: int, errors: string[]} */
     private array $stats = [
         'deleted_files' => 0,
         'deleted_db_logs' => 0,
@@ -72,7 +73,7 @@ class LogCleaner
                 ->where('created_at', '<', $cutoffDate)
                 ->delete();
 
-            if ($affected) {
+            if ($affected > 0) {
                 $this->stats['deleted_db_logs'] += $affected;
             }
         } catch (\Exception $e) {
@@ -94,7 +95,7 @@ class LogCleaner
             $this->formatBytes($this->stats['bytes_freed'])
         );
 
-        if (!empty($this->stats['errors'])) {
+        if (count($this->stats['errors']) > 0) {
             $message .= "Errors:\n- " . implode("\n- ", $this->stats['errors']) . "\n";
         }
 
@@ -120,7 +121,11 @@ class LogCleaner
         return round($bytes / (1024 ** $i), 2) . ' ' . $units[$i];
     }
 
-    public function handle(array $parameters = []): mixed
+    /**
+     * @param array<string, mixed> $parameters
+     * @return array{deleted_files: int, deleted_db_logs: int, bytes_freed: int, errors: string[]}
+     */
+    public function handle(array $parameters = []): array
     {
         $retentionDays = $parameters['retention_days'] ?? 30;
 

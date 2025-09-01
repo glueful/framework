@@ -71,10 +71,10 @@ class NotificationRetryProcessor
     /**
      * Handle the scheduled job execution
      *
-     * @param array $params Command parameters
-     * @return array|bool Result of the execution
+     * @param array<string, mixed> $params Command parameters
+     * @return array<string, int> Result of the execution
      */
-    public function handle(array $params = [])
+    public function handle(array $params = []): array
     {
         $limit = $params['limit'] ?? 50;
 
@@ -85,7 +85,7 @@ class NotificationRetryProcessor
         $results = $this->retryService->processDueRetries($limit, $this->notificationService);
 
         // Log the results
-        if ($this->logger) {
+        if ($this->logger !== null) {
             $this->logger->info("Notification retry processing completed", [
                 'processed' => $results['processed'],
                 'successful' => $results['successful'],
