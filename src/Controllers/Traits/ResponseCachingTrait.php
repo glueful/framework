@@ -22,7 +22,7 @@ trait ResponseCachingTrait
     /**
      * Get cache store instance
      *
-     * @return CacheStore
+     * @return CacheStore<mixed>
      */
     protected function getCacheStore(): CacheStore
     {
@@ -39,7 +39,7 @@ trait ResponseCachingTrait
      * @param string $key Cache key identifier
      * @param callable $callback Callback to generate data if not cached
      * @param int $ttl Time to live in seconds
-     * @param array $tags Cache tags for invalidation
+     * @param array<string> $tags Cache tags for invalidation
      * @return mixed Cached or generated data
      */
     protected function cacheResponse(
@@ -63,7 +63,7 @@ trait ResponseCachingTrait
         );
 
         // Add user-specific tags if authenticated
-        if ($this->currentUser) {
+        if ($this->currentUser !== null) {
             $tags[] = 'user:' . $this->currentUser->uuid;
         }
 
@@ -75,9 +75,9 @@ trait ResponseCachingTrait
      *
      * @param string $repository Repository name
      * @param string $method Repository method name
-     * @param array $args Method arguments
+     * @param array<mixed> $args Method arguments
      * @param int $ttl Time to live in seconds
-     * @param array $tags Additional cache tags
+     * @param array<string> $tags Additional cache tags
      * @return mixed Cached query results
      */
     protected function cacheQuery(
@@ -107,10 +107,10 @@ trait ResponseCachingTrait
      * @param string $repository Repository name
      * @param int $page Page number
      * @param int $perPage Items per page
-     * @param array $conditions Query conditions
-     * @param array $orderBy Order by criteria
+     * @param array<string, mixed> $conditions Query conditions
+     * @param array<string, string> $orderBy Order by criteria
      * @param int $ttl Cache time to live
-     * @return array Paginated results
+     * @return array<string, mixed> Paginated results
      */
     protected function cachePaginatedResponse(
         string $repository,
@@ -137,7 +137,7 @@ trait ResponseCachingTrait
      * Add cache headers to response
      *
      * @param Response $response Response object
-     * @param array $options Cache options
+     * @param array<string, mixed> $options Cache options
      * @return Response Response with cache headers
      */
     protected function withCacheHeaders(
@@ -158,7 +158,7 @@ trait ResponseCachingTrait
         // Set cache control headers
         $cacheControl = [];
 
-        if ($settings['public']) {
+        if ($settings['public'] === true) {
             $cacheControl[] = 'public';
         } else {
             $cacheControl[] = 'private';
@@ -170,14 +170,14 @@ trait ResponseCachingTrait
             $cacheControl[] = 's-maxage=' . $settings['s_maxage'];
         }
 
-        if ($settings['must_revalidate']) {
+        if ($settings['must_revalidate'] === true) {
             $cacheControl[] = 'must-revalidate';
         }
 
         header('Cache-Control: ' . implode(', ', $cacheControl));
 
         // Set Vary header
-        if (!empty($settings['vary'])) {
+        if (is_array($settings['vary']) && count($settings['vary']) > 0) {
             header('Vary: ' . implode(', ', $settings['vary']));
         }
 
@@ -190,7 +190,7 @@ trait ResponseCachingTrait
      * @param mixed $data Response data
      * @param string $cacheKey Cache key
      * @param int $ttl Time to live
-     * @param array $tags Cache tags
+     * @param array<string> $tags Cache tags
      * @return Response Cached response
      */
     protected function cachedResponse(
@@ -245,10 +245,10 @@ trait ResponseCachingTrait
         if ($this->isAdmin()) {
             $ttl = 300; // 5 minutes for admins (fresher data)
             $tags[] = 'admin_cache';
-        } elseif ($this->currentUser && $this->can('premium_features')) {
+        } elseif ($this->currentUser !== null && $this->can('premium_features')) {
             $ttl = 7200; // 2 hours for premium users
             $tags[] = 'premium_cache';
-        } elseif ($this->currentUser) {
+        } elseif ($this->currentUser !== null) {
             $ttl = 3600; // 1 hour for regular users
             $tags[] = 'user_cache';
         } else {
@@ -262,13 +262,13 @@ trait ResponseCachingTrait
     /**
      * Invalidate cache by tags
      *
-     * @param array $tags Cache tags to invalidate
+     * @param array<string> $tags Cache tags to invalidate
      */
     protected function invalidateCache(array $tags = []): void
     {
-        if (empty($tags)) {
+        if (count($tags) === 0) {
             // Invalidate user-specific cache by default
-            if ($this->currentUser) {
+            if ($this->currentUser !== null) {
                 $tags = ['user:' . $this->currentUser->uuid];
             }
         }
@@ -286,7 +286,7 @@ trait ResponseCachingTrait
     {
         $tags = ['repository:' . $resource];
 
-        if ($id) {
+        if ($id !== null && $id !== '') {
             $tags[] = $resource . ':' . $id;
         }
 
@@ -296,7 +296,7 @@ trait ResponseCachingTrait
     /**
      * Warm cache with predefined keys
      *
-     * @param array $keys Cache keys with TTL values
+     * @param array<string, int> $keys Cache keys with TTL values
      * @param callable $dataProvider Data provider callback
      */
     protected function warmCache(array $keys, callable $dataProvider): void
@@ -313,7 +313,7 @@ trait ResponseCachingTrait
      *
      * @param string $key Cache key
      * @param callable $callback Data generator
-     * @param array $conditions Cache conditions
+     * @param array<string, mixed> $conditions Cache conditions
      * @return mixed Data
      */
     protected function conditionalCache(
@@ -328,13 +328,13 @@ trait ResponseCachingTrait
         foreach ($conditions as $condition => $value) {
             switch ($condition) {
                 case 'method':
-                    if (!in_array($this->request->getMethod(), (array)$value)) {
+                    if (!in_array($this->request->getMethod(), (array)$value, true)) {
                         $shouldCache = false;
                     }
                     break;
 
                 case 'authenticated':
-                    if ($value && !$this->currentUser) {
+                    if ($value === true && $this->currentUser === null) {
                         $shouldCache = false;
                     }
                     break;
@@ -425,7 +425,7 @@ trait ResponseCachingTrait
      * @param string $fragment Fragment identifier
      * @param callable $callback Data generator
      * @param int $ttl Time to live
-     * @param array $dependencies Cache dependencies
+     * @param array<string, mixed> $dependencies Cache dependencies
      * @return mixed Cached fragment
      */
     protected function cacheFragment(
@@ -457,8 +457,8 @@ trait ResponseCachingTrait
     /**
      * Cache multiple operations in batch
      *
-     * @param array $operations Array of cache operations
-     * @return array Results array
+     * @param array<string, mixed> $operations Array of cache operations
+     * @return array<string, mixed> Results array
      */
     protected function cacheMultiple(array $operations): array
     {

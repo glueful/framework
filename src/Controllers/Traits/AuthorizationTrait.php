@@ -26,7 +26,7 @@ trait AuthorizationTrait
      *
      * @param string $permission Permission to check
      * @param string $resource Resource identifier (default: 'system')
-     * @param array $context Additional context for permission check
+     * @param array<string, mixed> $context Additional context for permission check
      * @return bool True if user has permission
      */
     protected function can(string $permission, string $resource = 'system', array $context = []): bool
@@ -40,7 +40,7 @@ trait AuthorizationTrait
      *
      * @param string $permission Permission to check
      * @param string $resource Resource identifier (default: 'system')
-     * @param array $context Additional context for permission check
+     * @param array<string, mixed> $context Additional context for permission check
      * @throws UnauthorizedException If permission is denied
      */
     protected function requirePermission(
@@ -74,9 +74,9 @@ trait AuthorizationTrait
     /**
      * Check if current user has any of the specified permissions
      *
-     * @param array $permissions Array of permissions to check
+     * @param array<string> $permissions Array of permissions to check
      * @param string $resource Resource identifier (default: 'system')
-     * @param array $context Additional context for permission check
+     * @param array<string, mixed> $context Additional context for permission check
      * @return bool True if user has at least one permission
      */
     protected function canAny(array $permissions, string $resource = 'system', array $context = []): bool
@@ -168,7 +168,7 @@ trait AuthorizationTrait
     private function extractToken(Request $request): ?string
     {
         $authHeader = $request->headers->get('Authorization');
-        if (!$authHeader) {
+        if ($authHeader === null || $authHeader === '') {
             return null;
         }
 

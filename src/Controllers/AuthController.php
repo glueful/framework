@@ -130,12 +130,12 @@ class AuthController
         // Authenticate with the specified provider or use default
         $result = $this->authService->authenticate($credentials, $providerName);
 
-        if (!$result) {
+        if ($result === null) {
             throw new AuthenticationException('Invalid credentials');
         }
 
         // Add CSRF token to login response only if CSRF protection is enabled
-        if (env('CSRF_PROTECTION_ENABLED', true)) {
+        if (env('CSRF_PROTECTION_ENABLED', true) === true) {
             try {
                 $csrfMiddleware = new \Glueful\Http\Middleware\CSRFMiddleware();
                 $csrfToken = $csrfMiddleware->generateToken($request);
@@ -186,7 +186,7 @@ class AuthController
 
         $token = AuthenticationService::extractTokenFromRequest($request);
 
-        if (!$token) {
+        if ($token === null) {
             throw new ValidationException('No token provided');
         }
 
@@ -297,21 +297,21 @@ class AuthController
         $request = SymfonyRequest::createFromGlobals();
         $token = AuthenticationService::extractTokenFromRequest($request);
 
-        if (!$token) {
+        if ($token === null) {
             throw new ValidationException('No token provided');
         }
 
         // Get session to extract user UUID
         $tokenStorage = new \Glueful\Auth\TokenStorageService();
         $session = $tokenStorage->getSessionByAccessToken($token);
-        if (!$session || !isset($session['user']['uuid'])) {
+        if ($session === null || !isset($session['user']['uuid'])) {
             throw new AuthenticationException('Invalid session');
         }
 
         // Refresh permissions in the session
         $result = $this->authService->refreshPermissions($token);
 
-        if (!$result) {
+        if ($result === null) {
             throw new AuthenticationException('Failed to refresh permissions');
         }
 
@@ -333,7 +333,7 @@ class AuthController
         // Get token from request
         $token = AuthenticationService::extractTokenFromRequest($request);
 
-        if (!$token) {
+        if ($token === null) {
             throw new ValidationException('No token provided');
         }
 
@@ -341,7 +341,7 @@ class AuthController
         $authManager = AuthBootstrap::getManager();
         $userData = $authManager->authenticate($request);
 
-        if (!$userData) {
+        if ($userData === null) {
             throw new AuthenticationException('Invalid token');
         }
 
@@ -403,7 +403,7 @@ class AuthController
         }
 
         // Send verification email
-        $result = $this->verifier->sendPasswordResetEmail($postData['email']);
+        $result = EmailVerification::sendPasswordResetEmail($postData['email']);
         if (!$result['success']) {
             $errorMsg = $result['message'] ?? 'Failed to send reset email';
             throw new ValidationException($errorMsg);
@@ -528,7 +528,7 @@ class AuthController
         $refreshToken = $postData['refresh_token'];
         $result = $this->authService->refreshTokens($refreshToken);
 
-        if (!$result) {
+        if ($result === null) {
             throw new AuthenticationException('Invalid or expired refresh token');
         }
 

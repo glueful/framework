@@ -33,6 +33,9 @@ abstract class BaseSecurityCommand extends BaseCommand
     /**
      * Extract option value from command arguments
      */
+    /**
+     * @param array<int, string> $args
+     */
     protected function extractOptionValue(array $args, string $option, string $default = ''): string
     {
         foreach ($args as $arg) {
@@ -46,19 +49,24 @@ abstract class BaseSecurityCommand extends BaseCommand
     /**
      * Process production environment checks
      */
+    /**
+     * @param array<string, mixed> $validation
+     * @return array<string, mixed>
+     */
     protected function processProductionCheck(array $validation, bool $fix, bool $verbose): array
     {
-        $passed = $validation['production_ready'] ?? false;
-        $message = $passed ? 'Production environment validated' : 'Production environment issues found';
+        $passed = ($validation['production_ready'] ?? false) === true;
+        $message = $passed === true ? 'Production environment validated' : 'Production environment issues found';
 
-        if ($verbose && !empty($validation['issues'])) {
+        $issues = is_array($validation['issues']) ? $validation['issues'] : [];
+        if ($verbose && count($issues) > 0) {
             $this->line('  Issues found:');
-            foreach ($validation['issues'] as $issue) {
+            foreach ($issues as $issue) {
                 $this->line("    • {$issue}");
             }
         }
 
-        if ($fix && !$passed) {
+        if ($fix === true && $passed !== true) {
             $this->line('  Applying automatic fixes...');
             // SecurityManager would handle fixes
         }
@@ -69,6 +77,10 @@ abstract class BaseSecurityCommand extends BaseCommand
     /**
      * Process security score assessment
      */
+    /**
+     * @param array<string, mixed> $scoreData
+     * @return array<string, mixed>
+     */
     protected function processSecurityScore(array $scoreData, bool $verbose): array
     {
         $score = $scoreData['score'] ?? 0;
@@ -77,9 +89,10 @@ abstract class BaseSecurityCommand extends BaseCommand
         $passed = $score >= 75;
         $message = "Score: {$score}/100 ({$status})";
 
-        if ($verbose && !empty($scoreData['breakdown'])) {
+        $breakdown = is_array($scoreData['breakdown']) ? $scoreData['breakdown'] : [];
+        if ($verbose && count($breakdown) > 0) {
             $this->line('  Score breakdown:');
-            foreach ($scoreData['breakdown'] as $category => $points) {
+            foreach ($breakdown as $category => $points) {
                 $this->line("    • {$category}: {$points}");
             }
         }
@@ -89,6 +102,9 @@ abstract class BaseSecurityCommand extends BaseCommand
 
     /**
      * Process health checks
+     */
+    /**
+     * @return array<string, mixed>
      */
     protected function processHealthChecks(bool $fix, bool $verbose): array
     {
@@ -102,6 +118,9 @@ abstract class BaseSecurityCommand extends BaseCommand
     /**
      * Process permission checks
      */
+    /**
+     * @return array<string, mixed>
+     */
     protected function processPermissionChecks(bool $fix, bool $verbose): array
     {
         // Permission checks would be handled by SecurityManager
@@ -113,6 +132,9 @@ abstract class BaseSecurityCommand extends BaseCommand
 
     /**
      * Process configuration security
+     */
+    /**
+     * @return array<string, mixed>
      */
     protected function processConfigurationSecurity(bool $production, bool $fix, bool $verbose): array
     {
@@ -126,6 +148,9 @@ abstract class BaseSecurityCommand extends BaseCommand
     /**
      * Process authentication security
      */
+    /**
+     * @return array<string, mixed>
+     */
     protected function processAuthenticationSecurity(bool $verbose): array
     {
         // Authentication security would be handled by SecurityManager
@@ -137,6 +162,9 @@ abstract class BaseSecurityCommand extends BaseCommand
 
     /**
      * Process network security
+     */
+    /**
+     * @return array<string, mixed>
      */
     protected function processNetworkSecurity(bool $verbose): array
     {

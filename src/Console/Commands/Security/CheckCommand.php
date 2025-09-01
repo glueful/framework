@@ -51,9 +51,9 @@ class CheckCommand extends BaseSecurityCommand
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $fix = $input->getOption('fix');
-        $verbose = $input->getOption('verbose');
-        $production = $input->getOption('production') || env('APP_ENV') === 'production';
+        $fix = (bool) $input->getOption('fix');
+        $verbose = (bool) $input->getOption('verbose');
+        $production = (bool) $input->getOption('production') || env('APP_ENV') === 'production';
 
         $this->info('🔒 Comprehensive Security Configuration Check');
         $this->line('');
@@ -65,7 +65,7 @@ class CheckCommand extends BaseSecurityCommand
         $this->info('1. Production Environment Security...');
         $prodValidation = SecurityManager::validateProductionEnvironment();
         $checks['production'] = $this->processProductionCheck($prodValidation, $fix, $verbose);
-        if (!$checks['production']['passed']) {
+        if (($checks['production']['passed'] ?? false) !== true) {
             $overallStatus = false;
         }
 
@@ -80,35 +80,35 @@ class CheckCommand extends BaseSecurityCommand
         // 3. System Health & Security
         $this->info('3. System Health & Security...');
         $checks['health'] = $this->processHealthChecks($fix, $verbose);
-        if (!$checks['health']['passed']) {
+        if (($checks['health']['passed'] ?? false) !== true) {
             $overallStatus = false;
         }
 
         // 4. File Permissions Security
         $this->info('4. File Permissions Security...');
         $checks['permissions'] = $this->processPermissionChecks($fix, $verbose);
-        if (!$checks['permissions']['passed']) {
+        if (($checks['permissions']['passed'] ?? false) !== true) {
             $overallStatus = false;
         }
 
         // 5. Configuration Security
         $this->info('5. Configuration Security...');
         $checks['config'] = $this->processConfigurationSecurity($production, $fix, $verbose);
-        if (!$checks['config']['passed']) {
+        if (($checks['config']['passed'] ?? false) !== true) {
             $overallStatus = false;
         }
 
         // 6. Authentication & Session Security
         $this->info('6. Authentication & Session Security...');
         $checks['auth'] = $this->processAuthenticationSecurity($verbose);
-        if (!$checks['auth']['passed']) {
+        if (($checks['auth']['passed'] ?? false) !== true) {
             $overallStatus = false;
         }
 
         // 7. Network Security (CORS, Headers, Rate Limiting)
         $this->info('7. Network Security Configuration...');
         $checks['network'] = $this->processNetworkSecurity($verbose);
-        if (!$checks['network']['passed']) {
+        if (($checks['network']['passed'] ?? false) !== true) {
             $overallStatus = false;
         }
 
@@ -121,9 +121,10 @@ class CheckCommand extends BaseSecurityCommand
         $totalCount = count($checks);
 
         foreach ($checks as $category => $result) {
-            $status = $result['passed'] ? '✅' : '❌';
+            $resultPassed = ($result['passed'] ?? false) === true;
+            $status = $resultPassed ? '✅' : '❌';
             $this->line(sprintf('%-25s %s %s', ucfirst($category), $status, $result['message']));
-            if ($result['passed']) {
+            if ($resultPassed) {
                 $passedCount++;
             }
         }
@@ -141,17 +142,17 @@ class CheckCommand extends BaseSecurityCommand
             $this->warning("⚠️ Security issues found ({$passedCount}/{$totalCount} categories passed)");
 
             // Show fix suggestions if not in fix mode
-            if (!$fix) {
+            if ($fix !== true) {
                 $this->line('');
                 $this->info('💡 To attempt automatic fixes, run:');
                 $this->line('   php glueful security:check --fix');
 
                 $fixes = SecurityManager::getEnvironmentFixSuggestions();
-                if (!empty($fixes)) {
+                if (count($fixes) > 0) {
                     $this->line('');
                     $this->info('🔧 Available automatic fixes:');
-                    foreach (array_slice($fixes, 0, 3) as $fix) {
-                        $this->line("   • {$fix['fix']}");
+                    foreach (array_slice($fixes, 0, 3) as $fixSuggestion) {
+                        $this->line("   • {$fixSuggestion['fix']}");
                     }
                     if (count($fixes) > 3) {
                         $this->line("   ... and " . (count($fixes) - 3) . " more");

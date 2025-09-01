@@ -75,26 +75,29 @@ class RevokeTokensCommand extends BaseSecurityCommand
     {
         // Initialize database connection
         $this->db = new Connection();
-        $user = $input->getOption('user');
-        $all = $input->getOption('all');
-        $type = $input->getOption('type');
-        $olderThan = $input->getOption('older-than');
-        $force = $input->getOption('force');
-        $reason = $input->getOption('reason');
+        $userOption = $input->getOption('user');
+        $user = $userOption !== null ? (string) $userOption : null;
+        $all = (bool) $input->getOption('all');
+        $type = (string) $input->getOption('type');
+        $olderThanOption = $input->getOption('older-than');
+        $olderThan = $olderThanOption !== null ? (string) $olderThanOption : null;
+        $force = (bool) $input->getOption('force');
+        $reasonOption = $input->getOption('reason');
+        $reason = $reasonOption !== null ? (string) $reasonOption : null;
 
         // Validate options
-        if (!$user && !$all && !$olderThan) {
+        if ($user === null && $all !== true && $olderThan === null) {
             $this->error('Please specify --user, --all, or --older-than option');
             return self::FAILURE;
         }
 
-        if ($user && $all) {
+        if ($user !== null && $all === true) {
             $this->error('Cannot specify both --user and --all options');
             return self::FAILURE;
         }
 
         $validTypes = ['access', 'refresh', 'all'];
-        if (!in_array($type, $validTypes)) {
+        if (!in_array($type, $validTypes, true)) {
             $this->error("Invalid token type: {$type}");
             $this->info('Valid types: ' . implode(', ', $validTypes));
             return self::FAILURE;
@@ -117,19 +120,23 @@ class RevokeTokensCommand extends BaseSecurityCommand
                 ->select(['access_token', 'refresh_token', 'user_uuid', 'uuid'])
                 ->where('status', 'active');
 
-            if ($user) {
+            if ($user !== null) {
                 // Find user UUID first
                 $userRepo = new \Glueful\Repository\UserRepository();
                 $userData = $userRepo->findByEmail($user) ?? $userRepo->findByUsername($user);
-                if (!$userData) {
+                if ($userData === null) {
                     $this->error("User not found: {$user}");
                     return self::FAILURE;
                 }
                 $sessionsQuery->where('user_uuid', $userData['uuid']);
             }
 
-            if ($olderThan) {
+            if ($olderThan !== null) {
                 $timestamp = strtotime("-{$olderThan}");
+                if ($timestamp === false) {
+                    $this->error('Invalid time format for --older-than option');
+                    return self::FAILURE;
+                }
                 $sessionsQuery->where('created_at', '<', date('Y-m-d H:i:s', $timestamp));
             }
 
@@ -143,9 +150,9 @@ class RevokeTokensCommand extends BaseSecurityCommand
             }
 
             // Confirmation if not forced
-            if (!$force) {
+            if ($force !== true) {
                 $this->line('');
-                if ($all) {
+                if ($all === true) {
                     $this->warning('⚠️ This will LOG OUT ALL USERS and require them to re-authenticate!');
                 } else {
                     $this->warning('⚠️ This will invalidate active sessions and require re-authentication!');
@@ -158,7 +165,7 @@ class RevokeTokensCommand extends BaseSecurityCommand
             }
 
             // Get reason if not provided
-            if (!$reason && !$force) {
+            if ($reason === null && $force !== true) {
                 $reason = $this->ask('Please provide a reason for token revocation');
             }
 

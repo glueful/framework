@@ -249,6 +249,9 @@ class ExtensionsController extends BaseController
      * @param array|null $extension Extension data from route params
      * @return mixed HTTP response
      */
+    /**
+     * @param array<string, mixed>|null $extension
+     */
     public function getExtensionHealth(?array $extension): mixed
     {
         // Check permission
@@ -617,7 +620,7 @@ class ExtensionsController extends BaseController
     /**
      * Build catalog filters from request query parameters
      *
-     * @return array Validated filters array
+     * @return array<string, mixed> Validated filters array
      */
     private function buildCatalogFilters(): array
     {
@@ -642,7 +645,7 @@ class ExtensionsController extends BaseController
         if ($this->request->query->has('status')) {
             $status = $this->request->query->get('status');
             $validStatuses = ['available', 'active', 'inactive'];
-            if (in_array($status, $validStatuses)) {
+            if (in_array($status, $validStatuses, true)) {
                 $filters['status'] = $status;
             }
         }
@@ -650,17 +653,17 @@ class ExtensionsController extends BaseController
         // Tags filter (comma-separated)
         if ($this->request->query->has('tags')) {
             $tags = $this->request->query->get('tags');
-            if (is_string($tags) && !empty(trim($tags))) {
+            if (is_string($tags) && trim($tags) !== '') {
                 $filters['tags'] = array_map('trim', explode(',', $tags));
                 // Remove empty tags
-                $filters['tags'] = array_filter($filters['tags'], fn($tag) => !empty($tag));
+                $filters['tags'] = array_filter($filters['tags'], fn($tag) => $tag !== '');
             }
         }
 
         // Search filter
         if ($this->request->query->has('search')) {
             $search = trim($this->request->query->get('search'));
-            if (!empty($search)) {
+            if ($search !== '') {
                 $filters['search'] = $search;
             }
         }
@@ -680,7 +683,7 @@ class ExtensionsController extends BaseController
         // Publisher filter
         if ($this->request->query->has('publisher')) {
             $publisher = trim($this->request->query->get('publisher'));
-            if (!empty($publisher)) {
+            if ($publisher !== '') {
                 $filters['publisher'] = $publisher;
             }
         }

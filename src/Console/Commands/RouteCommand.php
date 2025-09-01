@@ -94,20 +94,20 @@ class RouteCommand extends BaseCommand
         try {
             $cacheService = new RouteCacheService();
             $envOverride = $input->getOption('env');
-            $env = $envOverride ?: (string) config('app.env', 'production');
+            $env = $envOverride ?? (string) config('app.env', 'production');
             $cacheDir = base_path('storage/cache');
             $hash = \Glueful\Services\RouteHash::computeEnvHash($env);
             $cacheFile = $cacheDir . "/routes_{$env}_{$hash}.php";
 
             // Check if cache already exists
-            if (!$force && file_exists($cacheFile)) {
+            if (!(bool) $force && file_exists($cacheFile)) {
                 $output->writeln('<comment>⚠️  Route cache already exists!</comment>');
                 $output->writeln("Cache file: {$cacheFile}");
                 $output->writeln('Use --force to regenerate the cache.');
                 return self::SUCCESS;
             }
 
-            if ($force && file_exists($cacheFile)) {
+            if ((bool) $force && file_exists($cacheFile)) {
                 $output->writeln('<comment>🗑️  Removing existing cache file...</comment>');
                 unlink($cacheFile);
             }
@@ -138,7 +138,7 @@ class RouteCommand extends BaseCommand
             $compileStartTime = microtime(true);
 
             $envOverride = $input->getOption('env');
-            $env = $envOverride ?: (string) config('app.env', 'production');
+            $env = $envOverride ?? (string) config('app.env', 'production');
             $cacheDir = base_path('storage/cache');
             $hash = \Glueful\Services\RouteHash::computeEnvHash($env);
             $result = $cacheService->cacheRoutes($router, $env);
@@ -174,17 +174,20 @@ class RouteCommand extends BaseCommand
         try {
             $cacheService = new RouteCacheService();
             $envOverride = $input->getOption('env');
-            $env = $envOverride ?: (string) config('app.env', 'production');
+            $env = $envOverride ?? (string) config('app.env', 'production');
             $cacheDir = base_path('storage/cache');
             $pattern = $cacheDir . "/routes_{$env}_*.php";
-            $files = glob($pattern) ?: [];
+            $files = glob($pattern);
+            if ($files === false) {
+                $files = [];
+            }
 
-            if ($verbose) {
+            if ((bool) $verbose) {
                 $output->writeln("<comment>Cache path pattern: {$pattern}</comment>");
                 $output->writeln('');
             }
 
-            if (empty($files)) {
+            if (count($files) === 0) {
                 $output->writeln('<comment>ℹ️  No route cache files found.</comment>');
                 $output->writeln('Routes are already being loaded dynamically.');
                 return self::SUCCESS;
@@ -193,13 +196,14 @@ class RouteCommand extends BaseCommand
             $output->writeln('<info>🗑️  Removing route cache files...</info>');
             $totalFreed = 0;
             foreach ($files as $file) {
-                $totalFreed += @filesize($file) ?: 0;
+                $fileSize = @filesize($file);
+                $totalFreed += $fileSize !== false ? $fileSize : 0;
                 @unlink($file);
             }
 
             $output->writeln('<success>✅ Route cache cleared successfully!</success>');
-            if ($verbose) {
-                $this->displayClearResults($output, (int) $totalFreed, $pattern);
+            if ((bool) $verbose) {
+                $this->displayClearResults($output, $totalFreed, $pattern);
             }
             $this->displayClearTips($output);
             return self::SUCCESS;
@@ -217,7 +221,7 @@ class RouteCommand extends BaseCommand
 
         try {
             $envOverride = $input->getOption('env');
-            if (!empty($envOverride)) {
+            if ($envOverride !== null && $envOverride !== '') {
                 $output->writeln("<comment>Environment override:</comment> {$envOverride}");
             }
             // Initialize router to load routes
@@ -240,10 +244,11 @@ class RouteCommand extends BaseCommand
 
             $tableData = [];
             foreach ($routes as $name => $route) {
-                $methods = implode('|', $route->getMethods() ?: ['ANY']);
+                $routeMethods = $route->getMethods();
+                $methods = implode('|', count($routeMethods) > 0 ? $routeMethods : ['ANY']);
                 $path = $route->getPath();
 
-                if ($verbose) {
+                if ((bool) $verbose) {
                     $defaults = $route->getDefaults();
                     $controller = $defaults['_controller'] ?? 'N/A';
                     $tableData[] = [$methods, $path, $controller, $name];
@@ -253,11 +258,11 @@ class RouteCommand extends BaseCommand
             }
 
             // Display as simple formatted output instead of table for CLI simplicity
-            $headers = $verbose ? ['Method', 'Path', 'Controller', 'Name'] : ['Method', 'Path', 'Name'];
+            $headers = (bool) $verbose ? ['Method', 'Path', 'Controller', 'Name'] : ['Method', 'Path', 'Name'];
 
             // Simple text table
             foreach ($tableData as $row) {
-                if ($verbose) {
+                if ((bool) $verbose) {
                     $output->writeln(sprintf(
                         '<info>%s</info> <comment>%s</comment> -> %s (%s)',
                         str_pad($row[0], 10),
@@ -292,7 +297,7 @@ class RouteCommand extends BaseCommand
         try {
             $cacheService = new RouteCacheService();
             $envOverride = $input->getOption('env');
-            $environment = $envOverride ?: (string) config('app.env', 'production');
+            $environment = $envOverride ?? (string) config('app.env', 'production');
             $cacheDir = base_path('storage/cache');
             $hash = \Glueful\Services\RouteHash::computeEnvHash($environment);
             $cacheFile = $cacheDir . "/routes_{$environment}_{$hash}.php";
@@ -409,7 +414,7 @@ class RouteCommand extends BaseCommand
         $output->writeln("Error: {$e->getMessage()}");
         $output->writeln("File: {$e->getFile()}:{$e->getLine()}");
 
-        if (config('app.debug')) {
+        if ((bool) config('app.debug')) {
             $output->writeln('');
             $output->writeln('<comment>Stack trace:</comment>');
             $output->writeln($e->getTraceAsString());
@@ -420,6 +425,7 @@ class RouteCommand extends BaseCommand
 
     /**
      * Display cache statistics
+     * @param array<string, mixed> $result
      */
     private function displayCacheStats(
         OutputInterface $output,
@@ -505,7 +511,7 @@ class RouteCommand extends BaseCommand
     {
         $units = ['B', 'KB', 'MB', 'GB'];
         $bytes = max($bytes, 0);
-        $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+        $pow = floor(($bytes !== 0 ? log($bytes) : 0) / log(1024));
         $pow = min($pow, count($units) - 1);
 
         $bytes /= pow(1024, $pow);

@@ -98,7 +98,7 @@ class FilesController extends BaseController
 
         // Get the blob data from repository
         $fileInfo = $this->blobRepository->find($uuid);
-        if (!$fileInfo) {
+        if ($fileInfo === null) {
             return Response::notFound('File not found');
         }
 
@@ -126,7 +126,7 @@ class FilesController extends BaseController
         // Enhanced audit logging with permission context
 
         // For download and inline types, handle ETag and caching headers
-        if (in_array($type, ['download', 'inline'])) {
+        if (in_array($type, ['download', 'inline'], true)) {
             return $this->handleFileServing($fileInfo, $type, $params);
         }
 
@@ -160,7 +160,7 @@ class FilesController extends BaseController
 
         // Handle multipart form data (regular file upload)
         if (strpos($contentType, 'multipart/form-data') !== false) {
-            if (empty($request->files->all())) {
+            if (count($request->files->all()) === 0) {
                 return Response::error('No file uploaded', Response::HTTP_BAD_REQUEST);
             }
 
@@ -233,6 +233,12 @@ class FilesController extends BaseController
      * @param array $params Route parameters
      * @return mixed HTTP response
      */
+    /**
+     * Delete file by UUID
+     *
+     * @param array{uuid: string} $params Route parameters containing file UUID
+     * @return mixed HTTP response
+     */
     public function deleteFile(array $params)
     {
         // Authentication handled by AuthenticationMiddleware
@@ -242,7 +248,7 @@ class FilesController extends BaseController
 
         $uuid = $params['uuid'] ?? null;
 
-        if (!$uuid) {
+        if ($uuid === null) {
             return Response::error('File UUID is required', Response::HTTP_BAD_REQUEST);
         }
 
@@ -335,6 +341,14 @@ class FilesController extends BaseController
      * @param array $params Additional parameters for processing
      * @return array Processed file data
      */
+    /**
+     * Process file request with security checks and auditing
+     *
+     * @param array<string, mixed> $fileInfo File information from database
+     * @param string $type Request type (download, inline, etc)
+     * @param array<string, mixed> $params Request parameters
+     * @return array<string, mixed> Processing result
+     */
     private function processFileRequest(array $fileInfo, string $type, array $params = []): array
     {
         return match ($type) {
@@ -360,9 +374,9 @@ class FilesController extends BaseController
     /**
      * Handle base64 file upload
      *
-     * @param array $getParams Query parameters
-     * @param array $postData POST data containing base64 content
-     * @return array Upload result
+     * @param array<string, mixed> $getParams Query parameters
+     * @param array<string, mixed> $postData POST data containing base64 content
+     * @return array<string, mixed> Upload result
      */
     private function handleBase64Upload(array $getParams, array $postData): array
     {
@@ -413,7 +427,7 @@ class FilesController extends BaseController
                 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
                 'text/plain',
                 'text/csv'
-            ])
+            ], true)
         ) {
             return 'document';
         } elseif (
@@ -423,7 +437,7 @@ class FilesController extends BaseController
                 'application/x-7z-compressed',
                 'application/x-tar',
                 'application/gzip'
-            ])
+            ], true)
         ) {
             return 'archive';
         } else {
@@ -438,6 +452,14 @@ class FilesController extends BaseController
      * @param string $type Serving type
      * @param array $params Additional parameters
      * @return array Response data
+     */
+    /**
+     * Process file serving with caching and headers
+     *
+     * @param array<string, mixed> $fileInfo File information from database
+     * @param string $type Serving type (download/inline)
+     * @param array<string, mixed> $params Additional parameters
+     * @return array<string, mixed> Serving response data
      */
     private function processFileServing(array $fileInfo, string $type, array $params = []): array
     {
@@ -476,6 +498,14 @@ class FilesController extends BaseController
      * @param string $mimeType File MIME type
      * @return array Response data
      */
+    /**
+     * Serve file as download
+     *
+     * @param array<string, mixed> $fileInfo File information
+     * @param string $filename Original filename
+     * @param string $mimeType MIME type
+     * @return array<string, mixed> Download response data
+     */
     private function serveFileDownload(array $fileInfo, string $filename, string $mimeType): array
     {
         $fileUrl = $fileInfo['url'] ?? '';
@@ -507,6 +537,14 @@ class FilesController extends BaseController
      * @param string $mimeType File MIME type
      * @return array Response data
      */
+    /**
+     * Serve file inline for browser display
+     *
+     * @param array<string, mixed> $fileInfo File information
+     * @param string $filename Original filename
+     * @param string $mimeType MIME type
+     * @return array<string, mixed> Inline response data
+     */
     private function serveFileInline(array $fileInfo, string $filename, string $mimeType): array
     {
         $fileUrl = $fileInfo['url'] ?? '';
@@ -537,6 +575,13 @@ class FilesController extends BaseController
      * @param array $params Image processing parameters
      * @return array Response with processed image data
      */
+    /**
+     * Process image serving with transformations
+     *
+     * @param string $imageUrl URL to image
+     * @param array<string, mixed> $params Transformation parameters
+     * @return array<string, mixed> Processed image response
+     */
     private function processImageServing(string $imageUrl, array $params): array
     {
         try {
@@ -549,11 +594,11 @@ class FilesController extends BaseController
 
             $processor = $imageProcessor::make($imageUrl);
 
-            if ($width && $height) {
+            if ($width !== null && $height !== null) {
                 $processor->resize($width, $height);
-            } elseif ($width) {
+            } elseif ($width !== null) {
                 $processor->width($width);
-            } elseif ($height) {
+            } elseif ($height !== null) {
                 $processor->height($height);
             }
 
@@ -561,7 +606,7 @@ class FilesController extends BaseController
                 $processor->quality($quality);
             }
 
-            if ($zoom && $zoom !== 100) {
+            if ($zoom !== null && $zoom !== 100) {
                 $scaleRatio = $zoom / 100;
                 if ($processor->width() && $processor->height()) {
                     $processor->resize(
@@ -598,6 +643,12 @@ class FilesController extends BaseController
      *
      * @param array $files Array of file upload data
      * @throws UnauthorizedException If permission is denied
+     */
+    /**
+     * Check upload permissions for files
+     *
+     * @param array<string, mixed> $files Files to check
+     * @return void
      */
     private function checkUploadPermissions(array $files): void
     {
@@ -649,6 +700,13 @@ class FilesController extends BaseController
      * @param array $postData Base64 upload data
      * @param array $params Upload parameters
      * @throws UnauthorizedException If permission is denied
+     */
+    /**
+     * Check base64 upload permissions
+     *
+     * @param array<string, mixed> $postData POST data
+     * @param array<string, mixed> $params Request parameters
+     * @return void
      */
     private function checkBase64UploadPermissions(array $postData, array $params): void
     {
@@ -713,6 +771,12 @@ class FilesController extends BaseController
      *
      * @param array $files Array of file upload data
      */
+    /**
+     * Apply file-specific rate limiting
+     *
+     * @param array<string, mixed> $files Files to check rate limits for
+     * @return void
+     */
     private function applyFileSpecificRateLimiting(array $files): void
     {
         foreach ($files as $fileData) {
@@ -750,6 +814,13 @@ class FilesController extends BaseController
      * @param array $fileInfo File information for context
      * @param string $operation Operation being performed
      */
+    /**
+     * Apply adaptive rate limiting based on file access patterns
+     *
+     * @param array<string, mixed> $fileInfo File information
+     * @param string $operation Operation type
+     * @return void
+     */
     private function applyAdaptiveRateLimiting(array $fileInfo, string $operation): void
     {
         // Create comprehensive context for behavior analysis
@@ -776,7 +847,7 @@ class FilesController extends BaseController
 
         // Track any unusual access patterns
         $suspiciousIndicators = $this->detectSuspiciousPatterns($fileInfo, $operation);
-        if (!empty($suspiciousIndicators)) {
+        if (count($suspiciousIndicators) > 0) {
             $this->auditSuspiciousFileAccess($fileInfo, $operation, $suspiciousIndicators);
         }
     }
@@ -805,6 +876,14 @@ class FilesController extends BaseController
      * @param string $type Request type (info|download|inline|image)
      * @param array $params Additional parameters for processing
      * @return array Processed file data with caching metadata
+     */
+    /**
+     * Process file request with caching layer
+     *
+     * @param array<string, mixed> $fileInfo File information
+     * @param string $type Request type
+     * @param array<string, mixed> $params Request parameters
+     * @return array<string, mixed> Cached processing result
      */
     private function processFileRequestWithCaching(array $fileInfo, string $type, array $params = []): array
     {
@@ -839,6 +918,14 @@ class FilesController extends BaseController
      * @param string $type Serving type (download|inline)
      * @param array $params Additional parameters
      * @return Response File serving response with appropriate headers
+     */
+    /**
+     * Handle file serving with proper headers
+     *
+     * @param array<string, mixed> $fileInfo File information
+     * @param string $type Serving type
+     * @param array<string, mixed> $params Additional parameters
+     * @return Response HTTP response
      */
     private function handleFileServing(array $fileInfo, string $type, array $params = []): Response
     {
@@ -880,6 +967,12 @@ class FilesController extends BaseController
      * @param string $type Access type
      * @return array Cache configuration
      */
+    /**
+     * Get file cache options
+     *
+     * @param string $type File serving type
+     * @return array<string, mixed> Cache options
+     */
     private function getFileCacheOptions(string $type): array
     {
         $baseOptions = [
@@ -912,6 +1005,12 @@ class FilesController extends BaseController
      *
      * @param array $fileInfo File information
      * @return string ETag value
+     */
+    /**
+     * Generate ETag for file
+     *
+     * @param array<string, mixed> $fileInfo File information
+     * @return string Generated ETag
      */
     private function generateFileETag(array $fileInfo): string
     {
@@ -959,6 +1058,14 @@ class FilesController extends BaseController
      * @param int $limit Result limit
      * @return array Cached file listing
      */
+    /**
+     * Get cached file listing with conditions
+     *
+     * @param array<string, mixed> $conditions Query conditions
+     * @param array<string, string> $orderBy Order by clauses
+     * @param int $limit Result limit
+     * @return array<string, mixed> File listing
+     */
     private function getCachedFileListing(
         array $conditions = [],
         array $orderBy = ['created_at' => 'DESC'],
@@ -995,6 +1102,15 @@ class FilesController extends BaseController
      * @param array $orderBy Sort criteria
      * @return array Paginated response with caching
      */
+    /**
+     * Get cached paginated files
+     *
+     * @param int $page Page number
+     * @param int $perPage Results per page
+     * @param array<string, mixed> $conditions Query conditions
+     * @param array<string, string> $orderBy Order by clauses
+     * @return array<string, mixed> Paginated file results
+     */
     private function getCachedPaginatedFiles(
         int $page = 1,
         int $perPage = 25,
@@ -1018,6 +1134,12 @@ class FilesController extends BaseController
      * @param array $conditions Existing conditions
      * @return array Conditions with ownership filter
      */
+    /**
+     * Add ownership conditions to query
+     *
+     * @param array<string, mixed> $conditions Existing conditions
+     * @return array<string, mixed> Updated conditions
+     */
     private function addOwnershipConditions(array $conditions): array
     {
         if (!$this->isAdmin()) {
@@ -1034,6 +1156,15 @@ class FilesController extends BaseController
      * @param string $severity Severity level
      * @param array $context Additional context data
      * @param array|null $fileInfo Optional file information
+     */
+    /**
+     * Audit operation with permission context
+     *
+     * @param string $action Action performed
+     * @param string $severity Severity level
+     * @param array<string, mixed> $context Additional context
+     * @param array<string, mixed>|null $fileInfo File information
+     * @return void
      */
     private function auditWithPermissionContext(
         string $action,
@@ -1064,7 +1195,7 @@ class FilesController extends BaseController
         ]);
 
         // Add file-specific context if provided
-        if ($fileInfo) {
+        if ($fileInfo !== null) {
             $enhancedContext = array_merge($enhancedContext, [
                 'file_uuid' => $fileInfo['uuid'] ?? null,
                 'file_owner' => $fileInfo['created_by'] ?? null,
@@ -1082,6 +1213,14 @@ class FilesController extends BaseController
      * @param string $limitType Type of rate limit violated
      * @param array $limitDetails Details about the rate limit
      * @param array $additionalContext Additional context
+     */
+    /**
+     * Audit rate limit violations
+     *
+     * @param string $limitType Type of limit violated
+     * @param array<string, mixed> $limitDetails Details about the limit
+     * @param array<string, mixed> $additionalContext Additional context
+     * @return void
      */
     private function auditRateLimitViolation(
         string $limitType,
@@ -1101,9 +1240,9 @@ class FilesController extends BaseController
     /**
      * Track suspicious file access patterns
      *
-     * @param array $fileInfo File information
+     * @param array<string, mixed> $fileInfo File information
      * @param string $accessType Type of access
-     * @param array $suspiciousIndicators Indicators of suspicious behavior
+     * @param array<string, mixed> $suspiciousIndicators Indicators of suspicious behavior
      */
     private function auditSuspiciousFileAccess(
         array $fileInfo,
@@ -1124,6 +1263,14 @@ class FilesController extends BaseController
      * @param string $permission Permission that was checked
      * @param string $resource Resource being accessed
      * @param array $permissionContext Permission check context
+     */
+    /**
+     * Audit permission violations
+     *
+     * @param string $permission Permission that was denied
+     * @param string $resource Resource being accessed
+     * @param array<string, mixed> $permissionContext Permission context
+     * @return void
      */
     private function auditPermissionViolation(
         string $permission,
@@ -1168,6 +1315,12 @@ class FilesController extends BaseController
      * @param array $fileInfo File information
      * @return int File age in days
      */
+    /**
+     * Calculate file age in days
+     *
+     * @param array<string, mixed> $fileInfo File information
+     * @return int Age in days
+     */
     private function calculateFileAge(array $fileInfo): int
     {
         if (!isset($fileInfo['created_at'])) {
@@ -1209,6 +1362,12 @@ class FilesController extends BaseController
      * @param array $indicators Suspicious behavior indicators
      * @return float Risk score (0.0 to 1.0)
      */
+    /**
+     * Calculate risk score based on indicators
+     *
+     * @param array<string, mixed> $indicators Risk indicators
+     * @return float Risk score
+     */
     private function calculateRiskScore(array $indicators): float
     {
         $score = 0.0;
@@ -1227,6 +1386,12 @@ class FilesController extends BaseController
      * @param array $fileInfo File information
      * @return array Access pattern analysis
      */
+    /**
+     * Analyze file access patterns
+     *
+     * @param array<string, mixed> $fileInfo File information
+     * @return array<string, mixed> Access pattern analysis
+     */
     private function analyzeAccessPattern(array $fileInfo): array
     {
         return [
@@ -1241,6 +1406,11 @@ class FilesController extends BaseController
      * Analyze access time patterns
      *
      * @return array Time-based access analysis
+     */
+    /**
+     * Analyze access time patterns
+     *
+     * @return array<string, mixed> Access time analysis
      */
     private function analyzeAccessTime(): array
     {
@@ -1261,6 +1431,12 @@ class FilesController extends BaseController
      * @param string $mimeType File MIME type
      * @return array File type access analysis
      */
+    /**
+     * Analyze file type access patterns
+     *
+     * @param string $mimeType MIME type to analyze
+     * @return array<string, mixed> File type analysis
+     */
     private function analyzeFileTypeAccess(string $mimeType): array
     {
         return [
@@ -1271,7 +1447,7 @@ class FilesController extends BaseController
                 'application/pdf',
                 'application/msword',
                 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-            ]),
+            ], true),
         ];
     }
 
@@ -1291,7 +1467,7 @@ class FilesController extends BaseController
             'users.manage'
         ];
 
-        return in_array($permission, $sensitivePermissions) && !$this->isAdmin();
+        return in_array($permission, $sensitivePermissions, true) && !$this->isAdmin();
     }
 
     /**
@@ -1301,13 +1477,20 @@ class FilesController extends BaseController
      * @param string $operation Operation being performed
      * @return array Suspicious indicators found
      */
+    /**
+     * Detect suspicious patterns in file access
+     *
+     * @param array<string, mixed> $fileInfo File information
+     * @param string $operation Operation being performed
+     * @return array<string, mixed> Suspicious patterns detected
+     */
     private function detectSuspiciousPatterns(array $fileInfo, string $operation): array
     {
         $indicators = [];
 
         // Check for unusual time access
         $timeAnalysis = $this->analyzeAccessTime();
-        if ($timeAnalysis['is_unusual_time']) {
+        if (($timeAnalysis['is_unusual_time'] ?? false) === true) {
             $indicators['unusual_time'] = 0.3;
         }
 
@@ -1323,7 +1506,7 @@ class FilesController extends BaseController
 
         // Check for large file access outside business hours
         $fileSize = $fileInfo['size'] ?? 0;
-        if ($fileSize > 100 * 1024 * 1024 && !$timeAnalysis['is_business_hours']) { // 100MB
+        if ($fileSize > 100 * 1024 * 1024 && ($timeAnalysis['is_business_hours'] ?? true) !== true) { // 100MB
             $indicators['large_file_unusual_time'] = 0.5;
         }
 
@@ -1358,7 +1541,7 @@ class FilesController extends BaseController
      *
      * @param string $permission Permission to check
      * @param string $resource Resource identifier
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      */
     protected function requirePermission(
         string $permission,

@@ -59,7 +59,7 @@ class NotificationsController extends BaseController
     private function createUserNotifiable(string $userUuid): object
     {
         return new class ($userUuid) implements \Glueful\Notifications\Contracts\Notifiable {
-            private $uuid;
+            private string $uuid;
 
             public function __construct(string $uuid)
             {
@@ -86,6 +86,9 @@ class NotificationsController extends BaseController
                 return true;
             }
 
+            /**
+             * @return array<string, mixed>
+             */
             public function getNotificationPreferences(): array
             {
                 return [];
@@ -115,12 +118,12 @@ class NotificationsController extends BaseController
         $filters = [];
 
         // Filter by type
-        if (isset($queryParams['type']) && !empty($queryParams['type'])) {
+        if (isset($queryParams['type']) && $queryParams['type'] !== '') {
             $filters['type'] = $queryParams['type'];
         }
 
         // Filter by priority
-        if (isset($queryParams['priority']) && !empty($queryParams['priority'])) {
+        if (isset($queryParams['priority']) && $queryParams['priority'] !== '') {
             $priorities = explode(',', $queryParams['priority']);
             if (count($priorities) > 1) {
                 $filters['priority'] = ['in' => $priorities];
@@ -130,11 +133,11 @@ class NotificationsController extends BaseController
         }
 
         // Filter by date range for created_at
-        if (isset($queryParams['date_from']) && !empty($queryParams['date_from'])) {
+        if (isset($queryParams['date_from']) && $queryParams['date_from'] !== '') {
             $filters['created_at']['gte'] = $queryParams['date_from'];
         }
 
-        if (isset($queryParams['date_to']) && !empty($queryParams['date_to'])) {
+        if (isset($queryParams['date_to']) && $queryParams['date_to'] !== '') {
             $filters['created_at']['lte'] = $queryParams['date_to'];
         }
 
@@ -173,9 +176,9 @@ class NotificationsController extends BaseController
 
         // Add filters to meta
         $meta['filters'] = [
-            'applied' => !empty($filters['type'])
-                || !empty($filters['priority'])
-                || !empty($filters['created_at'] ?? []),
+            'applied' => isset($filters['type'])
+                || isset($filters['priority'])
+                || ($filters['created_at'] ?? []) !== [],
             'parameters' => $filters
         ];
 
@@ -185,7 +188,7 @@ class NotificationsController extends BaseController
     /**
      * Get a single notification by ID
      *
-     * @param array $params Route parameters
+     * @param array<string, mixed> $params Route parameters
      * @return mixed HTTP response
      */
     public function getNotification(array $params)
@@ -198,7 +201,7 @@ class NotificationsController extends BaseController
         $notification = $this->notificationService->getNotificationByUuid($params['uuid']);
 
         // Check if notification exists
-        if (!$notification) {
+        if ($notification === null) {
             return Response::error('Notification not found', ErrorCodes::NOT_FOUND);
         }
 
@@ -217,7 +220,7 @@ class NotificationsController extends BaseController
     /**
      * Mark notification as read
      *
-     * @param array $params Route parameters
+     * @param array<string, mixed> $params Route parameters
      * @return mixed HTTP response
      */
     public function markAsRead(array $params)
@@ -230,7 +233,7 @@ class NotificationsController extends BaseController
         $notification = $this->notificationService->getNotificationByUuid($params['uuid']);
 
         // Check if notification exists
-        if (!$notification) {
+        if ($notification === null) {
             return Response::error('Notification not found', ErrorCodes::NOT_FOUND);
         }
 
@@ -257,7 +260,7 @@ class NotificationsController extends BaseController
     /**
      * Mark notification as unread
      *
-     * @param array $params Route parameters
+     * @param array<string, mixed> $params Route parameters
      * @return mixed HTTP response
      */
     public function markAsUnread(array $params)
@@ -270,7 +273,7 @@ class NotificationsController extends BaseController
         $notification = $this->notificationService->getNotificationByUuid($params['uuid']);
 
         // Check if notification exists
-        if (!$notification) {
+        if ($notification === null) {
             return Response::error('Notification not found', ErrorCodes::NOT_FOUND);
         }
 
@@ -380,7 +383,7 @@ class NotificationsController extends BaseController
     /**
      * Delete a notification
      *
-     * @param array $params Route parameters
+     * @param array<string, mixed> $params Route parameters
      * @return mixed HTTP response
      */
     public function deleteNotification(array $params)
@@ -393,7 +396,7 @@ class NotificationsController extends BaseController
         $notification = $this->notificationService->getNotificationByUuid($params['uuid']);
 
         // Check if notification exists
-        if (!$notification) {
+        if ($notification === null) {
             return Response::error('Notification not found', ErrorCodes::NOT_FOUND);
         }
 
@@ -441,7 +444,7 @@ class NotificationsController extends BaseController
     /**
      * Get metrics for a specific notification channel
      *
-     * @param array $params Route parameters
+     * @param array<string, mixed> $params Route parameters
      * @return mixed HTTP response
      */
     public function getChannelMetrics(array $params)
@@ -459,7 +462,7 @@ class NotificationsController extends BaseController
         $availableChannels = $this->notificationService->getDispatcher()
             ->getChannelManager()
             ->getAvailableChannels();
-        if (!in_array($channelName, $availableChannels)) {
+        if (!in_array($channelName, $availableChannels, true)) {
             $errorMsg = "Channel '{$channelName}' not found or not available";
             return Response::error(
                 $errorMsg,
@@ -482,7 +485,7 @@ class NotificationsController extends BaseController
     /**
      * Reset metrics for a specific notification channel
      *
-     * @param array $params Route parameters
+     * @param array<string, mixed> $params Route parameters
      * @return mixed HTTP response
      */
     public function resetChannelMetrics(array $params)
@@ -500,7 +503,7 @@ class NotificationsController extends BaseController
         $availableChannels = $this->notificationService->getDispatcher()
             ->getChannelManager()
             ->getAvailableChannels();
-        if (!in_array($channelName, $availableChannels)) {
+        if (!in_array($channelName, $availableChannels, true)) {
             $errorMsg = "Channel '{$channelName}' not found or not available";
             return Response::error(
                 $errorMsg,

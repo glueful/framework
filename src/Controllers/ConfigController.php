@@ -10,7 +10,6 @@ use Glueful\Exceptions\BusinessLogicException;
 use Glueful\Exceptions\ValidationException;
 use Glueful\Helpers\ValidationHelper;
 use Glueful\Http\Response;
-use Glueful\Services\FileFinder;
 use Glueful\Services\FileManager;
 use Glueful\Extensions\ExtensionManager;
 use Glueful\Configuration\ConfigurationProcessor;
@@ -71,7 +70,7 @@ class ConfigController extends BaseController
         }
 
         // Check for sensitive config access
-        if (in_array($configName, self::SENSITIVE_CONFIG_FILES)) {
+        if (in_array($configName, self::SENSITIVE_CONFIG_FILES, true)) {
             $this->requirePermission('system.config.sensitive.view');
 
             // Sensitive configs get private caching (5 minutes)
@@ -92,9 +91,9 @@ class ConfigController extends BaseController
 
         // Check if content has been modified
         $lastModified = $this->getConfigLastModified($configName);
-        if ($lastModified) {
+        if ($lastModified !== null) {
             $notModifiedResponse = $this->checkNotModified($lastModified);
-            if ($notModifiedResponse) {
+            if ($notModifiedResponse !== null) {
                 return $notModifiedResponse;
             }
         }
@@ -112,7 +111,7 @@ class ConfigController extends BaseController
         ];
         $response = $this->publicSuccess($formattedConfig, 'Configuration retrieved', 1800); // 30 minutes
 
-        if ($lastModified) {
+        if ($lastModified !== null) {
             $response = $this->withLastModified($response, $lastModified);
         }
 
@@ -148,6 +147,7 @@ class ConfigController extends BaseController
 
     /**
      * Update configuration with cache invalidation
+     * @param array<string, mixed> $data
      */
     public function updateConfig(string $filename, array $data): Response
     {
@@ -173,14 +173,14 @@ class ConfigController extends BaseController
         }
 
         // Check for sensitive config modifications
-        if (in_array($configName, self::SENSITIVE_CONFIG_FILES)) {
+        if (in_array($configName, self::SENSITIVE_CONFIG_FILES, true)) {
             $this->requirePermission('system.config.sensitive.edit');
         }
 
         // Get existing config through ConfigManager for audit trail
         $existingConfig = ConfigManager::get($configName, []);
 
-        if (empty($existingConfig)) {
+        if ($existingConfig === [] || $existingConfig === null) {
             return $this->notFound('Configuration not found');
         }
 
@@ -212,6 +212,7 @@ class ConfigController extends BaseController
 
     /**
      * Create new configuration file
+     * @param array<string, mixed> $data
      */
     public function createConfig(string $name, array $data): bool
     {
@@ -235,9 +236,8 @@ class ConfigController extends BaseController
             throw new ValidationException('Invalid configuration data');
         }
 
-        // Get FileManager and FileFinder services
+        // Get FileManager service
         $fileManager = container()->get(FileManager::class);
-        $fileFinder = container()->get(FileFinder::class);
 
         // Determine config path
         $configPath = config_path();
@@ -296,7 +296,7 @@ class ConfigController extends BaseController
             $processor = container()->get(ConfigurationProcessor::class);
             $schemaInfo = $processor->getSchemaInfo($configName);
 
-            if (!$schemaInfo) {
+            if ($schemaInfo === null) {
                 return $this->notFound('Schema not found for configuration: ' . $configName);
             }
 
@@ -308,7 +308,7 @@ class ConfigController extends BaseController
             // Get schema structure if available
             try {
                 $schema = $processor->getSchema($configName);
-                if ($schema) {
+                if ($schema !== null) {
                     $treeBuilder = $schema->getConfigTreeBuilder();
                     $tree = $treeBuilder->buildTree();
                     $enhanced['schema_structure'] = $this->analyzeSchemaStructure($tree);
@@ -459,6 +459,9 @@ class ConfigController extends BaseController
     /**
      * Load all configuration files
      */
+    /**
+     * @return array<int, array{name: string, config: array<string, mixed>, source: string, extension_version?: string}>
+     */
     private function loadAllConfigs(): array
     {
         // Load config files directly from the application config directory
@@ -515,6 +518,9 @@ class ConfigController extends BaseController
     /**
      * Load a specific configuration file
      */
+    /**
+     * @return array<string, mixed>|null
+     */
     private function loadConfigFile(string $configName): ?array
     {
         // Use permission-aware caching for config file access
@@ -570,6 +576,15 @@ class ConfigController extends BaseController
     // ... rest of the existing methods remain the same ...
     // (keeping all the existing functionality intact)
 
+    /**
+     * @return array<string, array{
+     *     name: string,
+     *     source: string,
+     *     content: array<string, mixed>,
+     *     extension_version: string|null,
+     *     last_modified: int|false
+     * }>
+     */
     private function loadExtensionConfigs(): array
     {
         $configs = [];
@@ -621,6 +636,9 @@ class ConfigController extends BaseController
         return $configs;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function safeIncludeConfig(string $file): array
     {
         // Basic security: ensure file is within allowed paths
@@ -649,6 +667,10 @@ class ConfigController extends BaseController
     /**
      * Mask sensitive data in configuration arrays
      */
+    /**
+     * @param array<string, mixed> $config
+     * @return array<string, mixed>
+     */
     private function maskSensitiveData(array $config, string $configName): array
     {
         // If user has sensitive view permissions, return unmasked
@@ -674,6 +696,10 @@ class ConfigController extends BaseController
         return $this->maskSensitiveKeys($masked);
     }
 
+    /**
+     * @param array<string, mixed> $config
+     * @return array<string, mixed>
+     */
     private function maskSecurityConfig(array $config): array
     {
         if (isset($config['jwt']['secret'])) {
@@ -688,6 +714,10 @@ class ConfigController extends BaseController
         return $config;
     }
 
+    /**
+     * @param array<string, mixed> $config
+     * @return array<string, mixed>
+     */
     private function maskDatabaseConfig(array $config): array
     {
         if (isset($config['password'])) {
@@ -703,6 +733,10 @@ class ConfigController extends BaseController
         return $config;
     }
 
+    /**
+     * @param array<string, mixed> $config
+     * @return array<string, mixed>
+     */
     private function maskAppConfig(array $config): array
     {
         if (isset($config['key'])) {
@@ -711,11 +745,19 @@ class ConfigController extends BaseController
         return $config;
     }
 
+    /**
+     * @param array<string, mixed> $config
+     * @return array<string, mixed>
+     */
     private function maskSensitiveKeys(array $config): array
     {
         return $this->recursiveMaskSensitiveKeys($config);
     }
 
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
     private function recursiveMaskSensitiveKeys(array $data): array
     {
         foreach ($data as $key => $value) {
@@ -760,10 +802,13 @@ class ConfigController extends BaseController
         }
     }
 
+    /**
+     * @param array<string, mixed> $data
+     */
     private function validateConfigData(array $data): bool
     {
         // Basic validation
-        if (empty($data) || !is_array($data)) {
+        if ($data === []) {
             return false;
         }
 
@@ -780,6 +825,9 @@ class ConfigController extends BaseController
         return true;
     }
 
+    /**
+     * @param array<string, mixed> $array
+     */
     private function getArrayDepth(array $array): int
     {
         $maxDepth = 1;
@@ -796,6 +844,9 @@ class ConfigController extends BaseController
         return $maxDepth;
     }
 
+    /**
+     * @param array<string, mixed> $config
+     */
     private function persistConfigToFile(string $configName, array $config): bool
     {
         $configPath = config_path();
@@ -806,6 +857,9 @@ class ConfigController extends BaseController
         return file_put_contents($filePath, $configContent) !== false;
     }
 
+    /**
+     * @param array<string, mixed> $data
+     */
     private function updateEnvVariables(array $data): void
     {
         $envPath = base_path('.env');
@@ -819,7 +873,7 @@ class ConfigController extends BaseController
 
         foreach ($data as $key => $value) {
             $envKey = $this->findEnvKeyForConfigValue($key);
-            if ($envKey) {
+            if ($envKey !== '') {
                 $lines = $this->updateEnvLine($lines, $envKey, $value);
                 $updated = true;
             }
@@ -835,7 +889,12 @@ class ConfigController extends BaseController
         return strtoupper(str_replace('.', '_', $key));
     }
 
-    private function updateEnvLine(array $lines, string $key, $value): array
+    /**
+     * @param array<int, string> $lines
+     * @param mixed $value
+     * @return array<int, string>
+     */
+    private function updateEnvLine(array $lines, string $key, mixed $value): array
     {
         $newLine = $key . '=' . (is_string($value) ? '"' . $value . '"' : $value);
 
@@ -851,10 +910,15 @@ class ConfigController extends BaseController
     }
 
     // Placeholder methods for missing functionality - these will use BaseController implementations
+    /**
+     * @param array<string, mixed> $config
+     */
     private function createConfigRollbackPoint(string $configName, array $config): void
     {
         // TODO: Implement config rollback functionality
         // For now, this is a placeholder that doesn't break the flow
+        // Prevent unused parameter warnings
+        unset($configName, $config);
     }
 
     /**
@@ -870,7 +934,11 @@ class ConfigController extends BaseController
     /**
      * Analyze schema structure for API response
      */
-    private function analyzeSchemaStructure($node): array
+    /**
+     * @param mixed $node
+     * @return array<string, mixed>
+     */
+    private function analyzeSchemaStructure(mixed $node): array
     {
         $structure = [
             'type' => $this->getNodeTypeName($node),
@@ -899,7 +967,10 @@ class ConfigController extends BaseController
     /**
      * Get node type name for schema structure
      */
-    private function getNodeTypeName($node): string
+    /**
+     * @param mixed $node
+     */
+    private function getNodeTypeName(mixed $node): string
     {
         if ($node instanceof \Symfony\Component\Config\Definition\ArrayNode) {
             return 'array';

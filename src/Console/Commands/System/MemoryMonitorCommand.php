@@ -31,7 +31,13 @@ use Symfony\Component\Process\Process;
 class MemoryMonitorCommand extends BaseCommand
 {
     private MemoryManager $memoryManager;
+    /**
+     * @var resource|null
+     */
     private $csvFile = null;
+    /**
+     * @var array<array<string, mixed>>
+     */
     private array $memoryHistory = [];
 
     public function __construct()
@@ -138,20 +144,20 @@ class MemoryMonitorCommand extends BaseCommand
         $this->displayCurrentMemoryStatus();
 
         // Handle different monitoring modes
-        if ($input->getOption('summary')) {
+        if ((bool) $input->getOption('summary') === true) {
             return $this->showMemorySummary($input);
         }
 
-        if ($input->getOption('trends')) {
+        if ((bool) $input->getOption('trends') === true) {
             return $this->showMemoryTrends($input);
         }
 
-        if ($input->getOption('analysis')) {
+        if ((bool) $input->getOption('analysis') === true) {
             return $this->performMemoryAnalysis($input);
         }
 
         // Default: Start monitoring
-        if ($command) {
+        if ($command !== null) {
             return $this->monitorCommand($command, $input);
         } else {
             return $this->monitorCurrentProcess($input);
@@ -201,7 +207,7 @@ class MemoryMonitorCommand extends BaseCommand
         $this->displayDetailedMemoryInfo($usage);
 
         // Show recommendations
-        if (!empty($recommendations)) {
+        if (count($recommendations) > 0) {
             $this->io->section('💡 Optimization Recommendations');
             foreach ($recommendations as $recommendation) {
                 $this->io->text("• {$recommendation}");
@@ -226,7 +232,7 @@ class MemoryMonitorCommand extends BaseCommand
 
         $trends = $this->collectMemoryTrends();
 
-        if (empty($trends)) {
+        if (count($trends) === 0) {
             $this->io->warning('No historical data available for trend analysis');
             $this->io->text('Run monitoring for a period to collect trend data');
             return self::SUCCESS;
@@ -273,7 +279,7 @@ class MemoryMonitorCommand extends BaseCommand
         $enableLogging = $input->getOption('log');
         $csvFile = $input->getOption('csv-file');
 
-        if ($enableLogging) {
+        if ((bool) $enableLogging === true) {
             $this->setupCsvLogging($csvFile);
         }
 
@@ -301,7 +307,7 @@ class MemoryMonitorCommand extends BaseCommand
                 }
 
                 // Log to CSV
-                if ($this->csvFile) {
+                if ($this->csvFile !== null) {
                     $this->logToCsv($usage, $iteration);
                 }
 
@@ -327,12 +333,12 @@ class MemoryMonitorCommand extends BaseCommand
         $output = $process->getOutput();
         $errorOutput = $process->getErrorOutput();
 
-        if ($output) {
+        if ($output !== '') {
             $this->io->section('Command Output');
             $this->io->text($output);
         }
 
-        if ($errorOutput) {
+        if ($errorOutput !== '') {
             $this->io->section('Command Errors');
             $this->io->text($errorOutput);
         }
@@ -353,7 +359,7 @@ class MemoryMonitorCommand extends BaseCommand
         $csvFile = $input->getOption('csv-file');
         $watchMode = $input->getOption('watch');
 
-        if ($enableLogging) {
+        if ((bool) $enableLogging === true) {
             $this->setupCsvLogging($csvFile);
         }
 
@@ -378,7 +384,7 @@ class MemoryMonitorCommand extends BaseCommand
                 $usage = $this->getCurrentMemoryUsage();
                 $peakUsage = max($peakUsage, $usage['current']);
 
-                if ($watchMode) {
+                if ((bool) $watchMode === true) {
                     // Clear screen for watch mode
                     $this->io->write("\033[2J\033[;H");
                     $this->io->title('📊 Memory Monitor (Watch Mode)');
@@ -392,7 +398,7 @@ class MemoryMonitorCommand extends BaseCommand
                 }
 
                 // Log to CSV
-                if ($this->csvFile) {
+                if ($this->csvFile !== null) {
                     $this->logToCsv($usage, $iteration);
                 }
 
@@ -424,6 +430,9 @@ class MemoryMonitorCommand extends BaseCommand
         return self::SUCCESS;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getCurrentMemoryUsage(): array
     {
         $current = memory_get_usage(true);
@@ -442,6 +451,9 @@ class MemoryMonitorCommand extends BaseCommand
         ];
     }
 
+    /**
+     * @param array<string, mixed> $usage
+     */
     private function displayDetailedMemoryInfo(array $usage): void
     {
         $this->io->section('📋 Detailed Memory Information');
@@ -456,7 +468,7 @@ class MemoryMonitorCommand extends BaseCommand
         ];
 
         // Add system memory info if available
-        if (function_exists('sys_getloadavg') && is_callable('sys_getloadavg')) {
+        if (function_exists('sys_getloadavg')) {
             $load = sys_getloadavg();
             $detailRows[] = [
                 'System Load',
@@ -468,6 +480,9 @@ class MemoryMonitorCommand extends BaseCommand
         $this->io->table($detailRows[0], array_slice($detailRows, 1));
     }
 
+    /**
+     * @param array<string, mixed> $usage
+     */
     private function displayRealtimeUsage(array $usage, int $iteration): void
     {
         $timestamp = date('H:i:s');
@@ -485,6 +500,10 @@ class MemoryMonitorCommand extends BaseCommand
         ));
     }
 
+    /**
+     * @param array<string, mixed> $usage
+     * @return array<string>
+     */
     private function generateRecommendations(array $usage): array
     {
         $recommendations = [];
@@ -504,7 +523,7 @@ class MemoryMonitorCommand extends BaseCommand
             $recommendations[] = "Large difference between current and peak usage - possible memory leaks";
         }
 
-        if (empty($recommendations)) {
+        if (count($recommendations) === 0) {
             $recommendations[] = "Memory usage looks healthy";
         }
 
@@ -528,12 +547,18 @@ class MemoryMonitorCommand extends BaseCommand
         $this->io->table($gcRows[0], array_slice($gcRows, 1));
     }
 
+    /**
+     * @return array<array<string, mixed>>
+     */
     private function collectMemoryTrends(): array
     {
         // Return stored memory history for trend analysis
         return array_slice($this->memoryHistory, -100); // Last 100 measurements
     }
 
+    /**
+     * @param array<array<string, mixed>> $trends
+     */
     private function displayTrendAnalysis(array $trends): void
     {
         if (count($trends) < 2) {
@@ -573,6 +598,11 @@ class MemoryMonitorCommand extends BaseCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $before
+     * @param array<string, mixed> $after
+     * @return array<string, mixed>
+     */
     private function calculateGcEfficiency(array $before, array $after): array
     {
         $memoryFreed = $before['current'] - $after['current'];
@@ -586,6 +616,11 @@ class MemoryMonitorCommand extends BaseCommand
         ];
     }
 
+    /**
+     * @param array<string, mixed> $before
+     * @param array<string, mixed> $after
+     * @param array<string, mixed> $gcEfficiency
+     */
     private function displayAnalysisResults(array $before, array $after, array $gcEfficiency): void
     {
         $this->io->section('🔬 Analysis Results');
@@ -654,13 +689,16 @@ class MemoryMonitorCommand extends BaseCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $usage
+     */
     private function handleThresholdExceeded(array $usage, InputInterface $input): void
     {
         $this->io->warning("⚠️ Memory threshold exceeded: " . $this->formatBytes($usage['current']));
 
         // Run alert script if specified
         $alertScript = $input->getOption('alert-script');
-        if ($alertScript) {
+        if ($alertScript !== null) {
             $this->io->text("Running alert script: {$alertScript}");
             try {
                 $process = Process::fromShellCommandline($alertScript);
@@ -678,12 +716,13 @@ class MemoryMonitorCommand extends BaseCommand
     private function setupCsvLogging(string $csvFile): void
     {
         $isNewFile = !file_exists($csvFile);
-        $this->csvFile = fopen($csvFile, 'a');
-
-        if (!$this->csvFile) {
+        $handle = fopen($csvFile, 'a');
+        if ($handle === false) {
             $this->io->warning("Failed to open CSV file: {$csvFile}");
             return;
         }
+        $this->csvFile = $handle;
+
 
         if ($isNewFile) {
             fputcsv($this->csvFile, [
@@ -700,9 +739,12 @@ class MemoryMonitorCommand extends BaseCommand
         $this->io->text("Logging to CSV: {$csvFile}");
     }
 
+    /**
+     * @param array<string, mixed> $usage
+     */
     private function logToCsv(array $usage, int $iteration): void
     {
-        if (!$this->csvFile) {
+        if ($this->csvFile === null) {
             return;
         }
 
@@ -723,7 +765,7 @@ class MemoryMonitorCommand extends BaseCommand
         $this->io->section('📊 Monitoring Summary');
         $this->io->text("Peak memory usage: " . $this->formatBytes($peakUsage));
 
-        if ($this->csvFile) {
+        if ($this->csvFile !== null) {
             fclose($this->csvFile);
             $this->io->text("Memory usage log saved to: {$csvFile}");
         }
@@ -738,7 +780,7 @@ class MemoryMonitorCommand extends BaseCommand
     {
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
         $bytes = max($bytes, 0);
-        $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+        $pow = floor(($bytes > 0 ? log($bytes) : 0) / log(1024));
         $pow = min($pow, count($units) - 1);
         $bytes /= pow(1024, $pow);
         return round($bytes, 2) . ' ' . $units[$pow];

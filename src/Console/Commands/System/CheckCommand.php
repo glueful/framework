@@ -51,9 +51,9 @@ class CheckCommand extends BaseCommand
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $verbose = $input->getOption('details');
-        $fix = $input->getOption('fix');
-        $production = $input->getOption('production');
+        $verbose = (bool) $input->getOption('details');
+        $fix = (bool) $input->getOption('fix');
+        $production = (bool) $input->getOption('production');
 
         $this->info("🔍 Glueful Framework System Check");
         $this->line("");
@@ -71,16 +71,16 @@ class CheckCommand extends BaseCommand
         $total = count($checks);
 
         foreach ($checks as $category => $result) {
-            $status = $result['passed'] ? '✅' : '❌';
+            $status = $result['passed'] === true ? '✅' : '❌';
             $this->line(sprintf("%-15s %s %s", $category, $status, $result['message']));
 
-            if ($verbose && !empty($result['details'])) {
+            if ($verbose === true && count($result['details']) > 0) {
                 foreach ($result['details'] as $detail) {
                     $this->line("                  $detail");
                 }
             }
 
-            if ($result['passed']) {
+            if ($result['passed'] === true) {
                 $passed++;
             }
         }
@@ -91,13 +91,16 @@ class CheckCommand extends BaseCommand
             return self::SUCCESS;
         } else {
             $this->warning("⚠️  $passed/$total checks passed. Please address the issues above.");
-            if (!$verbose) {
+            if ($verbose !== true) {
                 $this->info("💡 Run with --details for more details");
             }
             return self::FAILURE;
         }
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function checkPhpVersion(): array
     {
         $required = '8.2.0';
@@ -116,6 +119,9 @@ class CheckCommand extends BaseCommand
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function checkPhpExtensions(): array
     {
         $required = ['pdo', 'pdo_mysql', 'json', 'mbstring', 'openssl', 'curl'];
@@ -128,17 +134,20 @@ class CheckCommand extends BaseCommand
         }
 
         return [
-            'passed' => empty($missing),
-            'message' => empty($missing) ?
+            'passed' => count($missing) === 0,
+            'message' => count($missing) === 0 ?
                 'All required extensions loaded' :
                 'Missing extensions: ' . implode(', ', $missing),
-            'details' => empty($missing) ? [] : array_map(
+            'details' => count($missing) === 0 ? [] : array_map(
                 fn($ext) => "Install php-$ext extension",
                 $missing
             )
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function checkPermissions(bool $fix = false): array
     {
         $dirs = [
@@ -175,8 +184,8 @@ class CheckCommand extends BaseCommand
         }
 
         return [
-            'passed' => empty($issues),
-            'message' => empty($issues) ?
+            'passed' => count($issues) === 0,
+            'message' => count($issues) === 0 ?
                 'All directories writable' :
                 count($issues) . ' permission issues',
             'details' => $fix ? [] : array_merge($issues, [
@@ -185,6 +194,9 @@ class CheckCommand extends BaseCommand
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function checkConfiguration(bool $production): array
     {
         $issues = [];
@@ -196,27 +208,30 @@ class CheckCommand extends BaseCommand
         }
 
         // Production-specific checks
-        if ($production) {
+        if ($production === true) {
             $debugEnabled = getenv('APP_DEBUG') === 'true';
             if ($debugEnabled) {
                 $issues[] = 'APP_DEBUG should be false in production';
             }
 
             $jwtSecret = getenv('JWT_SECRET');
-            if (!$jwtSecret || strlen($jwtSecret) < 32) {
+            if ($jwtSecret === false || strlen($jwtSecret) < 32) {
                 $issues[] = 'JWT_SECRET must be set and at least 32 characters';
             }
         }
 
         return [
-            'passed' => empty($issues),
-            'message' => empty($issues) ?
+            'passed' => count($issues) === 0,
+            'message' => count($issues) === 0 ?
                 'Configuration valid' :
                 count($issues) . ' configuration issues',
             'details' => $issues
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function checkSecurity(bool $production): array
     {
         $issues = [];
@@ -227,39 +242,43 @@ class CheckCommand extends BaseCommand
         }
 
         // Check for common security files
-        $baseDir = base_path();
         $publicEnv = base_path('public/.env');
         if (file_exists($publicEnv)) {
             $issues[] = '.env file in public directory (critical security risk)';
         }
 
         // Production-specific security checks
-        if ($production) {
+        if ($production === true) {
             $publicIndex = base_path('public/index.php');
             if (file_exists($publicIndex)) {
                 $content = file_get_contents($publicIndex);
-                if (strpos($content, 'error_reporting(E_ALL)') !== false) {
+                if ($content !== false && strpos($content, 'error_reporting(E_ALL)') !== false) {
                     $issues[] = 'Error reporting enabled in production';
                 }
             }
         }
 
         return [
-            'passed' => empty($issues),
-            'message' => empty($issues) ?
+            'passed' => count($issues) === 0,
+            'message' => count($issues) === 0 ?
                 'Security checks passed' :
                 count($issues) . ' security issues found',
             'details' => $issues
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function checkDatabase(): array
     {
         try {
             // Use ConnectionValidator to avoid duplicate queries with bootstrap validation
             $healthResult = \Glueful\Database\ConnectionValidator::performHealthCheck();
+            /** @var HealthService $healthService */
             $healthService = $this->getService(HealthService::class);
-            return $healthService->convertToSystemCheckFormat($healthResult['details'] ?? $healthResult);
+            $healthServiceClass = get_class($healthService);
+            return $healthServiceClass::convertToSystemCheckFormat($healthResult['details'] ?? $healthResult);
         } catch (\Exception $e) {
             return [
                 'passed' => false,

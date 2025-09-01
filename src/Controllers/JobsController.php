@@ -42,14 +42,14 @@ class JobsController extends BaseController
     /**
      * Get allowed job names from configuration
      *
-     * @return array List of allowed job names
+     * @return array<int, string> List of allowed job names
      */
     private function getAllowedJobNames(): array
     {
         $allowedNames = config('security.jobs.allowed_names', []);
 
         // Optionally auto-include scheduled jobs if enabled
-        if (config('security.jobs.auto_allow_scheduled_jobs', false)) {
+        if (config('security.jobs.auto_allow_scheduled_jobs', false) === true) {
             $scheduleConfig = config('schedule.jobs', []);
             foreach ($scheduleConfig as $job) {
                 if (isset($job['name'])) {
@@ -71,7 +71,7 @@ class JobsController extends BaseController
     private function validateJobName(string $jobName): void
     {
         // Basic validation
-        if (empty($jobName)) {
+        if ($jobName === '') {
             throw new ValidationException('Job name cannot be empty');
         }
 
@@ -138,6 +138,9 @@ class JobsController extends BaseController
      * @param array $jobData Job data array to validate
      * @throws ValidationException If array structure is invalid
      */
+    /**
+     * @param array<string, mixed> $jobData
+     */
     private function validateJobDataArray(array $jobData): void
     {
         // Check nesting depth
@@ -175,7 +178,7 @@ class JobsController extends BaseController
     /**
      * Calculate array depth recursively
      *
-     * @param array $array Array to analyze
+     * @param array<string, mixed> $array Array to analyze
      * @return int Maximum depth
      */
     private function getArrayDepth(array $array): int
@@ -235,7 +238,7 @@ class JobsController extends BaseController
      * Check if operation requires enhanced security validation
      *
      * @param string $operation Operation type
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @throws SecurityException If security requirements are not met
      */
     private function validateSecurityRequirements(string $operation, array $context = []): void
@@ -243,12 +246,11 @@ class JobsController extends BaseController
         // Enhanced behavior check for sensitive operations
         $sensitiveOperations = ['run_all_jobs', 'create_job'];
 
-        if (in_array($operation, $sensitiveOperations)) {
+        if (in_array($operation, $sensitiveOperations, true)) {
             // Require lower behavior score for sensitive operations
             $maxScore = match ($operation) {
                 'run_all_jobs' => 0.3, // Very strict for running all jobs
                 'create_job' => 0.6,   // Moderate for job creation
-                default => 0.8
             };
 
             $this->requireLowRiskBehavior($maxScore, $operation);
@@ -267,13 +269,16 @@ class JobsController extends BaseController
      * @param array $context Execution context
      * @throws SecurityException If execution frequency is suspicious
      */
+    /**
+     * @param array<string, mixed> $context
+     */
     private function validateExecutionFrequency(array $context): void
     {
         // This would integrate with a more sophisticated tracking system
         // For now, we'll implement basic validation
 
         $userId = $this->getCurrentUserUuid();
-        if (!$userId) {
+        if ($userId === null) {
             return; // Anonymous users already restricted by other means
         }
 
@@ -283,7 +288,7 @@ class JobsController extends BaseController
     /**
      * Get scheduled jobs data without sending response (for internal use)
      *
-     * @return array Scheduled jobs data
+     * @return array<string, mixed> Scheduled jobs data
      */
     public function getScheduledJobsData(): array
     {
@@ -376,7 +381,7 @@ class JobsController extends BaseController
 
         // Log successful retrieval with metrics
 
-        if (empty($jobs)) {
+        if ($jobs === []) {
             return Response::success([], 'No jobs found');
         }
 

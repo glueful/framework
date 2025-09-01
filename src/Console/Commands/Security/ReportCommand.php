@@ -71,16 +71,16 @@ class ReportCommand extends BaseSecurityCommand
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $format = $input->getOption('format');
-        $email = $input->getOption('email');
-        $outputFile = $input->getOption('output');
-        $includeVulns = $input->getOption('include-vulnerabilities');
-        $includeMetrics = $input->getOption('include-metrics');
-        $dateRange = $input->getOption('days');
+        $format = (string) $input->getOption('format');
+        $email = $input->getOption('email') !== null ? (string) $input->getOption('email') : null;
+        $outputFile = $input->getOption('output') !== null ? (string) $input->getOption('output') : null;
+        $includeVulns = (bool) $input->getOption('include-vulnerabilities');
+        $includeMetrics = (bool) $input->getOption('include-metrics');
+        $dateRange = (string) $input->getOption('days');
 
         // Validate format
         $validFormats = ['html', 'pdf', 'json'];
-        if (!in_array($format, $validFormats)) {
+        if (!in_array($format, $validFormats, true)) {
             $this->error("Invalid format: {$format}");
             $this->info('Valid formats: ' . implode(', ', $validFormats));
             return self::FAILURE;
@@ -98,13 +98,13 @@ class ReportCommand extends BaseSecurityCommand
             $report = $this->generateSecurityReport($reportData, $format);
 
             // 3. Save to file if output specified
-            if ($outputFile) {
+            if ($outputFile !== null) {
                 $this->info("Saving report to: {$outputFile}");
                 $this->saveReportToFile($report, $outputFile, $format);
             }
 
             // 4. Send via email if specified
-            if ($email) {
+            if ($email !== null) {
                 $this->info("Sending report to: {$email}");
                 $this->sendReportByEmail($report, $email, $format, $reportData['summary']);
             }
@@ -119,10 +119,17 @@ class ReportCommand extends BaseSecurityCommand
         }
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function gatherSecurityReportData(string $dateRange, bool $includeVulns, bool $includeMetrics): array
     {
         $days = (int) $dateRange;
-        $startDate = date('Y-m-d', strtotime("-{$days} days"));
+        $timestamp = strtotime("-{$days} days");
+        if ($timestamp === false) {
+            throw new \InvalidArgumentException('Invalid date range specified');
+        }
+        $startDate = date('Y-m-d', $timestamp);
         $endDate = date('Y-m-d');
 
         $data = [
@@ -141,12 +148,12 @@ class ReportCommand extends BaseSecurityCommand
             'recommendations' => []
         ];
 
-        if ($includeVulns) {
+        if ($includeVulns === true) {
             $this->info('Running vulnerability assessment...');
             $data['vulnerabilities'] = $this->runVulnerabilityAssessment();
         }
 
-        if ($includeMetrics) {
+        if ($includeMetrics === true) {
             $this->info('Gathering security metrics...');
             $data['metrics'] = $this->gatherSecurityMetrics($days);
         }
@@ -158,6 +165,9 @@ class ReportCommand extends BaseSecurityCommand
         return $data;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function analyzeSecurityConfiguration(): array
     {
         $prodValidation = SecurityManager::validateProductionEnvironment();
@@ -173,12 +183,15 @@ class ReportCommand extends BaseSecurityCommand
             'environment_security' => [
                 'debug_mode' => env('APP_DEBUG', false),
                 'environment' => env('APP_ENV', 'unknown'),
-                'app_key_set' => !empty(env('APP_KEY')),
-                'jwt_key_set' => !empty(env('JWT_KEY'))
+                'app_key_set' => (env('APP_KEY') !== null && env('APP_KEY') !== ''),
+                'jwt_key_set' => (env('JWT_KEY') !== null && env('JWT_KEY') !== '')
             ]
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function analyzeSystemSecurity(): array
     {
         return [
@@ -189,6 +202,9 @@ class ReportCommand extends BaseSecurityCommand
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function analyzeAuthenticationSecurity(int $days): array
     {
         // TODO: Use $days parameter to filter authentication data
@@ -201,6 +217,9 @@ class ReportCommand extends BaseSecurityCommand
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getAuditSummary(int $days): array
     {
         // TODO: Use $days parameter to filter audit data
@@ -211,6 +230,9 @@ class ReportCommand extends BaseSecurityCommand
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function assessCompliance(): array
     {
         return [
@@ -221,6 +243,9 @@ class ReportCommand extends BaseSecurityCommand
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function runVulnerabilityAssessment(): array
     {
         return [
@@ -232,6 +257,9 @@ class ReportCommand extends BaseSecurityCommand
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function gatherSecurityMetrics(int $days): array
     {
         // TODO: Use $days parameter to filter metrics data
@@ -243,6 +271,10 @@ class ReportCommand extends BaseSecurityCommand
         ];
     }
 
+    /**
+     * @param array<string, mixed> $data
+     * @return array<int, string>
+     */
     private function generateSecurityRecommendations(array $data): array
     {
         $recommendations = [];
@@ -251,17 +283,21 @@ class ReportCommand extends BaseSecurityCommand
             $recommendations[] = 'Improve production readiness score by addressing security warnings';
         }
 
-        if (!empty($data['vulnerabilities']) && $data['vulnerabilities']['critical'] > 0) {
+        if (isset($data['vulnerabilities']) && ($data['vulnerabilities']['critical'] ?? 0) > 0) {
             $recommendations[] = 'Address critical vulnerabilities immediately';
         }
 
-        if ($data['security_config']['environment_security']['debug_mode']) {
+        if (($data['security_config']['environment_security']['debug_mode'] ?? false) === true) {
             $recommendations[] = 'Disable debug mode in production';
         }
 
         return $recommendations;
     }
 
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
     private function createReportSummary(array $data): array
     {
         $score = $data['security_config']['production_readiness']['score'] ?? 0;
@@ -278,11 +314,15 @@ class ReportCommand extends BaseSecurityCommand
         ];
     }
 
+    /**
+     * @param array<string, mixed> $data
+     */
     private function generateSecurityReport(array $data, string $format): string
     {
         switch ($format) {
             case 'json':
-                return json_encode($data, JSON_PRETTY_PRINT);
+                $result = json_encode($data, JSON_PRETTY_PRINT);
+                return $result !== false ? $result : '';
             case 'html':
                 return $this->generateHtmlReport($data);
             default:
@@ -290,6 +330,9 @@ class ReportCommand extends BaseSecurityCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $data
+     */
     private function generateHtmlReport(array $data): string
     {
         $html = "<html><head><title>Security Report</title></head><body>";
@@ -307,6 +350,9 @@ class ReportCommand extends BaseSecurityCommand
         return $html;
     }
 
+    /**
+     * @param array<string, mixed> $data
+     */
     private function generateTextReport(array $data): string
     {
         $report = "SECURITY REPORT\n";
@@ -335,6 +381,9 @@ class ReportCommand extends BaseSecurityCommand
         $this->success("Report saved to: {$output}");
     }
 
+    /**
+     * @param array<string, mixed> $summary
+     */
     private function sendReportByEmail(string $report, string $email, string $format, array $summary): void
     {
         // TODO: Implement actual email sending using $report content
@@ -343,6 +392,9 @@ class ReportCommand extends BaseSecurityCommand
         $this->info("Subject: Security Report - Score: {$summary['overall_score']}/100");
     }
 
+    /**
+     * @param array<string, mixed> $summary
+     */
     private function displayReportSummary(array $summary, string $format, ?string $output, ?string $email): void
     {
         $this->line('');
@@ -359,11 +411,11 @@ class ReportCommand extends BaseSecurityCommand
             ['Recommendations', $summary['recommendations_count']]
         ];
 
-        if ($output) {
+        if ($output !== null) {
             $summaryData[] = ['Saved To', $output];
         }
 
-        if ($email) {
+        if ($email !== null) {
             $summaryData[] = ['Emailed To', $email];
         }
 

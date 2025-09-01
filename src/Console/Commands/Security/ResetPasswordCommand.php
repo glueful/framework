@@ -63,11 +63,12 @@ class ResetPasswordCommand extends BaseSecurityCommand
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $username = $input->getArgument('username');
-        $force = $input->getOption('force');
-        $notify = $input->getOption('notify');
-        $temporary = $input->getOption('temporary');
-        $reason = $input->getOption('reason');
+        $username = (string) $input->getArgument('username');
+        $force = (bool) $input->getOption('force');
+        $notify = (bool) $input->getOption('notify');
+        $temporary = (string) $input->getOption('temporary');
+        $reasonOption = $input->getOption('reason');
+        $reason = $reasonOption !== null ? (string) $reasonOption : null;
 
         $this->info("🔒 Forcing Password Reset for User: {$username}");
         $this->line('');
@@ -81,7 +82,7 @@ class ResetPasswordCommand extends BaseSecurityCommand
             $user = null;
             $identifierType = null;
 
-            if (filter_var($username, FILTER_VALIDATE_EMAIL)) {
+            if (filter_var($username, FILTER_VALIDATE_EMAIL) !== false) {
                 $user = $userRepository->findByEmail($username);
                 $identifierType = 'email';
             } else {
@@ -89,7 +90,7 @@ class ResetPasswordCommand extends BaseSecurityCommand
                 $identifierType = 'username';
             }
 
-            if (!$user) {
+            if ($user === null) {
                 $this->error("User not found with {$identifierType}: {$username}");
                 return self::FAILURE;
             }
@@ -110,7 +111,7 @@ class ResetPasswordCommand extends BaseSecurityCommand
             ]);
 
             // Confirmation if not forced
-            if (!$force) {
+            if ($force !== true) {
                 $this->warning('This will invalidate the user\'s current password.');
                 $this->warning('The user will be required to set a new password on next login.');
 
@@ -121,7 +122,7 @@ class ResetPasswordCommand extends BaseSecurityCommand
             }
 
             // Get reason if not provided
-            if (!$reason && !$force) {
+            if ($reason === null && $force !== true) {
                 $reason = $this->ask('Please provide a reason for the password reset');
             }
 
@@ -155,7 +156,7 @@ class ResetPasswordCommand extends BaseSecurityCommand
                     ['Password Length', strlen($temporaryPassword) . ' characters']
                 ];
 
-                if ($notify) {
+                if ($notify === true) {
                     $details[] = ['Notification', 'Email notification would be sent'];
                 }
 

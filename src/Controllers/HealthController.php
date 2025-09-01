@@ -67,7 +67,7 @@ class HealthController extends BaseController
         }, 30); // 30-second cache for fresh monitoring data
 
         // Convert cached response to actual Response object
-        if ($response['error']) {
+        if ($response['error'] === true) {
             return Response::error(
                 $response['message'],
                 $response['status'],
@@ -205,6 +205,7 @@ class HealthController extends BaseController
 
     /**
      * Generate comprehensive detailed health metrics
+     * @return array<string, mixed>
      */
     private function generateDetailedHealthMetrics(): array
     {
@@ -292,6 +293,7 @@ class HealthController extends BaseController
 
     /**
      * Get Response API performance metrics
+     * @return array<string, mixed>
      */
     private function getResponseApiPerformance(): array
     {
@@ -318,6 +320,7 @@ class HealthController extends BaseController
 
     /**
      * Get average response time metrics
+     * @return array<string, mixed>
      */
     private function getAverageResponseTime(): array
     {
@@ -341,6 +344,7 @@ class HealthController extends BaseController
 
     /**
      * Get error rate metrics
+     * @return array<string, mixed>
      */
     private function getErrorRate(): array
     {
@@ -364,6 +368,7 @@ class HealthController extends BaseController
 
     /**
      * Check middleware pipeline health
+     * @return array<string, mixed>
      */
     private function checkMiddlewarePipeline(): array
     {
@@ -402,7 +407,7 @@ class HealthController extends BaseController
                 }
             }
 
-            if (!empty($missingCritical)) {
+            if ($missingCritical !== []) {
                 $health['status'] = 'warning';
                 $health['missing_critical_middleware'] = $missingCritical;
             }
@@ -418,6 +423,7 @@ class HealthController extends BaseController
 
     /**
      * Get response cache hit metrics
+     * @return array<string, mixed>
      */
     private function getResponseCacheHits(): array
     {
@@ -479,7 +485,7 @@ class HealthController extends BaseController
         try {
             if (function_exists('sys_getloadavg')) {
                 $uptime = shell_exec('uptime');
-                return trim($uptime) ?: 'Unable to determine uptime';
+                return trim($uptime) !== '' ? trim($uptime) : 'Unable to determine uptime';
             }
             return 'Uptime not available on this system';
         } catch (\Throwable) {
@@ -516,6 +522,9 @@ class HealthController extends BaseController
         return round(($used / $limit) * 100, 2);
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getSystemLoad(): array
     {
         try {
@@ -533,6 +542,9 @@ class HealthController extends BaseController
         }
     }
 
+    /**
+     * @param array<string, mixed> $health
+     */
     private function calculateOverallHealthStatus(array $health): string
     {
         $issues = [];
@@ -557,7 +569,7 @@ class HealthController extends BaseController
             $issues[] = 'Low cache hit ratio';
         }
 
-        if (!empty($issues)) {
+        if ($issues !== []) {
             return count($issues) > 2 ? 'critical' : 'warning';
         }
 
@@ -573,6 +585,9 @@ class HealthController extends BaseController
     {
         return 0.0;
     }
+    /**
+     * @return array<string, mixed>
+     */
     private function getResponseTimePercentiles(): array
     {
         return ['p50' => 0, 'p95' => 0, 'p99' => 0];
@@ -581,6 +596,9 @@ class HealthController extends BaseController
     {
         return 0;
     }
+    /**
+     * @return array<string, mixed>
+     */
     private function getErrorBreakdown(): array
     {
         return [];
@@ -589,10 +607,16 @@ class HealthController extends BaseController
     {
         return count(config('middleware.global', []));
     }
+    /**
+     * @param array<int, mixed> $middleware
+     */
     private function validateMiddlewarePipeline(array $middleware): bool
     {
         return true;
     }
+    /**
+     * @return array<string, mixed>
+     */
     private function getResponseApiThroughput(): array
     {
         return ['requests_per_minute' => 0];
@@ -605,14 +629,23 @@ class HealthController extends BaseController
     {
         return 0;
     }
+    /**
+     * @return array<string, mixed>
+     */
     private function getMiddlewarePerformanceMetrics(): array
     {
         return [];
     }
+    /**
+     * @return array<string, mixed>
+     */
     private function getResponseValidationMetrics(): array
     {
         return [];
     }
+    /**
+     * @return array<string, mixed>
+     */
     private function getCompressionMetrics(): array
     {
         return [];
@@ -625,6 +658,9 @@ class HealthController extends BaseController
     {
         return '0 MB';
     }
+    /**
+     * @return array<string, mixed>
+     */
     private function getEdgeCacheMetrics(): array
     {
         return [];
@@ -633,10 +669,16 @@ class HealthController extends BaseController
     {
         return 'connected';
     }
+    /**
+     * @return array<string, mixed>
+     */
     private function getConnectionPoolMetrics(): array
     {
         return [];
     }
+    /**
+     * @return array<string, mixed>
+     */
     private function getQueryPerformanceMetrics(): array
     {
         return [];
@@ -661,18 +703,30 @@ class HealthController extends BaseController
     {
         return 0;
     }
+    /**
+     * @return array<string, mixed>
+     */
     private function getRouteCacheStatus(): array
     {
         return ['enabled' => Router::isUsingCachedRoutes()];
     }
+    /**
+     * @return array<string, mixed>
+     */
     private function getExtensionsHealth(): array
     {
         return [];
     }
+    /**
+     * @return array<string, mixed>
+     */
     private function getQueueHealth(): array
     {
         return [];
     }
+    /**
+     * @return array<string, mixed>
+     */
     private function getNotificationHealth(): array
     {
         return [];
@@ -689,6 +743,9 @@ class HealthController extends BaseController
     {
         return 0;
     }
+    /**
+     * @return array<string, mixed>
+     */
     private function getDiskUsage(): array
     {
         $path = realpath(base_path('storage'));

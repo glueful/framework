@@ -57,15 +57,16 @@ class ScanCommand extends BaseSecurityCommand
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $deep = $input->getOption('deep');
-        $fix = $input->getOption('fix');
-        $outputFile = $input->getOption('output');
-        $format = $input->getOption('format');
+        $deep = (bool) $input->getOption('deep');
+        $fix = (bool) $input->getOption('fix');
+        $outputFileOption = $input->getOption('output');
+        $outputFile = $outputFileOption !== null ? (string) $outputFileOption : null;
+        $format = (string) $input->getOption('format');
 
         $this->info('🔍 Security Vulnerability Scan');
         $this->line('');
 
-        if ($deep) {
+        if ($deep === true) {
             $this->info('Performing deep security scan...');
         } else {
             $this->info('Performing standard security scan...');
@@ -74,7 +75,7 @@ class ScanCommand extends BaseSecurityCommand
         try {
             // Determine scan types from options (following original pattern)
             $scanTypes = ['code', 'dependency', 'config'];
-            if ($deep) {
+            if ($deep === true) {
                 // Deep scan includes additional security checks
                 $scanTypes[] = 'runtime';
                 $scanTypes[] = 'network';
@@ -88,7 +89,7 @@ class ScanCommand extends BaseSecurityCommand
             $this->displayScanResults($results);
 
             // Save results to file if requested
-            if ($outputFile) {
+            if ($outputFile !== null) {
                 $this->saveResultsToFile($results, $outputFile, $format);
             }
 
@@ -99,10 +100,10 @@ class ScanCommand extends BaseSecurityCommand
             if ($critical > 0) {
                 $this->error("Critical vulnerabilities found: {$critical}");
 
-                if ($fix) {
+                if ($fix === true) {
                     $this->info('Attempting to apply automatic fixes...');
                     $fixResults = $this->applySecurityFixes($results);
-                    if (!empty($fixResults['fixed'])) {
+                    if (($fixResults['fixed'] ?? 0) > 0) {
                         $this->info("Applied {$fixResults['fixed']} automatic fixes");
                     }
                 }
@@ -111,10 +112,10 @@ class ScanCommand extends BaseSecurityCommand
             } elseif ($high > 0) {
                 $this->warning("High severity vulnerabilities found: {$high}");
 
-                if ($fix) {
+                if ($fix === true) {
                     $this->info('Attempting to apply automatic fixes...');
                     $fixResults = $this->applySecurityFixes($results);
-                    if (!empty($fixResults['fixed'])) {
+                    if (($fixResults['fixed'] ?? 0) > 0) {
                         $this->info("Applied {$fixResults['fixed']} automatic fixes");
                     }
                 }
@@ -130,6 +131,9 @@ class ScanCommand extends BaseSecurityCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $result
+     */
     private function displayScanResults(array $result): void
     {
         $this->line('');
@@ -147,7 +151,7 @@ class ScanCommand extends BaseSecurityCommand
         $this->table(['Metric', 'Value'], $summary);
 
         // Show vulnerabilities if any
-        if (!empty($result['vulnerabilities']) && is_array($result['vulnerabilities'])) {
+        if (count($result['vulnerabilities'] ?? []) > 0 && is_array($result['vulnerabilities'])) {
             $this->line('');
             $this->info('Vulnerabilities Found:');
             $this->line('');
@@ -171,7 +175,7 @@ class ScanCommand extends BaseSecurityCommand
                 $this->line("   File: {$file}:{$line}");
                 $this->line("   Description: {$description}");
 
-                if (!empty($vuln['solution'])) {
+                if (isset($vuln['solution']) && $vuln['solution'] !== '') {
                     $this->line("   Solution: {$vuln['solution']}");
                 }
 
@@ -180,7 +184,7 @@ class ScanCommand extends BaseSecurityCommand
         }
 
         // Show categories if available
-        if (!empty($result['categories'])) {
+        if (count($result['categories'] ?? []) > 0) {
             $this->line('');
             $this->info('Vulnerability Categories:');
             foreach ($result['categories'] as $category => $count) {
@@ -189,6 +193,9 @@ class ScanCommand extends BaseSecurityCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $results
+     */
     private function saveResultsToFile(array $results, string $outputFile, string $format): void
     {
         $dir = dirname($outputFile);
@@ -206,6 +213,9 @@ class ScanCommand extends BaseSecurityCommand
         $this->success("Scan results saved to: {$outputFile}");
     }
 
+    /**
+     * @param array<string, mixed> $results
+     */
     private function generateHtmlReport(array $results): string
     {
         $html = "<html><head><title>Security Scan Results</title></head><body>";
@@ -216,7 +226,7 @@ class ScanCommand extends BaseSecurityCommand
         $html .= "<p>Vulnerabilities Found: " . ($results['vulnerabilities_found'] ?? 0) . "</p>";
         $html .= "<p>Risk Level: " . ($results['risk_level'] ?? 'Unknown') . "</p>";
 
-        if (!empty($results['vulnerabilities'])) {
+        if (count($results['vulnerabilities'] ?? []) > 0) {
             $html .= "<h2>Vulnerabilities</h2>";
             foreach ($results['vulnerabilities'] as $vuln) {
                 $html .= "<div style='border: 1px solid #ccc; margin: 10px; padding: 10px;'>";
@@ -225,7 +235,7 @@ class ScanCommand extends BaseSecurityCommand
                     ($vuln['line'] ?? 'Unknown') . "</p>";
                 $html .= "<p><strong>Description:</strong> " .
                     ($vuln['description'] ?? 'No description') . "</p>";
-                if (!empty($vuln['solution'])) {
+                if (isset($vuln['solution']) && $vuln['solution'] !== '') {
                     $html .= "<p><strong>Solution:</strong> " . $vuln['solution'] . "</p>";
                 }
                 $html .= "</div>";
@@ -236,6 +246,9 @@ class ScanCommand extends BaseSecurityCommand
         return $html;
     }
 
+    /**
+     * @param array<string, mixed> $results
+     */
     private function generateTextReport(array $results): string
     {
         $report = "SECURITY VULNERABILITY SCAN RESULTS\n";
@@ -245,7 +258,7 @@ class ScanCommand extends BaseSecurityCommand
         $report .= "Vulnerabilities Found: " . ($results['vulnerabilities_found'] ?? 0) . "\n";
         $report .= "Risk Level: " . ($results['risk_level'] ?? 'Unknown') . "\n\n";
 
-        if (!empty($results['vulnerabilities'])) {
+        if (count($results['vulnerabilities'] ?? []) > 0) {
             $report .= "VULNERABILITIES:\n";
             $report .= "===============\n\n";
             foreach ($results['vulnerabilities'] as $i => $vuln) {
@@ -254,7 +267,7 @@ class ScanCommand extends BaseSecurityCommand
                 $report .= "   File: " . ($vuln['file'] ?? 'Unknown') . ":" .
                     ($vuln['line'] ?? 'Unknown') . "\n";
                 $report .= "   Description: " . ($vuln['description'] ?? 'No description') . "\n";
-                if (!empty($vuln['solution'])) {
+                if (isset($vuln['solution']) && $vuln['solution'] !== '') {
                     $report .= "   Solution: " . $vuln['solution'] . "\n";
                 }
                 $report .= "\n";
@@ -264,11 +277,15 @@ class ScanCommand extends BaseSecurityCommand
         return $report;
     }
 
+    /**
+     * @param array<string, mixed> $results
+     * @return array<string, mixed>
+     */
     private function applySecurityFixes(array $results): array
     {
         $fixResults = ['fixed' => 0, 'failed' => 0, 'details' => []];
 
-        if (empty($results['vulnerabilities'])) {
+        if (count($results['vulnerabilities'] ?? []) === 0) {
             return $fixResults;
         }
 
@@ -276,7 +293,7 @@ class ScanCommand extends BaseSecurityCommand
             // Only attempt to fix certain types of vulnerabilities
             $fixableTypes = ['permission_issue', 'config_issue', 'file_permission'];
 
-            if (!in_array($vuln['type'] ?? '', $fixableTypes)) {
+            if (!in_array($vuln['type'] ?? '', $fixableTypes, true)) {
                 continue;
             }
 
@@ -300,6 +317,9 @@ class ScanCommand extends BaseSecurityCommand
         return $fixResults;
     }
 
+    /**
+     * @param array<string, mixed> $vulnerability
+     */
     private function applySingleFix(array $vulnerability): bool
     {
         $type = $vulnerability['type'] ?? '';
@@ -307,7 +327,7 @@ class ScanCommand extends BaseSecurityCommand
 
         switch ($type) {
             case 'permission_issue':
-                if ($file && file_exists($file)) {
+                if ($file !== '' && file_exists($file)) {
                     return chmod($file, 0644);
                 }
                 break;
@@ -319,7 +339,7 @@ class ScanCommand extends BaseSecurityCommand
                 return false;
 
             case 'file_permission':
-                if ($file && file_exists($file)) {
+                if ($file !== '' && file_exists($file)) {
                     return chmod($file, 0644);
                 }
                 break;

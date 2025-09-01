@@ -66,8 +66,8 @@ class ResourceController extends BaseController
     /**
      * Get resource list with pagination
      *
-     * @param array $params Route parameters
-     * @param array $queryParams Query string parameters
+     * @param array<string, mixed> $params Route parameters
+     * @param array<string, mixed> $queryParams Query string parameters
      * @return mixed HTTP response
      */
     public function get(array $params, array $queryParams)
@@ -90,7 +90,7 @@ class ResourceController extends BaseController
         $perPage = min(100, max(1, (int)($queryParams['per_page'] ?? 25)));
         $sort = $queryParams['sort'] ?? 'id'; // Default sort by ID
         $order = strtolower($queryParams['order'] ?? 'desc');
-        $order = in_array($order, ['asc', 'desc']) ? $order : 'desc';
+        $order = in_array($order, ['asc', 'desc'], true) ? $order : 'desc';
         $fields = $this->parseFields($queryParams['fields'] ?? '');
 
         // Apply optional query parameter restrictions
@@ -122,8 +122,8 @@ class ResourceController extends BaseController
     /**
      * Get single resource by UUID
      *
-     * @param array $params Route parameters
-     * @param array $queryParams Query string parameters
+     * @param array<string, mixed> $params Route parameters
+     * @param array<string, mixed> $queryParams Query string parameters
      * @return mixed HTTP response
      */
     public function getSingle(array $params, array $queryParams)
@@ -152,7 +152,7 @@ class ResourceController extends BaseController
             300 // 5 minutes
         );
 
-        if (!$result) {
+        if ($result === null) {
             return Response::error('Record not found', ErrorCodes::NOT_FOUND);
         }
 
@@ -169,8 +169,8 @@ class ResourceController extends BaseController
     /**
      * Create new resource
      *
-     * @param array $params Route parameters
-     * @param array $postData POST data
+     * @param array<string, mixed> $params Route parameters
+     * @param array<string, mixed> $postData POST data
      * @return mixed HTTP response
      */
     public function post(array $params, array $postData)
@@ -192,7 +192,7 @@ class ResourceController extends BaseController
         // Require low-risk behavior for create operations
         $this->requireLowRiskBehavior();
 
-        if (empty($postData)) {
+        if ($postData === []) {
             return Response::error('No data provided', ErrorCodes::BAD_REQUEST);
         }
 
@@ -222,8 +222,8 @@ class ResourceController extends BaseController
     /**
      * Update existing resource
      *
-     * @param array $params Route parameters
-     * @param array $putData PUT data
+     * @param array<string, mixed> $params Route parameters
+     * @param array<string, mixed> $putData PUT data
      * @return mixed HTTP response
      */
     public function put(array $params, array $putData)
@@ -250,7 +250,7 @@ class ResourceController extends BaseController
         $repository = $this->repositoryFactory->getRepository($table);
         $existing = $repository->find($uuid);
 
-        if (!$existing) {
+        if ($existing === null) {
             return Response::error('Record not found', ErrorCodes::NOT_FOUND);
         }
 
@@ -289,7 +289,7 @@ class ResourceController extends BaseController
     /**
      * Delete resource
      *
-     * @param array $params Route parameters
+     * @param array<string, mixed> $params Route parameters
      * @return mixed HTTP response
      */
     public function delete(array $params)
@@ -316,7 +316,7 @@ class ResourceController extends BaseController
         $repository = $this->repositoryFactory->getRepository($table);
         $existing = $repository->find($uuid);
 
-        if (!$existing) {
+        if ($existing === null) {
             return Response::error('Record not found', ErrorCodes::NOT_FOUND);
         }
 
@@ -352,7 +352,7 @@ class ResourceController extends BaseController
         $tags = ["repository:{$table}", "resource:{$table}"];
 
         // If UUID provided, also add specific resource cache tag
-        if ($uuid) {
+        if ($uuid !== null) {
             $tags[] = "resource:{$table}:{$uuid}";
         }
 
@@ -375,6 +375,8 @@ class ResourceController extends BaseController
 
     /**
      * Apply field-level permissions if enabled
+     * @param mixed $data
+     * @return mixed
      */
     protected function applyFieldPermissions($data, string $table, string $operation)
     {
@@ -386,6 +388,10 @@ class ResourceController extends BaseController
     /**
      * Apply query parameter restrictions if enabled
      */
+    /**
+     * @param array<string, mixed> $queryParams
+     * @return array<string, mixed>
+     */
     protected function applyQueryRestrictions(array $queryParams, string $table): array
     {
         // Default: no query restrictions
@@ -396,6 +402,9 @@ class ResourceController extends BaseController
     /**
      * Apply ownership validation if enabled
      */
+    /**
+     * @param array<string, mixed> $record
+     */
     protected function applyOwnershipValidation(string $table, string $uuid, array $record): void
     {
         if (!$this->enableOwnershipValidation) {
@@ -403,11 +412,11 @@ class ResourceController extends BaseController
         }
 
         // Simple ownership check for known tables
-        if (!in_array($table, ['profiles', 'blobs'])) {
+        if (!in_array($table, ['profiles', 'blobs'], true)) {
             return; // Not an owned resource
         }
 
-        if (!$this->currentUser) {
+        if ($this->currentUser === null) {
             $this->requirePermission('admin.access');
             return;
         }
@@ -436,6 +445,10 @@ class ResourceController extends BaseController
     /**
      * Parse query conditions from request parameters
      */
+    /**
+     * @param array<string, mixed> $queryParams
+     * @return array<string, mixed>
+     */
     protected function parseConditions(array $queryParams): array
     {
         $conditions = [];
@@ -443,7 +456,7 @@ class ResourceController extends BaseController
         // Add any filter conditions from query params
         foreach ($queryParams as $key => $value) {
             // Skip pagination and sorting parameters
-            if (in_array($key, ['page', 'per_page', 'sort', 'order', 'fields'])) {
+            if (in_array($key, ['page', 'per_page', 'sort', 'order', 'fields'], true)) {
                 continue;
             }
 
@@ -457,9 +470,12 @@ class ResourceController extends BaseController
     /**
      * Parse fields to select from request parameters
      */
+    /**
+     * @return array<int, string>
+     */
     protected function parseFields(string $fields): array
     {
-        if (empty($fields) || $fields === '*') {
+        if ($fields === '' || $fields === '*') {
             return [];
         }
 

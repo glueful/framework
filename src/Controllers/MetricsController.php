@@ -33,7 +33,7 @@ class MetricsController extends BaseController
     /**
      * Get API metrics data without sending response (for internal use)
      *
-     * @return array API metrics data
+     * @return array<string, mixed> API metrics data
      */
     public function getApiMetricsData(): array
     {
@@ -120,7 +120,7 @@ class MetricsController extends BaseController
     /**
      * Get system health data without sending response (for internal use)
      *
-     * @return array System health data
+     * @return array<string, mixed> System health data
      */
     public function getSystemHealthData(): array
     {
@@ -158,7 +158,7 @@ class MetricsController extends BaseController
     /**
      * Generate system health metrics data
      *
-     * @return array System health metrics
+     * @return array<string, mixed> System health metrics
      */
     private function generateSystemHealthMetrics(): array
     {
@@ -239,7 +239,7 @@ class MetricsController extends BaseController
                 $logFiles = glob($logPath . '/*.log');
                 $recentLogs = [];
 
-                if (!empty($logFiles)) {
+                if ($logFiles !== []) {
                     // Get the most recent log file
                     usort($logFiles, function ($a, $b) {
                         return filemtime($b) - filemtime($a);
@@ -394,7 +394,7 @@ class MetricsController extends BaseController
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
 
         $bytes = max((float)$bytes, 0);
-        $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+        $pow = floor(($bytes > 0 ? log($bytes) : 0) / log(1024));
         $pow = min($pow, count($units) - 1);
 
         $bytes /= (1 << (10 * $pow));
@@ -458,7 +458,7 @@ class MetricsController extends BaseController
     /**
      * Get Redis memory usage
      *
-     * @param array $info Redis info array
+     * @param array<string, mixed> $info Redis info array
      * @return string Formatted memory usage
      */
     private function getRedisMemoryUsage(array $info): string
@@ -471,7 +471,7 @@ class MetricsController extends BaseController
     /**
      * Get health status for a specific extension
      *
-     * @param array|null $extension Extension information array
+     * @param array<string, mixed>|null $extension Extension information array
      * @return mixed HTTP response
      */
     public function getExtensionHealth(?array $extension): mixed
@@ -533,9 +533,9 @@ class MetricsController extends BaseController
     /**
      * Filter extension health data based on user permissions
      *
-     * @param array $health Raw health data
+     * @param array<string, mixed> $health Raw health data
      * @param string $extensionName Extension name
-     * @return array Filtered health data
+     * @return array<string, mixed> Filtered health data
      */
     private function filterExtensionHealthData(array $health, string $extensionName): array
     {
@@ -567,8 +567,8 @@ class MetricsController extends BaseController
     /**
      * Apply context-aware data filtering for system metrics
      *
-     * @param array $metrics Raw metrics data
-     * @return array Filtered metrics based on user context
+     * @param array<string, mixed> $metrics Raw metrics data
+     * @return array<string, mixed> Filtered metrics based on user context
      */
     private function filterMetricsByUserContext(array $metrics): array
     {

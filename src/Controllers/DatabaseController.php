@@ -84,7 +84,7 @@ class DatabaseController extends BaseController
             }
 
             // Add AUTO_INCREMENT if specified
-            if (isset($options['autoIncrement']) && !empty($options['autoIncrement'])) {
+            if (isset($options['autoIncrement']) && $options['autoIncrement'] !== '') {
                 $autoIncValue = is_string($options['autoIncrement'])
                     ? $options['autoIncrement']
                     : "AUTO_INCREMENT";
@@ -103,7 +103,7 @@ class DatabaseController extends BaseController
             }
 
             // Add DEFAULT if provided
-            if (isset($options['default']) && $options['default'] !== null && $options['default'] !== '') {
+            if (isset($options['default']) && $options['default'] !== '') {
                 // Handle special DEFAULT value CURRENT_TIMESTAMP
                 if ($options['default'] === 'CURRENT_TIMESTAMP') {
                     $columnDef .= " DEFAULT CURRENT_TIMESTAMP";
@@ -128,7 +128,7 @@ class DatabaseController extends BaseController
         $this->schemaManager->getConnection()->getPDO()->exec($sql);
 
         // Add indexes if provided
-        if (isset($data['indexes']) && !empty($data['indexes'])) {
+        if (isset($data['indexes']) && count($data['indexes']) > 0) {
             // Make sure each index has the table property set
             $indexes = array_map(function ($index) use ($tableName) {
                 if (!isset($index['table'])) {
@@ -141,7 +141,7 @@ class DatabaseController extends BaseController
         }
 
         // Add foreign keys if provided
-        if (isset($data['foreign_keys']) && !empty($data['foreign_keys'])) {
+        if (isset($data['foreign_keys']) && count($data['foreign_keys']) > 0) {
             // Make sure each foreign key has the table property set
             $foreignKeys = array_map(function ($fk) use ($tableName) {
                 if (!isset($fk['table'])) {
@@ -182,9 +182,10 @@ class DatabaseController extends BaseController
             return Response::error('Table name is required', Response::HTTP_BAD_REQUEST);
         }
 
-        $result = $this->schemaManager->dropTable($data['table_name']);
-        if (!$result) {
-            return Response::error('Failed to drop table', Response::HTTP_BAD_REQUEST);
+        try {
+            $this->schemaManager->dropTable($data['table_name']);
+        } catch (\Exception $e) {
+            return Response::error('Failed to drop table: ' . $e->getMessage(), Response::HTTP_BAD_REQUEST);
         }
 
 
@@ -215,7 +216,13 @@ class DatabaseController extends BaseController
     /**
      * Get table size information
      */
-    public function getTableSize(?array $table): mixed
+    /**
+     * Get table size information
+     *
+     * @param array{name: string} $table Table data with 'name' key
+     * @return mixed HTTP response
+     */
+    public function getTableSize(array $table): mixed
     {
         // Permission check for reading table information
         $this->requirePermission('database.structure.read', 'database');
@@ -258,7 +265,22 @@ class DatabaseController extends BaseController
      * @param array|null $table Table data with 'name' key
      * @return mixed HTTP response
      */
-    public function getTableMetadata(?array $table): mixed
+    /**
+     * Get comprehensive table metadata
+     *
+     * Returns detailed information about a table including:
+     * - Row count
+     * - Table size
+     * - Column count
+     * - Index count
+     * - Storage engine
+     * - Creation time
+     * - Last update time
+     *
+     * @param array{name: string} $table Table data with 'name' key
+     * @return mixed HTTP response
+     */
+    public function getTableMetadata(array $table): mixed
     {
         // Permission check for reading table metadata
         $this->requirePermission('database.structure.read', 'database');
@@ -287,7 +309,7 @@ class DatabaseController extends BaseController
             $stmt->execute([$tableName]);
             $tableStatus = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
-            $status = !empty($tableStatus) ? $tableStatus[0] : [];
+            $status = count($tableStatus) > 0 ? $tableStatus[0] : [];
 
             // Format the metadata response
             $metadata = [
@@ -339,7 +361,28 @@ class DatabaseController extends BaseController
      *
      * @return mixed HTTP response
      */
-    public function getTableData(?array $table): mixed
+    /**
+     * Fetch paginated data from a table with search and filtering
+     *
+     * Supports:
+     * - Full-text search across multiple columns
+     * - Advanced filtering with operators
+     * - Pagination
+     * - Sorting
+     *
+     * Query parameters:
+     * - page: Page number (default: 1)
+     * - per_page: Records per page (default: 25)
+     * - search: Search term for text search
+     * - search_fields: Array of column names to search in
+     * - filters: Advanced filters object with operator support
+     * - order_by: Column to sort by (default: id)
+     * - order_dir: Sort direction ASC/DESC (default: DESC)
+     *
+     * @param array{name: string} $table Table data with 'name' key
+     * @return mixed HTTP response
+     */
+    public function getTableData(array $table): mixed
     {
         // Permission check for reading table data
         $datatest = $this->currentUser;
@@ -375,7 +418,7 @@ class DatabaseController extends BaseController
             $columns = $this->schemaManager->getTableColumns($table['name']);
 
             // Auto-detect searchable columns if not specified
-        if ($searchTerm && empty($searchFields)) {
+        if ($searchTerm && count($searchFields) === 0) {
             $searchFields = $this->detectSearchableColumns($columns);
         }
 
@@ -383,10 +426,10 @@ class DatabaseController extends BaseController
             $query = $this->db->table($table['name'])->select(['*']);
 
             // Apply search if provided
-        if ($searchTerm && !empty($searchFields)) {
+        if ($searchTerm && count($searchFields) > 0) {
             // Validate search fields exist in table
             $validSearchFields = $this->validateSearchFields($searchFields, $columns);
-            if (!empty($validSearchFields)) {
+            if (count($validSearchFields) > 0) {
                 $query = $query->where(function ($q) use ($validSearchFields, $searchTerm) {
                     foreach ($validSearchFields as $field) {
                         $q->orWhere($field, 'LIKE', '%' . $searchTerm . '%');
@@ -396,10 +439,10 @@ class DatabaseController extends BaseController
         }
 
             // Apply advanced filters if provided
-        if (!empty($filters)) {
+        if (count($filters) > 0) {
             // Validate filter fields exist in table
             $validFilters = $this->validateFilters($filters, $columns);
-            if (!empty($validFilters)) {
+            if (count($validFilters) > 0) {
                 foreach ($validFilters as $filter) {
                     $column = $filter['column'];
                     $operator = $filter['operator'] ?? '=';
@@ -416,7 +459,7 @@ class DatabaseController extends BaseController
             $results = $query->paginate($page, $perPage);
 
             // Resolve foreign key display labels
-        if (!empty($results['data'])) {
+        if (count($results['data']) > 0) {
             $results['data'] = $this->resolveForeignKeyDisplayLabels($results['data'], $columns);
         }
 
@@ -433,9 +476,9 @@ class DatabaseController extends BaseController
         }
 
             // Add filter metadata if filters were applied
-        if (!empty($filters)) {
+        if (count($filters) > 0) {
             $results['filters'] = [
-                'applied' => $validFilters ?? [],
+                'applied' => $validFilters,
                 'requested' => $filters
             ];
         }
@@ -455,6 +498,12 @@ class DatabaseController extends BaseController
      * @param array $params Route parameters containing table name
      * @return mixed HTTP response with column metadata
      */
+    /**
+     * Get columns information for a specific table
+     *
+     * @param array{name: string} $params Route parameters containing table name
+     * @return mixed HTTP response with column metadata
+     */
     public function getColumns(array $params): mixed
     {
         // Permission check for reading column information
@@ -472,7 +521,7 @@ class DatabaseController extends BaseController
             // Get detailed column metadata using SchemaManager
             $columns = $this->schemaManager->getTableColumns($tableName);
 
-        if (empty($columns)) {
+        if (count($columns) === 0) {
             $errorMsg = "No columns found or table '$tableName' does not exist";
             return Response::notFound($errorMsg);
         }
@@ -523,7 +572,7 @@ class DatabaseController extends BaseController
         // Handle both single column and array of columns
         $columns = isset($data['columns']) ? $data['columns'] : [$data['column']];
 
-        // Ensure we have an array
+        // Ensure we have an array (columns is mixed type from request data)
         if (!is_array($columns)) {
             $columns = [$columns];
         }
@@ -555,13 +604,13 @@ class DatabaseController extends BaseController
         }
 
         // Check if all columns were added successfully
-        if (empty($failed)) {
+        if (count($failed) === 0) {
             // All columns were added successfully
             return Response::success([
                 'table' => $tableName,
                 'columns_added' => $results
             ], count($results) > 1 ? 'Columns added successfully' : 'Column added successfully');
-        } elseif (empty($results)) {
+        } elseif (count($results) === 0) {
             // All columns failed to add
             return Response::error(
                 'Failed to add column(s): ' . implode(', ', $failed),
@@ -630,13 +679,13 @@ class DatabaseController extends BaseController
         }
 
         // Check if all columns were dropped successfully
-        if (empty($failed)) {
+        if (count($failed) === 0) {
             // All columns were dropped successfully
             return Response::success([
                 'table' => $tableName,
                 'columns_dropped' => $results
             ], count($results) > 1 ? 'Columns dropped successfully' : 'Column dropped successfully');
-        } elseif (empty($results)) {
+        } elseif (count($results) === 0) {
             // All columns failed to drop
             return Response::error(
                 'Failed to drop column(s): ' . implode(', ', $failed),
@@ -722,13 +771,13 @@ class DatabaseController extends BaseController
         }
 
         // Check if all indexes were added successfully
-        if (empty($failed)) {
+        if (count($failed) === 0) {
             // All indexes were added successfully
             return Response::success([
                 'table' => $tableName,
                 'indexes_added' => $results
             ], count($results) > 1 ? 'Indexes added successfully' : 'Index added successfully');
-        } elseif (empty($results)) {
+        } elseif (count($results) === 0) {
             // All indexes failed to add
             return Response::error(
                 'Failed to add index(es): ' . implode(', ', $failed),
@@ -797,13 +846,13 @@ class DatabaseController extends BaseController
         }
 
         // Check if all indexes were dropped successfully
-        if (empty($failed)) {
+        if (count($failed) === 0) {
             // All indexes were dropped successfully
             return Response::success([
                 'table' => $tableName,
                 'indexes_dropped' => $results
             ], count($results) > 1 ? 'Indexes dropped successfully' : 'Index dropped successfully');
-        } elseif (empty($results)) {
+        } elseif (count($results) === 0) {
             // All indexes failed to drop
             return Response::error(
                 'Failed to drop index(es): ' . implode(', ', $failed),
@@ -891,7 +940,7 @@ class DatabaseController extends BaseController
         }
 
         // Check if all foreign keys were added successfully
-        if (empty($failed)) {
+        if (count($failed) === 0) {
             // All foreign keys were added successfully
             return Response::success(
                 [
@@ -902,7 +951,7 @@ class DatabaseController extends BaseController
                     ? 'Foreign key constraints added successfully'
                     : 'Foreign key constraint added successfully'
             );
-        } elseif (empty($results)) {
+        } elseif (count($results) === 0) {
             // All foreign keys failed to add
             return Response::error(
                 'Failed to add foreign key(s): ' . implode(', ', $failed),
@@ -974,7 +1023,7 @@ class DatabaseController extends BaseController
         }
 
         // Check if all constraints were dropped successfully
-        if (empty($failed)) {
+        if (count($failed) === 0) {
             // All constraints were dropped successfully
             return Response::success(
                 [
@@ -985,7 +1034,7 @@ class DatabaseController extends BaseController
                     ? 'Foreign key constraints dropped successfully'
                     : 'Foreign key constraint dropped successfully'
             );
-        } elseif (empty($results)) {
+        } elseif (count($results) === 0) {
             // All constraints failed to drop
             return Response::error(
                 'Failed to drop foreign key constraint(s): ' . implode(', ', $failed),
@@ -1031,14 +1080,14 @@ class DatabaseController extends BaseController
         $params = $data['params'] ?? [];
 
         // Safety checks
-        if (empty($sql)) {
+        if ($sql === '') {
             return Response::error('SQL query cannot be empty', Response::HTTP_BAD_REQUEST);
         }
 
         // Prevent destructive operations if the safety flag is not set
         $isSafeQuery = $data['allow_write'] ?? false;
         $firstWord = strtoupper(explode(' ', $sql)[0]);
-        if (!$isSafeQuery && in_array($firstWord, ['DELETE', 'TRUNCATE', 'DROP', 'ALTER', 'UPDATE', 'INSERT'])) {
+        if (!$isSafeQuery && in_array($firstWord, ['DELETE', 'TRUNCATE', 'DROP', 'ALTER', 'UPDATE', 'INSERT'], true)) {
             return Response::forbidden(
                 'Write operations require explicit allow_write flag for safety'
             );
@@ -1051,7 +1100,7 @@ class DatabaseController extends BaseController
         $results = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
         // For write operations, get the affected rows count
-        $isReadOperation = in_array($firstWord, ['SELECT', 'SHOW', 'DESCRIBE', 'EXPLAIN']);
+        $isReadOperation = in_array($firstWord, ['SELECT', 'SHOW', 'DESCRIBE', 'EXPLAIN'], true);
         $message = $isReadOperation
             ? 'Query executed successfully'
             : 'Query executed successfully, ' . count($results) . ' rows affected';
@@ -1105,10 +1154,10 @@ class DatabaseController extends BaseController
             ];
 
         // Process column deletions first to avoid constraint conflicts
-            if (!empty($data['deleted_columns'])) {
+            if (isset($data['deleted_columns']) && count($data['deleted_columns']) > 0) {
                 foreach ($data['deleted_columns'] as $column) {
-                    $success = $this->schemaManager->dropColumn($tableName, $column);
-                    if ($success) {
+                    $result = $this->schemaManager->dropColumn($tableName, $column);
+                    if ($result['success'] ?? false) {
                         $results['deleted_columns'][] = $column;
                     } else {
                         $results['failed_operations'][] = "Failed to delete column: $column";
@@ -1117,7 +1166,7 @@ class DatabaseController extends BaseController
             }
 
             // Process index deletions
-            if (!empty($data['deleted_indexes'])) {
+            if (isset($data['deleted_indexes']) && count($data['deleted_indexes']) > 0) {
                 foreach ($data['deleted_indexes'] as $index) {
                     $success = $this->schemaManager->dropIndex($tableName, $index);
                     if ($success) {
@@ -1129,7 +1178,7 @@ class DatabaseController extends BaseController
             }
 
             // Process foreign key deletions
-            if (!empty($data['deleted_foreign_keys'])) {
+            if (isset($data['deleted_foreign_keys']) && count($data['deleted_foreign_keys']) > 0) {
                 foreach ($data['deleted_foreign_keys'] as $constraintName) {
                     $success = $this->schemaManager->dropForeignKey($tableName, $constraintName);
                     if ($success) {
@@ -1141,7 +1190,7 @@ class DatabaseController extends BaseController
             }
 
             // Process new columns
-            if (!empty($data['columns'])) {
+            if (isset($data['columns']) && count($data['columns']) > 0) {
                 foreach ($data['columns'] as $column) {
                     if (!isset($column['name']) || !isset($column['type'])) {
                         $results['failed_operations'][] = "Invalid column definition";
@@ -1160,9 +1209,9 @@ class DatabaseController extends BaseController
                         }
                     }
 
-                    $success = $this->schemaManager->addColumn($tableName, $column['name'], $columnDef);
+                    $result = $this->schemaManager->addColumn($tableName, $column['name'], $columnDef);
 
-                    if ($success) {
+                    if ($result['success'] ?? false) {
                         $results['added_columns'][] = $column['name'];
                     } else {
                         $results['failed_operations'][] = "Failed to add column: " . $column['name'];
@@ -1171,7 +1220,7 @@ class DatabaseController extends BaseController
             }
 
             // Process new indexes
-            if (!empty($data['indexes'])) {
+            if (isset($data['indexes']) && count($data['indexes']) > 0) {
                 $formattedIndexes = array_map(function ($index) use ($tableName) {
                     return [
                         'table' => $tableName,
@@ -1201,7 +1250,7 @@ class DatabaseController extends BaseController
             }
 
             // Process new foreign keys
-            if (!empty($data['foreign_keys'])) {
+            if (isset($data['foreign_keys']) && count($data['foreign_keys']) > 0) {
                 foreach ($data['foreign_keys'] as $fk) {
                     if (!isset($fk['column']) || !isset($fk['references']) || !isset($fk['on'])) {
                         $results['failed_operations'][] = "Invalid foreign key definition";
@@ -1231,7 +1280,7 @@ class DatabaseController extends BaseController
             }
 
             // Return appropriate response based on results
-            if (empty($results['failed_operations'])) {
+            if (count($results['failed_operations']) === 0) {
                 return Response::success($results, 'Table schema updated successfully');
             } else {
                 // Some operations failed, but others might have succeeded
@@ -1255,6 +1304,14 @@ class DatabaseController extends BaseController
      *
      * @return array Database statistics data
      */
+    /**
+     * Get database statistics data with caching (for internal use)
+     *
+     * @return array{
+     *     tables: array<array{table_name: string, schema: string, size: int, rows: int, avg_row_size: int}>,
+     *     total_tables: int
+     * } Database statistics data
+     */
     public function getDatabaseStatsData(): array
     {
         return $this->cacheResponse(
@@ -1264,7 +1321,7 @@ class DatabaseController extends BaseController
                 $tables = $this->schemaManager->getTables();
                 error_log("Retrieved " . count($tables) . " tables from the database");
 
-                if (empty($tables)) {
+                if (count($tables) === 0) {
                     return ['tables' => [], 'total_tables' => 0];
                 }
 
@@ -1336,7 +1393,18 @@ class DatabaseController extends BaseController
      * @param array $params Route parameters containing table name
      * @return mixed HTTP response
      */
-    public function importTableData($params): mixed
+    /**
+     * Import data into a database table
+     *
+     * Handles bulk import of data into the specified table with options for:
+     * - Skipping first row if it contains headers
+     * - Updating existing records by matching ID
+     * - Skipping rows with errors and continuing
+     *
+     * @param array{name: string} $params Route parameters containing table name
+     * @return mixed HTTP response
+     */
+    public function importTableData(array $params): mixed
     {
         // Permission check for data import
         $this->requirePermission('database.data.import', 'database');
@@ -1347,23 +1415,13 @@ class DatabaseController extends BaseController
         // Require low risk behavior for bulk operations
         $this->requireLowRiskBehavior(0.5, 'data_import');
 
-        if (!is_array($params)) {
-            return Response::error('Invalid parameters', Response::HTTP_BAD_REQUEST);
-        }
         $tableName = $params['name'] ?? null;
-        if (!$tableName) {
+        if ($tableName === null) {
             return Response::error('Table name is required', Response::HTTP_BAD_REQUEST);
         }
 
         // Get request data
         $data = RequestHelper::getRequestData();
-
-        if (!is_array($data)) {
-            return Response::error(
-                'Invalid request format. Expected JSON object.',
-                Response::HTTP_BAD_REQUEST
-            );
-        }
 
         if (!isset($data['data']) || !is_array($data['data'])) {
             return Response::error(
@@ -1388,7 +1446,7 @@ class DatabaseController extends BaseController
         $columnNames = array_column($tableColumns, 'name');
 
         // Skip first row if it contains headers and option is enabled
-        if ($skipFirstRow && !empty($importData)) {
+        if ($skipFirstRow && count($importData) > 0) {
             array_shift($importData);
         }
 
@@ -1405,9 +1463,9 @@ class DatabaseController extends BaseController
      * Process batch import with transactions for optimal performance
      *
      * @param string $tableName
-     * @param array $importData
-     * @param array $options
-     * @param array $columnNames
+     * @param array<string, mixed> $importData
+     * @param array<string, mixed> $options
+     * @param array<string> $columnNames
      * @return mixed
      */
     private function processBatchImport(string $tableName, array $importData, array $options, array $columnNames): mixed
@@ -1436,7 +1494,7 @@ class DatabaseController extends BaseController
                         }
 
                         // Handle update existing records
-                        if ($updateExisting && isset($filteredRow['id'])) {
+                        if ((bool)$updateExisting && isset($filteredRow['id'])) {
                             $this->upsertRecord($tableName, $filteredRow);
                         } else {
                             $this->db->table($tableName)->insert($filteredRow);
@@ -1468,9 +1526,9 @@ class DatabaseController extends BaseController
      * Process large imports (placeholder for background job implementation)
      *
      * @param string $tableName
-     * @param array $importData
-     * @param array $options
-     * @param array $columnNames
+     * @param array<string, mixed> $importData
+     * @param array<string, mixed> $options
+     * @param array<string> $columnNames
      * @return mixed
      */
     private function processLargeImport(string $tableName, array $importData, array $options, array $columnNames): mixed
@@ -1502,7 +1560,7 @@ class DatabaseController extends BaseController
                         $filteredRow = $this->validateAndFilterRow($row, $columnNames);
 
                         if ($filteredRow !== null) {
-                            if ($updateExisting && isset($filteredRow['id'])) {
+                            if ((bool)$updateExisting && isset($filteredRow['id'])) {
                                 // Handle updates individually for now
                                 $this->upsertRecord($tableName, $filteredRow);
                                 $imported++;
@@ -1515,7 +1573,7 @@ class DatabaseController extends BaseController
                     }
 
                 // Bulk insert valid rows
-                    if (!empty($validRows)) {
+                    if (count($validRows) > 0) {
                         $this->bulkInsert($tableName, $validRows);
                         $imported += count($validRows);
                     }
@@ -1549,12 +1607,12 @@ class DatabaseController extends BaseController
      * Validate and filter row data
      *
      * @param mixed $row
-     * @param array $columnNames
-     * @return array|null
+     * @param array<string> $columnNames
+     * @return array<string, mixed>|null
      */
     private function validateAndFilterRow($row, array $columnNames): ?array
     {
-        if (empty($row) || !is_array($row)) {
+        if (!is_array($row) || count($row) === 0) {
             return null;
         }
 
@@ -1563,19 +1621,19 @@ class DatabaseController extends BaseController
             if (!is_string($column)) {
                 continue;
             }
-            if (in_array($column, $columnNames)) {
+            if (in_array($column, $columnNames, true)) {
                 $filteredRow[$column] = $value;
             }
         }
 
-        return empty($filteredRow) ? null : $filteredRow;
+        return count($filteredRow) === 0 ? null : $filteredRow;
     }
 
     /**
      * Insert or update record using database-agnostic upsert
      *
      * @param string $tableName
-     * @param array $data
+     * @param array<string, mixed> $data
      * @return void
      */
     private function upsertRecord(string $tableName, array $data): void
@@ -1592,12 +1650,12 @@ class DatabaseController extends BaseController
      * Bulk insert multiple records using database-agnostic method
      *
      * @param string $tableName
-     * @param array $rows
+     * @param array<array<string, mixed>> $rows
      * @return void
      */
     private function bulkInsert(string $tableName, array $rows): void
     {
-        if (empty($rows)) {
+        if (count($rows) === 0) {
             return;
         }
 
@@ -1608,6 +1666,12 @@ class DatabaseController extends BaseController
      * Bulk delete records from a table
      *
      * @param array $params Route parameters containing table name
+     * @return mixed HTTP response
+     */
+    /**
+     * Bulk delete records from a table
+     *
+     * @param array{name: string} $params Route parameters containing table name
      * @return mixed HTTP response
      */
     public function bulkDelete(array $params): mixed
@@ -1621,26 +1685,17 @@ class DatabaseController extends BaseController
         // Require very low risk behavior for bulk deletion
         $this->requireLowRiskBehavior(0.2, 'bulk_deletion');
 
-        if (!is_array($params)) {
-            return Response::error('Invalid parameters', Response::HTTP_BAD_REQUEST);
-        }
 
         $tableName = $params['name'] ?? null;
-        if (!$tableName) {
+        if ($tableName === null) {
             return Response::error('Table name is required', Response::HTTP_BAD_REQUEST);
         }
 
         // Get request data
         $data = RequestHelper::getRequestData();
 
-        if (!is_array($data)) {
-            return Response::error(
-                'Invalid request format. Expected JSON object.',
-                Response::HTTP_BAD_REQUEST
-            );
-        }
 
-        if (!isset($data['ids']) || !is_array($data['ids']) || empty($data['ids'])) {
+        if (!isset($data['ids']) || !is_array($data['ids']) || count($data['ids']) === 0) {
             return Response::error(
                 'IDs array is required and cannot be empty',
                 Response::HTTP_BAD_REQUEST
@@ -1674,7 +1729,7 @@ class DatabaseController extends BaseController
             $tableColumns = $this->schemaManager->getTableColumns($tableName);
             $columnNames = array_column($tableColumns, 'name');
 
-            if (!in_array($statusColumn, $columnNames)) {
+            if (!in_array($statusColumn, $columnNames, true)) {
                 return Response::error(
                     "Column '{$statusColumn}' does not exist in table '{$tableName}'. Cannot perform soft delete.",
                     Response::HTTP_BAD_REQUEST
@@ -1727,6 +1782,12 @@ class DatabaseController extends BaseController
      * @param array $params Route parameters containing table name
      * @return mixed HTTP response
      */
+    /**
+     * Bulk update records in a table
+     *
+     * @param array{name: string} $params Route parameters containing table name
+     * @return mixed HTTP response
+     */
     public function bulkUpdate(array $params): mixed
     {
         // Permission check for bulk updates
@@ -1738,33 +1799,24 @@ class DatabaseController extends BaseController
         // Require low risk behavior for bulk operations
         $this->requireLowRiskBehavior(0.4, 'bulk_update');
 
-        if (!is_array($params)) {
-            return Response::error('Invalid parameters', Response::HTTP_BAD_REQUEST);
-        }
 
         $tableName = $params['name'] ?? null;
-        if (!$tableName) {
+        if ($tableName === null) {
             return Response::error('Table name is required', Response::HTTP_BAD_REQUEST);
         }
 
         // Get request data
         $data = RequestHelper::getRequestData();
 
-        if (!is_array($data)) {
-            return Response::error(
-                'Invalid request format. Expected JSON object.',
-                Response::HTTP_BAD_REQUEST
-            );
-        }
 
-        if (!isset($data['ids']) || !is_array($data['ids']) || empty($data['ids'])) {
+        if (!isset($data['ids']) || !is_array($data['ids']) || count($data['ids']) === 0) {
             return Response::error(
                 'IDs array is required and cannot be empty',
                 Response::HTTP_BAD_REQUEST
             );
         }
 
-        if (!isset($data['data']) || !is_array($data['data']) || empty($data['data'])) {
+        if (!isset($data['data']) || !is_array($data['data']) || count($data['data']) === 0) {
             return Response::error(
                 'Update data is required and cannot be empty',
                 Response::HTTP_BAD_REQUEST
@@ -1796,12 +1848,12 @@ class DatabaseController extends BaseController
         // Filter update data to only include valid columns
         $filteredUpdateData = [];
         foreach ($updateData as $column => $value) {
-            if (in_array($column, $columnNames)) {
+            if (in_array($column, $columnNames, true)) {
                 $filteredUpdateData[$column] = $value;
             }
         }
 
-        if (empty($filteredUpdateData)) {
+        if (count($filteredUpdateData) === 0) {
             return Response::error(
                 'No valid columns found in update data',
                 Response::HTTP_BAD_REQUEST
@@ -1873,7 +1925,7 @@ class DatabaseController extends BaseController
      * Build database-agnostic bulk update query
      *
      * @param string $tableName
-     * @param array $setClauses
+     * @param array<string> $setClauses
      * @param string $placeholders
      * @return string
      */
@@ -2002,7 +2054,7 @@ class DatabaseController extends BaseController
 
         // Validate format
         $supportedFormats = ['json', 'sql', 'yaml', 'php'];
-        if (!in_array($format, $supportedFormats)) {
+        if (!in_array($format, $supportedFormats, true)) {
             return Response::error(
                 "Unsupported format '{$format}'. Supported formats: " . implode(', ', $supportedFormats),
                 Response::HTTP_BAD_REQUEST
@@ -2155,7 +2207,7 @@ class DatabaseController extends BaseController
         // Get the original change from audit logs
         $originalChange = $this->getAuditLogById($changeId);
 
-        if (!$originalChange) {
+        if ($originalChange === null) {
             return Response::notFound('Change not found');
         }
 
@@ -2190,7 +2242,7 @@ class DatabaseController extends BaseController
      * @param string $tableName
      * @param int $limit
      * @param int $offset
-     * @return array
+     * @return array<array<string, mixed>>
      */
     private function getSchemaAuditLogs(string $tableName, int $limit, int $offset): array
     {
@@ -2216,7 +2268,7 @@ class DatabaseController extends BaseController
         // Filter logs by table name using PHP JSON parsing (database-agnostic)
         $filteredLogs = [];
         foreach ($allLogs as $log) {
-            if (!empty($log['context'])) {
+            if (isset($log['context']) && is_string($log['context']) && $log['context'] !== '') {
                 $context = json_decode($log['context'], true);
                 if (
                     is_array($context) &&
@@ -2255,7 +2307,7 @@ class DatabaseController extends BaseController
      * Get migration history for a table
      *
      * @param string $tableName
-     * @return array
+     * @return array<array<string, mixed>>
      */
     private function getMigrationHistory(string $tableName): array
     {
@@ -2275,7 +2327,7 @@ class DatabaseController extends BaseController
      * Get audit log by ID
      *
      * @param string $changeId
-     * @return array|null
+     * @return array<string, mixed>|null
      */
     private function getAuditLogById(string $changeId): ?array
     {
@@ -2294,8 +2346,8 @@ class DatabaseController extends BaseController
      * - Excludes system columns (id, uuid, created_at, etc.)
      * - Excludes password/token columns for security
      *
-     * @param array $columns Column metadata from SchemaManager
-     * @return array Array of searchable column names
+     * @param array<array<string, mixed>> $columns Column metadata from SchemaManager
+     * @return array<string> Array of searchable column names
      */
     private function detectSearchableColumns(array $columns): array
     {
@@ -2311,7 +2363,7 @@ class DatabaseController extends BaseController
             $columnType = strtolower($column['type']);
 
             // Skip excluded columns
-            if (in_array(strtolower($columnName), $excludedColumns)) {
+            if (in_array(strtolower($columnName), $excludedColumns, true)) {
                 continue;
             }
 
@@ -2338,9 +2390,9 @@ class DatabaseController extends BaseController
      * Ensures requested search fields are valid columns in the table
      * to prevent SQL errors and injection attempts.
      *
-     * @param array $searchFields Requested search field names
-     * @param array $columns Table column metadata
-     * @return array Valid search fields that exist in the table
+     * @param array<string> $searchFields Requested search field names
+     * @param array<array<string, mixed>> $columns Table column metadata
+     * @return array<string> Valid search fields that exist in the table
      */
     private function validateSearchFields(array $searchFields, array $columns): array
     {
@@ -2348,7 +2400,7 @@ class DatabaseController extends BaseController
         $validFields = [];
 
         foreach ($searchFields as $field) {
-            if (in_array($field, $columnNames)) {
+            if (in_array($field, $columnNames, true)) {
                 $validFields[] = $field;
             }
         }
@@ -2362,9 +2414,9 @@ class DatabaseController extends BaseController
      * Ensures filter fields exist in table and operators are valid.
      * Prevents SQL injection by validating column names and operators.
      *
-     * @param array $filters Raw filter data from request
-     * @param array $columns Table column metadata
-     * @return array Validated and sanitized filters
+     * @param array<string, mixed> $filters Raw filter data from request
+     * @param array<array<string, mixed>> $columns Table column metadata
+     * @return array<string, mixed> Validated and sanitized filters
      */
     private function validateFilters(array $filters, array $columns): array
     {
@@ -2380,7 +2432,7 @@ class DatabaseController extends BaseController
 
         foreach ($filters as $field => $condition) {
             // Validate field exists in table
-            if (!in_array($field, $columnNames)) {
+            if (!in_array($field, $columnNames, true)) {
                 continue;
             }
 
@@ -2388,11 +2440,11 @@ class DatabaseController extends BaseController
                 $validCondition = [];
                 foreach ($condition as $operator => $value) {
                     // Validate operator
-                    if (in_array(strtolower($operator), $validOperators)) {
+                    if (in_array(strtolower($operator), $validOperators, true)) {
                         $validCondition[$operator] = $value;
                     }
                 }
-                if (!empty($validCondition)) {
+                if (count($validCondition) > 0) {
                     $validFilters[$field] = $validCondition;
                 }
             } else {
@@ -2407,18 +2459,18 @@ class DatabaseController extends BaseController
     /**
      * Resolve foreign key fields to include human-readable display labels
      *
-     * @param array $records The data records from the query
-     * @param array $columns Column metadata from SchemaManager
-     * @return array Records with added foreign key display labels
+     * @param array<array<string, mixed>> $records The data records from the query
+     * @param array<array<string, mixed>> $columns Column metadata from SchemaManager
+     * @return array<array<string, mixed>> Records with added foreign key display labels
      */
     private function resolveForeignKeyDisplayLabels(array $records, array $columns): array
     {
         // Get foreign key columns
         $foreignKeyColumns = array_filter($columns, function ($col) {
-            return !empty($col['relationships']);
+            return isset($col['relationships']) && count($col['relationships']) > 0;
         });
 
-        if (empty($foreignKeyColumns)) {
+        if (count($foreignKeyColumns) === 0) {
             return $records; // No foreign keys to resolve
         }
 
@@ -2446,7 +2498,7 @@ class DatabaseController extends BaseController
             foreach ($foreignKeyGroups as $table => &$group) {
                 foreach ($group['columns'] as $columnMap) {
                     $value = $record[$columnMap['local_column']];
-                    if ($value !== null && !in_array($value, $group['values'])) {
+                    if ($value !== null && !in_array($value, $group['values'], true)) {
                         $group['values'][] = $value;
                     }
                 }
@@ -2504,8 +2556,8 @@ class DatabaseController extends BaseController
     /**
      * Generate smart display label using the same logic as frontend
      *
-     * @param array $record The database record
-     * @param array $columns Column metadata for the table
+     * @param array<string, mixed> $record The database record
+     * @param array<array<string, mixed>> $columns Column metadata for the table
      * @return string Human-readable display label
      */
     private function generateSmartLabel(array $record, array $columns): string
@@ -2525,7 +2577,7 @@ class DatabaseController extends BaseController
         $nonSystemValues = [];
         foreach ($record as $key => $value) {
             if (
-                !in_array($key, ['id', 'created_at', 'updated_at', 'deleted_at']) &&
+                !in_array($key, ['id', 'created_at', 'updated_at', 'deleted_at'], true) &&
                 !str_contains($key, 'password') &&
                 $value !== null && $value !== ''
             ) {
@@ -2536,14 +2588,15 @@ class DatabaseController extends BaseController
             }
         }
 
-        return implode(' - ', $nonSystemValues) ?: 'Record #' . ($record['id'] ?? 'Unknown');
+        $result = implode(' - ', $nonSystemValues);
+        return $result !== '' ? $result : 'Record #' . ($record['id'] ?? 'Unknown');
     }
 
     /**
      * Filter columns suitable for display (same logic as frontend)
      *
-     * @param array $columns Column metadata
-     * @return array Filtered columns suitable for display
+     * @param array<array<string, mixed>> $columns Column metadata
+     * @return array<array<string, mixed>> Filtered columns suitable for display
      */
     private function getDisplayableColumnsForLabels(array $columns): array
     {
@@ -2566,7 +2619,10 @@ class DatabaseController extends BaseController
             }
 
             // Include unique identifiers
-            if ($col['is_unique'] && !$col['is_primary']) {
+            if (
+                isset($col['is_unique']) && $col['is_unique'] === true &&
+                isset($col['is_primary']) && $col['is_primary'] !== true
+            ) {
                 return true;
             }
 
@@ -2577,9 +2633,9 @@ class DatabaseController extends BaseController
     /**
      * Score and select best fields for display (same logic as frontend)
      *
-     * @param array $columns Filtered displayable columns
-     * @param array $record The database record
-     * @return array Top scored fields for display
+     * @param array<array<string, mixed>> $columns Filtered displayable columns
+     * @param array<string, mixed> $record The database record
+     * @return array<array<string, mixed>> Top scored fields for display
      */
     private function selectBestDisplayFields(array $columns, array $record): array
     {
@@ -2597,7 +2653,7 @@ class DatabaseController extends BaseController
             }
 
             // Medium scores for unique identifiers
-            if ($col['is_unique']) {
+            if (isset($col['is_unique']) && $col['is_unique'] === true) {
                 $score += 60;
             }
             if (preg_match('/^(username|email|code|slug)$/i', $col['name'])) {
@@ -2619,7 +2675,7 @@ class DatabaseController extends BaseController
 
             // Check if field has meaningful data
             $value = $record[$col['name']] ?? null;
-            if (empty($value) || (is_string($value) && trim($value) === '')) {
+            if ($value === null || $value === '' || (is_string($value) && trim($value) === '')) {
                 $score = 0;
             }
 

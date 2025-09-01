@@ -180,25 +180,25 @@ class SchedulerCommand extends BaseCommand
     {
         $this->io->title('⏰ Running Scheduled Jobs');
 
-        $dryRun = $input->getOption('dry-run');
-        $force = $input->getOption('force');
+        $dryRun = (bool) $input->getOption('dry-run');
+        $force = (bool) $input->getOption('force');
 
-        if ($dryRun) {
+        if ($dryRun === true) {
             $this->io->warning('DRY RUN MODE - Jobs will not be executed');
         }
 
         $this->io->text('Checking for due jobs...');
 
-        if ($force) {
+        if ($force === true) {
             $this->io->warning('FORCE MODE - All jobs will be executed regardless of schedule');
-            if ($dryRun) {
+            if ($dryRun === true) {
                 $this->showJobsToRun(true);
             } else {
                 $this->scheduler->runAllJobs();
                 $this->io->success('All jobs executed (forced)');
             }
         } else {
-            if ($dryRun) {
+            if ($dryRun === true) {
                 $this->showJobsToRun(false);
             } else {
                 $this->scheduler->runDueJobs();
@@ -215,7 +215,7 @@ class SchedulerCommand extends BaseCommand
 
         $interval = (int) $input->getOption('interval');
         $maxRuns = (int) $input->getOption('max-runs');
-        $watch = $input->getOption('watch');
+        $watch = (bool) $input->getOption('watch');
 
         $this->io->text("Worker interval: {$interval} seconds");
         if ($maxRuns > 0) {
@@ -242,7 +242,7 @@ class SchedulerCommand extends BaseCommand
             while (true) {
                 $runStart = time();
 
-                if ($watch) {
+                if ($watch === true) {
                     $this->clearScreen();
                     $this->io->title('🔄 Scheduler Worker (Watch Mode)');
                     $this->displayWorkerStatus($runCount, $startTime, $interval);
@@ -267,7 +267,7 @@ class SchedulerCommand extends BaseCommand
                 $sleepTime = max(0, $interval - $executionTime);
 
                 if ($sleepTime > 0) {
-                    if (!$watch) {
+                    if ($watch !== true) {
                         $this->io->text("Sleeping for {$sleepTime} seconds...");
                     }
                     sleep($sleepTime);
@@ -293,14 +293,14 @@ class SchedulerCommand extends BaseCommand
 
         $jobs = $this->scheduler->getJobs();
         $filter = $input->getOption('filter');
-        $format = $input->getOption('output-format');
+        $format = (string) $input->getOption('output-format');
 
-        if ($filter) {
-            $jobs = $this->filterJobs($jobs, $filter);
+        if ($filter !== false && $filter !== null) {
+            $jobs = $this->filterJobs($jobs, (string) $filter);
             $this->io->text("Filtered by: {$filter}");
         }
 
-        if (empty($jobs)) {
+        if (count($jobs) === 0) {
             $this->io->warning('No scheduled jobs found');
             return self::SUCCESS;
         }
@@ -320,7 +320,7 @@ class SchedulerCommand extends BaseCommand
 
         // Show next upcoming jobs
         $upcomingJobs = $this->getUpcomingJobs($jobs, 5);
-        if (!empty($upcomingJobs)) {
+        if (count($upcomingJobs) > 0) {
             $this->io->section('⏳ Next Upcoming Jobs');
             $this->displayUpcomingJobs($upcomingJobs);
         }
@@ -336,10 +336,19 @@ class SchedulerCommand extends BaseCommand
         $description = $input->getOption('description');
         $timeout = (int) $input->getOption('timeout');
 
-        if (!$jobName || !$cron || !$command) {
+        if (
+            $jobName === false || $jobName === null ||
+            $cron === false || $cron === null ||
+            $command === false || $command === null
+        ) {
             $this->io->error('Missing required options: --job-name, --cron, and --command are required');
             return self::FAILURE;
         }
+
+        $jobName = (string) $jobName;
+        $cron = (string) $cron;
+        $command = (string) $command;
+        $description = $description !== false && $description !== null ? (string) $description : null;
 
         $this->io->title("➕ Adding New Job: {$jobName}");
 
@@ -369,10 +378,12 @@ class SchedulerCommand extends BaseCommand
     {
         $jobName = $input->getOption('job-name');
 
-        if (!$jobName) {
+        if ($jobName === false || $jobName === null) {
             $this->io->error('Job name is required: --job-name');
             return self::FAILURE;
         }
+
+        $jobName = (string) $jobName;
 
         $this->io->title("🗑️ Removing Job: {$jobName}");
 
@@ -410,13 +421,16 @@ class SchedulerCommand extends BaseCommand
 
         $this->io->title('📜 Job Execution History');
 
-        if ($jobName) {
+        if ($jobName !== false && $jobName !== null) {
+            $jobName = (string) $jobName;
             $this->io->text("Showing history for job: {$jobName}");
+        } else {
+            $jobName = null;
         }
 
         // This would require the scheduler to maintain execution history
         $this->io->text("History functionality would be implemented here");
-        $this->io->text("Would show last {$limit} executions" . ($jobName ? " for {$jobName}" : ''));
+        $this->io->text("Would show last {$limit} executions" . ($jobName !== null ? " for {$jobName}" : ''));
 
         return self::SUCCESS;
     }
@@ -445,7 +459,7 @@ class SchedulerCommand extends BaseCommand
             $this->io->text('Would execute due jobs:');
         }
 
-        if (empty($jobsToRun)) {
+        if (count($jobsToRun) === 0) {
             $this->io->text('  No jobs to execute');
         } else {
             foreach ($jobsToRun as $job) {
@@ -454,10 +468,14 @@ class SchedulerCommand extends BaseCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $jobs
+     */
     private function displayExecutedJobs(array $jobs): void
     {
         foreach ($jobs as $job) {
-            $status = $job['success'] ? '✅' : '❌';
+            $success = is_bool($job['success']) ? $job['success'] : false;
+            $status = $success === true ? '✅' : '❌';
             $duration = isset($job['duration']) ? " ({$job['duration']}ms)" : '';
             $this->io->text("  {$status} {$job['name']}{$duration}");
         }
@@ -485,12 +503,16 @@ class SchedulerCommand extends BaseCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $jobs
+     * @return array<string, mixed>
+     */
     private function filterJobs(array $jobs, string $filter): array
     {
         return array_filter($jobs, function ($job) use ($filter) {
             return match ($filter) {
                 'enabled' => $job['enabled'] ?? true,
-                'disabled' => !($job['enabled'] ?? true),
+                'disabled' => ($job['enabled'] ?? true) !== true,
                 'running' => $job['status'] === 'running',
                 'failed' => $job['status'] === 'failed',
                 default => true
@@ -498,6 +520,9 @@ class SchedulerCommand extends BaseCommand
         });
     }
 
+    /**
+     * @param array<string, mixed> $jobs
+     */
     private function displayJobs(array $jobs, string $format): void
     {
         switch ($format) {
@@ -515,12 +540,16 @@ class SchedulerCommand extends BaseCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $jobs
+     */
     private function displayJobsTable(array $jobs): void
     {
         $rows = [['Name', 'Schedule', 'Status', 'Last Run', 'Next Run']];
 
         foreach ($jobs as $job) {
-            $status = ($job['enabled'] ?? true) ? '✅ Enabled' : '❌ Disabled';
+            $enabled = is_bool($job['enabled']) ? $job['enabled'] : true;
+            $status = $enabled === true ? '✅ Enabled' : '❌ Disabled';
             $lastRun = $job['last_run'] ?? 'Never';
             $nextRun = $job['next_run'] ?? 'Calculating...';
 
@@ -536,6 +565,10 @@ class SchedulerCommand extends BaseCommand
         $this->io->table($rows[0], array_slice($rows, 1));
     }
 
+    /**
+     * @param array<string, mixed> $jobs
+     * @return array<string, int>
+     */
     private function calculateSchedulerStats(array $jobs): array
     {
         $total = count($jobs);
@@ -552,6 +585,9 @@ class SchedulerCommand extends BaseCommand
         ];
     }
 
+    /**
+     * @param array<string, int> $stats
+     */
     private function displaySchedulerStats(array $stats): void
     {
         $rows = [
@@ -566,6 +602,10 @@ class SchedulerCommand extends BaseCommand
         $this->io->table($rows[0], array_slice($rows, 1));
     }
 
+    /**
+     * @param array<string, mixed> $jobs
+     * @return array<string, mixed>
+     */
     private function getUpcomingJobs(array $jobs, int $limit): array
     {
         // This would calculate the next run times for all jobs
@@ -573,6 +613,9 @@ class SchedulerCommand extends BaseCommand
         return array_slice($jobs, 0, $limit);
     }
 
+    /**
+     * @param array<string, mixed> $jobs
+     */
     private function displayUpcomingJobs(array $jobs): void
     {
         $rows = [['Job', 'Next Run', 'Schedule']];
@@ -594,10 +637,12 @@ class SchedulerCommand extends BaseCommand
         $jobName = $input->getOption('job-name');
         $action = $enable ? 'enable' : 'disable';
 
-        if (!$jobName) {
+        if ($jobName === false || $jobName === null) {
             $this->io->error("Job name is required: --job-name");
             return self::FAILURE;
         }
+
+        $jobName = (string) $jobName;
 
         $this->io->title(($enable ? '✅ Enabling' : '❌ Disabling') . " Job: {$jobName}");
 
@@ -613,6 +658,9 @@ class SchedulerCommand extends BaseCommand
         return self::SUCCESS;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function performHealthCheck(): array
     {
         $issues = [];
@@ -620,7 +668,7 @@ class SchedulerCommand extends BaseCommand
 
         // Check if scheduler is properly configured
         $jobs = $this->scheduler->getJobs();
-        if (empty($jobs)) {
+        if (count($jobs) === 0) {
             $warnings[] = 'No jobs are currently scheduled';
         }
 
@@ -639,7 +687,7 @@ class SchedulerCommand extends BaseCommand
             }
         }
 
-        $overallStatus = empty($issues) ? 'healthy' : 'unhealthy';
+        $overallStatus = count($issues) === 0 ? 'healthy' : 'unhealthy';
 
         return [
             'overall_status' => $overallStatus,
@@ -650,6 +698,9 @@ class SchedulerCommand extends BaseCommand
         ];
     }
 
+    /**
+     * @param array<string, mixed> $health
+     */
     private function displayHealthStatus(array $health): void
     {
         $status = $health['overall_status'] === 'healthy' ? '✅ Healthy' : '❌ Unhealthy';
@@ -658,21 +709,24 @@ class SchedulerCommand extends BaseCommand
         $this->io->text("Enabled Jobs: {$health['enabled_jobs']}");
         $this->io->newLine();
 
-        if (!empty($health['issues'])) {
+        $issues = is_array($health['issues']) ? $health['issues'] : [];
+        $warnings = is_array($health['warnings']) ? $health['warnings'] : [];
+
+        if (count($issues) > 0) {
             $this->io->section('🚨 Critical Issues');
-            foreach ($health['issues'] as $issue) {
+            foreach ($issues as $issue) {
                 $this->io->error($issue);
             }
         }
 
-        if (!empty($health['warnings'])) {
+        if (count($warnings) > 0) {
             $this->io->section('⚠️ Warnings');
-            foreach ($health['warnings'] as $warning) {
+            foreach ($warnings as $warning) {
                 $this->io->warning($warning);
             }
         }
 
-        if (empty($health['issues']) && empty($health['warnings'])) {
+        if (count($issues) === 0 && count($warnings) === 0) {
             $this->io->success('No issues detected');
         }
     }
@@ -698,7 +752,7 @@ class SchedulerCommand extends BaseCommand
             ['Name', $name],
             ['Schedule', $cron],
             ['Command', $command],
-            ['Description', $description ?: 'No description'],
+            ['Description', $description ?? 'No description'],
             ['Timeout', $timeout . ' seconds'],
             ['Status', 'Enabled']
         ];

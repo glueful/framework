@@ -134,6 +134,8 @@ abstract class BaseController
 
     /**
      * Create validation error response
+     *
+     * @param array<string, string> $errors
      */
     protected function validationError(array $errors, string $message = 'Validation failed'): Response
     {
@@ -174,6 +176,10 @@ abstract class BaseController
 
     /**
      * Create paginated response
+     *
+     * @param array<mixed> $data
+     * @param array<string, mixed> $meta
+     * @param array<string> $groups
      */
     protected function paginated(
         array $data,
@@ -212,7 +218,7 @@ abstract class BaseController
      * ```
      *
      * @param mixed $data Data to serialize (array, object, or primitive)
-     * @param array $groups Serialization groups to control field visibility
+     * @param array<string> $groups Serialization groups to control field visibility
      * @param string $message Response message for client
      * @return Response JSON response with serialized data
      */
@@ -220,7 +226,7 @@ abstract class BaseController
     {
         $context = SerializationContext::create();
 
-        if (!empty($groups)) {
+        if (count($groups) > 0) {
             $context->withGroups($groups);
         }
 
@@ -230,6 +236,8 @@ abstract class BaseController
 
     /**
      * Create serialized created response
+     *
+     * @param array<string> $groups
      */
     protected function serializeCreated(
         mixed $data,
@@ -238,7 +246,7 @@ abstract class BaseController
     ): Response {
         $context = SerializationContext::create();
 
-        if (!empty($groups)) {
+        if (count($groups) > 0) {
             $context->withGroups($groups);
         }
 
@@ -258,6 +266,10 @@ abstract class BaseController
 
     /**
      * Create serialized response with metadata (flattened structure)
+     *
+     * @param array<mixed> $data
+     * @param array<string, mixed> $meta
+     * @param array<string> $groups
      */
     protected function serializeWithMeta(
         array $data,
@@ -267,7 +279,7 @@ abstract class BaseController
     ): Response {
         $context = SerializationContext::create();
 
-        if (!empty($groups)) {
+        if (count($groups) > 0) {
             $context->withGroups($groups);
         }
 
@@ -292,7 +304,8 @@ abstract class BaseController
         }
 
         // Add ETag for conditional requests
-        $response->setEtag(md5($response->getContent()));
+        $content = $response->getContent();
+        $response->setEtag(md5($content !== false ? $content : ''));
 
         return $response;
     }
@@ -354,15 +367,15 @@ abstract class BaseController
         $notModified = false;
 
         // Check If-Modified-Since
-        if ($ifModifiedSince && $lastModified) {
+        if ($ifModifiedSince !== null && $lastModified !== null) {
             $ifModifiedSinceDate = \DateTime::createFromFormat('D, d M Y H:i:s T', $ifModifiedSince);
-            if ($ifModifiedSinceDate && $lastModified <= $ifModifiedSinceDate) {
+            if ($ifModifiedSinceDate !== false && $lastModified <= $ifModifiedSinceDate) {
                 $notModified = true;
             }
         }
 
         // Check If-None-Match (ETag)
-        if ($ifNoneMatch && $etag) {
+        if ($ifNoneMatch !== null && $etag !== null) {
             if ($ifNoneMatch === $etag || $ifNoneMatch === '"' . $etag . '"') {
                 $notModified = true;
             }
@@ -370,10 +383,10 @@ abstract class BaseController
 
         if ($notModified) {
             $response = new Response('', 304);
-            if ($etag) {
+            if ($etag !== null) {
                 $response->setEtag($etag);
             }
-            if ($lastModified) {
+            if ($lastModified !== null) {
                 $response->setLastModified($lastModified);
             }
             return $response;
@@ -408,8 +421,8 @@ abstract class BaseController
      * }
      * ```
      *
-     * @param array $data Request data to validate
-     * @param array $rules Validation rules keyed by field name
+     * @param array<string, mixed> $data Request data to validate
+     * @param array<string, string> $rules Validation rules keyed by field name
      * @return Response|null Validation error response if validation fails, null if valid
      */
     protected function validateRequest(array $data, array $rules): ?Response
@@ -425,11 +438,13 @@ abstract class BaseController
                 continue;
             }
 
-            if ($value !== null && str_contains($rule, 'email') && !filter_var($value, FILTER_VALIDATE_EMAIL)) {
-                $errors[$field] = "{$field} must be a valid email";
+            if ($value !== null && str_contains($rule, 'email')) {
+                if (filter_var($value, FILTER_VALIDATE_EMAIL) === false) {
+                    $errors[$field] = "{$field} must be a valid email";
+                }
             }
 
-            if ($value !== null && preg_match('/max:(\d+)/', $rule, $matches)) {
+            if ($value !== null && preg_match('/max:(\d+)/', $rule, $matches) === 1) {
                 $maxLength = (int) $matches[1];
                 if (strlen((string) $value) > $maxLength) {
                     $errors[$field] = "{$field} must not exceed {$maxLength} characters";
@@ -437,7 +452,7 @@ abstract class BaseController
             }
         }
 
-        return empty($errors) ? null : $this->validationError($errors);
+        return count($errors) === 0 ? null : $this->validationError($errors);
     }
 
     /**
@@ -495,15 +510,15 @@ abstract class BaseController
      * $name = $data['name'] ?? null;
      * ```
      *
-     * @return array Parsed request data as associative array
+     * @return array<string, mixed> Parsed request data as associative array
      */
     protected function getRequestData(): array
     {
-        $contentType = $this->request->headers->get('Content-Type', '');
+        $contentType = $this->request->headers->get('Content-Type', '') ?? '';
 
         if (str_contains($contentType, 'application/json')) {
             $content = $this->request->getContent();
-            return $content ? json_decode($content, true) ?? [] : [];
+            return $content !== '' ? json_decode($content, true) ?? [] : [];
         }
 
         return $this->request->request->all();
@@ -526,20 +541,25 @@ abstract class BaseController
      * - PATCH: Partial resource updates
      * - Works with browsers that don't natively support PUT/PATCH
      *
-     * @return array Parsed request data for PUT/PATCH operations
+     * @return array<string, mixed> Parsed request data for PUT/PATCH operations
      */
     protected function getPutData(): array
     {
-        $contentType = $this->request->headers->get('Content-Type', '');
+        $contentType = $this->request->headers->get('Content-Type', '') ?? '';
 
         if (str_contains($contentType, 'application/json')) {
             $content = $this->request->getContent();
-            return $content ? json_decode($content, true) ?? [] : [];
+            return $content !== '' ? json_decode($content, true) ?? [] : [];
         }
 
         // For form-encoded PUT data
         $content = $this->request->getContent();
-        parse_str($content, $data);
+        parse_str($content, $parsedData);
+        // Ensure all keys are strings for return type compliance
+        $data = [];
+        foreach ($parsedData as $key => $value) {
+            $data[(string) $key] = $value;
+        }
         return $data;
     }
 }

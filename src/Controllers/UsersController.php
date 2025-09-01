@@ -12,9 +12,7 @@ use Glueful\Exceptions\BusinessLogicException;
 use Glueful\Auth\TokenStorageService;
 use Glueful\Database\Connection;
 use Symfony\Component\HttpFoundation\Request;
-use Glueful\Constants\ErrorCodes;
 use Glueful\Helpers\ValidationHelper;
-use Glueful\Http\SecureErrorResponse;
 
 /**
  * UsersController
@@ -135,7 +133,7 @@ class UsersController extends BaseController
 
         try {
             // Check if RBAC role service is available in container
-            if ($container->has('rbac.role_service') && !empty($userUuids)) {
+            if ($container->has('rbac.role_service') && $userUuids !== []) {
                 $roleService = $container->get('rbac.role_service');
                 // Use bulk method to fetch roles for all users in one go
                 $allUserRoles = $roleService->getBulkUserRoles($userUuids);
@@ -206,7 +204,7 @@ class UsersController extends BaseController
         $this->rateLimitResource('users', 'read');
 
         $user = $this->userRepository->find($uuid);
-        if (!$user) {
+        if ($user === null) {
             throw new NotFoundException('User not found');
         }
 
@@ -272,8 +270,8 @@ class UsersController extends BaseController
 
         // Enhanced input validation and sanitization
         $validationErrors = $this->validateUserInput($data, 'create');
-        if (!empty($validationErrors)) {
-            return Response::validation($validationErrors, 'Validation failed');
+        if ($validationErrors !== []) {
+            return Response::validation(['errors' => $validationErrors], 'Validation failed');
         }
 
         // Sanitize input data
@@ -289,18 +287,18 @@ class UsersController extends BaseController
 
         // Create user
         $userUuid = $this->userRepository->create($data);
-        if (!$userUuid) {
+        if ($userUuid === '') {
             return Response::serverError('Failed to create user');
         }
 
         // Note: Role assignment disabled - use RBAC extension API
-        if (!empty($roleUuids)) {
+        if ($roleUuids !== []) {
             // Role assignment is now handled by the RBAC extension
             // Use the RBAC API endpoints for role management
         }
 
         // Create profile if data provided
-        if (!empty($profileData)) {
+        if ($profileData !== []) {
             $this->getUserRepository()->updateProfile($userUuid, $profileData);
         }
 
@@ -344,7 +342,7 @@ class UsersController extends BaseController
      * Update user information
      *
      * @route PUT /api/users/{uuid}
-     * @param array $params
+     * @param array<string, mixed> $params
      * @param Request $request
      * @return Response
      */
@@ -364,14 +362,14 @@ class UsersController extends BaseController
         $this->rateLimitResource('users', 'write', 20, 300);
 
         $user = $this->getUserRepository()->findByUuid($uuid);
-        if (!$user) {
+        if ($user === null) {
             throw new NotFoundException('User not found');
         }
 
         // Enhanced input validation and sanitization
         $validationErrors = $this->validateUserInput($data, 'update');
-        if (!empty($validationErrors)) {
-            return Response::validation($validationErrors, 'Validation failed');
+        if ($validationErrors !== []) {
+            return Response::validation(['errors' => $validationErrors], 'Validation failed');
         }
 
         // Sanitize input data
@@ -391,7 +389,7 @@ class UsersController extends BaseController
         unset($data['roles'], $data['profile']);
 
         // Update user
-        if (!empty($data)) {
+        if ($data !== []) {
             $this->userRepository->update($user['uuid'], $data);
         }
 
@@ -446,7 +444,7 @@ class UsersController extends BaseController
      * Delete user (soft delete)
      *
      * @route DELETE /api/users/{uuid}
-     * @param array $params
+     * @param array<string, mixed> $params
      * @return Response
      */
     public function delete(array $params): Response
@@ -463,7 +461,7 @@ class UsersController extends BaseController
         $this->requireLowRiskBehavior(0.4, 'user_deletion');
 
         $user = $this->getUserRepository()->findByUuid($uuid);
-        if (!$user) {
+        if ($user === null) {
             throw new NotFoundException('User not found');
         }
 
@@ -487,7 +485,7 @@ class UsersController extends BaseController
      * Restore soft-deleted user
      *
      * @route POST /api/users/{uuid}/restore
-     * @param array $params
+     * @param array<string, mixed> $params
      * @return Response
      */
     public function restore(array $params): Response
@@ -501,7 +499,7 @@ class UsersController extends BaseController
         $this->rateLimitResource('users', 'restore', 5, 600);
 
         $user = $this->getUserRepository()->findByUuid($uuid); // For restore, check if user exists
-        if (!$user) {
+        if ($user === null) {
             throw new NotFoundException('User not found');
         }
 
@@ -533,7 +531,7 @@ class UsersController extends BaseController
 
         $data = $request->toArray();
 
-        if (empty($data['action']) || empty($data['user_ids'])) {
+        if (($data['action'] ?? '') === '' || ($data['user_ids'] ?? []) === []) {
             return Response::error('Action and user_ids are required', Response::HTTP_BAD_REQUEST);
         }
 
@@ -587,14 +585,14 @@ class UsersController extends BaseController
                 }
 
                 $results['success']++;
-            } catch (\Exception $e) {
+            } catch (\Exception) {
                 $results['failed']++;
                 $results['errors'][] = "Failed for user {$userUuid}: database operation error";
             }
         }
 
         // Execute batch updates by grouping similar operations
-        if (!empty($batchUpdates)) {
+        if ($batchUpdates !== []) {
             // Group updates by the data being changed to enable true bulk operations
             $updateGroups = [];
             foreach ($batchUpdates as $userUuid => $updateData) {
@@ -615,7 +613,7 @@ class UsersController extends BaseController
         }
 
         // Execute batch session revocations
-        if (!empty($sessionsToRevoke)) {
+        if ($sessionsToRevoke !== []) {
             foreach ($sessionsToRevoke as $userUuid) {
                 $this->tokenStorage->revokeAllUserSessions($userUuid);
             }
@@ -892,7 +890,7 @@ class UsersController extends BaseController
 
         $file = $request->files->get('file');
 
-        if (!$file) {
+        if ($file === null) {
             return Response::error('File is required', Response::HTTP_BAD_REQUEST);
         }
 
@@ -917,7 +915,7 @@ class UsersController extends BaseController
      * Get user activity log
      *
      * @route GET /api/users/{uuid}/activity
-     * @param array $params
+     * @param array<string, mixed> $params
      * @param Request $request
      * @return Response
      */
@@ -938,7 +936,7 @@ class UsersController extends BaseController
         $perPage = (int) $request->query->get('per_page', 50);
 
         $user = $this->getUserRepository()->findByUuid($uuid);
-        if (!$user) {
+        if ($user === null) {
             throw new NotFoundException('User not found');
         }
 
@@ -977,7 +975,7 @@ class UsersController extends BaseController
      * Get user sessions
      *
      * @route GET /api/users/{uuid}/sessions
-     * @param array $params
+     * @param array<string, mixed> $params
      * @return Response
      */
     public function sessions(array $params): Response
@@ -995,7 +993,7 @@ class UsersController extends BaseController
         $this->rateLimitResource('users', 'sessions', 50, 300);
 
         $user = $this->getUserRepository()->findByUuid($uuid);
-        if (!$user) {
+        if ($user === null) {
             throw new NotFoundException('User not found');
         }
 
@@ -1040,7 +1038,7 @@ class UsersController extends BaseController
      * Terminate user sessions
      *
      * @route DELETE /api/users/{uuid}/sessions
-     * @param array $params
+     * @param array<string, mixed> $params
      * @param Request $request
      * @return Response
      */
@@ -1060,12 +1058,11 @@ class UsersController extends BaseController
         $sessionId = $request->get('session_id'); // Optional: terminate specific session
 
         $user = $this->getUserRepository()->findByUuid($uuid);
-        if (!$user) {
+        if ($user === null) {
             throw new NotFoundException('User not found');
         }
 
-        $terminatedSessions = 0;
-        if ($sessionId) {
+        if ($sessionId !== null && $sessionId !== '') {
             // Get the session token to revoke
             $session = $this->db->table('auth_sessions')
                 ->select(['access_token'])
@@ -1074,17 +1071,11 @@ class UsersController extends BaseController
                 ->limit(1)
                 ->get();
 
-            if (!empty($session)) {
+            if ($session !== []) {
                 $this->tokenStorage->revokeSession($session[0]['access_token']);
-                $terminatedSessions = 1;
             }
         } else {
             // Revoke all user sessions
-            $activeSessions = $this->db->table('auth_sessions')
-                ->select(['session_id'])
-                ->where('user_uuid', $user['uuid'])
-                ->where('status', 'active')
-                ->get();
             $this->tokenStorage->revokeAllUserSessions($user['uuid']);
         }
 
@@ -1095,7 +1086,7 @@ class UsersController extends BaseController
     /**
      * Generate CSV from users data
      *
-     * @param array $users
+     * @param array<int, array<string, mixed>> $users
      * @return string
      */
     private function generateCSV(array $users): string
@@ -1140,9 +1131,9 @@ class UsersController extends BaseController
     /**
      * Validate user input data
      *
-     * @param array $data Input data
+     * @param array<string, mixed> $data Input data
      * @param string $operation Operation type (create, update)
-     * @return array Validation errors
+     * @return array<int, string> Validation errors
      */
     private function validateUserInput(array $data, string $operation): array
     {
@@ -1208,8 +1199,8 @@ class UsersController extends BaseController
     /**
      * Sanitize user input data
      *
-     * @param array $data Input data
-     * @return array Sanitized data
+     * @param array<string, mixed> $data Input data
+     * @return array<string, mixed> Sanitized data
      */
     private function sanitizeUserInput(array $data): array
     {

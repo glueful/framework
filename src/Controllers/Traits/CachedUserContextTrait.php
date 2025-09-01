@@ -102,7 +102,7 @@ trait CachedUserContextTrait
      *
      * @param string $permission Permission to check
      * @param string $resource Resource identifier
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return bool True if user has permission
      */
     protected function hasCachedPermission(string $permission, string $resource = 'system', array $context = []): bool
@@ -113,7 +113,7 @@ trait CachedUserContextTrait
     /**
      * Get cached user roles
      *
-     * @return array User roles
+     * @return array<string> User roles
      */
     protected function getCachedUserRoles(): array
     {
@@ -123,7 +123,7 @@ trait CachedUserContextTrait
     /**
      * Get cached user permissions
      *
-     * @return array User permissions
+     * @return array<string> User permissions
      */
     protected function getCachedUserPermissions(): array
     {
@@ -143,7 +143,7 @@ trait CachedUserContextTrait
     /**
      * Get cached session data
      *
-     * @return array|null Session data or null
+     * @return array<string, mixed>|null Session data or null
      */
     protected function getCachedSessionData(): ?array
     {
@@ -153,8 +153,8 @@ trait CachedUserContextTrait
     /**
      * Get audit context with cached user data
      *
-     * @param array $additionalContext Additional context to merge
-     * @return array Complete audit context
+     * @param array<string, mixed> $additionalContext Additional context to merge
+     * @return array<string, mixed> Complete audit context
      */
     protected function getCachedAuditContext(array $additionalContext = []): array
     {
@@ -230,7 +230,7 @@ trait CachedUserContextTrait
      *
      * @param string $permission Permission to check
      * @param string $resource Resource identifier
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @param string|null $message Custom error message
      * @throws UnauthorizedException If permission denied
      */
@@ -259,9 +259,9 @@ trait CachedUserContextTrait
     /**
      * Check multiple permissions with OR logic (cached)
      *
-     * @param array $permissions Array of permissions to check
+     * @param array<string> $permissions Array of permissions to check
      * @param string $resource Resource identifier
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return bool True if user has at least one permission
      */
     protected function hasCachedAnyPermission(
@@ -280,9 +280,9 @@ trait CachedUserContextTrait
     /**
      * Check multiple permissions with AND logic (cached)
      *
-     * @param array $permissions Array of permissions to check
+     * @param array<string> $permissions Array of permissions to check
      * @param string $resource Resource identifier
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return bool True if user has all permissions
      */
     protected function hasCachedAllPermissions(
@@ -301,7 +301,7 @@ trait CachedUserContextTrait
     /**
      * Get user context cache statistics
      *
-     * @return array Cache statistics
+     * @return array<string, mixed> Cache statistics
      */
     protected function getUserContextStats(): array
     {
@@ -342,7 +342,7 @@ trait CachedUserContextTrait
     {
         $roles = $this->getCachedUserRoles();
 
-        if (empty($roles)) {
+        if (count($roles) === 0) {
             return false;
         }
 
@@ -362,7 +362,7 @@ trait CachedUserContextTrait
     /**
      * Check if user belongs to any of the specified roles (cached)
      *
-     * @param array $roles Array of role names to check
+     * @param array<string> $roles Array of role names to check
      * @return bool True if user has any of the roles
      */
     protected function hasCachedAnyRole(array $roles): bool
@@ -378,7 +378,7 @@ trait CachedUserContextTrait
     /**
      * Get user's cached capabilities summary
      *
-     * @return array User capabilities summary
+     * @return array<string, mixed> User capabilities summary
      */
     protected function getCachedUserCapabilities(): array
     {

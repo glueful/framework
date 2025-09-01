@@ -57,9 +57,9 @@ class ServeCommand extends BaseCommand
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $port = $input->getOption('port');
-        $host = $input->getOption('host');
-        $openBrowser = $input->getOption('open');
+        $port = (string) $input->getOption('port');
+        $host = (string) $input->getOption('host');
+        $openBrowser = (bool) $input->getOption('open');
 
         // Validate port
         if (!$this->isValidPort($port)) {
@@ -88,7 +88,7 @@ class ServeCommand extends BaseCommand
         $this->displayServerInfo($host, $port, $publicDir);
 
         // Open browser if requested
-        if ($openBrowser) {
+        if ($openBrowser === true) {
             $this->openBrowser($host, $port);
         }
 
@@ -139,7 +139,7 @@ class ServeCommand extends BaseCommand
             default => null
         };
 
-        if ($command) {
+        if ($command !== null) {
             $this->line('Opening browser...');
             exec($command . ' 2>/dev/null &');
         } else {

@@ -72,15 +72,16 @@ class LockdownCommand extends BaseSecurityCommand
     {
         $this->initializeServices();
 
-        $enable = $input->getOption('enable');
-        $disable = $input->getOption('disable');
-        $status = $input->getOption('status');
-        $force = $input->getOption('force');
-        $reason = $input->getOption('reason');
-        $cleanup = $input->getOption('cleanup');
+        $enable = (bool) $input->getOption('enable');
+        $disable = (bool) $input->getOption('disable');
+        $status = (bool) $input->getOption('status');
+        $force = (bool) $input->getOption('force');
+        $reasonOption = $input->getOption('reason');
+        $reason = $reasonOption !== false && $reasonOption !== null ? (string) $reasonOption : null;
+        $cleanup = (bool) $input->getOption('cleanup');
 
         // Validate options
-        $actionCount = (int)$enable + (int)$disable + (int)$status;
+        $actionCount = ($enable ? 1 : 0) + ($disable ? 1 : 0) + ($status ? 1 : 0);
         if ($actionCount === 0) {
             $status = true; // Default to status if no action specified
         } elseif ($actionCount > 1) {
@@ -89,11 +90,11 @@ class LockdownCommand extends BaseSecurityCommand
         }
 
         try {
-            if ($status) {
+            if ($status === true) {
                 return $this->handleLockdownStatus();
-            } elseif ($enable) {
+            } elseif ($enable === true) {
                 return $this->handleLockdownEnable($force, $reason);
-            } elseif ($disable) {
+            } elseif ($disable === true) {
                 return $this->handleLockdownDisable($force, $reason, $cleanup);
             }
 
@@ -117,21 +118,26 @@ class LockdownCommand extends BaseSecurityCommand
             return self::SUCCESS;
         }
 
-        $maintenanceData = json_decode(file_get_contents($maintenanceFile), true);
+        $jsonContent = file_get_contents($maintenanceFile);
+        if ($jsonContent === false) {
+            $this->success('✅ System is NOT in lockdown mode');
+            return self::SUCCESS;
+        }
+        $maintenanceData = json_decode($jsonContent, true);
 
-        if (!$maintenanceData || !($maintenanceData['enabled'] ?? false)) {
+        if ($maintenanceData === null || ($maintenanceData['enabled'] ?? false) !== true) {
             $this->success('✅ System is NOT in lockdown mode');
             return self::SUCCESS;
         }
 
-        if (!($maintenanceData['lockdown_mode'] ?? false)) {
+        if (($maintenanceData['lockdown_mode'] ?? false) !== true) {
             $this->info('🔧 System is in maintenance mode (not security lockdown)');
             return self::SUCCESS;
         }
 
         // Check if lockdown has expired
         $endTime = $maintenanceData['end_time'] ?? null;
-        if ($endTime && time() > $endTime) {
+        if ($endTime !== null && time() > $endTime) {
             $this->warning('⚠️ Lockdown has EXPIRED but files still exist');
             $this->info('Run: php glueful security:lockdown --disable --cleanup');
             return self::SUCCESS;
@@ -155,11 +161,16 @@ class LockdownCommand extends BaseSecurityCommand
 
         // Check if already enabled
         if (file_exists($maintenanceFile)) {
-            $maintenanceData = json_decode(file_get_contents($maintenanceFile), true);
+            $jsonContent = file_get_contents($maintenanceFile);
+            if ($jsonContent === false) {
+                $this->warning('Security lockdown is already disabled');
+                return self::SUCCESS;
+            }
+            $maintenanceData = json_decode($jsonContent, true);
             if (
-                $maintenanceData &&
-                ($maintenanceData['enabled'] ?? false) &&
-                ($maintenanceData['lockdown_mode'] ?? false)
+                $maintenanceData !== null &&
+                ($maintenanceData['enabled'] ?? false) === true &&
+                ($maintenanceData['lockdown_mode'] ?? false) === true
             ) {
                 $this->warning('Security lockdown is already enabled');
                 return self::SUCCESS;
@@ -167,7 +178,7 @@ class LockdownCommand extends BaseSecurityCommand
         }
 
         // Confirmation if not forced
-        if (!$force) {
+        if ($force !== true) {
             $this->warning('This will enable emergency security lockdown mode.');
             $this->warning('Access to the system will be restricted.');
 
@@ -178,7 +189,7 @@ class LockdownCommand extends BaseSecurityCommand
         }
 
         // Get reason if not provided
-        if (!$reason && !$force) {
+        if ($reason === null && $force !== true) {
             $reason = $this->ask('Please provide a reason for enabling lockdown mode');
         }
 
@@ -227,7 +238,7 @@ class LockdownCommand extends BaseSecurityCommand
         }
 
         // Confirmation if not forced
-        if (!$force) {
+        if ($force !== true) {
             $this->info('This will disable security lockdown mode and restore normal access.');
 
             if (!$this->confirm('Are you sure you want to disable lockdown mode?', false)) {
@@ -237,7 +248,7 @@ class LockdownCommand extends BaseSecurityCommand
         }
 
         // Get reason if not provided
-        if (!$reason && !$force) {
+        if ($reason === null && $force !== true) {
             $reason = $this->ask('Please provide a reason for disabling lockdown mode');
         }
 
@@ -265,6 +276,9 @@ class LockdownCommand extends BaseSecurityCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $maintenanceData
+     */
     private function displayLockdownDetails(array $maintenanceData): void
     {
         $this->info('📊 Lockdown Details:');

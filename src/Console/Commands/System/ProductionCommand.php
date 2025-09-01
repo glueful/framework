@@ -126,7 +126,7 @@ class ProductionCommand extends BaseCommand
         $this->io->title('🔧 Glueful Production Configuration Manager');
 
         // Handle interactive mode
-        if ($input->getOption('interactive')) {
+        if ((bool) $input->getOption('interactive')) {
             return $this->runInteractiveMode($input);
         }
 
@@ -138,31 +138,32 @@ class ProductionCommand extends BaseCommand
         $exitCode = self::SUCCESS;
 
         // Execute requested actions in logical order
-        if ($input->getOption('check')) {
+        if ((bool) $input->getOption('check')) {
             $exitCode = max($exitCode, $this->runProductionCheck($input));
         }
 
-        if ($input->getOption('score')) {
+        if ((bool) $input->getOption('score')) {
             $this->showProductionScore($input);
         }
 
-        if ($input->getOption('suggestions')) {
+        if ((bool) $input->getOption('suggestions')) {
             $this->showFixSuggestions();
         }
 
-        if ($input->getOption('fix')) {
+        if ((bool) $input->getOption('fix')) {
             $exitCode = max($exitCode, $this->applyAutomaticFixes($input));
         }
 
-        if ($input->getOption('template')) {
+        if ((bool) $input->getOption('template')) {
             $exitCode = max($exitCode, $this->applyProductionTemplate($input));
         }
 
-        if ($migrate = $input->getOption('migrate')) {
+        $migrate = $input->getOption('migrate');
+        if ($migrate !== null) {
             $exitCode = max($exitCode, $this->migrateEnvironment($migrate, $input));
         }
 
-        if ($input->getOption('audit')) {
+        if ((bool) $input->getOption('audit')) {
             $this->generateAuditReport($input);
         }
 
@@ -173,7 +174,7 @@ class ProductionCommand extends BaseCommand
     {
         $options = ['check', 'score', 'fix', 'template', 'audit', 'suggestions', 'interactive'];
         foreach ($options as $option) {
-            if ($input->getOption($option)) {
+            if ((bool) $input->getOption($option)) {
                 return true;
             }
         }
@@ -192,7 +193,7 @@ class ProductionCommand extends BaseCommand
         $validation = SecurityManager::validateProductionEnvironment();
         $health = HealthService::getOverallHealth();
 
-        if (!empty($validation['warnings']) || $health['status'] !== 'ok') {
+        if (count($validation['warnings']) > 0 || $health['status'] !== 'ok') {
             $this->io->warning('Issues detected in current configuration.');
 
             if ($this->io->confirm('Would you like to see the issues?', true)) {
@@ -244,7 +245,7 @@ class ProductionCommand extends BaseCommand
 
         $this->displayValidationResults($validation, $health);
 
-        $hasIssues = !empty($validation['warnings']) || $health['status'] !== 'ok';
+        $hasIssues = count($validation['warnings']) > 0 || $health['status'] !== 'ok';
 
         if (!$hasIssues) {
             $this->io->success('✅ Production configuration is ready!');
@@ -257,10 +258,14 @@ class ProductionCommand extends BaseCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $validation
+     * @param array<string, mixed> $health
+     */
     private function displayValidationResults(array $validation, array $health): void
     {
         // Show critical issues
-        if (!empty($validation['warnings'])) {
+        if (count($validation['warnings']) > 0) {
             $this->io->section('🚨 Critical Security Issues');
             foreach ($validation['warnings'] as $warning) {
                 $this->io->text("❌ {$warning}");
@@ -268,7 +273,7 @@ class ProductionCommand extends BaseCommand
         }
 
         // Show recommendations
-        if (!empty($validation['recommendations'])) {
+        if (count($validation['recommendations']) > 0) {
             $this->io->section('💡 Security Recommendations');
             foreach ($validation['recommendations'] as $recommendation) {
                 $this->io->text("• {$recommendation}");
@@ -317,7 +322,7 @@ class ProductionCommand extends BaseCommand
 
         $fixes = SecurityManager::getEnvironmentFixSuggestions();
 
-        if (empty($fixes)) {
+        if (count($fixes) === 0) {
             $this->io->success('No fix suggestions - configuration looks good!');
             return;
         }
@@ -347,13 +352,13 @@ class ProductionCommand extends BaseCommand
         $fixes = SecurityManager::getEnvironmentFixSuggestions();
         $autoFixable = array_filter($fixes, fn($fix) => $this->canAutoFix($fix));
 
-        if (empty($autoFixable)) {
+        if (count($autoFixable) === 0) {
             $this->io->warning('No automatic fixes available.');
             $this->io->text('Manual configuration required for detected issues.');
             return self::SUCCESS;
         }
 
-        if ($dryRun) {
+        if ((bool) $dryRun) {
             $this->io->warning('DRY RUN MODE - No changes will be applied');
             $this->io->text('The following fixes would be applied:');
             foreach ($autoFixable as $fix) {
@@ -362,7 +367,7 @@ class ProductionCommand extends BaseCommand
             return self::SUCCESS;
         }
 
-        if (!$force) {
+        if (!((bool) $force)) {
             $this->io->text('The following fixes will be applied:');
             foreach ($autoFixable as $fix) {
                 $this->io->text("  • {$fix['fix']}");
@@ -386,7 +391,7 @@ class ProductionCommand extends BaseCommand
             }
         }
 
-        if (!empty($applied)) {
+        if (count($applied) > 0) {
             $this->io->newLine();
             $this->io->success('✅ Applied fixes:');
             foreach ($applied as $fix) {
@@ -413,13 +418,13 @@ class ProductionCommand extends BaseCommand
             return self::FAILURE;
         }
 
-        if ($dryRun) {
+        if ((bool) $dryRun) {
             $this->io->warning('DRY RUN MODE - No changes will be applied');
             $this->io->text('Would apply production template to .env file');
             return self::SUCCESS;
         }
 
-        if (!$force) {
+        if (!((bool) $force)) {
             $this->io->warning('This will update your .env file with production-ready defaults.');
             if (!$this->io->confirm('Continue?', false)) {
                 $this->io->text('Operation cancelled.');
@@ -457,7 +462,7 @@ class ProductionCommand extends BaseCommand
     {
         $validEnvs = ['development', 'staging', 'production'];
 
-        if (!in_array($targetEnv, $validEnvs)) {
+        if (!in_array($targetEnv, $validEnvs, true)) {
             $this->io->error("Invalid environment: {$targetEnv}");
             $this->io->text('Valid environments: ' . implode(', ', $validEnvs));
             return self::FAILURE;
@@ -468,7 +473,7 @@ class ProductionCommand extends BaseCommand
         $dryRun = $input->getOption('dry-run');
         $backup = $this->shouldCreateBackup($input);
 
-        if ($dryRun) {
+        if ((bool) $dryRun) {
             $this->io->warning('DRY RUN MODE - No changes will be applied');
             $this->io->text("Would migrate to environment: {$targetEnv}");
             return self::SUCCESS;
@@ -503,7 +508,7 @@ class ProductionCommand extends BaseCommand
         $report = $this->buildAuditReport($timestamp, $validation, $health, $score);
 
         $outputFile = $input->getOption('output-file');
-        if ($outputFile) {
+        if ($outputFile !== null) {
             file_put_contents($outputFile, $report);
             $this->io->success("Audit report saved to: {$outputFile}");
         } else {
@@ -512,6 +517,11 @@ class ProductionCommand extends BaseCommand
         }
     }
 
+    /**
+     * @param array<string, mixed> $validation
+     * @param array<string, mixed> $health
+     * @param array<string, mixed> $score
+     */
     private function buildAuditReport(string $timestamp, array $validation, array $health, array $score): string
     {
         $report = [];
@@ -525,10 +535,10 @@ class ProductionCommand extends BaseCommand
         $report[] = "Message: {$score['message']}";
         $report[] = "";
 
-        if ($validation['is_production']) {
+        if ((bool) $validation['is_production']) {
             $report[] = "=== SECURITY VALIDATION ===";
 
-            if (!empty($validation['warnings'])) {
+            if (count($validation['warnings']) > 0) {
                 $report[] = "Critical Issues (" . count($validation['warnings']) . "):";
                 foreach ($validation['warnings'] as $i => $warning) {
                     $report[] = "  " . ($i + 1) . ". {$warning}";
@@ -536,7 +546,7 @@ class ProductionCommand extends BaseCommand
                 $report[] = "";
             }
 
-            if (!empty($validation['recommendations'])) {
+            if (count($validation['recommendations']) > 0) {
                 $report[] = "Recommendations (" . count($validation['recommendations']) . "):";
                 foreach ($validation['recommendations'] as $i => $rec) {
                     $report[] = "  " . ($i + 1) . ". {$rec}";
@@ -544,7 +554,7 @@ class ProductionCommand extends BaseCommand
                 $report[] = "";
             }
 
-            if (empty($validation['warnings']) && empty($validation['recommendations'])) {
+            if (count($validation['warnings']) === 0 && count($validation['recommendations']) === 0) {
                 $report[] = "No security issues detected.";
                 $report[] = "";
             }
@@ -559,7 +569,7 @@ class ProductionCommand extends BaseCommand
 
         $report[] = "=== FIX SUGGESTIONS ===";
         $fixes = SecurityManager::getEnvironmentFixSuggestions();
-        if (!empty($fixes)) {
+        if (count($fixes) > 0) {
             foreach ($fixes as $i => $fix) {
                 $report[] = ($i + 1) . ". {$fix['issue']}";
                 $report[] = "   Fix: {$fix['fix']}";
@@ -578,17 +588,23 @@ class ProductionCommand extends BaseCommand
 
     private function shouldCreateBackup(InputInterface $input): bool
     {
-        return $input->getOption('backup') || !$input->getOption('no-backup');
+        return (bool) $input->getOption('backup') || !((bool) $input->getOption('no-backup'));
     }
 
+    /**
+     * @param array<string, mixed> $fix
+     */
     private function canAutoFix(array $fix): bool
     {
-        return in_array($fix['severity'], ['critical']) &&
+        return in_array($fix['severity'], ['critical'], true) &&
                (str_contains($fix['command'], 'key:generate') ||
                 str_contains($fix['command'], 'Set ') ||
                 str_contains($fix['fix'], 'Generate'));
     }
 
+    /**
+     * @param array<string, mixed> $fix
+     */
     private function applyFix(array $fix): bool
     {
         if (str_contains($fix['command'], 'key:generate --force')) {
@@ -722,6 +738,6 @@ class ProductionCommand extends BaseCommand
             'GENERATE_SECURE_JWT_SECRET_KEY_HERE',
         ];
 
-        return in_array(trim($value, '"\''), $placeholders);
+        return in_array(trim($value, '"\''), $placeholders, true);
     }
 }

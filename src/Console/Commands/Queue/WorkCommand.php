@@ -145,7 +145,7 @@ class WorkCommand extends BaseQueueCommand
             };
         } catch (\Exception $e) {
             $this->error("Error: " . $e->getMessage());
-            if ($input->getOption('verbose')) {
+            if ((bool) $input->getOption('verbose') === true) {
                 $this->error($e->getTraceAsString());
             }
             return self::FAILURE;
@@ -175,8 +175,8 @@ class WorkCommand extends BaseQueueCommand
         $memory = (int) $input->getOption('memory');
         $timeout = (int) $input->getOption('timeout');
         $maxJobs = (int) $input->getOption('max-jobs');
-        $daemon = $input->getOption('daemon');
-        $stopWhenEmpty = $input->getOption('stop-when-empty');
+        $daemon = (bool) $input->getOption('daemon');
+        $stopWhenEmpty = (bool) $input->getOption('stop-when-empty');
 
         $this->info("🚀 Starting queue workers...");
         $this->line("Workers: {$workerCount} (multi-worker enabled by default)");
@@ -203,7 +203,7 @@ class WorkCommand extends BaseQueueCommand
         $this->success("Spawned {$workerCount} worker(s) per queue");
 
         // Monitor workers if not in daemon mode
-        if (!$daemon) {
+        if ($daemon !== true) {
             return $this->monitorWorkers();
         }
 
@@ -213,7 +213,8 @@ class WorkCommand extends BaseQueueCommand
     private function executeSpawn(InputInterface $input): int
     {
         $count = (int) $input->getOption('count');
-        $queue = $input->getOption('queue') ?: 'default';
+        $queueOption = $input->getOption('queue');
+        $queue = $queueOption !== false && $queueOption !== null ? (string) $queueOption : 'default';
 
         $this->info("➕ Spawning {$count} worker(s) for queue: {$queue}");
 
@@ -235,7 +236,8 @@ class WorkCommand extends BaseQueueCommand
     private function executeScale(InputInterface $input): int
     {
         $count = (int) $input->getOption('count');
-        $queue = $input->getOption('queue') ?: 'default';
+        $queueOption = $input->getOption('queue');
+        $queue = $queueOption !== false && $queueOption !== null ? (string) $queueOption : 'default';
 
         $currentCount = $this->processManager->getWorkerCount($queue);
         $this->info("📊 Scaling workers for queue: {$queue}");
@@ -252,16 +254,16 @@ class WorkCommand extends BaseQueueCommand
 
     private function executeStatus(InputInterface $input): int
     {
-        $json = $input->getOption('json');
+        $json = (bool) $input->getOption('json');
         $watch = $input->getOption('watch');
 
-        if ($watch) {
+        if ($watch !== false && $watch !== null) {
             return $this->watchStatus((int) $watch, $json);
         }
 
         $status = $this->processManager->getStatus();
 
-        if ($json) {
+        if ($json === true) {
             $this->displayJson($status);
         } else {
             $this->displayWorkerStatus($status);
@@ -273,17 +275,18 @@ class WorkCommand extends BaseQueueCommand
     private function executeStop(InputInterface $input): int
     {
         $timeout = 30; // Default timeout
-        $all = $input->getOption('all');
+        $all = (bool) $input->getOption('all');
         $workerId = $input->getOption('worker-id');
 
-        if ($all) {
+        if ($all === true) {
             $this->info("🛑 Stopping all workers...");
             $this->processManager->stopAll($timeout);
             $this->success("All workers stopped");
-        } elseif ($workerId) {
+        } elseif ($workerId !== false && $workerId !== null) {
+            $workerId = (string) $workerId;
             $this->info("🛑 Stopping worker: {$workerId}");
             $worker = $this->processManager->getWorker($workerId);
-            if ($worker) {
+            if ($worker !== null) {
                 $worker->stop($timeout);
                 $this->success("Worker stopped");
             } else {
@@ -300,10 +303,10 @@ class WorkCommand extends BaseQueueCommand
 
     private function executeRestart(InputInterface $input): int
     {
-        $all = $input->getOption('all');
+        $all = (bool) $input->getOption('all');
         $workerId = $input->getOption('worker-id');
 
-        if ($all) {
+        if ($all === true) {
             $this->info("🔄 Restarting all workers...");
             $workers = $this->processManager->getStatus();
             foreach ($workers as $workerInfo) {
@@ -315,7 +318,8 @@ class WorkCommand extends BaseQueueCommand
                 }
             }
             $this->success("All workers restarted");
-        } elseif ($workerId) {
+        } elseif ($workerId !== false && $workerId !== null) {
+            $workerId = (string) $workerId;
             $this->info("🔄 Restarting worker: {$workerId}");
             try {
                 $this->processManager->restart($workerId);
@@ -424,9 +428,12 @@ class WorkCommand extends BaseQueueCommand
         return self::SUCCESS;
     }
 
+    /**
+     * @param array<string, mixed> $status
+     */
     private function displayWorkerStatus(array $status): void
     {
-        if (empty($status)) {
+        if (count($status) === 0) {
             $this->warning("No workers running");
             $this->line();
             $this->info("💡 Start workers with: php glueful queue:work");

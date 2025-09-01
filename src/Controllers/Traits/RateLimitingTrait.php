@@ -48,7 +48,7 @@ trait RateLimitingTrait
             $this->getCachedUserUuid() ?? $this->request->getClientIp()
         );
 
-        if ($useAdaptive && config('security.rate_limiter.enable_adaptive', true)) {
+        if ($useAdaptive === true && config('security.rate_limiter.enable_adaptive', true) === true) {
             // Use adaptive rate limiter with behavior analysis
             $limiter = new AdaptiveRateLimiter(
                 $key,
@@ -92,7 +92,7 @@ trait RateLimitingTrait
      * Apply method-specific rate limiting
      *
      * @param string|null $method Method name (auto-detected if null)
-     * @param array|null $customLimits Custom rate limits
+     * @param array<string, mixed>|null $customLimits Custom rate limits
      * @throws RateLimitExceededException If rate limit is exceeded
      */
     protected function rateLimitMethod(?string $method = null, ?array $customLimits = null): void
@@ -103,7 +103,7 @@ trait RateLimitingTrait
         $configKey = sprintf('security.rate_limits.controllers.%s.%s', static::class, $method);
         $methodLimits = config($configKey, $customLimits);
 
-        if (!$methodLimits) {
+        if ($methodLimits === null) {
             // Fall back to HTTP method-based limits
             $httpMethod = $this->request->getMethod();
             $methodLimits = config("security.rate_limits.methods.{$httpMethod}", [
@@ -159,7 +159,7 @@ trait RateLimitingTrait
      * Checks multiple rate limit levels (e.g., per minute, hour, day)
      *
      * @param string $action Action identifier
-     * @param array $levels Array of level configurations
+     * @param array<string, array<string, int>> $levels Array of level configurations
      * @throws RateLimitExceededException If any level is exceeded
      */
     protected function multiLevelRateLimit(string $action, array $levels = []): void
@@ -170,7 +170,7 @@ trait RateLimitingTrait
             'day' => ['attempts' => 1000, 'window' => 86400]
         ]);
 
-        $levels = $levels ?: $defaultLevels;
+        $levels = count($levels) > 0 ? $levels : $defaultLevels;
 
         foreach ($levels as $level => $config) {
             $this->rateLimit(
@@ -186,7 +186,7 @@ trait RateLimitingTrait
      * Apply conditional rate limiting based on user type
      *
      * @param string $action Action identifier
-     * @param array|null $customLimits Custom limits by user type
+     * @param array<string, array<string, int>>|null $customLimits Custom limits by user type
      * @throws RateLimitExceededException If rate limit is exceeded
      */
     protected function conditionalRateLimit(string $action, ?array $customLimits = null): void
@@ -221,7 +221,7 @@ trait RateLimitingTrait
     /**
      * Get rate limit headers for response
      *
-     * @return array Headers array
+     * @return array<string, string> Headers array
      */
     protected function getRateLimitHeaders(): array
     {
@@ -260,7 +260,7 @@ trait RateLimitingTrait
      */
     protected function requireLowRiskBehavior(float $maxScore = 0.6, ?string $operation = null): void
     {
-        if (!$this->currentUser) {
+        if ($this->currentUser === null) {
             throw new UnauthorizedException(
                 'anonymous',
                 'authentication',

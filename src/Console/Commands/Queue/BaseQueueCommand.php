@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Glueful\Console\Commands\Queue;
 
 use Glueful\Console\BaseCommand;
-use Symfony\Component\Console\Helper\Table;
 use Symfony\Component\Console\Helper\QuestionHelper;
 use Symfony\Component\Console\Question\ConfirmationQuestion;
 
@@ -19,8 +18,9 @@ abstract class BaseQueueCommand extends BaseCommand
 {
     /**
      * Extract option value from arguments
+     * @param string[] $args
      */
-    protected function extractOptionValue(array<string> $args, string $option, mixed $default = null): mixed
+    protected function extractOptionValue(array $args, string $option, mixed $default = null): mixed
     {
         // Handle --option=value format
         foreach ($args as $arg) {
@@ -44,8 +44,9 @@ abstract class BaseQueueCommand extends BaseCommand
 
     /**
      * Check if option exists in arguments
+     * @param string[] $args
      */
-    protected function hasOption(array<string> $args, string $option): bool
+    protected function hasOption(array $args, string $option): bool
     {
         return in_array($option, $args, true) ||
                (bool) array_filter($args, fn($arg) => str_starts_with($arg, $option . '='));
@@ -101,8 +102,9 @@ abstract class BaseQueueCommand extends BaseCommand
 
     /**
      * Parse queue names from comma-separated string
+     * @return string[]
      */
-    protected function parseQueues(?string $queues): array<string>
+    protected function parseQueues(?string $queues): array
     {
         if ($queues === null) {
             return ['default'];
@@ -169,8 +171,9 @@ abstract class BaseQueueCommand extends BaseCommand
 
     /**
      * Get option value for args parsing
+     * @param string[] $args
      */
-    protected function getOptionValue(array<string> $args, string $option, mixed $default = null): mixed
+    protected function getOptionValue(array $args, string $option, mixed $default = null): mixed
     {
         return $this->extractOptionValue($args, $option, $default);
     }

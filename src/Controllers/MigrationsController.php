@@ -80,7 +80,7 @@ class MigrationsController extends BaseController
     /**
      * Get pending migrations data without sending response (for internal use)
      *
-     * @return array Pending migrations data
+     * @return array<string, mixed> Pending migrations data
      */
     public function getPendingMigrationsData(): array
     {
