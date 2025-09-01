@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Glueful\Extensions\Services;
 
 use Glueful\Extensions\Services\Interfaces\ExtensionConfigInterface;
-use Glueful\Extensions\Enums\ExtensionStatus;
 use Glueful\Extensions\Exceptions\ExtensionException;
 use Glueful\Services\FileManager;
 use Glueful\DI\ContainerBootstrap;
@@ -13,7 +12,9 @@ use Psr\Log\LoggerInterface;
 
 class ExtensionConfig implements ExtensionConfigInterface
 {
+    /** @var array<string, mixed>|null */
     private ?array $configCache = null;
+    /** @var array<string, mixed>|null */
     private ?array $metadataCache = null;
     private ?int $configLastModified = null;
     private string $configPath;
@@ -24,7 +25,7 @@ class ExtensionConfig implements ExtensionConfigInterface
         private ?FileManager $fileManager = null,
         private ?LoggerInterface $logger = null
     ) {
-        $this->configPath = $configPath ?: $this->getDefaultConfigPath();
+        $this->configPath = $configPath ?? $this->getDefaultConfigPath();
         $this->initializeServices();
     }
 
@@ -47,6 +48,7 @@ class ExtensionConfig implements ExtensionConfigInterface
         $this->debug = $enable;
     }
 
+    /** @return array<string, mixed> */
     public function getConfig(): array
     {
         if ($this->shouldReloadConfig()) {
@@ -56,6 +58,7 @@ class ExtensionConfig implements ExtensionConfigInterface
         return $this->configCache ?? [];
     }
 
+    /** @param array<string, mixed> $config */
     public function saveConfig(array $config): bool
     {
         try {
@@ -83,12 +86,14 @@ class ExtensionConfig implements ExtensionConfigInterface
         }
     }
 
+    /** @return array<string, mixed> */
     public function getExtensionConfig(string $name): array
     {
         $config = $this->getConfig();
         return $config['extensions'][$name] ?? [];
     }
 
+    /** @param array<string, mixed> $extensionConfig */
     public function updateExtensionConfig(string $name, array $extensionConfig): void
     {
         $config = $this->getConfig();
@@ -102,6 +107,7 @@ class ExtensionConfig implements ExtensionConfigInterface
         }
     }
 
+    /** @return string[] */
     public function getEnabledExtensions(): array
     {
         $config = $this->getConfig();
@@ -156,6 +162,7 @@ class ExtensionConfig implements ExtensionConfigInterface
     /**
      * Check if extension config is minimal (missing manifest data)
      */
+    /** @param array<string, mixed> $config */
     private function isMinimalExtensionConfig(array $config): bool
     {
         // Check if it only has basic properties and lacks manifest metadata
@@ -168,6 +175,7 @@ class ExtensionConfig implements ExtensionConfigInterface
     /**
      * Create extension configuration from manifest.json file
      */
+    /** @return array<string, mixed> */
     private function createExtensionConfigFromManifest(string $name): array
     {
         $extensionsPath = $this->getExtensionsPath();
@@ -188,7 +196,7 @@ class ExtensionConfig implements ExtensionConfigInterface
             $manifestContent = file_get_contents($manifestPath);
             $manifest = json_decode($manifestContent, true);
 
-            if (!$manifest) {
+            if ($manifest === null || $manifest === false) {
                 throw new \Exception("Invalid JSON in manifest.json");
             }
 
@@ -260,6 +268,7 @@ class ExtensionConfig implements ExtensionConfigInterface
     /**
      * Update environments section when enabling/disabling extensions
      */
+    /** @param array<string, mixed> $config */
     private function updateEnvironments(array &$config, string $extensionName, bool $enabled): void
     {
         // Ensure environments section exists
@@ -283,7 +292,7 @@ class ExtensionConfig implements ExtensionConfigInterface
                 $envConfig['enabledExtensions'] = [];
             }
 
-            $currentIndex = array_search($extensionName, $envConfig['enabledExtensions']);
+            $currentIndex = array_search($extensionName, $envConfig['enabledExtensions'], true);
 
             if ($enabled) {
                 // Add to enabledExtensions if not already present
@@ -302,11 +311,12 @@ class ExtensionConfig implements ExtensionConfigInterface
     /**
      * Determine extension type based on manifest data
      */
+    /** @param array<string, mixed> $manifest */
     private function determineExtensionType(array $manifest): string
     {
         // Check if it's a core extension based on author or other criteria
         $author = strtolower($manifest['author'] ?? '');
-        if (in_array($author, ['glueful team', 'glueful', 'core'])) {
+        if (in_array($author, ['glueful team', 'glueful', 'core'], true)) {
             return 'core';
         }
         return 'optional';
@@ -315,6 +325,7 @@ class ExtensionConfig implements ExtensionConfigInterface
     /**
      * Detect routes files in extension
      */
+    /** @return string[] */
     private function detectRoutes(string $extensionPath): array
     {
         $routes = [];
@@ -330,6 +341,7 @@ class ExtensionConfig implements ExtensionConfigInterface
     /**
      * Detect migration files in extension
      */
+    /** @return string[] */
     private function detectMigrations(string $extensionPath): array
     {
         $migrations = [];
@@ -363,18 +375,21 @@ class ExtensionConfig implements ExtensionConfigInterface
         $this->debugLog("Disabled extension: {$name}");
     }
 
+    /** @return array<string, mixed> */
     public function getExtensionSettings(string $name): array
     {
         $extensionConfig = $this->getExtensionConfig($name);
         return $extensionConfig['settings'] ?? [];
     }
 
+    /** @param array<string, mixed> $settings */
     public function updateExtensionSettings(string $name, array $settings): void
     {
         $this->updateExtensionConfig($name, ['settings' => $settings]);
         $this->debugLog("Updated settings for extension: {$name}");
     }
 
+    /** @return string[] */
     public function getCoreExtensions(): array
     {
         $config = $this->getConfig();
@@ -389,6 +404,7 @@ class ExtensionConfig implements ExtensionConfigInterface
         return $core;
     }
 
+    /** @return string[] */
     public function getOptionalExtensions(): array
     {
         $config = $this->getConfig();
@@ -409,6 +425,7 @@ class ExtensionConfig implements ExtensionConfigInterface
         return ($extensionConfig['type'] ?? 'optional') === 'core';
     }
 
+    /** @param array<string, mixed> $extensionData */
     public function addExtension(string $name, array $extensionData): void
     {
         $config = $this->getConfig();
@@ -460,6 +477,10 @@ class ExtensionConfig implements ExtensionConfigInterface
         $this->clearCache();
     }
 
+    /**
+     * @param array<string, mixed> $config
+     * @return string[]
+     */
     public function validateConfig(array $config): array
     {
         $errors = [];
@@ -489,6 +510,7 @@ class ExtensionConfig implements ExtensionConfigInterface
         return $errors;
     }
 
+    /** @return string[] */
     public function getExtensionsByEnvironment(string $environment): array
     {
         $config = $this->getConfig();
@@ -497,7 +519,7 @@ class ExtensionConfig implements ExtensionConfigInterface
         foreach ($config['extensions'] ?? [] as $name => $extensionConfig) {
             $environments = $extensionConfig['environments'] ?? [];
 
-            if (empty($environments) || in_array($environment, $environments)) {
+            if ($environments === [] || in_array($environment, $environments, true)) {
                 $extensions[] = $name;
             }
         }
@@ -576,7 +598,7 @@ class ExtensionConfig implements ExtensionConfigInterface
             return;
         }
 
-        if ($this->logger) {
+        if ($this->logger !== null) {
             $this->logger->debug("[ExtensionConfig] {$message}");
         } else {
             error_log("[ExtensionConfig] {$message}");

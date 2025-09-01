@@ -14,21 +14,21 @@ use Exception;
  */
 class ApiException extends Exception
 {
-    /** @var array|null Additional error context data */
-    private array|null $data;
+    /** @var array<string, mixed>|null Additional error context data */
+    private ?array $data;
 
     /**
      * Constructor
      *
      * @param string $message Error message
      * @param int $statusCode HTTP status code
-     * @param array|null $data Additional error data
+     * @param array<string, mixed>|null $data Additional error data
      * @param \Throwable|null $previous Previous exception
      */
     public function __construct(
         string $message,
         int $statusCode = 400,
-        array|null $data = null,
+        ?array $data = null,
         \Throwable|null $previous = null
     ) {
         parent::__construct($message, $statusCode, $previous);
@@ -48,9 +48,9 @@ class ApiException extends Exception
     /**
      * Get additional error data
      *
-     * @return array|null Additional context data
+     * @return array<string, mixed>|null Additional context data
      */
-    public function getData(): array|null
+    public function getData(): ?array
     {
         return $this->data;
     }

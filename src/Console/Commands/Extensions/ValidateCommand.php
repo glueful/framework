@@ -148,7 +148,7 @@ class ValidateCommand extends BaseExtensionCommand
             // Use the new ExtensionManager validation system
             $validationResult = $extensionsManager->validate($extensionName);
 
-            if ($validationResult === null || !$validationResult['valid']) {
+            if ($validationResult === null || $validationResult['valid'] === false) {
                 // Handle simple error response for non-existent extensions
                 if (
                     isset($validationResult['issues']) &&

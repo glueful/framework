@@ -18,9 +18,9 @@ class ExtensionException extends ApiException
      *
      * @param string $message Error message
      * @param int $statusCode HTTP status code
-     * @param array|null $data Additional error data
+     * @param array<string, mixed>|null $data Additional error data
      */
-    public function __construct(string $message, int $statusCode = 400, array|null $data = null)
+    public function __construct(string $message, int $statusCode = 400, ?array $data = null)
     {
         parent::__construct($message, $statusCode, $data);
     }

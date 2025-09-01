@@ -23,6 +23,8 @@ interface ExtensionLoaderInterface
 
     /**
      * Get list of all loaded extensions
+     *
+     * @return string[]
      */
     public function getLoadedExtensions(): array;
 
@@ -53,6 +55,8 @@ interface ExtensionLoaderInterface
 
     /**
      * Discover extensions in directory
+     *
+     * @return string[]
      */
     public function discoverExtensions(?string $extensionsPath = null): array;
 
@@ -68,13 +72,15 @@ interface ExtensionLoaderInterface
 
     /**
      * Get registered namespaces
+     *
+     * @return array<string, string>
      */
     public function getRegisteredNamespaces(): array;
 
     /**
      * Discover all available extensions from local and Composer sources
      *
-     * @return array Available extensions with source type information
+     * @return array<string, array<string, mixed>> Available extensions with source type information
      */
     public function discoverAvailableExtensions(): array;
 }

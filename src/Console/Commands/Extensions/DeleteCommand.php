@@ -129,7 +129,7 @@ class DeleteCommand extends BaseExtensionCommand
                 $result = $extensionsManager->delete($extensionName, $force);
                 if (is_array($result)) {
                     // Handle array response format like old system
-                    if (!$result['success']) {
+                    if ($result['success'] === false) {
                         $this->error('Deletion failed: ' . ($result['message'] ?? 'Unknown error'));
                         return self::FAILURE;
                     }

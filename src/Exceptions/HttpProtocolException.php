@@ -16,7 +16,7 @@ class HttpProtocolException extends ApiException
     /** @var string|null The error code for categorizing protocol violations */
     private ?string $errorCode = null;
 
-    /** @var array Additional context about the protocol violation */
+    /** @var array<string, mixed> Additional context about the protocol violation */
     private array $protocolContext = [];
 
     /**
@@ -25,7 +25,7 @@ class HttpProtocolException extends ApiException
      * @param string $message Error message
      * @param int $statusCode HTTP status code (typically 400)
      * @param string|null $errorCode Specific error code for categorization
-     * @param array $protocolContext Additional context about the violation
+     * @param array<string, mixed> $protocolContext Additional context about the violation
      */
     public function __construct(
         string $message,
@@ -52,7 +52,7 @@ class HttpProtocolException extends ApiException
     /**
      * Get additional protocol context
      *
-     * @return array
+     * @return array<string, mixed>
      */
     public function getProtocolContext(): array
     {

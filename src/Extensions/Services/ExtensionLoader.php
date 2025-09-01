@@ -42,7 +42,7 @@ use Psr\Log\LoggerInterface;
  */
 class ExtensionLoader implements ExtensionLoaderInterface
 {
-    /** @var array<string, array> Loaded extensions registry with metadata */
+    /** @var array<string, array<string, mixed>> Loaded extensions registry with metadata */
     private array $loadedExtensions = [];
 
     /** @var array<string, string> PSR-4 namespace mappings for extensions */
@@ -213,7 +213,7 @@ class ExtensionLoader implements ExtensionLoaderInterface
         $this->debugLog("Loading extension: {$name}");
 
         $extensionPath = $this->getExtensionPath($name);
-        if (!$extensionPath) {
+        if ($extensionPath === null) {
             $this->debugLog("Extension path not found for: {$name}");
             return false;
         }
@@ -289,6 +289,7 @@ class ExtensionLoader implements ExtensionLoaderInterface
         return isset($this->loadedExtensions[$name]);
     }
 
+    /** @return string[] */
     public function getLoadedExtensions(): array
     {
         return array_keys($this->loadedExtensions);
@@ -315,7 +316,7 @@ class ExtensionLoader implements ExtensionLoaderInterface
 
         // Check for main extension file
         $mainFile = $manifest['main'] ?? null;
-        if (!$mainFile || !file_exists($path . '/' . $mainFile)) {
+        if ($mainFile === null || !file_exists($path . '/' . $mainFile)) {
             return false;
         }
 
@@ -325,14 +326,14 @@ class ExtensionLoader implements ExtensionLoaderInterface
     public function registerNamespace(string $name, string $path): void
     {
         $classLoader = $this->getClassLoader();
-        if (!$classLoader) {
+        if ($classLoader === null) {
             $this->debugLog("ClassLoader not available for namespace registration");
             return;
         }
 
         // Get autoload config from ExtensionConfig service (reduces duplication)
         $extensionConfig = $this->extensionConfig->getExtensionConfig($name);
-        if (!empty($extensionConfig) && isset($extensionConfig['autoload']['psr-4'])) {
+        if ($extensionConfig !== [] && isset($extensionConfig['autoload']['psr-4'])) {
             $autoloadConfig = $extensionConfig['autoload']['psr-4'];
 
             // Resolve project root via helper
@@ -355,6 +356,7 @@ class ExtensionLoader implements ExtensionLoaderInterface
         $this->debugLog("Registered default namespace for extension: {$name}");
     }
 
+    /** @return array<string, string> */
     public function getRegisteredNamespaces(): array
     {
         return $this->registeredNamespaces;
@@ -365,7 +367,7 @@ class ExtensionLoader implements ExtensionLoaderInterface
         $this->debugLog("Loading routes for extension: {$name}");
 
         $extensionConfig = $this->extensionConfig->getExtensionConfig($name);
-        if (empty($extensionConfig)) {
+        if ($extensionConfig === []) {
             $this->debugLog("Extension '{$name}' not found in config");
             return;
         }
@@ -390,7 +392,7 @@ class ExtensionLoader implements ExtensionLoaderInterface
             $this->debugLog("No 'provides.routes' section found for {$name}, trying fallback");
             // Fallback to old hardcoded approach if no routes in manifest
             $extensionPath = $this->getExtensionPath($name);
-            if (!$extensionPath) {
+            if ($extensionPath === null) {
                 $this->debugLog("No extension path found for {$name}");
                 return;
             }
@@ -416,14 +418,14 @@ class ExtensionLoader implements ExtensionLoaderInterface
         $this->debugLog("Loading service providers for extension: {$name}");
 
         $extensionConfig = $this->extensionConfig->getExtensionConfig($name);
-        if (empty($extensionConfig)) {
+        if ($extensionConfig === []) {
             $this->debugLog("Extension '{$name}' not found in config");
             return;
         }
 
         $serviceProviders = $extensionConfig['provides']['services'] ?? [];
 
-        if (empty($serviceProviders)) {
+        if ($serviceProviders === []) {
             $this->debugLog("No service providers defined for extension '{$name}'");
             return;
         }
@@ -451,7 +453,7 @@ class ExtensionLoader implements ExtensionLoaderInterface
     public function initializeExtension(string $name): bool
     {
         $extensionClass = $this->getExtensionClass($name);
-        if (!$extensionClass) {
+        if ($extensionClass === null) {
             return false;
         }
 
@@ -502,9 +504,10 @@ class ExtensionLoader implements ExtensionLoaderInterface
      * @throws \InvalidArgumentException If provided path is not a valid directory
      * @throws \RuntimeException If directory scanning fails due to permissions
      */
+    /** @return string[] */
     public function discoverExtensions(?string $extensionsPath = null): array
     {
-        $extensionsPath = $extensionsPath ?: $this->getDefaultExtensionsPath();
+        $extensionsPath = $extensionsPath ?? $this->getDefaultExtensionsPath();
 
         if (!is_dir($extensionsPath)) {
             return [];
@@ -519,7 +522,7 @@ class ExtensionLoader implements ExtensionLoaderInterface
             // Skip hidden directories and common non-extension directories
             if (
                 str_starts_with($extensionName, '.') ||
-                in_array($extensionName, ['vendor', 'node_modules', 'tests'])
+                in_array($extensionName, ['vendor', 'node_modules', 'tests'], true)
             ) {
                 continue;
             }
@@ -536,7 +539,7 @@ class ExtensionLoader implements ExtensionLoaderInterface
     {
         // Check if this is a Composer extension
         $composerPackage = $this->composerDiscovery->getExtensionPackageByName($name);
-        if ($composerPackage) {
+        if ($composerPackage !== null) {
             return $this->loadComposerExtensionClass($composerPackage);
         }
 
@@ -547,6 +550,7 @@ class ExtensionLoader implements ExtensionLoaderInterface
     /**
      * Load extension class from Composer package
      */
+    /** @param array<string, mixed> $composerPackage */
     private function loadComposerExtensionClass(array $composerPackage): ?string
     {
         $extensionClass = $composerPackage['extension_class'];
@@ -572,7 +576,7 @@ class ExtensionLoader implements ExtensionLoaderInterface
     private function loadLocalExtensionClass(string $name, string $path): ?string
     {
         $manifest = $this->loadManifest($path);
-        if (!$manifest) {
+        if ($manifest === null) {
             return null;
         }
 
@@ -606,6 +610,7 @@ class ExtensionLoader implements ExtensionLoaderInterface
      *
      * @return array Available extensions with metadata
      */
+    /** @return array<string, array<string, mixed>> */
     public function discoverAvailableExtensions(): array
     {
         $extensions = [];
@@ -634,7 +639,7 @@ class ExtensionLoader implements ExtensionLoaderInterface
 
             // Check for conflicts with local extensions
             if (isset($extensions[$extensionName]) && $extensions[$extensionName]['source_type'] === 'local') {
-                if ($logConflicts) {
+                if ($logConflicts === true) {
                     $this->debugLog("Extension conflict detected: '{$extensionName}' exists in both " .
                         "local and Composer sources");
                 }
@@ -677,6 +682,7 @@ class ExtensionLoader implements ExtensionLoaderInterface
      *
      * @return array Local extensions
      */
+    /** @return array<int, array<string, mixed>> */
     private function discoverLocalExtensions(): array
     {
         $extensions = [];
@@ -714,7 +720,7 @@ class ExtensionLoader implements ExtensionLoaderInterface
 
         // Then check Composer packages
         $composerPackage = $this->composerDiscovery->getExtensionPackageByName($name);
-        if ($composerPackage) {
+        if ($composerPackage !== null) {
             return $composerPackage['install_path'];
         }
 
@@ -726,6 +732,7 @@ class ExtensionLoader implements ExtensionLoaderInterface
         return base_path('extensions');
     }
 
+    /** @return array<string, mixed>|null */
     private function loadManifest(string $path): ?array
     {
         $manifestPath = $path . '/manifest.json';
@@ -770,7 +777,7 @@ class ExtensionLoader implements ExtensionLoaderInterface
                 // Set extension properties if this is a BaseExtensionServiceProvider
                 if ($serviceProvider instanceof \Glueful\DI\ServiceProviders\BaseExtensionServiceProvider) {
                     $extensionPath = $this->getExtensionPath($extensionName);
-                    if ($extensionPath) {
+                    if ($extensionPath !== null) {
                         // Use reflection to set the protected properties
                         $reflection = new \ReflectionClass($serviceProvider);
 
@@ -820,7 +827,7 @@ class ExtensionLoader implements ExtensionLoaderInterface
             return;
         }
 
-        if ($this->logger) {
+        if ($this->logger !== null) {
             $this->logger->debug("[ExtensionLoader] {$message}");
         } else {
             error_log("[ExtensionLoader] {$message}");

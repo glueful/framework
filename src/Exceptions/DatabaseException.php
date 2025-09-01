@@ -17,13 +17,13 @@ class DatabaseException extends ApiException
      *
      * @param string $message Exception message
      * @param int $statusCode HTTP status code (defaults to 500)
-     * @param array|null $data Additional error data
+     * @param array<string, mixed>|null $data Additional error data
      * @param \Throwable|null $previous Previous exception
      */
     public function __construct(
         string $message = "Database operation failed",
         int $statusCode = 500,
-        array|null $data = null,
+        ?array $data = null,
         ?\Throwable $previous = null
     ) {
         parent::__construct($message, $statusCode, $data, $previous);

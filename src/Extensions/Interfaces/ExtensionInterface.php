@@ -16,14 +16,14 @@ interface ExtensionInterface
     /**
      * Get extension metadata
      *
-     * @return array Extension metadata
+     * @return array<string, mixed> Extension metadata
      */
     public static function getMetadata(): array;
 
     /**
      * Check extension health
      *
-     * @return array Health status
+     * @return array<string, mixed> Health status
      */
     public static function checkHealth(): array;
 }

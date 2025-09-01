@@ -189,7 +189,7 @@ class InfoCommand extends BaseExtensionCommand
         if ($extension === null) {
             $this->error("Extension '{$extensionName}' not found.");
             $extensions = $manager->listInstalled();
-            $available = $extensions;
+            $available = array_column($extensions, 'name');
             $this->suggestSimilarExtensions($extensionName, $available);
             return self::FAILURE;
         }

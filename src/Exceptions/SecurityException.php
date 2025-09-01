@@ -18,13 +18,13 @@ class SecurityException extends ApiException
      *
      * @param string $message Error message
      * @param int $statusCode HTTP status code (default 400 Bad Request)
-     * @param array|null $data Additional error data
+     * @param array<string, mixed>|null $data Additional error data
      * @param \Throwable|null $previous Previous exception
      */
     public function __construct(
         string $message,
         int $statusCode = 400,
-        array|null $data = null,
+        ?array $data = null,
         ?\Throwable $previous = null
     ) {
         parent::__construct($message, $statusCode, $data, $previous);
@@ -34,7 +34,7 @@ class SecurityException extends ApiException
      * Create exception for invalid content type
      *
      * @param string $received Received content type
-     * @param array $expected Array of expected content types
+     * @param array<string> $expected Array of expected content types
      * @return self
      */
     public static function invalidContentType(string $received, array $expected): self
@@ -54,7 +54,7 @@ class SecurityException extends ApiException
      * Create exception for suspicious activity
      *
      * @param string $activity Description of suspicious activity
-     * @param array $context Additional context data
+     * @param array<string, mixed> $context Additional context data
      * @return self
      */
     public static function suspiciousActivity(string $activity, array $context = []): self

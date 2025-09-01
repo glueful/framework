@@ -13,6 +13,7 @@ use Psr\Log\LoggerInterface;
 
 class ExtensionCatalog implements ExtensionCatalogInterface
 {
+    /** @var array<string, mixed>|null */
     private ?array $catalogCache = null;
     private int $cacheTimeout = 3600; // 1 hour
     private string $cacheFile;
@@ -67,16 +68,18 @@ class ExtensionCatalog implements ExtensionCatalogInterface
         $this->timeout = $timeout;
     }
 
+    /** @return array<string, mixed> */
     public function getAvailableExtensions(): array
     {
         return $this->fetchCatalog();
     }
 
+    /** @return array<int, mixed> */
     public function searchExtensions(string $query): array
     {
         $catalog = $this->fetchCatalog();
 
-        if (empty($catalog)) {
+        if ($catalog === []) {
             return [];
         }
 
@@ -102,10 +105,10 @@ class ExtensionCatalog implements ExtensionCatalogInterface
 
     public function downloadExtension(string $name, ?string $version = null): string
     {
-        $this->debugLog("Downloading extension: {$name}" . ($version ? " (v{$version})" : ""));
+        $this->debugLog("Downloading extension: {$name}" . ($version !== null ? " (v{$version})" : ""));
 
         $extensionMetadata = $this->getRemoteMetadata($name);
-        if (!$extensionMetadata) {
+        if ($extensionMetadata === []) {
             throw new ExtensionException("Extension not found in catalog: {$name}");
         }
 
@@ -120,6 +123,7 @@ class ExtensionCatalog implements ExtensionCatalogInterface
         return $tempFile;
     }
 
+    /** @return array<string, mixed> */
     public function getRemoteMetadata(string $name): array
     {
         $catalog = $this->fetchCatalog();
@@ -133,6 +137,7 @@ class ExtensionCatalog implements ExtensionCatalogInterface
         return [];
     }
 
+    /** @return array<string, mixed> */
     public function checkForUpdates(): array
     {
         // This would check installed extensions against the catalog
@@ -140,6 +145,7 @@ class ExtensionCatalog implements ExtensionCatalogInterface
         return [];
     }
 
+    /** @return string[] */
     public function getCategories(): array
     {
         $catalog = $this->fetchCatalog();
@@ -153,6 +159,7 @@ class ExtensionCatalog implements ExtensionCatalogInterface
         return array_unique($categories);
     }
 
+    /** @return array<string, mixed> */
     public function getFeaturedExtensions(): array
     {
         $catalog = $this->fetchCatalog();
@@ -162,13 +169,14 @@ class ExtensionCatalog implements ExtensionCatalogInterface
         });
     }
 
+    /** @return array<string, mixed> */
     public function getExtensionsByCategory(string $category): array
     {
         $catalog = $this->fetchCatalog();
 
         return array_filter($catalog, function ($extension) use ($category) {
             $categories = $extension['categories'] ?? [];
-            return in_array($category, $categories);
+            return in_array($category, $categories, true);
         });
     }
 
@@ -275,6 +283,7 @@ class ExtensionCatalog implements ExtensionCatalogInterface
         return $this->registryUrl;
     }
 
+    /** @return array<string, mixed> */
     private function fetchCatalog(bool $useCache = true): array
     {
         // Check cache first
@@ -375,6 +384,7 @@ class ExtensionCatalog implements ExtensionCatalogInterface
         return (time() - $cacheTime) < $this->cacheTimeout;
     }
 
+    /** @return array<string, mixed>|null */
     private function loadCacheFile(): ?array
     {
         if (!file_exists($this->cacheFile)) {
@@ -390,6 +400,7 @@ class ExtensionCatalog implements ExtensionCatalogInterface
         return json_last_error() === JSON_ERROR_NONE ? $data : null;
     }
 
+    /** @param array<string, mixed> $data */
     private function saveCacheFile(array $data): void
     {
         $cacheDir = dirname($this->cacheFile);
@@ -413,7 +424,7 @@ class ExtensionCatalog implements ExtensionCatalogInterface
             return;
         }
 
-        if ($this->logger) {
+        if ($this->logger !== null) {
             $this->logger->debug("[ExtensionCatalog] {$message}");
         } else {
             error_log("[ExtensionCatalog] {$message}");

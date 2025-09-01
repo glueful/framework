@@ -85,8 +85,8 @@ class ExtensionManager
      * ```
      *
      * @param string $source Source path, URL, or extension name from catalog
-     * @param array $options Installation options (auto_enable, skip_dependencies, force)
-     * @return array Installation result with success status, extension info, and errors
+     * @param array<string, mixed> $options Installation options (auto_enable, skip_dependencies, force)
+     * @return array<string, mixed> Installation result with success status, extension info, and errors
      * @throws \InvalidArgumentException If source parameter is empty or invalid
      * @throws \Glueful\Exceptions\ExtensionException If installation fails due to validation errors
      * @throws \RuntimeException If filesystem operations fail or dependencies cannot be resolved
@@ -122,7 +122,7 @@ class ExtensionManager
 
             // Validate extension
             $validationResult = $this->validator->validateExtension($tempDir);
-            if (!$validationResult['valid']) {
+            if (($validationResult['valid'] ?? false) !== true) {
                 $issues = implode(', ', $validationResult['issues']);
                 throw new ExtensionException("Extension validation failed: " . $issues);
             }
@@ -183,7 +183,7 @@ class ExtensionManager
      * Install extension dependencies based on manifest and composer.json
      *
      * @param string $extensionPath Extension directory path
-     * @param array $manifest Extension manifest data
+     * @param array<string, mixed> $manifest Extension manifest data
      * @return bool Success status
      */
     public function installExtensionDependencies(string $extensionPath, array $manifest): bool
@@ -192,7 +192,7 @@ class ExtensionManager
         $composerJsonPath = $extensionPath . '/composer.json';
 
         // Check if extension has composer dependencies in manifest
-        if (!isset($manifest['dependencies']['composer']) || empty($manifest['dependencies']['composer'])) {
+        if (!isset($manifest['dependencies']['composer']) || count($manifest['dependencies']['composer']) === 0) {
             $this->debugLog("No composer dependencies found in manifest");
             return true;
         }
@@ -219,7 +219,7 @@ class ExtensionManager
      * Validate that composer.json dependencies match manifest dependencies
      *
      * @param string $composerJsonPath Path to composer.json
-     * @param array $manifest Extension manifest data
+     * @param array<string, mixed> $manifest Extension manifest data
      * @return bool Validation success
      */
     private function validateComposerDependencies(string $composerJsonPath, array $manifest): bool
@@ -320,7 +320,7 @@ class ExtensionManager
 
             // Remove from filesystem
             $extensionPath = $this->getExtensionPath($name);
-            if ($extensionPath && is_dir($extensionPath)) {
+            if ($extensionPath !== null && is_dir($extensionPath)) {
                 $this->removeDirectory($extensionPath);
             }
 
@@ -346,12 +346,12 @@ class ExtensionManager
         try {
             // Validate extension first
             $extensionPath = $this->getExtensionPath($name);
-            if (!$extensionPath) {
+            if ($extensionPath === null) {
                 throw new ExtensionException("Extension not found: {$name}");
             }
 
             $validationResult = $this->validator->validateExtension($extensionPath);
-            if (!$validationResult['valid']) {
+            if (($validationResult['valid'] ?? false) !== true) {
                 throw new ExtensionException("Extension validation failed");
             }
 
@@ -407,7 +407,7 @@ class ExtensionManager
      *
      * @param string $name Extension name
      * @param bool $force Force deletion even if enabled
-     * @return array Deletion result
+     * @return array<string, mixed> Deletion result
      */
     public function delete(string $name, bool $force = false): array
     {
@@ -431,19 +431,19 @@ class ExtensionManager
      *
      * @param string $name Extension name
      * @param string|null $version Specific version or null for latest
-     * @return array Update result
+     * @return array<string, mixed> Update result
      */
     public function update(string $name, ?string $version = null): array
     {
         try {
             $currentMetadata = $this->getExtensionMetadata($name);
-            if (!$currentMetadata) {
+            if ($currentMetadata === null) {
                 throw new ExtensionException("Extension not found: {$name}");
             }
 
             // Check for updates
             $remoteMetadata = $this->catalog->getRemoteMetadata($name);
-            if (!$remoteMetadata) {
+            if (count($remoteMetadata) === 0) {
                 throw new ExtensionException("Extension not found in catalog: {$name}");
             }
 
@@ -468,7 +468,7 @@ class ExtensionManager
             // Install new version
             $installResult = $this->install($name);
 
-            if (!$installResult['success']) {
+            if ($installResult['success'] === false) {
                 throw new ExtensionException("Failed to install updated version");
             }
 
@@ -501,7 +501,7 @@ class ExtensionManager
     /**
      * Fetch available extensions from catalog
      *
-     * @return array Available extensions
+     * @return array<string, mixed> Available extensions
      */
     public function fetch(): array
     {
@@ -511,7 +511,7 @@ class ExtensionManager
     /**
      * Get synchronized catalog with local extension status
      *
-     * @return array Synchronized catalog data
+     * @return array<string, mixed> Synchronized catalog data
      */
     public function getSynchronizedCatalog(): array
     {
@@ -533,16 +533,17 @@ class ExtensionManager
             $extensionName = $extension['name'] ?? '';
 
             // Add local status information
-            $extension['installed'] = in_array($extensionName, $installedExtensionNames);
-            $extension['enabled'] = in_array($extensionName, $enabledExtensions);
-            $extension['status'] = $extension['enabled'] ? 'active' :
-                                 ($extension['installed'] ? 'inactive' : 'available');
+            $extension['installed'] = in_array($extensionName, $installedExtensionNames, true);
+            $extension['enabled'] = in_array($extensionName, $enabledExtensions, true);
+            $isEnabled = ($extension['enabled'] ?? false) === true;
+            $isInstalled = ($extension['installed'] ?? false) === true;
+            $extension['status'] = $isEnabled ? 'active' : ($isInstalled ? 'inactive' : 'available');
 
             // Add actions available for this extension
             $extension['actions_available'] = $this->getAvailableActions($extensionName, $extension);
 
             // Add local metadata if installed
-            if ($extension['installed']) {
+            if ($isInstalled) {
                 $extension['local_metadata'] = $this->getExtensionMetadata($extensionName);
             }
 
@@ -571,7 +572,7 @@ class ExtensionManager
      * Search extensions in catalog
      *
      * @param string $query Search query
-     * @return array Search results
+     * @return array<int, mixed> Search results
      */
     public function search(string $query): array
     {
@@ -581,7 +582,7 @@ class ExtensionManager
     /**
      * Check for available updates
      *
-     * @return array Available updates
+     * @return array<string, mixed> Available updates
      */
     public function checkForUpdates(): array
     {
@@ -591,7 +592,7 @@ class ExtensionManager
     /**
      * Get extension categories
      *
-     * @return array Categories
+     * @return array<string, mixed> Categories
      */
     public function getCategories(): array
     {
@@ -601,7 +602,7 @@ class ExtensionManager
     /**
      * Get featured extensions
      *
-     * @return array Featured extensions
+     * @return array<string, mixed> Featured extensions
      */
     public function getFeaturedExtensions(): array
     {
@@ -612,7 +613,7 @@ class ExtensionManager
      * Get extensions by category
      *
      * @param string $category Category name
-     * @return array Extensions
+     * @return array<string, mixed> Extensions
      */
     public function getExtensionsByCategory(string $category): array
     {
@@ -626,7 +627,7 @@ class ExtensionManager
     /**
      * List all installed extensions
      *
-     * @return array Installed extensions
+     * @return array<int, array<string, mixed>> Installed extensions
      */
     public function listInstalled(): array
     {
@@ -660,7 +661,7 @@ class ExtensionManager
     /**
      * List enabled extensions
      *
-     * @return array Enabled extensions
+     * @return array<int, string> Enabled extensions
      */
     public function listEnabled(): array
     {
@@ -670,7 +671,7 @@ class ExtensionManager
     /**
      * Get loaded extensions
      *
-     * @return array Loaded extensions
+     * @return array<int, string> Loaded extensions
      */
     public function getLoadedExtensions(): array
     {
@@ -715,12 +716,12 @@ class ExtensionManager
      * Get extension metadata
      *
      * @param string $name Extension name
-     * @return array|null Extension metadata
+     * @return array<string, mixed>|null Extension metadata
      */
     public function getExtensionMetadata(string $name): ?array
     {
         $extensionPath = $this->getExtensionPath($name);
-        if (!$extensionPath) {
+        if ($extensionPath === null) {
             return null;
         }
 
@@ -737,7 +738,7 @@ class ExtensionManager
      * Get extension information (alias for getExtensionMetadata)
      *
      * @param string $name Extension name
-     * @return array|null Extension information
+     * @return array<string, mixed>|null Extension information
      */
     public function getExtensionInfo(string $name): ?array
     {
@@ -766,12 +767,12 @@ class ExtensionManager
      * Check extension health
      *
      * @param string $name Extension name
-     * @return array Health status
+     * @return array<string, mixed> Health status
      */
     public function checkHealth(string $name): array
     {
         $extensionPath = $this->getExtensionPath($name);
-        if (!$extensionPath) {
+        if ($extensionPath === null) {
             return [
                 'healthy' => false,
                 'issues' => ['Extension not found']
@@ -803,12 +804,12 @@ class ExtensionManager
      * Validate an extension
      *
      * @param string $name Extension name
-     * @return array Validation result
+     * @return array<string, mixed> Validation result
      */
     public function validate(string $name): array
     {
         $extensionPath = $this->getExtensionPath($name);
-        if (!$extensionPath) {
+        if ($extensionPath === null) {
             return [
                 'valid' => false,
                 'issues' => ['Extension not found']
@@ -827,7 +828,7 @@ class ExtensionManager
     public function validateDependencies(string $name): bool
     {
         $metadata = $this->getExtensionMetadata($name);
-        if (!$metadata || !isset($metadata['engines'])) {
+        if ($metadata === null || !isset($metadata['engines'])) {
             return true;
         }
 
@@ -842,7 +843,7 @@ class ExtensionManager
      * Get extension configuration
      *
      * @param string $name Extension name
-     * @return array Extension configuration
+     * @return array<string, mixed> Extension configuration
      */
     public function getExtensionConfig(string $name): array
     {
@@ -853,7 +854,7 @@ class ExtensionManager
      * Update extension configuration
      *
      * @param string $name Extension name
-     * @param array $configuration Configuration data
+     * @param array<string, mixed> $configuration Configuration data
      * @return void
      */
     public function updateExtensionConfig(string $name, array $configuration): void
@@ -865,7 +866,7 @@ class ExtensionManager
      * Get extension settings
      *
      * @param string $name Extension name
-     * @return array Extension settings
+     * @return array<string, mixed> Extension settings
      */
     public function getExtensionSettings(string $name): array
     {
@@ -876,7 +877,7 @@ class ExtensionManager
      * Update extension settings
      *
      * @param string $name Extension name
-     * @param array $settings Settings data
+     * @param array<string, mixed> $settings Settings data
      * @return void
      */
     public function updateExtensionSettings(string $name, array $settings): void
@@ -887,7 +888,7 @@ class ExtensionManager
     /**
      * Get global configuration
      *
-     * @return array Global configuration
+     * @return array<string, mixed> Global configuration
      */
     public function getGlobalConfig(): array
     {
@@ -897,7 +898,7 @@ class ExtensionManager
     /**
      * Get core extensions
      *
-     * @return array Core extensions
+     * @return array<int, string> Core extensions
      */
     public function getCoreExtensions(): array
     {
@@ -907,7 +908,7 @@ class ExtensionManager
     /**
      * Get optional extensions
      *
-     * @return array Optional extensions
+     * @return array<int, string> Optional extensions
      */
     public function getOptionalExtensions(): array
     {
@@ -932,8 +933,8 @@ class ExtensionManager
     /**
      * Enable multiple extensions
      *
-     * @param array $names Extension names
-     * @return array Results
+     * @param array<string> $names Extension names
+     * @return array<string, bool> Results
      */
     public function enableMultiple(array $names): array
     {
@@ -949,8 +950,8 @@ class ExtensionManager
     /**
      * Disable multiple extensions
      *
-     * @param array $names Extension names
-     * @return array Results
+     * @param array<string> $names Extension names
+     * @return array<string, bool> Results
      */
     public function disableMultiple(array $names): array
     {
@@ -1003,7 +1004,7 @@ class ExtensionManager
                 }
             }
         } catch (\Throwable $e) {
-            if ($this->logger) {
+            if ($this->logger !== null) {
                 $this->logger->warning('Auto-enable extensions failed: ' . $e->getMessage());
             }
         }
@@ -1012,7 +1013,7 @@ class ExtensionManager
     /**
      * Discover all available extensions from local and Composer sources
      *
-     * @return array Available extensions with source type information
+     * @return array<string, array<string, mixed>> Available extensions with source type information
      */
     public function discoverAvailableExtensions(): array
     {
@@ -1058,12 +1059,12 @@ class ExtensionManager
     protected function registerSpaConfigurations(string $extensionClass): void
     {
         try {
-            if ($this->container && $this->container->has(\Glueful\SpaManager::class)) {
+            if ($this->container !== null && $this->container->has(\Glueful\SpaManager::class)) {
                 $spaManager = $this->container->get(\Glueful\SpaManager::class);
                 $spaManager->registerFromExtension($extensionClass);
             }
         } catch (\Throwable $e) {
-            if ($this->logger) {
+            if ($this->logger !== null) {
                 $this->logger->error(
                     "Failed to register SPA configurations for {$extensionClass}: " . $e->getMessage()
                 );
@@ -1090,7 +1091,7 @@ class ExtensionManager
      * Discover extensions in directory
      *
      * @param string|null $extensionsPath Extensions directory path
-     * @return array Discovered extensions
+     * @return array<int, string> Discovered extensions
      */
     public function discoverExtensions(?string $extensionsPath = null): array
     {
@@ -1105,7 +1106,7 @@ class ExtensionManager
      * Get extensions by type
      *
      * @param string $type Extension type
-     * @return array Extensions
+     * @return array<int, string> Extensions
      */
     public function getExtensionsByType(string $type): array
     {
@@ -1161,7 +1162,7 @@ class ExtensionManager
     /**
      * Get registered namespaces
      *
-     * @return array Registered namespaces
+     * @return array<string, mixed> Registered namespaces
      */
     public function getRegisteredNamespaces(): array
     {
@@ -1176,7 +1177,7 @@ class ExtensionManager
      * Legacy method: Get extension data
      *
      * @param string $name Extension name
-     * @return array|null Extension data
+     * @return array<string, mixed>|null Extension data
      */
     public function getExtensionData(string $name): ?array
     {
@@ -1272,15 +1273,15 @@ class ExtensionManager
      * Get available actions for an extension
      *
      * @param string $extensionName Extension name
-     * @param array $extension Extension data
-     * @return array Available actions
+     * @param array<string, mixed> $extension Extension data
+     * @return array<int, string> Available actions
      */
     private function getAvailableActions(string $extensionName, array $extension): array
     {
         $actions = [];
 
-        if ($extension['installed'] ?? false) {
-            if ($extension['enabled'] ?? false) {
+        if (($extension['installed'] ?? false) === true) {
+            if (($extension['enabled'] ?? false) === true) {
                 $actions[] = 'disable';
             } else {
                 $actions[] = 'enable';
@@ -1310,7 +1311,7 @@ class ExtensionManager
             return;
         }
 
-        if ($this->logger) {
+        if ($this->logger !== null) {
             $this->logger->debug("[ExtensionManager] {$message}");
         } else {
             error_log("[ExtensionManager] {$message}");

@@ -8,26 +8,36 @@ interface ExtensionConfigInterface
 {
     /**
      * Get the global extensions configuration
+     *
+     * @return array<string, mixed>
      */
     public function getConfig(): array;
 
     /**
      * Save the global extensions configuration
+     *
+     * @param array<string, mixed> $config
      */
     public function saveConfig(array $config): bool;
 
     /**
      * Get configuration for a specific extension
+     *
+     * @return array<string, mixed>
      */
     public function getExtensionConfig(string $name): array;
 
     /**
      * Update configuration for a specific extension
+     *
+     * @param array<string, mixed> $config
      */
     public function updateExtensionConfig(string $name, array $config): void;
 
     /**
      * Get list of enabled extensions
+     *
+     * @return string[]
      */
     public function getEnabledExtensions(): array;
 
@@ -48,11 +58,15 @@ interface ExtensionConfigInterface
 
     /**
      * Get extension settings/options
+     *
+     * @return array<string, mixed>
      */
     public function getExtensionSettings(string $name): array;
 
     /**
      * Update extension settings/options
+     *
+     * @param array<string, mixed> $settings
      */
     public function updateExtensionSettings(string $name, array $settings): void;
 
@@ -63,6 +77,8 @@ interface ExtensionConfigInterface
 
     /**
      * Add extension to configuration
+     *
+     * @param array<string, mixed> $extensionData
      */
     public function addExtension(string $name, array $extensionData): void;
 
@@ -73,11 +89,15 @@ interface ExtensionConfigInterface
 
     /**
      * Get core extensions
+     *
+     * @return string[]
      */
     public function getCoreExtensions(): array;
 
     /**
      * Get optional extensions
+     *
+     * @return string[]
      */
     public function getOptionalExtensions(): array;
 

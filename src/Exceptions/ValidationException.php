@@ -12,17 +12,17 @@ namespace Glueful\Exceptions;
  */
 class ValidationException extends ApiException
 {
-    /** @var array Validation error messages */
+    /** @var array<string, mixed> Validation error messages */
     private array $errors;
 
     /**
      * Constructor
      *
-     * @param string|array $errors Error message or array of validation error messages
+     * @param string|array<string, mixed> $errors Error message or array of validation error messages
      * @param int $statusCode HTTP status code (defaults to 422)
-     * @param array|null $details Additional error details
+     * @param array<string, mixed>|null $details Additional error details
      */
-    public function __construct($errors, int $statusCode = 422, array|null $details = null)
+    public function __construct($errors, int $statusCode = 422, ?array $details = null)
     {
         if (is_string($errors)) {
             $message = $errors;
@@ -38,7 +38,7 @@ class ValidationException extends ApiException
     /**
      * Get validation errors
      *
-     * @return array Array of validation error messages
+     * @return array<string, mixed> Array of validation error messages
      */
     public function getErrors(): array
     {

@@ -122,7 +122,7 @@ class HttpAuthException extends AuthenticationException
      */
     public static function tokenExpired(string $tokenType = 'Bearer', ?string $token = null): self
     {
-        $tokenPrefix = $token && strlen($token) > 10 ? substr($token, 0, 10) : null;
+        $tokenPrefix = ($token !== null && strlen($token) > 10) ? substr($token, 0, 10) : null;
 
         return new self(
             'Token has expired',

@@ -9,7 +9,6 @@ use Glueful\Exceptions\ApiException;
 use Glueful\Exceptions\HttpProtocolException;
 use Glueful\Exceptions\HttpAuthException;
 use Glueful\Events\Http\ExceptionEvent;
-use Glueful\Http\RequestContext;
 use Psr\Log\LoggerInterface;
 use Glueful\Events\Event;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
@@ -28,14 +27,14 @@ class ExceptionHandler
     private static bool $testMode = false;
 
     /**
-     * @var array|null Captured response for testing
+     * @var array<string, mixed>|null Captured response for testing
      */
     private static ?array $testResponse = null;
 
 
 
     /**
-     * @var array Error response rate limits by IP
+     * @var array<string, int> Error response rate limits by IP
      */
     private static array $errorResponseLimits = [];
 
@@ -45,7 +44,7 @@ class ExceptionHandler
     private static int $maxErrorResponsesPerMinute = 60;
 
     /**
-     * @var array Cache for request context to avoid repeated calculations
+     * @var array<string, array<string, mixed>> Cache for request context to avoid repeated calculations
      */
     private static array $contextCache = [];
 
@@ -55,7 +54,7 @@ class ExceptionHandler
     private static bool $verboseContext = true;
 
     /**
-     * @var array Lightweight context for high-frequency errors
+     * @var array<string, mixed> Lightweight context for high-frequency errors
      */
     private static array $lightweightContext = [];
 
@@ -94,7 +93,7 @@ class ExceptionHandler
     /**
      * Get the last captured response in test mode
      *
-     * @return array|null
+     * @return array<string, mixed>|null
      */
     public static function getTestResponse(): ?array
     {
@@ -137,7 +136,7 @@ class ExceptionHandler
     public static function handleError(int $severity, string $message, string $filename, int $lineno): bool
     {
         // Check if error should be reported based on error_reporting setting
-        if (!(error_reporting() & $severity)) {
+        if ((error_reporting() & $severity) === 0) {
             // This error code is not included in error_reporting, so let PHP handle it
             return false;
         }
@@ -159,7 +158,7 @@ class ExceptionHandler
         $error = error_get_last();
 
         // Check if this was a fatal error
-        if ($error !== null && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        if ($error !== null && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
             // Create an exception from the fatal error
             $exception = new \ErrorException(
                 $error['message'],
@@ -196,7 +195,7 @@ class ExceptionHandler
             $authManager = \Glueful\Auth\AuthBootstrap::getManager();
             $userData = $authManager->authenticateWithProviders(['jwt', 'api_key'], $request);
 
-            if ($userData) {
+            if ($userData !== null) {
                 // Check common UUID locations in auth data
                 return $userData['user_uuid'] ?? $userData['uuid'] ?? $userData['user']['uuid'] ?? null;
             }
@@ -217,12 +216,15 @@ class ExceptionHandler
      * @param string|null $userUuid User UUID if available
      * @return array Context array for logging
      */
+    /**
+     * @return array<string, mixed>
+     */
     private static function buildContextFromRequest(?string $userUuid = null): array
     {
         $context = [
             // User context
             'user_uuid' => $userUuid,
-            'session_id' => session_id() ?: null,
+            'session_id' => session_id() !== false ? session_id() : null,
 
             // Request context
             'request_uri' => $_SERVER['REQUEST_URI'] ?? 'unknown',
@@ -296,7 +298,7 @@ class ExceptionHandler
         ];
 
         foreach ($ipHeaders as $header) {
-            if (!empty($_SERVER[$header])) {
+            if (isset($_SERVER[$header]) && $_SERVER[$header] !== '' && $_SERVER[$header] !== '0') {
                 $ip = $_SERVER[$header];
 
                 // Handle comma-separated IPs (X-Forwarded-For can have multiple)
@@ -319,6 +321,9 @@ class ExceptionHandler
      *
      * @return array Filtered headers
      */
+    /**
+     * @return array<string, mixed>
+     */
     private static function getFilteredHeaders(): array
     {
         $headers = [];
@@ -334,7 +339,7 @@ class ExceptionHandler
             if (strpos($key, 'HTTP_') === 0) {
                 $headerName = strtolower(str_replace(['HTTP_', '_'], ['', '-'], $key));
 
-                if (in_array($headerName, $sensitiveHeaders)) {
+                if (in_array($headerName, $sensitiveHeaders, true)) {
                     $headers[$headerName] = 'redacted';
                 } else {
                     $headers[$headerName] = $value;
@@ -360,12 +365,15 @@ class ExceptionHandler
      *
      * @return array Rate limit context
      */
+    /**
+     * @return array<string, mixed>
+     */
     private static function getRateLimitInfo(): array
     {
         $info = [];
 
         // Check if we have error response rate limit data
-        if (!empty(self::$errorResponseLimits)) {
+        if (count(self::$errorResponseLimits) > 0) {
             $clientIp = self::getRealIpAddress();
             $currentTime = time();
             $windowStart = $currentTime - 60;
@@ -390,6 +398,9 @@ class ExceptionHandler
      * @param string|null $userUuid User UUID
      * @param \Throwable $exception Exception being handled
      * @return array Optimized context array
+     */
+    /**
+     * @return array<string, mixed>
      */
     private static function getOptimizedContext(?string $userUuid, \Throwable $exception): array
     {
@@ -442,7 +453,7 @@ class ExceptionHandler
         ];
 
         $exceptionClass = get_class($exception);
-        return in_array($exceptionClass, $lightweightExceptions);
+        return in_array($exceptionClass, $lightweightExceptions, true);
     }
 
     /**
@@ -451,10 +462,13 @@ class ExceptionHandler
      * @param string|null $userUuid User UUID
      * @return array Lightweight context
      */
+    /**
+     * @return array<string, mixed>
+     */
     private static function getLightweightContext(?string $userUuid): array
     {
         // Cache lightweight context to avoid repeated calculations
-        if (!empty(self::$lightweightContext)) {
+        if (count(self::$lightweightContext) > 0) {
             $context = self::$lightweightContext;
             $context['user_uuid'] = $userUuid;
             $context['timestamp'] = date('c');
@@ -484,11 +498,14 @@ class ExceptionHandler
      * @param string|null $userUuid User UUID
      * @return array Basic context
      */
+    /**
+     * @return array<string, mixed>
+     */
     private static function buildBasicContext(?string $userUuid): array
     {
         return [
             'user_uuid' => $userUuid,
-            'session_id' => session_id() ?: null,
+            'session_id' => session_id() !== false ? session_id() : null,
             'request_uri' => $_SERVER['REQUEST_URI'] ?? 'unknown',
             'request_method' => $_SERVER['REQUEST_METHOD'] ?? 'unknown',
             'ip_address' => self::getRealIpAddress(),
@@ -525,11 +542,14 @@ class ExceptionHandler
      *
      * @return array Cache statistics
      */
+    /**
+     * @return array<string, mixed>
+     */
     public static function getContextCacheStats(): array
     {
         return [
             'cache_size' => count(self::$contextCache),
-            'lightweight_cached' => !empty(self::$lightweightContext),
+            'lightweight_cached' => count(self::$lightweightContext) > 0,
             'verbose_mode' => self::$verboseContext
         ];
     }
@@ -539,14 +559,17 @@ class ExceptionHandler
      *
      * @return array Request body information
      */
+    /**
+     * @return array<string, mixed>
+     */
     private static function getRequestBodyInfo(): array
     {
         static $bodyInfo = null;
 
         if ($bodyInfo === null) {
-            $input = file_get_contents('php://input') ?: '';
+            $input = file_get_contents('php://input') !== false ? file_get_contents('php://input') : '';
             $bodyInfo = [
-                'has_request_body' => !empty($input),
+                'has_request_body' => $input !== '' && $input !== '0',
                 'request_body_size' => strlen($input),
                 'content_length_header' => $_SERVER['CONTENT_LENGTH'] ?? null
             ];
@@ -573,7 +596,7 @@ class ExceptionHandler
     public static function setEventDispatcher(?EventDispatcherInterface $eventDispatcher): void
     {
         // Initialize the Event class with the test dispatcher
-        if ($eventDispatcher) {
+        if ($eventDispatcher !== null) {
             Event::initialize($eventDispatcher);
         }
     }
@@ -723,7 +746,7 @@ class ExceptionHandler
         $debugMode = config('app.debug', false);
 
         // Only show detailed errors in development environment with debug enabled
-        return $debugMode && ($environment === 'development' || $environment === 'local');
+        return (bool)$debugMode && ($environment === 'development' || $environment === 'local');
     }
 
     /**
@@ -732,6 +755,9 @@ class ExceptionHandler
      * @param \Throwable $exception
      * @param array $customContext Optional additional context for the log
      * @return void
+     */
+    /**
+     * @param array<string, mixed> $customContext
      */
     public static function logError(\Throwable $exception, array $customContext = []): void
     {
@@ -765,7 +791,7 @@ class ExceptionHandler
         ];
 
         // Merge custom context if provided
-        if (!empty($customContext)) {
+        if (count($customContext) > 0) {
             $context = array_merge($context, $customContext);
         }
 
@@ -810,7 +836,7 @@ class ExceptionHandler
                           !strpos($exceptionFile, '/Services/') &&
                           !strpos($exceptionFile, '/Repository/');
 
-        return in_array(get_class($exception), $frameworkExceptions) || $isFrameworkFile;
+        return in_array(get_class($exception), $frameworkExceptions, true) || $isFrameworkFile;
     }
 
     /**
@@ -857,7 +883,7 @@ class ExceptionHandler
         $environment = env('APP_ENV', 'production');
 
         // Always sanitize sensitive information unless in development/local
-        if (!in_array($environment, ['development', 'local']) || !config('app.debug', false)) {
+        if (!in_array($environment, ['development', 'local'], true) || !(bool)config('app.debug', false)) {
             // Remove all file paths (both Unix and Windows)
             $message = preg_replace('/[\/\\\\][^\s]*\.php/', '[file]', $message);
             $message = preg_replace('/[\/\\\\][^\s]*\.inc/', '[file]', $message);

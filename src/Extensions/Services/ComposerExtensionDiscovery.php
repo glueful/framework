@@ -22,6 +22,7 @@ use Psr\Log\LoggerInterface;
  */
 class ComposerExtensionDiscovery
 {
+    /** @var array<int, array<string, mixed>>|null */
     private ?array $discoveredPackages = null;
     private bool $debug = false;
 
@@ -43,7 +44,7 @@ class ComposerExtensionDiscovery
     /**
      * Discover all Composer packages of type "glueful-extension"
      *
-     * @return array Array of extension packages with metadata
+     * @return array<int, array<string, mixed>> Array of extension packages with metadata
      */
     public function discoverExtensionPackages(): array
     {
@@ -71,7 +72,7 @@ class ComposerExtensionDiscovery
             foreach ($packages as $package) {
                 if ($this->isGluefulExtension($package)) {
                     $extensionData = $this->parseExtensionPackage($package);
-                    if ($extensionData) {
+                    if ($extensionData !== null) {
                         $this->discoveredPackages[] = $extensionData;
                         $this->debugLog("Discovered Composer extension: {$package['name']}");
                     }
@@ -91,7 +92,7 @@ class ComposerExtensionDiscovery
      * Get extension package by name
      *
      * @param string $packageName Composer package name (e.g., 'glueful/rbac-extension')
-     * @return array|null Extension package data or null if not found
+     * @return array<string, mixed>|null Extension package data or null if not found
      */
     public function getExtensionPackage(string $packageName): ?array
     {
@@ -110,7 +111,7 @@ class ComposerExtensionDiscovery
      * Get extension package by extension name
      *
      * @param string $extensionName Extension name (e.g., 'RBAC')
-     * @return array|null Extension package data or null if not found
+     * @return array<string, mixed>|null Extension package data or null if not found
      */
     public function getExtensionPackageByName(string $extensionName): ?array
     {
@@ -128,7 +129,7 @@ class ComposerExtensionDiscovery
     /**
      * Check if a package is a Glueful extension
      *
-     * @param array $package Composer package data
+     * @param array<string, mixed> $package Composer package data
      * @return bool True if package is a Glueful extension
      */
     private function isGluefulExtension(array $package): bool
@@ -150,8 +151,8 @@ class ComposerExtensionDiscovery
     /**
      * Parse extension package data and validate structure
      *
-     * @param array $package Composer package data
-     * @return array|null Parsed extension data or null if invalid
+     * @param array<string, mixed> $package Composer package data
+     * @return array<string, mixed>|null Parsed extension data or null if invalid
      */
     private function parseExtensionPackage(array $package): ?array
     {
@@ -159,7 +160,7 @@ class ComposerExtensionDiscovery
             $gluefulConfig = $package['extra']['glueful'] ?? [];
             $extensionClass = $gluefulConfig['extension-class'] ?? null;
 
-            if (!$extensionClass) {
+            if ($extensionClass === null) {
                 $this->debugLog("Package {$package['name']} missing extension-class");
                 return null;
             }
@@ -170,7 +171,7 @@ class ComposerExtensionDiscovery
             // Get package installation path
             $installPath = $this->getPackageInstallPath($package);
 
-            if (!$installPath || !is_dir($installPath)) {
+            if ($installPath === null || !is_dir($installPath)) {
                 $this->debugLog("Package {$package['name']} install path not found: {$installPath}");
                 return null;
             }
@@ -220,14 +221,14 @@ class ComposerExtensionDiscovery
             $nameWithoutSuffix = substr($classShortName, 0, -9);
 
             // If removing Extension leaves something meaningful, use it
-            if (!empty($nameWithoutSuffix)) {
+            if ($nameWithoutSuffix !== '') {
                 return $nameWithoutSuffix;
             }
         }
 
         // Try to extract from namespace path for Glueful extensions
-        if (count($parts) >= 3 && in_array('Extensions', $parts)) {
-            $extensionsIndex = array_search('Extensions', $parts);
+        if (count($parts) >= 3 && in_array('Extensions', $parts, true)) {
+            $extensionsIndex = array_search('Extensions', $parts, true);
             if ($extensionsIndex !== false && isset($parts[$extensionsIndex + 1])) {
                 return $parts[$extensionsIndex + 1];
             }
@@ -242,7 +243,7 @@ class ComposerExtensionDiscovery
     /**
      * Get package installation path
      *
-     * @param array $package Composer package data
+     * @param array<string, mixed> $package Composer package data
      * @return string|null Installation path or null if not found
      */
     private function getPackageInstallPath(array $package): ?string
@@ -271,7 +272,7 @@ class ComposerExtensionDiscovery
      * Validate that extension class exists and is accessible
      *
      * @param string $className Extension class name
-     * @param array $package Package data for autoloading
+     * @param array<string, mixed> $package Package data for autoloading
      * @return bool True if class is valid
      */
     private function validateExtensionClass(string $className, array $package): bool
@@ -285,14 +286,15 @@ class ComposerExtensionDiscovery
         $autoload = $package['autoload']['psr-4'] ?? [];
         $installPath = $this->getPackageInstallPath($package);
 
-        if (!$installPath || empty($autoload)) {
+        if ($installPath === null || count($autoload) === 0) {
             return false;
         }
 
         foreach ($autoload as $namespace => $path) {
             if (str_starts_with($className . '\\', $namespace)) {
                 $relativeClass = substr($className, strlen($namespace) - 1);
-                $classFile = $installPath . '/' . trim($path, '/') . '/' . str_replace('\\', '/', $relativeClass) . '.php';
+                $classFile = $installPath . '/' . trim($path, '/') . '/' .
+                    str_replace('\\', '/', $relativeClass) . '.php';
 
                 if (file_exists($classFile)) {
                     return true;
@@ -311,11 +313,11 @@ class ComposerExtensionDiscovery
      */
     public function registerAutoloading(?ClassLoader $classLoader = null): void
     {
-        if (!$classLoader) {
+        if ($classLoader === null) {
             $classLoader = $this->getComposerAutoloader();
         }
 
-        if (!$classLoader) {
+        if ($classLoader === null) {
             $this->debugLog("No Composer autoloader available for extension PSR-4 registration");
             return;
         }
@@ -330,7 +332,7 @@ class ComposerExtensionDiscovery
     /**
      * Register PSR-4 autoloading for a specific package
      *
-     * @param array $package Extension package data
+     * @param array<string, mixed> $package Extension package data
      * @param ClassLoader $classLoader Composer autoloader
      */
     private function registerPackageAutoloading(array $package, ClassLoader $classLoader): void
@@ -397,7 +399,7 @@ class ComposerExtensionDiscovery
         }
 
         // Fallback to current working directory
-        return getcwd() ?: __DIR__;
+        return getcwd() !== false ? getcwd() : __DIR__;
     }
 
     /**
@@ -418,7 +420,7 @@ class ComposerExtensionDiscovery
             return;
         }
 
-        if ($this->logger) {
+        if ($this->logger !== null) {
             $this->logger->debug("[ComposerExtensionDiscovery] {$message}");
         } else {
             error_log("[ComposerExtensionDiscovery] {$message}");

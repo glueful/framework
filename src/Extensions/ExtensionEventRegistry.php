@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Glueful\Extensions;
 
-use Glueful\Extensions\Contracts\EventSubscriberInterface;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 
@@ -21,6 +20,7 @@ class ExtensionEventRegistry
 {
     private EventDispatcherInterface $eventDispatcher;
     private ?LoggerInterface $logger;
+    /** @var array<int, string> */
     private array $registeredExtensions = [];
 
     public function __construct(
@@ -34,7 +34,7 @@ class ExtensionEventRegistry
     /**
      * Register all event subscribers from loaded extensions
      *
-     * @param array $extensions Array of loaded extension instances
+     * @param array<int, object|array<string, mixed>> $extensions Array of loaded extension instances
      * @return int Number of event listeners registered
      */
     public function registerExtensionSubscribers(array $extensions): int
@@ -59,7 +59,7 @@ class ExtensionEventRegistry
     /**
      * Register event subscribers for a specific extension
      *
-     * @param object|array $extension Extension instance or extension data
+     * @param object|array<string, mixed> $extension Extension instance or extension data
      * @return int Number of event listeners registered for this extension
      */
     public function registerExtensionEventSubscribers(object|array $extension): int
@@ -68,7 +68,7 @@ class ExtensionEventRegistry
         if (is_array($extension)) {
             // If it's array data, try to get the extension class name
             $extensionName = $extension['name'] ?? null;
-            if (!$extensionName) {
+            if ($extensionName === null || $extensionName === '') {
                 return 0; // Skip if no name available
             }
 
@@ -89,7 +89,7 @@ class ExtensionEventRegistry
         $extensionClass = get_class($extension);
 
         // Skip if already registered
-        if (in_array($extensionClass, $this->registeredExtensions)) {
+        if (in_array($extensionClass, $this->registeredExtensions, true)) {
             return 0;
         }
 
@@ -99,7 +99,7 @@ class ExtensionEventRegistry
         }
 
         $subscribers = $extension::getEventSubscribers();
-        if (empty($subscribers)) {
+        if (count($subscribers) === 0) {
             return 0;
         }
 
@@ -127,7 +127,7 @@ class ExtensionEventRegistry
      *
      * @param object $extension Extension instance
      * @param string $eventClass Event class or name
-     * @param string|array $methodConfig Method configuration
+     * @param string|array<int|string, mixed> $methodConfig Method configuration
      * @param string $extensionClass Extension class name
      * @return int Number of listeners registered (0 or more)
      */
@@ -143,27 +143,26 @@ class ExtensionEventRegistry
                 return $this->addListener($extension, $eventClass, $methodConfig, 0, $extensionClass);
             }
 
-            if (is_array($methodConfig)) {
-                // Check if it's a single [method, priority] or multiple [[method1, priority1], [method2, priority2]]
-                if (isset($methodConfig[0]) && is_array($methodConfig[0])) {
-                    // Multiple listeners: [['method1', priority1], ['method2', priority2]]
-                    $count = 0;
-                    foreach ($methodConfig as $listenerConfig) {
-                        if (is_array($listenerConfig) && count($listenerConfig) >= 1) {
-                            $method = $listenerConfig[0];
-                            $priority = $listenerConfig[1] ?? 0;
-                            $count += $this->addListener($extension, $eventClass, $method, $priority, $extensionClass);
-                        }
+            // Handle array configuration
+            // Check if it's a single [method, priority] or multiple [[method1, priority1], [method2, priority2]]
+            if (isset($methodConfig[0]) && is_array($methodConfig[0])) {
+                // Multiple listeners: [['method1', priority1], ['method2', priority2]]
+                $count = 0;
+                foreach ($methodConfig as $listenerConfig) {
+                    if (is_array($listenerConfig) && count($listenerConfig) >= 1) {
+                        $method = $listenerConfig[0];
+                        $priority = $listenerConfig[1] ?? 0;
+                        $count += $this->addListener($extension, $eventClass, $method, $priority, $extensionClass);
                     }
-                    return $count;
-                } else {
-                    // Single listener with priority: ['method', priority]
-                    $method = $methodConfig[0] ?? $methodConfig['method'] ?? null;
-                    $priority = $methodConfig[1] ?? $methodConfig['priority'] ?? 0;
+                }
+                return $count;
+            } else {
+                // Single listener with priority: ['method', priority]
+                $method = $methodConfig[0] ?? $methodConfig['method'] ?? null;
+                $priority = $methodConfig[1] ?? $methodConfig['priority'] ?? 0;
 
-                    if ($method) {
-                        return $this->addListener($extension, $eventClass, $method, $priority, $extensionClass);
-                    }
+                if ($method) {
+                    return $this->addListener($extension, $eventClass, $method, $priority, $extensionClass);
                 }
             }
 
@@ -213,7 +212,7 @@ class ExtensionEventRegistry
     /**
      * Get list of registered extensions
      *
-     * @return array List of registered extension class names
+     * @return array<int, string> List of registered extension class names
      */
     public function getRegisteredExtensions(): array
     {
@@ -238,7 +237,7 @@ class ExtensionEventRegistry
      */
     public function isExtensionRegistered(string $extensionClass): bool
     {
-        return in_array($extensionClass, $this->registeredExtensions);
+        return in_array($extensionClass, $this->registeredExtensions, true);
     }
 
     /**
@@ -250,7 +249,7 @@ class ExtensionEventRegistry
      */
     protected function log(string $level, string $message): void
     {
-        if ($this->logger) {
+        if ($this->logger !== null) {
             $this->logger->log($level, $message, ['component' => 'ExtensionEventRegistry']);
         }
     }

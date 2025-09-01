@@ -18,8 +18,8 @@ class HttpException extends ApiException
     /** @var mixed|null The HTTP response body if available */
     private mixed $responseBody = null;
 
-    /** @var array|null HTTP response headers if available */
-    private array|null $responseHeaders = null;
+    /** @var array<string, mixed>|null HTTP response headers if available */
+    private ?array $responseHeaders = null;
 
     /** @var string|null The request URL that caused the exception */
     private string|null $requestUrl = null;
@@ -32,18 +32,18 @@ class HttpException extends ApiException
      *
      * @param string $message Error message
      * @param int $statusCode HTTP status code or curl error code
-     * @param array|null $data Additional error data
+     * @param array<string, mixed>|null $data Additional error data
      * @param mixed|null $responseBody Response body if available
-     * @param array|null $responseHeaders Response headers if available
+     * @param array<string, mixed>|null $responseHeaders Response headers if available
      * @param string|null $requestUrl The request URL that failed
      * @param string|null $requestMethod The HTTP method used in the request
      */
     public function __construct(
         string $message,
         int $statusCode = 400,
-        array|null $data = null,
+        ?array $data = null,
         mixed $responseBody = null,
-        array|null $responseHeaders = null,
+        ?array $responseHeaders = null,
         string|null $requestUrl = null,
         string|null $requestMethod = null
     ) {
@@ -68,9 +68,9 @@ class HttpException extends ApiException
     /**
      * Get the HTTP response headers
      *
-     * @return array|null
+     * @return array<string, mixed>|null
      */
-    public function getResponseHeaders(): array|null
+    public function getResponseHeaders(): ?array
     {
         return $this->responseHeaders;
     }

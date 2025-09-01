@@ -19,7 +19,7 @@ class BusinessLogicException extends ApiException
      * Create a new business logic exception
      *
      * @param string $message Error message
-     * @param array $context Additional context information
+     * @param array<string, mixed> $context Additional context information
      * @param \Throwable|null $previous Previous exception for chaining
      */
     public function __construct(string $message, array $context = [], ?\Throwable $previous = null)
@@ -86,7 +86,7 @@ class BusinessLogicException extends ApiException
      * Create exception for dependency violations
      *
      * @param string $resource Resource being operated on
-     * @param array $dependencies List of dependent resources
+     * @param array<string> $dependencies List of dependent resources
      * @return self
      */
     public static function hasDependencies(string $resource, array $dependencies): self

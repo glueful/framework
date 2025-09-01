@@ -62,12 +62,15 @@ class ExtensionRequirements extends ConfigurableService
         match ($mode) {
             'strict' => throw new \RuntimeException("{$message} {$install}"),
             'lenient' => error_log("WARNING: {$message} {$install}"),
-            'suggest' => print("SUGGESTION: {$message} {$install}\n")
+            'suggest' => print("SUGGESTION: {$message} {$install}\n"),
+            default => error_log("Unknown mode: {$mode}")
         };
     }
 
     /**
      * Validate extension requirements based on enabled features
+     *
+     * @param array<string> $enabledFeatures
      */
     public function validateFeatureRequirements(array $enabledFeatures): void
     {
@@ -93,7 +96,7 @@ class ExtensionRequirements extends ConfigurableService
     /**
      * Get required extensions list
      *
-     * @return array List of required extension package names
+     * @return array<string> List of required extension package names
      */
     public function getRequiredExtensions(): array
     {
@@ -103,7 +106,7 @@ class ExtensionRequirements extends ConfigurableService
     /**
      * Get feature to extension mappings
      *
-     * @return array Mapping of features to required extensions
+     * @return array<string, string> Mapping of features to required extensions
      */
     public function getFeatureMappings(): array
     {

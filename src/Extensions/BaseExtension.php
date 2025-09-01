@@ -49,7 +49,7 @@ abstract class BaseExtension implements ExtensionInterface
      * Fallback: Generate from class reflection (for backward compatibility)
      *
      * @see https://docs.glueful.com/extensions/metadata-standard
-     * @return array Extension metadata
+     * @return array<string, mixed> Extension metadata
      */
     public static function getMetadata(): array
     {
@@ -115,7 +115,7 @@ abstract class BaseExtension implements ExtensionInterface
      * Checks if the extension is functioning correctly. Extensions can
      * override this to perform custom health checks.
      *
-     * @return array Health status
+     * @return array<string, mixed> Health status
      */
     public static function checkHealth(): array
     {
@@ -145,7 +145,7 @@ abstract class BaseExtension implements ExtensionInterface
         $manifest = static::getMetadata();
 
         // Check if SPA is enabled in manifest
-        if (!isset($manifest['spa']['enabled']) || !$manifest['spa']['enabled']) {
+        if (!isset($manifest['spa']['enabled']) || $manifest['spa']['enabled'] === false) {
             return [];
         }
 
@@ -204,13 +204,13 @@ abstract class BaseExtension implements ExtensionInterface
     public static function hasSpa(): bool
     {
         $manifest = static::getMetadata();
-        return isset($manifest['spa']['enabled']) && $manifest['spa']['enabled'];
+        return isset($manifest['spa']['enabled']) && $manifest['spa']['enabled'] === true;
     }
 
     /**
      * Get SPA metadata from manifest
      *
-     * @return array SPA metadata
+     * @return array<string, mixed> SPA metadata
      */
     public static function getSpaMetadata(): array
     {

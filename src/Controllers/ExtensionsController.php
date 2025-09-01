@@ -57,7 +57,8 @@ class ExtensionsController extends BaseController
             $extensionData = [];
 
             // Process installed extensions
-            foreach ($installedExtensions as $extensionName) {
+            foreach ($installedExtensions as $extension) {
+                $extensionName = $extension['name'] ?? '';
                 $tierType = $this->extensionManager->isCoreExtension($extensionName) ? 'core' : 'optional';
                 // Get metadata for each extension
                 $metadata = $this->extensionManager->getExtensionMetadata($extensionName) ?? [];
@@ -292,7 +293,8 @@ class ExtensionsController extends BaseController
                     'isCoreExtension' => $isCoreExtension,
                     'enabled' => $isEnabled,
                     'criticality' => $isCoreExtension ? 'critical' : 'standard',
-                    'healthImpact' => $isCoreExtension && !$health['healthy'] ? 'system-critical' : 'extension-only'
+                    'healthImpact' => $isCoreExtension && $health['healthy'] === false ?
+                        'system-critical' : 'extension-only'
                 ];
             },
             60 // 1 minute TTL for health checks
@@ -500,7 +502,7 @@ class ExtensionsController extends BaseController
             return Response::error($e->getMessage(), Response::HTTP_BAD_REQUEST);
         }
 
-        if (!$result['success']) {
+        if ($result['success'] === false) {
             $statusCode = Response::HTTP_BAD_REQUEST;
 
             // If the deletion failed due to extension being enabled

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Glueful\Extensions\Services;
 
 use Glueful\Extensions\Services\Interfaces\ExtensionValidatorInterface;
-use Glueful\Extensions\Exceptions\ExtensionException;
 use Glueful\Services\FileManager;
 use Glueful\DI\ContainerBootstrap;
 use Psr\Log\LoggerInterface;
@@ -13,7 +12,9 @@ use Psr\Log\LoggerInterface;
 class ExtensionValidator implements ExtensionValidatorInterface
 {
     private bool $debug = false;
+    /** @var array<string, int> */
     private array $frameworkVersion;
+    /** @var array<string, array<int, string>|array<string, mixed>> */
     private array $securityPatterns;
 
     public function __construct(
@@ -44,6 +45,7 @@ class ExtensionValidator implements ExtensionValidatorInterface
         $this->debug = $enable;
     }
 
+    /** @return array<string, mixed> */
     public function validateExtension(string $path): array
     {
         $results = [
@@ -58,16 +60,16 @@ class ExtensionValidator implements ExtensionValidatorInterface
 
         // Validate structure
         $structureResult = $this->validateStructure($path);
-        $results['structure_valid'] = empty($structureResult);
-        if (!empty($structureResult)) {
+        $results['structure_valid'] = $structureResult === [];
+        if ($structureResult !== []) {
             $results['issues'] = array_merge($results['issues'], $structureResult);
         }
 
         // Load and validate manifest
         $manifest = $this->loadManifest($path);
-        if ($manifest) {
+        if ($manifest !== null) {
             $manifestIssues = $this->validateManifest($manifest);
-            if (!empty($manifestIssues)) {
+            if ($manifestIssues !== []) {
                 $results['issues'] = array_merge($results['issues'], $manifestIssues);
             }
 
@@ -87,26 +89,27 @@ class ExtensionValidator implements ExtensionValidatorInterface
 
         // Validate syntax
         $syntaxIssues = $this->validateSyntax($path);
-        $results['syntax_valid'] = empty($syntaxIssues);
-        if (!empty($syntaxIssues)) {
+        $results['syntax_valid'] = $syntaxIssues === [];
+        if ($syntaxIssues !== []) {
             $results['issues'] = array_merge($results['issues'], $syntaxIssues);
         }
 
         // Security validation
         $securityIssues = $this->validateSecurity($path);
         $results['security_issues'] = $securityIssues;
-        if (!empty($securityIssues)) {
+        if ($securityIssues !== []) {
             $results['issues'] = array_merge($results['issues'], $securityIssues);
         }
 
         // Overall validation
-        $results['valid'] = empty($results['issues']) && empty($results['security_issues']);
+        $results['valid'] = $results['issues'] === [] && $results['security_issues'] === [];
 
         $this->debugLog("Validation completed for {$path}. Valid: " . ($results['valid'] ? 'Yes' : 'No'));
 
         return $results;
     }
 
+    /** @param array<string, string> $dependencies */
     public function validateDependencies(array $dependencies): bool
     {
         foreach ($dependencies as $dependency => $constraint) {
@@ -127,6 +130,7 @@ class ExtensionValidator implements ExtensionValidatorInterface
         return true;
     }
 
+    /** @return string[] */
     public function validateSecurity(string $path): array
     {
         $issues = [];
@@ -170,6 +174,7 @@ class ExtensionValidator implements ExtensionValidatorInterface
         return $issues;
     }
 
+    /** @param array<string, mixed> $metadata */
     public function checkCompatibility(array $metadata): bool
     {
         // Check framework compatibility
@@ -192,6 +197,10 @@ class ExtensionValidator implements ExtensionValidatorInterface
         return true;
     }
 
+    /**
+     * @param array<string, mixed> $manifest
+     * @return string[]
+     */
     public function validateManifest(array $manifest): array
     {
         $issues = [];
@@ -199,14 +208,14 @@ class ExtensionValidator implements ExtensionValidatorInterface
         // Required fields
         $requiredFields = ['manifestVersion', 'id', 'name', 'version', 'main'];
         foreach ($requiredFields as $field) {
-            if (!isset($manifest[$field]) || empty($manifest[$field])) {
+            if (!isset($manifest[$field]) || $manifest[$field] === '' || $manifest[$field] === []) {
                 $issues[] = "Required field '{$field}' is missing or empty";
             }
         }
 
         // Validate manifest version
         if (isset($manifest['manifestVersion'])) {
-            if (!in_array($manifest['manifestVersion'], ['1.0', '2.0'])) {
+            if (!in_array($manifest['manifestVersion'], ['1.0', '2.0'], true)) {
                 $issues[] = "Unsupported manifest version: {$manifest['manifestVersion']}";
             }
         }
@@ -235,11 +244,12 @@ class ExtensionValidator implements ExtensionValidatorInterface
         return $issues;
     }
 
+    /** @param array<string, mixed> $manifest */
     public function validateFiles(string $path, array $manifest): bool
     {
         // Check if main file exists
         $mainFile = $manifest['main'] ?? null;
-        if ($mainFile && !file_exists($path . '/' . $mainFile)) {
+        if ($mainFile !== null && !file_exists($path . '/' . $mainFile)) {
             return false;
         }
 
@@ -255,6 +265,7 @@ class ExtensionValidator implements ExtensionValidatorInterface
         return true;
     }
 
+    /** @return string[] */
     public function validateSyntax(string $path): array
     {
         $issues = [];
@@ -301,7 +312,7 @@ class ExtensionValidator implements ExtensionValidatorInterface
                 $perms = $file->getPerms();
 
                 // Check for overly permissive permissions
-                if (($perms & 0002) || ($perms & 0020)) {
+                if ((($perms & 0002) !== 0) || (($perms & 0020) !== 0)) {
                     $this->debugLog("Overly permissive permissions on: {$file->getPathname()}");
                     return false;
                 }
@@ -311,6 +322,7 @@ class ExtensionValidator implements ExtensionValidatorInterface
         return true;
     }
 
+    /** @return string[] */
     private function validateStructure(string $path): array
     {
         $issues = [];
@@ -329,6 +341,7 @@ class ExtensionValidator implements ExtensionValidatorInterface
         return $issues;
     }
 
+    /** @return array<string, mixed>|null */
     private function loadManifest(string $path): ?array
     {
         $manifestPath = $path . '/manifest.json';
@@ -345,6 +358,7 @@ class ExtensionValidator implements ExtensionValidatorInterface
         return json_last_error() === JSON_ERROR_NONE ? $manifest : null;
     }
 
+    /** @return string[] */
     private function findPhpFiles(string $path): array
     {
         $phpFiles = [];
@@ -366,6 +380,7 @@ class ExtensionValidator implements ExtensionValidatorInterface
         return $phpFiles;
     }
 
+    /** @return array<string, int> */
     private function parseVersion(string $version): array
     {
         // Remove any pre-release or build metadata
@@ -379,6 +394,7 @@ class ExtensionValidator implements ExtensionValidatorInterface
         ];
     }
 
+    /** @param array<string, int> $version */
     private function checkVersionConstraint(array $version, string $constraint): bool
     {
         // Simple constraint checking - supports >= for now
@@ -445,7 +461,7 @@ class ExtensionValidator implements ExtensionValidatorInterface
             return;
         }
 
-        if ($this->logger) {
+        if ($this->logger !== null) {
             $this->logger->debug("[ExtensionValidator] {$message}");
         } else {
             error_log("[ExtensionValidator] {$message}");

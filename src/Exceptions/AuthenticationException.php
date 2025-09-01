@@ -19,13 +19,13 @@ class AuthenticationException extends ApiException
      *
      * @param string $message Custom error message
      * @param int $statusCode HTTP status code (defaults to 401)
-     * @param array|null $data Additional error data
+     * @param array<string, mixed>|null $data Additional error data
      * @param \Throwable|null $previous Previous exception
      */
     public function __construct(
         string $message = 'Authentication failed',
         int $statusCode = 401,
-        array|null $data = null,
+        ?array $data = null,
         ?\Throwable $previous = null
     ) {
         parent::__construct($message, $statusCode, $data, $previous);

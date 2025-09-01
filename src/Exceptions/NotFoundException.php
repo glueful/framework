@@ -19,13 +19,13 @@ class NotFoundException extends ApiException
      *
      * @param string $message Error message
      * @param int $statusCode HTTP status code (defaults to 404)
-     * @param array|null $details Additional error details
+     * @param array<string, mixed>|null $details Additional error details
      * @param \Throwable|null $previous Previous exception
      */
     public function __construct(
         string $message = 'Resource not found',
         int $statusCode = 404,
-        array|null $details = null,
+        ?array $details = null,
         \Throwable|null $previous = null
     ) {
         // If the message doesn't contain "not found", append it (for resource names)
