@@ -20,7 +20,7 @@ use RuntimeException;
 class ConnectionPoolException extends RuntimeException
 {
     /**
-     * @var array Additional context about the error
+     * @var array<string, mixed> Additional context about the error
      */
     private array $context = [];
 
@@ -28,7 +28,7 @@ class ConnectionPoolException extends RuntimeException
      * Create exception with context
      *
      * @param string          $message  Error message
-     * @param array           $context  Additional error context
+     * @param array<string, mixed>           $context  Additional error context
      * @param int             $code     Error code
      * @param \Throwable|null $previous Previous exception
      */
@@ -45,7 +45,7 @@ class ConnectionPoolException extends RuntimeException
     /**
      * Get error context
      *
-     * @return array
+     * @return array<string, mixed>
      */
     public function getContext(): array
     {
@@ -56,7 +56,7 @@ class ConnectionPoolException extends RuntimeException
      * Create timeout exception
      *
      * @param  float $timeout   Timeout duration
-     * @param  array $poolState Current pool state
+     * @param  array<string, mixed> $poolState Current pool state
      * @return self
      */
     public static function acquisitionTimeout(float $timeout, array $poolState): self

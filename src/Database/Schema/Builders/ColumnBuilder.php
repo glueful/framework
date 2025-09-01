@@ -145,7 +145,7 @@ class ColumnBuilder implements ColumnBuilderInterface
     private ?string $check = null;
 
     /**
-     * @var array Additional options
+     * @var array<string, mixed> Additional options
      */
     private array $options = [];
 
@@ -180,7 +180,7 @@ class ColumnBuilder implements ColumnBuilderInterface
      * @param TableBuilderContextInterface $tableBuilder Parent table builder
      * @param string                       $name         Column name
      * @param string                       $type         Column type
-     * @param array                        $options      Initial options
+     * @param array<string, mixed>                        $options      Initial options
      */
     public function __construct(
         TableBuilderContextInterface $tableBuilder,
@@ -194,8 +194,8 @@ class ColumnBuilder implements ColumnBuilderInterface
 
         // Apply initial options
         foreach ($options as $key => $value) {
-            if (property_exists($this, $key)) {
-                $this->$key = $value;
+            if (is_string($key) && property_exists($this, $key)) {
+                $this->setProperty($key, $value);
             } else {
                 $this->options[$key] = $value;
             }
@@ -313,7 +313,7 @@ class ColumnBuilder implements ColumnBuilderInterface
     public function unique(?string $indexName = null): self
     {
         $this->unique = true;
-        if ($indexName) {
+        if ($indexName !== null) {
             $this->options['uniqueIndexName'] = $indexName;
         }
         return $this;
@@ -328,7 +328,7 @@ class ColumnBuilder implements ColumnBuilderInterface
     public function index(?string $indexName = null): self
     {
         $this->options['index'] = true;
-        if ($indexName) {
+        if ($indexName !== null) {
             $this->options['indexName'] = $indexName;
         }
         return $this;
@@ -731,7 +731,7 @@ class ColumnBuilder implements ColumnBuilderInterface
         $this->tableBuilder->addColumnDefinition($columnDefinition);
 
         // Add foreign key if specified
-        if ($this->foreignTable) {
+        if ($this->foreignTable !== null) {
             $constraintName = $this->generateForeignKeyName();
             $foreignKey = new \Glueful\Database\Schema\DTOs\ForeignKeyDefinition(
                 localColumn: $this->name,
@@ -752,7 +752,7 @@ class ColumnBuilder implements ColumnBuilderInterface
         }
 
         // Add regular index if specified
-        if (isset($this->options['index']) && $this->options['index'] && !$this->unique && !$this->primary) {
+        if (isset($this->options['index']) && (bool) $this->options['index'] && !$this->unique && !$this->primary) {
             $indexName = $this->options['indexName'] ?? null;
             $this->tableBuilder->index($this->name, $indexName);
         }
@@ -805,6 +805,38 @@ class ColumnBuilder implements ColumnBuilderInterface
     // ===========================================
     // Private Helper Methods
     // ===========================================
+
+    /**
+     * Set a property value safely
+     *
+     * @param string $property Property name
+     * @param mixed $value Property value
+     * @return void
+     */
+    private function setProperty(string $property, mixed $value): void
+    {
+        match ($property) {
+            'length' => $this->length = is_int($value) ? $value : null,
+            'precision' => $this->precision = is_int($value) ? $value : null,
+            'scale' => $this->scale = is_int($value) ? $value : null,
+            'nullable' => $this->nullable = (bool) $value,
+            'default' => $this->default = $value,
+            'defaultRaw' => $this->defaultRaw = is_string($value) ? $value : null,
+            'autoIncrement' => $this->autoIncrement = (bool) $value,
+            'unsigned' => $this->unsigned = (bool) $value,
+            'unique' => $this->unique = (bool) $value,
+            'primary' => $this->primary = (bool) $value,
+            'after' => $this->after = is_string($value) ? $value : null,
+            'first' => $this->first = (bool) $value,
+            'comment' => $this->comment = is_string($value) ? $value : null,
+            'charset' => $this->charset = is_string($value) ? $value : null,
+            'collation' => $this->collation = is_string($value) ? $value : null,
+            'binary' => $this->binary = (bool) $value,
+            'zerofill' => $this->zerofill = (bool) $value,
+            'check' => $this->check = is_string($value) ? $value : null,
+            default => null // Property not recognized, do nothing
+        };
+    }
 
     /**
      * Guess table name from column name

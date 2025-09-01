@@ -57,7 +57,7 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
         }
 
         // Add primary key (if not already defined by column)
-        if (!empty($table->primaryKey) && !$this->hasPrimaryKeyColumn($table->columns)) {
+        if ($table->primaryKey !== [] && !$this->hasPrimaryKeyColumn($table->columns)) {
             $quotedColumns = array_map([$this, 'quoteIdentifier'], $table->primaryKey);
             $parts[] = '  PRIMARY KEY (' . implode(', ', $quotedColumns) . ')';
         }
@@ -92,13 +92,17 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
      * @param  array           $changes Array of changes to apply
      * @return array Array of SQL statements
      */
+    /**
+     * @param array<string, mixed> $changes
+     * @return array<string>
+     */
     public function alterTable(TableDefinition $table, array $changes): array
     {
         $statements = [];
         $tableName = $this->quoteIdentifier($table->name);
 
         // Add columns
-        if (!empty($changes['add_columns'])) {
+        if (isset($changes['add_columns']) && $changes['add_columns'] !== []) {
             foreach ($changes['add_columns'] as $column) {
                 $columnDef = $this->buildColumnDefinition($column);
                 $statements[] = "ALTER TABLE {$tableName} ADD COLUMN {$columnDef};";
@@ -106,14 +110,14 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
         }
 
         // Modify columns
-        if (!empty($changes['modify_columns'])) {
+        if (isset($changes['modify_columns']) && $changes['modify_columns'] !== []) {
             foreach ($changes['modify_columns'] as $column) {
                 $statements = array_merge($statements, $this->buildModifyColumnStatements($table->name, $column));
             }
         }
 
         // Drop columns
-        if (!empty($changes['drop_columns'])) {
+        if (isset($changes['drop_columns']) && $changes['drop_columns'] !== []) {
             foreach ($changes['drop_columns'] as $columnName) {
                 $quotedColumn = $this->quoteIdentifier($columnName);
                 $statements[] = "ALTER TABLE {$tableName} DROP COLUMN {$quotedColumn};";
@@ -121,28 +125,28 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
         }
 
         // Add indexes
-        if (!empty($changes['add_indexes'])) {
+        if (isset($changes['add_indexes']) && $changes['add_indexes'] !== []) {
             foreach ($changes['add_indexes'] as $index) {
                 $statements[] = $this->createIndex($table->name, $index);
             }
         }
 
         // Drop indexes
-        if (!empty($changes['drop_indexes'])) {
+        if (isset($changes['drop_indexes']) && $changes['drop_indexes'] !== []) {
             foreach ($changes['drop_indexes'] as $indexName) {
                 $statements[] = $this->dropIndex($table->name, $indexName);
             }
         }
 
         // Add foreign keys
-        if (!empty($changes['add_foreign_keys'])) {
+        if (isset($changes['add_foreign_keys']) && $changes['add_foreign_keys'] !== []) {
             foreach ($changes['add_foreign_keys'] as $foreignKey) {
                 $statements[] = $this->addForeignKey($table->name, $foreignKey);
             }
         }
 
         // Drop foreign keys
-        if (!empty($changes['drop_foreign_keys'])) {
+        if (isset($changes['drop_foreign_keys']) && $changes['drop_foreign_keys'] !== []) {
             foreach ($changes['drop_foreign_keys'] as $constraintName) {
                 $statements[] = $this->dropForeignKey($table->name, $constraintName);
             }
@@ -270,7 +274,7 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
         $sql .= " ON {$tableName}";
 
         // Add method if specified
-        if ($index->algorithm) {
+        if ($index->algorithm !== null) {
             $method = strtolower($index->algorithm);
             $sql .= " USING {$method}";
         }
@@ -331,11 +335,11 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
         $sql .= "FOREIGN KEY ({$localColumn}) ";
         $sql .= "REFERENCES {$referencedTable} ({$referencedColumn})";
 
-        if ($foreignKey->onDelete) {
+        if ($foreignKey->onDelete !== null) {
             $sql .= ' ON DELETE ' . strtoupper($foreignKey->onDelete);
         }
 
-        if ($foreignKey->onUpdate) {
+        if ($foreignKey->onUpdate !== null) {
             $sql .= ' ON UPDATE ' . strtoupper($foreignKey->onUpdate);
         }
 
@@ -378,6 +382,9 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
      * @param  string $database Database name
      * @param  array  $options  Database options
      * @return string SQL CREATE DATABASE statement
+     */
+    /**
+     * @param array<string, mixed> $options
      */
     public function createDatabase(string $database, array $options = []): string
     {
@@ -426,6 +433,9 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
      * @param  array  $options Type options (length, precision, etc.)
      * @return string PostgreSQL-specific type
      */
+    /**
+     * @param array<string, mixed> $options
+     */
     public function mapColumnType(string $type, array $options = []): string
     {
         return match ($type) {
@@ -437,9 +447,9 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
             'longText' => 'TEXT',
             'mediumText' => 'TEXT',
             'tinyText' => 'TEXT',
-            'integer' => ($options['autoIncrement'] ?? false) ? 'SERIAL' : 'INTEGER',
-            'bigInteger' => ($options['autoIncrement'] ?? false) ? 'BIGSERIAL' : 'BIGINT',
-            'smallInteger' => ($options['autoIncrement'] ?? false) ? 'SMALLSERIAL' : 'SMALLINT',
+            'integer' => (bool)($options['autoIncrement'] ?? false) ? 'SERIAL' : 'INTEGER',
+            'bigInteger' => (bool)($options['autoIncrement'] ?? false) ? 'BIGSERIAL' : 'BIGINT',
+            'smallInteger' => (bool)($options['autoIncrement'] ?? false) ? 'SMALLSERIAL' : 'SMALLINT',
             'tinyInteger' => 'SMALLINT',
             'decimal', 'numeric' => 'DECIMAL(' . ($options['precision'] ?? 8) . ',' . ($options['scale'] ?? 2) . ')',
             'float' => isset($options['precision']) && isset($options['scale'])
@@ -601,6 +611,9 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
      * @param  array $columns Array of ColumnDefinition objects
      * @return bool True if a primary key column exists
      */
+    /**
+     * @param array<ColumnDefinition> $columns
+     */
     private function hasPrimaryKeyColumn(array $columns): bool
     {
         foreach ($columns as $column) {
@@ -651,12 +664,12 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
         }
 
         // Check constraint
-        if ($column->check) {
+        if ($column->check !== null) {
             $parts[] = 'CHECK (' . $column->check . ')';
         }
 
         // Enum check constraint for PostgreSQL
-        if ($column->type === 'enum' && !empty($column->options['values'])) {
+        if ($column->type === 'enum' && isset($column->options['values']) && $column->options['values'] !== []) {
             $quotedValues = array_map([$this, 'quoteValue'], $column->options['values']);
             $enumCheck = $this->quoteIdentifier($column->name) . ' IN (' . implode(', ', $quotedValues) . ')';
             $parts[] = 'CHECK (' . $enumCheck . ')';
@@ -671,6 +684,9 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
      * @param  string           $table  Table name
      * @param  ColumnDefinition $column Column definition
      * @return array Array of SQL statements
+     */
+    /**
+     * @return array<string>
      */
     private function buildModifyColumnStatements(string $table, ColumnDefinition $column): array
     {
@@ -728,11 +744,11 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
         $parts[] = $this->quoteIdentifier($foreignKey->referencedTable);
         $parts[] = '(' . $this->quoteIdentifier($foreignKey->referencedColumn) . ')';
 
-        if ($foreignKey->onDelete) {
+        if ($foreignKey->onDelete !== null) {
             $parts[] = 'ON DELETE ' . strtoupper($foreignKey->onDelete);
         }
 
-        if ($foreignKey->onUpdate) {
+        if ($foreignKey->onUpdate !== null) {
             $parts[] = 'ON UPDATE ' . strtoupper($foreignKey->onUpdate);
         }
 
@@ -788,6 +804,9 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
      * @param  string $table Table name
      * @param  \PDO   $pdo   PDO connection for executing queries
      * @return array Array of column information with standardized format
+     */
+    /**
+     * @return array<string, mixed>
      */
     public function getTableColumns(string $table, \PDO $pdo): array
     {
@@ -852,7 +871,7 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
                     $formattedColumns[$pk]['is_primary'] = true;
                 }
             }
-        } catch (\Exception $e) {
+        } catch (\Exception) {
             // Continue without primary key information
         }
 
@@ -877,7 +896,7 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
                     $formattedColumns[$unique]['is_unique'] = true;
                 }
             }
-        } catch (\Exception $e) {
+        } catch (\Exception) {
             // Continue without unique constraint information
         }
 
@@ -910,7 +929,7 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
                     ];
                 }
             }
-        } catch (\Exception $e) {
+        } catch (\Exception) {
             // Continue without index information
         }
 
@@ -954,11 +973,11 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
                     ];
                 }
             }
-        } catch (\Exception $e) {
+        } catch (\Exception) {
             // Continue without foreign key information
         }
 
-        return array_values($formattedColumns); // Convert back to indexed array
+        return $formattedColumns; // Return associative array as expected
     }
 
     // ===========================================
@@ -971,6 +990,10 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
      * @param  string $table   Table name
      * @param  array  $changes Changes to preview
      * @return array Preview information with SQL and warnings
+     */
+    /**
+     * @param array<string, mixed> $changes
+     * @return array<string, mixed>
      */
     public function generateChangePreview(string $table, array $changes): array
     {
@@ -1001,7 +1024,8 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
                 case 'add_index':
                     $indexName = $change['index_name'] ?? "{$table}_{$change['column']}_idx";
                     $column = $change['column'];
-                    $unique = ($change['unique'] ?? false) ? 'UNIQUE ' : '';
+                    $isUnique = $change['unique'] ?? false;
+                    $unique = is_bool($isUnique) && $isUnique ? 'UNIQUE ' : '';
                     $sql[] = "CREATE {$unique}INDEX " . $this->quoteIdentifier($indexName) .
                        " ON " . $this->quoteIdentifier($table) . " (" . $this->quoteIdentifier($column) . ")";
                     $estimatedDuration += 15;
@@ -1022,7 +1046,7 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
             'sql' => $sql,
             'warnings' => $warnings,
             'estimated_duration' => $estimatedDuration,
-            'safe_to_execute' => empty($warnings),
+            'safe_to_execute' => $warnings === [],
             'generated_at' => date('Y-m-d H:i:s')
         ];
     }
@@ -1034,6 +1058,10 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
      * @param  string $format Export format
      * @param  array  $schema Table schema data
      * @return array Exported schema
+     */
+    /**
+     * @param array<string, mixed> $schema
+     * @return array<string, mixed>
      */
     public function exportTableSchema(string $table, string $format, array $schema): array
     {
@@ -1068,6 +1096,10 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
      * @param  string $format Schema format
      * @return array Validation result
      */
+    /**
+     * @param array<string, mixed> $schema
+     * @return array<string, mixed>
+     */
     public function validateSchema(array $schema, string $format): array
     {
         return $this->commonValidateSchema($schema, $format);
@@ -1078,6 +1110,10 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
      *
      * @param  array $change Original change
      * @return array Revert operations
+     */
+    /**
+     * @param array<string, mixed> $change
+     * @return array<string, mixed>
      */
     public function generateRevertOperations(array $change): array
     {
@@ -1091,6 +1127,9 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
      * @param  array  $schema Schema definition
      * @return string CREATE TABLE SQL
      */
+    /**
+     * @param array<string, mixed> $schema
+     */
     private function generateCreateTableFromSchema(string $table, array $schema): string
     {
         $columns = [];
@@ -1099,7 +1138,8 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
             $columnName = $column['column_name'] ?? $column['name'];
             $columnType = $column['data_type'] ?? $column['type'];
             $nullable = ($column['is_nullable'] ?? 'YES') === 'YES' ? '' : ' NOT NULL';
-            $default = !empty($column['column_default']) ? " DEFAULT {$column['column_default']}" : '';
+            $columnDefault = $column['column_default'] ?? null;
+            $default = ($columnDefault !== null && $columnDefault !== '') ? " DEFAULT {$columnDefault}" : '';
 
             $columns[] = $this->quoteIdentifier($columnName) . " {$columnType}{$nullable}{$default}";
         }
@@ -1110,12 +1150,16 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
     /**
      * Common validation logic
      */
+    /**
+     * @param array<string, mixed> $schema
+     * @return array<string, mixed>
+     */
     private function commonValidateSchema(array $schema, string $format): array
     {
         $errors = [];
         $warnings = [];
 
-        if (empty($schema)) {
+        if ($schema === []) {
             $errors[] = 'Schema cannot be empty';
         }
 
@@ -1129,7 +1173,7 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
         }
 
         return [
-            'valid' => empty($errors),
+            'valid' => $errors === [],
             'errors' => $errors,
             'warnings' => $warnings
         ];
@@ -1137,6 +1181,10 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
 
     /**
      * Common revert operations logic
+     */
+    /**
+     * @param array<string, mixed> $change
+     * @return array<string, mixed>
      */
     private function commonGenerateRevertOperations(array $change): array
     {
@@ -1168,7 +1216,7 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
                 ];
         }
 
-        return $revertOps;
+        return count($revertOps) > 0 ? $revertOps[0] : ['type' => 'no_operation'];
     }
 
     /**
@@ -1179,6 +1227,11 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
      * @param  string $format  Schema format
      * @param  array  $options Import options
      * @return array Import result with SQL statements
+     */
+    /**
+     * @param array<string, mixed> $schema
+     * @param array<string, mixed> $options
+     * @return array<string, mixed>
      */
     public function importTableSchema(string $table, array $schema, string $format, array $options): array
     {
@@ -1204,14 +1257,16 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
                         $columnName = $column['column_name'] ?? $column['name'];
                         $columnType = $column['data_type'] ?? $column['type'] ?? 'VARCHAR(255)';
                         $nullable = ($column['is_nullable'] ?? 'YES') === 'YES' ? '' : ' NOT NULL';
-                        $default = !empty($column['column_default']) ? " DEFAULT {$column['column_default']}" : '';
+                        $columnDefault = $column['column_default'] ?? null;
+                        $default = ($columnDefault !== null && $columnDefault !== '') ?
+                            " DEFAULT {$columnDefault}" : '';
 
                         $columns[] = $this->quoteIdentifier($columnName) . " {$columnType}{$nullable}{$default}";
 
                         // Handle constraints that need to be added separately
-                        if (!empty($column['is_primary'])) {
+                        if (isset($column['is_primary']) && (bool)$column['is_primary']) {
                             $constraints[] = "PRIMARY KEY (" . $this->quoteIdentifier($columnName) . ")";
-                        } elseif (!empty($column['is_unique'])) {
+                        } elseif (isset($column['is_unique']) && (bool)$column['is_unique']) {
                             $constraintName = "{$table}_{$columnName}_unique";
                             $constraints[] = "CONSTRAINT " . $this->quoteIdentifier($constraintName) .
                                        " UNIQUE (" . $this->quoteIdentifier($columnName) . ")";

@@ -48,7 +48,7 @@ class UpdateBuilder implements UpdateBuilderInterface
         $sql = "UPDATE {$this->driver->wrapIdentifier($table)} SET ";
         $sql .= $this->buildSetClause($data);
 
-        if (!empty($conditions)) {
+        if (count($conditions) > 0) {
             $sql .= " WHERE " . $this->buildWhereClause($conditions);
         }
 
@@ -96,7 +96,7 @@ class UpdateBuilder implements UpdateBuilderInterface
      */
     public function validateData(array $data): void
     {
-        if (empty($data)) {
+        if (count($data) === 0) {
             throw new \InvalidArgumentException('Cannot update with empty data array');
         }
 
@@ -110,7 +110,7 @@ class UpdateBuilder implements UpdateBuilderInterface
      */
     public function validateConditions(array $conditions): void
     {
-        if (empty($conditions)) {
+        if (count($conditions) === 0) {
             throw new \InvalidArgumentException('Update conditions cannot be empty. This would update all rows.');
         }
 
@@ -121,6 +121,8 @@ class UpdateBuilder implements UpdateBuilderInterface
 
     /**
      * Check if array is associative
+     *
+     * @param array<mixed> $array
      */
     protected function isAssociativeArray(array $array): bool
     {

@@ -111,7 +111,7 @@ class ApiDefinitionGenerator
     ): void {
         $this->generateDatabaseDefinitions($specificDatabase);
 
-        if ($tableName !== null && $tableName !== '') {
+        if ($tableName !== null && $tableName !== '' && $specificDatabase !== null) {
             $this->generateTableDefinition($specificDatabase, $tableName);
         }
 
@@ -342,7 +342,7 @@ class ApiDefinitionGenerator
                         $fields[] = [
                             'Field' => $col['name'],
                             'Type' => $col['type'] ?? '',
-                            'Null' => isset($col['nullable']) && $col['nullable'] ? 'YES' : 'NO'
+                            'Null' => isset($col['nullable']) && (bool) $col['nullable'] ? 'YES' : 'NO'
                         ];
                     } elseif (isset($col['Field'])) {
                         // Old format that already has 'Field', 'Type', 'Null' keys

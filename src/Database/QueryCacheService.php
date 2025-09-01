@@ -18,7 +18,7 @@ use ReflectionMethod;
 class QueryCacheService
 {
     /**
-     * @var CacheStore Cache store instance
+     * @var CacheStore<mixed> Cache store instance
      */
     private CacheStore $cache;
 
@@ -40,7 +40,7 @@ class QueryCacheService
     /**
      * Constructor
      *
-     * @param CacheStore|null $cache Optional custom cache store instance
+     * @param CacheStore<mixed>|null $cache Optional custom cache store instance
      */
     public function __construct(?CacheStore $cache = null)
     {
@@ -61,7 +61,7 @@ class QueryCacheService
      * Get cached query result or execute and cache
      *
      * @param  string   $query    SQL query
-     * @param  array    $params   Query parameters
+     * @param  array<mixed>    $params   Query parameters
      * @param  \Closure $executor Function to execute if cache miss
      * @param  int|null $ttl      Cache TTL in seconds
      * @return mixed Query result
@@ -115,7 +115,7 @@ class QueryCacheService
      *
      * @param  object $repository Repository instance
      * @param  string $method     Method name
-     * @param  array  $args       Method arguments
+     * @param  array<mixed>  $args       Method arguments
      * @return mixed Method result
      */
     public function cacheRepositoryMethod(object $repository, string $method, array $args = [])
@@ -123,7 +123,7 @@ class QueryCacheService
         $reflection = new ReflectionMethod($repository, $method);
         $attributes = $reflection->getAttributes(CacheResult::class);
 
-        if (empty($attributes)) {
+        if ($attributes === []) {
             // No CacheResult attribute, execute method directly
             return $reflection->invokeArgs($repository, $args);
         }
@@ -132,7 +132,7 @@ class QueryCacheService
         $cacheAttr = $attributes[0]->newInstance();
 
         // Generate a unique key for this method call
-        $keyBase = $cacheAttr->keyPrefix ?: get_class($repository) . '::' . $method;
+        $keyBase = $cacheAttr->keyPrefix ?? (get_class($repository) . '::' . $method);
         $key = $this->generateMethodCacheKey($keyBase, $args);
 
         // Use the ttl from the attribute
@@ -145,7 +145,7 @@ class QueryCacheService
                 $result = $reflection->invokeArgs($repository, $args);
 
                 // Apply custom tags if provided in the attribute
-                if (!empty($cacheAttr->tags)) {
+                if ($cacheAttr->tags !== []) {
                     $this->cache->addTags($key, $cacheAttr->tags);
                 }
 
@@ -159,7 +159,7 @@ class QueryCacheService
      * Generate a cache key for a repository method
      *
      * @param  string $keyBase Base key (usually class::method)
-     * @param  array  $args    Method arguments
+     * @param  array<mixed>  $args    Method arguments
      * @return string Cache key
      */
     protected function generateMethodCacheKey(string $keyBase, array $args): string
@@ -200,7 +200,7 @@ class QueryCacheService
         $tables = $this->extractTablesFromQuery($query);
 
         foreach ($tables as $table) {
-            if (in_array($table, $excludeTables)) {
+            if (in_array($table, $excludeTables, true)) {
                 return false;
             }
         }
@@ -212,7 +212,7 @@ class QueryCacheService
      * Generate cache key for a query
      *
      * @param  string $query  SQL query
-     * @param  array  $params Query parameters
+     * @param  array<mixed>  $params Query parameters
      * @return string Cache key
      */
     protected function generateCacheKey(string $query, array $params): string
@@ -224,7 +224,7 @@ class QueryCacheService
      * Extract table names from a SQL query
      *
      * @param  string $query SQL query
-     * @return array List of table names
+     * @return array<string> List of table names
      */
     protected function extractTablesFromQuery(string $query): array
     {

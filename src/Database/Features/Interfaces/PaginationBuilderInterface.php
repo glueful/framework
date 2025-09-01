@@ -33,7 +33,7 @@ interface PaginationBuilderInterface
     /**
      * Execute paginated query with SQL and bindings
      *
-     * @param array<string, scalar|array|null> $bindings
+     * @param array<string, mixed> $bindings
      * @return array{
      *   data: list<array<string,mixed>>,
      *   current_page: int,
@@ -50,6 +50,8 @@ interface PaginationBuilderInterface
 
     /**
      * Get total count for pagination
+     *
+     * @param array<string, mixed> $bindings
      */
     public function getTotalCount(string $sql, array $bindings): int;
 

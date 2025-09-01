@@ -45,6 +45,8 @@ interface JoinClauseInterface
 
     /**
      * Get all join data
+     *
+     * @return array<array<string, mixed>>
      */
     public function getJoins(): array;
 
@@ -65,6 +67,8 @@ interface JoinClauseInterface
 
     /**
      * Get parameter bindings for joins
+     *
+     * @return array<mixed>
      */
     public function getBindings(): array;
 }

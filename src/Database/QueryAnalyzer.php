@@ -56,8 +56,9 @@ class QueryAnalyzer
      * potential optimizations.
      *
      * @param  string $query  The SQL query to analyze
-     * @param  array  $params Parameters to bind to the query
-     * @return array Analysis results containing execution plan, issues, suggestions and index recommendations
+     * @param  array<int|string, mixed>  $params Parameters to bind to the query
+     * @return array<string, mixed> Analysis results containing execution plan, issues, suggestions and
+     *                              index recommendations
      */
     public function analyzeQuery(string $query, array $params = []): array
     {
@@ -77,8 +78,8 @@ class QueryAnalyzer
      * using database-specific syntax.
      *
      * @param  string $query  The SQL query to analyze
-     * @param  array  $params Parameters to bind to the query
-     * @return array The execution plan as returned by the database
+     * @param  array<int|string, mixed>  $params Parameters to bind to the query
+     * @return array<string, mixed> The execution plan as returned by the database
      */
     protected function getExecutionPlan(string $query, array $params = []): array
     {
@@ -119,9 +120,9 @@ class QueryAnalyzer
     /**
      * Normalize execution plan format across different database engines
      *
-     * @param  array  $plan       Raw execution plan from database
+     * @param  array<string, mixed>  $plan       Raw execution plan from database
      * @param  string $driverName Database driver name
-     * @return array Normalized execution plan
+     * @return array<int|string, mixed> Normalized execution plan
      */
     protected function normalizeExecutionPlan(array $plan, string $driverName): array
     {
@@ -157,8 +158,8 @@ class QueryAnalyzer
      * - Inefficient LIKE patterns
      *
      * @param  string $query  The SQL query to analyze
-     * @param  array  $params Parameters to bind to the query
-     * @return array List of detected issues with severity and description
+     * @param  array<int|string, mixed>  $params Parameters to bind to the query
+     * @return array<int, array<string, string>> List of detected issues with severity and description
      */
     protected function detectIssues(string $query, array $params = []): array
     {
@@ -194,9 +195,9 @@ class QueryAnalyzer
     /**
      * Detect MySQL-specific query issues
      *
-     * @param  array  $plan  Execution plan
+     * @param  array<string, mixed>  $plan  Execution plan
      * @param  string $query SQL query
-     * @return array Detected issues
+     * @return array<int, array<string, string>> Detected issues
      */
     protected function detectMySQLIssues(array $plan, string $query): array
     {
@@ -237,16 +238,16 @@ class QueryAnalyzer
     /**
      * Detect PostgreSQL-specific query issues
      *
-     * @param  array  $plan  Execution plan
+     * @param  array<string, mixed>  $plan  Execution plan
      * @param  string $query SQL query
-     * @return array Detected issues
+     * @return array<int, array<string, string>> Detected issues
      */
     protected function detectPostgreSQLIssues(array $plan, string $query): array
     {
         $issues = [];
 
         // Process PostgreSQL's JSON plan format
-        if (is_array($plan) && isset($plan[0]) && isset($plan[0]['Plan'])) {
+        if (isset($plan[0]) && isset($plan[0]['Plan'])) {
             $planDetails = $plan[0]['Plan'];
 
             // Check for sequential scans
@@ -277,9 +278,9 @@ class QueryAnalyzer
     /**
      * Detect SQLite-specific query issues
      *
-     * @param  array  $plan  Execution plan
+     * @param  array<string, mixed>  $plan  Execution plan
      * @param  string $query SQL query
-     * @return array Detected issues
+     * @return array<int, array<string, string>> Detected issues
      */
     protected function detectSQLiteIssues(array $plan, string $query): array
     {
@@ -310,7 +311,7 @@ class QueryAnalyzer
      * Detect generic SQL issues that apply to all database types
      *
      * @param  string $query SQL query
-     * @return array Detected issues
+     * @return array<int, array<string, string>> Detected issues
      */
     protected function detectGenericIssues(string $query): array
     {
@@ -351,8 +352,8 @@ class QueryAnalyzer
      * Generate optimization suggestions based on query analysis
      *
      * @param  string $query  The SQL query to analyze
-     * @param  array  $params Parameters to bind to the query
-     * @return array List of suggestions to improve query performance
+     * @param  array<int|string, mixed>  $params Parameters to bind to the query
+     * @return array<int, array<string, string>> List of suggestions to improve query performance
      */
     protected function generateSuggestions(string $query, array $params = []): array
     {
@@ -361,36 +362,29 @@ class QueryAnalyzer
 
         // Convert issues to suggestions
         foreach ($issues as $issue) {
-            switch ($issue['message']) {
-                case (strpos($issue['message'], 'Full table scan') !== false):
-                    $suggestions[] = [
+            if (strpos($issue['message'], 'Full table scan') !== false) {
+                $suggestions[] = [
                     'priority' => 'high',
                     'suggestion' => 'Add appropriate indexes to tables',
                     'details' => $issue['details'],
                     'related_issue' => $issue['message']
-                    ];
-                    break;
-
-                case (strpos($issue['message'], "Query uses 'SELECT *'") !== false):
-                    $suggestions[] = [
+                ];
+            } elseif (strpos($issue['message'], "Query uses 'SELECT *'") !== false) {
+                $suggestions[] = [
                     'priority' => 'medium',
                     'suggestion' => 'Select only necessary columns',
                     'details' => 'Selecting specific columns reduces I/O and memory usage',
                     'related_issue' => $issue['message']
-                    ];
-                    break;
-
-                case (strpos($issue['message'], 'leading wildcard in LIKE pattern') !== false):
-                    $suggestions[] = [
+                ];
+            } elseif (strpos($issue['message'], 'leading wildcard in LIKE pattern') !== false) {
+                $suggestions[] = [
                     'priority' => 'high',
                     'suggestion' => 'Avoid leading wildcards in LIKE patterns',
                     'details' => 'Consider using a full-text search index or restructuring the query',
                     'related_issue' => $issue['message']
-                    ];
-                    break;
-
-                // Add more suggestion mappings based on common issues
+                ];
             }
+            // Add more suggestion mappings based on common issues
         }
 
         // Add generic suggestions based on query patterns
@@ -403,7 +397,7 @@ class QueryAnalyzer
      * Get suggestions based on common query patterns
      *
      * @param  string $query SQL query
-     * @return array List of suggestions
+     * @return array<int, array<string, string>> List of suggestions
      */
     protected function getQueryPatternSuggestions(string $query): array
     {
@@ -445,8 +439,8 @@ class QueryAnalyzer
      * Recommend indexes that could improve query performance
      *
      * @param  string $query  The SQL query to analyze
-     * @param  array  $params Parameters to bind to the query
-     * @return array List of recommended indexes
+     * @param  array<int|string, mixed>  $params Parameters to bind to the query
+     * @return array<int, array<string, mixed>> List of recommended indexes
      */
     protected function recommendIndexes(string $query, array $params = []): array
     {
@@ -539,7 +533,7 @@ class QueryAnalyzer
      * Extract tables referenced in a query
      *
      * @param  string $query SQL query
-     * @return array List of tables
+     * @return array<int, string> List of tables
      */
     protected function extractTablesFromQuery(string $query): array
     {
@@ -555,7 +549,7 @@ class QueryAnalyzer
 
         // Extract from JOIN clauses
         preg_match_all('/join\s+([a-z0-9_\.]+)/i', $query, $matches);
-        if (!empty($matches[1])) {
+        if ($matches[1] !== []) {
             $tables = array_merge($tables, $matches[1]);
         }
 
@@ -566,7 +560,7 @@ class QueryAnalyzer
      * Extract columns used in WHERE clauses
      *
      * @param  string $query SQL query
-     * @return array Associative array of table => columns
+     * @return array<string, array<int, string>> Associative array of table => columns
      */
     protected function extractWhereColumnsFromQuery(string $query): array
     {
@@ -579,7 +573,7 @@ class QueryAnalyzer
             // Extract column names from conditions
             preg_match_all('/([a-z0-9_\.]+)\s*(?:=|>|<|>=|<=|!=|<>|like|in)/i', $whereClause, $columnMatches);
 
-            if (!empty($columnMatches[1])) {
+            if ($columnMatches[1] !== []) {
                 foreach ($columnMatches[1] as $col) {
                     // If column has table prefix, separate it
                     if (strpos($col, '.') !== false) {
@@ -605,7 +599,7 @@ class QueryAnalyzer
      * Extract columns used in JOIN conditions
      *
      * @param  string $query SQL query
-     * @return array Associative array of table => columns
+     * @return array<string, array<int, string>> Associative array of table => columns
      */
     protected function extractJoinColumnsFromQuery(string $query): array
     {
@@ -618,13 +612,13 @@ class QueryAnalyzer
 
         foreach ($matches as $match) {
             $table = $match[1];
-            $alias = !empty($match[2]) ? $match[2] : $table;
+            $alias = $match[2] !== '' ? $match[2] : $table;
             $condition = $match[3];
 
             // Extract column names from the JOIN condition
             preg_match_all('/([a-z0-9_\.]+)\s*(?:=|>|<|>=|<=)/i', $condition, $columnMatches);
 
-            if (!empty($columnMatches[1])) {
+            if ($columnMatches[1] !== []) {
                 foreach ($columnMatches[1] as $col) {
                     // If column has table prefix, separate it
                     if (strpos($col, '.') !== false) {
@@ -651,7 +645,7 @@ class QueryAnalyzer
      * Extract columns used in ORDER BY clauses
      *
      * @param  string $query SQL query
-     * @return array Associative array of table => columns
+     * @return array<string, array<int, string>> Associative array of table => columns
      */
     protected function extractOrderByColumnsFromQuery(string $query): array
     {
@@ -691,7 +685,7 @@ class QueryAnalyzer
      * Extract columns used in GROUP BY clauses
      *
      * @param  string $query SQL query
-     * @return array Associative array of table => columns
+     * @return array<string, array<int, string>> Associative array of table => columns
      */
     protected function extractGroupByColumnsFromQuery(string $query): array
     {
@@ -729,9 +723,9 @@ class QueryAnalyzer
     /**
      * Get MySQL-specific index recommendations
      *
-     * @param  array  $plan  Execution plan
+     * @param  array<string, mixed>  $plan  Execution plan
      * @param  string $query SQL query
-     * @return array Index recommendations
+     * @return array<int, array<string, mixed>> Index recommendations
      */
     protected function getMySQLIndexRecommendations(array $plan, string $query): array
     {
@@ -759,16 +753,16 @@ class QueryAnalyzer
     /**
      * Get PostgreSQL-specific index recommendations
      *
-     * @param  array  $plan  Execution plan
+     * @param  array<string, mixed>  $plan  Execution plan
      * @param  string $query SQL query
-     * @return array Index recommendations
+     * @return array<int, array<string, mixed>> Index recommendations
      */
     protected function getPostgreSQLIndexRecommendations(array $plan, string $query): array
     {
         $recommendations = [];
 
         // Process PostgreSQL's JSON plan format
-        if (is_array($plan) && isset($plan[0]) && isset($plan[0]['Plan'])) {
+        if (isset($plan[0]) && isset($plan[0]['Plan'])) {
             $this->analyzePgPlan($plan[0]['Plan'], $recommendations);
         }
 
@@ -778,8 +772,8 @@ class QueryAnalyzer
     /**
      * Recursively analyze PostgreSQL execution plan
      *
-     * @param array $planNode         Current plan node
-     * @param array &$recommendations Recommendations array to append to
+     * @param array<string, mixed> $planNode         Current plan node
+     * @param array<int, array<string, mixed>> &$recommendations Recommendations array to append to
      */
     protected function analyzePgPlan(array $planNode, array &$recommendations): void
     {
@@ -809,9 +803,9 @@ class QueryAnalyzer
     /**
      * Get SQLite-specific index recommendations
      *
-     * @param  array  $plan  Execution plan
+     * @param  array<string, mixed>  $plan  Execution plan
      * @param  string $query SQL query
-     * @return array Index recommendations
+     * @return array<int, array<string, mixed>> Index recommendations
      */
     protected function getSQLiteIndexRecommendations(array $plan, string $query): array
     {

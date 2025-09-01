@@ -34,7 +34,7 @@ interface QueryValidatorInterface
      * Validate INSERT data
      *
      * @param  string $table The table name
-     * @param  array  $data  The data to insert
+     * @param  array<string, mixed>  $data  The data to insert
      * @throws \InvalidArgumentException If validation fails
      */
     public function validateInsert(string $table, array $data): void;
@@ -43,8 +43,8 @@ interface QueryValidatorInterface
      * Validate UPDATE data
      *
      * @param  string $table      The table name
-     * @param  array  $data       The data to update
-     * @param  array  $conditions The WHERE conditions
+     * @param  array<string, mixed>  $data       The data to update
+     * @param  array<string, mixed>  $conditions The WHERE conditions
      * @throws \InvalidArgumentException If validation fails
      */
     public function validateUpdate(string $table, array $data, array $conditions): void;
@@ -53,7 +53,7 @@ interface QueryValidatorInterface
      * Validate DELETE conditions
      *
      * @param  string $table      The table name
-     * @param  array  $conditions The WHERE conditions
+     * @param  array<string, mixed>  $conditions The WHERE conditions
      * @throws \InvalidArgumentException If validation fails
      */
     public function validateDelete(string $table, array $conditions): void;
@@ -69,7 +69,7 @@ interface QueryValidatorInterface
     /**
      * Validate column names
      *
-     * @param  array $columns The column names to validate
+     * @param  array<int|string, mixed> $columns The column names to validate
      * @throws \InvalidArgumentException If validation fails
      */
     public function validateColumnNames(array $columns): void;

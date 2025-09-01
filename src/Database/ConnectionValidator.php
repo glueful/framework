@@ -31,7 +31,7 @@ class ConnectionValidator
     private static bool $databaseAvailable = true;
 
     /**
-     * @var array Connection validation cache
+     * @var array<string, array<string, mixed>> Connection validation cache
      */
     private static array $validationCache = [];
 
@@ -102,7 +102,7 @@ class ConnectionValidator
             }
 
             // Enable graceful degradation if not throwing
-            if (self::$gracefulDegradationEnabled && $healthData !== null) {
+            if (self::$gracefulDegradationEnabled) {
                 self::enableGracefulDegradation($healthData);
             }
         }
@@ -120,6 +120,7 @@ class ConnectionValidator
 
     /**
      * Enable graceful degradation mode
+     * @param array<string, mixed> $healthData
      */
     private static function enableGracefulDegradation(array $healthData): void
     {
@@ -144,6 +145,7 @@ class ConnectionValidator
 
     /**
      * Perform periodic connection health check
+     * @return array<string, mixed>
      */
     public static function performHealthCheck(): array
     {
@@ -185,6 +187,7 @@ class ConnectionValidator
 
     /**
      * Configure validation settings
+     * @param array<string, mixed> $options
      */
     public static function configure(array $options): void
     {
@@ -199,6 +202,7 @@ class ConnectionValidator
 
     /**
      * Get validation configuration
+     * @return array<string, bool>
      */
     public static function getConfiguration(): array
     {

@@ -64,7 +64,7 @@ class AlterTableBuilder implements AlterTableBuilderInterface, TableBuilderConte
     private TableDefinition $tableDefinition;
 
     /**
-     * @var array Changes to apply to the table
+     * @var array<string, mixed> Changes to apply to the table
      */
     private array $changes = [
         'add_columns' => [],
@@ -107,7 +107,7 @@ class AlterTableBuilder implements AlterTableBuilderInterface, TableBuilderConte
      *
      * @param  string $column  Column name
      * @param  string $type    Column type
-     * @param  array  $options Column options
+     * @param  array<string, mixed>  $options Column options
      * @return self For method chaining
      */
     public function addColumn(string $column, string $type, array $options = []): self
@@ -150,7 +150,7 @@ class AlterTableBuilder implements AlterTableBuilderInterface, TableBuilderConte
         // Find existing column definition to use as base
         $existingColumn = $this->findColumnDefinition($name);
 
-        if ($existingColumn) {
+        if ($existingColumn !== null) {
             return new ColumnBuilder(
                 $this,
                 $name,
@@ -184,7 +184,7 @@ class AlterTableBuilder implements AlterTableBuilderInterface, TableBuilderConte
      *
      * @param  string $column  Column to modify
      * @param  string $type    New column type
-     * @param  array  $options New column options
+     * @param  array<string, mixed>  $options New column options
      * @return self For method chaining
      */
     public function modifyColumn(string $column, string $type, array $options = []): self
@@ -249,7 +249,7 @@ class AlterTableBuilder implements AlterTableBuilderInterface, TableBuilderConte
      *
      * @param  string $name    Column name
      * @param  string $type    New column type
-     * @param  array  $options Column options
+     * @param  array<string, mixed>  $options Column options
      * @return ColumnBuilderInterface For column definition
      */
     public function changeColumn(string $name, string $type, array $options = []): ColumnBuilderInterface
@@ -393,7 +393,7 @@ class AlterTableBuilder implements AlterTableBuilderInterface, TableBuilderConte
     /**
      * Add an index to the table (Interface-compliant method)
      *
-     * @param  array  $columns Column names for the index
+     * @param  array<int, string>  $columns Column names for the index
      * @param  string $name    Index name
      * @param  bool   $unique  Whether the index should be unique
      * @return self For method chaining
@@ -407,7 +407,7 @@ class AlterTableBuilder implements AlterTableBuilderInterface, TableBuilderConte
     /**
      * Add an index to the table with specific type
      *
-     * @param  array|string $columns Column name(s) for the index
+     * @param  array<int, string>|string $columns Column name(s) for the index
      * @param  string|null  $name    Index name (auto-generated if null)
      * @param  string       $type    Index type ('index', 'unique', 'fulltext')
      * @return self For method chaining
@@ -416,7 +416,7 @@ class AlterTableBuilder implements AlterTableBuilderInterface, TableBuilderConte
     {
         $columns = is_array($columns) ? $columns : [$columns];
 
-        if (!$name) {
+        if ($name === null) {
             $name = $this->generateIndexName($columns, $type);
         }
 
@@ -433,7 +433,7 @@ class AlterTableBuilder implements AlterTableBuilderInterface, TableBuilderConte
     /**
      * Add a unique index
      *
-     * @param  array|string $columns Column name(s)
+     * @param  array<int, string>|string $columns Column name(s)
      * @param  string|null  $name    Index name
      * @return self For method chaining
      */
@@ -445,7 +445,7 @@ class AlterTableBuilder implements AlterTableBuilderInterface, TableBuilderConte
     /**
      * Add a regular index
      *
-     * @param  array|string $columns Column name(s)
+     * @param  array<int, string>|string $columns Column name(s)
      * @param  string|null  $name    Index name
      * @return self For method chaining
      */
@@ -606,7 +606,7 @@ class AlterTableBuilder implements AlterTableBuilderInterface, TableBuilderConte
      */
     public function execute(): bool
     {
-        if (empty(array_filter($this->changes))) {
+        if (array_filter($this->changes) === []) {
             return true; // No changes to execute
         }
 
@@ -621,13 +621,13 @@ class AlterTableBuilder implements AlterTableBuilderInterface, TableBuilderConte
         // Execute all pending operations
         $results = $this->schemaBuilder->execute();
 
-        return !empty($results);
+        return $results !== [];
     }
 
     /**
      * Get all pending alterations
      *
-     * @return array Array of pending alterations
+     * @return array<string, mixed> Array of pending alterations
      */
     public function getAlterations(): array
     {
@@ -719,7 +719,7 @@ class AlterTableBuilder implements AlterTableBuilderInterface, TableBuilderConte
     /**
      * Set primary key (for TableBuilderInterface compatibility)
      *
-     * @param  array|string $columns Column(s) for primary key
+     * @param  array<int, string>|string $columns Column(s) for primary key
      * @return self For method chaining
      */
     public function primary(array|string $columns): self
@@ -732,7 +732,7 @@ class AlterTableBuilder implements AlterTableBuilderInterface, TableBuilderConte
     /**
      * Add a fulltext index (for TableBuilderInterface compatibility)
      *
-     * @param  array|string $columns Column(s) for fulltext index
+     * @param  array<int, string>|string $columns Column(s) for fulltext index
      * @param  string|null  $name    Index name (auto-generated if null)
      * @return self For method chaining
      */
@@ -744,7 +744,7 @@ class AlterTableBuilder implements AlterTableBuilderInterface, TableBuilderConte
     /**
      * Drop a unique constraint (compatible with both interfaces)
      *
-     * @param  array|string $columns Column name(s) or constraint name
+     * @param  array<int, string>|string $columns Column name(s) or constraint name
      * @return self For method chaining
      */
     public function dropUnique($columns): self
@@ -866,7 +866,7 @@ class AlterTableBuilder implements AlterTableBuilderInterface, TableBuilderConte
     /**
      * Get all pending changes
      *
-     * @return array Array of changes to be applied
+     * @return array<string, mixed> Array of changes to be applied
      */
     public function getChanges(): array
     {
@@ -880,7 +880,7 @@ class AlterTableBuilder implements AlterTableBuilderInterface, TableBuilderConte
      */
     public function hasChanges(): bool
     {
-        return !empty(array_filter($this->changes));
+        return array_filter($this->changes) !== [];
     }
 
     /**
@@ -916,7 +916,7 @@ class AlterTableBuilder implements AlterTableBuilderInterface, TableBuilderConte
     /**
      * Generate index name from columns and type
      *
-     * @param  array  $columns Column names
+     * @param  array<int, string>  $columns Column names
      * @param  string $type    Index type
      * @return string Generated index name
      */

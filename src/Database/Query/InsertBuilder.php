@@ -28,6 +28,8 @@ class InsertBuilder implements InsertBuilderInterface
 
     /**
      * Insert single record
+     * @param string $table
+     * @param array<string, mixed> $data
      */
     public function insert(string $table, array $data): int
     {
@@ -41,6 +43,8 @@ class InsertBuilder implements InsertBuilderInterface
 
     /**
      * Insert multiple records in batch
+     * @param string $table
+     * @param array<array<string, mixed>> $rows
      */
     public function insertBatch(string $table, array $rows): int
     {
@@ -54,6 +58,9 @@ class InsertBuilder implements InsertBuilderInterface
 
     /**
      * Insert or update on duplicate key
+     * @param string $table
+     * @param array<string, mixed> $data
+     * @param array<string> $updateColumns
      */
     public function upsert(string $table, array $data, array $updateColumns): int
     {
@@ -67,6 +74,8 @@ class InsertBuilder implements InsertBuilderInterface
 
     /**
      * Build INSERT SQL query
+     * @param string $table
+     * @param array<string, mixed> $data
      */
     public function buildInsertQuery(string $table, array $data): string
     {
@@ -79,6 +88,8 @@ class InsertBuilder implements InsertBuilderInterface
 
     /**
      * Build batch INSERT SQL query
+     * @param string $table
+     * @param array<array<string, mixed>> $rows
      */
     public function buildBatchInsertQuery(string $table, array $rows): string
     {
@@ -98,20 +109,25 @@ class InsertBuilder implements InsertBuilderInterface
 
     /**
      * Build UPSERT SQL query
+     * @param string $table
+     * @param array<string, mixed> $data
+     * @param array<string> $updateColumns
      */
     public function buildUpsertQuery(string $table, array $data, array $updateColumns): string
     {
         // Use driver-specific upsert implementation
-        $keys = array_keys($data);
-        return $this->driver->upsert($table, $keys, $updateColumns);
+        // Extract update data based on specified columns
+        $updateData = array_intersect_key($data, array_flip($updateColumns));
+        return $this->driver->upsert($table, $data, $updateData);
     }
 
     /**
      * Validate insert data
+     * @param array<string, mixed> $data
      */
     public function validateData(array $data): void
     {
-        if (empty($data)) {
+        if (count($data) === 0) {
             throw new \InvalidArgumentException('Cannot insert empty data array');
         }
 
@@ -122,10 +138,11 @@ class InsertBuilder implements InsertBuilderInterface
 
     /**
      * Validate batch insert data
+     * @param array<array<string, mixed>> $rows
      */
     public function validateBatchData(array $rows): void
     {
-        if (empty($rows)) {
+        if (count($rows) === 0) {
             throw new \InvalidArgumentException('Cannot perform batch insert with empty rows array');
         }
 
@@ -147,6 +164,7 @@ class InsertBuilder implements InsertBuilderInterface
 
     /**
      * Check if array is associative
+     * @param array<mixed> $array
      */
     protected function isAssociativeArray(array $array): bool
     {
@@ -155,6 +173,8 @@ class InsertBuilder implements InsertBuilderInterface
 
     /**
      * Flatten batch data into single bindings array
+     * @param array<array<string, mixed>> $rows
+     * @return array<mixed>
      */
     protected function flattenBatchData(array $rows): array
     {

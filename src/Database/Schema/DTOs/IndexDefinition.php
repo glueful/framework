@@ -159,7 +159,7 @@ readonly class IndexDefinition
      */
     public function hasCustomLengths(): bool
     {
-        return !empty($this->lengths);
+        return $this->lengths !== [];
     }
 
     /**
@@ -169,13 +169,13 @@ readonly class IndexDefinition
      */
     public function hasCustomOrders(): bool
     {
-        return !empty($this->orders);
+        return $this->orders !== [];
     }
 
     /**
      * Create a copy of this index definition with modifications
      *
-     * @param  array $changes Changes to apply
+     * @param  array<string, mixed> $changes Changes to apply
      * @return self New index definition instance
      */
     public function with(array $changes): self
@@ -259,7 +259,7 @@ readonly class IndexDefinition
      */
     private function validateColumns(): void
     {
-        if (empty($this->columns)) {
+        if ($this->columns === []) {
             throw new \InvalidArgumentException('Index must have at least one column');
         }
 
@@ -271,14 +271,14 @@ readonly class IndexDefinition
 
         // Validate column names
         foreach ($this->columns as $column) {
-            if (!is_string($column) || empty(trim($column))) {
+            if (!is_string($column) || trim($column) === '') {
                 throw new \InvalidArgumentException('All column names must be non-empty strings');
             }
         }
 
         // Validate lengths reference valid columns
         foreach (array_keys($this->lengths) as $column) {
-            if (!in_array($column, $this->columns)) {
+            if (!in_array($column, $this->columns, true)) {
                 throw new \InvalidArgumentException(
                     "Length specified for column '{$column}' not in index columns"
                 );
@@ -287,7 +287,7 @@ readonly class IndexDefinition
 
         // Validate orders reference valid columns
         foreach (array_keys($this->orders) as $column) {
-            if (!in_array($column, $this->columns)) {
+            if (!in_array($column, $this->columns, true)) {
                 throw new \InvalidArgumentException(
                     "Order specified for column '{$column}' not in index columns"
                 );
@@ -304,7 +304,7 @@ readonly class IndexDefinition
     {
         $validTypes = ['index', 'unique', 'primary', 'fulltext', 'spatial'];
 
-        if (!in_array($this->type, $validTypes)) {
+        if (!in_array($this->type, $validTypes, true)) {
             throw new \InvalidArgumentException(
                 "Invalid index type: {$this->type}. Valid types: " . implode(', ', $validTypes)
             );
@@ -323,14 +323,14 @@ readonly class IndexDefinition
     private function validateOptions(): void
     {
         // Name validation
-        if (empty(trim($this->name))) {
+        if (trim($this->name) === '') {
             throw new \InvalidArgumentException('Index name cannot be empty');
         }
 
         // Validate sort orders
         foreach ($this->orders as $column => $order) {
             $order = strtoupper($order);
-            if (!in_array($order, ['ASC', 'DESC'])) {
+            if (!in_array($order, ['ASC', 'DESC'], true)) {
                 throw new \InvalidArgumentException(
                     "Invalid sort order '{$order}' for column '{$column}'. Must be ASC or DESC"
                 );
@@ -341,7 +341,7 @@ readonly class IndexDefinition
         if ($this->algorithm !== null) {
             $validAlgorithms = ['BTREE', 'HASH', 'RTREE'];
             $algorithm = strtoupper($this->algorithm);
-            if (!in_array($algorithm, $validAlgorithms)) {
+            if (!in_array($algorithm, $validAlgorithms, true)) {
                 throw new \InvalidArgumentException(
                     "Invalid index algorithm: {$this->algorithm}. Valid algorithms: " .
                     implode(', ', $validAlgorithms)

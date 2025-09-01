@@ -33,7 +33,7 @@ interface AlterTableBuilderInterface
      *
      * @param  string $column  Column name
      * @param  string $type    Column type
-     * @param  array  $options Column options (nullable, default, etc.)
+     * @param  array<string, mixed>  $options Column options (nullable, default, etc.)
      * @return self For method chaining
      */
     public function addColumn(string $column, string $type, array $options = []): self;
@@ -43,7 +43,7 @@ interface AlterTableBuilderInterface
      *
      * @param  string $column  Column to modify
      * @param  string $type    New column type
-     * @param  array  $options New column options
+     * @param  array<string, mixed>  $options New column options
      * @return self For method chaining
      */
     public function modifyColumn(string $column, string $type, array $options = []): self;
@@ -59,7 +59,7 @@ interface AlterTableBuilderInterface
     /**
      * Add an index to the table
      *
-     * @param  array  $columns Columns to index
+     * @param  array<int, string>  $columns Columns to index
      * @param  string $name    Index name
      * @param  bool   $unique  Whether the index should be unique
      * @return self For method chaining
@@ -129,7 +129,7 @@ interface AlterTableBuilderInterface
     /**
      * Get all pending alterations
      *
-     * @return array Array of pending alterations
+     * @return array<string, mixed> Array of pending alterations
      */
     public function getAlterations(): array;
 

@@ -74,7 +74,7 @@ class SoftDeleteHandler implements SoftDeleteHandlerInterface
         }
 
         // Check if table has the deleted_at column before applying filters
-        if ($table && !$this->tableHasDeletedAtColumn($table)) {
+        if ($table !== null && !$this->tableHasDeletedAtColumn($table)) {
             return;
         }
 
@@ -184,12 +184,15 @@ class SoftDeleteHandler implements SoftDeleteHandlerInterface
      * @param  array  $conditions The WHERE conditions
      * @return int Number of deleted rows
      */
+    /**
+     * @param array<string, mixed> $conditions
+     */
     public function forceDelete(string $table, array $conditions): int
     {
         $sql = "DELETE FROM {$this->driver->wrapIdentifier($table)}";
         $bindings = [];
 
-        if (!empty($conditions)) {
+        if (count($conditions) > 0) {
             $whereClause = $this->buildWhereClause($conditions, $bindings);
             $sql .= " WHERE $whereClause";
         }
@@ -271,6 +274,8 @@ class SoftDeleteHandler implements SoftDeleteHandlerInterface
 
     /**
      * Build WHERE clause from conditions
+     * @param array<string, mixed> $conditions
+     * @param array<mixed> $bindings
      */
     private function buildWhereClause(array $conditions, array &$bindings): string
     {

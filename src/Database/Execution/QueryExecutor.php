@@ -81,7 +81,7 @@ class QueryExecutor implements QueryExecutorInterface
                 function () use ($sql, $bindings) {
                     $stmt = $this->executeStatement($sql, $bindings);
                     $result = $stmt->fetch(PDO::FETCH_ASSOC);
-                    return $result ?: null;
+                    return $result !== false ? $result : null;
                 },
                 $this->cacheTtl
             );
@@ -91,7 +91,7 @@ class QueryExecutor implements QueryExecutorInterface
         $stmt = $this->executeStatement($sql, $bindings);
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        return $result ?: null;
+        return $result !== false ? $result : null;
     }
 
     /**

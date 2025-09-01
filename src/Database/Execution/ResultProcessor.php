@@ -122,7 +122,7 @@ class ResultProcessor implements ResultProcessorInterface
             throw new \InvalidArgumentException("Class {$className} does not exist");
         }
 
-        if (empty($constructorArgs)) {
+        if (count($constructorArgs) === 0) {
             return $statement->fetchAll(PDO::FETCH_CLASS, $className);
         }
 
@@ -132,9 +132,17 @@ class ResultProcessor implements ResultProcessorInterface
             $object = new $className(...$constructorArgs);
 
             // Populate object properties from row data
+            $reflection = new \ReflectionClass($object);
             foreach ($row as $property => $value) {
-                if (property_exists($object, $property)) {
-                    $object->$property = $value;
+                if ($reflection->hasProperty($property)) {
+                    $reflectionProperty = $reflection->getProperty($property);
+                    if ($reflectionProperty->isPublic()) {
+                        $reflectionProperty->setValue($object, $value);
+                    } elseif ($reflectionProperty->isPrivate() || $reflectionProperty->isProtected()) {
+                        $reflectionProperty->setAccessible(true);
+                        $reflectionProperty->setValue($object, $value);
+                        $reflectionProperty->setAccessible(false);
+                    }
                 }
             }
 
@@ -172,7 +180,7 @@ class ResultProcessor implements ResultProcessorInterface
      *
      * @param  PDOStatement $statement The executed statement
      * @param  string|int   $column    The column to extract
-     * @return array Flat array of values
+     * @return array<int, mixed> Flat array of values
      */
     public function fetchFlatColumn(PDOStatement $statement, string|int $column = 0): array
     {

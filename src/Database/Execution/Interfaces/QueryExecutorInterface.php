@@ -17,26 +17,38 @@ interface QueryExecutorInterface
 {
     /**
      * Execute a SELECT query and return all results
+     * 
+     * @param array<int|string, mixed> $bindings
+     * @return array<int, array<string, mixed>>
      */
     public function executeQuery(string $sql, array $bindings = []): array;
 
     /**
      * Execute a SELECT query and return first result
+     * 
+     * @param array<int|string, mixed> $bindings
+     * @return array<string, mixed>|null
      */
     public function executeFirst(string $sql, array $bindings = []): ?array;
 
     /**
      * Execute a modification query (INSERT, UPDATE, DELETE)
+     * 
+     * @param array<int|string, mixed> $bindings
      */
     public function executeModification(string $sql, array $bindings = []): int;
 
     /**
      * Execute a COUNT query
+     * 
+     * @param array<int|string, mixed> $bindings
      */
     public function executeCount(string $sql, array $bindings = []): int;
 
     /**
      * Execute query and return PDO statement
+     * 
+     * @param array<int|string, mixed> $bindings
      */
     public function executeStatement(string $sql, array $bindings = []): PDOStatement;
 

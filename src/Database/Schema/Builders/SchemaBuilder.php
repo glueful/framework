@@ -203,13 +203,13 @@ class SchemaBuilder implements SchemaBuilderInterface
     /**
      * Execute all pending schema operations
      *
-     * @return array Results of executed operations
+     * @return array<int, mixed> Results of executed operations
      * @throws \RuntimeException If execution fails
      */
     public function execute(): array
     {
 
-        if (empty($this->pendingOperations)) {
+        if ($this->pendingOperations === []) {
             return [];
         }
 
@@ -219,12 +219,12 @@ class SchemaBuilder implements SchemaBuilderInterface
         $pdo = $this->connection->getPDO();
 
         try {
-            foreach ($this->pendingOperations as $i => $sql) {
+            foreach ($this->pendingOperations as $operationIndex => $sqlStatement) {
                 // Always use direct PDO exec for DDL statements
                 // This is simpler and avoids transaction context mismatches
-                $result = $this->connection->getPDO()->exec($sql);
+                $result = $this->connection->getPDO()->exec($sqlStatement);
                 $results[] = $result;
-                $executed[] = $sql;
+                $executed[] = $sqlStatement;
             }
 
             $this->reset();
@@ -232,8 +232,8 @@ class SchemaBuilder implements SchemaBuilderInterface
         } catch (\Exception $e) {
             // Log which operations were executed for debugging
             error_log("Schema execution failed after executing " . count($executed) . " operations");
-            foreach ($executed as $i => $sql) {
-                error_log("Executed [{$i}]: {$sql}");
+            foreach ($executed as $index => $sql) {
+                error_log("Executed [{$index}]: {$sql}");
             }
 
             throw new \RuntimeException(
@@ -247,7 +247,7 @@ class SchemaBuilder implements SchemaBuilderInterface
     /**
      * Preview what SQL would be executed without running it
      *
-     * @return array Array of SQL statements that would be executed
+     * @return array<int, string> Array of SQL statements that would be executed
      */
     public function preview(): array
     {
@@ -257,7 +257,7 @@ class SchemaBuilder implements SchemaBuilderInterface
     /**
      * Validate all pending operations without executing
      *
-     * @return array Validation results with errors and warnings
+     * @return array<string, mixed> Validation results with errors and warnings
      */
     public function validate(): array
     {
@@ -271,23 +271,23 @@ class SchemaBuilder implements SchemaBuilderInterface
         // Basic SQL validation
         foreach ($this->pendingOperations as $i => $sql) {
             // Check for empty operations
-            if (empty(trim($sql))) {
+            if (trim($sql) === '') {
                 $results['errors'][] = "Operation {$i}: Empty SQL statement";
                 $results['valid'] = false;
                 continue;
             }
 
             // Check for potential dangerous operations
-            if (preg_match('/DROP\s+DATABASE/i', $sql)) {
+            if (preg_match('/DROP\s+DATABASE/i', $sql) === 1) {
                 $results['warnings'][] = "Operation {$i}: DROP DATABASE detected - potentially destructive";
             }
 
-            if (preg_match('/DROP\s+TABLE/i', $sql)) {
+            if (preg_match('/DROP\s+TABLE/i', $sql) === 1) {
                 $results['warnings'][] = "Operation {$i}: DROP TABLE detected - data loss possible";
             }
 
             // Check for basic SQL syntax issues
-            if (!preg_match('/;\s*$/', trim($sql))) {
+            if (preg_match('/;\s*$/', trim($sql)) !== 1) {
                 $results['warnings'][] = "Operation {$i}: Missing semicolon terminator";
             }
         }
@@ -317,6 +317,9 @@ class SchemaBuilder implements SchemaBuilderInterface
     {
         $sql = $this->sqlGenerator->tableExistsQuery($table);
         $stmt = $this->connection->getPDO()->query($sql);
+        if ($stmt === false) {
+            return false;
+        }
         $result = $stmt->fetchColumn();
         return (bool) $result;
     }
@@ -332,6 +335,9 @@ class SchemaBuilder implements SchemaBuilderInterface
     {
         $sql = $this->sqlGenerator->columnExistsQuery($table, $column);
         $stmt = $this->connection->getPDO()->query($sql);
+        if ($stmt === false) {
+            return false;
+        }
         $result = $stmt->fetchColumn();
         return (bool) $result;
     }
@@ -339,12 +345,15 @@ class SchemaBuilder implements SchemaBuilderInterface
     /**
      * Get list of all tables
      *
-     * @return array Array of table names
+     * @return array<int, string> Array of table names
      */
     public function getTables(): array
     {
         $sql = $this->sqlGenerator->getTablesQuery();
         $stmt = $this->connection->getPDO()->query($sql);
+        if ($stmt === false) {
+            return [];
+        }
         $result = $stmt->fetchAll(\PDO::FETCH_COLUMN);
 
         return $result;
@@ -354,12 +363,15 @@ class SchemaBuilder implements SchemaBuilderInterface
      * Get complete table schema information
      *
      * @param  string $table Table name
-     * @return array Complete schema information
+     * @return array<int, array<string, mixed>> Complete schema information
      */
     public function getTableSchema(string $table): array
     {
         $sql = $this->sqlGenerator->getTableSchemaQuery($table);
         $stmt = $this->connection->getPDO()->query($sql);
+        if ($stmt === false) {
+            return [];
+        }
         return $stmt->fetchAll(\PDO::FETCH_ASSOC);
     }
 
@@ -367,12 +379,13 @@ class SchemaBuilder implements SchemaBuilderInterface
      * Get table columns information
      *
      * @param  string $table Table name
-     * @return array Array of column definitions with 'name' field
+     * @return array<int, array<string, mixed>> Array of column definitions with 'name' field
      */
     public function getTableColumns(string $table): array
     {
         // Use the SQL generator's database-specific implementation
-        return $this->sqlGenerator->getTableColumns($table, $this->connection->getPDO());
+        $columns = $this->sqlGenerator->getTableColumns($table, $this->connection->getPDO());
+        return array_is_list($columns) ? $columns : [];
     }
 
     /**
@@ -441,6 +454,9 @@ class SchemaBuilder implements SchemaBuilderInterface
         try {
             $sql = $this->sqlGenerator->getTableSizeQuery($table);
             $stmt = $this->connection->getPDO()->query($sql);
+            if ($stmt === false) {
+                return 0;
+            }
             $result = $stmt->fetch(\PDO::FETCH_ASSOC);
             return (int) ($result['size'] ?? 0);
         } catch (\Exception $e) {
@@ -460,6 +476,9 @@ class SchemaBuilder implements SchemaBuilderInterface
         try {
             $sql = $this->sqlGenerator->getTableRowCountQuery($table);
             $stmt = $this->connection->getPDO()->query($sql);
+            if ($stmt === false) {
+                return 0;
+            }
             $result = $stmt->fetch(\PDO::FETCH_ASSOC);
             return (int) ($result['count'] ?? 0);
         } catch (\Exception $e) {
@@ -477,8 +496,8 @@ class SchemaBuilder implements SchemaBuilderInterface
      *
      * @param  string $table      Table name
      * @param  string $column     Column name
-     * @param  array  $definition Column definition
-     * @return array Result with success status
+     * @param  array<string, mixed>  $definition Column definition
+     * @return array<string, mixed> Result with success status
      */
     public function addColumn(string $table, string $column, array $definition): array
     {
@@ -488,7 +507,7 @@ class SchemaBuilder implements SchemaBuilderInterface
             // Map the definition to fluent API calls
             $columnBuilder = $tableBuilder->addColumn($column, $definition['type'] ?? 'string');
 
-            if (isset($definition['nullable']) && !$definition['nullable']) {
+            if (isset($definition['nullable']) && !(bool) $definition['nullable']) {
                 $columnBuilder->notNull();
             }
             if (isset($definition['default'])) {
@@ -508,7 +527,7 @@ class SchemaBuilder implements SchemaBuilderInterface
      *
      * @param  string $table  Table name
      * @param  string $column Column name
-     * @return array Result with success status
+     * @return array<string, mixed> Result with success status
      */
     public function dropColumn(string $table, string $column): array
     {
@@ -523,7 +542,7 @@ class SchemaBuilder implements SchemaBuilderInterface
     /**
      * Add an index to a table
      *
-     * @param  array $indexes Index definitions
+     * @param  array<int, array<string, mixed>> $indexes Index definitions
      * @return self For method chaining
      */
     public function addIndex(array $indexes): self
@@ -572,7 +591,7 @@ class SchemaBuilder implements SchemaBuilderInterface
     /**
      * Add foreign key constraints
      *
-     * @param  array $foreignKeys Foreign key definitions
+     * @param  array<int, array<string, mixed>> $foreignKeys Foreign key definitions
      * @return self For method chaining
      */
     public function addForeignKey(array $foreignKeys): self
@@ -624,8 +643,8 @@ class SchemaBuilder implements SchemaBuilderInterface
      * Generate preview of schema changes
      *
      * @param  string $table   Table name
-     * @param  array  $changes Changes to preview
-     * @return array Preview information
+     * @param  array<string, mixed>  $changes Changes to preview
+     * @return array<string, mixed> Preview information
      */
     public function generateChangePreview(string $table, array $changes): array
     {
@@ -637,20 +656,22 @@ class SchemaBuilder implements SchemaBuilderInterface
      *
      * @param  string $table  Table name
      * @param  string $format Export format
-     * @return array Exported schema
+     * @return array<string, mixed> Exported schema
      */
     public function exportTableSchema(string $table, string $format): array
     {
         $schema = $this->getTableSchema($table);
-        return $this->sqlGenerator->exportTableSchema($table, $format, $schema);
+        // Convert indexed array to associative array for export
+        $schemaData = ['columns' => $schema];
+        return $this->sqlGenerator->exportTableSchema($table, $format, $schemaData);
     }
 
     /**
      * Validate schema definition
      *
-     * @param  array  $schema Schema to validate
+     * @param  array<string, mixed>  $schema Schema to validate
      * @param  string $format Schema format
-     * @return array Validation result
+     * @return array<string, mixed> Validation result
      */
     public function validateSchema(array $schema, string $format): array
     {
@@ -661,17 +682,20 @@ class SchemaBuilder implements SchemaBuilderInterface
      * Import table schema from definition
      *
      * @param  string $table   Table name
-     * @param  array  $schema  Schema definition
+     * @param  array<string, mixed>  $schema  Schema definition
      * @param  string $format  Schema format
-     * @param  array  $options Import options
-     * @return array Import result
+     * @param  array<string, mixed>  $options Import options
+     * @return array<string, mixed> Import result
      */
     public function importTableSchema(string $table, array $schema, string $format, array $options): array
     {
         // Delegate to SQL generator for database-specific import logic
         $result = $this->sqlGenerator->importTableSchema($table, $schema, $format, $options);
 
-        if ($result['success'] && !empty($result['sql'])) {
+        if (
+            isset($result['success']) && is_bool($result['success']) && $result['success'] &&
+            isset($result['sql']) && is_array($result['sql']) && $result['sql'] !== []
+        ) {
             try {
                 // Execute the SQL statements generated by the SQL generator
                 foreach ($result['sql'] as $sql) {
@@ -694,19 +718,20 @@ class SchemaBuilder implements SchemaBuilderInterface
     /**
      * Generate revert operations for a change
      *
-     * @param  array $change Original change
-     * @return array Revert operations
+     * @param  array<string, mixed> $change Original change
+     * @return array<int, array<string, mixed>> Revert operations
      */
     public function generateRevertOperations(array $change): array
     {
-        return $this->sqlGenerator->generateRevertOperations($change);
+        $result = $this->sqlGenerator->generateRevertOperations($change);
+        return array_is_list($result) ? $result : [];
     }
 
     /**
      * Execute revert operations
      *
-     * @param  array $operations Revert operations
-     * @return array Execution result
+     * @param  array<int, array<string, mixed>> $operations Revert operations
+     * @return array<string, mixed> Execution result
      */
     public function executeRevert(array $operations): array
     {

@@ -33,7 +33,7 @@ class ConnectionPoolManager
     private array $pools = [];
 
     /**
-     * @var array Global pooling configuration
+     * @var array<string, mixed> Global pooling configuration
      */
     private array $globalConfig;
 
@@ -117,7 +117,7 @@ class ConnectionPoolManager
     /**
      * Get comprehensive statistics for all pools
      *
-     * @return array Pool statistics by engine
+     * @return array<string, array<string, mixed>> Pool statistics by engine
      */
     public function getStats(): array
     {
@@ -131,7 +131,7 @@ class ConnectionPoolManager
     /**
      * Get aggregate statistics across all pools
      *
-     * @return array Aggregate pool statistics
+     * @return array<string, mixed> Aggregate pool statistics
      */
     public function getAggregateStats(): array
     {
@@ -194,7 +194,7 @@ class ConnectionPoolManager
      * Build database-specific DSN
      *
      * @param  string $engine Database engine
-     * @param  array  $config Database configuration
+     * @param  array<string, mixed> $config Database configuration
      * @return string DSN string
      * @throws \Exception For unsupported engines
      */
@@ -224,8 +224,8 @@ class ConnectionPoolManager
      * Build PDO options for engine
      *
      * @param  string $engine Database engine
-     * @param  array  $config Database configuration
-     * @return array PDO options
+     * @param  array<string, mixed> $config Database configuration
+     * @return array<int, mixed> PDO options
      */
     private function buildPDOOptions(string $engine, array $config): array
     {
@@ -236,7 +236,7 @@ class ConnectionPoolManager
         ];
 
         // Add engine-specific options
-        if ($engine === 'mysql' && ($config['strict'] ?? true)) {
+        if ($engine === 'mysql' && ($config['strict'] ?? true) === true) {
             $options[\PDO::MYSQL_ATTR_INIT_COMMAND] = "SET sql_mode='STRICT_ALL_TABLES'";
         }
 
@@ -309,7 +309,7 @@ class ConnectionPoolManager
     /**
      * Get pool health status
      *
-     * @return array Health status by engine
+     * @return array<string, array<string, mixed>> Health status by engine
      */
     public function getHealthStatus(): array
     {

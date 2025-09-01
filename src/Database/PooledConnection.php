@@ -90,7 +90,7 @@ class PooledConnection
      * Proxy all PDO methods
      *
      * @param  string $method Method name
-     * @param  array  $args   Method arguments
+     * @param  array<mixed>  $args   Method arguments
      * @return mixed Method result
      * @throws \Exception If connection is unhealthy or method fails
      */
@@ -108,7 +108,7 @@ class PooledConnection
         // Track transaction state
         if ($method === 'beginTransaction') {
             $this->inTransaction = true;
-        } elseif (in_array($method, ['commit', 'rollBack'])) {
+        } elseif (in_array($method, ['commit', 'rollBack'], true)) {
             $this->inTransaction = false;
         }
 
@@ -132,7 +132,19 @@ class PooledConnection
      */
     public function __get($name)
     {
-        return $this->pdo->$name;
+        if ($this->pdo === null) {
+            throw new \RuntimeException('PDO connection is null');
+        }
+
+        // Use reflection to safely access PDO properties
+        $reflection = new \ReflectionClass($this->pdo);
+        if ($reflection->hasProperty($name)) {
+            $property = $reflection->getProperty($name);
+            $property->setAccessible(true);
+            return $property->getValue($this->pdo);
+        }
+
+        throw new \RuntimeException("Property {$name} does not exist on PDO");
     }
 
     /**
@@ -143,7 +155,20 @@ class PooledConnection
      */
     public function __set($name, $value)
     {
-        $this->pdo->$name = $value;
+        if ($this->pdo === null) {
+            throw new \RuntimeException('PDO connection is null');
+        }
+
+        // Use reflection to safely set PDO properties
+        $reflection = new \ReflectionClass($this->pdo);
+        if ($reflection->hasProperty($name)) {
+            $property = $reflection->getProperty($name);
+            $property->setAccessible(true);
+            $property->setValue($this->pdo, $value);
+            return;
+        }
+
+        throw new \RuntimeException("Property {$name} does not exist on PDO");
     }
 
     /**
@@ -252,10 +277,10 @@ class PooledConnection
         $this->markedForDestruction = true;
 
         // Rollback any active transaction
-        if ($this->inTransaction) {
+        if ($this->inTransaction && $this->pdo !== null) {
             try {
                 $this->pdo->rollBack();
-            } catch (\Exception $e) {
+            } catch (\Exception) {
                 // Ignore rollback errors during destruction
             }
         }
@@ -267,7 +292,7 @@ class PooledConnection
     /**
      * Get connection statistics
      *
-     * @return array
+     * @return array<string, mixed>
      */
     public function getStats(): array
     {
@@ -329,7 +354,7 @@ class PooledConnection
                 '08S01', // Communication link failure
             ];
 
-            return in_array($errorCode, $connectionErrors);
+            return in_array($errorCode, $connectionErrors, true);
         }
 
         return false;

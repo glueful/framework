@@ -15,6 +15,10 @@ use Glueful\Database\Features\Interfaces\QueryPurposeInterface;
 class QueryPurpose implements QueryPurposeInterface
 {
     private ?string $purpose = null;
+
+    /**
+     * @var array<string, mixed>
+     */
     private array $metadata = [];
 
     /**
@@ -52,6 +56,8 @@ class QueryPurpose implements QueryPurposeInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @param array<string, mixed> $metadata
      */
     public function setMetadata(array $metadata): void
     {
@@ -60,6 +66,8 @@ class QueryPurpose implements QueryPurposeInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @return array<string, mixed>
      */
     public function getMetadata(): array
     {
@@ -85,7 +93,7 @@ class QueryPurpose implements QueryPurposeInterface
 
         $formatted = "Purpose: {$this->purpose}";
 
-        if (!empty($this->metadata)) {
+        if (count($this->metadata) > 0) {
             $metadataString = json_encode($this->metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             $formatted .= " | Metadata: {$metadataString}";
         }
@@ -95,6 +103,8 @@ class QueryPurpose implements QueryPurposeInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @return array<string, mixed>
      */
     public function getContext(): array
     {

@@ -16,12 +16,16 @@ use Glueful\Database\Query\Interfaces\QueryStateInterface;
 class QueryState implements QueryStateInterface
 {
     protected ?string $table = null;
+    /** @var array<string> */
     protected array $selectColumns = ['*'];
     protected bool $distinct = false;
+    /** @var array<array{type: string, table: string, first: string, operator: string, second: string}> */
     protected array $joins = [];
     protected ?int $limit = null;
     protected ?int $offset = null;
+    /** @var array<string> */
     protected array $groupBy = [];
+    /** @var array<array{column: string, direction: string}> */
     protected array $orderBy = [];
 
     /**
@@ -61,7 +65,7 @@ class QueryState implements QueryStateInterface
      */
     public function setSelectColumns(array $columns): void
     {
-        $this->selectColumns = empty($columns) ? ['*'] : $columns;
+        $this->selectColumns = count($columns) === 0 ? ['*'] : $columns;
     }
 
     /**

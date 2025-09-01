@@ -168,7 +168,7 @@ interface TableBuilderInterface
      * Add enum column
      *
      * @param  string      $name    Column name
-     * @param  array       $values  Allowed enum values
+     * @param  array<int, string>       $values  Allowed enum values
      * @param  string|null $default Default value (must be one of the allowed values)
      * @return ColumnBuilderInterface For fluent chaining
      */
@@ -225,7 +225,7 @@ interface TableBuilderInterface
      *
      * @param  string $name    Column name
      * @param  string $type    Column type
-     * @param  array  $options Column options
+     * @param  array<string, mixed>  $options Column options
      * @return ColumnBuilderInterface For fluent chaining
      */
     public function addColumn(string $name, string $type, array $options = []): ColumnBuilderInterface;
@@ -262,7 +262,7 @@ interface TableBuilderInterface
     /**
      * Add an index
      *
-     * @param  array|string $columns Column(s) to index
+     * @param  array<int, string>|string $columns Column(s) to index
      * @param  string|null  $name    Index name (auto-generated if null)
      * @return self For method chaining
      */
@@ -271,7 +271,7 @@ interface TableBuilderInterface
     /**
      * Add a unique index
      *
-     * @param  array|string $columns Column(s) for unique constraint
+     * @param  array<int, string>|string $columns Column(s) for unique constraint
      * @param  string|null  $name    Index name (auto-generated if null)
      * @return self For method chaining
      */
@@ -280,7 +280,7 @@ interface TableBuilderInterface
     /**
      * Set primary key
      *
-     * @param  array|string $columns Column(s) for primary key
+     * @param  array<int, string>|string $columns Column(s) for primary key
      * @return self For method chaining
      */
     public function primary(array|string $columns): self;
@@ -288,7 +288,7 @@ interface TableBuilderInterface
     /**
      * Add a fulltext index (where supported)
      *
-     * @param  array|string $columns Column(s) for fulltext index
+     * @param  array<int, string>|string $columns Column(s) for fulltext index
      * @param  string|null  $name    Index name (auto-generated if null)
      * @return self For method chaining
      */

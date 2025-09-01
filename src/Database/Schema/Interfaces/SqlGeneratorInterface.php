@@ -41,8 +41,8 @@ interface SqlGeneratorInterface
      * Generate ALTER TABLE statements for table modifications
      *
      * @param  \Glueful\Database\Schema\DTOs\TableDefinition $table   Current table definition
-     * @param  array                                         $changes Array of changes to apply
-     * @return array Array of SQL statements
+     * @param  array<string, mixed>                          $changes Array of changes to apply
+     * @return array<string> Array of SQL statements
      */
     public function alterTable(\Glueful\Database\Schema\DTOs\TableDefinition $table, array $changes): array;
 
@@ -160,7 +160,7 @@ interface SqlGeneratorInterface
      * Generate CREATE DATABASE statement
      *
      * @param  string $database Database name
-     * @param  array  $options  Database options
+     * @param  array<string, mixed>  $options  Database options
      * @return string SQL CREATE DATABASE statement
      */
     public function createDatabase(string $database, array $options = []): string;
@@ -182,7 +182,7 @@ interface SqlGeneratorInterface
      * Map abstract column type to database-specific type
      *
      * @param  string $type    Abstract type (string, integer, etc.)
-     * @param  array  $options Type options (length, precision, etc.)
+     * @param  array<string, mixed>  $options Type options (length, precision, etc.)
      * @return string Database-specific type
      */
     public function mapColumnType(string $type, array $options = []): string;
@@ -279,7 +279,7 @@ interface SqlGeneratorInterface
      *
      * @param  string $table Table name
      * @param  \PDO   $pdo   PDO connection for executing queries
-     * @return array Array of column information with standardized format
+     * @return array<string, mixed> Array of column information with standardized format
      */
     public function getTableColumns(string $table, \PDO $pdo): array;
 
@@ -291,8 +291,8 @@ interface SqlGeneratorInterface
      * Generate preview of schema changes
      *
      * @param  string $table   Table name
-     * @param  array  $changes Changes to preview
-     * @return array Preview information with SQL and warnings
+     * @param  array<string, mixed>  $changes Changes to preview
+     * @return array<string, mixed> Preview information with SQL and warnings
      */
     public function generateChangePreview(string $table, array $changes): array;
 
@@ -301,25 +301,25 @@ interface SqlGeneratorInterface
      *
      * @param  string $table  Table name
      * @param  string $format Export format (json, sql, yaml, php)
-     * @param  array  $schema Table schema data
-     * @return array Exported schema
+     * @param  array<string, mixed>  $schema Table schema data
+     * @return array<string, mixed> Exported schema
      */
     public function exportTableSchema(string $table, string $format, array $schema): array;
 
     /**
      * Validate schema definition
      *
-     * @param  array  $schema Schema to validate
+     * @param  array<string, mixed>  $schema Schema to validate
      * @param  string $format Schema format
-     * @return array Validation result with errors and warnings
+     * @return array<string, mixed> Validation result with errors and warnings
      */
     public function validateSchema(array $schema, string $format): array;
 
     /**
      * Generate revert operations for a change
      *
-     * @param  array $change Original change
-     * @return array Revert operations
+     * @param  array<string, mixed> $change Original change
+     * @return array<string, mixed> Revert operations
      */
     public function generateRevertOperations(array $change): array;
 
@@ -327,10 +327,10 @@ interface SqlGeneratorInterface
      * Import table schema from definition
      *
      * @param  string $table   Table name
-     * @param  array  $schema  Schema definition
+     * @param  array<string, mixed>  $schema  Schema definition
      * @param  string $format  Schema format
-     * @param  array  $options Import options
-     * @return array Import result with SQL statements
+     * @param  array<string, mixed>  $options Import options
+     * @return array<string, mixed> Import result with SQL statements
      */
     public function importTableSchema(string $table, array $schema, string $format, array $options): array;
 }

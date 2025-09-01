@@ -16,6 +16,7 @@ use Glueful\Database\Query\Interfaces\JoinClauseInterface;
  */
 class JoinClause implements JoinClauseInterface
 {
+    /** @var array<array{type: string, table: string, first: string, operator: string, second: string}> */
     protected array $joins = [];
     protected DatabaseDriver $driver;
 
@@ -69,7 +70,7 @@ class JoinClause implements JoinClauseInterface
      */
     public function toSql(): string
     {
-        if (empty($this->joins)) {
+        if (count($this->joins) === 0) {
             return '';
         }
 
@@ -89,7 +90,7 @@ class JoinClause implements JoinClauseInterface
      */
     public function hasJoins(): bool
     {
-        return !empty($this->joins);
+        return count($this->joins) > 0;
     }
 
     /**
@@ -134,6 +135,8 @@ class JoinClause implements JoinClauseInterface
 
     /**
      * Build a single JOIN clause
+     *
+     * @param array{type: string, table: string, first: string, operator: string, second: string} $join
      */
     protected function buildJoinClause(array $join): string
     {

@@ -45,8 +45,8 @@ class ExecutionPlanAnalyzer
      * Get the execution plan for a query
      *
      * @param  string $query  SQL query to analyze
-     * @param  array  $params Query parameters
-     * @return array Execution plan details
+     * @param  array<mixed>  $params Query parameters
+     * @return array<mixed> Execution plan details
      * @throws \RuntimeException When execution plan not supported for the current driver
      */
     public function getExecutionPlan(string $query, array $params = []): array
@@ -64,8 +64,8 @@ class ExecutionPlanAnalyzer
     /**
      * Analyze execution plan and provide recommendations
      *
-     * @param  array $plan The execution plan to analyze
-     * @return array Issues and recommendations
+     * @param  array<mixed> $plan The execution plan to analyze
+     * @return array<string, mixed> Issues and recommendations
      */
     public function analyzeExecutionPlan(array $plan): array
     {
@@ -96,8 +96,8 @@ class ExecutionPlanAnalyzer
      * Get MySQL execution plan (EXPLAIN)
      *
      * @param  string $query  SQL query to analyze
-     * @param  array  $params Query parameters
-     * @return array MySQL execution plan
+     * @param  array<mixed>  $params Query parameters
+     * @return array<mixed> MySQL execution plan
      */
     private function getMySQLExecutionPlan(string $query, array $params = []): array
     {
@@ -124,8 +124,8 @@ class ExecutionPlanAnalyzer
      * Get PostgreSQL execution plan (EXPLAIN)
      *
      * @param  string $query  SQL query to analyze
-     * @param  array  $params Query parameters
-     * @return array PostgreSQL execution plan
+     * @param  array<mixed>  $params Query parameters
+     * @return array<mixed> PostgreSQL execution plan
      */
     private function getPostgreSQLExecutionPlan(string $query, array $params = []): array
     {
@@ -152,8 +152,8 @@ class ExecutionPlanAnalyzer
      * Get SQLite execution plan (EXPLAIN QUERY PLAN)
      *
      * @param  string $query  SQL query to analyze
-     * @param  array  $params Query parameters
-     * @return array SQLite execution plan
+     * @param  array<mixed>  $params Query parameters
+     * @return array<mixed> SQLite execution plan
      */
     private function getSQLiteExecutionPlan(string $query, array $params = []): array
     {
@@ -184,12 +184,12 @@ class ExecutionPlanAnalyzer
     /**
      * Detect database type from plan structure
      *
-     * @param  array $plan The execution plan to analyze
+     * @param  array<mixed> $plan The execution plan to analyze
      * @return string Database type ('mysql', 'pgsql', 'sqlite', or 'unknown')
      */
     private function detectDatabaseType(array $plan): string
     {
-        if (empty($plan)) {
+        if (count($plan) === 0) {
             return 'unknown';
         }
 
@@ -214,8 +214,8 @@ class ExecutionPlanAnalyzer
     /**
      * Analyze MySQL execution plan
      *
-     * @param  array $plan MySQL execution plan
-     * @return array Issues and recommendations
+     * @param  array<mixed> $plan MySQL execution plan
+     * @return array<string, mixed> Issues and recommendations
      */
     private function analyzeMySQLPlan(array $plan): array
     {
@@ -259,8 +259,8 @@ class ExecutionPlanAnalyzer
     /**
      * Analyze PostgreSQL execution plan
      *
-     * @param  array $plan PostgreSQL execution plan
-     * @return array Issues and recommendations
+     * @param  array<mixed> $plan PostgreSQL execution plan
+     * @return array<string, mixed> Issues and recommendations
      */
     private function analyzePostgreSQLPlan(array $plan): array
     {
@@ -298,8 +298,8 @@ class ExecutionPlanAnalyzer
     /**
      * Analyze SQLite execution plan
      *
-     * @param  array $plan SQLite execution plan
-     * @return array Issues and recommendations
+     * @param  array<mixed> $plan SQLite execution plan
+     * @return array<string, mixed> Issues and recommendations
      */
     private function analyzeSQLitePlan(array $plan): array
     {
@@ -331,7 +331,7 @@ class ExecutionPlanAnalyzer
     /**
      * Check if MySQL plan contains a full table scan
      *
-     * @param  array $plan MySQL execution plan details
+     * @param  array<mixed> $plan MySQL execution plan details
      * @return bool True if plan contains full table scan
      */
     private function hasFullTableScan(array $plan): bool
@@ -344,7 +344,7 @@ class ExecutionPlanAnalyzer
         // Check nested structures like joins
         foreach (['table', 'tables', 'nested_loop'] as $key) {
             if (isset($plan[$key]) && is_array($plan[$key])) {
-                foreach ((array)$plan[$key] as $item) {
+                foreach ($plan[$key] as $item) {
                     if (is_array($item) && $this->hasFullTableScan($item)) {
                         return true;
                     }
@@ -358,20 +358,24 @@ class ExecutionPlanAnalyzer
     /**
      * Check if MySQL plan contains a filesort operation
      *
-     * @param  array $plan MySQL execution plan details
+     * @param  array<mixed> $plan MySQL execution plan details
      * @return bool True if plan contains filesort
      */
     private function hasFilesort(array $plan): bool
     {
         // Check for 'using_filesort' flag
-        if (isset($plan['table']) && isset($plan['table']['using_filesort']) && $plan['table']['using_filesort']) {
+        if (
+            isset($plan['table'])
+            && isset($plan['table']['using_filesort'])
+            && $plan['table']['using_filesort'] === true
+        ) {
             return true;
         }
 
         // Check nested structures
         foreach (['table', 'tables', 'nested_loop'] as $key) {
             if (isset($plan[$key]) && is_array($plan[$key])) {
-                foreach ((array)$plan[$key] as $item) {
+                foreach ($plan[$key] as $item) {
                     if (is_array($item) && $this->hasFilesort($item)) {
                         return true;
                     }
@@ -385,7 +389,7 @@ class ExecutionPlanAnalyzer
     /**
      * Check if MySQL plan contains temporary table usage
      *
-     * @param  array $plan MySQL execution plan details
+     * @param  array<mixed> $plan MySQL execution plan details
      * @return bool True if plan contains temporary table
      */
     private function hasTemporaryTable(array $plan): bool
@@ -394,7 +398,7 @@ class ExecutionPlanAnalyzer
         if (
             isset($plan['table'])
             && isset($plan['table']['using_temporary_table'])
-            && $plan['table']['using_temporary_table']
+            && $plan['table']['using_temporary_table'] === true
         ) {
             return true;
         }
@@ -402,7 +406,7 @@ class ExecutionPlanAnalyzer
         // Check nested structures
         foreach (['table', 'tables', 'nested_loop'] as $key) {
             if (isset($plan[$key]) && is_array($plan[$key])) {
-                foreach ((array)$plan[$key] as $item) {
+                foreach ($plan[$key] as $item) {
                     if (is_array($item) && $this->hasTemporaryTable($item)) {
                         return true;
                     }
@@ -416,7 +420,7 @@ class ExecutionPlanAnalyzer
     /**
      * Check if MySQL plan contains inefficient join operations
      *
-     * @param  array $plan MySQL execution plan details
+     * @param  array<mixed> $plan MySQL execution plan details
      * @return bool True if plan contains inefficient joins
      */
     private function hasIneffientJoins(array $plan): bool
@@ -440,7 +444,7 @@ class ExecutionPlanAnalyzer
     /**
      * Check if PostgreSQL plan contains sequential scan
      *
-     * @param  array $plan PostgreSQL execution plan node
+     * @param  array<mixed> $plan PostgreSQL execution plan node
      * @return bool True if plan contains sequential scan
      */
     private function hasSequentialScan(array $plan): bool
@@ -465,7 +469,7 @@ class ExecutionPlanAnalyzer
     /**
      * Check if PostgreSQL plan contains hash join
      *
-     * @param  array $plan PostgreSQL execution plan node
+     * @param  array<mixed> $plan PostgreSQL execution plan node
      * @return bool True if plan contains hash join
      */
     private function hasHashJoin(array $plan): bool
@@ -490,7 +494,7 @@ class ExecutionPlanAnalyzer
     /**
      * Check if PostgreSQL plan contains high cost operations
      *
-     * @param  array $plan PostgreSQL execution plan node
+     * @param  array<mixed> $plan PostgreSQL execution plan node
      * @return bool True if plan contains high cost operations
      */
     private function hasHighCost(array $plan): bool
@@ -516,8 +520,8 @@ class ExecutionPlanAnalyzer
     /**
      * Extract important details from MySQL execution plan
      *
-     * @param  array $plan MySQL execution plan details
-     * @return array Simplified plan details
+     * @param  array<mixed> $plan MySQL execution plan details
+     * @return array<string, mixed> Simplified plan details
      */
     private function extractMySQLPlanDetails(array $plan): array
     {
@@ -548,8 +552,8 @@ class ExecutionPlanAnalyzer
     /**
      * Extract important details from PostgreSQL execution plan
      *
-     * @param  array $plan PostgreSQL execution plan node
-     * @return array Simplified plan details
+     * @param  array<mixed> $plan PostgreSQL execution plan node
+     * @return array<string, mixed> Simplified plan details
      */
     private function extractPostgreSQLPlanDetails(array $plan): array
     {
@@ -588,7 +592,7 @@ class ExecutionPlanAnalyzer
      * Bind parameters to a prepared statement
      *
      * @param  \PDOStatement $stmt   Prepared statement
-     * @param  array         $params Parameters to bind
+     * @param  array<mixed>  $params Parameters to bind
      * @return void
      */
     private function bindParams($stmt, array $params): void

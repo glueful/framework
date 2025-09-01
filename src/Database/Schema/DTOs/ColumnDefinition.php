@@ -118,7 +118,8 @@ readonly class ColumnDefinition
             [
             'integer', 'bigInteger', 'smallInteger', 'tinyInteger',
             'decimal', 'float', 'double', 'real'
-            ]
+            ],
+            true
         );
     }
 
@@ -133,7 +134,8 @@ readonly class ColumnDefinition
             $this->type,
             [
             'string', 'varchar', 'char', 'text', 'longText', 'mediumText', 'tinyText'
-            ]
+            ],
+            true
         );
     }
 
@@ -148,7 +150,8 @@ readonly class ColumnDefinition
             $this->type,
             [
             'timestamp', 'datetime', 'date', 'time', 'year'
-            ]
+            ],
+            true
         );
     }
 
@@ -159,7 +162,7 @@ readonly class ColumnDefinition
      */
     public function supportsLength(): bool
     {
-        return $this->isString() || in_array($this->type, ['binary', 'varbinary']);
+        return $this->isString() || in_array($this->type, ['binary', 'varbinary'], true);
     }
 
     /**
@@ -169,7 +172,7 @@ readonly class ColumnDefinition
      */
     public function supportsPrecisionScale(): bool
     {
-        return in_array($this->type, ['decimal', 'numeric', 'float', 'double']);
+        return in_array($this->type, ['decimal', 'numeric', 'float', 'double'], true);
     }
 
     /**
@@ -189,7 +192,7 @@ readonly class ColumnDefinition
      */
     public function supportsAutoIncrement(): bool
     {
-        return in_array($this->type, ['id', 'foreignId', 'integer', 'bigInteger', 'smallInteger', 'tinyInteger']);
+        return in_array($this->type, ['id', 'foreignId', 'integer', 'bigInteger', 'smallInteger', 'tinyInteger'], true);
     }
 
     /**
@@ -220,13 +223,13 @@ readonly class ColumnDefinition
      */
     public function isValidEnumValue(string $value): bool
     {
-        return $this->isEnum() && in_array($value, $this->getEnumValues());
+        return $this->isEnum() && in_array($value, $this->getEnumValues(), true);
     }
 
     /**
      * Create a copy of this column definition with modifications
      *
-     * @param  array $changes Changes to apply
+     * @param  array<string, mixed> $changes Changes to apply
      * @return self New column definition instance
      */
     public function with(array $changes): self
@@ -295,7 +298,7 @@ readonly class ColumnDefinition
             'id', 'foreignId'
         ];
 
-        if (!in_array($this->type, $validTypes)) {
+        if (!in_array($this->type, $validTypes, true)) {
             throw new \InvalidArgumentException("Invalid column type: {$this->type}");
         }
     }
@@ -364,7 +367,7 @@ readonly class ColumnDefinition
         }
 
         // Name validation
-        if (empty(trim($this->name))) {
+        if (trim($this->name) === '') {
             throw new \InvalidArgumentException('Column name cannot be empty');
         }
 
@@ -389,12 +392,12 @@ readonly class ColumnDefinition
         // Enum validation
         if ($this->isEnum()) {
             $enumValues = $this->getEnumValues();
-            if (empty($enumValues)) {
+            if ($enumValues === []) {
                 throw new \InvalidArgumentException('Enum column must have at least one value');
             }
 
             // Validate default value is in enum values
-            if ($this->default !== null && !in_array($this->default, $enumValues)) {
+            if ($this->default !== null && !in_array($this->default, $enumValues, true)) {
                 throw new \InvalidArgumentException(
                     'Enum default value must be one of the allowed values: ' . implode(', ', $enumValues)
                 );

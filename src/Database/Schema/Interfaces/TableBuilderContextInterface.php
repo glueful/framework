@@ -46,7 +46,7 @@ interface TableBuilderContextInterface
     /**
      * Add an index
      *
-     * @param  array|string $columns Column(s) to index
+     * @param  array<int, string>|string $columns Column(s) to index
      * @param  string|null  $name    Index name (auto-generated if null)
      * @return self For method chaining
      */
@@ -55,7 +55,7 @@ interface TableBuilderContextInterface
     /**
      * Add a unique index
      *
-     * @param  array|string $columns Column(s) for unique constraint
+     * @param  array<int, string>|string $columns Column(s) for unique constraint
      * @param  string|null  $name    Index name (auto-generated if null)
      * @return self For method chaining
      */

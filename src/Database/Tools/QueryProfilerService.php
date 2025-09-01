@@ -2,14 +2,17 @@
 
 namespace Glueful\Database\Tools;
 
+use Psr\Log\LoggerInterface;
+
 class QueryProfilerService
 {
-    private $logger;
-    private $threshold;
-    private $sampling;
-    private $profiles = [];
+    private LoggerInterface $logger;
+    private float $threshold;
+    private float $sampling;
+    /** @var array<mixed> */
+    private array $profiles = [];
 
-    public function __construct($threshold = null, $logger = null)
+    public function __construct(?float $threshold = null, ?LoggerInterface $logger = null)
     {
         $this->logger = $logger ?? \Glueful\Logging\LogManager::getInstance();
         $this->threshold = $threshold ?? $this->getConfig('threshold', 100); // ms
@@ -35,8 +38,13 @@ class QueryProfilerService
 
     /**
      * Profile a database query
+     *
+     * @param string $query
+     * @param array<mixed> $params
+     * @param \Closure $executionCallback
+     * @return mixed
      */
-    public function profile(string $query, array $params, \Closure $executionCallback)
+    public function profile(string $query, array $params, \Closure $executionCallback): mixed
     {
         // Skip profiling based on sampling rate
         if (mt_rand(1, 100) / 100 > $this->sampling) {
@@ -83,6 +91,8 @@ class QueryProfilerService
 
     /**
      * Record a query profile for storage and analysis
+     *
+     * @param array<mixed> $profile
      */
     private function recordProfile(array $profile): void
     {
@@ -96,6 +106,9 @@ class QueryProfilerService
 
     /**
      * Sanitize query parameters for safe logging
+     *
+     * @param array<mixed> $params
+     * @return array<mixed>
      */
     private function sanitizeParams(array $params): array
     {
@@ -118,6 +131,8 @@ class QueryProfilerService
 
     /**
      * Get backtrace information for the query
+     *
+     * @return array<mixed>
      */
     private function getBacktrace(): array
     {
@@ -153,9 +168,11 @@ class QueryProfilerService
 
         return $relevantTrace;
     }
-       /**
-        * Log a slow query to the system logger
-        */
+    /**
+     * Log a slow query to the system logger
+     *
+     * @param array<mixed> $profile
+     */
     private function logSlowQuery(array $profile): void
     {
         $context = [
@@ -172,7 +189,9 @@ class QueryProfilerService
 
         // Use channel method if available, otherwise use warning directly
         if (method_exists($this->logger, 'channel')) {
-            $this->logger->channel('database')
+            /** @var \Glueful\Logging\LogManager $channelLogger */
+            $channelLogger = $this->logger;
+            $channelLogger->channel('database')
                 ->warning("Slow query detected ({$profile['duration']}ms): {$profile['sql']}", $context);
         } else {
             $this->logger->warning("Slow query detected ({$profile['duration']}ms): {$profile['sql']}", $context);
@@ -181,6 +200,8 @@ class QueryProfilerService
 
     /**
      * Get all recorded query profiles
+     *
+     * @return array<mixed>
      */
     public function getProfiles(): array
     {
@@ -189,6 +210,10 @@ class QueryProfilerService
 
     /**
      * Get recent query profiles with optional filtering
+     *
+     * @param int $limit
+     * @param float|null $thresholdMs
+     * @return array<mixed>
      */
     public function getRecentProfiles(int $limit = 100, ?float $thresholdMs = null): array
     {
@@ -216,10 +241,12 @@ class QueryProfilerService
 
     /**
      * Get performance statistics about executed queries
+     *
+     * @return array<string, mixed>
      */
     public function getStatistics(): array
     {
-        if (empty($this->profiles)) {
+        if (count($this->profiles) === 0) {
             return [
                 'count' => 0,
                 'total_duration' => 0,

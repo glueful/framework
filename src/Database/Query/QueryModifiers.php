@@ -15,9 +15,13 @@ use Glueful\Database\Driver\DatabaseDriver;
  */
 class QueryModifiers implements QueryModifiersInterface
 {
+    /** @var array<string> */
     private array $groupBy = [];
+    /** @var array<array{type: string, boolean: string, expression?: string, column?: string, operator?: string, value?: mixed}> */
     private array $having = [];
+    /** @var array<mixed> */
     private array $havingBindings = [];
+    /** @var array<array{type: string, column?: string, direction?: string, expression?: string}> */
     private array $orderBy = [];
 
     public function __construct(
@@ -204,7 +208,7 @@ class QueryModifiers implements QueryModifiersInterface
      */
     public function buildGroupByClause(): string
     {
-        if (empty($this->groupBy)) {
+        if (count($this->groupBy) === 0) {
             return '';
         }
 
@@ -221,7 +225,7 @@ class QueryModifiers implements QueryModifiersInterface
      */
     public function buildHavingClause(): string
     {
-        if (empty($this->having)) {
+        if (count($this->having) === 0) {
             return '';
         }
 
@@ -258,7 +262,7 @@ class QueryModifiers implements QueryModifiersInterface
      */
     public function buildOrderByClause(): string
     {
-        if (empty($this->orderBy)) {
+        if (count($this->orderBy) === 0) {
             return '';
         }
 
@@ -315,7 +319,7 @@ class QueryModifiers implements QueryModifiersInterface
      * Add OR HAVING raw condition
      *
      * @param string $expression The raw SQL expression
-     * @param array  $bindings   Parameter bindings
+     * @param array<mixed> $bindings Parameter bindings
      */
     public function orHavingRaw(string $expression, array $bindings = []): void
     {

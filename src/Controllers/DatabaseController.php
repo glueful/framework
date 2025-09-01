@@ -596,7 +596,7 @@ class DatabaseController extends BaseController
                 $columnDef
             );
 
-            if ($result['success'] ?? false) {
+            if ((bool) ($result['success'] ?? false)) {
                 $results[] = $column['name'];
             } else {
                 $failed[] = $column['name'];
@@ -671,7 +671,7 @@ class DatabaseController extends BaseController
             // Use the SchemaManager's dropColumn method
             $result = $this->schemaManager->dropColumn($tableName, $columnName);
 
-            if ($result['success'] ?? false) {
+            if ((bool) ($result['success'] ?? false)) {
                 $results[] = $columnName;
             } else {
                 $failed[] = $columnName;
@@ -1157,7 +1157,7 @@ class DatabaseController extends BaseController
             if (isset($data['deleted_columns']) && count($data['deleted_columns']) > 0) {
                 foreach ($data['deleted_columns'] as $column) {
                     $result = $this->schemaManager->dropColumn($tableName, $column);
-                    if ($result['success'] ?? false) {
+                    if ((bool) ($result['success'] ?? false)) {
                         $results['deleted_columns'][] = $column;
                     } else {
                         $results['failed_operations'][] = "Failed to delete column: $column";
@@ -1211,7 +1211,7 @@ class DatabaseController extends BaseController
 
                     $result = $this->schemaManager->addColumn($tableName, $column['name'], $columnDef);
 
-                    if ($result['success'] ?? false) {
+                    if ((bool) ($result['success'] ?? false)) {
                         $results['added_columns'][] = $column['name'];
                     } else {
                         $results['failed_operations'][] = "Failed to add column: " . $column['name'];
@@ -1330,9 +1330,13 @@ class DatabaseController extends BaseController
                 // Get size information for each table
                 foreach ($tables as $table) {
                     // Check if the result includes schema information already
-                    $tableName = is_array($table) ? $table['name'] : $table;
-                    // Default to 'public' schema if not specified
-                    $schema = is_array($table) && isset($table['schema']) ? $table['schema'] : 'public';
+                    if (is_array($table)) {
+                        $tableName = $table['name'];
+                        $schema = array_key_exists('schema', $table) ? $table['schema'] : 'public';
+                    } else {
+                        $tableName = $table;
+                        $schema = 'public';
+                    }
 
                     $size = $this->schemaManager->getTableSize($tableName);
                     $rowCount = $this->schemaManager->getTableRowCount($tableName);
@@ -1643,7 +1647,7 @@ class DatabaseController extends BaseController
             return $column !== 'id';
         });
 
-        $this->db->table($tableName)->upsert([$data], $updateColumns);
+        $this->db->table($tableName)->upsert($data, $updateColumns);
     }
 
     /**
@@ -1939,7 +1943,7 @@ class DatabaseController extends BaseController
         $wrappedSetClauses = [];
         foreach ($setClauses as $clause) {
             // Extract column name from "column = ?" format
-            if (preg_match('/^(\w+)\s*=\s*\?$/', $clause, $matches)) {
+            if (preg_match('/^(\w+)\s*=\s*\?$/', $clause, $matches) === 1) {
                 $columnName = $matches[1];
                 $wrappedSetClauses[] = $this->wrapIdentifier($columnName) . ' = ?';
             } else {
@@ -2071,7 +2075,7 @@ class DatabaseController extends BaseController
             'schema' => $schema,
             'exported_at' => date('Y-m-d H:i:s'),
             'metadata' => [
-            'export_size' => strlen(json_encode($schema)),
+            'export_size' => strlen(json_encode($schema) !== false ? json_encode($schema) : ''),
             'format_version' => '1.0'
             ]
         ]);
@@ -2110,7 +2114,7 @@ class DatabaseController extends BaseController
 
         // Validate schema before import
         $validation = $this->schemaManager->validateSchema($schema, $format);
-        if (!$validation['valid']) {
+        if (!(bool) ($validation['valid'] ?? true)) {
             return Response::error(
                 'Invalid schema: ' . implode(', ', $validation['errors']),
                 Response::HTTP_BAD_REQUEST
@@ -2368,7 +2372,7 @@ class DatabaseController extends BaseController
             }
 
             // Skip columns that might contain sensitive data
-            if (preg_match('/(password|token|secret|key|hash)$/i', $columnName)) {
+            if (preg_match('/(password|token|secret|key|hash)$/i', $columnName) === 1) {
                 continue;
             }
 
@@ -2645,10 +2649,10 @@ class DatabaseController extends BaseController
             $score = 0;
 
             // High scores for name-like fields
-            if (preg_match('/^(name|title|label|display_name)$/i', $col['name'])) {
+            if (preg_match('/^(name|title|label|display_name)$/i', $col['name']) === 1) {
                 $score += 100;
             }
-            if (preg_match('/name$/i', $col['name'])) {
+            if (preg_match('/name$/i', $col['name']) === 1) {
                 $score += 80;
             }
 
@@ -2656,7 +2660,7 @@ class DatabaseController extends BaseController
             if (isset($col['is_unique']) && $col['is_unique'] === true) {
                 $score += 60;
             }
-            if (preg_match('/^(username|email|code|slug)$/i', $col['name'])) {
+            if (preg_match('/^(username|email|code|slug)$/i', $col['name']) === 1) {
                 $score += 50;
             }
 
@@ -2669,7 +2673,7 @@ class DatabaseController extends BaseController
             if (str_contains($col['type'], '512') || str_contains($col['type'], '1000')) {
                 $score -= 10;
             }
-            if (preg_match('/^(uuid|guid|hash)$/i', $col['name'])) {
+            if (preg_match('/^(uuid|guid|hash)$/i', $col['name']) === 1) {
                 $score -= 30;
             }
 

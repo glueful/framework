@@ -18,12 +18,12 @@ class DevelopmentQueryMonitor
     private static bool $enabled = false;
 
     /**
-     * @var array Query execution log
+     * @var array<int, array{sql: string, normalized_sql: string, params: array<string, mixed>, execution_time: float, purpose: string, timestamp: float, memory_usage: int, backtrace: array<int, array{file: string, line: int, function: string}>, hash: string}> Query execution log
      */
     private static array $queryLog = [];
 
     /**
-     * @var array N+1 query detection data
+     * @var array<string, array{count: int, first_seen: float, queries: array<int, array{sql: string, normalized_sql: string, params: array<string, mixed>, execution_time: float, purpose: string, timestamp: float, memory_usage: int, backtrace: array<int, array{file: string, line: int, function: string}>, hash: string}>}> N+1 query detection data
      */
     private static array $queryPatterns = [];
 
@@ -38,7 +38,7 @@ class DevelopmentQueryMonitor
     private static int $nPlusOneThreshold = 10;
 
     /**
-     * @var array Current request query statistics
+     * @var array{total_queries: int, total_time: float, slow_queries: int, duplicate_queries: int} Current request query statistics
      */
     private static array $requestStats = [
         'total_queries' => 0,
@@ -66,6 +66,8 @@ class DevelopmentQueryMonitor
 
     /**
      * Log a query execution
+     *
+     * @param array<string, mixed> $params
      */
     public static function logQuery(string $sql, array $params, float $executionTime, string $purpose = ''): void
     {
@@ -99,13 +101,15 @@ class DevelopmentQueryMonitor
         }
 
         // Log to file if enabled
-        if (env('LOG_QUERIES_TO_FILE', true)) {
+        if ((bool) env('LOG_QUERIES_TO_FILE', true)) {
             self::logToFile($logEntry);
         }
     }
 
     /**
      * Update request statistics
+     *
+     * @param array{sql: string, normalized_sql: string, params: array<string, mixed>, execution_time: float, purpose: string, timestamp: float, memory_usage: int, backtrace: array<int, array{file: string, line: int, function: string}>, hash: string} $logEntry
      */
     private static function updateRequestStats(array $logEntry): void
     {
@@ -126,6 +130,8 @@ class DevelopmentQueryMonitor
 
     /**
      * Detect query patterns for N+1 detection
+     *
+     * @param array{sql: string, normalized_sql: string, params: array<string, mixed>, execution_time: float, purpose: string, timestamp: float, memory_usage: int, backtrace: array<int, array{file: string, line: int, function: string}>, hash: string} $logEntry
      */
     private static function detectQueryPatterns(string $originalSql, array $logEntry): void
     {
@@ -150,6 +156,8 @@ class DevelopmentQueryMonitor
 
     /**
      * Handle slow query detection
+     *
+     * @param array{sql: string, normalized_sql: string, params: array<string, mixed>, execution_time: float, purpose: string, timestamp: float, memory_usage: int, backtrace: array<int, array{file: string, line: int, function: string}>, hash: string} $logEntry
      */
     private static function handleSlowQuery(array $logEntry): void
     {
@@ -162,13 +170,15 @@ class DevelopmentQueryMonitor
         error_log($message);
 
         // Display in browser console if possible (only for non-API requests)
-        if (!headers_sent() && env('SHOW_QUERY_WARNINGS', true) && !self::isApiRequest()) {
+        if (!headers_sent() && (bool) env('SHOW_QUERY_WARNINGS', true) && !self::isApiRequest()) {
             echo "<script>console.warn(" . json_encode($message) . ");</script>";
         }
     }
 
     /**
      * Handle potential N+1 query detection
+     *
+     * @param array{count: int, first_seen: float, queries: array<int, array{sql: string, normalized_sql: string, params: array<string, mixed>, execution_time: float, purpose: string, timestamp: float, memory_usage: int, backtrace: array<int, array{file: string, line: int, function: string}>, hash: string}>} $patternData
      */
     private static function handlePotentialNPlusOne(string $pattern, array $patternData): void
     {
@@ -185,15 +195,15 @@ class DevelopmentQueryMonitor
         error_log($message);
 
         // Display warning (only for non-API requests)
-        if (!headers_sent() && env('SHOW_QUERY_WARNINGS', true) && !self::isApiRequest()) {
+        if (!headers_sent() && (bool) env('SHOW_QUERY_WARNINGS', true) && !self::isApiRequest()) {
             echo "<script>console.warn(" . json_encode($message) . ");</script>";
         }
 
         // Suggest optimization
         $suggestion = self::generateOptimizationSuggestion($pattern, $patternData);
-        if ($suggestion) {
+        if ($suggestion !== null) {
             error_log("OPTIMIZATION SUGGESTION: $suggestion");
-            if (!headers_sent() && env('SHOW_QUERY_WARNINGS', true) && !self::isApiRequest()) {
+            if (!headers_sent() && (bool) env('SHOW_QUERY_WARNINGS', true) && !self::isApiRequest()) {
                 echo "<script>console.info(" . json_encode("💡 " . $suggestion) . ");</script>";
             }
         }
@@ -204,7 +214,7 @@ class DevelopmentQueryMonitor
      */
     public static function displayRequestSummary(): void
     {
-        if (!self::$enabled || empty(self::$queryLog)) {
+        if (!self::$enabled || count(self::$queryLog) === 0) {
             return;
         }
 
@@ -229,7 +239,7 @@ class DevelopmentQueryMonitor
         }
 
         // Display in browser console (only for non-API requests)
-        if (!headers_sent() && env('SHOW_QUERY_SUMMARY', true) && !self::isApiRequest()) {
+        if (!headers_sent() && (bool) env('SHOW_QUERY_SUMMARY', true) && !self::isApiRequest()) {
             echo "<script>console.group('🔍 Database Query Summary');";
             echo "console.table(" . json_encode($summary) . ");";
 
@@ -304,10 +314,11 @@ class DevelopmentQueryMonitor
 
     /**
      * Generate optimization suggestion
+     *
+     * @param array{count: int, first_seen: float, queries: array<int, array{sql: string, normalized_sql: string, params: array<string, mixed>, execution_time: float, purpose: string, timestamp: float, memory_usage: int, backtrace: array<int, array{file: string, line: int, function: string}>, hash: string}>} $patternData
      */
     private static function generateOptimizationSuggestion(string $pattern, array $patternData): ?string
     {
-        $queries = $patternData['queries'];
         $count = $patternData['count'];
 
         if (strpos($pattern, 'SELECT') === 0) {
@@ -324,6 +335,8 @@ class DevelopmentQueryMonitor
 
     /**
      * Get relevant backtrace (excluding framework internals)
+     *
+     * @return array<int, array{file: string, line: int, function: string}>
      */
     private static function getRelevantBacktrace(): array
     {
@@ -350,6 +363,8 @@ class DevelopmentQueryMonitor
 
     /**
      * Log query to file
+     *
+     * @param array{sql: string, normalized_sql: string, params: array<string, mixed>, execution_time: float, purpose: string, timestamp: float, memory_usage: int, backtrace: array<int, array{file: string, line: int, function: string}>, hash: string} $logEntry
      */
     private static function logToFile(array $logEntry): void
     {
@@ -359,7 +374,7 @@ class DevelopmentQueryMonitor
             "[%s] %.3fs - %s %s\n",
             date('H:i:s'),
             $logEntry['execution_time'],
-            $logEntry['purpose'] ? "[{$logEntry['purpose']}]" : '',
+            $logEntry['purpose'] !== '' ? "[{$logEntry['purpose']}]" : '',
             $logEntry['sql']
         );
 
@@ -368,6 +383,8 @@ class DevelopmentQueryMonitor
 
     /**
      * Get current query statistics
+     *
+     * @return array{enabled: bool, request_stats: array{total_queries: int, total_time: float, slow_queries: int, duplicate_queries: int}, query_count: int, patterns_detected: int, slow_query_threshold: float}
      */
     public static function getStats(): array
     {
@@ -418,27 +435,12 @@ class DevelopmentQueryMonitor
                 // Log backtraces to identify source
                 foreach ($queries as $i => $query) {
                     $backtrace = $query['backtrace'] ?? [];
-                    if (!empty($backtrace)) {
+                    if (count($backtrace) > 0) {
                         $traceItems = array_map(
-                            function ($frame) {
-                                if (is_string($frame)) {
-                                    return $frame;
-                                }
-                                if (is_array($frame)) {
-                                    $location = '';
-                                    if (isset($frame['file']) && isset($frame['line'])) {
-                                        $location = basename($frame['file']) . ':' . $frame['line'];
-                                    }
-                                    if (isset($frame['function'])) {
-                                        $function = $frame['function'];
-                                        if (isset($frame['class'])) {
-                                            $function = $frame['class'] . $frame['type'] . $function;
-                                        }
-                                        return $function . ($location ? ' (' . $location . ')' : '');
-                                    }
-                                    return $location ?: 'Unknown';
-                                }
-                                return 'Unknown';
+                            function (array $frame): string {
+                                $location = basename($frame['file']) . ':' . $frame['line'];
+                                $function = $frame['function'];
+                                return $function . ' (' . $location . ')';
                             },
                             array_slice($backtrace, 0, 3)
                         );

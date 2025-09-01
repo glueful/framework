@@ -42,7 +42,7 @@ class PostgreSQLDriver implements DatabaseDriver
      * - Handles constraint violations gracefully
      *
      * @param  string $table   Target table
-     * @param  array  $columns Column list
+     * @param  array<string, mixed>  $columns Column list
      * @return string PostgreSQL insert statement
      */
     public function insertIgnore(string $table, array $columns): string
@@ -62,8 +62,8 @@ class PostgreSQLDriver implements DatabaseDriver
      * - Supports all PostgreSQL types
      *
      * @param  string $table         Target table
-     * @param  array  $columns       Columns to insert
-     * @param  array  $updateColumns Columns to update on conflict
+     * @param  array<string, mixed>  $columns       Columns to insert
+     * @param  array<string, mixed>  $updateColumns Columns to update on conflict
      * @return string PostgreSQL upsert statement
      */
     public function upsert(string $table, array $columns, array $updateColumns): string

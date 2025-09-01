@@ -20,6 +20,7 @@ class SelectBuilder implements SelectBuilderInterface
 {
     protected DatabaseDriver $driver;
     protected QueryStateInterface $state;
+    /** @var array<mixed> */
     protected array $bindings = [];
 
     public function __construct(DatabaseDriver $driver, QueryStateInterface $state)
@@ -130,7 +131,7 @@ class SelectBuilder implements SelectBuilderInterface
     /**
      * Format a single column for the SELECT clause
      */
-    protected function formatColumn($column): string
+    protected function formatColumn(mixed $column): string
     {
         // Handle raw SQL expressions
         if ($column instanceof RawExpression) {
@@ -190,6 +191,8 @@ class SelectBuilder implements SelectBuilderInterface
 
     /**
      * Build JOIN clause from join data
+     *
+     * @param array{type?: string, table: string, first: string, operator: string, second: string} $join
      */
     protected function buildJoinClause(array $join): string
     {

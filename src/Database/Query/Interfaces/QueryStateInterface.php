@@ -32,11 +32,15 @@ interface QueryStateInterface
 
     /**
      * Set columns to select
+     *
+     * @param array<string|\Glueful\Database\RawExpression> $columns
      */
     public function setSelectColumns(array $columns): void;
 
     /**
      * Get select columns
+     *
+     * @return array<string|\Glueful\Database\RawExpression>
      */
     public function getSelectColumns(): array;
 
@@ -52,11 +56,15 @@ interface QueryStateInterface
 
     /**
      * Add join information
+     *
+     * @param array<string, mixed> $joinData
      */
     public function addJoin(array $joinData): void;
 
     /**
      * Get all joins
+     *
+     * @return array<array<string, mixed>>
      */
     public function getJoins(): array;
 
@@ -82,21 +90,29 @@ interface QueryStateInterface
 
     /**
      * Set GROUP BY columns
+     *
+     * @param array<string> $columns
      */
     public function setGroupBy(array $columns): void;
 
     /**
      * Get GROUP BY columns
+     *
+     * @return array<string>
      */
     public function getGroupBy(): array;
 
     /**
      * Set ORDER BY clauses
+     *
+     * @param array<array{column: string, direction: string}> $orderBy
      */
     public function setOrderBy(array $orderBy): void;
 
     /**
      * Get ORDER BY clauses
+     *
+     * @return array<array{column: string, direction: string}>
      */
     public function getOrderBy(): array;
 

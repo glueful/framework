@@ -58,7 +58,7 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
         }
 
         // Add primary key
-        if (!empty($table->primaryKey)) {
+        if ($table->primaryKey !== []) {
             $quotedColumns = array_map([$this, 'quoteIdentifier'], $table->primaryKey);
             $parts[] = '  PRIMARY KEY (' . implode(', ', $quotedColumns) . ')';
         }
@@ -91,13 +91,17 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
      * @param  array           $changes Array of changes to apply
      * @return array Array of SQL statements
      */
+    /**
+     * @param array<string, mixed> $changes
+     * @return array<string>
+     */
     public function alterTable(TableDefinition $table, array $changes): array
     {
         $statements = [];
         $tableName = $this->quoteIdentifier($table->name);
 
         // Add columns
-        if (!empty($changes['add_columns'])) {
+        if (isset($changes['add_columns']) && $changes['add_columns'] !== []) {
             foreach ($changes['add_columns'] as $column) {
                 $columnDef = $this->buildColumnDefinition($column);
                 $positioning = $this->buildColumnPositioning($column);
@@ -106,7 +110,7 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
         }
 
         // Modify columns
-        if (!empty($changes['modify_columns'])) {
+        if (isset($changes['modify_columns']) && $changes['modify_columns'] !== []) {
             foreach ($changes['modify_columns'] as $column) {
                 $columnDef = $this->buildColumnDefinition($column);
                 $statements[] = "ALTER TABLE {$tableName} MODIFY COLUMN {$columnDef};";
@@ -114,7 +118,7 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
         }
 
         // Drop columns
-        if (!empty($changes['drop_columns'])) {
+        if (isset($changes['drop_columns']) && $changes['drop_columns'] !== []) {
             foreach ($changes['drop_columns'] as $columnName) {
                 $quotedColumn = $this->quoteIdentifier($columnName);
                 $statements[] = "ALTER TABLE {$tableName} DROP COLUMN {$quotedColumn};";
@@ -122,28 +126,28 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
         }
 
         // Add indexes
-        if (!empty($changes['add_indexes'])) {
+        if (isset($changes['add_indexes']) && $changes['add_indexes'] !== []) {
             foreach ($changes['add_indexes'] as $index) {
                 $statements[] = $this->createIndex($table->name, $index);
             }
         }
 
         // Drop indexes
-        if (!empty($changes['drop_indexes'])) {
+        if (isset($changes['drop_indexes']) && $changes['drop_indexes'] !== []) {
             foreach ($changes['drop_indexes'] as $indexName) {
                 $statements[] = $this->dropIndex($table->name, $indexName);
             }
         }
 
         // Add foreign keys
-        if (!empty($changes['add_foreign_keys'])) {
+        if (isset($changes['add_foreign_keys']) && $changes['add_foreign_keys'] !== []) {
             foreach ($changes['add_foreign_keys'] as $foreignKey) {
                 $statements[] = $this->addForeignKey($table->name, $foreignKey);
             }
         }
 
         // Drop foreign keys
-        if (!empty($changes['drop_foreign_keys'])) {
+        if (isset($changes['drop_foreign_keys']) && $changes['drop_foreign_keys'] !== []) {
             foreach ($changes['drop_foreign_keys'] as $constraintName) {
                 $statements[] = $this->dropForeignKey($table->name, $constraintName);
             }
@@ -297,7 +301,7 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
         $sql .= ' (' . implode(', ', $columns) . ')';
 
         // Add algorithm if specified
-        if ($index->algorithm) {
+        if ($index->algorithm !== null) {
             $sql .= ' USING ' . strtoupper($index->algorithm);
         }
 
@@ -343,11 +347,11 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
         $sql .= "FOREIGN KEY ({$localColumn}) ";
         $sql .= "REFERENCES {$referencedTable} ({$referencedColumn})";
 
-        if ($foreignKey->onDelete) {
+        if ($foreignKey->onDelete !== null) {
             $sql .= ' ON DELETE ' . strtoupper($foreignKey->onDelete);
         }
 
-        if ($foreignKey->onUpdate) {
+        if ($foreignKey->onUpdate !== null) {
             $sql .= ' ON UPDATE ' . strtoupper($foreignKey->onUpdate);
         }
 
@@ -379,6 +383,9 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
      * @param  string $database Database name
      * @param  array  $options  Database options
      * @return string SQL CREATE DATABASE statement
+     */
+    /**
+     * @param array<string, mixed> $options
      */
     public function createDatabase(string $database, array $options = []): string
     {
@@ -422,6 +429,9 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
      * @param  string $type    Abstract type (string, integer, etc.)
      * @param  array  $options Type options (length, precision, etc.)
      * @return string MySQL-specific type
+     */
+    /**
+     * @param array<string, mixed> $options
      */
     public function mapColumnType(string $type, array $options = []): string
     {
@@ -627,11 +637,11 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
         }
 
         // Charset and collation
-        if ($column->charset && $column->isString()) {
+        if ($column->charset !== null && $column->isString()) {
             $parts[] = 'CHARACTER SET ' . $column->charset;
         }
 
-        if ($column->collation && $column->isString()) {
+        if ($column->collation !== null && $column->isString()) {
             $parts[] = 'COLLATE ' . $column->collation;
         }
 
@@ -653,7 +663,7 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
         }
 
         // Comment
-        if ($column->comment) {
+        if ($column->comment !== null) {
             $parts[] = 'COMMENT ' . $this->quoteValue($column->comment);
         }
 
@@ -672,7 +682,7 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
             return ' FIRST';
         }
 
-        if ($column->after) {
+        if ($column->after !== null) {
             return ' AFTER ' . $this->quoteIdentifier($column->after);
         }
 
@@ -721,7 +731,7 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
         $parts[] = '(' . implode(', ', $columns) . ')';
 
         // Algorithm
-        if ($index->algorithm) {
+        if ($index->algorithm !== null) {
             $parts[] = 'USING ' . strtoupper($index->algorithm);
         }
 
@@ -746,11 +756,11 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
         $parts[] = $this->quoteIdentifier($foreignKey->referencedTable);
         $parts[] = '(' . $this->quoteIdentifier($foreignKey->referencedColumn) . ')';
 
-        if ($foreignKey->onDelete) {
+        if ($foreignKey->onDelete !== null) {
             $parts[] = 'ON DELETE ' . strtoupper($foreignKey->onDelete);
         }
 
-        if ($foreignKey->onUpdate) {
+        if ($foreignKey->onUpdate !== null) {
             $parts[] = 'ON UPDATE ' . strtoupper($foreignKey->onUpdate);
         }
 
@@ -781,7 +791,7 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
         }
 
         // Comment
-        if ($table->comment) {
+        if ($table->comment !== null) {
             $options[] = 'COMMENT=' . $this->quoteValue($table->comment);
         }
 
@@ -819,6 +829,9 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
      * @param  string $table Table name
      * @param  \PDO   $pdo   PDO connection for executing queries
      * @return array Array of column information with standardized format
+     */
+    /**
+     * @return array<string, mixed>
      */
     public function getTableColumns(string $table, \PDO $pdo): array
     {
@@ -864,7 +877,7 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
                     ];
                 }
             }
-        } catch (\PDOException $e) {
+        } catch (\PDOException) {
             // If indexes can't be retrieved, continue without them
         }
 
@@ -902,11 +915,11 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
                     ];
                 }
             }
-        } catch (\PDOException $e) {
+        } catch (\PDOException) {
             // If foreign key information can't be retrieved, continue without it
         }
 
-        return array_values($formattedColumns); // Convert back to indexed array
+        return $formattedColumns; // Return associative array as expected
     }
 
     // ===========================================
@@ -919,6 +932,10 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
      * @param  string $table   Table name
      * @param  array  $changes Changes to preview
      * @return array Preview information with SQL and warnings
+     */
+    /**
+     * @param array<string, mixed> $changes
+     * @return array<string, mixed>
      */
     public function generateChangePreview(string $table, array $changes): array
     {
@@ -949,7 +966,8 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
                 case 'add_index':
                     $indexName = $change['index_name'] ?? "{$table}_{$change['column']}_idx";
                     $column = $change['column'];
-                    $unique = ($change['unique'] ?? false) ? 'UNIQUE ' : '';
+                    $isUnique = $change['unique'] ?? false;
+                    $unique = is_bool($isUnique) && $isUnique ? 'UNIQUE ' : '';
                     $sql[] = "CREATE {$unique}INDEX " . $this->quoteIdentifier($indexName) .
                        " ON " . $this->quoteIdentifier($table) . " (" . $this->quoteIdentifier($column) . ")";
                     $estimatedDuration += 15;
@@ -971,7 +989,7 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
             'sql' => $sql,
             'warnings' => $warnings,
             'estimated_duration' => $estimatedDuration,
-            'safe_to_execute' => empty($warnings),
+            'safe_to_execute' => count($warnings) === 0,
             'generated_at' => date('Y-m-d H:i:s')
         ];
     }
@@ -983,6 +1001,10 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
      * @param  string $format Export format
      * @param  array  $schema Table schema data
      * @return array Exported schema
+     */
+    /**
+     * @param array<string, mixed> $schema
+     * @return array<string, mixed>
      */
     public function exportTableSchema(string $table, string $format, array $schema): array
     {
@@ -1017,12 +1039,16 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
      * @param  string $format Schema format
      * @return array Validation result
      */
+    /**
+     * @param array<string, mixed> $schema
+     * @return array<string, mixed>
+     */
     public function validateSchema(array $schema, string $format): array
     {
         $errors = [];
         $warnings = [];
 
-        if (empty($schema)) {
+        if ($schema === []) {
             $errors[] = 'Schema cannot be empty';
         }
 
@@ -1034,10 +1060,12 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
                 $errors[] = 'Columns definition is required and must be an array';
             } else {
                 foreach ($schema['columns'] as $column) {
-                    if (empty($column['COLUMN_NAME'] ?? $column['name'])) {
+                    $columnName = $column['COLUMN_NAME'] ?? $column['name'] ?? '';
+                    if ($columnName === '') {
                         $errors[] = 'Column name is required';
                     }
-                    if (empty($column['DATA_TYPE'] ?? $column['type'])) {
+                    $columnType = $column['DATA_TYPE'] ?? $column['type'] ?? '';
+                    if ($columnType === '') {
                         $errors[] = 'Column type is required';
                     }
                 }
@@ -1045,7 +1073,7 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
         }
 
         return [
-            'valid' => empty($errors),
+            'valid' => $errors === [],
             'errors' => $errors,
             'warnings' => $warnings
         ];
@@ -1056,6 +1084,10 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
      *
      * @param  array $change Original change
      * @return array Revert operations
+     */
+    /**
+     * @param array<string, mixed> $change
+     * @return array<string, mixed>
      */
     public function generateRevertOperations(array $change): array
     {
@@ -1104,7 +1136,7 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
                 ];
         }
 
-        return $revertOps;
+        return count($revertOps) > 0 ? $revertOps[0] : ['type' => 'no_operation'];
     }
 
     /**
@@ -1115,6 +1147,11 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
      * @param  string $format  Schema format
      * @param  array  $options Import options
      * @return array Import result with SQL statements
+     */
+    /**
+     * @param array<string, mixed> $schema
+     * @param array<string, mixed> $options
+     * @return array<string, mixed>
      */
     public function importTableSchema(string $table, array $schema, string $format, array $options): array
     {
@@ -1135,14 +1172,16 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
                     // Generate CREATE TABLE statement
                     $columns = [];
                     $indexes = [];
-                    $foreignKeys = [];
+                    $foreignKeys = []; // phpcs:ignore
 
                     foreach ($schema['columns'] as $column) {
                         $columnName = $column['COLUMN_NAME'] ?? $column['name'];
                         $columnType = $column['DATA_TYPE'] ?? $column['type'] ?? 'VARCHAR(255)';
                         $nullable = ($column['IS_NULLABLE'] ?? 'YES') === 'YES' ? '' : ' NOT NULL';
-                        $default = !empty($column['COLUMN_DEFAULT']) ? " DEFAULT {$column['COLUMN_DEFAULT']}" : '';
-                        $extra = !empty($column['EXTRA']) && $column['EXTRA'] === 'auto_increment'
+                        $columnDefault = $column['COLUMN_DEFAULT'] ?? null;
+                        $default = ($columnDefault !== null && $columnDefault !== '') ?
+                            " DEFAULT {$columnDefault}" : '';
+                        $extra = (isset($column['EXTRA']) && $column['EXTRA'] === 'auto_increment')
                         ? ' AUTO_INCREMENT'
                         : '';
 
@@ -1211,6 +1250,9 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
      * @param  array  $schema Schema definition
      * @return string CREATE TABLE SQL
      */
+    /**
+     * @param array<string, mixed> $schema
+     */
     private function generateCreateTableFromSchema(string $table, array $schema): string
     {
         $columns = [];
@@ -1219,7 +1261,8 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
             $columnName = $column['COLUMN_NAME'] ?? $column['name'];
             $columnType = $column['DATA_TYPE'] ?? $column['type'];
             $nullable = ($column['IS_NULLABLE'] ?? 'YES') === 'YES' ? '' : ' NOT NULL';
-            $default = !empty($column['COLUMN_DEFAULT']) ? " DEFAULT {$column['COLUMN_DEFAULT']}" : '';
+            $columnDefault = $column['COLUMN_DEFAULT'] ?? null;
+            $default = ($columnDefault !== null && $columnDefault !== '') ? " DEFAULT {$columnDefault}" : '';
 
             $columns[] = $this->quoteIdentifier($columnName) . " {$columnType}{$nullable}{$default}";
         }

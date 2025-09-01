@@ -92,7 +92,6 @@ class Connection implements DatabaseInterface
 
     /**
      * @var array<string, mixed> Database configuration
-     * @phpstan-var DatabaseConfig
      */
     protected array $config;
 
@@ -120,7 +119,7 @@ class Connection implements DatabaseInterface
      * 3. Fall back to legacy connection reuse
      * 4. Initialize driver and schema manager
      *
-     * @param  array $config Optional configuration override
+     * @param  array<string, mixed> $config Optional configuration override
      * @throws \Glueful\Exceptions\DatabaseException On connection failure or invalid configuration
      */
     public function __construct(array $config = [])
@@ -129,7 +128,8 @@ class Connection implements DatabaseInterface
         $this->engine = $this->config['engine'] ?? config('database.engine');
 
         // Initialize pool manager if pooling is enabled
-        if ($this->config['pooling']['enabled'] ?? false) {
+        $poolingEnabled = (bool) ($this->config['pooling']['enabled'] ?? false);
+        if ($poolingEnabled === true) {
             self::$poolManager ??= new ConnectionPoolManager();
             $this->pool = self::$poolManager->getPool($this->engine);
         }
@@ -137,7 +137,7 @@ class Connection implements DatabaseInterface
         $this->driver = $this->resolveDriver($this->engine);
 
         // Initialize PDO connection only if pooling is disabled
-        if (!($this->config['pooling']['enabled'] ?? false)) {
+        if ($poolingEnabled === false) {
             $this->pdo = $this->createPDOConnection($this->engine);
         }
 
@@ -162,7 +162,6 @@ class Connection implements DatabaseInterface
      * Load database configuration
      *
      * @return array<string, mixed> Complete database configuration
-     * @phpstan-return DatabaseConfig
      */
     private function loadConfig(): array
     {
@@ -184,7 +183,7 @@ class Connection implements DatabaseInterface
         ];
 
         // Add engine-specific options
-        if ($engine === 'mysql' && ($dbConfig['strict'] ?? true)) {
+        if ($engine === 'mysql' && ($dbConfig['strict'] ?? true) === true) {
             $options[PDO::MYSQL_ATTR_INIT_COMMAND] = "SET sql_mode='STRICT_ALL_TABLES'";
         }
 
@@ -230,7 +229,6 @@ class Connection implements DatabaseInterface
      */
     /**
      * @param array<string, mixed> $config
-     * @phpstan-param MySqlConfig|PgSqlConfig|SqliteConfig $config
      */
     private function buildDSN(string $engine, array $config): string
     {
@@ -351,8 +349,8 @@ class Connection implements DatabaseInterface
     public function getPDO(): PDO
     {
         // Use pooled connection if available
-        if ($this->pool) {
-            if (!$this->pooledConnection) {
+        if ($this->pool !== null) {
+            if ($this->pooledConnection === null) {
                 $this->pooledConnection = $this->pool->acquire();
             }
             return $this->pooledConnection->getPDO();
@@ -531,7 +529,7 @@ class Connection implements DatabaseInterface
     public function __destruct()
     {
         // Release pooled connection
-        if ($this->pooledConnection && $this->pool) {
+        if ($this->pooledConnection !== null && $this->pool !== null) {
             $this->pool->release($this->pooledConnection);
             $this->pooledConnection = null;
         }

@@ -196,7 +196,7 @@ readonly class ForeignKeyDefinition
     /**
      * Create a copy of this foreign key definition with modifications
      *
-     * @param  array $changes Changes to apply
+     * @param  array<string, mixed> $changes Changes to apply
      * @return self New foreign key definition instance
      */
     public function with(array $changes): self
@@ -221,19 +221,19 @@ readonly class ForeignKeyDefinition
      */
     private function validateColumns(): void
     {
-        if (empty(trim($this->localColumn))) {
+        if (trim($this->localColumn) === '') {
             throw new \InvalidArgumentException('Local column name cannot be empty');
         }
 
-        if (empty(trim($this->referencedTable))) {
+        if (trim($this->referencedTable) === '') {
             throw new \InvalidArgumentException('Referenced table name cannot be empty');
         }
 
-        if (empty(trim($this->referencedColumn))) {
+        if (trim($this->referencedColumn) === '') {
             throw new \InvalidArgumentException('Referenced column name cannot be empty');
         }
 
-        if (empty(trim($this->name))) {
+        if (trim($this->name) === '') {
             throw new \InvalidArgumentException('Foreign key constraint name cannot be empty');
         }
     }
@@ -249,7 +249,7 @@ readonly class ForeignKeyDefinition
 
         if ($this->onDelete !== null) {
             $onDelete = strtoupper($this->onDelete);
-            if (!in_array($onDelete, $validActions)) {
+            if (!in_array($onDelete, $validActions, true)) {
                 throw new \InvalidArgumentException(
                     "Invalid ON DELETE action: {$this->onDelete}. Valid actions: " .
                     implode(', ', $validActions)
@@ -259,7 +259,7 @@ readonly class ForeignKeyDefinition
 
         if ($this->onUpdate !== null) {
             $onUpdate = strtoupper($this->onUpdate);
-            if (!in_array($onUpdate, $validActions)) {
+            if (!in_array($onUpdate, $validActions, true)) {
                 throw new \InvalidArgumentException(
                     "Invalid ON UPDATE action: {$this->onUpdate}. Valid actions: " .
                     implode(', ', $validActions)

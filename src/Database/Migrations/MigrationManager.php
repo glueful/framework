@@ -161,7 +161,7 @@ class MigrationManager
 
         foreach ($enabledExtensions as $extensionName) {
             $extensionPath = $this->extensionsManager->getExtensionPath($extensionName);
-            if ($extensionPath) {
+            if ($extensionPath !== null) {
                 $migrationDir = $extensionPath . '/migrations';
                 $extensionMigrations = $this->fileFinder->findMigrations($migrationDir);
                 foreach ($extensionMigrations as $file) {
@@ -170,7 +170,7 @@ class MigrationManager
             }
         }
 
-        $pendingFiles = array_filter($files, fn($file) => !in_array(basename($file), $applied));
+        $pendingFiles = array_filter($files, fn($file) => !in_array(basename($file), $applied, true));
 
         // Sort files by filename to ensure proper execution order
         usort($pendingFiles, fn($a, $b) => basename($a) <=> basename($b));
@@ -227,7 +227,7 @@ class MigrationManager
         $enabledExtensions = $this->extensionsManager->listEnabled();
         foreach ($enabledExtensions as $extensionName) {
             $extensionPath = $this->extensionsManager->getExtensionPath($extensionName);
-            if ($extensionPath) {
+            if ($extensionPath !== null) {
                 $migrationDir = $extensionPath . '/migrations';
                 $extensionMigrations = $this->fileFinder->findMigrations($migrationDir);
                 foreach ($extensionMigrations as $file) {
@@ -237,7 +237,7 @@ class MigrationManager
         }
 
         // Filter pending migrations
-        $pendingFiles = array_filter($files, fn($file) => !in_array(basename($file), $applied));
+        $pendingFiles = array_filter($files, fn($file) => !in_array(basename($file), $applied, true));
 
         // Sort files by filename to ensure proper execution order
         usort($pendingFiles, fn($a, $b) => basename($a) <=> basename($b));
@@ -256,7 +256,7 @@ class MigrationManager
      * - Specific migration file
      * - Provided list of pending migrations (to avoid duplicate queries)
      *
-     * @param  string|array|null $specificFileOrPendingMigrations Optional specific migration file or array of pending
+     * @param  string|array<string>|null $specificFileOrPendingMigrations Optional specific migration file or array of pending
      *                                                            migrations
      * @return array{
      *     applied: array<string>,
@@ -286,7 +286,7 @@ class MigrationManager
         }
 
         // If no pending migrations, return early
-        if (empty($pendingMigrations)) {
+        if (count($pendingMigrations) === 0) {
             return $results;
         }
 
@@ -367,7 +367,7 @@ class MigrationManager
 
         foreach ($enabledExtensions as $extension) {
             $extensionPath = $this->extensionsManager->getExtensionPath($extension);
-            if ($extensionPath && strpos($file, $extensionPath) === 0) {
+            if ($extensionPath !== null && strpos($file, $extensionPath) === 0) {
                 $extensionName = $extension;
                 break;
             }
@@ -494,7 +494,7 @@ class MigrationManager
 
             foreach ($enabledExtensions as $extensionName) {
                 $extensionPath = $this->extensionsManager->getExtensionPath($extensionName);
-                if ($extensionPath) {
+                if ($extensionPath !== null) {
                     $migrationDir = $extensionPath . '/migrations';
                     $extensionFile = $migrationDir . '/' . $filename;
 
@@ -508,7 +508,7 @@ class MigrationManager
                         }
                     }
 
-                    if ($matchingFile && file_exists($extensionFile)) {
+                    if ($matchingFile !== null && file_exists($extensionFile)) {
                         $file = $extensionFile;
                         $found = true;
                         break;

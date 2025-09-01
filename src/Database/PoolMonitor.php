@@ -27,7 +27,7 @@ use Glueful\Database\ConnectionPoolManager;
 class PoolMonitor
 {
     /**
-     * @var array Historical metrics storage
+     * @var array<array{timestamp: float, pools: array<string, mixed>}> Historical metrics storage
      */
     private static array $historicalMetrics = [];
 
@@ -37,7 +37,7 @@ class PoolMonitor
     private static int $maxHistoryEntries = 1000;
 
     /**
-     * @var array Performance thresholds for alerting
+     * @var array<string, int|float> Performance thresholds for alerting
      */
     private static array $thresholds = [
         'max_utilization' => 90,        // % - Alert if pool utilization exceeds
@@ -51,12 +51,12 @@ class PoolMonitor
      * Get comprehensive metrics for all connection pools
      *
      * @param  bool $includeDetails Include detailed statistics
-     * @return array Pool metrics by engine
+     * @return array<string, mixed> Pool metrics by engine
      */
     public static function getMetrics(bool $includeDetails = false): array
     {
         $manager = Connection::getPoolManager();
-        if (!$manager) {
+        if ($manager === null) {
             return [];
         }
 
@@ -103,12 +103,12 @@ class PoolMonitor
     /**
      * Get aggregate metrics across all pools
      *
-     * @return array Aggregate statistics
+     * @return array<string, mixed> Aggregate statistics
      */
     public static function getAggregateMetrics(): array
     {
         $manager = Connection::getPoolManager();
-        if (!$manager) {
+        if ($manager === null) {
             return [];
         }
 
@@ -151,7 +151,7 @@ class PoolMonitor
                 $stats['pool_efficiency']
             );
 
-            if ($includeDetails && !empty($stats['alerts'])) {
+            if ($includeDetails && count($stats['alerts']) > 0) {
                 $logMessage .= sprintf(" [ALERTS: %s]", implode(', ', $stats['alerts']));
             }
 
@@ -174,7 +174,7 @@ class PoolMonitor
     /**
      * Get performance recommendations based on current metrics
      *
-     * @return array Performance recommendations
+     * @return array<string, array<array{type: string, priority: string, message: string}>> Performance recommendations
      */
     public static function getRecommendations(): array
     {
@@ -222,7 +222,7 @@ class PoolMonitor
                 ];
             }
 
-            if (!empty($poolRecommendations)) {
+            if (count($poolRecommendations) > 0) {
                 $recommendations[$poolName] = $poolRecommendations;
             }
         }
@@ -235,7 +235,7 @@ class PoolMonitor
      *
      * @param  string $poolName Pool name
      * @param  int    $minutes  Minutes of history to analyze
-     * @return array Trend analysis
+     * @return array<string, mixed> Trend analysis
      */
     public static function getTrends(string $poolName, int $minutes = 60): array
     {
@@ -245,7 +245,7 @@ class PoolMonitor
             fn($entry) => $entry['timestamp'] > $cutoffTime && isset($entry['pools'][$poolName])
         );
 
-        if (empty($relevantMetrics)) {
+        if (count($relevantMetrics) === 0) {
             return ['trend' => 'insufficient_data'];
         }
 
@@ -264,8 +264,8 @@ class PoolMonitor
     /**
      * Check for alert conditions
      *
-     * @param  array $metrics Pool metrics
-     * @return array List of active alerts
+     * @param  array<string, mixed> $metrics Pool metrics
+     * @return array<string> List of active alerts
      */
     private static function checkAlerts(array $metrics): array
     {
@@ -304,7 +304,7 @@ class PoolMonitor
     /**
      * Calculate average acquisition time from statistics
      *
-     * @param  array $stats Pool statistics
+     * @param  array<string, mixed> $stats Pool statistics
      * @return float Average acquisition time in milliseconds
      */
     private static function calculateAvgAcquisitionTime(array $stats): float
@@ -326,7 +326,7 @@ class PoolMonitor
     /**
      * Calculate pool efficiency ratio
      *
-     * @param  array $stats Pool statistics
+     * @param  array<string, mixed> $stats Pool statistics
      * @return float Efficiency ratio (0.0 to 1.0)
      */
     private static function calculatePoolEfficiency(array $stats): float
@@ -349,7 +349,7 @@ class PoolMonitor
     /**
      * Get pool status based on metrics
      *
-     * @param  array $stats Pool statistics
+     * @param  array<string, mixed> $stats Pool statistics
      * @return string Status (healthy, warning, critical)
      */
     private static function getPoolStatus(array $stats): string
@@ -372,7 +372,7 @@ class PoolMonitor
     /**
      * Store metrics for historical analysis
      *
-     * @param  array $metrics Current metrics
+     * @param  array<string, mixed> $metrics Current metrics
      * @return void
      */
     private static function storeHistoricalMetrics(array $metrics): void
@@ -391,7 +391,7 @@ class PoolMonitor
     /**
      * Calculate trend direction for a metric series
      *
-     * @param  array $values Metric values over time
+     * @param  array<float|int> $values Metric values over time
      * @return string Trend direction (increasing, decreasing, stable)
      */
     private static function calculateTrend(array $values): string
@@ -418,7 +418,7 @@ class PoolMonitor
     /**
      * Calculate overall success rate from aggregate stats
      *
-     * @param  array $stats Aggregate statistics
+     * @param  array<string, mixed> $stats Aggregate statistics
      * @return float Overall success rate percentage
      */
     private static function calculateOverallSuccessRate(array $stats): float
@@ -436,7 +436,7 @@ class PoolMonitor
     /**
      * Count healthy pools from health status
      *
-     * @param  array $healthStatus Health status by pool
+     * @param  array<string, array{healthy?: bool}> $healthStatus Health status by pool
      * @return int Number of healthy pools
      */
     private static function countHealthyPools(array $healthStatus): int
@@ -447,7 +447,7 @@ class PoolMonitor
     /**
      * Configure monitoring thresholds
      *
-     * @param  array $thresholds New threshold values
+     * @param  array<string, int|float> $thresholds New threshold values
      * @return void
      */
     public static function setThresholds(array $thresholds): void

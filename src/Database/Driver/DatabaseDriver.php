@@ -49,7 +49,7 @@ interface DatabaseDriver
      * - SQLite:     INSERT OR IGNORE INTO table (col1, col2) VALUES (?, ?)
      *
      * @param  string $table   The target table name (unquoted)
-     * @param  array  $columns Array of column definitions
+     * @param  array<string, mixed>  $columns Array of column definitions
      * @return string Complete SQL statement with proper syntax for target database
      * @throws \InvalidArgumentException If table name or columns are invalid
      */
@@ -69,8 +69,8 @@ interface DatabaseDriver
      * - SQLite:     INSERT OR REPLACE INTO table (col1, col2) VALUES (?, ?)
      *
      * @param  string $table         The target table name (unquoted)
-     * @param  array  $columns       Columns to insert in the format [name => value]
-     * @param  array  $updateColumns Columns to update on conflict in format [name => value]
+     * @param  array<string, mixed>  $columns       Columns to insert in the format [name => value]
+     * @param  array<string, mixed>  $updateColumns Columns to update on conflict in format [name => value]
      * @return string Complete SQL statement with proper syntax for target database
      * @throws \InvalidArgumentException If parameters are invalid
      */

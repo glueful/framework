@@ -30,17 +30,17 @@ use Glueful\Exceptions\BusinessLogicException;
 class ConnectionPool
 {
     /**
-     * @var array Available connections ready for use
+     * @var array<int|string, PooledConnection> Available connections ready for use
      */
     private array $availableConnections = [];
 
     /**
-     * @var array Currently active connections
+     * @var array<int|string, PooledConnection> Currently active connections
      */
     private array $activeConnections = [];
 
     /**
-     * @var array Pool configuration
+     * @var array<string, mixed> Pool configuration
      */
     private array $config;
 
@@ -60,7 +60,7 @@ class ConnectionPool
     private ?string $password;
 
     /**
-     * @var array PDO connection options
+     * @var array<int, mixed> PDO connection options
      */
     private array $options;
 
@@ -80,7 +80,7 @@ class ConnectionPool
     private DatabaseDriver $driver;
 
     /**
-     * @var array Database configuration
+     * @var array<string, mixed> Database configuration
      */
     private array $dbConfig;
 
@@ -95,7 +95,7 @@ class ConnectionPool
     private bool $maintenanceWorkerRunning = false;
 
     /**
-     * @var array Pool statistics
+     * @var array<string, mixed> Pool statistics
      */
     private array $stats = [
         'total_created' => 0,
@@ -113,13 +113,13 @@ class ConnectionPool
     /**
      * Initialize connection pool
      *
-     * @param array          $config   Pool configuration
+     * @param array<string, mixed> $config   Pool configuration
      * @param string         $dsn      Database connection string
      * @param string|null    $username Database username
      * @param string|null    $password Database password
-     * @param array          $options  PDO options
+     * @param array<int, mixed> $options  PDO options
      * @param DatabaseDriver $driver   Database driver
-     * @param array          $dbConfig Database configuration
+     * @param array<string, mixed> $dbConfig Database configuration
      */
     public function __construct(
         array $config,
@@ -170,7 +170,7 @@ class ConnectionPool
 
         while (true) {
             // Try to get available connection
-            if (!empty($this->availableConnections)) {
+            if (count($this->availableConnections) > 0) {
                 $connection = array_shift($this->availableConnections);
 
                 // Validate connection health
@@ -289,8 +289,8 @@ class ConnectionPool
             $debugInfo = sprintf(
                 'Connection failed - DSN: %s, Username: %s, Password: %s',
                 $this->dsn,
-                $this->username ? 'SET' : 'NULL',
-                $this->password ? 'SET' : 'NULL'
+                $this->username !== null ? 'SET' : 'NULL',
+                $this->password !== null ? 'SET' : 'NULL'
             );
             error_log('ConnectionPool Debug: ' . $debugInfo);
             throw $e;
@@ -613,12 +613,12 @@ class ConnectionPool
             }
 
             // Fallback to Factory for older versions (v1.0-v1.1)
-            if (!$loop && class_exists('React\\EventLoop\\Factory')) {
+            if ($loop === null && class_exists('React\\EventLoop\\Factory')) {
                 $factoryClass = 'React\\EventLoop\\Factory';
                 $loop = call_user_func([$factoryClass, 'create']);
             }
 
-            if ($loop) {
+            if ($loop !== null) {
                 $this->maintenanceTimer = $loop->addPeriodicTimer(
                     $this->config['health_check_interval'],
                     function () {
@@ -792,7 +792,7 @@ class ConnectionPool
         }
 
         try {
-            if ($this->maintenanceTimer) {
+            if ($this->maintenanceTimer !== null) {
                 // ReactPHP timer
                 if (method_exists($this->maintenanceTimer, 'cancel')) {
                     $this->maintenanceTimer->cancel();
@@ -949,7 +949,7 @@ class ConnectionPool
     /**
      * Get pool statistics
      *
-     * @return array
+     * @return array<string, mixed>
      */
     public function getStats(): array
     {
@@ -1037,7 +1037,7 @@ class ConnectionPool
     /**
      * Get maintenance worker status
      *
-     * @return array
+     * @return array<string, mixed>
      */
     public function getMaintenanceWorkerStatus(): array
     {

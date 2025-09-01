@@ -16,6 +16,7 @@ use Glueful\Database\Query\Interfaces\QueryStateInterface;
 class QueryValidator implements QueryValidatorInterface
 {
     private bool $strictMode = true;
+    /** @var array<string, callable> */
     private array $customRules = [];
 
     /**
@@ -42,7 +43,7 @@ class QueryValidator implements QueryValidatorInterface
         $this->validateTableName($table);
 
         // Validate based on query type
-        if (!empty($state->getSelectColumns())) {
+        if (count($state->getSelectColumns()) > 0) {
             $this->validateSelect($state);
         }
 
@@ -50,7 +51,7 @@ class QueryValidator implements QueryValidatorInterface
         $this->validatePagination($state->getLimit(), $state->getOffset());
 
         // Run custom validation rules
-        foreach ($this->customRules as $name => $validator) {
+        foreach ($this->customRules as $validator) {
             $validator($state);
         }
     }
@@ -62,7 +63,7 @@ class QueryValidator implements QueryValidatorInterface
     {
         $columns = $state->getSelectColumns();
 
-        if (empty($columns)) {
+        if (count($columns) === 0) {
             throw new \InvalidArgumentException('No columns specified for SELECT query');
         }
 
@@ -82,16 +83,30 @@ class QueryValidator implements QueryValidatorInterface
 
         // Validate GROUP BY columns
         $groupBy = $state->getGroupBy();
-        if (!empty($groupBy)) {
+        if (count($groupBy) > 0) {
             $this->validateColumnNames($groupBy);
         }
 
         // Validate ORDER BY
         $orderBy = $state->getOrderBy();
-        foreach ($orderBy as $column => $direction) {
-            $this->validateColumnName($column);
-            if (!in_array(strtoupper($direction), ['ASC', 'DESC'], true)) {
-                throw new \InvalidArgumentException("Invalid sort direction: $direction");
+        foreach ($orderBy as $orderItem) {
+            if (!is_array($orderItem) || !isset($orderItem['type'])) {
+                throw new \InvalidArgumentException('Invalid ORDER BY structure');
+            }
+
+            if ($orderItem['type'] === 'column') {
+                if (!isset($orderItem['column'], $orderItem['direction'])) {
+                    throw new \InvalidArgumentException('ORDER BY column must have column and direction');
+                }
+                $this->validateColumnName($orderItem['column']);
+                if (!in_array(strtoupper($orderItem['direction']), ['ASC', 'DESC'], true)) {
+                    throw new \InvalidArgumentException("Invalid sort direction: {$orderItem['direction']}");
+                }
+            } elseif ($orderItem['type'] === 'raw') {
+                if (!isset($orderItem['expression'])) {
+                    throw new \InvalidArgumentException('ORDER BY raw must have expression');
+                }
+                // Note: Raw expressions are not validated for security as they're expected to be developer-controlled
             }
         }
     }
@@ -103,7 +118,7 @@ class QueryValidator implements QueryValidatorInterface
     {
         $this->validateTableName($table);
 
-        if (empty($data)) {
+        if (count($data) === 0) {
             throw new \InvalidArgumentException('No data provided for INSERT');
         }
 
@@ -125,11 +140,11 @@ class QueryValidator implements QueryValidatorInterface
     {
         $this->validateTableName($table);
 
-        if (empty($data)) {
+        if (count($data) === 0) {
             throw new \InvalidArgumentException('No data provided for UPDATE');
         }
 
-        if (empty($conditions) && $this->strictMode) {
+        if (count($conditions) === 0 && $this->strictMode) {
             throw new \InvalidArgumentException(
                 'UPDATE without WHERE clause is dangerous. Disable strict mode to allow this.'
             );
@@ -146,7 +161,7 @@ class QueryValidator implements QueryValidatorInterface
         }
 
         // Validate condition columns
-        if (!empty($conditions)) {
+        if (count($conditions) > 0) {
             $conditionColumns = array_keys($conditions);
             $this->validateColumnNames($conditionColumns);
         }
@@ -159,14 +174,14 @@ class QueryValidator implements QueryValidatorInterface
     {
         $this->validateTableName($table);
 
-        if (empty($conditions) && $this->strictMode) {
+        if (count($conditions) === 0 && $this->strictMode) {
             throw new \InvalidArgumentException(
                 'DELETE without WHERE clause is dangerous. Disable strict mode to allow this.'
             );
         }
 
         // Validate condition columns
-        if (!empty($conditions)) {
+        if (count($conditions) > 0) {
             $conditionColumns = array_keys($conditions);
             $this->validateColumnNames($conditionColumns);
         }
@@ -177,7 +192,7 @@ class QueryValidator implements QueryValidatorInterface
      */
     public function validateTableName(string $table): void
     {
-        if (empty($table)) {
+        if ($table === '') {
             throw new \InvalidArgumentException('Table name cannot be empty');
         }
 
@@ -207,6 +222,7 @@ class QueryValidator implements QueryValidatorInterface
 
     /**
      * {@inheritdoc}
+     * @param array<string|int, mixed> $columns
      */
     public function validateColumnNames(array $columns): void
     {
@@ -238,7 +254,7 @@ class QueryValidator implements QueryValidatorInterface
      */
     private function validateColumnName(string $column): void
     {
-        if (empty($column)) {
+        if ($column === '') {
             throw new \InvalidArgumentException('Column name cannot be empty');
         }
 
@@ -317,7 +333,7 @@ class QueryValidator implements QueryValidatorInterface
 
         // Validate array values (for IN clauses, etc.)
         if (is_array($value)) {
-            if (empty($value)) {
+            if (count($value) === 0) {
                 throw new \InvalidArgumentException("Empty array value for column '$column'");
             }
             foreach ($value as $item) {

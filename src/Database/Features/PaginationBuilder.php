@@ -62,6 +62,9 @@ class PaginationBuilder implements PaginationBuilderInterface
      *   execution_time_ms: int
      * }
      */
+    /**
+     * @param array<string, mixed> $bindings
+     */
     public function paginateQuery(string $sql, array $bindings, int $page = 1, int $perPage = 10): array
     {
         $timerId = $this->logger->startTiming();
@@ -103,6 +106,7 @@ class PaginationBuilder implements PaginationBuilderInterface
             'debug'
         );
 
+        /** @var array{data: array<int, array<string, mixed>>, current_page: int, per_page: int, total: int, last_page: int, has_more: bool, from: int, to: int, execution_time_ms: int} */
         return array_merge(
             [
                 'data' => $data,
@@ -116,6 +120,8 @@ class PaginationBuilder implements PaginationBuilderInterface
 
     /**
      * Get total count for pagination
+     *
+     * @param array<string, mixed> $bindings
      */
     public function getTotalCount(string $sql, array $bindings): int
     {
@@ -204,6 +210,8 @@ class PaginationBuilder implements PaginationBuilderInterface
 
     /**
      * Calculate pagination bounds with validation
+     *
+     * @return array{limit: int, offset: int}
      */
     public function calculateBounds(int $page, int $perPage): array
     {

@@ -43,7 +43,7 @@ interface SoftDeleteHandlerInterface
      * Perform a soft delete on records
      *
      * @param  string $table           The table to soft delete from
-     * @param  array  $conditions      The WHERE conditions
+     * @param  array<string, mixed>  $conditions      The WHERE conditions
      * @param  string $deletedAtColumn The column name for soft delete timestamp
      * @return int Number of affected rows
      */
@@ -53,7 +53,7 @@ interface SoftDeleteHandlerInterface
      * Restore soft-deleted records
      *
      * @param  string $table           The table to restore from
-     * @param  array  $conditions      The WHERE conditions
+     * @param  array<string, mixed>  $conditions      The WHERE conditions
      * @param  string $deletedAtColumn The column name for soft delete timestamp
      * @return int Number of restored rows
      */

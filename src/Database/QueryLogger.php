@@ -34,7 +34,7 @@ class QueryLogger
     protected bool $enableTiming = false;
 
     /**
-     * @var array Recent queries for N+1 detection
+     * @var array<array<string,mixed>> Recent queries for N+1 detection
      */
     protected array $recentQueries = [];
 
@@ -49,7 +49,7 @@ class QueryLogger
     protected int $n1TimeWindow = 5;
 
     /**
-     * @var array Recent query history
+     * @var array<array<string,mixed>> Recent query history
      */
     protected array $queryLog = [];
 
@@ -59,7 +59,7 @@ class QueryLogger
     protected int $maxLogSize = 100;
 
     /**
-     * @var array Query statistics
+     * @var array<string,int|float> Query statistics
      */
     protected array $stats = [
         'total' => 0,
@@ -73,7 +73,7 @@ class QueryLogger
     ];
 
     /**
-     * @var array Framework logging configuration
+     * @var array<string,mixed> Framework logging configuration
      */
     protected array $config;
 
@@ -144,7 +144,7 @@ class QueryLogger
     /**
      * Get query log
      *
-     * @return array Query execution history
+     * @return array<array<string,mixed>> Query execution history
      */
     public function getQueryLog(): array
     {
@@ -154,7 +154,7 @@ class QueryLogger
     /**
      * Get query statistics
      *
-     * @return array Query statistics
+     * @return array<string,int|float> Query statistics
      */
     public function getStatistics(): array
     {
@@ -186,7 +186,7 @@ class QueryLogger
      * Log a query execution
      *
      * @param  string            $sql       SQL statement
-     * @param  array             $params    Query parameters
+     * @param  array<mixed>             $params    Query parameters
      * @param  float|string|null $startTime Query start time or timer ID
      * @param  \Throwable|null   $error     Error if one occurred
      * @param  string|null       $purpose   Business purpose of the query
@@ -220,7 +220,7 @@ class QueryLogger
         $this->stats['total']++;
         $this->stats[$queryType]++;
 
-        if ($error) {
+        if ($error !== null) {
             $this->stats['error']++;
         }
 
@@ -241,10 +241,10 @@ class QueryLogger
             'type' => $queryType,
             'tables' => $tables,
             'complexity' => $complexity,
-            'time' => $executionTime ? $executionTime . ' ms' : null,
+            'time' => $executionTime !== null ? $executionTime . ' ms' : null,
             'timestamp' => date('Y-m-d H:i:s'),
             'purpose' => $purpose,
-            'error' => $error ? $error->getMessage() : null
+            'error' => $error !== null ? $error->getMessage() : null
         ];
 
         // Add to internal log with size limit
@@ -261,7 +261,7 @@ class QueryLogger
             \Glueful\Database\DevelopmentQueryMonitor::logQuery(
                 $sql,
                 $params,
-                $executionTime ? $executionTime / 1000 : 0.0, // Convert ms to seconds
+                $executionTime !== null ? $executionTime / 1000 : 0.0, // Convert ms to seconds
                 $purpose ?? ''
             );
         }
@@ -276,16 +276,20 @@ class QueryLogger
             'type' => 'database_query'
         ];
 
-        if ($purpose) {
+        if ($purpose !== null) {
             $context['purpose'] = $purpose;
         }
 
-        if ($executionTime) {
+        if ($executionTime !== null) {
             $context['execution_time'] = $executionTime;
         }
 
         // Framework logs slow queries (configurable infrastructure concern)
-        if ($this->config['enabled'] && $executionTime && $executionTime > $this->config['threshold_ms']) {
+        if (
+            (bool)$this->config['enabled'] &&
+            $executionTime !== null &&
+            $executionTime > $this->config['threshold_ms']
+        ) {
             $this->logSlowQuery($sql, $executionTime);
         }
 
@@ -293,7 +297,7 @@ class QueryLogger
         // Applications can listen to this event for business-specific query logging
         if (class_exists('\\Glueful\\Events\\Event')) {
             $metadata = [];
-            if ($error) {
+            if ($error !== null) {
                 $metadata['error'] = [
                     'message' => $error->getMessage(),
                     'code' => $error->getCode(),
@@ -301,13 +305,13 @@ class QueryLogger
                     'line' => $error->getLine()
                 ];
             }
-            if ($purpose) {
+            if ($purpose !== null) {
                 $metadata['purpose'] = $purpose;
             }
             if ($complexity > 0) {
                 $metadata['complexity'] = $complexity;
             }
-            if (!empty($tables)) {
+            if ($tables !== []) {
                 $metadata['tables'] = $tables;
             }
 
@@ -315,7 +319,7 @@ class QueryLogger
                 new \Glueful\Events\Database\QueryExecutedEvent(
                     $sql,
                     $params,
-                    $executionTime ? $executionTime / 1000 : 0.0, // Convert ms to seconds
+                    $executionTime !== null ? $executionTime / 1000 : 0.0, // Convert ms to seconds
                     'default', // connection name
                     $metadata
                 )
@@ -359,7 +363,7 @@ class QueryLogger
      * Log a database-related event
      *
      * @param  string       $message Event message
-     * @param  array        $context Event context
+     * @param  array<string,mixed>        $context Event context
      * @param  Level|string $level   Log level
      * @return void
      */
@@ -387,7 +391,7 @@ class QueryLogger
         }
 
         // Log the event through framework logger
-        if ($this->logger) {
+        if ($this->logger !== null) {
             // Pass Level enum directly to LogManager
             $this->logger->log($level, $message, $context);
         }
@@ -402,7 +406,7 @@ class QueryLogger
      */
     private function logSlowQuery(string $sql, float $executionTime): void
     {
-        if (!$this->logger) {
+        if ($this->logger === null) {
             return;
         }
 
@@ -446,8 +450,8 @@ class QueryLogger
     /**
      * Sanitize query parameters for logging (remove sensitive data)
      *
-     * @param  array $params Query parameters
-     * @return array Sanitized parameters
+     * @param  array<mixed> $params Query parameters
+     * @return array<mixed> Sanitized parameters
      */
     protected function sanitizeQueryParams(array $params): array
     {
@@ -538,7 +542,7 @@ class QueryLogger
      * Extract table names from SQL statement
      *
      * @param  string $sql SQL statement
-     * @return array Array of table names
+     * @return array<string> Array of table names
      */
     protected function extractTableNames(string $sql): array
     {
@@ -555,7 +559,7 @@ class QueryLogger
 
         // Extract tables from joins
         preg_match_all('/\bjoin\s+[`"]?(\w+)[`"]?/i', $sql, $matches);
-        if (!empty($matches[1])) {
+        if ($matches[1] !== []) {
             $tables = array_merge($tables, $matches[1]);
         }
 
@@ -651,7 +655,7 @@ class QueryLogger
      *
      * @param string     $sql           SQL statement
      * @param float|null $executionTime Execution time in ms
-     * @param array      $tables        Affected tables
+     * @param array<string>      $tables        Affected tables
      */
     protected function addToRecentQueries(string $sql, ?float $executionTime, array $tables): void
     {
@@ -781,19 +785,19 @@ class QueryLogger
 
                     // Get average execution time
                     $executionTimes = array_map(
-                        fn($q) => $q['execution_time'] ?? 0,
+                        fn($q) => $q['execution_time'],
                         array_filter(
                             $this->recentQueries,
                             fn($q) => $q['signature'] === $signature && $q['execution_time'] !== null
                         )
                     );
 
-                    $avgExecutionTime = !empty($executionTimes)
+                    $avgExecutionTime = $executionTimes !== []
                         ? array_sum($executionTimes) / count($executionTimes)
                         : null;
 
                     // Log the potential N+1 issue
-                    if ($this->logger) {
+                    if ($this->logger !== null) {
                         $this->logger->warning(
                             "Potential N+1 query pattern detected",
                             [
@@ -805,7 +809,7 @@ class QueryLogger
                             'sample_query' => $sampleQuery,
                             'tables' => $tables[$signature],
                             'avg_execution_time' => $avgExecutionTime,
-                            'total_execution_time' => $avgExecutionTime ? $avgExecutionTime * $count : null,
+                            'total_execution_time' => $avgExecutionTime !== null ? $avgExecutionTime * $count : null,
                             'recommendation' => $this->generateN1FixRecommendation($sampleQuery, $tables[$signature])
                             ]
                         );
@@ -828,7 +832,7 @@ class QueryLogger
      * Generate recommendations for fixing N+1 query issues
      *
      * @param  string $sampleQuery A sample query from the N+1 pattern
-     * @param  array  $tables      Tables involved in the query
+     * @param  array<string>  $tables      Tables involved in the query
      * @return string Recommendation for fixing the N+1 issue
      */
     protected function generateN1FixRecommendation(string $sampleQuery, array $tables): string

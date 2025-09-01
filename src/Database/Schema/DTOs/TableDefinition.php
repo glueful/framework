@@ -155,7 +155,7 @@ readonly class TableDefinition
     /**
      * Create a copy of this table definition with modifications
      *
-     * @param  array $changes Changes to apply
+     * @param  array<string, mixed> $changes Changes to apply
      * @return self New table definition instance
      */
     public function with(array $changes): self
@@ -211,7 +211,7 @@ readonly class TableDefinition
                 throw new \InvalidArgumentException('All columns must be ColumnDefinition instances');
             }
 
-            if (in_array($column->name, $columnNames)) {
+            if (in_array($column->name, $columnNames, true)) {
                 throw new \InvalidArgumentException("Duplicate column name: {$column->name}");
             }
 
@@ -232,7 +232,7 @@ readonly class TableDefinition
                 throw new \InvalidArgumentException('All indexes must be IndexDefinition instances');
             }
 
-            if (in_array($index->name, $indexNames)) {
+            if (in_array($index->name, $indexNames, true)) {
                 throw new \InvalidArgumentException("Duplicate index name: {$index->name}");
             }
 
@@ -262,7 +262,7 @@ readonly class TableDefinition
                 throw new \InvalidArgumentException('All foreign keys must be ForeignKeyDefinition instances');
             }
 
-            if (in_array($foreignKey->name, $fkNames)) {
+            if (in_array($foreignKey->name, $fkNames, true)) {
                 throw new \InvalidArgumentException("Duplicate foreign key name: {$foreignKey->name}");
             }
 

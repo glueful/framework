@@ -16,7 +16,7 @@ interface TransactionManagerInterface
     /**
      * Execute callback within a transaction
      */
-    public function transaction(callable $callback);
+    public function transaction(callable $callback): mixed;
 
     /**
      * Begin a new transaction or create savepoint

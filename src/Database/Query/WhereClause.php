@@ -16,7 +16,9 @@ use Glueful\Database\Query\Interfaces\WhereClauseInterface;
  */
 class WhereClause implements WhereClauseInterface
 {
+    /** @var array<array{type: string, sql?: string, boolean: string, query?: string}> */
     protected array $conditions = [];
+    /** @var array<mixed> */
     protected array $bindings = [];
     protected DatabaseDriver $driver;
 
@@ -34,7 +36,7 @@ class WhereClause implements WhereClauseInterface
      * - add('column', '>', 'value')        - Operator format
      * - add(callable $callback)            - Closure format
      */
-    public function add($column, $operator = null, $value = null): void
+    public function add(string|array|callable $column, ?string $operator = null, mixed $value = null): void
     {
         $this->addCondition($column, $operator, $value, 'AND');
     }
@@ -42,7 +44,7 @@ class WhereClause implements WhereClauseInterface
     /**
      * Add an OR WHERE condition
      */
-    public function addOr($column, $operator = null, $value = null): void
+    public function addOr(string|array|callable $column, ?string $operator = null, mixed $value = null): void
     {
         $this->addCondition($column, $operator, $value, 'OR');
     }
@@ -52,7 +54,7 @@ class WhereClause implements WhereClauseInterface
      */
     public function whereIn(string $column, array $values): void
     {
-        if (empty($values)) {
+        if (count($values) === 0) {
             $this->addRawCondition('1 = 0', [], 'AND'); // Always false
             return;
         }
@@ -68,7 +70,7 @@ class WhereClause implements WhereClauseInterface
      */
     public function whereNotIn(string $column, array $values): void
     {
-        if (empty($values)) {
+        if (count($values) === 0) {
             return; // Always true, so no condition needed
         }
 
@@ -81,7 +83,12 @@ class WhereClause implements WhereClauseInterface
     /**
      * Add WHERE condition (convenience method for nested queries)
      */
-    public function where($column, $operator = null, $value = null): self
+    /**
+     * Add WHERE condition (convenience method for nested queries)
+     *
+     * @param string|array<string, mixed>|callable $column
+     */
+    public function where(string|array|callable $column, ?string $operator = null, mixed $value = null): self
     {
         $this->add($column, $operator, $value);
         return $this;
@@ -128,7 +135,7 @@ class WhereClause implements WhereClauseInterface
     /**
      * Add WHERE BETWEEN condition
      */
-    public function whereBetween(string $column, $min, $max): void
+    public function whereBetween(string $column, mixed $min, mixed $max): void
     {
         $condition = $this->wrapColumn($column) . ' BETWEEN ? AND ?';
         $this->addRawCondition($condition, [$min, $max], 'AND');
@@ -215,6 +222,9 @@ class WhereClause implements WhereClauseInterface
      * @param  string|null $path        JSON path (optional)
      * @return array Array with 'condition' and 'bindings' keys
      */
+    /**
+     * {@inheritdoc}
+     */
     public function buildJsonCondition(string $column, string $searchValue, ?string $path = null): array
     {
         $wrappedColumn = $this->wrapColumn($column);
@@ -266,6 +276,9 @@ class WhereClause implements WhereClauseInterface
      * @param  array  $jsonConditions Array of JSON conditions ['column', 'value', 'path']
      * @return array Array with 'query' and 'bindings' keys
      */
+    /**
+     * {@inheritdoc}
+     */
     public function buildAggregationQuery(
         string $table,
         string $selectColumns,
@@ -289,7 +302,7 @@ class WhereClause implements WhereClauseInterface
             $allBindings = array_merge($allBindings, $jsonCondition['bindings']);
         }
 
-        $whereClause = !empty($whereConditions) ? 'WHERE ' . implode(' AND ', $whereConditions) : '';
+        $whereClause = count($whereConditions) > 0 ? 'WHERE ' . implode(' AND ', $whereConditions) : '';
 
         // Build query with LIMIT (supported by MySQL, PostgreSQL, SQLite)
         $query = "SELECT $selectColumns FROM $wrappedTable $whereClause " .
@@ -306,7 +319,7 @@ class WhereClause implements WhereClauseInterface
      */
     public function toSql(): string
     {
-        if (empty($this->conditions)) {
+        if (count($this->conditions) === 0) {
             return '';
         }
 
@@ -341,7 +354,7 @@ class WhereClause implements WhereClauseInterface
      */
     public function hasConditions(): bool
     {
-        return !empty($this->conditions);
+        return count($this->conditions) > 0;
     }
 
     /**
@@ -356,7 +369,7 @@ class WhereClause implements WhereClauseInterface
     /**
      * Add OR WHERE condition
      */
-    public function orWhere($column, $operator = null, $value = null): self
+    public function orWhere(string|array|callable $column, ?string $operator = null, mixed $value = null): self
     {
         $this->addCondition($column, $operator, $value, 'OR');
         return $this;
@@ -399,12 +412,12 @@ class WhereClause implements WhereClauseInterface
         }
 
         // If all conditions are simple AND with =, return associative array
-        if (empty($complexConditions) && !empty($simpleConditions)) {
+        if (count($complexConditions) === 0 && count($simpleConditions) > 0) {
             return $simpleConditions;
         }
 
         // Otherwise, throw an exception as complex conditions aren't supported yet
-        if (!empty($complexConditions)) {
+        if (count($complexConditions) > 0) {
             throw new \RuntimeException(
                 'Complex WHERE conditions (OR, NOT, !=, etc.) are not yet supported for UPDATE/DELETE operations'
             );
@@ -415,8 +428,10 @@ class WhereClause implements WhereClauseInterface
 
     /**
      * Add a condition (internal method)
+     *
+     * @param string|array<string, mixed>|callable $column
      */
-    protected function addCondition($column, $operator, $value, string $boolean): void
+    protected function addCondition(string|array|callable $column, ?string $operator, mixed $value, string $boolean): void
     {
         // Handle array format: ['column' => 'value']
         if (is_array($column)) {
@@ -449,7 +464,10 @@ class WhereClause implements WhereClauseInterface
     /**
      * Add basic condition
      */
-    protected function addBasicCondition(string $column, string $operator, $value, string $boolean): void
+    /**
+     * Add basic condition
+     */
+    protected function addBasicCondition(string $column, string $operator, mixed $value, string $boolean): void
     {
         $sql = $this->wrapColumn($column) . ' ' . $operator . ' ?';
 
@@ -464,6 +482,11 @@ class WhereClause implements WhereClauseInterface
 
     /**
      * Add raw condition
+     */
+    /**
+     * Add raw condition
+     *
+     * @param array<mixed> $bindings
      */
     protected function addRawCondition(string $sql, array $bindings, string $boolean): void
     {

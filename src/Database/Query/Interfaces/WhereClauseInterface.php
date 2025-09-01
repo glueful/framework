@@ -21,21 +21,29 @@ interface WhereClauseInterface
      * - add('column', 'value')             - Simple format
      * - add('column', '>', 'value')        - Operator format
      * - add(callable $callback)            - Closure format
+     *
+     * @param string|array<string, mixed> $column
      */
-    public function add($column, $operator = null, $value = null): void;
+    public function add(string|array $column, ?string $operator = null, mixed $value = null): void;
 
     /**
      * Add an OR WHERE condition
+     *
+     * @param string|array<string, mixed> $column
      */
-    public function addOr($column, $operator = null, $value = null): void;
+    public function addOr(string|array $column, ?string $operator = null, mixed $value = null): void;
 
     /**
      * Add WHERE IN condition
+     *
+     * @param array<mixed> $values
      */
     public function whereIn(string $column, array $values): void;
 
     /**
      * Add WHERE NOT IN condition
+     *
+     * @param array<mixed> $values
      */
     public function whereNotIn(string $column, array $values): void;
 
@@ -62,7 +70,7 @@ interface WhereClauseInterface
     /**
      * Add WHERE BETWEEN condition
      */
-    public function whereBetween(string $column, $min, $max): void;
+    public function whereBetween(string $column, mixed $min, mixed $max): void;
 
     /**
      * Add WHERE LIKE condition
@@ -71,6 +79,8 @@ interface WhereClauseInterface
 
     /**
      * Add raw WHERE condition
+     *
+     * @param array<mixed> $bindings
      */
     public function whereRaw(string $condition, array $bindings = []): void;
 
@@ -81,11 +91,16 @@ interface WhereClauseInterface
 
     /**
      * Build database-agnostic JSON condition string for use in raw SQL
+     *
+     * @return array<string, mixed>
      */
     public function buildJsonCondition(string $column, string $searchValue, ?string $path = null): array;
 
     /**
      * Build database-agnostic aggregation query with JSON conditions
+     *
+     * @param array<mixed> $jsonConditions
+     * @return array<string, mixed>
      */
     public function buildAggregationQuery(
         string $table,
@@ -104,6 +119,8 @@ interface WhereClauseInterface
 
     /**
      * Get all parameter bindings
+     *
+     * @return array<mixed>
      */
     public function getBindings(): array;
 
@@ -119,11 +136,15 @@ interface WhereClauseInterface
 
     /**
      * Add OR WHERE condition
+     *
+     * @param string|array<string, mixed> $column
      */
-    public function orWhere($column, $operator = null, $value = null): self;
+    public function orWhere(string|array $column, ?string $operator = null, mixed $value = null): self;
 
     /**
      * Get conditions as array format for update/delete operations
+     *
+     * @return array<string, mixed>
      */
     public function getConditionsArray(): array;
 }

@@ -68,8 +68,8 @@ class QueryOptimizer
      * along with performance improvement estimates and suggestions.
      *
      * @param  string $query  The SQL query to optimize
-     * @param  array  $params Parameters to bind to the query
-     * @return array Optimization results including original query, optimized query,
+     * @param  array<mixed>  $params Parameters to bind to the query
+     * @return array<string,mixed> Optimization results including original query, optimized query,
      *               suggestions and estimated improvement
      */
     public function optimizeQuery(string $query, array $params = []): array
@@ -88,8 +88,8 @@ class QueryOptimizer
      * Apply optimizations to the original query based on analysis
      *
      * @param  string $query    The original SQL query
-     * @param  array  $analysis The query analysis results
-     * @param  array  $params   Query parameters
+     * @param  array<string,mixed>  $analysis The query analysis results
+     * @param  array<mixed>  $params   Query parameters
      * @return string The optimized query
      */
     protected function applyOptimizations(string $query, array $analysis, array $params = []): string
@@ -108,8 +108,8 @@ class QueryOptimizer
     /**
      * Generate optimization suggestions based on query analysis
      *
-     * @param  array $analysis The query analysis results
-     * @return array List of optimization suggestions
+     * @param  array<string,mixed> $analysis The query analysis results
+     * @return array<array<string,mixed>> List of optimization suggestions
      */
     protected function generateSuggestions(array $analysis): array
     {
@@ -135,8 +135,8 @@ class QueryOptimizer
     /**
      * Convert an identified issue into an actionable suggestion
      *
-     * @param  array $issue The issue details from analysis
-     * @return array The suggestion with description and impact
+     * @param  array<string,mixed> $issue The issue details from analysis
+     * @return array<string,mixed> The suggestion with description and impact
      */
     protected function createSuggestionFromIssue(array $issue): array
     {
@@ -151,7 +151,7 @@ class QueryOptimizer
     /**
      * Determine the solution for a specific issue
      *
-     * @param  array $issue The issue details from analysis
+     * @param  array<string,mixed> $issue The issue details from analysis
      * @return string The suggested solution
      */
     protected function determineSolution(array $issue): string
@@ -175,8 +175,8 @@ class QueryOptimizer
     /**
      * Calculate the estimated performance improvement
      *
-     * @param  array $analysis The query analysis results
-     * @return array Improvement metrics
+     * @param  array<string,mixed> $analysis The query analysis results
+     * @return array<string,mixed> Improvement metrics
      */
     protected function calculateImprovement(array $analysis): array
     {
@@ -221,7 +221,7 @@ class QueryOptimizer
      * Optimize JOIN operations in the query
      *
      * @param  string $query    The original query
-     * @param  array  $analysis The query analysis results
+     * @param  array<string,mixed>  $analysis The query analysis results
      * @return string The query with optimized joins
      */
     protected function optimizeJoins(string $query, array $analysis): string
@@ -243,7 +243,7 @@ class QueryOptimizer
      * MySQL-specific join optimization
      *
      * @param  string $query    The original query
-     * @param  array  $analysis The query analysis results
+     * @param  array<string,mixed>  $analysis The query analysis results
      * @return string The query with optimized joins
      */
     protected function optimizeMySQLJoins(string $query, array $analysis): string
@@ -270,7 +270,7 @@ class QueryOptimizer
      * PostgreSQL-specific join optimization
      *
      * @param  string $query    The original query
-     * @param  array  $analysis The query analysis results
+     * @param  array<string,mixed>  $analysis The query analysis results
      * @return string The query with optimized joins
      */
     protected function optimizePostgreSQLJoins(string $query, array $analysis): string
@@ -284,7 +284,7 @@ class QueryOptimizer
      * SQLite-specific join optimization
      *
      * @param  string $query    The original query
-     * @param  array  $analysis The query analysis results
+     * @param  array<string,mixed>  $analysis The query analysis results
      * @return string The query with optimized joins
      */
     protected function optimizeSQLiteJoins(string $query, array $analysis): string
@@ -298,7 +298,7 @@ class QueryOptimizer
      * Optimize WHERE clauses in the query
      *
      * @param  string $query    The original query
-     * @param  array  $analysis The query analysis results
+     * @param  array<string,mixed>  $analysis The query analysis results
      * @return string The query with optimized where clauses
      */
     protected function optimizeWhereClauses(string $query, array $analysis): string
@@ -320,7 +320,7 @@ class QueryOptimizer
      * MySQL-specific WHERE clause optimization
      *
      * @param  string $query    The original query
-     * @param  array  $analysis The query analysis results
+     * @param  array<string,mixed>  $analysis The query analysis results
      * @return string The query with optimized WHERE clauses
      */
     protected function optimizeMySQLWhereClauses(string $query, array $analysis): string
@@ -345,7 +345,7 @@ class QueryOptimizer
      * PostgreSQL-specific WHERE clause optimization
      *
      * @param  string $query    The original query
-     * @param  array  $analysis The query analysis results
+     * @param  array<string,mixed>  $analysis The query analysis results
      * @return string The query with optimized WHERE clauses
      */
     protected function optimizePostgreSQLWhereClauses(string $query, array $analysis): string
@@ -358,7 +358,7 @@ class QueryOptimizer
      * SQLite-specific WHERE clause optimization
      *
      * @param  string $query    The original query
-     * @param  array  $analysis The query analysis results
+     * @param  array<string,mixed>  $analysis The query analysis results
      * @return string The query with optimized WHERE clauses
      */
     protected function optimizeSQLiteWhereClauses(string $query, array $analysis): string
@@ -371,7 +371,7 @@ class QueryOptimizer
      * Optimize GROUP BY operations in the query
      *
      * @param  string $query    The original query
-     * @param  array  $analysis The query analysis results
+     * @param  array<string,mixed>  $analysis The query analysis results
      * @return string The query with optimized grouping
      */
     protected function optimizeGrouping(string $query, array $analysis): string
@@ -393,7 +393,7 @@ class QueryOptimizer
      * MySQL-specific GROUP BY optimization
      *
      * @param  string $query    The original query
-     * @param  array  $analysis The query analysis results
+     * @param  array<string,mixed>  $analysis The query analysis results
      * @return string The query with optimized GROUP BY
      */
     protected function optimizeMySQLGrouping(string $query, array $analysis): string
@@ -429,7 +429,7 @@ class QueryOptimizer
      * PostgreSQL-specific GROUP BY optimization
      *
      * @param  string $query    The original query
-     * @param  array  $analysis The query analysis results
+     * @param  array<string,mixed>  $analysis The query analysis results
      * @return string The query with optimized GROUP BY
      */
     protected function optimizePostgreSQLGrouping(string $query, array $analysis): string
@@ -443,7 +443,7 @@ class QueryOptimizer
      * SQLite-specific GROUP BY optimization
      *
      * @param  string $query    The original query
-     * @param  array  $analysis The query analysis results
+     * @param  array<string,mixed>  $analysis The query analysis results
      * @return string The query with optimized GROUP BY
      */
     protected function optimizeSQLiteGrouping(string $query, array $analysis): string
@@ -457,7 +457,7 @@ class QueryOptimizer
      * Optimize ORDER BY operations in the query
      *
      * @param  string $query    The original query
-     * @param  array  $analysis The query analysis results
+     * @param  array<string,mixed>  $analysis The query analysis results
      * @return string The query with optimized ordering
      */
     protected function optimizeOrdering(string $query, array $analysis): string
@@ -479,7 +479,7 @@ class QueryOptimizer
      * MySQL-specific ORDER BY optimization
      *
      * @param  string $query    The original query
-     * @param  array  $analysis The query analysis results
+     * @param  array<string,mixed>  $analysis The query analysis results
      * @return string The query with optimized ORDER BY
      */
     protected function optimizeMySQLOrdering(string $query, array $analysis): string
@@ -506,7 +506,7 @@ class QueryOptimizer
      * PostgreSQL-specific ORDER BY optimization
      *
      * @param  string $query    The original query
-     * @param  array  $analysis The query analysis results
+     * @param  array<string,mixed>  $analysis The query analysis results
      * @return string The query with optimized ORDER BY
      */
     protected function optimizePostgreSQLOrdering(string $query, array $analysis): string
@@ -519,7 +519,7 @@ class QueryOptimizer
      * SQLite-specific ORDER BY optimization
      *
      * @param  string $query    The original query
-     * @param  array  $analysis The query analysis results
+     * @param  array<string,mixed>  $analysis The query analysis results
      * @return string The query with optimized ORDER BY
      */
     protected function optimizeSQLiteOrdering(string $query, array $analysis): string

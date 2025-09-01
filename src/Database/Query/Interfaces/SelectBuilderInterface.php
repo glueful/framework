@@ -20,11 +20,15 @@ interface SelectBuilderInterface
 
     /**
      * Set the columns to select
+     *
+     * @param array<string|\Glueful\Database\RawExpression> $columns
      */
     public function setColumns(array $columns): void;
 
     /**
      * Get the current columns
+     *
+     * @return array<string|\Glueful\Database\RawExpression>
      */
     public function getColumns(): array;
 
@@ -45,6 +49,8 @@ interface SelectBuilderInterface
 
     /**
      * Get parameter bindings for the SELECT clause
+     *
+     * @return array<mixed>
      */
     public function getBindings(): array;
 

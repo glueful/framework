@@ -81,7 +81,7 @@ class ForeignKeyBuilder implements ForeignKeyBuilderInterface
     private bool $initiallyDeferred = false;
 
     /**
-     * @var array Additional options
+     * @var array<string, mixed> Additional options
      */
     private array $options = [];
 

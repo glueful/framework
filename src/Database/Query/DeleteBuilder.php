@@ -29,6 +29,9 @@ class DeleteBuilder implements DeleteBuilderInterface
 
     /**
      * Delete records
+     * @param string $table
+     * @param array<string, mixed> $conditions
+     * @param bool $softDelete
      */
     public function delete(string $table, array $conditions, bool $softDelete = true): int
     {
@@ -43,6 +46,8 @@ class DeleteBuilder implements DeleteBuilderInterface
 
     /**
      * Restore soft-deleted records
+     * @param string $table
+     * @param array<string, mixed> $conditions
      */
     public function restore(string $table, array $conditions): int
     {
@@ -56,6 +61,8 @@ class DeleteBuilder implements DeleteBuilderInterface
 
     /**
      * Hard delete records (bypass soft delete)
+     * @param string $table
+     * @param array<string, mixed> $conditions
      */
     public function forceDelete(string $table, array $conditions): int
     {
@@ -64,6 +71,9 @@ class DeleteBuilder implements DeleteBuilderInterface
 
     /**
      * Build DELETE SQL query
+     * @param string $table
+     * @param array<string, mixed> $conditions
+     * @param bool $softDelete
      */
     public function buildDeleteQuery(string $table, array $conditions, bool $softDelete): string
     {
@@ -77,7 +87,7 @@ class DeleteBuilder implements DeleteBuilderInterface
             $sql = "DELETE FROM {$tableName}";
         }
 
-        if (!empty($conditions)) {
+        if (count($conditions) > 0) {
             $sql .= " WHERE " . $this->buildWhereClause($conditions);
         }
 
@@ -86,13 +96,15 @@ class DeleteBuilder implements DeleteBuilderInterface
 
     /**
      * Build RESTORE SQL query
+     * @param string $table
+     * @param array<string, mixed> $conditions
      */
     public function buildRestoreQuery(string $table, array $conditions): string
     {
         $tableName = $this->driver->wrapIdentifier($table);
         $sql = "UPDATE {$tableName} SET deleted_at = NULL";
 
-        if (!empty($conditions)) {
+        if (count($conditions) > 0) {
             $sql .= " WHERE " . $this->buildWhereClause($conditions);
         }
 
@@ -101,6 +113,7 @@ class DeleteBuilder implements DeleteBuilderInterface
 
     /**
      * Build WHERE clause for DELETE
+     * @param array<string, mixed> $conditions
      */
     public function buildWhereClause(array $conditions): string
     {
@@ -115,6 +128,8 @@ class DeleteBuilder implements DeleteBuilderInterface
 
     /**
      * Get parameter bindings for DELETE query
+     * @param array<string, mixed> $conditions
+     * @return array<int, mixed>
      */
     public function getBindings(array $conditions): array
     {
@@ -123,10 +138,11 @@ class DeleteBuilder implements DeleteBuilderInterface
 
     /**
      * Validate delete conditions
+     * @param array<string, mixed> $conditions
      */
     public function validateConditions(array $conditions): void
     {
-        if (empty($conditions)) {
+        if (count($conditions) === 0) {
             throw new \InvalidArgumentException('Delete conditions cannot be empty. This would delete all rows.');
         }
 
@@ -153,6 +169,7 @@ class DeleteBuilder implements DeleteBuilderInterface
 
     /**
      * Check if array is associative
+     * @param array<mixed> $array
      */
     protected function isAssociativeArray(array $array): bool
     {

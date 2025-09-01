@@ -30,107 +30,136 @@ interface QueryBuilderInterface
      *
      * @param array<string|\Glueful\Database\RawExpression> $columns
      */
-    public function select(array $columns = ['*']);
+    public function select(array $columns = ['*']): static;
 
     /**
      * Add WHERE condition
+     *
+     * @param string|array<string,mixed>|callable $column
+     * @param mixed $operator
+     * @param mixed $value
      */
-    public function where($column, $operator = null, $value = null);
+    public function where($column, $operator = null, $value = null): static;
 
     /**
      * Add OR WHERE condition
+     *
+     * @param string|array<string,mixed>|callable $column
+     * @param mixed $operator
+     * @param mixed $value
      */
-    public function orWhere($column, $operator = null, $value = null);
+    public function orWhere($column, $operator = null, $value = null): static;
 
     /**
      * Add WHERE IN condition
+     *
+     * @param array<mixed> $values
      */
-    public function whereIn(string $column, array $values);
+    public function whereIn(string $column, array $values): static;
 
     /**
      * Add WHERE NOT IN condition
+     *
+     * @param array<mixed> $values
      */
-    public function whereNotIn(string $column, array $values);
+    public function whereNotIn(string $column, array $values): static;
 
     /**
      * Add WHERE NULL condition
      */
-    public function whereNull(string $column);
+    public function whereNull(string $column): static;
 
     /**
      * Add WHERE NOT NULL condition
      */
-    public function whereNotNull(string $column);
+    public function whereNotNull(string $column): static;
 
     /**
      * Add OR WHERE NULL condition
      */
-    public function orWhereNull(string $column);
+    public function orWhereNull(string $column): static;
 
     /**
      * Add OR WHERE NOT NULL condition
      */
-    public function orWhereNotNull(string $column);
+    public function orWhereNotNull(string $column): static;
 
     /**
      * Add WHERE BETWEEN condition
+     *
+     * @param mixed $min
+     * @param mixed $max
      */
-    public function whereBetween(string $column, $min, $max);
+    public function whereBetween(string $column, $min, $max): static;
 
     /**
      * Add WHERE LIKE condition
      */
-    public function whereLike(string $column, string $pattern);
+    public function whereLike(string $column, string $pattern): static;
 
     /**
      * Add raw WHERE condition
+     *
+     * @param array<mixed> $bindings
      */
-    public function whereRaw(string $condition, array $bindings = []);
+    public function whereRaw(string $condition, array $bindings = []): static;
 
     /**
      * Add JSON contains WHERE condition (database-agnostic)
      */
-    public function whereJsonContains(string $column, string $searchValue, ?string $path = null);
+    public function whereJsonContains(string $column, string $searchValue, ?string $path = null): static;
 
     /**
      * Add JOIN clause
      */
-    public function join(string $table, string $first, string $operator, string $second, string $type = 'INNER');
+    public function join(
+        string $table,
+        string $first,
+        string $operator,
+        string $second,
+        string $type = 'INNER'
+    ): static;
 
     /**
      * Add LEFT JOIN clause
      */
-    public function leftJoin(string $table, string $first, string $operator, string $second);
+    public function leftJoin(string $table, string $first, string $operator, string $second): static;
 
     /**
      * Add RIGHT JOIN clause
      */
-    public function rightJoin(string $table, string $first, string $operator, string $second);
+    public function rightJoin(string $table, string $first, string $operator, string $second): static;
 
     /**
      * Add GROUP BY clause
+     *
+     * @param string|array<string> $columns
      */
-    public function groupBy($columns);
+    public function groupBy($columns): static;
 
     /**
      * Add HAVING clause
+     *
+     * @param array<string,mixed> $conditions
      */
-    public function having(array $conditions);
+    public function having(array $conditions): static;
 
     /**
      * Add ORDER BY clause
+     *
+     * @param string|array<string,string> $column
      */
-    public function orderBy($column, string $direction = 'ASC');
+    public function orderBy($column, string $direction = 'ASC'): static;
 
     /**
      * Add LIMIT clause
      */
-    public function limit(int $count);
+    public function limit(int $count): static;
 
     /**
      * Add OFFSET clause
      */
-    public function offset(int $count);
+    public function offset(int $count): static;
 
     /**
      * Execute query and return all results
@@ -141,6 +170,8 @@ interface QueryBuilderInterface
 
     /**
      * Execute query and return first result
+     *
+     * @return array<string,mixed>|null
      */
     public function first(): ?array;
 
@@ -168,16 +199,22 @@ interface QueryBuilderInterface
 
     /**
      * Insert data
+     *
+     * @param array<string,mixed> $data
      */
     public function insert(array $data): int;
 
     /**
      * Insert multiple rows
+     *
+     * @param array<array<string,mixed>> $rows
      */
     public function insertBatch(array $rows): int;
 
     /**
      * Update data
+     *
+     * @param array<string,mixed> $data
      */
     public function update(array $data): int;
 
@@ -188,23 +225,25 @@ interface QueryBuilderInterface
 
     /**
      * Execute in transaction
+     *
+     * @return mixed
      */
     public function transaction(callable $callback);
 
     /**
      * Enable query caching
      */
-    public function cache(?int $ttl = null);
+    public function cache(?int $ttl = null): static;
 
     /**
      * Enable query optimization
      */
-    public function optimize();
+    public function optimize(): static;
 
     /**
      * Set business purpose for the query
      */
-    public function withPurpose(string $purpose);
+    public function withPurpose(string $purpose): static;
 
     /**
      * Get SQL string
@@ -213,6 +252,8 @@ interface QueryBuilderInterface
 
     /**
      * Get parameter bindings
+     *
+     * @return array<mixed>
      */
     public function getBindings(): array;
 
@@ -223,11 +264,17 @@ interface QueryBuilderInterface
 
     /**
      * Execute a raw SQL query and return results
+     *
+     * @param array<mixed> $bindings
+     * @return array<mixed>
      */
     public function executeRaw(string $sql, array $bindings = []): array;
 
     /**
      * Execute a raw SQL query and return first result
+     *
+     * @param array<mixed> $bindings
+     * @return array<string,mixed>|null
      */
     public function executeRawFirst(string $sql, array $bindings = []): ?array;
 }

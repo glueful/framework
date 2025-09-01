@@ -37,7 +37,7 @@ class TransactionManager implements TransactionManagerInterface
     /**
      * Execute callback within a transaction
      */
-    public function transaction(callable $callback)
+    public function transaction(callable $callback): mixed
     {
         $retryCount = 0;
 

@@ -17,7 +17,7 @@ interface ResultProcessorInterface
      * Fetch all rows from a statement
      *
      * @param  PDOStatement $statement The executed statement
-     * @return array Array of associative arrays
+     * @return array<int, array<string, mixed>> Array of associative arrays
      */
     public function fetchAll(PDOStatement $statement): array;
 
@@ -25,7 +25,7 @@ interface ResultProcessorInterface
      * Fetch a single row from a statement
      *
      * @param  PDOStatement $statement The executed statement
-     * @return array|null Associative array or null if no rows
+     * @return array<string, mixed>|null Associative array or null if no rows
      */
     public function fetchOne(PDOStatement $statement): ?array;
 
@@ -44,7 +44,7 @@ interface ResultProcessorInterface
      * @param  PDOStatement $statement   The executed statement
      * @param  string|int   $keyColumn   The column to use as key
      * @param  string|int   $valueColumn The column to use as value
-     * @return array Key-value pairs
+     * @return array<string|int, mixed> Key-value pairs
      */
     public function fetchKeyValue(PDOStatement $statement, string|int $keyColumn, string|int $valueColumn): array;
 
@@ -53,7 +53,7 @@ interface ResultProcessorInterface
      *
      * @param  PDOStatement $statement   The executed statement
      * @param  string|int   $groupColumn The column to group by
-     * @return array Grouped results
+     * @return array<string|int, array<int, array<string, mixed>>> Grouped results
      */
     public function fetchGrouped(PDOStatement $statement, string|int $groupColumn): array;
 
@@ -62,7 +62,7 @@ interface ResultProcessorInterface
      *
      * @param  PDOStatement $statement The executed statement
      * @param  callable     $callback  The callback to process each row
-     * @return array Processed results
+     * @return array<int, mixed> Processed results
      */
     public function fetchWithCallback(PDOStatement $statement, callable $callback): array;
 
@@ -87,8 +87,8 @@ interface ResultProcessorInterface
      *
      * @param  PDOStatement $statement       The executed statement
      * @param  string       $className       The class name to instantiate
-     * @param  array        $constructorArgs Constructor arguments
-     * @return array Array of objects
+     * @param  array<string, mixed>        $constructorArgs Constructor arguments
+     * @return array<int, object> Array of objects
      */
     public function fetchAsObjects(PDOStatement $statement, string $className, array $constructorArgs = []): array;
 }

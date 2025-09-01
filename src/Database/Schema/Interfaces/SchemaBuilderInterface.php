@@ -101,7 +101,7 @@ interface SchemaBuilderInterface
     /**
      * Execute all pending schema operations
      *
-     * @return array Results of executed operations
+     * @return array<int, mixed> Results of executed operations
      * @throws \RuntimeException If execution fails
      */
     public function execute(): array;
@@ -109,14 +109,14 @@ interface SchemaBuilderInterface
     /**
      * Preview what SQL would be executed without running it
      *
-     * @return array Array of SQL statements that would be executed
+     * @return array<int, string> Array of SQL statements that would be executed
      */
     public function preview(): array;
 
     /**
      * Validate all pending operations without executing
      *
-     * @return array Validation results with errors and warnings
+     * @return array<string, mixed> Validation results with errors and warnings
      */
     public function validate(): array;
 
@@ -147,7 +147,7 @@ interface SchemaBuilderInterface
     /**
      * Get list of all tables
      *
-     * @return array Array of table names
+     * @return array<int, string> Array of table names
      */
     public function getTables(): array;
 
@@ -155,7 +155,7 @@ interface SchemaBuilderInterface
      * Get complete table schema information
      *
      * @param  string $table Table name
-     * @return array Complete schema information
+     * @return array<int, array<string, mixed>> Complete schema information
      */
     public function getTableSchema(string $table): array;
 
@@ -163,7 +163,7 @@ interface SchemaBuilderInterface
      * Get table columns information
      *
      * @param  string $table Table name
-     * @return array Array of column definitions with 'name' field
+     * @return array<int, array<string, mixed>> Array of column definitions with 'name' field
      */
     public function getTableColumns(string $table): array;
 
@@ -221,8 +221,8 @@ interface SchemaBuilderInterface
      *
      * @param  string $table      Table name
      * @param  string $column     Column name
-     * @param  array  $definition Column definition
-     * @return array Result with success status
+     * @param  array<string, mixed>  $definition Column definition
+     * @return array<string, mixed> Result with success status
      */
     public function addColumn(string $table, string $column, array $definition): array;
 
@@ -231,14 +231,14 @@ interface SchemaBuilderInterface
      *
      * @param  string $table  Table name
      * @param  string $column Column name
-     * @return array Result with success status
+     * @return array<string, mixed> Result with success status
      */
     public function dropColumn(string $table, string $column): array;
 
     /**
      * Add an index to a table
      *
-     * @param  array $indexes Index definitions
+     * @param  array<int, array<string, mixed>> $indexes Index definitions
      * @return self For method chaining
      */
     public function addIndex(array $indexes): self;
@@ -255,7 +255,7 @@ interface SchemaBuilderInterface
     /**
      * Add foreign key constraints
      *
-     * @param  array $foreignKeys Foreign key definitions
+     * @param  array<int, array<string, mixed>> $foreignKeys Foreign key definitions
      * @return self For method chaining
      */
     public function addForeignKey(array $foreignKeys): self;
@@ -277,8 +277,8 @@ interface SchemaBuilderInterface
      * Generate preview of schema changes
      *
      * @param  string $table   Table name
-     * @param  array  $changes Changes to preview
-     * @return array Preview information
+     * @param  array<string, mixed>  $changes Changes to preview
+     * @return array<string, mixed> Preview information
      */
     public function generateChangePreview(string $table, array $changes): array;
 
@@ -287,16 +287,16 @@ interface SchemaBuilderInterface
      *
      * @param  string $table  Table name
      * @param  string $format Export format
-     * @return array Exported schema
+     * @return array<string, mixed> Exported schema
      */
     public function exportTableSchema(string $table, string $format): array;
 
     /**
      * Validate schema definition
      *
-     * @param  array  $schema Schema to validate
+     * @param  array<string, mixed>  $schema Schema to validate
      * @param  string $format Schema format
-     * @return array Validation result
+     * @return array<string, mixed> Validation result
      */
     public function validateSchema(array $schema, string $format): array;
 
@@ -304,26 +304,26 @@ interface SchemaBuilderInterface
      * Import table schema from definition
      *
      * @param  string $table   Table name
-     * @param  array  $schema  Schema definition
+     * @param  array<string, mixed>  $schema  Schema definition
      * @param  string $format  Schema format
-     * @param  array  $options Import options
-     * @return array Import result
+     * @param  array<string, mixed>  $options Import options
+     * @return array<string, mixed> Import result
      */
     public function importTableSchema(string $table, array $schema, string $format, array $options): array;
 
     /**
      * Generate revert operations for a change
      *
-     * @param  array $change Original change
-     * @return array Revert operations
+     * @param  array<string, mixed> $change Original change
+     * @return array<int, array<string, mixed>> Revert operations
      */
     public function generateRevertOperations(array $change): array;
 
     /**
      * Execute revert operations
      *
-     * @param  array $operations Revert operations
-     * @return array Execution result
+     * @param  array<int, array<string, mixed>> $operations Revert operations
+     * @return array<string, mixed> Execution result
      */
     public function executeRevert(array $operations): array;
 }

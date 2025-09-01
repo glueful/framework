@@ -147,6 +147,10 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @param string|array<string,mixed>|callable $column
+     * @param mixed $operator
+     * @param mixed $value
      */
     public function where($column, $operator = null, $value = null): static
     {
@@ -163,6 +167,10 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @param string|array<string,mixed>|callable $column
+     * @param mixed $operator
+     * @param mixed $value
      */
     public function orWhere($column, $operator = null, $value = null): static
     {
@@ -178,6 +186,8 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @param array<mixed> $values
      */
     public function whereIn(string $column, array $values): static
     {
@@ -187,6 +197,8 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @param array<mixed> $values
      */
     public function whereNotIn(string $column, array $values): static
     {
@@ -232,8 +244,11 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @param mixed $min
+     * @param mixed $max
      */
-    public function whereBetween(string $column, $min, $max): static
+    public function whereBetween(string $column, mixed $min, mixed $max): static
     {
         $this->whereClause->whereBetween($column, $min, $max);
         return $this;
@@ -250,6 +265,8 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @param array<mixed> $bindings
      */
     public function whereRaw(string $condition, array $bindings = []): static
     {
@@ -320,6 +337,8 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @param string|array<string> $columns
      */
     public function groupBy($columns): static
     {
@@ -331,6 +350,8 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @param array<string,mixed> $conditions
      */
     public function having(array $conditions): static
     {
@@ -342,6 +363,8 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * Add raw HAVING condition
+     *
+     * @param array<mixed> $bindings
      */
     public function havingRaw(string $condition, array $bindings = []): static
     {
@@ -351,6 +374,8 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @param string|array<string,string> $column
      */
     public function orderBy($column, string $direction = 'ASC'): static
     {
@@ -423,6 +448,8 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @return array<string,mixed>|null
      */
     public function first(): ?array
     {
@@ -434,7 +461,7 @@ class QueryBuilder implements QueryBuilderInterface
         // Restore original limit
         $this->state->setLimit($originalLimit);
 
-        return empty($results) ? null : $results[0];
+        return $results === [] ? null : $results[0];
     }
 
     /**
@@ -481,6 +508,8 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * Get a flat array of column values
+     *
+     * @return array<mixed>
      */
     public function pluck(string $column, ?string $key = null): array
     {
@@ -532,6 +561,8 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @param array<string,mixed> $data
      */
     public function insert(array $data): int
     {
@@ -543,12 +574,14 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @param array<array<string,mixed>> $rows
      */
     public function insertBatch(array $rows): int
     {
         $table = $this->state->getTableOrFail();
 
-        if (empty($rows)) {
+        if ($rows === []) {
             throw new \InvalidArgumentException('No rows provided for batch insert');
         }
 
@@ -584,8 +617,8 @@ class QueryBuilder implements QueryBuilderInterface
      * );
      * ```
      *
-     * @param  array $data          Associative array of column => value pairs to insert
-     * @param  array $updateColumns Columns to update on duplicate key conflict
+     * @param  array<string,mixed> $data Data to insert/update
+     * @param  array<int,string>|array<string,mixed> $updateColumns Update columns
      * @return int Number of affected rows (1 for insert, 2 for update in MySQL)
      * @throws \InvalidArgumentException If data array is empty or contains invalid columns
      * @throws \Glueful\Exceptions\DatabaseException If no table is set or database operation fails
@@ -601,6 +634,8 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @param array<string,mixed> $data
      */
     public function update(array $data): int
     {
@@ -660,8 +695,10 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @return mixed
      */
-    public function transaction(callable $callback)
+    public function transaction(callable $callback): mixed
     {
         return $this->transactionManager->transaction($callback);
     }
@@ -713,6 +750,8 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @return array<mixed>
      */
     public function getBindings(): array
     {
@@ -721,6 +760,8 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * Get query execution plan
+     *
+     * @return array<mixed>
      */
     public function explain(): array
     {
@@ -772,8 +813,8 @@ class QueryBuilder implements QueryBuilderInterface
      * ```
      *
      * @param  string $sql      Raw SQL query to execute
-     * @param  array  $bindings Parameter bindings for placeholders in the SQL
-     * @return array Array of result rows as associative arrays
+     * @param  array<mixed>  $bindings Parameter bindings for placeholders in the SQL
+     * @return array<mixed> Array of result rows as associative arrays
      * @throws \Glueful\Exceptions\DatabaseException If query execution fails
      * @throws \PDOException If database connection or SQL syntax errors occur
      * @throws \InvalidArgumentException If SQL is empty or bindings are malformed
@@ -794,8 +835,8 @@ class QueryBuilder implements QueryBuilderInterface
      * row, or null if no results are found.
      *
      * @param  string $sql      Raw SQL query to execute
-     * @param  array  $bindings Parameter bindings for placeholders in the SQL
-     * @return array|null First result row as associative array, or null if no results
+     * @param  array<mixed>  $bindings Parameter bindings for placeholders in the SQL
+     * @return array<string,mixed>|null First result row as associative array, or null if no results
      * @throws \Glueful\Exceptions\DatabaseException If query execution fails
      * @throws \PDOException If database connection or SQL syntax errors occur
      * @throws \InvalidArgumentException If SQL is empty or bindings are malformed
@@ -804,7 +845,7 @@ class QueryBuilder implements QueryBuilderInterface
     public function executeRawFirst(string $sql, array $bindings = []): ?array
     {
         $results = $this->queryExecutor->executeQuery($sql, $bindings);
-        return empty($results) ? null : $results[0];
+        return $results === [] ? null : $results[0];
     }
 
     /**
@@ -833,7 +874,7 @@ class QueryBuilder implements QueryBuilderInterface
      * ```
      *
      * @param  string $sql      Raw SQL modification query to execute
-     * @param  array  $bindings Parameter bindings for placeholders in the SQL
+     * @param  array<mixed>  $bindings Parameter bindings for placeholders in the SQL
      * @return int Number of affected rows
      * @throws \Glueful\Exceptions\DatabaseException If query execution fails
      * @throws \PDOException If database connection or SQL syntax errors occur
@@ -911,11 +952,13 @@ class QueryBuilder implements QueryBuilderInterface
         $sql .= $this->queryModifiers->buildHavingClause();
         $sql .= $this->queryModifiers->buildOrderByClause();
 
-        if ($limit = $this->state->getLimit()) {
+        $limit = $this->state->getLimit();
+        if ($limit !== null) {
             $sql .= " LIMIT {$limit}";
         }
 
-        if ($offset = $this->state->getOffset()) {
+        $offset = $this->state->getOffset();
+        if ($offset !== null) {
             $sql .= " OFFSET {$offset}";
         }
 
@@ -950,6 +993,8 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * Get all parameter bindings from components
+     *
+     * @return array<mixed>
      */
     private function getAllBindings(): array
     {
@@ -963,6 +1008,8 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * Get WHERE clause bindings only
+     *
+     * @return array<mixed>
      */
     private function getWhereBindings(): array
     {

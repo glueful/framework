@@ -39,14 +39,14 @@ interface QueryPurposeInterface
     /**
      * Set metadata associated with the purpose
      *
-     * @param array $metadata Additional metadata for the purpose
+     * @param array<string, mixed> $metadata Additional metadata for the purpose
      */
     public function setMetadata(array $metadata): void;
 
     /**
      * Get metadata associated with the purpose
      *
-     * @return array The metadata array
+     * @return array<string, mixed> The metadata array
      */
     public function getMetadata(): array;
 
@@ -68,7 +68,7 @@ interface QueryPurposeInterface
     /**
      * Get full purpose context including metadata
      *
-     * @return array Complete purpose context
+     * @return array<string, mixed> Complete purpose context
      */
     public function getContext(): array;
 }

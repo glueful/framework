@@ -15,14 +15,14 @@ interface QueryModifiersInterface
     /**
      * Add GROUP BY columns
      *
-     * @param string|array $columns Column(s) to group by
+     * @param string|array<string> $columns Column(s) to group by
      */
     public function groupBy(string|array $columns): void;
 
     /**
      * Get GROUP BY columns
      *
-     * @return array The columns to group by
+     * @return array<string> The columns to group by
      */
     public function getGroupBy(): array;
 
@@ -39,21 +39,21 @@ interface QueryModifiersInterface
      * Add raw HAVING condition
      *
      * @param string $expression The raw SQL expression
-     * @param array  $bindings   Parameter bindings
+     * @param array<mixed>  $bindings   Parameter bindings
      */
     public function havingRaw(string $expression, array $bindings = []): void;
 
     /**
      * Get HAVING conditions
      *
-     * @return array The having conditions
+     * @return array<mixed> The having conditions
      */
     public function getHaving(): array;
 
     /**
      * Add ORDER BY clause
      *
-     * @param string|array $column    Column(s) to order by
+     * @param string|array<string> $column    Column(s) to order by
      * @param string       $direction Sort direction (ASC or DESC)
      */
     public function orderBy(string|array $column, string $direction = 'ASC'): void;
@@ -73,7 +73,7 @@ interface QueryModifiersInterface
     /**
      * Get ORDER BY clauses
      *
-     * @return array The order by clauses
+     * @return array<array{column: string, direction: string}> The order by clauses
      */
     public function getOrderBy(): array;
 
@@ -116,7 +116,7 @@ interface QueryModifiersInterface
     /**
      * Get all bindings for HAVING conditions
      *
-     * @return array The parameter bindings
+     * @return array<mixed> The parameter bindings
      */
     public function getHavingBindings(): array;
 }

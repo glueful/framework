@@ -16,6 +16,9 @@ use Glueful\Database\Execution\Interfaces\ParameterBinderInterface;
  */
 class ParameterBinder implements ParameterBinderInterface
 {
+    /**
+     * @var array<int, string>
+     */
     protected array $sensitiveFields = [
         'password',
         'password_hash',
@@ -33,13 +36,15 @@ class ParameterBinder implements ParameterBinderInterface
     public function flattenBindings(array $bindings): array
     {
         $flattened = [];
-        foreach ($bindings as $binding) {
+        $index = 0;
+        foreach ($bindings as $key => $binding) {
             if (is_array($binding)) {
                 // Convert array to JSON string to prevent array to string conversion
-                $flattened[] = json_encode($binding);
+                $flattened[$key] = json_encode($binding);
             } else {
-                $flattened[] = $binding;
+                $flattened[$key] = $binding;
             }
+            $index++;
         }
         return $flattened;
     }
@@ -52,7 +57,7 @@ class ParameterBinder implements ParameterBinderInterface
         $flattenedBindings = $this->flattenBindings($bindings);
 
         foreach ($flattenedBindings as $index => $value) {
-            $parameterIndex = $index + 1; // PDO parameters are 1-indexed
+            $parameterIndex = is_string($index) ? $index : $index + 1; // PDO parameters are 1-indexed for numeric keys
 
             if (!$this->validateParameter($value)) {
                 throw new \InvalidArgumentException("Invalid parameter type at index {$index}");
@@ -65,7 +70,7 @@ class ParameterBinder implements ParameterBinderInterface
     /**
      * Sanitize parameter for logging (remove sensitive data)
      */
-    public function sanitizeForLog($parameter): mixed
+    public function sanitizeForLog(mixed $parameter): mixed
     {
         if (is_string($parameter) && $this->isSensitiveValue($parameter)) {
             return '[REDACTED]';
@@ -89,7 +94,7 @@ class ParameterBinder implements ParameterBinderInterface
     /**
      * Validate parameter type
      */
-    public function validateParameter($parameter): bool
+    public function validateParameter(mixed $parameter): bool
     {
         // Allow common parameter types
         return is_null($parameter) ||
@@ -128,13 +133,16 @@ class ParameterBinder implements ParameterBinderInterface
      */
     public function addSensitiveField(string $field): void
     {
-        if (!in_array($field, $this->sensitiveFields)) {
+        if (!in_array($field, $this->sensitiveFields, true)) {
             $this->sensitiveFields[] = $field;
         }
     }
 
     /**
      * Get list of sensitive fields
+     */
+    /**
+     * @return array<int, string>
      */
     public function getSensitiveFields(): array
     {

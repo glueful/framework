@@ -16,7 +16,7 @@ class QueryHasher
      * Generate a normalized hash key for a query and its parameters
      *
      * @param  string $query  SQL query
-     * @param  array  $params Query parameters
+     * @param  array<mixed>  $params Query parameters
      * @return string Hash key
      */
     public function hash(string $query, array $params): string
@@ -35,7 +35,7 @@ class QueryHasher
      * Create a composite cache key including db name and connection info
      *
      * @param  string $query      SQL query
-     * @param  array  $params     Query parameters
+     * @param  array<mixed>  $params     Query parameters
      * @param  string $connection Optional connection name
      * @param  string $dbName     Optional database name
      * @return string Composite cache key
@@ -50,8 +50,8 @@ class QueryHasher
         $hash = $this->hash($query, $params);
 
         // Determine connection and db name if not provided
-        $connection = $connection ?: config('database.engine', 'mysql');
-        $dbName = $dbName ?: $this->getDatabaseName($connection);
+        $connection = $connection !== '' ? $connection : (string)config('database.engine', 'mysql');
+        $dbName = $dbName !== '' ? $dbName : $this->getDatabaseName($connection);
 
         // Combine all components into a cache key with query type prefix
         $prefix = 'query_cache';
@@ -87,7 +87,7 @@ class QueryHasher
     /**
      * Serialize parameters into a consistent string representation
      *
-     * @param  array $params Query parameters
+     * @param  array<mixed> $params Query parameters
      * @return string Serialized parameters
      */
     protected function serializeParams(array $params): string

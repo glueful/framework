@@ -320,7 +320,7 @@ class TableBuilder implements TableBuilderInterface, TableBuilderContextInterfac
      * Add enum column
      *
      * @param  string      $name    Column name
-     * @param  array       $values  Allowed enum values
+     * @param  array<int, string>       $values  Allowed enum values
      * @param  string|null $default Default value (must be one of the allowed values)
      * @return ColumnBuilderInterface For fluent chaining
      */
@@ -412,7 +412,7 @@ class TableBuilder implements TableBuilderInterface, TableBuilderContextInterfac
      *
      * @param  string $name    Column name
      * @param  string $type    Column type
-     * @param  array  $options Column options
+     * @param  array<string, mixed>  $options Column options
      * @return ColumnBuilderInterface For fluent chaining
      */
     public function addColumn(string $name, string $type, array $options = []): ColumnBuilderInterface
@@ -468,14 +468,14 @@ class TableBuilder implements TableBuilderInterface, TableBuilderContextInterfac
     /**
      * Add an index
      *
-     * @param  array|string $columns Column(s) to index
+     * @param  array<int, string>|string $columns Column(s) to index
      * @param  string|null  $name    Index name (auto-generated if null)
      * @return self For method chaining
      */
     public function index(array|string $columns, ?string $name = null): self
     {
         $columns = is_string($columns) ? [$columns] : $columns;
-        $name = $name ?: $this->generateIndexName($columns, 'index');
+        $name = $name !== null ? $name : $this->generateIndexName($columns, 'index');
 
         $this->indexes[] = new IndexDefinition($columns, $name, 'index');
         return $this;
@@ -484,14 +484,14 @@ class TableBuilder implements TableBuilderInterface, TableBuilderContextInterfac
     /**
      * Add a unique index
      *
-     * @param  array|string $columns Column(s) for unique constraint
+     * @param  array<int, string>|string $columns Column(s) for unique constraint
      * @param  string|null  $name    Index name (auto-generated if null)
      * @return self For method chaining
      */
     public function unique(array|string $columns, ?string $name = null): self
     {
         $columns = is_string($columns) ? [$columns] : $columns;
-        $name = $name ?: $this->generateIndexName($columns, 'unique');
+        $name = $name !== null ? $name : $this->generateIndexName($columns, 'unique');
 
         $this->indexes[] = new IndexDefinition($columns, $name, 'unique', true);
         return $this;
@@ -500,7 +500,7 @@ class TableBuilder implements TableBuilderInterface, TableBuilderContextInterfac
     /**
      * Set primary key
      *
-     * @param  array|string $columns Column(s) for primary key
+     * @param  array<int, string>|string $columns Column(s) for primary key
      * @return self For method chaining
      */
     public function primary(array|string $columns): self
@@ -512,14 +512,14 @@ class TableBuilder implements TableBuilderInterface, TableBuilderContextInterfac
     /**
      * Add a fulltext index (where supported)
      *
-     * @param  array|string $columns Column(s) for fulltext index
+     * @param  array<int, string>|string $columns Column(s) for fulltext index
      * @param  string|null  $name    Index name (auto-generated if null)
      * @return self For method chaining
      */
     public function fulltext(array|string $columns, ?string $name = null): self
     {
         $columns = is_string($columns) ? [$columns] : $columns;
-        $name = $name ?: $this->generateIndexName($columns, 'fulltext');
+        $name = $name !== null ? $name : $this->generateIndexName($columns, 'fulltext');
 
         $this->indexes[] = new IndexDefinition($columns, $name, 'fulltext');
         return $this;
@@ -738,7 +738,7 @@ class TableBuilder implements TableBuilderInterface, TableBuilderContextInterfac
      *
      * @param  string $name    Column name
      * @param  string $type    Column type
-     * @param  array  $options Column options
+     * @param  array<string, mixed>  $options Column options
      * @return ColumnBuilderInterface Column builder
      */
     private function addColumnBuilder(string $name, string $type, array $options = []): ColumnBuilderInterface
