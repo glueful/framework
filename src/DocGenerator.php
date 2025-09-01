@@ -12,13 +12,13 @@ namespace Glueful;
  */
 class DocGenerator
 {
-    /** @var array OpenAPI paths storage */
+    /** @var array<string, mixed> OpenAPI paths storage */
     private array $paths = [];
 
-    /** @var array OpenAPI schemas storage */
+    /** @var array<string, mixed> OpenAPI schemas storage */
     private array $schemas = [];
 
-    /** @var array Extension tags storage */
+    /** @var array<string, mixed> Extension tags storage */
     private array $extensionTags = [];
 
     /**
@@ -36,7 +36,7 @@ class DocGenerator
         }
 
         $definition = json_decode($jsonContent, true);
-        if (!$definition) {
+        if ($definition === null || $definition === false) {
             return;
         }
 
@@ -63,7 +63,7 @@ class DocGenerator
         }
 
         $definition = json_decode($jsonContent, true);
-        if (!$definition || !isset($definition['doc'])) {
+        if ($definition === null || $definition === false || !isset($definition['doc'])) {
             return;
         }
 
@@ -121,7 +121,7 @@ class DocGenerator
         }
 
         $definition = json_decode($jsonContent, true);
-        if (!$definition) {
+        if ($definition === null || $definition === false) {
             error_log("Invalid JSON in extension definition file: $filePath");
             return;
         }
@@ -195,7 +195,7 @@ class DocGenerator
         }
 
         $definition = json_decode($jsonContent, true);
-        if (!$definition) {
+        if ($definition === null || $definition === false) {
             error_log("Invalid JSON in route definition file: $filePath");
             return;
         }
@@ -272,6 +272,11 @@ class DocGenerator
      * @param string $resource API resource name
      * @param string $tableName Database table name
      * @param array $definition Table definition data
+     */
+    /**
+     * @param string $resource
+     * @param string $tableName
+     * @param array<string, mixed> $definition
      */
     private function addPathsFromJson(string $resource, string $tableName, array $definition): void
     {
@@ -407,7 +412,7 @@ class DocGenerator
      *
      * Generates endpoint documentation for custom API endpoints.
      *
-     * @param array $definition Custom API definition
+     * @param array<string, mixed> $definition Custom API definition
      */
     private function addPathsFromDocJson(array $definition): void
     {
@@ -432,7 +437,8 @@ class DocGenerator
                 'description' => $field['description'] ?? $fieldName
             ];
 
-            if (!($field['nullable'] ?? true)) {
+            $nullable = $field['nullable'] ?? true;
+            if ($nullable !== true) {
                 $required[] = $apiField;
             }
         }
@@ -444,7 +450,7 @@ class DocGenerator
             'properties' => $properties
         ];
 
-        if (!empty($required)) {
+        if (count($required) > 0) {
             $this->schemas[$schemaName]['required'] = $required;
         }
 
@@ -489,7 +495,7 @@ class DocGenerator
             'tags' => [explode('/', $docName)[0]],
             'summary' => ucwords(str_replace('-', ' ', basename($docName))),
             'description' => "Endpoint for " . str_replace('-', ' ', $docName),
-            'security' => $isPublic ? [] : [['BearerAuth' => []]],
+            'security' => $isPublic === true ? [] : [['BearerAuth' => []]],
             'requestBody' => [
                 'required' => true,
                 'content' => $content
@@ -503,8 +509,8 @@ class DocGenerator
      *
      * Validates and processes field definitions from table configuration.
      *
-     * @param array $definition Table definition
-     * @return array Processed fields
+     * @param array<string, mixed> $definition Table definition
+     * @return array<string, mixed> Processed fields
      */
     private function processFields(array $definition): array
     {
@@ -533,7 +539,7 @@ class DocGenerator
      * Creates OpenAPI schemas for table data structures.
      *
      * @param string $tableName Database table name
-     * @param array $definition Table definition data
+     * @param array<string, mixed> $definition Table definition data
      */
     private function addSchemaFromJson(string $tableName, array $definition): void
     {
@@ -541,7 +547,7 @@ class DocGenerator
         $required = [];
 
         $fields = $this->processFields($definition['table'] ?? []);
-        if (empty($fields)) {
+        if (count($fields) === 0) {
             // Handle missing or empty fields gracefully
             return;
         }
@@ -560,7 +566,8 @@ class DocGenerator
                 'description' => $field['description'] ?? $fieldName
             ];
 
-            if (!($field['nullable'] ?? true)) {
+            $nullable = $field['nullable'] ?? true;
+            if ($nullable !== true) {
                 $required[] = $apiField;
             }
         }
@@ -570,7 +577,7 @@ class DocGenerator
             'properties' => $properties
         ];
 
-        if (!empty($required)) {
+        if (count($required) > 0) {
             $this->schemas[$tableName]['required'] = $required;
         }
 
@@ -592,7 +599,7 @@ class DocGenerator
      *
      * Creates OpenAPI schemas for custom API endpoints.
      *
-     * @param array $definition Custom API definition
+     * @param array<string, mixed> $definition Custom API definition
      * @return string Generated schema name
      */
     private function addSchemaFromDocJson(array $definition): string
@@ -621,7 +628,8 @@ class DocGenerator
                 $properties[$apiField]['format'] = 'base64';
             }
 
-            if (!($field['nullable'] ?? true)) {
+            $nullable = $field['nullable'] ?? true;
+            if ($nullable !== true) {
                 $required[] = $apiField;
             }
         }
@@ -632,7 +640,7 @@ class DocGenerator
             'properties' => $properties
         ];
 
-        if (!empty($required)) {
+        if (count($required) > 0) {
             $this->schemas[$schemaName]['required'] = $required;
         }
 
@@ -642,7 +650,8 @@ class DocGenerator
         }
 
         // Create multipart schema if needed
-        if (isset($definition['doc']['consumes']) && in_array('multipart/form-data', $definition['doc']['consumes'])) {
+        $consumes = $definition['doc']['consumes'] ?? [];
+        if (in_array('multipart/form-data', $consumes, true)) {
             $this->schemas[$schemaName . 'Multipart'] = [
                 'type' => 'object',
                 'properties' => array_map(function ($prop) {
@@ -673,7 +682,7 @@ class DocGenerator
     private function inferTypeFromJson(string $dbType): string
     {
         // Handle null or empty type
-        if (!$dbType) {
+        if ($dbType === '') {
             return 'string'; // Default to string type
         }
         if (str_contains($dbType, 'int')) {
@@ -696,7 +705,7 @@ class DocGenerator
      *
      * Returns standard parameters used across endpoints.
      *
-     * @return array Common parameters definition
+     * @return array<int, array<string, mixed>> Common parameters definition
      */
     private function getCommonParameters(): array
     {
@@ -715,7 +724,7 @@ class DocGenerator
      *
      * Returns standard filtering and pagination parameters.
      *
-     * @return array Filter parameters definition
+     * @return array<int, array<string, mixed>> Filter parameters definition
      */
     private function getFilterParameters(): array
     {
@@ -751,7 +760,7 @@ class DocGenerator
      * Returns standard API response structures.
      *
      * @param string $tableName Related table name
-     * @return array Response definitions
+     * @return array<int|string, mixed> Response definitions
      */
     private function getCommonResponses(string $tableName): array
     {
@@ -802,7 +811,7 @@ class DocGenerator
      *
      * Returns standard error response structures.
      *
-     * @return array Error response definitions
+     * @return array<int|string, mixed> Error response definitions
      */
     private function getErrorResponses(): array
     {
@@ -845,7 +854,7 @@ class DocGenerator
      *
      * Returns base schemas used across the API.
      *
-     * @return array Default schemas
+     * @return array<string, mixed> Default schemas
      */
     private function getDefaultSchemas(): array
     {
@@ -1360,13 +1369,13 @@ class DocGenerator
      *
      * Creates OpenAPI tags for grouping endpoints.
      *
-     * @return array Generated tags
+     * @return array<int, array{name: string, description: string}> Generated tags
      */
     private function generateTags(): array
     {
         $tags = [];
-        foreach ($this->paths as $path => $methods) {
-            foreach ($methods as $method => $operation) {
+        foreach ($this->paths as $methods) {
+            foreach ($methods as $operation) {
                 if (isset($operation['tags'])) {
                     foreach ($operation['tags'] as $tag) {
                         if (!isset($tags[$tag])) {

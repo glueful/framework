@@ -31,7 +31,8 @@ class VarDumperServiceProvider implements ServiceProviderInterface
     public function register(ContainerBuilder $container): void
     {
         // Only register in development environment
-        if (env('APP_ENV') !== 'development' || !env('APP_DEBUG', false)) {
+        $debug = env('APP_DEBUG', false);
+        if (env('APP_ENV') !== 'development' || $debug !== true) {
             return;
         }
 
@@ -65,7 +66,8 @@ class VarDumperServiceProvider implements ServiceProviderInterface
     public function boot(Container $container): void
     {
         // Only boot in development environment
-        if (env('APP_ENV') !== 'development' || !env('APP_DEBUG', false)) {
+        $debug = env('APP_DEBUG', false);
+        if (env('APP_ENV') !== 'development' || $debug !== true) {
             return;
         }
 
@@ -140,8 +142,11 @@ class VarDumperServiceProvider implements ServiceProviderInterface
 
     /**
      * Factory method for creating appropriate dumper
+     *
+     * @param mixed $container
+     * @return mixed
      */
-    public static function createDumper($container)
+    public static function createDumper(mixed $container): mixed
     {
         if ('cli' === PHP_SAPI) {
             return $container->get(CliDumper::class);

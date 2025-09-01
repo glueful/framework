@@ -22,7 +22,7 @@ class RateLimitExceededEvent extends BaseEvent
      * @param int $currentCount Current request count
      * @param int $limit Rate limit threshold
      * @param int $windowSeconds Time window in seconds
-     * @param array $metadata Additional metadata
+     * @param array<string, mixed> $metadata Additional metadata
      */
     public function __construct(
         private readonly string $clientIp,

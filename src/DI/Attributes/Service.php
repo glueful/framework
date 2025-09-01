@@ -24,12 +24,12 @@ class Service
      *
      * @param string|null $id Service identifier (defaults to class name)
      * @param bool $public Whether service should be public (default false)
-     * @param array $tags Array of service tags for grouping
+     * @param array<string> $tags Array of service tags for grouping
      * @param bool $shared Whether service should be shared/singleton (default true)
      * @param bool $lazy Whether service should be lazy-loaded (default false)
      * @param string|null $factory Factory method or service for creating the service
-     * @param array $arguments Constructor arguments to inject
-     * @param array $calls Method calls to make after instantiation
+     * @param array<mixed> $arguments Constructor arguments to inject
+     * @param array<array{method: string, arguments?: array<mixed>}> $calls Method calls to make after instantiation
      */
     public function __construct(
         public readonly ?string $id = null,
@@ -69,7 +69,7 @@ class Service
     /**
      * Get service tags
      *
-     * @return array Array of tags
+     * @return array<string> Array of tags
      */
     public function getTags(): array
     {
@@ -109,7 +109,7 @@ class Service
     /**
      * Get constructor arguments
      *
-     * @return array Constructor arguments
+     * @return array<mixed> Constructor arguments
      */
     public function getArguments(): array
     {
@@ -119,7 +119,7 @@ class Service
     /**
      * Get method calls
      *
-     * @return array Method calls to make after instantiation
+     * @return array<array{method: string, arguments?: array<mixed>}> Method calls to make after instantiation
      */
     public function getCalls(): array
     {
@@ -132,7 +132,7 @@ class Service
      * Useful for debugging and serialization.
      *
      * @param string $className Class name for ID fallback
-     * @return array Service configuration as array
+     * @return array<string, mixed> Service configuration as array
      */
     public function toArray(string $className): array
     {

@@ -91,7 +91,7 @@ class ExtensionServiceProvider implements ServiceProviderInterface
 
         // Set up composer class loader if available
         $classLoaders = \Composer\Autoload\ClassLoader::getRegisteredLoaders();
-        if (!empty($classLoaders)) {
+        if (count($classLoaders) > 0) {
             // Get the first registered class loader
             $classLoader = reset($classLoaders);
             $extensionManager->setClassLoader($classLoader);

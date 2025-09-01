@@ -21,7 +21,7 @@ class SessionDestroyedEvent extends BaseEvent
      * @param string $accessToken The access token that was revoked
      * @param string|null $userUuid User UUID if available
      * @param string $reason Reason for session destruction
-     * @param array $metadata Additional metadata
+     * @param array<string, mixed> $metadata Additional metadata
      */
     public function __construct(
         private readonly string $accessToken,
@@ -85,6 +85,6 @@ class SessionDestroyedEvent extends BaseEvent
      */
     public function isRevoked(): bool
     {
-        return in_array($this->reason, ['revoked', 'admin_revoked', 'security_revoked']);
+        return in_array($this->reason, ['revoked', 'admin_revoked', 'security_revoked'], true);
     }
 }

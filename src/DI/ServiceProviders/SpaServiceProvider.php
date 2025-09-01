@@ -43,6 +43,9 @@ class SpaServiceProvider implements ServiceProviderInterface
         return 'spa';
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getStaticFileConfig(): array
     {
         return [

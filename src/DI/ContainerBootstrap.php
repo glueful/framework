@@ -109,7 +109,7 @@ class ContainerBootstrap
         }
 
         foreach ($extensionsData['extensions'] as $extensionName => $config) {
-            if (!($config['enabled'] ?? false)) {
+            if (($config['enabled'] ?? false) !== true) {
                 continue;
             }
 

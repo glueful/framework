@@ -83,9 +83,11 @@ class UserDTO
     #[Groups(['user:read', 'user:private'])]
     public ?string $website = null;
 
+    /** @var array<string, mixed> */
     #[Groups(['user:read', 'user:private'])]
     public array $preferences = [];
 
+    /** @var array<int, string> */
     #[Groups(['user:read', 'user:private'])]
     public array $permissions = [];
 
@@ -105,6 +107,7 @@ class UserDTO
     #[MaxDepth(2)]
     public ?UserDTO $manager = null;
 
+    /** @var array<int, UserDTO> */
     #[Groups(['user:detailed'])]
     #[MaxDepth(3)]
     public array $subordinates = [];
@@ -129,6 +132,8 @@ class UserDTO
 
     /**
      * Create a DTO from array data
+     *
+     * @param array<string, mixed> $data
      */
     public static function fromArray(array $data): self
     {
@@ -136,7 +141,9 @@ class UserDTO
 
         foreach ($data as $key => $value) {
             if (property_exists($dto, $key)) {
-                $dto->$key = $value;
+                $property = new \ReflectionProperty($dto, $key);
+                $property->setAccessible(true);
+                $property->setValue($dto, $value);
             }
         }
 
@@ -145,6 +152,8 @@ class UserDTO
 
     /**
      * Get public representation
+     *
+     * @return array<string, mixed>
      */
     public function getPublicData(): array
     {
@@ -181,7 +190,7 @@ class UserDTO
      */
     public function getDisplayName(): string
     {
-        return $this->name ?: $this->username ?: 'Anonymous';
+        return $this->name !== '' ? $this->name : ($this->username !== null ? $this->username : 'Anonymous');
     }
 
     /**
@@ -189,9 +198,9 @@ class UserDTO
      */
     public function isProfileComplete(): bool
     {
-        return !empty($this->name) &&
-               !empty($this->email) &&
-               !empty($this->username) &&
+        return $this->name !== '' &&
+               $this->email !== '' &&
+               $this->username !== null && $this->username !== '' &&
                $this->profileCompleted;
     }
 }

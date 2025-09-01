@@ -73,12 +73,17 @@ class ArchiveServiceProvider implements ServiceProviderInterface
 
     /**
      * Factory method for creating ArchiveService
+     *
+     * @param mixed $connection
+     * @param \Glueful\Database\Schema\Interfaces\SchemaBuilderInterface $schemaBuilder
+     * @param \Glueful\Security\RandomStringGenerator $randomStringGenerator
+     * @param array<string, mixed> $config
      */
     public static function createArchiveService(
-        $connection,
-        $schemaBuilder,
-        $randomStringGenerator,
-        $config
+        mixed $connection,
+        \Glueful\Database\Schema\Interfaces\SchemaBuilderInterface $schemaBuilder,
+        \Glueful\Security\RandomStringGenerator $randomStringGenerator,
+        array $config
     ): ArchiveService {
         return new ArchiveService(
             $connection,

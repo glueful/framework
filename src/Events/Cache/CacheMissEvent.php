@@ -18,7 +18,7 @@ class CacheMissEvent extends BaseEvent
 {
     /**
      * @param string $key Cache key that was missed
-     * @param array $tags Expected cache tags
+     * @param array<int, string> $tags Expected cache tags
      * @param mixed $valueLoader Callback to load the value
      */
     public function __construct(
@@ -42,7 +42,7 @@ class CacheMissEvent extends BaseEvent
     /**
      * Get expected tags
      *
-     * @return array Tags
+     * @return array<int, string> Tags
      */
     public function getTags(): array
     {

@@ -24,7 +24,7 @@ class Tag
      * Tag Attribute Constructor
      *
      * @param string $name Tag name
-     * @param array $attributes Additional tag attributes
+     * @param array<string, mixed> $attributes Additional tag attributes
      * @param int $priority Tag priority for ordering (higher = first)
      */
     public function __construct(
@@ -47,7 +47,7 @@ class Tag
     /**
      * Get tag attributes
      *
-     * @return array Tag attributes
+     * @return array<string, mixed> Tag attributes
      */
     public function getAttributes(): array
     {
@@ -79,7 +79,7 @@ class Tag
     /**
      * Convert to Symfony tag format
      *
-     * @return array Symfony-compatible tag definition
+     * @return array<string, mixed> Symfony-compatible tag definition
      */
     public function toSymfonyTag(): array
     {

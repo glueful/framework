@@ -19,7 +19,7 @@ class EntityCreatedEvent extends BaseEvent
     /**
      * @param mixed $entity The created entity/data
      * @param string $table Database table name
-     * @param array $metadata Additional metadata
+     * @param array<string, mixed> $metadata Additional metadata
      */
     public function __construct(
         private readonly mixed $entity,
@@ -78,11 +78,15 @@ class EntityCreatedEvent extends BaseEvent
      *
      * @return array Cache tags
      */
+    /**
+     * @return array<int, string>
+     */
     public function getCacheTags(): array
     {
         $tags = [$this->table];
 
-        if ($entityId = $this->getEntityId()) {
+        $entityId = $this->getEntityId();
+        if ($entityId !== null) {
             $tags[] = $this->table . ':' . $entityId;
         }
 
@@ -96,6 +100,6 @@ class EntityCreatedEvent extends BaseEvent
      */
     public function isUserRelated(): bool
     {
-        return in_array($this->table, ['users', 'user_sessions', 'user_preferences']);
+        return in_array($this->table, ['users', 'user_sessions', 'user_preferences'], true);
     }
 }

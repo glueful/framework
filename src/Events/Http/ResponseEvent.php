@@ -21,7 +21,7 @@ class ResponseEvent extends BaseEvent
     /**
      * @param Request $request Original HTTP request
      * @param Response $response HTTP response object
-     * @param array $metadata Additional response metadata
+     * @param array<string, mixed> $metadata Additional response metadata
      */
     public function __construct(
         private readonly Request $request,
@@ -85,7 +85,7 @@ class ResponseEvent extends BaseEvent
     public function getContentLength(): ?int
     {
         $contentLength = $this->response->headers->get('Content-Length');
-        return $contentLength ? (int)$contentLength : strlen($this->response->getContent());
+        return $contentLength !== null ? (int)$contentLength : strlen($this->response->getContent());
     }
 
     /**
@@ -162,6 +162,9 @@ class ResponseEvent extends BaseEvent
      * Get controller/action information
      *
      * @return array|null Controller and action info
+     */
+    /**
+     * @return array<string, mixed>|null
      */
     public function getControllerInfo(): ?array
     {

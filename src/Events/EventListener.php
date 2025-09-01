@@ -16,7 +16,7 @@ interface EventListener
     /**
      * Get the events that the listener should handle
      *
-     * @return array Array of event names or patterns (can include wildcards)
+     * @return array<string, string|array<string, string|int>> Array of event names or patterns (can include wildcards)
      */
     public function getSubscribedEvents(): array;
 

@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Glueful\DI\ServiceProviders;
 
-use Glueful\DI\ServiceProviders\BaseServiceProvider;
+use Glueful\DI\ServiceProviderInterface;
+use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Reference;
+use Glueful\DI\Container;
 use Intervention\Image\ImageManager;
 use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 use Intervention\Image\Drivers\Imagick\Driver as ImagickDriver;
@@ -20,18 +23,18 @@ use Psr\Log\LoggerInterface;
  * Registers image processing services in the dependency injection container.
  * Configures Intervention Image with appropriate drivers and settings.
  */
-class ImageServiceProvider extends BaseServiceProvider
+class ImageServiceProvider implements ServiceProviderInterface
 {
     /**
      * Register image processing services
      *
-     * @return void
+     * @param ContainerBuilder $container
      */
-    public function register(): void
+    public function register(ContainerBuilder $container): void
     {
-        $this->registerImageManager();
-        $this->registerImageSecurityValidator();
-        $this->registerImageProcessor();
+        $this->registerImageManager($container);
+        $this->registerImageSecurityValidator($container);
+        $this->registerImageProcessor($container);
     }
 
     /**
@@ -39,20 +42,28 @@ class ImageServiceProvider extends BaseServiceProvider
      *
      * @return void
      */
-    private function registerImageManager(): void
+    private function registerImageManager(ContainerBuilder $container): void
     {
-        $this->container->singleton(ImageManager::class, function ($container) {
-            $driverType = config('image.driver', 'gd');
+        $container->register(ImageManager::class)
+            ->setFactory([self::class, 'createImageManager'])
+            ->setPublic(true);
+    }
 
-            // Choose driver based on configuration and availability
-            $driver = match ($driverType) {
-                'imagick' => $this->createImagickDriver(),
-                'gd' => $this->createGdDriver(),
-                default => $this->createGdDriver() // Default to GD
-            };
+    /**
+     * Factory method for creating ImageManager
+     */
+    public static function createImageManager(): ImageManager
+    {
+        $driverType = config('image.driver', 'gd');
 
-            return new ImageManager($driver);
-        });
+        // Choose driver based on configuration and availability
+        $driver = match ($driverType) {
+            'imagick' => self::createImagickDriver(),
+            'gd' => self::createGdDriver(),
+            default => self::createGdDriver() // Default to GD
+        };
+
+        return new ImageManager($driver);
     }
 
     /**
@@ -60,17 +71,23 @@ class ImageServiceProvider extends BaseServiceProvider
      *
      * @return void
      */
-    private function registerImageSecurityValidator(): void
+    private function registerImageSecurityValidator(ContainerBuilder $container): void
     {
-        $this->container->singleton(ImageSecurityValidator::class, function ($container) {
-            $securityConfig = config('image.security', []);
+        $container->register(ImageSecurityValidator::class)
+            ->setFactory([self::class, 'createImageSecurityValidator'])
+            ->setPublic(true);
+    }
 
-            // Merge with limits configuration
-            $limitsConfig = config('image.limits', []);
-            $mergedConfig = array_merge($securityConfig, $limitsConfig);
+    /**
+     * Factory method for creating ImageSecurityValidator
+     */
+    public static function createImageSecurityValidator(): ImageSecurityValidator
+    {
+        $securityConfig = config('image.security', []);
+        $limitsConfig = config('image.limits', []);
+        $mergedConfig = array_merge($securityConfig, $limitsConfig);
 
-            return new ImageSecurityValidator($mergedConfig);
-        });
+        return new ImageSecurityValidator($mergedConfig);
     }
 
     /**
@@ -78,22 +95,46 @@ class ImageServiceProvider extends BaseServiceProvider
      *
      * @return void
      */
-    private function registerImageProcessor(): void
+    private function registerImageProcessor(ContainerBuilder $container): void
     {
-        $this->container->bind(ImageProcessorInterface::class, function ($container) {
-            return new ImageProcessor(
-                $container->get(ImageManager::class),
-                $container->get(CacheStore::class),
-                $container->get(ImageSecurityValidator::class),
-                $container->get(LoggerInterface::class),
-                $this->getImageProcessorConfig()
-            );
-        });
+        $container->register(ImageProcessorInterface::class)
+            ->setFactory([self::class, 'createImageProcessor'])
+            ->setArguments([
+                new Reference(ImageManager::class),
+                new Reference(CacheStore::class),
+                new Reference(ImageSecurityValidator::class),
+                new Reference(LoggerInterface::class)
+            ])
+            ->setPublic(true);
 
         // Also register the concrete implementation
-        $this->container->bind(ImageProcessor::class, function ($container) {
-            return $container->get(ImageProcessorInterface::class);
-        });
+        $container->setAlias(ImageProcessor::class, ImageProcessorInterface::class)
+            ->setPublic(true);
+    }
+
+    /**
+     * Factory method for creating ImageProcessor
+     *
+     * @param ImageManager $imageManager
+     * @param CacheStore<mixed> $cacheStore
+     * @param ImageSecurityValidator $validator
+     * @param LoggerInterface $logger
+     */
+    public static function createImageProcessor(
+        ImageManager $imageManager,
+        CacheStore $cacheStore,
+        ImageSecurityValidator $validator,
+        LoggerInterface $logger
+    ): ImageProcessor {
+        $config = self::getImageProcessorConfig();
+
+        return new ImageProcessor(
+            $imageManager,
+            $cacheStore,
+            $validator,
+            $logger,
+            $config
+        );
     }
 
     /**
@@ -101,7 +142,7 @@ class ImageServiceProvider extends BaseServiceProvider
      *
      * @return GdDriver
      */
-    private function createGdDriver(): GdDriver
+    private static function createGdDriver(): GdDriver
     {
         // Verify GD extension is loaded
         if (!extension_loaded('gd')) {
@@ -117,19 +158,17 @@ class ImageServiceProvider extends BaseServiceProvider
      * @return ImagickDriver
      * @throws \RuntimeException If ImageMagick is not available
      */
-    private function createImagickDriver(): ImagickDriver
+    private static function createImagickDriver(): GdDriver|ImagickDriver
     {
         // Check if ImageMagick extension is available
         if (!extension_loaded('imagick')) {
             // Fall back to GD if ImageMagick is not available
-            $this->logDriverFallback('imagick', 'gd', 'ImageMagick extension not loaded');
-            return $this->createGdDriver();
+            return self::createGdDriver();
         }
 
         // Verify ImageMagick is functional
         if (!class_exists('\Imagick')) {
-            $this->logDriverFallback('imagick', 'gd', 'Imagick class not found');
-            return $this->createGdDriver();
+            return self::createGdDriver();
         }
 
         return new ImagickDriver();
@@ -138,9 +177,9 @@ class ImageServiceProvider extends BaseServiceProvider
     /**
      * Get image processor configuration
      *
-     * @return array Configuration array
+     * @return array<string, mixed> Configuration array
      */
-    private function getImageProcessorConfig(): array
+    private static function getImageProcessorConfig(): array
     {
         return [
             'optimization' => config('image.optimization', []),
@@ -153,99 +192,13 @@ class ImageServiceProvider extends BaseServiceProvider
         ];
     }
 
-    /**
-     * Log driver fallback information
-     *
-     * @param string $requestedDriver Requested driver
-     * @param string $fallbackDriver Fallback driver
-     * @param string $reason Reason for fallback
-     * @return void
-     */
-    private function logDriverFallback(string $requestedDriver, string $fallbackDriver, string $reason): void
-    {
-        if ($this->container->has(LoggerInterface::class)) {
-            $logger = $this->container->get(LoggerInterface::class);
-            $logger->warning('Image driver fallback', [
-                'requested_driver' => $requestedDriver,
-                'fallback_driver' => $fallbackDriver,
-                'reason' => $reason,
-                'type' => 'image_processing'
-            ]);
-        }
-    }
 
-    /**
-     * Boot method - called after all services are registered
-     *
-     * @return void
-     */
-    public function boot(): void
-    {
-        // Verify image processing is properly configured
-        $this->validateImageConfiguration();
 
-        // Register any image processing middleware or events here
-        // if needed in the future
-    }
-
-    /**
-     * Validate image processing configuration
-     *
-     * @return void
-     * @throws \RuntimeException If configuration is invalid
-     */
-    private function validateImageConfiguration(): void
-    {
-        // Check required configuration
-        $requiredConfigs = [
-            'image.driver',
-            'image.limits.max_width',
-            'image.limits.max_height',
-        ];
-
-        foreach ($requiredConfigs as $configKey) {
-            if (!config($configKey)) {
-                throw new \RuntimeException("Missing required image configuration: {$configKey}");
-            }
-        }
-
-        // Validate driver availability
-        $driver = config('image.driver', 'gd');
-        if ($driver === 'imagick' && !extension_loaded('imagick')) {
-            $this->logDriverFallback('imagick', 'gd', 'ImageMagick not available, using GD');
-        }
-
-        // Validate cache configuration if caching is enabled
-        if (config('image.cache.enabled', true)) {
-            if (!$this->container->has(CacheStore::class)) {
-                throw new \RuntimeException('Image caching enabled but CacheStore not registered');
-            }
-        }
-
-        // Validate security settings
-        $maxWidth = config('image.limits.max_width');
-        $maxHeight = config('image.limits.max_height');
-
-        if ($maxWidth <= 0 || $maxHeight <= 0) {
-            throw new \RuntimeException('Invalid image dimension limits');
-        }
-
-        if ($maxWidth > 8192 || $maxHeight > 8192) {
-            if ($this->container->has(LoggerInterface::class)) {
-                $logger = $this->container->get(LoggerInterface::class);
-                $logger->warning('Very large image dimensions configured', [
-                    'max_width' => $maxWidth,
-                    'max_height' => $maxHeight,
-                    'type' => 'image_processing'
-                ]);
-            }
-        }
-    }
 
     /**
      * Get services provided by this provider
      *
-     * @return array
+     * @return array<int, string>
      */
     public function provides(): array
     {
@@ -255,5 +208,29 @@ class ImageServiceProvider extends BaseServiceProvider
             ImageProcessorInterface::class,
             ImageProcessor::class,
         ];
+    }
+
+    /**
+     * Get the provider name for debugging
+     */
+    public function getName(): string
+    {
+        return 'image';
+    }
+
+    /**
+     * Boot services after container is built
+     */
+    public function boot(Container $container): void
+    {
+        // Nothing to boot for image service
+    }
+
+    /**
+     * Get compiler passes for image services
+     */
+    public function getCompilerPasses(): array
+    {
+        return [];
     }
 }

@@ -16,7 +16,7 @@ use Symfony\Contracts\EventDispatcher\Event as SymfonyEvent;
  */
 abstract class BaseEvent extends SymfonyEvent
 {
-    /** @var array Event metadata for framework features */
+    /** @var array<string, mixed> Event metadata for framework features */
     private array $metadata = [];
 
     /** @var float Event creation timestamp */
@@ -27,7 +27,6 @@ abstract class BaseEvent extends SymfonyEvent
 
     public function __construct()
     {
-        parent::__construct();
         $this->timestamp = microtime(true);
         $this->eventId = uniqid('evt_', true);
     }
@@ -61,7 +60,7 @@ abstract class BaseEvent extends SymfonyEvent
      */
     public function getMetadata(?string $key = null): mixed
     {
-        return $key ? ($this->metadata[$key] ?? null) : $this->metadata;
+        return $key !== null ? ($this->metadata[$key] ?? null) : $this->metadata;
     }
 
     /**

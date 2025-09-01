@@ -14,15 +14,18 @@ use Glueful\Serialization\Attributes\{Groups, SerializedName, DateFormat};
  */
 class PaginatedResponseDTO
 {
+    /** @var array<int, mixed> */
     #[Groups(['response', 'pagination'])]
     public array $data = [];
 
     #[Groups(['response', 'pagination'])]
     public PaginationMetaDTO $pagination;
 
+    /** @var array<string, mixed>|null */
     #[Groups(['response', 'meta'])]
     public ?array $meta = null;
 
+    /** @var array<string, string|null>|null */
     #[Groups(['response', 'links'])]
     public ?array $links = null;
 
@@ -43,6 +46,9 @@ class PaginatedResponseDTO
     #[DateFormat('c')]
     public \DateTime $generatedAt;
 
+    /**
+     * @param array<int, mixed> $data
+     */
     public function __construct(
         array $data = [],
         int $currentPage = 1,
@@ -62,6 +68,9 @@ class PaginatedResponseDTO
 
     /**
      * Create paginated response from array data
+     *
+     * @param array<int, mixed> $data
+     * @param array<string, mixed>|null $meta
      */
     public static function create(
         array $data,
@@ -77,6 +86,8 @@ class PaginatedResponseDTO
 
     /**
      * Add pagination links
+     *
+     * @param array<string, mixed> $params
      */
     public function withLinks(string $baseUrl, array $params = []): self
     {
@@ -99,6 +110,8 @@ class PaginatedResponseDTO
 
     /**
      * Add metadata
+     *
+     * @param array<string, mixed> $meta
      */
     public function withMeta(array $meta): self
     {
@@ -119,11 +132,13 @@ class PaginatedResponseDTO
 
     /**
      * Build URL with query parameters
+     *
+     * @param array<string, mixed> $params
      */
     private function buildUrl(string $baseUrl, array $params): string
     {
         $query = http_build_query($params);
-        return $baseUrl . ($query ? '?' . $query : '');
+        return $baseUrl . ($query !== '' ? '?' . $query : '');
     }
 
     /**

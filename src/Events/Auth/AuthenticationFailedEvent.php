@@ -21,7 +21,7 @@ class AuthenticationFailedEvent extends BaseEvent
      * @param string $reason Failure reason
      * @param string|null $clientIp Client IP address
      * @param string|null $userAgent Client user agent
-     * @param array $metadata Additional failure metadata
+     * @param array<string, mixed> $metadata Additional failure metadata
      */
     public function __construct(
         private readonly string $username,
@@ -96,7 +96,7 @@ class AuthenticationFailedEvent extends BaseEvent
      */
     public function isUserDisabled(): bool
     {
-        return in_array($this->reason, ['user_disabled', 'user_suspended', 'user_locked']);
+        return in_array($this->reason, ['user_disabled', 'user_suspended', 'user_locked'], true);
     }
 
     /**

@@ -18,10 +18,10 @@ class QueryExecutedEvent extends BaseEvent
 {
     /**
      * @param string $sql SQL query
-     * @param array $bindings Query bindings
+     * @param array<int, mixed> $bindings Query bindings
      * @param float $executionTime Execution time in seconds
      * @param string $connectionName Database connection name
-     * @param array $metadata Additional metadata
+     * @param array<string, mixed> $metadata Additional metadata
      */
     public function __construct(
         private readonly string $sql,
@@ -52,6 +52,9 @@ class QueryExecutedEvent extends BaseEvent
      * Get query bindings
      *
      * @return array Bindings
+     */
+    /**
+     * @return array<int, mixed>
      */
     public function getBindings(): array
     {
@@ -136,6 +139,6 @@ class QueryExecutedEvent extends BaseEvent
      */
     public function isModifying(): bool
     {
-        return in_array($this->getQueryType(), ['INSERT', 'UPDATE', 'DELETE']);
+        return in_array($this->getQueryType(), ['INSERT', 'UPDATE', 'DELETE'], true);
     }
 }

@@ -170,13 +170,16 @@ class CoreServiceProvider implements ServiceProviderInterface
 
     /**
      * Factory method for creating logger
+     *
+     * @param mixed $container
      */
-    public static function createLogger($container): \Psr\Log\LoggerInterface
+    public static function createLogger(mixed $container): \Psr\Log\LoggerInterface
     {
         // Framework logging should be optional and configurable
         $config = config('logging.framework', []);
 
-        if (!($config['enabled'] ?? true)) {
+        $enabled = $config['enabled'] ?? true;
+        if ($enabled !== true) {
             return new \Psr\Log\NullLogger();
         }
 
@@ -188,7 +191,8 @@ class CoreServiceProvider implements ServiceProviderInterface
         $channelConfig = config('logging.channels.framework', []);
         $logLevel = \Monolog\Logger::toMonologLevel($config['level'] ?? 'info');
 
-        if (env('APP_DEBUG', false)) {
+        $debug = env('APP_DEBUG', false);
+        if ($debug === true) {
             $logLevel = \Monolog\Logger::toMonologLevel('debug');
         }
 

@@ -70,15 +70,15 @@ final class AutoConfigServiceProvider implements ServiceProviderInterface
     public static function createRedis(): \Redis
     {
         $redis = new \Redis();
-        $host = config('cache.stores.redis.host') ?: env('REDIS_HOST', '127.0.0.1');
-        $port = (int)(config('cache.stores.redis.port') ?: env('REDIS_PORT', 6379));
-        $timeout = (float)(config('cache.stores.redis.timeout') ?: env('REDIS_TIMEOUT', 2.5));
-        $password = config('cache.stores.redis.password') ?: env('REDIS_PASSWORD', null);
+        $host = config('cache.stores.redis.host') ?? env('REDIS_HOST', '127.0.0.1');
+        $port = (int)(config('cache.stores.redis.port') ?? env('REDIS_PORT', 6379));
+        $timeout = (float)(config('cache.stores.redis.timeout') ?? env('REDIS_TIMEOUT', 2.5));
+        $password = config('cache.stores.redis.password') ?? env('REDIS_PASSWORD', null);
         $redis->connect($host, $port, $timeout);
-        if (!empty($password)) {
+        if ($password !== null && $password !== '') {
             $redis->auth($password);
         }
-        $db = (int)(config('cache.stores.redis.database') ?: env('REDIS_DB', 0));
+        $db = (int)(config('cache.stores.redis.database') ?? env('REDIS_DB', 0));
         if ($db > 0) {
             $redis->select($db);
         }
@@ -99,7 +99,7 @@ final class AutoConfigServiceProvider implements ServiceProviderInterface
         if ($defaultMailer === null || !isset($mailers[$defaultMailer])) {
             // Fallback to explicit DSN if provided via env
             $fallbackDsn = env('MAILER_DSN');
-            if (!$fallbackDsn) {
+            if ($fallbackDsn === null || $fallbackDsn === false || $fallbackDsn === '') {
                 return;
             }
             $dsn = (string) $fallbackDsn;
@@ -129,6 +129,9 @@ final class AutoConfigServiceProvider implements ServiceProviderInterface
 
     /**
      * Build a Symfony Mailer DSN from a mailer config entry.
+     *
+     * @param array<string, mixed> $cfg
+     * @param string $name
      */
     private static function buildMailerDsn(array $cfg, string $name): string
     {
@@ -168,7 +171,7 @@ final class AutoConfigServiceProvider implements ServiceProviderInterface
 
         // Try key/token-based API DSN
         $key = $cfg['key'] ?? $cfg['token'] ?? null;
-        if (!empty($key)) {
+        if ($key !== null && $key !== '') {
             return $transport . '://' . rawurlencode((string) $key) . '@default';
         }
 

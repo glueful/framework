@@ -21,7 +21,7 @@ class ExceptionEvent extends BaseEvent
     /**
      * @param Request $request Original HTTP request
      * @param Throwable $exception Exception that occurred
-     * @param array $metadata Additional exception metadata
+     * @param array<string, mixed> $metadata Additional exception metadata
      */
     public function __construct(
         private readonly Request $request,
@@ -111,6 +111,9 @@ class ExceptionEvent extends BaseEvent
      * Get exception trace
      *
      * @return array Stack trace
+     */
+    /**
+     * @return array<int, array<string, mixed>>
      */
     public function getTrace(): array
     {

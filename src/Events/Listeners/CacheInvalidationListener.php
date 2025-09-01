@@ -23,7 +23,7 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
  */
 class CacheInvalidationListener implements EventSubscriberInterface
 {
-    /** @var array Cache invalidation patterns by table */
+    /** @var array<string, array<int, string>> Cache invalidation patterns by table */
     private array $invalidationPatterns = [
         'users' => [
             'user:{id}',
@@ -48,6 +48,9 @@ class CacheInvalidationListener implements EventSubscriberInterface
         ]
     ];
 
+    /**
+     * @param CacheStore<mixed> $cache
+     */
     public function __construct(
         private CacheStore $cache
     ) {
@@ -57,6 +60,9 @@ class CacheInvalidationListener implements EventSubscriberInterface
      * Define subscribed events
      *
      * @return array
+     */
+    /**
+     * @return array<string, string>
      */
     public static function getSubscribedEvents(): array
     {
@@ -90,7 +96,8 @@ class CacheInvalidationListener implements EventSubscriberInterface
     public function onSessionCreated(SessionCreatedEvent $event): void
     {
         // Invalidate user-related cache
-        if ($userUuid = $event->getUserUuid()) {
+        $userUuid = $event->getUserUuid();
+        if ($userUuid !== null) {
             $invalidatedKeys = [];
 
             // Invalidate specific user cache keys
@@ -119,7 +126,8 @@ class CacheInvalidationListener implements EventSubscriberInterface
     public function onSessionDestroyed(SessionDestroyedEvent $event): void
     {
         // Invalidate session and user cache
-        if ($userUuid = $event->getUserUuid()) {
+        $userUuid = $event->getUserUuid();
+        if ($userUuid !== null) {
             $invalidatedKeys = [];
 
             $keysToInvalidate = [
@@ -180,7 +188,7 @@ class CacheInvalidationListener implements EventSubscriberInterface
      *
      * @param string $pattern Cache key pattern
      * @param string $entityId Entity ID
-     * @return array Array of cache keys
+     * @return array<int, string> Array of cache keys
      */
     private function resolveCachePattern(string $pattern, string $entityId): array
     {
@@ -189,14 +197,9 @@ class CacheInvalidationListener implements EventSubscriberInterface
 
         // Handle wildcard patterns
         if (str_contains($resolvedPattern, '*')) {
-            // Use cache's deletePattern method if available
-            if (method_exists($this->cache, 'deletePattern')) {
-                $this->cache->deletePattern($resolvedPattern);
-                return [$resolvedPattern]; // Return pattern for logging
-            }
-
-            // Fallback: try to get all keys matching pattern
-            return $this->getKeysMatchingPattern($resolvedPattern);
+            // Use cache's deletePattern method
+            $this->cache->deletePattern($resolvedPattern);
+            return [$resolvedPattern]; // Return pattern for logging
         }
 
         return [$resolvedPattern];
@@ -208,6 +211,9 @@ class CacheInvalidationListener implements EventSubscriberInterface
      * @param string $pattern Pattern with wildcards
      * @return array Matching keys
      */
+    /**
+     * @return array<int, string>
+     */
     private function getKeysMatchingPattern(string $pattern): array
     {
         // This is a simplified implementation - in production you might want
@@ -218,12 +224,10 @@ class CacheInvalidationListener implements EventSubscriberInterface
         $regex = str_replace(['*', ':'], ['.*', '\\:'], $pattern);
         $regex = "/^{$regex}$/";
 
-        // If cache has a getAllKeys method, use it
-        if (method_exists($this->cache, 'getAllKeys')) {
-            foreach ($this->cache->getAllKeys() as $key) {
-                if (preg_match($regex, $key)) {
-                    $keys[] = $key;
-                }
+        // Use cache's getAllKeys method
+        foreach ($this->cache->getAllKeys() as $key) {
+            if (preg_match($regex, $key)) {
+                $keys[] = $key;
             }
         }
 
@@ -233,15 +237,14 @@ class CacheInvalidationListener implements EventSubscriberInterface
     /**
      * Dispatch cache invalidation event
      *
-     * @param array $invalidatedKeys Keys that were invalidated
+     * @param array<int, string> $invalidatedKeys Keys that were invalidated
      * @param string $reason Reason for invalidation
-     * @param array $metadata Additional metadata
+     * @param array<string, mixed> $metadata Additional metadata
      */
     private function dispatchCacheInvalidationEvent(array $invalidatedKeys, string $reason, array $metadata = []): void
     {
-        if (!empty($invalidatedKeys)) {
-            $event = new CacheInvalidatedEvent($invalidatedKeys, array_merge($metadata, [
-                'reason' => $reason,
+        if (count($invalidatedKeys) > 0) {
+            $event = new CacheInvalidatedEvent($invalidatedKeys, [], $reason, array_merge($metadata, [
                 'timestamp' => time(),
                 'count' => count($invalidatedKeys)
             ]));
@@ -253,7 +256,7 @@ class CacheInvalidationListener implements EventSubscriberInterface
      * Add custom invalidation pattern for a table
      *
      * @param string $table Table name
-     * @param array $patterns Cache key patterns
+     * @param array<int, string> $patterns Cache key patterns
      */
     public function addInvalidationPatterns(string $table, array $patterns): void
     {
@@ -271,7 +274,7 @@ class CacheInvalidationListener implements EventSubscriberInterface
      * Get invalidation patterns for a table
      *
      * @param string $table Table name
-     * @return array Patterns
+     * @return array<int, string> Patterns
      */
     public function getInvalidationPatterns(string $table): array
     {

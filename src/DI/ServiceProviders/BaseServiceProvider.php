@@ -49,6 +49,9 @@ abstract class BaseServiceProvider implements ServiceProviderInterface
 
     /**
      * Register a singleton service (shared instance)
+     *
+     * @param string $abstract
+     * @param string|callable|null $concrete
      */
     protected function singleton(string $abstract, $concrete = null): void
     {
@@ -65,6 +68,9 @@ abstract class BaseServiceProvider implements ServiceProviderInterface
 
     /**
      * Bind a service to the container
+     *
+     * @param string $abstract
+     * @param string|callable|null $concrete
      */
     protected function bind(string $abstract, $concrete = null): void
     {
@@ -101,6 +107,10 @@ abstract class BaseServiceProvider implements ServiceProviderInterface
 
     /**
      * Tag a service
+     *
+     * @param string $serviceId
+     * @param string $tag
+     * @param array<string, mixed> $attributes
      */
     protected function tagService(string $serviceId, string $tag, array $attributes = []): void
     {
@@ -119,6 +129,10 @@ abstract class BaseServiceProvider implements ServiceProviderInterface
 
     /**
      * Register a service with explicit arguments
+     *
+     * @param string $id
+     * @param string $class
+     * @param array<int, mixed> $arguments
      */
     protected function service(string $id, string $class, array $arguments = []): void
     {

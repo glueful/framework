@@ -6,7 +6,6 @@ namespace Glueful\DI;
 
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Dumper\PhpDumper;
-use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
 use Symfony\Component\Config\FileLocator;
 use Glueful\DI\Passes\TaggedServicePass;
@@ -182,7 +181,7 @@ class ContainerFactory
         }
 
         foreach ($extensionsData['extensions'] as $extensionName => $config) {
-            if (!($config['enabled'] ?? false)) {
+            if (($config['enabled'] ?? false) !== true) {
                 continue;
             }
 
@@ -306,7 +305,8 @@ class ContainerFactory
         $parts = [];
         if (is_dir($configDir)) {
             foreach (glob($configDir . '/*.php') as $file) {
-                $parts[] = md5_file($file) ?: '';
+                $hash = md5_file($file);
+                $parts[] = $hash !== false ? $hash : '';
             }
         }
         return substr(sha1(implode('|', $parts)), 0, 8);
@@ -336,7 +336,8 @@ class ContainerFactory
             // Cleanup older compiled containers for this environment
             $dir = dirname($file);
             $env = (string) config('app.env', env('APP_ENV', 'production'));
-            foreach (glob($dir . "/container_{$env}_*.php") ?: [] as $old) {
+            $files = glob($dir . "/container_{$env}_*.php");
+            foreach ($files !== false ? $files : [] as $old) {
                 if ($old !== $file) {
                     @unlink($old);
                 }

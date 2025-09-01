@@ -18,9 +18,9 @@ use Glueful\Events\BaseEvent;
 class SessionCreatedEvent extends BaseEvent
 {
     /**
-     * @param array $sessionData Session data (uuid, username, email, etc.)
-     * @param array $tokens Access and refresh tokens
-     * @param array $metadata Additional session metadata
+     * @param array<string, mixed> $sessionData Session data (uuid, username, email, etc.)
+     * @param array<string, string> $tokens Access and refresh tokens
+     * @param array<string, mixed> $metadata Additional session metadata
      */
     public function __construct(
         private readonly array $sessionData,
@@ -38,7 +38,7 @@ class SessionCreatedEvent extends BaseEvent
     /**
      * Get session data
      *
-     * @return array Session data
+     * @return array<string, mixed> Session data
      */
     public function getSessionData(): array
     {
@@ -68,7 +68,7 @@ class SessionCreatedEvent extends BaseEvent
     /**
      * Get tokens
      *
-     * @return array Tokens array
+     * @return array<string, string> Tokens array
      */
     public function getTokens(): array
     {

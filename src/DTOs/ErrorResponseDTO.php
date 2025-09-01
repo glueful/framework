@@ -29,12 +29,15 @@ class ErrorResponseDTO
     #[Groups(['error', 'detailed'])]
     public ?string $type = null;
 
+    /** @var array<string, mixed>|null */
     #[Groups(['error', 'detailed'])]
     public ?array $details = null;
 
+    /** @var array<string, mixed>|null */
     #[Groups(['error', 'detailed'])]
     public ?array $context = null;
 
+    /** @var array<string, mixed>|null */
     #[Groups(['error', 'validation'])]
     public ?array $validation = null;
 
@@ -44,9 +47,11 @@ class ErrorResponseDTO
     #[Groups(['error', 'debug'])]
     public ?int $line = null;
 
+    /** @var array<int, array<string, mixed>>|null */
     #[Groups(['error', 'debug'])]
     public ?array $trace = null;
 
+    /** @var array<string, mixed>|null */
     #[Groups(['error', 'debug'])]
     public ?array $previous = null;
 
@@ -103,7 +108,7 @@ class ErrorResponseDTO
         $error = new self(
             $exception::class,
             $exception->getMessage(),
-            $exception->getCode() ?: 500,
+            $exception->getCode() !== 0 ? $exception->getCode() : 500,
             'exception'
         );
 
@@ -116,7 +121,7 @@ class ErrorResponseDTO
         }
 
         // Handle previous exceptions
-        if ($exception->getPrevious()) {
+        if ($exception->getPrevious() !== null) {
             $error->previous = [
                 'class' => $exception->getPrevious()::class,
                 'message' => $exception->getPrevious()->getMessage(),
@@ -129,6 +134,8 @@ class ErrorResponseDTO
 
     /**
      * Create validation error
+     *
+     * @param array<string, mixed> $errors
      */
     public static function createValidationError(array $errors, string $message = 'Validation failed'): self
     {
@@ -172,9 +179,9 @@ class ErrorResponseDTO
     /**
      * Create not found error
      */
-    public static function notFound(string $resource = 'Resource', string $identifier = null): self
+    public static function notFound(string $resource = 'Resource', ?string $identifier = null): self
     {
-        $message = $identifier
+        $message = $identifier !== null
             ? "{$resource} with identifier '{$identifier}' not found"
             : "{$resource} not found";
 
@@ -189,7 +196,7 @@ class ErrorResponseDTO
     /**
      * Create rate limit error
      */
-    public static function rateLimit(int $retryAfter = null): self
+    public static function rateLimit(?int $retryAfter = null): self
     {
         $error = new self(
             'RateLimitError',
@@ -198,7 +205,7 @@ class ErrorResponseDTO
             'rate_limit'
         );
 
-        if ($retryAfter) {
+        if ($retryAfter !== null) {
             $error->details = ['retry_after' => $retryAfter];
         }
 
@@ -240,6 +247,8 @@ class ErrorResponseDTO
 
     /**
      * Add additional details
+     *
+     * @param array<string, mixed> $details
      */
     public function withDetails(array $details): self
     {
@@ -249,6 +258,8 @@ class ErrorResponseDTO
 
     /**
      * Add context information
+     *
+     * @param array<string, mixed> $context
      */
     public function withContext(array $context): self
     {
@@ -298,6 +309,8 @@ class ErrorResponseDTO
 
     /**
      * Get error summary for logging
+     *
+     * @return array<string, mixed>
      */
     public function getSummary(): array
     {

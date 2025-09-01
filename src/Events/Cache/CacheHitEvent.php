@@ -19,7 +19,7 @@ class CacheHitEvent extends BaseEvent
     /**
      * @param string $key Cache key
      * @param mixed $value Retrieved value
-     * @param array $tags Cache tags
+     * @param array<int, string> $tags Cache tags
      * @param float $retrievalTime Time to retrieve in seconds
      */
     public function __construct(
@@ -54,7 +54,7 @@ class CacheHitEvent extends BaseEvent
     /**
      * Get cache tags
      *
-     * @return array Tags
+     * @return array<int, string> Tags
      */
     public function getTags(): array
     {

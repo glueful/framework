@@ -71,16 +71,22 @@ class FileServiceProvider implements ServiceProviderInterface
 
     /**
      * Factory method for creating FileManager
+     *
+     * @param \Psr\Log\LoggerInterface $logger
+     * @param array<string, mixed> $config
      */
-    public static function createFileManager($logger, $config): FileManager
+    public static function createFileManager(\Psr\Log\LoggerInterface $logger, array $config): FileManager
     {
         return new FileManager($logger, $config);
     }
 
     /**
      * Factory method for creating FileFinder
+     *
+     * @param \Psr\Log\LoggerInterface $logger
+     * @param array<string, mixed> $config
      */
-    public static function createFileFinder($logger, $config): FileFinder
+    public static function createFileFinder(\Psr\Log\LoggerInterface $logger, array $config): FileFinder
     {
         return new FileFinder($logger, $config);
     }

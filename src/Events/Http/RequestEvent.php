@@ -19,7 +19,7 @@ class RequestEvent extends BaseEvent
 {
     /**
      * @param Request $request HTTP request object
-     * @param array $metadata Additional request metadata
+     * @param array<string, mixed> $metadata Additional request metadata
      */
     public function __construct(
         private readonly Request $request,
@@ -127,7 +127,7 @@ class RequestEvent extends BaseEvent
     /**
      * Get route information from metadata
      *
-     * @return array|null Route data
+     * @return array<string, mixed>|null Route data
      */
     public function getRouteInfo(): ?array
     {

@@ -18,9 +18,8 @@ class Container implements ContainerInterface
     }
 
     /**
-     * @template T of object
-     * @param class-string<T> $id
-     * @return T
+     * @param string $id
+     * @return mixed
      */
     public function get(string $id): mixed
     {
@@ -28,8 +27,10 @@ class Container implements ContainerInterface
             return $this->container->get($id);
         } catch (\Throwable $e) {
             $class = get_class($e);
-            if ($class === '\\Symfony\\Component\\DependencyInjection\\Exception\\ServiceNotFoundException'
-                || str_contains($class, 'ServiceNotFound')) {
+            if (
+                $class === '\\Symfony\\Component\\DependencyInjection\\Exception\\ServiceNotFoundException'
+                || str_contains($class, 'ServiceNotFound')
+            ) {
                 $suggestion = $this->findClosestServiceId($id);
                 $available = $this->getServiceIds();
                 $preview = array_slice($available, 0, 10);
@@ -37,11 +38,18 @@ class Container implements ContainerInterface
                 if ($suggestion !== null) {
                     $message .= " Did you mean [{$suggestion}]?";
                 }
-                if (!empty($preview)) {
+                if (count($preview) > 0) {
                     $more = max(count($available) - count($preview), 0);
-                    $message .= " Available services: " . implode(', ', $preview) . ($more > 0 ? "... and {$more} more." : '');
+                    $message .= " Available services: " . implode(', ', $preview) .
+                        ($more > 0 ? "... and {$more} more." : '');
                 }
-                throw new \Symfony\Component\DependencyInjection\Exception\ServiceNotFoundException($id, previous: $e, message: $message);
+                throw new \Symfony\Component\DependencyInjection\Exception\ServiceNotFoundException(
+                    $id,
+                    null,
+                    null,
+                    [],
+                    $message
+                );
             }
             throw $e;
         }
@@ -94,9 +102,17 @@ class Container implements ContainerInterface
             return $this->container->getServiceIds();
         }
 
-        // For compiled containers, we need to use reflection to get service IDs
-        if (method_exists($this->container, 'getServiceIds')) {
-            return $this->container->getServiceIds();
+        // For compiled containers, try to get service IDs via reflection
+        try {
+            $reflection = new \ReflectionClass($this->container);
+            if ($reflection->hasMethod('getServiceIds')) {
+                $method = $reflection->getMethod('getServiceIds');
+                if ($method->isPublic()) {
+                    return $method->invoke($this->container);
+                }
+            }
+        } catch (\ReflectionException) {
+            // Fallback to empty array if reflection fails
         }
 
         // Fallback for basic containers - return empty array

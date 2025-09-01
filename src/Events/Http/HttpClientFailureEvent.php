@@ -22,7 +22,7 @@ class HttpClientFailureEvent extends BaseEvent
      * @param string $url The URL that failed
      * @param HttpException $exception The exception that occurred
      * @param string $failureReason Reason for failure (connection_failed, request_failed, etc.)
-     * @param array $context Additional context data
+     * @param array<string, mixed> $context Additional context data
      */
     public function __construct(
         public readonly string $method,

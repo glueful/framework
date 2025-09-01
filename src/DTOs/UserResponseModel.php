@@ -68,9 +68,11 @@ class UserResponseModel
     #[DateFormat('Y-m-d')]
     public ?\DateTime $dateOfBirth = null;
 
+    /** @var array<string, mixed> */
     #[Groups(['detailed'])]
     public array $preferences = [];
 
+    /** @var array<int, string> */
     #[Groups(['detailed'])]
     public array $permissions = [];
 
@@ -90,6 +92,7 @@ class UserResponseModel
     #[MaxDepth(2)]
     public ?UserResponseModel $manager = null;
 
+    /** @var array<int, UserResponseModel> */
     #[Groups(['detailed'])]
     #[MaxDepth(1)]
     public array $subordinates = [];
@@ -172,14 +175,14 @@ class UserResponseModel
         $response->userAgent = $user->userAgent;
 
         // Handle dates
-        if ($user->createdAt) {
+        if ($user->createdAt !== null) {
             $response->createdAt = $user->createdAt;
             $response->memberSince = $user->createdAt;
         }
-        if ($user->updatedAt) {
+        if ($user->updatedAt !== null) {
             $response->updatedAt = $user->updatedAt;
         }
-        if ($user->lastLogin) {
+        if ($user->lastLogin !== null) {
             $response->lastLogin = $user->lastLogin;
         }
 
@@ -188,6 +191,8 @@ class UserResponseModel
 
     /**
      * Get public profile data
+     *
+     * @return array<string, mixed>
      */
     public function getPublicProfile(): array
     {
@@ -209,6 +214,8 @@ class UserResponseModel
 
     /**
      * Get summary for lists
+     *
+     * @return array<string, mixed>
      */
     public function getSummary(): array
     {

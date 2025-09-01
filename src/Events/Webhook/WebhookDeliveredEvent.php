@@ -14,6 +14,9 @@ use Glueful\Events\BaseEvent;
  */
 class WebhookDeliveredEvent extends BaseEvent
 {
+    /**
+     * @param array<string, mixed> $payload
+     */
     public function __construct(
         public readonly string $url,
         public readonly array $payload,
@@ -33,6 +36,9 @@ class WebhookDeliveredEvent extends BaseEvent
 
     /**
      * Get the webhook payload
+     */
+    /**
+     * @return array<string, mixed>
      */
     public function getPayload(): array
     {

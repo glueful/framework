@@ -118,18 +118,22 @@ class ValidatorServiceProvider implements ServiceProviderInterface
 
     /**
      * Factory method for creating Symfony Validator
+     *
+     * @param mixed $container
      */
-    public static function createValidator($container): ValidatorInterface
+    public static function createValidator(mixed $container): ValidatorInterface
     {
         $validatorBuilder = new ValidatorBuilder();
         $validatorBuilder->enableAttributeMapping();
 
         // Create custom constraint validator factory that uses DI container
         $validatorFactory = new class ($container) extends ConstraintValidatorFactory {
+            /** @var mixed */
             private $container;
 
-            public function __construct($container)
+            public function __construct(mixed $container)
             {
+                parent::__construct();
                 $this->container = $container;
             }
 
@@ -154,19 +158,26 @@ class ValidatorServiceProvider implements ServiceProviderInterface
 
     /**
      * Factory method for creating ConstraintCompiler
+     *
+     * @param mixed $cacheStore
+     * @param mixed $config
      */
-    public static function createConstraintCompiler($cacheStore, $config): ConstraintCompiler
+    public static function createConstraintCompiler(mixed $cacheStore, mixed $config): ConstraintCompiler
     {
         return new ConstraintCompiler($cacheStore, $config);
     }
 
     /**
      * Factory method for creating LazyValidationProvider
+     *
+     * @param mixed $container
+     * @param ConstraintCompiler $compiler
+     * @param mixed $config
      */
     public static function createLazyValidationProvider(
-        $container,
+        mixed $container,
         ConstraintCompiler $compiler,
-        $config
+        mixed $config
     ): LazyValidationProvider {
         return new LazyValidationProvider($container, $compiler, $config);
     }

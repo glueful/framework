@@ -50,19 +50,19 @@ class Event
      */
     public static function dispatch(object $event, ?string $eventName = null): object
     {
-        if (!self::$dispatcher) {
+        if (self::$dispatcher === null) {
             self::initializeFromContainer();
         }
 
         // If no dispatcher is available, silently return the event without dispatching
-        if (!self::$dispatcher) {
+        if (self::$dispatcher === null) {
             return $event;
         }
 
         $eventName = $eventName ?? get_class($event);
 
         // Optional event logging for debugging
-        if (self::$logEvents && self::$logger) {
+        if (self::$logEvents && self::$logger !== null) {
             self::$logger->debug('Event dispatched', [
                 'type' => 'event',
                 'event_name' => $eventName,
@@ -73,7 +73,7 @@ class Event
 
         if ($event instanceof BaseEvent) {
         // Add any framework-specific handling here
-            if (self::$logEvents && self::$logger) {
+            if (self::$logEvents && self::$logger !== null) {
                 self::$logger->debug('Glueful event dispatched', [
                 'event_id' => $event->getEventId(),
                 'event_name' => $event->getName(),
@@ -109,7 +109,7 @@ class Event
      */
     public static function listen(string $eventName, callable $listener, int $priority = 0): void
     {
-        if (!self::$dispatcher) {
+        if (self::$dispatcher === null) {
             self::initializeFromContainer();
         }
 
@@ -124,7 +124,7 @@ class Event
      */
     public static function forget(string $eventName, callable $listener): void
     {
-        if (!self::$dispatcher) {
+        if (self::$dispatcher === null) {
             return;
         }
 
@@ -137,9 +137,12 @@ class Event
      * @param string|null $eventName The event name (null for all listeners)
      * @return array The listeners
      */
+    /**
+     * @return array<string, array<callable>>
+     */
     public static function getListeners(?string $eventName = null): array
     {
-        if (!self::$dispatcher) {
+        if (self::$dispatcher === null) {
             return [];
         }
 
@@ -154,7 +157,7 @@ class Event
      */
     public static function hasListeners(?string $eventName = null): bool
     {
-        if (!self::$dispatcher) {
+        if (self::$dispatcher === null) {
             return false;
         }
 
@@ -192,9 +195,6 @@ class Event
 
         try {
             $container = container();
-            if (!$container) {
-                return;
-            }
 
             if ($container->has(SymfonyEventDispatcherInterface::class)) {
                 self::$dispatcher = $container->get(SymfonyEventDispatcherInterface::class);

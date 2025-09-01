@@ -28,7 +28,11 @@ class LockServiceProvider implements ServiceProviderInterface
         $container->setAlias('lock', LockManagerInterface::class);
     }
 
-    protected static function createRedisStore($container, array $config): RedisLockStore
+    /**
+     * @param mixed $container
+     * @param array<string, mixed> $config
+     */
+    protected static function createRedisStore(mixed $container, array $config): RedisLockStore
     {
         if (!$container->has(\Redis::class)) {
             throw new \RuntimeException('Redis service not found in container. Please ensure Redis is configured.');
@@ -42,7 +46,11 @@ class LockServiceProvider implements ServiceProviderInterface
         ]);
     }
 
-    protected static function createDatabaseStore($container, array $config): DatabaseLockStore
+    /**
+     * @param mixed $container
+     * @param array<string, mixed> $config
+     */
+    protected static function createDatabaseStore(mixed $container, array $config): DatabaseLockStore
     {
         if (!$container->has(DatabaseInterface::class)) {
             throw new \RuntimeException('Database service not found in container.');
@@ -58,11 +66,14 @@ class LockServiceProvider implements ServiceProviderInterface
         ]);
     }
 
+    /**
+     * @param array<string, mixed> $config
+     */
     protected static function createFileStore(array $config): FileLockStore
     {
         $path = $config['path'] ?? null;
 
-        if ($path && !str_starts_with($path, '/')) {
+        if ($path !== null && !str_starts_with($path, '/')) {
             // Convert relative path to absolute using storage directory
             $storagePath = config('app.paths.storage_path', __DIR__ . '/../../../storage');
             $path = rtrim($storagePath, '/') . '/' . ltrim($path, '/');
@@ -112,8 +123,10 @@ class LockServiceProvider implements ServiceProviderInterface
 
     /**
      * Factory method for creating LockManager
+     *
+     * @param mixed $container
      */
-    public static function createLockManager($container): LockManagerInterface
+    public static function createLockManager(mixed $container): LockManagerInterface
     {
         $config = config('lock', []);
         $logger = $container->has('logger') ? $container->get('logger') : null;

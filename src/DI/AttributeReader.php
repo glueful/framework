@@ -38,7 +38,7 @@ class AttributeReader
         $reflection = new \ReflectionClass($className);
         $serviceAttribute = $this->getServiceAttribute($reflection);
 
-        if (!$serviceAttribute) {
+        if ($serviceAttribute === null) {
             return; // Not marked as a service
         }
 
@@ -57,7 +57,7 @@ class AttributeReader
         $this->processServiceTags($definition, $reflection);
 
         // Process factory if specified
-        if ($serviceAttribute->getFactory()) {
+        if ($serviceAttribute->getFactory() !== null) {
             $definition->setFactory($serviceAttribute->getFactory());
         }
 
@@ -105,26 +105,26 @@ class AttributeReader
     /**
      * Get Service attribute from class
      *
-     * @param \ReflectionClass $reflection Class reflection
+     * @param \ReflectionClass<object> $reflection Class reflection
      * @return Service|null Service attribute or null
      */
     private function getServiceAttribute(\ReflectionClass $reflection): ?Service
     {
         $attributes = $reflection->getAttributes(Service::class);
-        return $attributes ? $attributes[0]->newInstance() : null;
+        return count($attributes) > 0 ? $attributes[0]->newInstance() : null;
     }
 
     /**
      * Process constructor parameter autowiring
      *
      * @param Definition $definition Service definition
-     * @param \ReflectionClass $reflection Class reflection
+     * @param \ReflectionClass<object> $reflection Class reflection
      * @return void
      */
     private function processConstructorAutowiring(Definition $definition, \ReflectionClass $reflection): void
     {
         $constructor = $reflection->getConstructor();
-        if (!$constructor) {
+        if ($constructor === null) {
             return;
         }
 
@@ -132,19 +132,19 @@ class AttributeReader
         foreach ($constructor->getParameters() as $parameter) {
             $autowireAttribute = $this->getParameterAutowireAttribute($parameter);
 
-            if ($autowireAttribute) {
+            if ($autowireAttribute !== null) {
                 $arguments[] = $this->resolveAutowiredArgument($autowireAttribute, $parameter);
             } else {
                 // Auto-wire by type if no explicit autowiring
                 $type = $parameter->getType();
-                if ($type && $type instanceof \ReflectionNamedType && !$type->isBuiltin()) {
+                if ($type !== null && $type instanceof \ReflectionNamedType && !$type->isBuiltin()) {
                     $typeName = $type->getName();
                     $arguments[] = new Reference($typeName);
                 }
             }
         }
 
-        if (!empty($arguments)) {
+        if (count($arguments) > 0) {
             $definition->setArguments($arguments);
         }
     }
@@ -153,7 +153,7 @@ class AttributeReader
      * Process service tags from attributes
      *
      * @param Definition $definition Service definition
-     * @param \ReflectionClass $reflection Class reflection
+     * @param \ReflectionClass<object> $reflection Class reflection
      * @return void
      */
     private function processServiceTags(Definition $definition, \ReflectionClass $reflection): void
@@ -175,7 +175,7 @@ class AttributeReader
     private function getParameterAutowireAttribute(\ReflectionParameter $parameter): ?Autowire
     {
         $attributes = $parameter->getAttributes(Autowire::class);
-        return $attributes ? $attributes[0]->newInstance() : null;
+        return count($attributes) > 0 ? $attributes[0]->newInstance() : null;
     }
 
     /**
@@ -201,7 +201,7 @@ class AttributeReader
             default:
                 // Auto-wire by type
                 $type = $parameter->getType();
-                if ($type && $type instanceof \ReflectionNamedType && !$type->isBuiltin()) {
+                if ($type !== null && $type instanceof \ReflectionNamedType && !$type->isBuiltin()) {
                     $typeName = $type->getName();
                     return new Reference($typeName);
                 }
@@ -213,7 +213,7 @@ class AttributeReader
      * Validate attribute configuration
      *
      * @param string $className Class name to validate
-     * @return array Validation results
+     * @return array<string> Validation results
      */
     public function validateClass(string $className): array
     {
@@ -228,18 +228,18 @@ class AttributeReader
             $reflection = new \ReflectionClass($className);
             $serviceAttribute = $this->getServiceAttribute($reflection);
 
-            if (!$serviceAttribute) {
+            if ($serviceAttribute === null) {
                 return $issues; // No service attribute, nothing to validate
             }
 
             // Validate constructor parameters
             $constructor = $reflection->getConstructor();
-            if ($constructor) {
+            if ($constructor !== null) {
                 foreach ($constructor->getParameters() as $parameter) {
                     $autowire = $this->getParameterAutowireAttribute($parameter);
-                    if ($autowire) {
+                    if ($autowire !== null) {
                         $validationResult = $this->validateAutowireAttribute($autowire, $parameter);
-                        if ($validationResult) {
+                        if ($validationResult !== null) {
                             $issues[] = $validationResult;
                         }
                     }
@@ -263,11 +263,14 @@ class AttributeReader
     {
         $injectionType = $autowire->getInjectionType();
 
-        if ($injectionType === 'service' && empty($autowire->getService())) {
+        if ($injectionType === 'service' && ($autowire->getService() === null || $autowire->getService() === '')) {
             return "Parameter {$parameter->getName()} has empty service ID";
         }
 
-        if ($injectionType === 'parameter' && empty($autowire->getParameter())) {
+        if (
+            $injectionType === 'parameter' &&
+            ($autowire->getParameter() === null || $autowire->getParameter() === '')
+        ) {
             return "Parameter {$parameter->getName()} has empty parameter name";
         }
 

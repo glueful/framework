@@ -14,6 +14,9 @@ use Glueful\Events\BaseEvent;
  */
 class HttpAuthSuccessEvent extends BaseEvent
 {
+    /**
+     * @param array<string, mixed> $tokenMetadata
+     */
     public function __construct(
         public readonly Request $request,
         public readonly array $tokenMetadata

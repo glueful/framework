@@ -17,10 +17,10 @@ use Glueful\Events\BaseEvent;
 class CacheInvalidatedEvent extends BaseEvent
 {
     /**
-     * @param array $keys Invalidated cache keys
-     * @param array $tags Invalidated cache tags
+     * @param array<int, string> $keys Invalidated cache keys
+     * @param array<int, string> $tags Invalidated cache tags
      * @param string $reason Invalidation reason
-     * @param array $metadata Additional metadata
+     * @param array<string, mixed> $metadata Additional metadata
      */
     public function __construct(
         private readonly array $keys = [],
@@ -39,7 +39,7 @@ class CacheInvalidatedEvent extends BaseEvent
     /**
      * Get invalidated keys
      *
-     * @return array Cache keys
+     * @return array<int, string> Cache keys
      */
     public function getKeys(): array
     {
@@ -49,7 +49,7 @@ class CacheInvalidatedEvent extends BaseEvent
     /**
      * Get invalidated tags
      *
-     * @return array Cache tags
+     * @return array<int, string> Cache tags
      */
     public function getTags(): array
     {
@@ -84,7 +84,7 @@ class CacheInvalidatedEvent extends BaseEvent
      */
     public function isAutomatic(): bool
     {
-        return in_array($this->reason, ['automatic', 'ttl_expired', 'data_changed']);
+        return in_array($this->reason, ['automatic', 'ttl_expired', 'data_changed'], true);
     }
 
     /**

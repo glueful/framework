@@ -19,8 +19,8 @@ class EntityUpdatedEvent extends BaseEvent
     /**
      * @param mixed $entity The updated entity/data
      * @param string $table Database table name
-     * @param array $changes Changed fields
-     * @param array $metadata Additional metadata
+     * @param array<string, mixed> $changes Changed fields
+     * @param array<string, mixed> $metadata Additional metadata
      */
     public function __construct(
         private readonly mixed $entity,
@@ -59,7 +59,7 @@ class EntityUpdatedEvent extends BaseEvent
     /**
      * Get changed fields
      *
-     * @return array Changed fields
+     * @return array<string, mixed> Changed fields
      */
     public function getChanges(): array
     {
@@ -123,11 +123,15 @@ class EntityUpdatedEvent extends BaseEvent
      *
      * @return array Cache tags
      */
+    /**
+     * @return array<int, string>
+     */
     public function getCacheTags(): array
     {
         $tags = [$this->table];
 
-        if ($entityId = $this->getEntityId()) {
+        $entityId = $this->getEntityId();
+        if ($entityId !== null) {
             $tags[] = $this->table . ':' . $entityId;
         }
 
