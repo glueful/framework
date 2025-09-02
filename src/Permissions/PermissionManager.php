@@ -36,13 +36,10 @@ class PermissionManager implements PermissionManagerInterface
     /** @var array<string, PermissionProviderInterface> Registered providers */
     private static array $providers = [];
 
-    /** @var array Configuration for the permission system */
-    private static array $config = [];
-
     /** @var bool Whether debug mode is enabled */
     private static bool $debugMode = false;
 
-    /** @var array Debug information collected during operations */
+    /** @var array<string, mixed> Debug information collected during operations */
     private static array $debugInfo = [];
 
     /** @var \Glueful\Auth\SessionCacheManager|null Session cache manager instance */
@@ -52,7 +49,7 @@ class PermissionManager implements PermissionManagerInterface
      * Set the active permission provider
      *
      * @param PermissionProviderInterface $provider The provider to activate
-     * @param array $config Configuration for the provider
+     * @param array<string, mixed> $config Configuration for the provider
      * @return void
      * @throws PermissionException If provider initialization fails or doesn't implement core permissions
      */
@@ -67,7 +64,6 @@ class PermissionManager implements PermissionManagerInterface
 
             // Set as active provider
             self::$activeProvider = $provider;
-            self::$config = $config;
 
             // Store provider info for debugging
             $providerInfo = $provider->getProviderInfo();
@@ -103,13 +99,13 @@ class PermissionManager implements PermissionManagerInterface
      * @param string $userUuid User UUID to check permissions for
      * @param string $permission Permission name
      * @param string $resource Resource identifier
-     * @param array $context Additional context for permission check
+     * @param array<string, mixed> $context Additional context for permission check
      * @return bool True if user has permission, false otherwise
      * @throws ProviderNotFoundException If no provider is registered
      */
     public function can(string $userUuid, string $permission, string $resource, array $context = []): bool
     {
-        if (!self::$activeProvider) {
+        if (self::$activeProvider === null) {
             throw new ProviderNotFoundException("No permission provider is registered");
         }
 
@@ -153,7 +149,7 @@ class PermissionManager implements PermissionManagerInterface
      * @param string $token Authentication token
      * @param string $permission Permission name
      * @param string $resource Resource identifier
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return bool True if user has permission, false otherwise
      * @throws \Exception If token is invalid or permission check fails
      */
@@ -162,7 +158,7 @@ class PermissionManager implements PermissionManagerInterface
         try {
             // Extract user UUID from token
             $userUuid = $this->getUserUuidFromToken($token);
-            if (!$userUuid) {
+            if ($userUuid === null) {
                 return false;
             }
 
@@ -189,12 +185,12 @@ class PermissionManager implements PermissionManagerInterface
      * Get all permissions for a user
      *
      * @param string $userUuid User UUID to get permissions for
-     * @return array User's permissions
+     * @return array<string, mixed> User's permissions
      * @throws ProviderNotFoundException If no provider is registered
      */
     public function getUserPermissions(string $userUuid): array
     {
-        if (!self::$activeProvider) {
+        if (self::$activeProvider === null) {
             throw new ProviderNotFoundException("No permission provider is registered");
         }
 
@@ -211,13 +207,13 @@ class PermissionManager implements PermissionManagerInterface
      * @param string $userUuid User UUID
      * @param string $permission Permission name
      * @param string $resource Resource identifier
-     * @param array $options Assignment options
+     * @param array<string, mixed> $options Assignment options
      * @return bool Success status
      * @throws ProviderNotFoundException If no provider is registered
      */
     public function assignPermission(string $userUuid, string $permission, string $resource, array $options = []): bool
     {
-        if (!self::$activeProvider) {
+        if (self::$activeProvider === null) {
             throw new ProviderNotFoundException("No permission provider is registered");
         }
 
@@ -253,7 +249,7 @@ class PermissionManager implements PermissionManagerInterface
      */
     public function revokePermission(string $userUuid, string $permission, string $resource): bool
     {
-        if (!self::$activeProvider) {
+        if (self::$activeProvider === null) {
             throw new ProviderNotFoundException("No permission provider is registered");
         }
 
@@ -285,13 +281,13 @@ class PermissionManager implements PermissionManagerInterface
      *
      * @param string $userUuid User UUID
      * @param string $roleSlug Role identifier/slug
-     * @param array $options Assignment options
+     * @param array<string, mixed> $options Assignment options
      * @return bool Success status
      * @throws ProviderNotFoundException If no provider is registered
      */
     public function assignRole(string $userUuid, string $roleSlug, array $options = []): bool
     {
-        if (!self::$activeProvider) {
+        if (self::$activeProvider === null) {
             throw new ProviderNotFoundException("No permission provider is registered");
         }
 
@@ -328,7 +324,7 @@ class PermissionManager implements PermissionManagerInterface
      */
     public function revokeRole(string $userUuid, string $roleSlug): bool
     {
-        if (!self::$activeProvider) {
+        if (self::$activeProvider === null) {
             throw new ProviderNotFoundException("No permission provider is registered");
         }
 
@@ -364,25 +360,25 @@ class PermissionManager implements PermissionManagerInterface
     /**
      * Get system information
      *
-     * @return array System information
+     * @return array{provider: string|null, available: bool, health: string, cache_enabled: bool} System information
      */
     public function getSystemInfo(): array
     {
-        $info = [
-            'provider_active' => self::$activeProvider !== null,
-            'providers_registered' => count(self::$providers),
-            'debug_mode' => self::$debugMode,
-            'config' => self::$config
-        ];
-
-        if (self::$activeProvider) {
-            $info['active_provider'] = self::$activeProvider->getProviderInfo();
-            $info['health_check'] = self::$activeProvider->healthCheck();
+        $providerName = null;
+        $health = 'unknown';
+        if (self::$activeProvider !== null) {
+            $providerInfo = self::$activeProvider->getProviderInfo();
+            $providerName = $providerInfo['name'] ?? get_class(self::$activeProvider);
+            $healthCheck = self::$activeProvider->healthCheck();
+            $health = $healthCheck['status'] ?? 'unknown';
         }
 
-        $info['available_providers'] = array_keys(self::$providers);
-
-        return $info;
+        return [
+            'provider' => $providerName,
+            'available' => self::$activeProvider !== null,
+            'health' => $health,
+            'cache_enabled' => true // Assuming cache is always enabled for permissions
+        ];
     }
 
     /**
@@ -393,7 +389,7 @@ class PermissionManager implements PermissionManagerInterface
      */
     public function invalidateUserCache(string $userUuid): void
     {
-        if (self::$activeProvider) {
+        if (self::$activeProvider !== null) {
             self::$activeProvider->invalidateUserCache($userUuid);
         }
     }
@@ -405,7 +401,7 @@ class PermissionManager implements PermissionManagerInterface
      */
     public function invalidateAllCache(): void
     {
-        if (self::$activeProvider) {
+        if (self::$activeProvider !== null) {
             self::$activeProvider->invalidateAllCache();
         }
     }
@@ -427,7 +423,7 @@ class PermissionManager implements PermissionManagerInterface
     /**
      * Get debug information
      *
-     * @return array Debug information
+     * @return array<string, mixed> Debug information
      */
     public function getDebugInfo(): array
     {
@@ -437,47 +433,44 @@ class PermissionManager implements PermissionManagerInterface
     /**
      * Perform health check
      *
-     * @return array Health check results
+     * @return array{status: string, provider: bool, cache: bool, errors: string[]} Health check results
      */
     public function healthCheck(): array
     {
-        $health = [
-            'overall_status' => 'healthy',
-            'checks' => []
-        ];
-
+        $errors = [];
+        $providerHealthy = false;
+        $cacheHealthy = true; // Assume cache is healthy unless proven otherwise
         // Check if provider is available
-        if (!self::$activeProvider) {
-            $health['overall_status'] = 'unhealthy';
-            $health['checks']['provider'] = [
-                'status' => 'fail',
-                'message' => 'No permission provider is registered'
-            ];
+        if (self::$activeProvider === null) {
+            $errors[] = 'No permission provider is registered';
         } else {
             // Check provider health
             try {
                 $providerHealth = self::$activeProvider->healthCheck();
-                $health['checks']['provider'] = $providerHealth;
-
-                if (($providerHealth['status'] ?? 'fail') !== 'healthy') {
-                    $health['overall_status'] = 'unhealthy';
+                $providerHealthy = ($providerHealth['status'] ?? 'fail') === 'healthy';
+                if (!$providerHealthy) {
+                    $errors[] = 'Permission provider is not healthy';
                 }
             } catch (\Exception $e) {
-                $health['overall_status'] = 'unhealthy';
-                $health['checks']['provider'] = [
-                    'status' => 'fail',
-                    'message' => 'Provider health check failed: ' . $e->getMessage()
-                ];
+                $errors[] = 'Provider health check failed: ' . $e->getMessage();
             }
         }
 
-        return $health;
+        // Determine overall status
+        $status = count($errors) === 0 ? 'healthy' : 'unhealthy';
+
+        return [
+            'status' => $status,
+            'provider' => $providerHealthy,
+            'cache' => $cacheHealthy,
+            'errors' => $errors
+        ];
     }
 
     /**
      * Register multiple providers
      *
-     * @param array $providers Array of provider instances
+     * @param PermissionProviderInterface[] $providers Array of provider instances
      * @return void
      */
     public function registerProviders(array $providers): void
@@ -495,7 +488,7 @@ class PermissionManager implements PermissionManagerInterface
      * Switch active provider
      *
      * @param string $providerName Name of registered provider to activate
-     * @param array $config Configuration for the new provider
+     * @param array<string, mixed> $config Configuration for the new provider
      * @return bool True if switch successful
      */
     public function switchProvider(string $providerName, array $config = []): bool
@@ -507,7 +500,7 @@ class PermissionManager implements PermissionManagerInterface
         try {
             $this->setProvider(self::$providers[$providerName], $config);
             return true;
-        } catch (\Exception $e) {
+        } catch (\Exception) {
             return false;
         }
     }
@@ -515,15 +508,11 @@ class PermissionManager implements PermissionManagerInterface
     /**
      * Get available providers
      *
-     * @return array List of available providers
+     * @return string[] List of available providers
      */
     public function getAvailableProviders(): array
     {
-        $providers = [];
-        foreach (self::$providers as $name => $provider) {
-            $providers[$name] = $provider->getProviderInfo();
-        }
-        return $providers;
+        return array_keys(self::$providers);
     }
 
     /**
@@ -538,18 +527,18 @@ class PermissionManager implements PermissionManagerInterface
             // Try to get session from TokenStorageService
             $tokenStorage = new \Glueful\Auth\TokenStorageService();
             $sessionData = $tokenStorage->getSessionByAccessToken($token);
-            if ($sessionData && isset($sessionData['user_uuid'])) {
+            if ($sessionData !== null && isset($sessionData['user_uuid'])) {
                 return $sessionData['user_uuid'];
             }
 
             // Fallback: try direct token validation
             $user = AuthenticationService::validateAccessToken($token);
-            if ($user && isset($user['uuid'])) {
+            if ($user !== null && isset($user['uuid'])) {
                 return $user['uuid'];
             }
 
             return null;
-        } catch (\Exception $e) {
+        } catch (\Exception) {
             return null;
         }
     }
@@ -581,7 +570,7 @@ class PermissionManager implements PermissionManagerInterface
         }
 
         // If any core permissions are missing, throw exception
-        if (!empty($missingPermissions)) {
+        if (count($missingPermissions) > 0) {
             $missingList = implode(', ', $missingPermissions);
             throw new PermissionException(
                 "Permission provider '{$providerName}' does not implement required core permissions: {$missingList}. " .
@@ -610,14 +599,14 @@ class PermissionManager implements PermissionManagerInterface
      */
     public function hasPermission(string $permission): bool
     {
-        if (!self::$activeProvider) {
+        if (self::$activeProvider === null) {
             return false;
         }
 
         try {
             $availablePermissions = self::$activeProvider->getAvailablePermissions();
             return isset($availablePermissions[$permission]);
-        } catch (\Exception $e) {
+        } catch (\Exception) {
             return false;
         }
     }

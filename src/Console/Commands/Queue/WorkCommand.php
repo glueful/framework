@@ -429,7 +429,7 @@ class WorkCommand extends BaseQueueCommand
     }
 
     /**
-     * @param array<string, mixed> $status
+     * @param array<int, array<string, mixed>> $status
      */
     private function displayWorkerStatus(array $status): void
     {

@@ -367,7 +367,7 @@ class InstallCommand extends BaseCommand
             $healthService = $this->installContainer->get(HealthService::class);
             $dbHealth = HealthService::checkDatabase();
 
-            if (!$dbHealth['status']) {
+            if ($dbHealth['status'] !== 'ok') {
                 throw new \Exception('Database connection failed: ' . ($dbHealth['message'] ?? 'Unknown error'));
             }
 
@@ -839,7 +839,7 @@ HELP;
         $healthService = $this->installContainer->get(HealthService::class);
         $dbHealth = HealthService::checkDatabase();
 
-        if (!$dbHealth['status']) {
+        if ($dbHealth['status'] !== 'ok') {
             throw new \Exception('Database health check failed: ' . ($dbHealth['message'] ?? 'Unknown error'));
         }
     }

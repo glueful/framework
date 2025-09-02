@@ -9,6 +9,9 @@ namespace Glueful\Serialization\Cache;
  */
 class DefaultCacheKeyStrategy implements CacheKeyStrategyInterface
 {
+    /**
+     * @param array<string, mixed> $context
+     */
     public function generateKey(object $object, array $context): string
     {
         return md5(get_class($object) . serialize($context));

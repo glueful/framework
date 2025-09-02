@@ -12,6 +12,9 @@ namespace Glueful\Services\Archive\DTOs;
  */
 class ArchiveResult
 {
+    /**
+     * @param array<string, mixed> $metadata
+     */
     public function __construct(
         public readonly bool $success,
         public readonly ?string $archiveUuid = null,
@@ -25,6 +28,8 @@ class ArchiveResult
 
     /**
      * Create a successful archive result
+     *
+     * @param array<string, mixed> $metadata
      */
     public static function success(
         string $archiveUuid,

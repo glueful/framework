@@ -30,7 +30,7 @@ class UserRepository extends BaseRepository
     /** @var Validator Data validator instance */
     private Validator $validator;
 
-    /** @var array Standard profile fields to retrieve */
+    /** @var array<string> Standard profile fields to retrieve */
     private array $userProfileFields = ['first_name', 'last_name', 'photo_uuid', 'photo_url'];
 
     /**
@@ -72,7 +72,7 @@ class UserRepository extends BaseRepository
      * Performs validation on the username format before querying.
      *
      * @param string $username Username to search for
-     * @return array|null User data or null if not found, or validation errors array
+     * @return array<string, mixed>|null User data or null if not found, or validation errors array
      */
     public function findByUsername(string $username): ?array
     {
@@ -96,7 +96,7 @@ class UserRepository extends BaseRepository
      * Performs validation on the email format before querying.
      *
      * @param string $email Email address to search for
-     * @return array|null User data or null if not found, or validation errors array
+     * @return array<string, mixed>|null User data or null if not found, or validation errors array
      */
     public function findByEmail(string $email): ?array
     {
@@ -118,7 +118,8 @@ class UserRepository extends BaseRepository
      * Direct lookup without additional validation.
      *
      * @param string $uuid User UUID to search for
-     * @return array|null User data or null if not found
+     * @param array<string>|null $fields Fields to select
+     * @return array<string, mixed>|null User data or null if not found
      */
     public function findByUuid(string $uuid, ?array $fields = null): ?array
     {
@@ -133,7 +134,7 @@ class UserRepository extends BaseRepository
      * Includes personal details and profile images.
      *
      * @param string $uuid User UUID to get profile for
-     * @return array|null Profile data or null if not found
+     * @return array<string, mixed>|null Profile data or null if not found
      */
     public function getProfile(string $uuid): ?array
     {
@@ -144,24 +145,24 @@ class UserRepository extends BaseRepository
             ->limit(1)
             ->get();
 
-        return $query ? $query[0] : null;
+        return $query !== [] ? $query[0] : null;
     }
 
     /**
      * Get profiles for multiple users in a single query (bulk operation)
      *
-     * @param array $userUuids Array of user UUIDs
-     * @return array Associative array indexed by user_uuid
+     * @param array<string> $userUuids Array of user UUIDs
+     * @return array<string, array<string, mixed>> Associative array indexed by user_uuid
      */
     public function getProfilesForUsers(array $userUuids): array
     {
-        if (empty($userUuids)) {
+        if ($userUuids === []) {
             return [];
         }
 
         // Remove duplicates and ensure we have valid UUIDs
         $userUuids = array_unique(array_filter($userUuids));
-        if (empty($userUuids)) {
+        if ($userUuids === []) {
             return [];
         }
 
@@ -206,7 +207,7 @@ class UserRepository extends BaseRepository
         } else {
             $user = $this->findByUuid($identifier);
         }
-        if (!$user) {
+        if ($user === null) {
             return false; // User not found
         }
 
@@ -228,7 +229,7 @@ class UserRepository extends BaseRepository
      * Inserts a new user record with basic information.
      * Additional profile data should be added separately.
      *
-     * @param array $userData User data (username, email, password, etc.)
+     * @param array<string, mixed> $userData User data (username, email, password, etc.)
      * @return string New user UUID
      * @throws \InvalidArgumentException If validation fails
      */
@@ -237,7 +238,7 @@ class UserRepository extends BaseRepository
         // Validate required fields
         $required = ['username', 'email', 'password'];
         foreach ($required as $field) {
-            if (empty($userData[$field])) {
+            if (($userData[$field] ?? '') === '') {
                 throw new \InvalidArgumentException("Field '{$field}' is required");
             }
         }
@@ -283,7 +284,7 @@ class UserRepository extends BaseRepository
      * For password updates, use setNewPassword() instead.
      *
      * @param string|int $id User UUID to update
-     * @param array $userData Updated user data
+     * @param array<string, mixed> $userData Updated user data
      * @param string|null $updatedByUserId UUID of user making the update (for audit)
      * @return bool Success status
      */
@@ -294,7 +295,7 @@ class UserRepository extends BaseRepository
         unset($userData['uuid']);     // Primary key shouldn't be changed
 
         // Get current user ID for audit if not provided
-        if (!$updatedByUserId) {
+        if ($updatedByUserId === null) {
             $currentUser = $this->getCurrentUser();
             $updatedByUserId = $currentUser['uuid'] ?? null;
         }
@@ -310,7 +311,7 @@ class UserRepository extends BaseRepository
      * This includes personal details and preferences.
      *
      * @param string $uuid User UUID
-     * @param array $profileData Profile information to update
+     * @param array<string, mixed> $profileData Profile information to update
      * @param string|null $updatedByUserId UUID of user making the update (for audit)
      * @return bool Success status
      */
@@ -318,7 +319,7 @@ class UserRepository extends BaseRepository
     {
         // Ensure user exists
         $user = $this->findByUuid($uuid);
-        if (!$user) {
+        if ($user === null) {
             return false;
         }
 
@@ -343,12 +344,13 @@ class UserRepository extends BaseRepository
             $this->table = 'profiles';
             $this->primaryKey = 'user_uuid';
 
-            if ($existingProfile) {
+            if ($existingProfile !== null) {
                 // Update existing profile
                 $success = parent::update($uuid, $profileData);
             } else {
                 // Create new profile
-                $success = parent::create($profileData) !== null;
+                $createResult = parent::create($profileData);
+                $success = $createResult !== '';
             }
         } finally {
             // Restore the original table and primary key
@@ -366,7 +368,7 @@ class UserRepository extends BaseRepository
      * Used for API key-based authentication.
      *
      * @param string $apiKey API key to search for
-     * @return array|null User data or null if not found
+     * @return array<string, mixed>|null User data or null if not found
      */
     public function findByApiKey(string $apiKey): ?array
     {
@@ -408,8 +410,8 @@ class UserRepository extends BaseRepository
      * $user = $repository->findOrCreateFromSaml($samlData);
      * ```
      *
-     * @param array $userData User data extracted from SAML attributes (email required)
-     * @return array|null User data array with updated provider info, or null on failure
+     * @param array<string, mixed> $userData User data extracted from SAML attributes (email required)
+     * @return array<string, mixed>|null User data array with updated provider info, or null on failure
      * @throws \Glueful\Exceptions\DatabaseException If user creation or update fails
      * @throws \InvalidArgumentException If required SAML attributes are missing
      * @throws \RuntimeException If transaction operations fail
@@ -417,7 +419,7 @@ class UserRepository extends BaseRepository
     public function findOrCreateFromSaml(array $userData): ?array
     {
         // Email is required to identify the user
-        if (empty($userData['email'])) {
+        if (($userData['email'] ?? '') === '') {
             return null;
         }
 
@@ -426,7 +428,7 @@ class UserRepository extends BaseRepository
             $user = $this->findByEmail($userData['email']);
 
             // If user exists, update SAML-related fields
-            if ($user) {
+            if ($user !== null) {
                 // Update user with SAML information if needed
                 $updates = [
                     'last_login_at' => date('Y-m-d H:i:s'),
@@ -435,23 +437,23 @@ class UserRepository extends BaseRepository
                 ];
 
                 // Optionally update name if provided
-                if (!empty($userData['name'])) {
+                if (($userData['name'] ?? '') !== '') {
                     $updates['name'] = $userData['name'];
                 }
 
                 // Optionally update first/last name if provided
-                if (!empty($userData['first_name'])) {
+                if (($userData['first_name'] ?? '') !== '') {
                     $updates['first_name'] = $userData['first_name'];
                 }
 
-                if (!empty($userData['last_name'])) {
+                if (($userData['last_name'] ?? '') !== '') {
                     $updates['last_name'] = $userData['last_name'];
                 }
 
                 $this->update($user['uuid'], $updates);
 
                 // Reload the user to get updated data
-                return $this->findByUUId($user['uuid']);
+                return $this->findByUuid($user['uuid']);
             }
 
             // User doesn't exist, create a new one
@@ -473,7 +475,7 @@ class UserRepository extends BaseRepository
             // Create the new user using the parent create method
             // This will also handle the audit logging
             $userId = $this->create($newUser);
-            if (!$userId) {
+            if ($userId === '') {
                 throw new DatabaseException('Failed to create user');
             }
 
@@ -481,7 +483,7 @@ class UserRepository extends BaseRepository
             // Use RBAC extension APIs for default role assignment
 
             // Return the newly created user
-            return $this->findByUUId($newUser['uuid']);
+            return $this->findByUuid($newUser['uuid']);
         });
     }
 
@@ -527,8 +529,8 @@ class UserRepository extends BaseRepository
      * $user = $repository->findOrCreateFromLdap($ldapData);
      * ```
      *
-     * @param array $userData User data extracted from LDAP directory attributes
-     * @return array|null User data array with directory information, or null on failure
+     * @param array<string, mixed> $userData User data extracted from LDAP directory attributes
+     * @return array<string, mixed>|null User data array with directory information, or null on failure
      * @throws \InvalidArgumentException If required LDAP attributes are missing
      * @throws \RuntimeException If user creation fails or LDAP data is corrupted
      * @throws \Exception If database operations fail during user provisioning
@@ -537,7 +539,7 @@ class UserRepository extends BaseRepository
     {
         try {
             // Email is required to identify the user
-            if (empty($userData['email'])) {
+            if (($userData['email'] ?? '') === '') {
                 return null;
             }
 
@@ -545,7 +547,7 @@ class UserRepository extends BaseRepository
             $user = $this->findByEmail($userData['email']);
 
             // If user exists, update LDAP-related fields
-            if ($user) {
+            if ($user !== null) {
                 // Update user with LDAP information
                 $updates = [
                     'last_login_at' => date('Y-m-d H:i:s'),
@@ -554,22 +556,22 @@ class UserRepository extends BaseRepository
                 ];
 
                 // Update name if provided
-                if (!empty($userData['name'])) {
+                if (($userData['name'] ?? '') !== '') {
                     $updates['name'] = $userData['name'];
                 }
 
                 // Update first/last name if provided
-                if (!empty($userData['first_name'])) {
+                if (($userData['first_name'] ?? '') !== '') {
                     $updates['first_name'] = $userData['first_name'];
                 }
 
-                if (!empty($userData['last_name'])) {
+                if (($userData['last_name'] ?? '') !== '') {
                     $updates['last_name'] = $userData['last_name'];
                 }
 
                 // Update additional fields if they exist
                 foreach (['phone', 'title', 'department', 'company', 'employee_id'] as $field) {
-                    if (!empty($userData[$field])) {
+                    if (($userData[$field] ?? '') !== '') {
                         $updates[$field] = $userData[$field];
                     }
                 }
@@ -633,7 +635,7 @@ class UserRepository extends BaseRepository
      * Retrieves the current user directly from the session cache using the token in the request.
      * This avoids re-authenticating the request and is more efficient.
      *
-     * @return array|null User data or null if not authenticated
+     * @return array<string, mixed>|null User data or null if not authenticated
      */
     public function getCurrentUser(): ?array
     {
@@ -643,14 +645,14 @@ class UserRepository extends BaseRepository
 
             // Extract token from the Authorization header
             $authHeader = $request->headers->get('Authorization');
-            if (!$authHeader) {
+            if ($authHeader === null) {
                 return null;
             }
 
             // Remove 'Bearer ' prefix if present
             $token = (strpos($authHeader, 'Bearer ') === 0) ? substr($authHeader, 7) : $authHeader;
 
-            if (empty($token)) {
+            if ($token === '') {
                 return null;
             }
 
@@ -658,7 +660,7 @@ class UserRepository extends BaseRepository
             $sessionCacheManager = $this->getSessionCacheManager();
             $sessionData = $sessionCacheManager->getSession($token);
 
-            if ($sessionData && isset($sessionData['user'])) {
+            if ($sessionData !== null && isset($sessionData['user'])) {
                 // Return the user data directly from session cache to avoid DB query
                 return $sessionData['user'];
             }
@@ -673,9 +675,9 @@ class UserRepository extends BaseRepository
     /**
      * Find active users
      *
-     * @param array $orderBy Sorting criteria
+     * @param array<string, string> $orderBy Sorting criteria
      * @param int|null $limit Maximum number of records
-     * @return array Array of active users
+     * @return array<array<string, mixed>> Array of active users
      */
     public function findActive(array $orderBy = [], ?int $limit = null): array
     {
@@ -693,7 +695,7 @@ class UserRepository extends BaseRepository
     {
         $conditions = ['email' => $email];
 
-        if ($excludeUuid) {
+        if ($excludeUuid !== null) {
             $conditions['uuid'] = ['!=', $excludeUuid];
         }
 
@@ -711,7 +713,7 @@ class UserRepository extends BaseRepository
     {
         $conditions = ['username' => $username];
 
-        if ($excludeUuid) {
+        if ($excludeUuid !== null) {
             $conditions['uuid'] = ['!=', $excludeUuid];
         }
 
@@ -773,7 +775,7 @@ class UserRepository extends BaseRepository
     /**
      * Deactivate users by UUIDs
      *
-     * @param array $uuids Array of user UUIDs
+     * @param array<string> $uuids Array of user UUIDs
      * @return int Number of affected records
      */
     public function deactivateUsers(array $uuids): int

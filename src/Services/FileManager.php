@@ -20,8 +20,12 @@ class FileManager
 {
     private Filesystem $filesystem;
     private ?LoggerInterface $logger;
+    /** @var array<string, mixed> */
     private array $config;
 
+    /**
+     * @param array<string, mixed> $config
+     */
     public function __construct(?LoggerInterface $logger = null, array $config = [])
     {
         $this->filesystem = new Filesystem();
@@ -318,7 +322,10 @@ class FileManager
         }
 
         // Check forbidden paths
-        $realPath = realpath(dirname($path)) ?: dirname($path);
+        $realPath = realpath(dirname($path));
+        if ($realPath === false) {
+            $realPath = dirname($path);
+        }
         foreach ($this->config['forbidden_paths'] as $forbidden) {
             if (strpos($realPath, $forbidden) === 0) {
                 throw new InvalidArgumentException("Access to forbidden path: {$path}");
@@ -342,7 +349,7 @@ class FileManager
      */
     private function log(string $level, string $message): void
     {
-        if ($this->logger && $this->config['enable_logging']) {
+        if ($this->logger !== null && (bool)($this->config['enable_logging'] ?? false)) {
             $this->logger->log($level, $message, ['service' => 'FileManager']);
         }
     }

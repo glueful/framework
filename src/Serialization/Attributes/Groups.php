@@ -20,7 +20,7 @@ class Groups extends SymfonyGroups
     /**
      * Constructor
      *
-     * @param array|string $groups Single group or array of groups
+     * @param array<string>|string $groups Single group or array of groups
      */
     public function __construct(array|string $groups)
     {

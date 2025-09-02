@@ -369,7 +369,7 @@ class NotificationService implements ConfigurableInterface
         ?int $offset = null,
         array $filters = []
     ): array {
-        return $this->repository->findForNotifiable(
+        $notificationData = $this->repository->findForNotifiable(
             $notifiable->getNotifiableType(),
             $notifiable->getNotifiableId(),
             $onlyUnread,
@@ -377,6 +377,11 @@ class NotificationService implements ConfigurableInterface
             $offset,
             $filters
         );
+
+        // Convert array data to Notification objects
+        return array_map(function (array $data): Notification {
+            return Notification::fromArray($data);
+        }, $notificationData);
     }
 
     /**

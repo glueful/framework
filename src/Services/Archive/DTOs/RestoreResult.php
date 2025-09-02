@@ -12,6 +12,10 @@ namespace Glueful\Services\Archive\DTOs;
  */
 class RestoreResult
 {
+    /**
+     * @param array<int, string> $conflicts
+     * @param array<string, mixed> $metadata
+     */
     public function __construct(
         public readonly bool $success,
         public readonly ?int $recordsRestored = null,
@@ -24,6 +28,9 @@ class RestoreResult
 
     /**
      * Create a successful restore result
+     *
+     * @param array<int, string> $conflicts
+     * @param array<string, mixed> $metadata
      */
     public static function success(
         int $recordsRestored,
@@ -53,7 +60,7 @@ class RestoreResult
      */
     public function hasConflicts(): bool
     {
-        return !empty($this->conflicts);
+        return count($this->conflicts) > 0;
     }
 
     /**

@@ -39,11 +39,11 @@ class SecurityManager
      * - request_validation: Request validation rules
      * - cors: Cross-origin resource sharing settings
      *
-     * @var array
+     * @var array<string, mixed>
      */
     private array $config;
 
-    /** @var CacheStore Cache driver instance */
+    /** @var CacheStore<mixed> Cache driver instance */
     private CacheStore $cache;
 
 
@@ -52,6 +52,8 @@ class SecurityManager
      *
      * Loads security configuration from the ConfigManager and sets up
      * default values for rate limiting and request validation.
+     *
+     * @param CacheStore<mixed>|null $cache Cache driver instance
      */
     public function __construct(?CacheStore $cache = null)
     {
@@ -78,7 +80,7 @@ class SecurityManager
      * Validate production environment configuration
      * Returns warnings instead of throwing exceptions to maintain developer flexibility
      *
-     * @return array Array of validation results with warnings
+     * @return array<string, mixed> Array of validation results with warnings
      */
     public static function validateProductionEnvironment(): array
     {
@@ -94,14 +96,14 @@ class SecurityManager
 
             // Key configuration warnings
             $appKey = env('APP_KEY');
-            if (empty($appKey) || $appKey === 'generate-secure-32-char-key-here') {
+            if ($appKey === '' || $appKey === null || $appKey === 'generate-secure-32-char-key-here') {
                 $warnings[] = 'APP_KEY uses default value - generate a secure key for production';
             } elseif (strlen($appKey) < 32) {
                 $warnings[] = 'APP_KEY is less than 32 characters - use a longer key for better security';
             }
 
             $jwtKey = env('JWT_KEY');
-            if (empty($jwtKey) || $jwtKey === 'your-secure-jwt-key-here') {
+            if ($jwtKey === '' || $jwtKey === null || $jwtKey === 'your-secure-jwt-key-here') {
                 $warnings[] = 'JWT_KEY uses default value - generate a secure key for production';
             } elseif (strlen($jwtKey) < 32) {
                 $warnings[] = 'JWT_KEY is less than 32 characters - use a longer key for better security';
@@ -129,11 +131,11 @@ class SecurityManager
             }
 
             // Security headers
-            if (empty(env('HSTS_HEADER'))) {
+            if (env('HSTS_HEADER') === '' || env('HSTS_HEADER') === null) {
                 $recommendations[] = 'HSTS_HEADER not configured - consider adding HSTS for HTTPS security';
             }
 
-            if (empty(env('CSP_HEADER'))) {
+            if (env('CSP_HEADER') === '' || env('CSP_HEADER') === null) {
                 $recommendations[] = 'CSP_HEADER not configured - consider adding Content Security Policy';
             }
         }
@@ -156,25 +158,40 @@ class SecurityManager
     {
         $validation = self::validateProductionEnvironment();
 
-        if (!$validation['is_production']) {
+        if (!(bool)$validation['is_production']) {
             return;
         }
 
-        if (!empty($validation['warnings'])) {
+        if (isset($validation['warnings']) && is_array($validation['warnings']) && count($validation['warnings']) > 0) {
             echo "\n⚠️  Production Environment Warnings:\n";
             foreach ($validation['warnings'] as $warning) {
                 echo "   • $warning\n";
             }
         }
 
-        if (!empty($validation['recommendations'])) {
+        if (
+            isset($validation['recommendations']) &&
+            is_array($validation['recommendations']) &&
+            count($validation['recommendations']) > 0
+        ) {
             echo "\n💡 Production Recommendations:\n";
             foreach ($validation['recommendations'] as $recommendation) {
                 echo "   • $recommendation\n";
             }
         }
 
-        if (!empty($validation['warnings']) || !empty($validation['recommendations'])) {
+        if (
+            (
+                isset($validation['warnings']) &&
+                is_array($validation['warnings']) &&
+                count($validation['warnings']) > 0
+            ) ||
+            (
+                isset($validation['recommendations']) &&
+                is_array($validation['recommendations']) &&
+                count($validation['recommendations']) > 0
+            )
+        ) {
             echo "\nNote: These are recommendations to improve security. The framework will continue to operate.\n";
             echo "Use 'php glueful system:check --production' for detailed analysis.\n\n";
         }
@@ -195,14 +212,14 @@ class SecurityManager
     /**
      * Get environment fix suggestions for production issues
      *
-     * @return array Array of fix suggestions with commands
+     * @return array<int, array<string, mixed>> Array of fix suggestions with commands
      */
     public static function getEnvironmentFixSuggestions(): array
     {
         $validation = self::validateProductionEnvironment();
         $fixes = [];
 
-        if ($validation['is_production']) {
+        if ((bool)$validation['is_production']) {
             foreach ($validation['warnings'] as $warning) {
                 if (str_contains($warning, 'APP_DEBUG')) {
                     $fixes[] = [
@@ -281,14 +298,14 @@ class SecurityManager
     {
         $fixes = self::getEnvironmentFixSuggestions();
 
-        if (empty($fixes)) {
+        if (count($fixes) === 0) {
             return;
         }
 
         $criticalFixes = array_filter($fixes, fn($fix) => $fix['severity'] === 'critical');
         $recommendedFixes = array_filter($fixes, fn($fix) => $fix['severity'] === 'recommended');
 
-        if (!empty($criticalFixes)) {
+        if (count($criticalFixes) > 0) {
             echo "\n🚨 Critical Security Issues (Action Required):\n";
             foreach ($criticalFixes as $fix) {
                 echo "   Issue: {$fix['issue']}\n";
@@ -297,7 +314,7 @@ class SecurityManager
             }
         }
 
-        if (!empty($recommendedFixes)) {
+        if (count($recommendedFixes) > 0) {
             echo "💡 Security Recommendations:\n";
             foreach ($recommendedFixes as $fix) {
                 echo "   Issue: {$fix['issue']}\n";
@@ -312,13 +329,13 @@ class SecurityManager
     /**
      * Get production readiness score (0-100)
      *
-     * @return array Score and breakdown
+     * @return array<string, mixed> Score and breakdown
      */
     public static function getProductionReadinessScore(): array
     {
         $validation = self::validateProductionEnvironment();
 
-        if (!$validation['is_production']) {
+        if (!(bool)$validation['is_production']) {
             return [
                 'score' => 100,
                 'status' => 'Not applicable (development environment)',
@@ -389,13 +406,13 @@ class SecurityManager
     public function enforceRateLimit(string $ip): void
     {
         // Skip rate limiting if disabled in configuration
-        if (!($this->config['rate_limit']['enabled'] ?? true)) {
+        if (!(bool)($this->config['rate_limit']['enabled'] ?? true)) {
             return;
         }
 
         // Skip if IP is whitelisted - allows trusted IPs to bypass limits
         $whitelist = $this->config['rate_limit']['whitelist_ips'] ?? [];
-        if (in_array($ip, $whitelist)) {
+        if (in_array($ip, $whitelist, true)) {
             return;
         }
 
@@ -453,7 +470,7 @@ class SecurityManager
     {
         // Check for empty $request and use fallback if needed
         // This ensures the method always has a valid request object to work with
-        if (empty($request)) {
+        if ($request === '' || $request === null) {
             $request = Request::createFromGlobals();
         }
 
@@ -461,7 +478,7 @@ class SecurityManager
 
         // Validate content type for POST/PUT/PATCH requests
         // These methods typically send data and need proper content type headers
-        if (in_array($method, ['POST', 'PUT', 'PATCH'])) {
+        if (in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
             $contentType = $request->headers->get('Content-Type');
 
             // Get allowed content types from configuration
@@ -472,7 +489,7 @@ class SecurityManager
             ];
 
             // Validate content type if present and allowed types are configured
-            if ($contentType && !empty($allowedTypes)) {
+            if ($contentType !== null && $contentType !== '' && count($allowedTypes) > 0) {
                 $isAllowed = false;
 
                 // Check if content type starts with any allowed type
@@ -502,16 +519,16 @@ class SecurityManager
 
         // Validate User-Agent if required by configuration
         // Some APIs require User-Agent to identify the client application
-        if ($this->config['request_validation']['require_user_agent'] ?? false) {
+        if ((bool)($this->config['request_validation']['require_user_agent'] ?? false)) {
             $userAgent = $request->headers->get('User-Agent');
-            if (empty($userAgent)) {
+            if ($userAgent === '' || $userAgent === null) {
                 throw new SecurityException("User-Agent header required", 400);
             }
         }
 
         // Check for suspicious user agents if configured
         // Helps block automated scrapers, bots, and malicious tools
-        if ($this->config['request_validation']['block_suspicious_ua'] ?? false) {
+        if ((bool)($this->config['request_validation']['block_suspicious_ua'] ?? false)) {
             $userAgent = $request->headers->get('User-Agent');
 
             // Default patterns to detect common automated tools

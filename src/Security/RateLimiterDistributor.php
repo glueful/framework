@@ -28,7 +28,7 @@ class RateLimiterDistributor
     /** @var string Lock key prefix */
     private const LOCK_PREFIX = 'lock:';
 
-    /** @var CacheStore Cache store instance */
+    /** @var CacheStore<mixed> Cache store instance */
     private CacheStore $cache;
 
     /** @var string Node identifier */
@@ -46,7 +46,7 @@ class RateLimiterDistributor
     /**
      * Constructor
      *
-     * @param CacheStore|null $cache Cache store instance
+     * @param CacheStore<mixed>|null $cache Cache store instance
      * @param string $nodeId Node identifier (defaults to hostname)
      * @param int $syncInterval Synchronization interval in seconds
      */
@@ -66,7 +66,7 @@ class RateLimiterDistributor
         }
 
         // Use hostname as node ID if not provided
-        $this->nodeId = $nodeId ?: gethostname() ?: uniqid('node-');
+        $this->nodeId = $nodeId !== '' ? $nodeId : (gethostname() !== false ? gethostname() : uniqid('node-'));
         $this->syncInterval = $syncInterval;
 
         // Attempt to connect to Redis for pub/sub if available
@@ -83,7 +83,7 @@ class RateLimiterDistributor
     {
         $nodeData = [
             'id' => $this->nodeId,
-            'hostname' => gethostname() ?: '',
+            'hostname' => gethostname() !== false ? gethostname() : '',
             'ip' => $_SERVER['SERVER_ADDR'] ?? '127.0.0.1',
             'last_seen' => time(),
             'version' => config('app.version_full', '1.0.0'),
@@ -126,7 +126,7 @@ class RateLimiterDistributor
             $this->cache->set($limitsKey . ':' . $key, $limitData);
 
             // Publish update if Redis pub/sub is available
-            if ($this->redis) {
+            if ($this->redis !== null) {
                 $this->redis->publish(
                     'limit_updates',
                     json_encode(['action' => 'update', 'data' => $limitData])
@@ -143,14 +143,14 @@ class RateLimiterDistributor
      * Get global rate limit data
      *
      * @param string $key Rate limit key
-     * @return array|null Rate limit data or null if not found
+     * @return array<string, mixed>|null Rate limit data or null if not found
      */
     public function getGlobalLimit(string $key): ?array
     {
         $limitsKey = self::GLOBAL_LIMITS_KEY;
         $data = $this->cache->get($limitsKey . ':' . $key);
 
-        if ($data) {
+        if ($data !== null && $data !== false) {
             return is_array($data) ? $data : null;
         }
 
@@ -173,7 +173,7 @@ class RateLimiterDistributor
 
         // We can't easily list all keys with the standard cache interface
         // Instead, let's use the direct Redis connection if available
-        if (!$this->redis) {
+        if ($this->redis === null) {
             return 0;
         }
 
@@ -193,7 +193,7 @@ class RateLimiterDistributor
             $key = str_replace($limitsKey . ':', '', $fullKey);
 
             $data = $this->cache->get($limitsKey . ':' . $key);
-            if (!$data || !is_array($data)) {
+            if ($data === null || $data === false || !is_array($data)) {
                 continue;
             }
 
@@ -207,7 +207,7 @@ class RateLimiterDistributor
         }
 
         // Clean up stale entries
-        if (!empty($cleanupKeys) && $this->acquireLock('cleanup', 5)) {
+        if (count($cleanupKeys) > 0 && $this->acquireLock('cleanup', 5)) {
             try {
                 foreach ($cleanupKeys as $key) {
                     $this->cache->delete($limitsKey . ':' . $key);
@@ -242,7 +242,7 @@ class RateLimiterDistributor
             $nodesKey = self::NODES_KEY;
 
             // We need to manually get all node keys since we don't have hgetall
-            if (!$this->redis) {
+            if ($this->redis === null) {
                 return 0;
             }
 
@@ -258,7 +258,7 @@ class RateLimiterDistributor
                 $nodeId = str_replace($nodesKey . ':', '', $fullKey);
                 $nodeData = $this->cache->get($nodesKey . ':' . $nodeId);
 
-                if (!$nodeData || !is_array($nodeData) || !isset($nodeData['last_seen'])) {
+                if ($nodeData === null || $nodeData === false || !is_array($nodeData) || !isset($nodeData['last_seen'])) {
                     continue;
                 }
 
@@ -294,7 +294,7 @@ class RateLimiterDistributor
             $nodesKey = self::NODES_KEY;
 
             // We need to manually get all node keys since we don't have hgetall
-            if (!$this->redis) {
+            if ($this->redis === null) {
                 // No Redis connection, this node becomes primary
                 $this->isPrimaryCoordinator = true;
                 $this->cache->set('primary_coordinator', $this->nodeId, 300);
@@ -320,7 +320,7 @@ class RateLimiterDistributor
             }
 
             // Check if the primary coordinator node still exists
-            if ($primaryId) {
+            if ($primaryId !== null && $primaryId !== false && $primaryId !== '') {
                 $primaryNodeExists = (bool)$this->cache->get($nodesKey . ':' . $primaryId);
                 if ($primaryNodeExists) {
                     // There's already an active primary coordinator
@@ -363,14 +363,14 @@ class RateLimiterDistributor
     /**
      * Get all registered nodes
      *
-     * @return array Array of node data
+     * @return array<string, array<string, mixed>> Array of node data
      */
     public function getNodes(): array
     {
         $nodesKey = self::NODES_KEY;
 
         // We need to manually get all node keys since we don't have hgetall
-        if (!$this->redis) {
+        if ($this->redis === null) {
             return [];
         }
 
@@ -384,7 +384,7 @@ class RateLimiterDistributor
             $nodeId = str_replace(self::PREFIX . $nodesKey . ':', '', $fullKey);
             $nodeData = $this->cache->get($nodesKey . ':' . $nodeId);
 
-            if ($nodeData && is_array($nodeData)) {
+            if ($nodeData !== null && $nodeData !== false && is_array($nodeData)) {
                 $result[$nodeId] = $nodeData;
             }
         }
@@ -435,13 +435,13 @@ class RateLimiterDistributor
     {
         try {
             $this->redis = new Redis();
-            $host = config('cache.stores.redis.host') ?: env('REDIS_HOST', '127.0.0.1');
-            $port = (int)(config('cache.stores.redis.port') ?: env('REDIS_PORT', 6379));
-            $password = config('cache.stores.redis.password') ?: env('REDIS_PASSWORD');
-            $database = (int)(config('cache.stores.redis.database') ?: env('REDIS_DB', 0));
+            $host = config('cache.stores.redis.host') ?? env('REDIS_HOST', '127.0.0.1');
+            $port = (int)(config('cache.stores.redis.port') ?? env('REDIS_PORT', 6379));
+            $password = config('cache.stores.redis.password') ?? env('REDIS_PASSWORD');
+            $database = (int)(config('cache.stores.redis.database') ?? env('REDIS_DB', 0));
 
             if ($this->redis->connect($host, $port, 2.5)) {
-                if ($password) {
+                if ($password !== null && $password !== '') {
                     $this->redis->auth($password);
                 }
                 $this->redis->select($database);

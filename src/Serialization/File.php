@@ -17,6 +17,7 @@ class File
     private string $mimeType;
     private string $extension;
     private \DateTime $createdAt;
+    /** @var array<string, mixed> */
     private array $metadata = [];
     private bool $isPublic = false;
     private ?string $path = null;
@@ -40,6 +41,7 @@ class File
 
     /**
      * Create from uploaded file
+     * @param array<string, mixed> $uploadedFile
      */
     public static function fromUpload(array $uploadedFile): self
     {
@@ -65,7 +67,7 @@ class File
             $info['basename'],
             $info['basename'],
             filesize($path),
-            mime_content_type($path) ?: 'application/octet-stream'
+            mime_content_type($path) !== false ? mime_content_type($path) : 'application/octet-stream'
         );
 
         $file->path = $path;
@@ -139,6 +141,7 @@ class File
 
     /**
      * Set metadata
+     * @param array<string, mixed> $metadata
      */
     public function setMetadata(array $metadata): self
     {
@@ -148,6 +151,7 @@ class File
 
     /**
      * Get metadata
+     * @return array<string, mixed>
      */
     public function getMetadata(): array
     {
@@ -168,7 +172,7 @@ class File
      */
     public function hasMetadata(): bool
     {
-        return !empty($this->metadata);
+        return count($this->metadata) > 0;
     }
 
     /**
@@ -206,7 +210,7 @@ class File
      */
     public function getHash(): string
     {
-        if ($this->path && file_exists($this->path)) {
+        if ($this->path !== null && file_exists($this->path)) {
             return hash_file('sha256', $this->path);
         }
 
@@ -235,7 +239,7 @@ class File
             'text/html',
         ];
 
-        return in_array($this->mimeType, $documentTypes);
+        return in_array($this->mimeType, $documentTypes, true);
     }
 
     /**
@@ -250,7 +254,7 @@ class File
             'application/gzip',
         ];
 
-        return in_array($this->mimeType, $archiveTypes);
+        return in_array($this->mimeType, $archiveTypes, true);
     }
 
     /**
@@ -292,7 +296,7 @@ class File
             'php', 'asp', 'aspx', 'jsp', 'pl', 'py', 'rb', 'sh'
         ];
 
-        return !in_array(strtolower($this->extension), $dangerousExtensions);
+        return !in_array(strtolower($this->extension), $dangerousExtensions, true);
     }
 
     /**

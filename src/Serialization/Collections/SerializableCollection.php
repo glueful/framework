@@ -11,17 +11,21 @@ use Glueful\Serialization\Attributes\Groups;
  *
  * A collection wrapper that provides serialization metadata and
  * group-based control over collection items and metadata.
+ * @template T
+ * @implements \IteratorAggregate<int, T>
  */
 class SerializableCollection implements \JsonSerializable, \Countable, \IteratorAggregate
 {
+    /** @var array<int, T> */
     protected array $items = [];
     protected ?string $defaultGroup = null;
+    /** @var array<string, mixed> */
     protected array $metadata = [];
 
     /**
      * Constructor
      *
-     * @param array $items Collection items
+     * @param array<int, T> $items Collection items
      * @param string|null $defaultGroup Default serialization group
      */
     public function __construct(array $items = [], ?string $defaultGroup = null)
@@ -32,6 +36,8 @@ class SerializableCollection implements \JsonSerializable, \Countable, \Iterator
 
     /**
      * Create collection with items
+     * @param array<int, T> $items
+     * @return self<T>
      */
     public static function create(array $items, ?string $defaultGroup = null): self
     {
@@ -49,6 +55,7 @@ class SerializableCollection implements \JsonSerializable, \Countable, \Iterator
 
     /**
      * Get items
+     * @return array<int, T>
      */
     #[Groups(['collection:items', 'collection:full'])]
     public function getItems(): array
@@ -58,6 +65,7 @@ class SerializableCollection implements \JsonSerializable, \Countable, \Iterator
 
     /**
      * Get metadata
+     * @return array<string, mixed>
      */
     #[Groups(['collection:meta', 'collection:full'])]
     public function getMetadata(): array
@@ -67,6 +75,7 @@ class SerializableCollection implements \JsonSerializable, \Countable, \Iterator
 
     /**
      * Add metadata
+     * @return self<T>
      */
     public function withMetadata(string $key, mixed $value): self
     {
@@ -76,6 +85,8 @@ class SerializableCollection implements \JsonSerializable, \Countable, \Iterator
 
     /**
      * Add multiple metadata
+     * @param array<string, mixed> $metadata
+     * @return self<T>
      */
     public function withMetadataArray(array $metadata): self
     {
@@ -85,6 +96,7 @@ class SerializableCollection implements \JsonSerializable, \Countable, \Iterator
 
     /**
      * Add item to collection
+     * @return self<T>
      */
     public function add(mixed $item): self
     {
@@ -94,6 +106,8 @@ class SerializableCollection implements \JsonSerializable, \Countable, \Iterator
 
     /**
      * Add multiple items
+     * @param array<int, T> $items
+     * @return self<T>
      */
     public function addMultiple(array $items): self
     {
@@ -103,6 +117,7 @@ class SerializableCollection implements \JsonSerializable, \Countable, \Iterator
 
     /**
      * Filter items
+     * @return self<T>
      */
     public function filter(callable $callback): self
     {
@@ -112,6 +127,7 @@ class SerializableCollection implements \JsonSerializable, \Countable, \Iterator
 
     /**
      * Map items
+     * @return self<T>
      */
     public function map(callable $callback): self
     {
@@ -121,6 +137,7 @@ class SerializableCollection implements \JsonSerializable, \Countable, \Iterator
 
     /**
      * Sort items
+     * @return self<T>
      */
     public function sort(callable $callback): self
     {
@@ -151,7 +168,7 @@ class SerializableCollection implements \JsonSerializable, \Countable, \Iterator
     #[Groups(['collection:meta', 'collection:summary'])]
     public function isEmpty(): bool
     {
-        return empty($this->items);
+        return count($this->items) === 0;
     }
 
     /**
@@ -164,6 +181,7 @@ class SerializableCollection implements \JsonSerializable, \Countable, \Iterator
 
     /**
      * Slice collection
+     * @return self<T>
      */
     public function slice(int $offset, ?int $length = null): self
     {
@@ -173,6 +191,7 @@ class SerializableCollection implements \JsonSerializable, \Countable, \Iterator
 
     /**
      * Chunk collection
+     * @return array<int, self<T>>
      */
     public function chunk(int $size): array
     {
@@ -185,6 +204,7 @@ class SerializableCollection implements \JsonSerializable, \Countable, \Iterator
 
     /**
      * Get unique items
+     * @return self<T>
      */
     public function unique(): self
     {
@@ -202,6 +222,7 @@ class SerializableCollection implements \JsonSerializable, \Countable, \Iterator
 
     /**
      * Group by key
+     * @return array<string, self<T>>
      */
     public function groupBy(string|callable $key): array
     {
@@ -211,7 +232,13 @@ class SerializableCollection implements \JsonSerializable, \Countable, \Iterator
             if (is_callable($key)) {
                 $groupKey = $key($item);
             } elseif (is_object($item)) {
-                $groupKey = $item->$key ?? 'undefined';
+                if (property_exists($item, $key)) {
+                    $reflection = new \ReflectionProperty($item, $key);
+                    $reflection->setAccessible(true);
+                    $groupKey = $reflection->getValue($item) ?? 'undefined';
+                } else {
+                    $groupKey = 'undefined';
+                }
             } elseif (is_array($item)) {
                 $groupKey = $item[$key] ?? 'undefined';
             } else {
@@ -230,6 +257,7 @@ class SerializableCollection implements \JsonSerializable, \Countable, \Iterator
 
     /**
      * Convert to array
+     * @return array<int, T>
      */
     public function toArray(): array
     {
@@ -238,6 +266,7 @@ class SerializableCollection implements \JsonSerializable, \Countable, \Iterator
 
     /**
      * JSON serialization
+     * @return array<string, mixed>
      */
     public function jsonSerialize(): array
     {
@@ -246,7 +275,7 @@ class SerializableCollection implements \JsonSerializable, \Countable, \Iterator
             'total' => $this->getTotal(),
         ];
 
-        if (!empty($this->metadata)) {
+        if (count($this->metadata) > 0) {
             $data['metadata'] = $this->metadata;
         }
 
@@ -271,6 +300,7 @@ class SerializableCollection implements \JsonSerializable, \Countable, \Iterator
 
     /**
      * Get summary for serialization
+     * @return array<string, mixed>
      */
     #[Groups(['collection:summary'])]
     public function getSummary(): array
@@ -284,6 +314,8 @@ class SerializableCollection implements \JsonSerializable, \Countable, \Iterator
 
     /**
      * Create paginated collection
+     * @param array<int, T> $items
+     * @return self<T>
      */
     public static function paginated(
         array $items,

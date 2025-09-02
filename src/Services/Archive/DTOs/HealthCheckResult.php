@@ -12,6 +12,11 @@ namespace Glueful\Services\Archive\DTOs;
  */
 class HealthCheckResult
 {
+    /**
+     * @param array<int, string> $issues
+     * @param array<int, string> $warnings
+     * @param array<string, mixed> $metrics
+     */
     public function __construct(
         public readonly bool $healthy,
         public readonly array $issues = [],
@@ -25,7 +30,7 @@ class HealthCheckResult
      */
     public function hasCriticalIssues(): bool
     {
-        return !$this->healthy || !empty($this->issues);
+        return !$this->healthy || count($this->issues) > 0;
     }
 
     /**
@@ -33,11 +38,13 @@ class HealthCheckResult
      */
     public function hasWarnings(): bool
     {
-        return !empty($this->warnings);
+        return count($this->warnings) > 0;
     }
 
     /**
      * Get all messages (issues and warnings)
+     *
+     * @return array<int, array<string, string>>
      */
     public function getAllMessages(): array
     {
@@ -65,6 +72,8 @@ class HealthCheckResult
 
     /**
      * Convert to array for JSON serialization
+     *
+     * @return array<string, mixed>
      */
     public function toArray(): array
     {

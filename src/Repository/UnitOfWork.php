@@ -18,8 +18,11 @@ use Glueful\Exceptions\DatabaseException;
 class UnitOfWork
 {
     private Connection $db;
+    /** @var array<string, array<string, mixed>> */
     private array $newEntities = [];
+    /** @var array<string, array<string, mixed>> */
     private array $dirtyEntities = [];
+    /** @var array<string, array<string, mixed>> */
     private array $removedEntities = [];
     private bool $isCommitting = false;
 
@@ -32,7 +35,7 @@ class UnitOfWork
      * Register a new entity to be inserted
      *
      * @param string $table Table name
-     * @param array $data Entity data
+     * @param array<string, mixed> $data Entity data
      * @param string|null $key Optional key for tracking
      */
     public function registerNew(string $table, array $data, ?string $key = null): void
@@ -46,7 +49,7 @@ class UnitOfWork
      *
      * @param string $table Table name
      * @param string $uuid Entity UUID
-     * @param array $data Updated data
+     * @param array<string, mixed> $data Updated data
      * @param string|null $key Optional key for tracking
      */
     public function registerDirty(string $table, string $uuid, array $data, ?string $key = null): void
@@ -71,7 +74,7 @@ class UnitOfWork
     /**
      * Commit all registered changes in a transaction
      *
-     * @return array Results of all operations
+     * @return array<string, array<mixed>> Results of all operations
      * @throws DatabaseException If commit fails
      */
     public function commit(): array
@@ -125,7 +128,7 @@ class UnitOfWork
      */
     public function isEmpty(): bool
     {
-        return empty($this->newEntities) && empty($this->dirtyEntities) && empty($this->removedEntities);
+        return $this->newEntities === [] && $this->dirtyEntities === [] && $this->removedEntities === [];
     }
 
     /**
@@ -140,6 +143,7 @@ class UnitOfWork
 
     /**
      * Get count of registered entities by type
+     * @return array<string, int>
      */
     public function getEntityCounts(): array
     {
@@ -152,6 +156,7 @@ class UnitOfWork
 
     /**
      * Commit new entities
+     * @return array<mixed>
      */
     private function commitNewEntities(): array
     {
@@ -167,6 +172,7 @@ class UnitOfWork
 
     /**
      * Commit dirty entities
+     * @return array<mixed>
      */
     private function commitDirtyEntities(): array
     {
@@ -184,6 +190,7 @@ class UnitOfWork
 
     /**
      * Commit removed entities
+     * @return array<mixed>
      */
     private function commitRemovedEntities(): array
     {

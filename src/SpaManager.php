@@ -17,6 +17,7 @@ use Glueful\Extensions\BaseExtension;
  */
 class SpaManager
 {
+    /** @var array<int, array{path_prefix: string, build_path: string, options: array<string, mixed>, registered_at: int}> */
     protected array $spaApps = [];
     protected LoggerInterface $logger;
     protected StaticFileDetector $staticFileDetector;
@@ -73,6 +74,9 @@ class SpaManager
      * @param string $buildPath Path to built SPA index.html
      * @param array $options Additional options
      * @return void
+     */
+    /**
+     * @param array<string, mixed> $options
      */
     public function registerSpaApp(string $pathPrefix, string $buildPath, array $options = []): void
     {
@@ -197,16 +201,19 @@ class SpaManager
      * @param array $options SPA options
      * @return bool Whether access is allowed
      */
+    /**
+     * @param array<string, mixed> $options
+     */
     protected function checkAccess(array $options): bool
     {
         // Basic authentication check
-        if (!empty($options['auth_required'])) {
+        if (isset($options['auth_required']) && (bool) $options['auth_required']) {
             // TODO: Implement your authentication logic
             // Example: return $this->isUserAuthenticated();
         }
 
         // Permission check
-        if (!empty($options['permissions'])) {
+        if (isset($options['permissions']) && is_array($options['permissions']) && count($options['permissions']) > 0) {
             // TODO: Implement your permission system
             // Example: return $this->hasPermissions($options['permissions']);
         }
@@ -219,6 +226,9 @@ class SpaManager
      *
      * @param array $app SPA application configuration
      * @return void
+     */
+    /**
+     * @param array{path_prefix: string, build_path: string, options: array<string, mixed>, registered_at: int} $app
      */
     protected function serveSpaApp(array $app): void
     {
@@ -287,6 +297,14 @@ class SpaManager
      *
      * @return array Registered SPA apps
      */
+    /**
+     * @return array<int, array{
+     *     path_prefix: string,
+     *     build_path: string,
+     *     options: array<string, mixed>,
+     *     registered_at: int
+     * }>
+     */
     public function getRegisteredApps(): array
     {
         return $this->spaApps;
@@ -296,6 +314,9 @@ class SpaManager
      * Get SPA statistics
      *
      * @return array SPA statistics
+     */
+    /**
+     * @return array{total_apps: int, frameworks: array<string, int>, auth_required: int, paths: array<int, string>}
      */
     public function getStatistics(): array
     {
@@ -312,7 +333,7 @@ class SpaManager
             $stats['frameworks'][$framework] = ($stats['frameworks'][$framework] ?? 0) + 1;
 
             // Count auth required
-            if (!empty($app['options']['auth_required'])) {
+            if (isset($app['options']['auth_required']) && (bool) $app['options']['auth_required']) {
                 $stats['auth_required']++;
             }
 

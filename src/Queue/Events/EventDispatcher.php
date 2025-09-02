@@ -19,7 +19,7 @@ namespace Glueful\Queue\Events;
  */
 class EventDispatcher
 {
-    /** @var array Registered event listeners */
+    /** @var array<string, array<int, array{callback: callable, priority: int}>> Registered event listeners */
     private array $listeners = [];
 
     /**
@@ -52,7 +52,7 @@ class EventDispatcher
      *
      * @param string $event Event name
      * @param mixed $data Event data
-     * @return array Results from all listeners
+     * @return array<int, mixed> Results from all listeners
      */
     public function dispatch(string $event, $data = null): array
     {
@@ -80,7 +80,7 @@ class EventDispatcher
      * Get all listeners for an event including wildcards
      *
      * @param string $event Event name
-     * @return array Array of listeners
+     * @return array<int, array{callback: callable, priority: int}> Array of listeners
      */
     private function getListenersForEvent(string $event): array
     {
@@ -150,7 +150,7 @@ class EventDispatcher
             fn($item) => $item['callback'] !== $listener
         );
 
-        if (empty($this->listeners[$event])) {
+        if (count($this->listeners[$event]) === 0) {
             unset($this->listeners[$event]);
         }
     }
@@ -163,13 +163,13 @@ class EventDispatcher
      */
     public function hasListeners(string $event): bool
     {
-        return !empty($this->getListenersForEvent($event));
+        return count($this->getListenersForEvent($event)) > 0;
     }
 
     /**
      * Get all registered events
      *
-     * @return array Event names
+     * @return array<int, string> Event names
      */
     public function getEvents(): array
     {

@@ -12,6 +12,10 @@ namespace Glueful\Services\Archive\DTOs;
  */
 class ArchiveSearchResult
 {
+    /**
+     * @param array<int, array<string, mixed>> $records
+     * @param array<int, string> $archivesSearched
+     */
     public function __construct(
         public readonly array $records,
         public readonly int $totalCount,
@@ -25,7 +29,7 @@ class ArchiveSearchResult
      */
     public function hasResults(): bool
     {
-        return !empty($this->records);
+        return count($this->records) > 0;
     }
 
     /**

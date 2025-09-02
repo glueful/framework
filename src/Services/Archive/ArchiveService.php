@@ -17,7 +17,6 @@ use Glueful\Services\Archive\DTOs\ArchiveFile;
 use Glueful\Helpers\Utils;
 use Glueful\Exceptions\DatabaseException;
 use Glueful\Exceptions\BusinessLogicException;
-use Glueful\Constants\ErrorCodes;
 use Glueful\Services\FileManager;
 
 /**
@@ -32,11 +31,15 @@ class ArchiveService implements ArchiveServiceInterface
 {
     private string $archiveBasePath;
     private ?string $encryptionKey;
+    /** @var array<string, mixed> */
     private array $config;
     private FileManager $fileManager;
 
     private Connection $db;
 
+    /**
+     * @param array<string, mixed> $config
+     */
     public function __construct(
         ?Connection $connection = null,
         private ?SchemaBuilderInterface $schemaManager = null,
@@ -140,6 +143,9 @@ class ArchiveService implements ArchiveServiceInterface
         $offset = 0;
 
         // Get table schema
+        if ($this->schemaManager === null) {
+            throw new DatabaseException('Schema manager not initialized');
+        }
         $schema = $this->schemaManager->getTableColumns($table);
 
         do {
@@ -151,12 +157,12 @@ class ArchiveService implements ArchiveServiceInterface
                 ->offset($offset)
                 ->get();
 
-            if (!empty($chunk)) {
+            if (count($chunk) > 0) {
                 $data = array_merge($data, $chunk);
                 $recordCount += count($chunk);
                 $offset += $chunkSize;
             }
-        } while (!empty($chunk));
+        } while (count($chunk) > 0);
 
         $metadata = [
             'table_name' => $table,
@@ -167,7 +173,7 @@ class ArchiveService implements ArchiveServiceInterface
             'first_record_date' => $data[0]['created_at'] ?? null,
             'last_record_date' => end($data)['created_at'] ?? null,
             'compression' => $this->config['compression'],
-            'encryption_enabled' => !empty($this->encryptionKey)
+            'encryption_enabled' => $this->encryptionKey !== null
         ];
 
         return new ExportResult($data, $recordCount, $metadata);
@@ -190,11 +196,18 @@ class ArchiveService implements ArchiveServiceInterface
             'data' => $exportResult->data
         ], JSON_UNESCAPED_UNICODE);
 
+        if ($jsonData === false) {
+            throw new \Exception('Failed to JSON encode archive data: ' . json_last_error_msg());
+        }
+
         // 2. Compress
         $compressedData = gzencode($jsonData, 9);
+        if ($compressedData === false) {
+            throw new \Exception('Failed to compress archive data');
+        }
 
         // 3. Encrypt if enabled
-        if ($this->encryptionKey) {
+        if ($this->encryptionKey !== null) {
             $iv = random_bytes(16);
             $encryptedData = openssl_encrypt(
                 $compressedData,
@@ -204,21 +217,35 @@ class ArchiveService implements ArchiveServiceInterface
                 $iv,
                 $tag
             );
+            if ($encryptedData === false) {
+                throw new \Exception('Failed to encrypt archive data');
+            }
             $finalData = $iv . $tag . $encryptedData;
         } else {
             $finalData = $compressedData;
         }
 
         // 4. Write to file
-        file_put_contents($filepath, $finalData);
+        $bytesWritten = file_put_contents($filepath, $finalData);
+        if ($bytesWritten === false) {
+            throw new \Exception('Failed to write archive file: ' . $filepath);
+        }
+
+        $fileSize = filesize($filepath);
+        if ($fileSize === false) {
+            throw new \Exception('Failed to get file size for: ' . $filepath);
+        }
 
         return new ArchiveFile(
             $filepath,
-            filesize($filepath),
+            $fileSize,
             hash('sha256', $finalData)
         );
     }
 
+    /**
+     * @param array<int, array<string, mixed>> $data
+     */
     private function createSearchIndex(string $archiveUuid, array $data): void
     {
         $indexes = [];
@@ -250,14 +277,18 @@ class ArchiveService implements ArchiveServiceInterface
         }
 
         // Perform bulk insert if we have entries
-        if (!empty($indexEntries)) {
+        if (count($indexEntries) > 0) {
             $this->insertBatchSearchIndexes($indexEntries);
         }
     }
 
+    /**
+     * @param array<string, array<string, mixed>> $indexes
+     * @param array<string, mixed> $record
+     */
     private function addToSearchIndex(array &$indexes, string $type, ?string $value, array $record): void
     {
-        if (!$value) {
+        if ($value === null || $value === '') {
             return;
         }
 
@@ -276,7 +307,7 @@ class ArchiveService implements ArchiveServiceInterface
         $indexes[$type][$value]['count']++;
 
         $timestamp = $record['created_at'] ?? date('Y-m-d H:i:s');
-        if (!$indexes[$type][$value]['first']) {
+        if (!((bool)($indexes[$type][$value]['first'] ?? false))) {
             $indexes[$type][$value]['first'] = $timestamp;
         }
         $indexes[$type][$value]['last'] = $timestamp;
@@ -292,7 +323,7 @@ class ArchiveService implements ArchiveServiceInterface
                 ->where('table_name', $table)
                 ->first();
 
-            if ($tableInfo) {
+            if ($tableInfo !== null) {
                 $rowCount = $this->db->table($table)->count();
 
                 $sizeBytes = ($tableInfo['data_length'] ?? 0) + ($tableInfo['index_length'] ?? 0);
@@ -303,7 +334,7 @@ class ArchiveService implements ArchiveServiceInterface
                     ->where('table_name', $table)
                     ->first();
 
-                if ($existing) {
+                if ($existing !== null) {
                     $this->db->table('archive_table_stats')
                         ->where('table_name', $table)
                         ->update([
@@ -331,7 +362,7 @@ class ArchiveService implements ArchiveServiceInterface
             ->where('table_name', $table)
             ->first();
 
-        if (!$stats) {
+        if ($stats === null) {
             return null;
         }
 
@@ -341,8 +372,12 @@ class ArchiveService implements ArchiveServiceInterface
             tableName: $table,
             currentRowCount: $stats['current_row_count'],
             currentSizeBytes: $stats['current_size_bytes'],
-            lastArchiveDate: $stats['last_archive_date'] ? new \DateTime($stats['last_archive_date']) : null,
-            nextArchiveDate: $stats['next_archive_date'] ? new \DateTime($stats['next_archive_date']) : null,
+            lastArchiveDate: ($stats['last_archive_date'] ?? null) !== null
+                ? new \DateTime($stats['last_archive_date'])
+                : null,
+            nextArchiveDate: ($stats['next_archive_date'] ?? null) !== null
+                ? new \DateTime($stats['next_archive_date'])
+                : null,
             needsArchive: $needsArchive,
             thresholdRows: $stats['archive_threshold_rows'],
             thresholdDays: $stats['archive_threshold_days']
@@ -379,7 +414,7 @@ class ArchiveService implements ArchiveServiceInterface
     {
         try {
             $archive = $this->getArchiveRecord($archiveUuid);
-            if (!$archive) {
+            if ($archive === null) {
                 return false;
             }
 
@@ -389,8 +424,12 @@ class ArchiveService implements ArchiveServiceInterface
             }
 
             // Verify checksum if configured
-            if ($this->config['verify_checksums']) {
-                $currentChecksum = hash('sha256', file_get_contents($archive['file_path']));
+            if ((bool)($this->config['verify_checksums'] ?? false)) {
+                $fileContents = file_get_contents($archive['file_path']);
+                if ($fileContents === false) {
+                    return false;
+                }
+                $currentChecksum = hash('sha256', $fileContents);
                 if ($currentChecksum !== $archive['checksum_sha256']) {
                     $this->updateArchiveStatus($archiveUuid, 'corrupted');
                     return false;
@@ -416,7 +455,7 @@ class ArchiveService implements ArchiveServiceInterface
     {
         try {
             $archive = $this->getArchiveRecord($archiveUuid);
-            if (!$archive) {
+            if ($archive === null) {
                 return false;
             }
 
@@ -469,11 +508,14 @@ class ArchiveService implements ArchiveServiceInterface
             totalRecordsArchived: $totals['total_records'] ?? 0,
             totalSizeBytes: $totals['total_size'] ?? 0,
             tableBreakdown: $breakdown,
-            oldestArchive: $dates['oldest'] ? new \DateTime($dates['oldest']) : null,
-            newestArchive: $dates['newest'] ? new \DateTime($dates['newest']) : null
+            oldestArchive: ($dates['oldest'] ?? null) !== null ? new \DateTime($dates['oldest']) : null,
+            newestArchive: ($dates['newest'] ?? null) !== null ? new \DateTime($dates['newest']) : null
         );
     }
 
+    /**
+     * @return array<int, string>
+     */
     public function getTablesNeedingArchival(): array
     {
         $tables = $this->db->table('archive_table_stats')
@@ -491,6 +533,9 @@ class ArchiveService implements ArchiveServiceInterface
         return $needingArchival;
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     public function getTableArchives(string $table): array
     {
         return $this->db->table('archive_registry')
@@ -505,6 +550,9 @@ class ArchiveService implements ArchiveServiceInterface
     private function validateTable(string $table): bool
     {
         try {
+            if ($this->schemaManager === null) {
+                return false;
+            }
             $this->schemaManager->getTableColumns($table);
             return true;
         } catch (\Exception) {
@@ -529,6 +577,9 @@ class ArchiveService implements ArchiveServiceInterface
             ->delete();
     }
 
+    /**
+     * @param array<string, mixed> $data
+     */
     private function registerArchive(array $data): void
     {
         $this->db->table('archive_registry')->insert($data);
@@ -555,7 +606,7 @@ class ArchiveService implements ArchiveServiceInterface
     {
         try {
             $archive = $this->getArchiveRecord($archiveUuid);
-            if ($archive && file_exists($archive['file_path'])) {
+            if ($archive !== null && file_exists($archive['file_path'])) {
                 unlink($archive['file_path']);
             }
 
@@ -567,6 +618,9 @@ class ArchiveService implements ArchiveServiceInterface
         }
     }
 
+    /**
+     * @return array<string, mixed>|null
+     */
     private function getArchiveRecord(string $archiveUuid): ?array
     {
         return $this->db->table('archive_registry')
@@ -575,12 +629,15 @@ class ArchiveService implements ArchiveServiceInterface
             ->first();
     }
 
+    /**
+     * @param array<string, mixed> $stats
+     */
     private function determineIfNeedsArchive(array $stats): bool
     {
         $rowThreshold = $stats['current_row_count'] >= $stats['archive_threshold_rows'];
 
         $timeThreshold = false;
-        if ($stats['last_archive_date']) {
+        if (($stats['last_archive_date'] ?? null) !== null) {
             $daysSince = (new \DateTime())->diff(new \DateTime($stats['last_archive_date']))->days;
             $timeThreshold = $daysSince >= $stats['archive_threshold_days'];
         } else {
@@ -596,33 +653,39 @@ class ArchiveService implements ArchiveServiceInterface
         return $_ENV['DB_NAME'] ?? 'glueful';
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     private function findRelevantArchives(ArchiveSearchQuery $query): array
     {
         // Implementation for finding relevant archives based on search query
         // This is a simplified version - full implementation would be more complex
         $archiveQuery = $this->db->table('archive_registry as ar')->select(['ar.*']);
 
-        if (!empty($query->tables)) {
+        if (count($query->tables ?? []) > 0) {
             $archiveQuery->whereIn('table_name', $query->tables);
         }
 
-        if ($query->startDate) {
+        if ($query->startDate !== null) {
             $archiveQuery->where('period_end', '>=', $query->startDate->format('Y-m-d H:i:s'));
         }
 
-        if ($query->endDate) {
+        if ($query->endDate !== null) {
             $archiveQuery->where('period_start', '<=', $query->endDate->format('Y-m-d H:i:s'));
         }
 
         return $archiveQuery->get();
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     private function loadArchive(string $archiveUuid): array
     {
         try {
             // Get archive metadata from database
             $archive = $this->getArchiveRecord($archiveUuid);
-            if (!$archive) {
+            if ($archive === null) {
                 throw BusinessLogicException::operationNotAllowed(
                     'archive_restore',
                     "Archive {$archiveUuid} not found"
@@ -647,7 +710,7 @@ class ArchiveService implements ArchiveServiceInterface
             }
 
             // Verify checksum if configured
-            if ($this->config['verify_checksums']) {
+            if ((bool)($this->config['verify_checksums'] ?? false)) {
                 $currentChecksum = hash('sha256', $fileData);
                 if ($currentChecksum !== $archive['checksum_sha256']) {
                     throw BusinessLogicException::operationNotAllowed(
@@ -659,9 +722,9 @@ class ArchiveService implements ArchiveServiceInterface
 
             // Decrypt if encryption was used
             $decompressedData = $fileData;
-            if ($this->encryptionKey && !empty($archive['metadata'])) {
+            if ($this->encryptionKey !== null && ($archive['metadata'] ?? '') !== '') {
                 $metadata = json_decode($archive['metadata'], true);
-                if ($metadata['encryption_enabled'] ?? false) {
+                if ((bool)($metadata['encryption_enabled'] ?? false)) {
                     $decompressedData = $this->decryptArchiveData($fileData);
                 }
             }
@@ -675,8 +738,9 @@ class ArchiveService implements ArchiveServiceInterface
                 throw new \Exception("Failed to parse archive JSON: " . json_last_error_msg());
             }
 
-            // Return the data array from the archive
-            return $archiveContent['data'] ?? [];
+            // Return the data array from the archive, ensuring it's an array of records
+            $data = $archiveContent['data'] ?? [];
+            return is_array($data) ? array_values($data) : [];
         } catch (\Exception $e) {
             error_log("Failed to load archive {$archiveUuid}: " . $e->getMessage());
             throw $e;
@@ -692,7 +756,7 @@ class ArchiveService implements ArchiveServiceInterface
      */
     private function decryptArchiveData(string $encryptedData): string
     {
-        if (!$this->encryptionKey) {
+        if ($this->encryptionKey === null) {
             throw new \Exception("No encryption key available for decryption");
         }
 
@@ -726,7 +790,7 @@ class ArchiveService implements ArchiveServiceInterface
      * Decompress archive data
      *
      * @param string $compressedData The compressed data
-     * @param array $archive Archive metadata for compression type detection
+     * @param array<string, mixed> $archive Archive metadata for compression type detection
      * @return string Decompressed JSON data
      * @throws \Exception If decompression fails
      */
@@ -759,6 +823,10 @@ class ArchiveService implements ArchiveServiceInterface
         }
     }
 
+    /**
+     * @param array<int, array<string, mixed>> $archiveData
+     * @return array<int, array<string, mixed>>
+     */
     private function searchArchiveData(array $archiveData, ArchiveSearchQuery $query): array
     {
         $results = [];
@@ -794,6 +862,9 @@ class ArchiveService implements ArchiveServiceInterface
      * @param array $record Individual record from archive
      * @param ArchiveSearchQuery $query Search criteria
      * @return bool True if record matches all criteria
+     */
+    /**
+     * @param array<string, mixed> $record
      */
     private function matchesSearchCriteria(array $record, ArchiveSearchQuery $query): bool
     {
@@ -854,6 +925,9 @@ class ArchiveService implements ArchiveServiceInterface
      * @param array $record Individual record from archive
      * @return \DateTime|null Parsed date or null if not found/invalid
      */
+    /**
+     * @param array<string, mixed> $record
+     */
     private function extractRecordDate(array $record): ?\DateTime
     {
         // Try common date field names
@@ -879,9 +953,12 @@ class ArchiveService implements ArchiveServiceInterface
      * @param array $indexEntries Array of index entry data
      * @return bool Success status
      */
+    /**
+     * @param array<int, array<string, mixed>> $indexEntries
+     */
     private function insertBatchSearchIndexes(array $indexEntries): bool
     {
-        if (empty($indexEntries)) {
+        if (count($indexEntries) === 0) {
             return true;
         }
 

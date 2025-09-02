@@ -17,7 +17,7 @@ class ConfigValidator
     /**
      * Validate queue configuration using OptionsResolver
      *
-     * @param array $config Configuration array
+     * @param array<string, mixed> $config Configuration array
      * @return ValidationResult Validation result
      */
     public function validate(array $config): ValidationResult
@@ -65,7 +65,8 @@ class ConfigValidator
         ];
 
         foreach ($patterns as $pattern => $replacement) {
-            if (preg_match($pattern, $message, $matches)) {
+            $result = preg_match($pattern, $message, $matches);
+            if ($result === 1) {
                 $formatted = $replacement;
                 for ($i = 1; $i < count($matches); $i++) {
                     $formatted = str_replace('$' . $i, $matches[$i], $formatted);
@@ -79,6 +80,8 @@ class ConfigValidator
 
     /**
      * Generate recommendations for successful configuration
+     *
+     * @return array<int, string>
      */
     private function generateSuccessRecommendations(QueueConfigurable $config): array
     {
@@ -87,19 +90,22 @@ class ConfigValidator
         // Check for performance optimizations
         $configArray = $config->toArray();
         $performance = $configArray['performance'] ?? [];
-        if (!($performance['cache_enabled'] ?? true)) {
+        $cacheEnabled = $performance['cache_enabled'] ?? true;
+        if ($cacheEnabled === false) {
             $recommendations[] = 'Consider enabling cache for better performance';
         }
 
         // Check for monitoring
         $monitoring = $config->getMonitoringConfig();
-        if (!$monitoring['enabled']) {
+        $monitoringEnabled = $monitoring['enabled'] ?? true;
+        if ($monitoringEnabled === false) {
             $recommendations[] = 'Enable monitoring for better visibility into queue operations';
         }
 
         // Check for auto-scaling
         $workers = $config->getWorkersConfig();
-        if (!$workers['auto_scale']) {
+        $autoScale = $workers['auto_scale'] ?? false;
+        if ($autoScale === false) {
             $recommendations[] = 'Consider enabling auto-scaling for dynamic worker management';
         }
 
@@ -128,6 +134,9 @@ class ConfigValidator
 
     /**
      * Get validation statistics
+     *
+     * @param array<string, mixed> $config
+     * @return array<string, mixed>
      */
     public function getValidationStats(array $config): array
     {

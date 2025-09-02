@@ -18,7 +18,7 @@ class HealthService
     /** @var self|null Singleton instance */
     private static ?self $instance = null;
 
-    /** @var CacheStore|null Cache driver instance */
+    /** @var CacheStore<mixed>|null Cache driver instance */
     private ?CacheStore $cache = null;
 
     /** @var Connection|null Database connection instance */
@@ -26,6 +26,8 @@ class HealthService
 
     /**
      * Constructor
+     *
+     * @param CacheStore<mixed>|null $cache
      */
     public function __construct(?CacheStore $cache = null, ?Connection $connection = null)
     {
@@ -49,6 +51,8 @@ class HealthService
 
     /**
      * Check database connectivity and functionality using QueryBuilder abstraction
+     *
+     * @return array<string, mixed>
      */
     public static function checkDatabase(): array
     {
@@ -57,6 +61,8 @@ class HealthService
 
     /**
      * Perform database health check using fluent QueryBuilder
+     *
+     * @return array<string, mixed>
      */
     private function performDatabaseCheck(): array
     {
@@ -72,7 +78,7 @@ class HealthService
                 'message' => 'Database connection and QueryBuilder operational',
                 'driver' => $this->connection->getDriverName(),
                 'migrations_applied' => $migrationCount,
-                'connectivity_test' => !empty($testResult)
+                'connectivity_test' => $testResult !== null && $testResult !== []
             ];
         } catch (\PDOException $e) {
             return [
@@ -105,6 +111,8 @@ class HealthService
 
     /**
      * Check cache connectivity and functionality
+     *
+     * @return array<string, mixed>
      */
     public static function checkCache(): array
     {
@@ -113,6 +121,8 @@ class HealthService
 
     /**
      * Perform cache health check using injected cache driver
+     *
+     * @return array<string, mixed>
      */
     private function performCacheCheck(): array
     {
@@ -150,6 +160,8 @@ class HealthService
 
     /**
      * Check required PHP extensions
+     *
+     * @return array<string, mixed>
      */
     public static function checkExtensions(): array
     {
@@ -165,7 +177,7 @@ class HealthService
             }
         }
 
-        if (empty($missing)) {
+        if ($missing === []) {
             return [
                 'status' => 'ok',
                 'message' => 'All required extensions are loaded',
@@ -184,17 +196,20 @@ class HealthService
     /**
      * Check application configuration
      */
+    /**
+     * @return array<string, mixed>
+     */
     public static function checkConfiguration(): array
     {
         $issues = [];
         $warnings = [];
 
         // Critical configuration checks
-        if (empty(env('JWT_KEY')) || env('JWT_KEY') === 'your-secure-jwt-key-here') {
+        if (env('JWT_KEY') === null || env('JWT_KEY') === '' || env('JWT_KEY') === 'your-secure-jwt-key-here') {
             $issues[] = 'JWT_KEY not properly configured';
         }
 
-        if (empty(env('APP_KEY')) || env('APP_KEY') === 'generate-secure-32-char-key-here') {
+        if (env('APP_KEY') === null || env('APP_KEY') === '' || env('APP_KEY') === 'generate-secure-32-char-key-here') {
             $issues[] = 'APP_KEY not properly configured';
         }
 
@@ -219,14 +234,14 @@ class HealthService
             }
         }
 
-        if (!empty($issues)) {
+        if ($issues !== []) {
             return [
                 'status' => 'error',
                 'message' => 'Critical configuration issues detected',
                 'issues' => $issues,
                 'warnings' => $warnings
             ];
-        } elseif (!empty($warnings)) {
+        } elseif ($warnings !== []) {
             return [
                 'status' => 'warning',
                 'message' => 'Configuration warnings detected',
@@ -243,6 +258,9 @@ class HealthService
 
     /**
      * Get overall system health status
+     */
+    /**
+     * @return array<string, mixed>
      */
     public static function getOverallHealth(): array
     {
@@ -283,6 +301,10 @@ class HealthService
 
     /**
      * Convert health service result to SystemCheckCommand format
+     */
+    /**
+     * @param array<string, mixed> $healthResult
+     * @return array<string, mixed>
      */
     public static function convertToSystemCheckFormat(array $healthResult): array
     {

@@ -39,10 +39,10 @@ class Serializer
      */
     public function serialize(mixed $data, string $format = 'json', ?SerializationContext $context = null): string
     {
-        $contextData = $context ? $context->toArray() : [];
+        $contextData = $context !== null ? $context->toArray() : [];
 
         // Try cache if available and data is an object
-        if ($this->cache && $this->cacheEnabled && is_object($data)) {
+        if ($this->cache !== null && $this->cacheEnabled && is_object($data)) {
             $cacheKey = $this->cache->generateKey($data, array_merge($contextData, ['format' => $format]));
 
             $cached = $this->cache->get($cacheKey);
@@ -75,7 +75,7 @@ class Serializer
         string $format = 'json',
         ?SerializationContext $context = null
     ): mixed {
-        $contextData = $context ? $context->toArray() : [];
+        $contextData = $context !== null ? $context->toArray() : [];
 
         return $this->symfonySerializer->deserialize($data, $type, $format, $contextData);
     }
@@ -85,14 +85,14 @@ class Serializer
      *
      * @param mixed $data Data to normalize
      * @param SerializationContext|null $context Normalization context
-     * @return array Normalized data
+     * @return array<string, mixed> Normalized data
      */
     public function normalize(mixed $data, ?SerializationContext $context = null): array
     {
-        $contextData = $context ? $context->toArray() : [];
+        $contextData = $context !== null ? $context->toArray() : [];
 
         // Try cache if available and data is an object
-        if ($this->cache && $this->cacheEnabled && is_object($data)) {
+        if ($this->cache !== null && $this->cacheEnabled && is_object($data)) {
             $cacheKey = $this->cache->generateKey($data, array_merge($contextData, ['operation' => 'normalize']));
 
             $cached = $this->cache->get($cacheKey);
@@ -106,7 +106,7 @@ class Serializer
             $result = $this->symfonySerializer->normalize($data, null, $contextData);
 
             // Cache the result if caching is enabled
-            if ($this->cache && $this->cacheEnabled && is_object($data)) {
+            if ($this->cache !== null && $this->cacheEnabled && is_object($data)) {
                 $cacheKey = $this->cache->generateKey($data, array_merge($contextData, ['operation' => 'normalize']));
                 $this->cache->set($cacheKey, ['result' => $result, 'timestamp' => time()]);
             }
@@ -127,7 +127,7 @@ class Serializer
      */
     public function denormalize(mixed $data, string $type, ?SerializationContext $context = null): mixed
     {
-        $contextData = $context ? $context->toArray() : [];
+        $contextData = $context !== null ? $context->toArray() : [];
 
         // Cast to DenormalizerInterface to access denormalize method
         if ($this->symfonySerializer instanceof DenormalizerInterface) {
@@ -153,7 +153,7 @@ class Serializer
      * Security-aware deserialization for cache and queue operations
      *
      * @param string $data Serialized data to deserialize
-     * @param array $additionalAllowedClasses Additional classes to allow
+     * @param array<string> $additionalAllowedClasses Additional classes to allow
      * @return mixed Deserialized data
      */
     public function secureDeserialize(string $data, array $additionalAllowedClasses = []): mixed
@@ -190,7 +190,7 @@ class Serializer
      *
      * @param string $json JSON string
      * @param SerializationContext|null $context Deserialization context
-     * @return array Array representation
+     * @return array<string, mixed> Array representation
      */
     public function fromJson(string $json, ?SerializationContext $context = null): array
     {
@@ -202,7 +202,7 @@ class Serializer
      *
      * @param string $xml XML string
      * @param SerializationContext|null $context Deserialization context
-     * @return array Array representation
+     * @return array<string, mixed> Array representation
      */
     public function fromXml(string $xml, ?SerializationContext $context = null): array
     {
@@ -213,7 +213,7 @@ class Serializer
      * Serialize data with groups
      *
      * @param mixed $data Data to serialize
-     * @param array $groups Serialization groups
+     * @param array<string> $groups Serialization groups
      * @param string $format Target format
      * @return string Serialized data
      */
@@ -227,8 +227,8 @@ class Serializer
      * Normalize data with groups
      *
      * @param mixed $data Data to normalize
-     * @param array $groups Serialization groups
-     * @return array Normalized data
+     * @param array<string> $groups Serialization groups
+     * @return array<string, mixed> Normalized data
      */
     public function normalizeWithGroups(mixed $data, array $groups): array
     {
@@ -298,7 +298,7 @@ class Serializer
      */
     public function invalidateCache(object $object): void
     {
-        if ($this->cache) {
+        if ($this->cache !== null) {
             $this->cache->invalidateObject($object);
         }
     }
@@ -308,17 +308,19 @@ class Serializer
      */
     public function clearCache(): void
     {
-        if ($this->cache) {
+        if ($this->cache !== null) {
             $this->cache->clear();
         }
     }
 
     /**
      * Get cache statistics
+     *
+     * @return array<string, mixed>
      */
     public function getCacheStats(): array
     {
-        if ($this->cache) {
+        if ($this->cache !== null) {
             return $this->cache->getStats();
         }
         return ['cache_enabled' => false];
@@ -326,10 +328,12 @@ class Serializer
 
     /**
      * Get normalizer registry statistics
+     *
+     * @return array<string, mixed>
      */
     public function getNormalizerStats(): array
     {
-        if ($this->normalizerRegistry) {
+        if ($this->normalizerRegistry !== null) {
             return $this->normalizerRegistry->getStats();
         }
         return ['registry_enabled' => false];
@@ -337,27 +341,33 @@ class Serializer
 
     /**
      * Preload specific normalizers for better performance
+     *
+     * @param array<string> $classes
      */
     public function preloadNormalizers(array $classes): void
     {
-        if ($this->normalizerRegistry) {
+        if ($this->normalizerRegistry !== null) {
             $this->normalizerRegistry->preload($classes);
         }
     }
 
     /**
      * Warm up cache for collection of objects
+     *
+     * @param array<object> $objects
+     * @param SerializationContext|null $context
+     * @return int
      */
     public function warmupCache(array $objects, ?SerializationContext $context = null): int
     {
-        if (!$this->cache || !$this->cacheEnabled) {
+        if ($this->cache === null || !$this->cacheEnabled) {
             return 0;
         }
 
         $warmedUp = 0;
         foreach ($objects as $object) {
             if (is_object($object)) {
-                $contextData = $context ? $context->toArray() : [];
+                $contextData = $context !== null ? $context->toArray() : [];
                 $cacheKey = $this->cache->generateKey($object, $contextData);
 
                 if (!$this->cache->has($cacheKey)) {
@@ -377,6 +387,8 @@ class Serializer
 
     /**
      * Get performance metrics
+     *
+     * @return array<string, mixed>
      */
     public function getPerformanceMetrics(): array
     {

@@ -20,10 +20,14 @@ use Glueful\Services\Archive\DTOs\HealthCheckResult;
 class ArchiveHealthChecker
 {
     private string $archivePath;
+    /** @var array<string, mixed> */
     private array $config;
 
     private Connection $db;
 
+    /**
+     * @param array<string, mixed> $config
+     */
     public function __construct(
         ?Connection $connection = null,
         array $config = []
@@ -46,8 +50,8 @@ class ArchiveHealthChecker
      */
     public function performHealthCheck(): HealthCheckResult
     {
-        if (!$this->config['enable_health_checks']) {
-            return new HealthCheckResult(true, [], ['health_checks' => 'disabled']);
+        if (!(bool)($this->config['enable_health_checks'] ?? true)) {
+            return new HealthCheckResult(true, [], [], ['health_checks' => 'disabled']);
         }
 
         $issues = [];
@@ -57,7 +61,7 @@ class ArchiveHealthChecker
         try {
             // Check file system integrity
             $corruptedArchives = $this->findCorruptedArchives();
-            if (!empty($corruptedArchives)) {
+            if (count($corruptedArchives) > 0) {
                 $issues[] = "Corrupted archives found: " . count($corruptedArchives) . " archives";
                 $metrics['corrupted_archives'] = $corruptedArchives;
             }
@@ -81,7 +85,7 @@ class ArchiveHealthChecker
 
             // Check missing archives
             $missingArchives = $this->findMissingArchives();
-            if (!empty($missingArchives)) {
+            if (count($missingArchives) > 0) {
                 $issues[] = "Missing archive files: " . count($missingArchives) . " files";
                 $metrics['missing_archives'] = $missingArchives;
             }
@@ -99,7 +103,7 @@ class ArchiveHealthChecker
 
             // Check for stale archives
             $staleArchives = $this->findStaleArchives();
-            if (!empty($staleArchives)) {
+            if ($staleArchives > 0) {
                 $warnings[] = "Found {$staleArchives} archives older than retention policy";
             }
         } catch (\Exception $e) {
@@ -107,7 +111,7 @@ class ArchiveHealthChecker
         }
 
         return new HealthCheckResult(
-            healthy: empty($issues),
+            healthy: count($issues) === 0,
             issues: $issues,
             warnings: $warnings,
             metrics: $metrics
@@ -117,7 +121,7 @@ class ArchiveHealthChecker
     /**
      * Find corrupted archives by verifying checksums
      *
-     * @return array List of corrupted archive UUIDs
+     * @return array<int, string> List of corrupted archive UUIDs
      */
     private function findCorruptedArchives(): array
     {
@@ -156,12 +160,21 @@ class ArchiveHealthChecker
     /**
      * Check storage usage
      *
-     * @return array Storage metrics
+     * @return array<string, mixed> Storage metrics
      */
     private function checkStorageUsage(): array
     {
         $totalSpace = disk_total_space($this->archivePath);
         $freeSpace = disk_free_space($this->archivePath);
+
+        if ($totalSpace === false || $freeSpace === false) {
+            return [
+                'issues' => ['Unable to determine disk space for archive path: ' . $this->archivePath],
+                'warnings' => [],
+                'metrics' => []
+            ];
+        }
+
         $usedSpace = $totalSpace - $freeSpace;
 
         // Get archive-specific usage
@@ -182,15 +195,15 @@ class ArchiveHealthChecker
             'used_space' => $usedSpace,
             'free_space' => $freeSpace,
             'archive_size' => $archiveSize,
-            'usage_percent' => ($usedSpace / $totalSpace) * 100,
-            'archive_percent' => ($archiveSize / $totalSpace) * 100,
+            'usage_percent' => $totalSpace > 0 ? ($usedSpace / $totalSpace) * 100 : 0,
+            'archive_percent' => $totalSpace > 0 ? ($archiveSize / $totalSpace) * 100 : 0,
         ];
     }
 
     /**
      * Find missing archive files
      *
-     * @return array List of missing archive UUIDs
+     * @return array<int, string> List of missing archive UUIDs
      */
     private function findMissingArchives(): array
     {
@@ -239,29 +252,45 @@ class ArchiveHealthChecker
     /**
      * Check archive age distribution
      *
-     * @return array Age distribution metrics
+     * @return array<string, mixed> Age distribution metrics
      */
     private function checkArchiveAgeDistribution(): array
     {
         try {
             // Get counts for different time periods separately to avoid database-specific date functions
+            $weekTimestamp = strtotime('-7 days');
+            if ($weekTimestamp === false) {
+                $weekTimestamp = time() - (7 * 24 * 3600); // Fallback: 7 days ago
+            }
             $lastWeek = $this->db->table('archive_registry')
-                ->where('created_at', '>', date('Y-m-d H:i:s', strtotime('-7 days')))
+                ->where('created_at', '>', date('Y-m-d H:i:s', $weekTimestamp))
                 ->where('status', '!=', 'deleted')
                 ->count();
 
+            $monthTimestamp = strtotime('-30 days');
+            if ($monthTimestamp === false) {
+                $monthTimestamp = time() - (30 * 24 * 3600); // Fallback: 30 days ago
+            }
             $lastMonth = $this->db->table('archive_registry')
-                ->where('created_at', '>', date('Y-m-d H:i:s', strtotime('-30 days')))
+                ->where('created_at', '>', date('Y-m-d H:i:s', $monthTimestamp))
                 ->where('status', '!=', 'deleted')
                 ->count();
 
+            $quarterTimestamp = strtotime('-90 days');
+            if ($quarterTimestamp === false) {
+                $quarterTimestamp = time() - (90 * 24 * 3600); // Fallback: 90 days ago
+            }
             $lastQuarter = $this->db->table('archive_registry')
-                ->where('created_at', '>', date('Y-m-d H:i:s', strtotime('-90 days')))
+                ->where('created_at', '>', date('Y-m-d H:i:s', $quarterTimestamp))
                 ->where('status', '!=', 'deleted')
                 ->count();
 
+            $yearTimestamp = strtotime('-365 days');
+            if ($yearTimestamp === false) {
+                $yearTimestamp = time() - (365 * 24 * 3600); // Fallback: 365 days ago
+            }
             $lastYear = $this->db->table('archive_registry')
-                ->where('created_at', '>', date('Y-m-d H:i:s', strtotime('-365 days')))
+                ->where('created_at', '>', date('Y-m-d H:i:s', $yearTimestamp))
                 ->where('status', '!=', 'deleted')
                 ->count();
 
@@ -301,7 +330,11 @@ class ArchiveHealthChecker
 
             foreach ($retentionPolicies as $table => $policy) {
                 $complianceYears = $policy['compliance_period_years'] ?? 7;
-                $cutoffDate = date('Y-m-d', strtotime("-{$complianceYears} years"));
+                $timestamp = strtotime("-{$complianceYears} years");
+                if ($timestamp === false) {
+                    continue; // Skip invalid date calculations
+                }
+                $cutoffDate = date('Y-m-d', $timestamp);
 
                 $count = $this->db->table('archive_registry')
                     ->where('table_name', $table)
@@ -322,7 +355,7 @@ class ArchiveHealthChecker
     /**
      * Get detailed health report
      *
-     * @return array Detailed health metrics
+     * @return array<string, mixed> Detailed health metrics
      */
     public function getDetailedHealthReport(): array
     {
@@ -342,7 +375,7 @@ class ArchiveHealthChecker
      * Generate recommendations based on health check
      *
      * @param HealthCheckResult $healthCheck
-     * @return array List of recommendations
+     * @return array<int, string> List of recommendations
      */
     private function generateRecommendations(HealthCheckResult $healthCheck): array
     {
@@ -358,7 +391,7 @@ class ArchiveHealthChecker
 
         if (
             isset($healthCheck->metrics['corrupted_archives']) &&
-            !empty($healthCheck->metrics['corrupted_archives'])
+            count($healthCheck->metrics['corrupted_archives'] ?? []) > 0
         ) {
             $recommendations[] = "Run integrity verification on all archives and consider re-archiving corrupted data";
         }

@@ -12,6 +12,7 @@ namespace Glueful\Serialization\Context;
  */
 class SerializationContext
 {
+    /** @var array<string, mixed> */
     private array $context = [];
 
     /**
@@ -24,6 +25,7 @@ class SerializationContext
 
     /**
      * Set serialization groups
+     * @param array<string> $groups
      */
     public function withGroups(array $groups): self
     {
@@ -54,6 +56,7 @@ class SerializationContext
 
     /**
      * Set attributes to ignore during serialization
+     * @param array<string> $attributes
      */
     public function withIgnoredAttributes(array $attributes): self
     {
@@ -81,6 +84,7 @@ class SerializationContext
 
     /**
      * Set custom normalizer context
+     * @param array<string, mixed> $context
      */
     public function withNormalizerContext(string $normalizer, array $context): self
     {
@@ -90,6 +94,7 @@ class SerializationContext
 
     /**
      * Convert context to array for Symfony Serializer
+     * @return array<string, mixed>
      */
     public function toArray(): array
     {
@@ -101,11 +106,12 @@ class SerializationContext
      */
     public function hasGroups(): bool
     {
-        return !empty($this->context['groups']);
+        return isset($this->context['groups']) && count($this->context['groups']) > 0;
     }
 
     /**
      * Get groups
+     * @return array<string>
      */
     public function getGroups(): array
     {
@@ -117,11 +123,12 @@ class SerializationContext
      */
     public function hasIgnoredAttributes(): bool
     {
-        return !empty($this->context['ignored_attributes']);
+        return isset($this->context['ignored_attributes']) && count($this->context['ignored_attributes']) > 0;
     }
 
     /**
      * Get ignored attributes
+     * @return array<string>
      */
     public function getIgnoredAttributes(): array
     {

@@ -30,7 +30,7 @@ class RateLimiterRule
     /** @var float Threshold for triggering rule based on behavior score (0.0-1.0) */
     private float $threshold;
 
-    /** @var array Additional rule conditions */
+    /** @var array<string, mixed> Additional rule conditions */
     private array $conditions;
 
     /** @var bool Whether rule is currently active */
@@ -51,7 +51,7 @@ class RateLimiterRule
      * @param int $maxAttempts Maximum attempts allowed
      * @param int $windowSeconds Time window in seconds
      * @param float $threshold Activation threshold (0.0-1.0)
-     * @param array $conditions Additional rule conditions
+     * @param array<string, mixed> $conditions Additional rule conditions
      * @param bool $active Whether rule is active
      * @param int $priority Rule priority (higher is more important)
      */
@@ -180,7 +180,7 @@ class RateLimiterRule
     /**
      * Get rule conditions
      *
-     * @return array Rule conditions
+     * @return array<string, mixed> Rule conditions
      */
     public function getConditions(): array
     {
@@ -190,7 +190,7 @@ class RateLimiterRule
     /**
      * Set rule conditions
      *
-     * @param array $conditions New rule conditions
+     * @param array<string, mixed> $conditions New rule conditions
      * @return self Fluent interface
      */
     public function setConditions(array $conditions): self
@@ -288,7 +288,7 @@ class RateLimiterRule
     /**
      * Convert rule to array
      *
-     * @return array Rule as associative array
+     * @return array<string, mixed> Rule as associative array
      */
     public function toArray(): array
     {
@@ -309,7 +309,7 @@ class RateLimiterRule
     /**
      * Create rule from array
      *
-     * @param array $data Rule data
+     * @param array<string, mixed> $data Rule data
      * @return self New rule instance
      */
     public static function fromArray(array $data): self

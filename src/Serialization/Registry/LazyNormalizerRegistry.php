@@ -82,7 +82,7 @@ class LazyNormalizerRegistry
 
         // Try exact class match first
         $normalizer = $this->getNormalizer($class);
-        if ($normalizer) {
+        if ($normalizer !== null) {
             return $normalizer;
         }
 
@@ -92,7 +92,7 @@ class LazyNormalizerRegistry
         // Check parent classes
         while ($parent = $reflection->getParentClass()) {
             $normalizer = $this->getNormalizer($parent->getName());
-            if ($normalizer) {
+            if ($normalizer !== null) {
                 // Cache this result for the original class
                 $this->normalizers[$class] = $this->normalizers[$parent->getName()];
                 return $normalizer;
@@ -103,7 +103,7 @@ class LazyNormalizerRegistry
         // Check interfaces
         foreach (class_implements($object) as $interface) {
             $normalizer = $this->getNormalizer($interface);
-            if ($normalizer) {
+            if ($normalizer !== null) {
                 // Cache this result for the original class
                 $this->normalizers[$class] = $this->normalizers[$interface];
                 return $normalizer;
@@ -123,6 +123,8 @@ class LazyNormalizerRegistry
 
     /**
      * Get all registered normalizer classes
+     *
+     * @return array<string>
      */
     public function getRegisteredNormalizers(): array
     {
@@ -131,6 +133,8 @@ class LazyNormalizerRegistry
 
     /**
      * Get all loaded normalizers
+     *
+     * @return array<string, NormalizerInterface>
      */
     public function getLoadedNormalizers(): array
     {
@@ -147,6 +151,8 @@ class LazyNormalizerRegistry
 
     /**
      * Preload specific normalizers
+     *
+     * @param array<string> $classes
      */
     public function preload(array $classes): void
     {
@@ -173,6 +179,8 @@ class LazyNormalizerRegistry
 
     /**
      * Get registry statistics
+     *
+     * @return array<string, mixed>
      */
     public function getStats(): array
     {
@@ -188,6 +196,8 @@ class LazyNormalizerRegistry
 
     /**
      * Bulk register normalizers from array
+     *
+     * @param array<string, string|callable> $mappings
      */
     public function registerNormalizers(array $mappings): void
     {
@@ -219,10 +229,10 @@ class LazyNormalizerRegistry
             if ($file->isFile() && $file->getExtension() === 'php') {
                 $className = $this->extractClassNameFromFile($file->getPathname(), $namespace);
 
-                if ($className && $this->isNormalizerClass($className)) {
+                if ($className !== null && $this->isNormalizerClass($className)) {
                     // Extract the class it normalizes from the class name or reflection
                     $targetClass = $this->extractTargetClass($className);
-                    if ($targetClass) {
+                    if ($targetClass !== null) {
                         $this->addNormalizer($targetClass, $className);
                         $discovered++;
                     }
@@ -273,7 +283,7 @@ class LazyNormalizerRegistry
 
             if (method_exists($normalizer, 'getSupportedTypes')) {
                 $supportedTypes = $normalizer->getSupportedTypes(null);
-                if (!empty($supportedTypes)) {
+                if (count($supportedTypes) > 0) {
                     return array_key_first($supportedTypes);
                 }
             }

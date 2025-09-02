@@ -73,17 +73,17 @@ class NotificationRepository extends BaseRepository
         }
 
         // Ensure UUID is present for new notifications
-        if (!isset($data['uuid']) || empty($data['uuid'])) {
+        if (!isset($data['uuid']) || ($data['uuid'] ?? '') === '') {
             $data['uuid'] = Utils::generateNanoID();
         }
 
         // Check if notification exists by UUID
         $existing = null;
-        if (!empty($data['uuid'])) {
+        if (($data['uuid'] ?? '') !== '') {
             $existing = $this->findByUuid($data['uuid']);
         }
 
-        if ($existing) {
+        if ($existing !== null) {
             // Update existing notification using BaseRepository's update method
             // This automatically handles audit logging
             $data['id'] = $existing->getId();
@@ -96,7 +96,7 @@ class NotificationRepository extends BaseRepository
 
             // Create new notification using BaseRepository's create method
             $result = $this->create($data);
-            return $result ? true : false;
+            return $result !== '';
         }
     }
 
@@ -114,7 +114,7 @@ class NotificationRepository extends BaseRepository
         // Use BaseRepository's findBy method for consistent behavior
         $result = $this->findBy($this->primaryKey, $uuid);
 
-        if (!$result) {
+        if ($result === null) {
             return null;
         }
 
@@ -159,8 +159,12 @@ class NotificationRepository extends BaseRepository
      * @param bool|null $onlyUnread Whether to get only unread notifications
      * @param int|null $limit Maximum number of notifications to retrieve
      * @param int|null $offset Pagination offset
-     * @param array $filters Optional additional filters (type, priority, date range)
-     * @return array Array of Notification objects
+     * @param array<string, mixed> $filters Optional additional filters (type, priority, date range)
+     * @return array<int, array<string, mixed>> Array of notification data arrays
+     */
+    /**
+     * @param array<string, mixed> $filters
+     * @return array<int, array<string, mixed>>
      */
     public function findForNotifiable(
         string $notifiableType,
@@ -191,7 +195,7 @@ class NotificationRepository extends BaseRepository
 
         $results = $query->get();
 
-        if (!$results) {
+        if ($results === []) {
             return [];
         }
 
@@ -212,8 +216,12 @@ class NotificationRepository extends BaseRepository
      * @param bool $onlyUnread Whether to get only unread notifications
      * @param int $page Page number (1-based)
      * @param int $perPage Number of items per page
-     * @param array $filters Optional additional filters (type, priority, date range)
-     * @return array Paginated results with data and pagination info
+     * @param array<string, mixed> $filters Optional additional filters (type, priority, date range)
+     * @return array<string, mixed> Paginated results with data and pagination info
+     */
+    /**
+     * @param array<string, mixed> $filters
+     * @return array<string, mixed>
      */
     public function findForNotifiableWithPagination(
         string $notifiableType,
@@ -258,7 +266,10 @@ class NotificationRepository extends BaseRepository
      *
      * @param DateTime|null $now Current time (defaults to now)
      * @param int|null $limit Maximum number to retrieve
-     * @return array Array of Notification objects
+     * @return array<Notification> Array of Notification objects
+     */
+    /**
+     * @return array<Notification>
      */
     public function findPendingScheduled(?DateTime $now = null, ?int $limit = null): array
     {
@@ -277,7 +288,7 @@ class NotificationRepository extends BaseRepository
 
         $results = $query->get();
 
-        if (!$results) {
+        if ($results === []) {
             return [];
         }
 
@@ -312,17 +323,17 @@ class NotificationRepository extends BaseRepository
 
             // Check if preference exists by UUID
             $existing = null;
-            if (!empty($preference->getUuid())) {
+            if (($preference->getUuid() ?? '') !== '') {
                 $existing = $this->findPreferenceByUuid($preference->getUuid());
             }
 
-            if ($existing) {
+            if ($existing !== null) {
                 // Update existing preference
                 return $this->update($data['uuid'], $data);
             } else {
                 // Create new preference
                 $result = $this->create($data);
-                return $result ? true : false;
+                return $result !== '';
             }
         });
     }
@@ -339,7 +350,7 @@ class NotificationRepository extends BaseRepository
             // Use BaseRepository's findBy method
             $data = $this->findBy('uuid', $uuid);
 
-            if (!$data) {
+            if ($data === null) {
                 return null;
             }
 
@@ -364,7 +375,7 @@ class NotificationRepository extends BaseRepository
      *
      * @param string $notifiableType Recipient type
      * @param string $notifiableId Recipient ID
-     * @return array Array of NotificationPreference objects
+     * @return array<NotificationPreference> Array of NotificationPreference objects
      */
     public function findPreferencesForNotifiable(string $notifiableType, string $notifiableId): array
     {
@@ -377,7 +388,7 @@ class NotificationRepository extends BaseRepository
                 ])
                 ->get();
 
-            if (!$results) {
+            if ($results === []) {
                 return [];
             }
 
@@ -424,17 +435,17 @@ class NotificationRepository extends BaseRepository
 
             // Check if template exists by UUID
             $existing = null;
-            if (!empty($template->getUuid())) {
+            if (($template->getUuid() ?? '') !== '') {
                 $existing = $this->findTemplateByUuid($template->getUuid());
             }
 
-            if ($existing) {
+            if ($existing !== null) {
                 // Update existing template
                 return $this->update($data['uuid'], $data);
             } else {
                 // Create new template
                 $result = $this->create($data);
-                return $result ? true : false;
+                return $result !== '';
             }
         });
     }
@@ -451,7 +462,7 @@ class NotificationRepository extends BaseRepository
             // Use BaseRepository's findBy method
             $data = $this->findBy('uuid', $uuid);
 
-            if (!$data) {
+            if ($data === null) {
                 return null;
             }
 
@@ -474,7 +485,7 @@ class NotificationRepository extends BaseRepository
      *
      * @param string $notificationType Notification type
      * @param string $channel Channel name
-     * @return array Array of NotificationTemplate objects
+     * @return array<NotificationTemplate> Array of NotificationTemplate objects
      */
     public function findTemplates(string $notificationType, string $channel): array
     {
@@ -487,7 +498,7 @@ class NotificationRepository extends BaseRepository
                 ])
                 ->get();
 
-            if (!$results) {
+            if ($results === []) {
                 return [];
             }
 
@@ -516,7 +527,7 @@ class NotificationRepository extends BaseRepository
      * @param string $notifiableType Recipient type
      * @param string $notifiableId Recipient ID
      * @param bool $onlyUnread Whether to count only unread notifications
-     * @param array $filters Optional additional filters
+     * @param array<string, mixed> $filters Optional additional filters
      * @return int Total count of notifications
      */
     public function countForNotifiable(
@@ -536,7 +547,7 @@ class NotificationRepository extends BaseRepository
         }
 
         // For simple cases, use the count method directly
-        if (empty($filters)) {
+        if ($filters === []) {
             return $this->db->table($this->table)->where($conditions)->count();
         }
 
@@ -570,7 +581,7 @@ class NotificationRepository extends BaseRepository
             ->whereNull('read_at')
             ->get();
 
-        if (empty($unreadNotifications)) {
+        if ($unreadNotifications === []) {
             return 0;
         }
 
@@ -588,7 +599,7 @@ class NotificationRepository extends BaseRepository
                 ->update(['read_at' => $now]);
 
             // If audit logging is critical, we can batch create audit entries
-            if ($updated > 0 && $userId) {
+            if ($updated > 0 && $userId !== null) {
                 $this->logBulkNotificationUpdate($unreadNotifications, $userId, 'marked_as_read');
             }
 
@@ -619,7 +630,7 @@ class NotificationRepository extends BaseRepository
             ->limit($limit)
             ->get();
 
-        if (empty($oldNotifications)) {
+        if ($oldNotifications === []) {
             return true;  // Nothing to delete
         }
 
@@ -633,7 +644,7 @@ class NotificationRepository extends BaseRepository
             $success = $deletedCount > 0;
 
             // If audit logging is critical, we can batch create audit entries
-            if ($success && $userId) {
+            if ($success && $userId !== null) {
                 $this->logBulkNotificationUpdate($oldNotifications, $userId, 'deleted');
             }
 
@@ -661,7 +672,7 @@ class NotificationRepository extends BaseRepository
     /**
      * Log bulk notification updates for audit purposes
      *
-     * @param array $notifications Array of notification records
+     * @param array<array<string, mixed>> $notifications Array of notification records
      * @param string $userId ID of user performing the action
      * @param string $action Action performed (e.g., 'marked_as_read', 'deleted')
      * @return void

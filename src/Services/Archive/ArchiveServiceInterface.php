@@ -89,7 +89,7 @@ interface ArchiveServiceInterface
     /**
      * Check which tables need archiving based on configured thresholds
      *
-     * @return array Array of table names that need archiving
+     * @return array<int, string> Array of table names that need archiving
      */
     public function getTablesNeedingArchival(): array;
 
@@ -97,7 +97,7 @@ interface ArchiveServiceInterface
      * Get list of all archives for a specific table
      *
      * @param string $table Table name
-     * @return array Array of archive metadata
+     * @return array<int, array<string, mixed>> Array of archive metadata
      */
     public function getTableArchives(string $table): array;
 }

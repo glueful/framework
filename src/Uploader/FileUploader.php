@@ -36,16 +36,21 @@ final class FileUploader
     ) {
         $this->fileManager = $fileManager ?? container()->get(FileManager::class);
         $this->blobRepository = new BlobRepository();
-        $driver = $this->storageDriver ?: config('services.storage.driver');
+        $driver = $this->storageDriver !== null && $this->storageDriver !== '' ? $this->storageDriver : config('services.storage.driver');
         $this->storage = match ($driver) {
             's3' => new S3Storage(),
             default => new LocalStorage(
-                $this->uploadsDirectory ?: config('app.paths.uploads'),
-                $this->cdnBaseUrl ?: config('app.paths.cdn')
+                $this->uploadsDirectory !== '' ? $this->uploadsDirectory : (string) config('app.paths.uploads'),
+                $this->cdnBaseUrl !== '' ? $this->cdnBaseUrl : (string) config('app.paths.cdn')
             )
         };
     }
 
+    /**
+     * @param array<string, mixed> $getParams
+     * @param array<string, mixed> $fileParams
+     * @return array<string, mixed>
+     */
     public function handleUpload(string $token, array $getParams, array $fileParams): array
     {
         try {
@@ -67,18 +72,26 @@ final class FileUploader
         }
     }
 
+    /**
+     * @param array<string, mixed> $getParams
+     * @param array<string, mixed> $fileParams
+     */
     private function validateRequest(string $token, array $getParams, array $fileParams): void
     {
-        if (empty($getParams['user_id']) || empty($token) || empty($fileParams)) {
+        if (!isset($getParams['user_id']) || $getParams['user_id'] === '' || $token === '' || $fileParams === []) {
             throw new ValidationException('Missing required parameters');
         }
     }
 
+    /**
+     * @param array<string, mixed> $fileParams
+     * @return array<string, mixed>
+     */
     private function processUploadedFile(array $fileParams, ?string $key): array
     {
         $file = isset($key) ? ($fileParams[$key] ?? null) : $fileParams;
 
-        if (!is_array($file) || empty($file['tmp_name']) || $file['error'] !== UPLOAD_ERR_OK) {
+        if (!is_array($file) || !isset($file['tmp_name']) || $file['tmp_name'] === '' || !isset($file['error']) || $file['error'] !== UPLOAD_ERR_OK) {
             throw new UploadException('Invalid file upload');
         }
 
@@ -89,6 +102,9 @@ final class FileUploader
         return $file;
     }
 
+    /**
+     * @param array<string, mixed> $file
+     */
     private function validateFileContent(array $file): void
     {
         $mime = mime_content_type($file['tmp_name']);
@@ -130,6 +146,11 @@ final class FileUploader
         );
     }
 
+    /**
+     * @param array<string, mixed> $getParams
+     * @param array<string, mixed> $file
+     * @return array<string, mixed>
+     */
     private function saveFileRecord(string $token, array $getParams, array $file, string $filename): array
     {
         $user = Utils::getUser();
@@ -155,7 +176,7 @@ final class FileUploader
 
     public function handleBase64Upload(string $base64String): string
     {
-        if (empty($base64String)) {
+        if ($base64String === '') {
             throw new ValidationException('Empty base64 string');
         }
 
@@ -185,6 +206,9 @@ final class FileUploader
      *
      * @param  string $directory Directory to analyze
      * @return array Usage statistics
+     */
+    /**
+     * @return array<string, mixed>
      */
     public function getDirectoryStats(string $directory): array
     {
@@ -231,6 +255,9 @@ final class FileUploader
      * @param  int    $maxAge    Maximum age in seconds
      * @return array Cleanup results
      */
+    /**
+     * @return array<string, mixed>
+     */
     public function cleanupOldFiles(string $directory, int $maxAge = 86400): array
     {
         $fileFinder = container()->get(\Glueful\Services\FileFinder::class);
@@ -270,7 +297,7 @@ final class FileUploader
         $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
         $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx', 'txt'];
 
-        if (!in_array($extension, $allowedExtensions)) {
+        if (!in_array($extension, $allowedExtensions, true)) {
             return false;
         }
 
@@ -290,7 +317,7 @@ final class FileUploader
             'txt' => ['text/plain']
         ];
 
-        return in_array($mimeType, $validMimes[$extension]);
+        return in_array($mimeType, $validMimes[$extension], true);
     }
 
     /**

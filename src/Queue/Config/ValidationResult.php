@@ -15,22 +15,22 @@ class ValidationResult
     /** @var bool Whether configuration is valid */
     public readonly bool $isValid;
 
-    /** @var array Validation errors */
+    /** @var array<int, string> Validation errors */
     public readonly array $errors;
 
-    /** @var array Validation warnings */
+    /** @var array<int, string> Validation warnings */
     public readonly array $warnings;
 
-    /** @var array Configuration recommendations */
+    /** @var array<int, string> Configuration recommendations */
     public readonly array $recommendations;
 
     /**
      * Create validation result
      *
      * @param bool $isValid Whether configuration is valid
-     * @param array $errors Validation errors
-     * @param array $warnings Validation warnings
-     * @param array $recommendations Configuration recommendations
+     * @param array<int, string> $errors Validation errors
+     * @param array<int, string> $warnings Validation warnings
+     * @param array<int, string> $recommendations Configuration recommendations
      */
     public function __construct(
         bool $isValid,
@@ -61,7 +61,7 @@ class ValidationResult
      */
     public function hasErrors(): bool
     {
-        return !empty($this->errors);
+        return count($this->errors) > 0;
     }
 
     /**
@@ -71,7 +71,7 @@ class ValidationResult
      */
     public function hasWarnings(): bool
     {
-        return !empty($this->warnings);
+        return count($this->warnings) > 0;
     }
 
     /**
@@ -81,13 +81,13 @@ class ValidationResult
      */
     public function hasRecommendations(): bool
     {
-        return !empty($this->recommendations);
+        return count($this->recommendations) > 0;
     }
 
     /**
      * Get all errors
      *
-     * @return array Validation errors
+     * @return array<int, string> Validation errors
      */
     public function getErrors(): array
     {
@@ -97,7 +97,7 @@ class ValidationResult
     /**
      * Get all warnings
      *
-     * @return array Validation warnings
+     * @return array<int, string> Validation warnings
      */
     public function getWarnings(): array
     {
@@ -107,7 +107,7 @@ class ValidationResult
     /**
      * Get all recommendations
      *
-     * @return array Configuration recommendations
+     * @return array<int, string> Configuration recommendations
      */
     public function getRecommendations(): array
     {
@@ -131,7 +131,7 @@ class ValidationResult
      */
     public function getErrorSummary(): string
     {
-        if (empty($this->errors)) {
+        if (count($this->errors) === 0) {
             return 'No errors found.';
         }
 
@@ -152,7 +152,7 @@ class ValidationResult
      */
     public function getWarningSummary(): string
     {
-        if (empty($this->warnings)) {
+        if (count($this->warnings) === 0) {
             return 'No warnings found.';
         }
 
@@ -173,7 +173,7 @@ class ValidationResult
      */
     public function getRecommendationSummary(): string
     {
-        if (empty($this->recommendations)) {
+        if (count($this->recommendations) === 0) {
             return 'No recommendations available.';
         }
 
@@ -220,7 +220,13 @@ class ValidationResult
     /**
      * Convert to array format
      *
-     * @return array Validation result as array
+     * @return array{
+     *     valid: bool,
+     *     errors: array<int, string>,
+     *     warnings: array<int, string>,
+     *     recommendations: array<int, string>,
+     *     summary: string
+     * } Validation result as array
      */
     public function toArray(): array
     {
@@ -247,8 +253,8 @@ class ValidationResult
     /**
      * Create a successful validation result
      *
-     * @param array $warnings Optional warnings
-     * @param array $recommendations Optional recommendations
+     * @param array<int, string> $warnings Optional warnings
+     * @param array<int, string> $recommendations Optional recommendations
      * @return self Validation result
      */
     public static function success(array $warnings = [], array $recommendations = []): self
@@ -259,9 +265,9 @@ class ValidationResult
     /**
      * Create a failed validation result
      *
-     * @param array $errors Validation errors
-     * @param array $warnings Optional warnings
-     * @param array $recommendations Optional recommendations
+     * @param array<int, string> $errors Validation errors
+     * @param array<int, string> $warnings Optional warnings
+     * @param array<int, string> $recommendations Optional recommendations
      * @return self Validation result
      */
     public static function failure(array $errors, array $warnings = [], array $recommendations = []): self

@@ -11,6 +11,9 @@ namespace Glueful\Serialization\Cache;
  */
 class HierarchicalCacheKeyStrategy implements CacheKeyStrategyInterface
 {
+    /**
+     * @param array<string, mixed> $context
+     */
     public function generateKey(object $object, array $context): string
     {
         $className = get_class($object);

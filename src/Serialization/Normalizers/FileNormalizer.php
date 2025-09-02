@@ -18,6 +18,9 @@ class FileNormalizer implements NormalizerInterface, DenormalizerInterface
 {
     /**
      * Normalize File object
+     * @param array $context
+     * @return array<string, mixed>
+     * @phpstan-ignore-next-line
      */
     public function normalize(mixed $object, ?string $format = null, array $context = []): array
     {
@@ -52,6 +55,8 @@ class FileNormalizer implements NormalizerInterface, DenormalizerInterface
 
     /**
      * Denormalize data to File object
+     * @param array $context
+     * @phpstan-ignore-next-line
      */
     public function denormalize(mixed $data, string $type, ?string $format = null, array $context = []): File
     {
@@ -75,6 +80,8 @@ class FileNormalizer implements NormalizerInterface, DenormalizerInterface
 
     /**
      * Check if normalization is supported
+     * @param array $context
+     * @phpstan-ignore-next-line
      */
     public function supportsNormalization(mixed $data, ?string $format = null, array $context = []): bool
     {
@@ -83,6 +90,8 @@ class FileNormalizer implements NormalizerInterface, DenormalizerInterface
 
     /**
      * Check if denormalization is supported
+     * @param array $context
+     * @phpstan-ignore-next-line
      */
     public function supportsDenormalization(
         mixed $data,

@@ -32,7 +32,7 @@ trait QueryFilterTrait
      * operator-based filters.
      *
      * @param QueryBuilderInterface $query The query builder instance to apply filters to
-     * @param array $filters Associative array of filters to apply
+     * @param array<string, mixed> $filters Associative array of filters to apply
      * @return void
      *
      * @example
@@ -89,12 +89,12 @@ trait QueryFilterTrait
                 $query->where($field, 'LIKE', "%{$value}%");
                 break;
             case 'in':
-                if (is_array($value) && !empty($value)) {
+                if (is_array($value) && $value !== []) {
                     $query->whereIn($field, $value);
                 }
                 break;
             case 'not_in':
-                if (is_array($value) && !empty($value)) {
+                if (is_array($value) && $value !== []) {
                     $query->whereNotIn($field, $value);
                 }
                 break;

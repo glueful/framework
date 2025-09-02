@@ -12,6 +12,9 @@ namespace Glueful\Services\Archive\DTOs;
  */
 class ArchiveSummary
 {
+    /**
+     * @param array<string, array<string, mixed>> $tableBreakdown
+     */
     public function __construct(
         public readonly int $totalArchives,
         public readonly int $totalRecordsArchived,
@@ -29,8 +32,8 @@ class ArchiveSummary
     {
         $bytes = $this->totalSizeBytes;
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-
-        for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
+        $i = 0;
+        for (; $bytes > 1024 && $i < count($units) - 1; $i++) {
             $bytes /= 1024;
         }
 
@@ -42,11 +45,12 @@ class ArchiveSummary
      */
     public function getArchiveTimeSpan(): ?int
     {
-        if (!$this->oldestArchive || !$this->newestArchive) {
+        if ($this->oldestArchive === null || $this->newestArchive === null) {
             return null;
         }
 
-        return $this->newestArchive->diff($this->oldestArchive)->days;
+        $days = $this->newestArchive->diff($this->oldestArchive)->days;
+        return $days !== false ? $days : null;
     }
 
     /**
@@ -66,7 +70,7 @@ class ArchiveSummary
      */
     public function getMostArchivedTable(): ?string
     {
-        if (empty($this->tableBreakdown)) {
+        if (count($this->tableBreakdown) === 0) {
             return null;
         }
 

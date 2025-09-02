@@ -11,5 +11,8 @@ namespace Glueful\Serialization\Cache;
  */
 interface CacheKeyStrategyInterface
 {
+    /**
+     * @param array<string, mixed> $context
+     */
     public function generateKey(object $object, array $context): string;
 }

@@ -18,6 +18,7 @@ class WorkerProcess
     private \DateTime $startedAt;
     private ?\DateTime $lastHeartbeat = null;
     private int $jobsProcessed = 0;
+    /** @var array<string, int|float> */
     private array $metrics = [
         'memory_usage' => 0,
         'cpu_usage' => 0.0,
@@ -190,6 +191,9 @@ class WorkerProcess
         $this->jobsProcessed++;
     }
 
+    /**
+     * @param array<string, int|float> $metrics
+     */
     public function updateMetrics(array $metrics): void
     {
         $this->metrics = array_merge($this->metrics, $metrics);
@@ -206,7 +210,7 @@ class WorkerProcess
         $lines = explode("\n", trim($buffer));
 
         foreach ($lines as $line) {
-            if (empty($line)) {
+            if ($line === '') {
                 continue;
             }
 
@@ -258,6 +262,9 @@ class WorkerProcess
         return time() - $this->startedAt->getTimestamp();
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function toArray(): array
     {
         return [
@@ -267,7 +274,7 @@ class WorkerProcess
             'status' => $this->isRunning() ? 'running' : 'stopped',
             'healthy' => $this->isHealthy(),
             'started_at' => $this->startedAt->format('c'),
-            'last_heartbeat' => $this->lastHeartbeat ? $this->lastHeartbeat->format('c') : null,
+            'last_heartbeat' => $this->lastHeartbeat !== null ? $this->lastHeartbeat->format('c') : null,
             'runtime' => $this->getRuntime(),
             'jobs_processed' => $this->jobsProcessed,
             'memory_usage' => $this->metrics['memory_usage'],

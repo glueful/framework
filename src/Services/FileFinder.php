@@ -18,8 +18,12 @@ use Iterator;
 class FileFinder
 {
     private ?LoggerInterface $logger;
+    /** @var array<string, mixed> */
     private array $config;
 
+    /**
+     * @param array<string, mixed> $config
+     */
     public function __construct(?LoggerInterface $logger = null, array $config = [])
     {
         $this->logger = $logger;
@@ -58,15 +62,15 @@ class FileFinder
     /**
      * Find route files across multiple directories
      *
-     * @param array $paths Array of paths to search
-     * @param array $patterns File name patterns (default: ['*.php'])
+     * @param array<int, string> $paths Array of paths to search
+     * @param array<int, string> $patterns File name patterns (default: ['*.php'])
      * @return Iterator<SplFileInfo> Route files
      */
     public function findRouteFiles(array $paths, array $patterns = ['*.php']): Iterator
     {
         $existingPaths = array_filter($paths, 'is_dir');
 
-        if (empty($existingPaths)) {
+        if (count($existingPaths) === 0) {
             $this->log('warning', 'No valid route paths found: ' . implode(', ', $paths));
             return new \EmptyIterator();
         }
@@ -107,9 +111,9 @@ class FileFinder
             ->files()
             ->in($migrationsPath)
             ->name($pattern)
-            ->filter(function (SplFileInfo $file) {
+            ->filter(function (SplFileInfo $file): bool {
                 // Only include files that match migration naming pattern (e.g., 001_CreateUsersTable.php)
-                return preg_match('/^\d{3}_.*\.php$/', $file->getBasename());
+                return preg_match('/^\d{3}_.*\.php$/', $file->getBasename()) === 1;
             })
             ->sortByName();
 
@@ -143,7 +147,8 @@ class FileFinder
             $cache->date("< {$olderThan}");
         }
 
-        $this->log('info', "Found cache files in: {$cachePath}" . ($olderThan ? " (older than {$olderThan})" : ''));
+        $ageInfo = $olderThan !== null ? " (older than {$olderThan})" : '';
+        $this->log('info', "Found cache files in: {$cachePath}" . $ageInfo);
         return $cache->getIterator();
     }
 
@@ -151,7 +156,7 @@ class FileFinder
      * Find configuration files
      *
      * @param string $configPath Path to config directory
-     * @param array $patterns File patterns (default: ['*.php'])
+     * @param array<int, string> $patterns File patterns (default: ['*.php'])
      * @return Iterator<SplFileInfo> Config files
      */
     public function findConfigFiles(string $configPath, array $patterns = ['*.php']): Iterator
@@ -182,7 +187,7 @@ class FileFinder
      *
      * @param string $logsPath Path to logs directory
      * @param string|null $olderThan Date string for old files
-     * @param array $patterns File patterns (default: ['*.log'])
+     * @param array<int, string> $patterns File patterns (default: ['*.log'])
      * @return Iterator<SplFileInfo> Log files
      */
     public function findLogFiles(string $logsPath, ?string $olderThan = null, array $patterns = ['*.log']): Iterator
@@ -208,7 +213,8 @@ class FileFinder
 
         $logs->sortByModifiedTime();
 
-        $this->log('info', "Found log files in: {$logsPath}" . ($olderThan ? " (older than {$olderThan})" : ''));
+        $ageInfo = $olderThan !== null ? " (older than {$olderThan})" : '';
+        $this->log('info', "Found log files in: {$logsPath}" . $ageInfo);
         return $logs->getIterator();
     }
 
@@ -217,7 +223,7 @@ class FileFinder
      *
      * @param string $path Root path to search
      * @param int|null $maxDepth Maximum depth to search
-     * @param array $excludeDirs Directories to exclude
+     * @param array<int, string> $excludeDirs Directories to exclude
      * @return Iterator<SplFileInfo> PHP files
      */
     public function findPhpFiles(
@@ -284,7 +290,7 @@ class FileFinder
      *
      * @param string $path Directory to search
      * @param string $content Content to search for
-     * @param array $patterns File patterns to include
+     * @param array<int, string> $patterns File patterns to include
      * @return Iterator<SplFileInfo> Files containing the content
      */
     public function findFilesByContent(string $path, string $content, array $patterns = ['*.php']): Iterator
@@ -318,15 +324,15 @@ class FileFinder
     {
         $finder = new Finder();
 
-        if ($this->config['ignore_vcs']) {
+        if ((bool)($this->config['ignore_vcs'] ?? false)) {
             $finder->ignoreVCS(true);
         }
 
-        if ($this->config['ignore_dot_files']) {
+        if ((bool)($this->config['ignore_dot_files'] ?? false)) {
             $finder->ignoreDotFiles(true);
         }
 
-        if (!$this->config['follow_links']) {
+        if (!(bool)($this->config['follow_links'] ?? false)) {
             $finder->followLinks();
         }
 
@@ -341,8 +347,8 @@ class FileFinder
      * Get file statistics for a directory
      *
      * @param string $path Directory path
-     * @param array $patterns File patterns to include
-     * @return array Statistics (file count, total size, etc.)
+     * @param array<int, string> $patterns File patterns to include
+     * @return array<string, mixed> Statistics (file count, total size, etc.)
      */
     public function getDirectoryStats(string $path, array $patterns = ['*']): array
     {
@@ -401,7 +407,7 @@ class FileFinder
      */
     private function log(string $level, string $message): void
     {
-        if ($this->logger && $this->config['enable_logging']) {
+        if ($this->logger !== null && (bool)($this->config['enable_logging'] ?? false)) {
             $this->logger->log($level, $message, ['service' => 'FileFinder']);
         }
     }

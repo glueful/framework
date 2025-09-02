@@ -49,7 +49,7 @@ interface JobInterface
     /**
      * Get job payload data
      *
-     * @return array Job data and parameters
+     * @return array<string, mixed> Job data and parameters
      */
     public function getPayload(): array;
 

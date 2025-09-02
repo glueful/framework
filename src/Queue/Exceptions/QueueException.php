@@ -27,7 +27,7 @@ class QueueException extends \Exception
     /**
      * Get context information for logging
      *
-     * @return array Context data
+     * @return array<string, mixed> Context data
      */
     public function getContext(): array
     {

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Glueful\Security;
 
 use Glueful\Cache\CacheStore;
-use Glueful\Extensions\EmailNotification\EmailNotificationProvider;
 use Glueful\Extensions\ExtensionManager;
 use Glueful\Http\RequestContext;
 use Glueful\Notifications\Contracts\Notifiable;
@@ -42,19 +41,23 @@ class EmailVerification
     /** @var NotificationService Notification service instance */
     private NotificationService $notificationService;
 
-    /** @var EmailNotificationProvider Email notification provider */
-    private EmailNotificationProvider $emailProvider;
+    /** @var object|null Email notification provider (loaded from extension) */
+    private ?object $emailProvider = null;
 
     /** @var RequestContext Request context service */
     private RequestContext $requestContext;
 
-    /** @var CacheStore Cache driver instance */
+    /** @var CacheStore<mixed> Cache driver instance */
     private CacheStore $cache;
 
     /**
      * Constructor
      *
      * Initializes cache driver for OTP storage and notification service.
+     */
+    /**
+     * @param RequestContext|null $requestContext
+     * @param CacheStore<mixed>|null $cache
      */
     public function __construct(?RequestContext $requestContext = null, ?CacheStore $cache = null)
     {
@@ -73,12 +76,19 @@ class EmailVerification
         // Create the notification dispatcher
         $dispatcher = new \Glueful\Notifications\Services\NotificationDispatcher($channelManager);
 
-        // Initialize EmailNotificationProvider
-        $this->emailProvider = new EmailNotificationProvider();
-        $this->emailProvider->initialize();
-
-        // Register the email provider with the channel manager directly
-        $this->emailProvider->register($channelManager);
+        // Initialize EmailNotificationProvider if extension is available
+        if (class_exists('\Glueful\Extensions\EmailNotification\EmailNotificationProvider')) {
+            /** @var class-string $providerClass */
+            $providerClass = '\Glueful\Extensions\EmailNotification\EmailNotificationProvider';
+            $this->emailProvider = new $providerClass();
+            if (method_exists($this->emailProvider, 'initialize')) {
+                $this->emailProvider->initialize();
+            }
+            // Register the email provider with the channel manager directly
+            if (method_exists($this->emailProvider, 'register')) {
+                $this->emailProvider->register($channelManager);
+            }
+        }
 
         // Initialize NotificationService with required dispatcher and repository
         $notificationRepository = new \Glueful\Repository\NotificationRepository();
@@ -102,7 +112,7 @@ class EmailVerification
      *
      * @param string $email Recipient email address
      * @param string $otp Generated OTP code
-     * @return array Operation result with status and message
+     * @return array{success: bool, message: string, error_code?: string} Operation result with status and message
      */
     public function sendVerificationEmail(string $email, string $otp): array
     {
@@ -256,7 +266,7 @@ class EmailVerification
      * Used as a fallback when primary cache storage fails
      *
      * @param string $key Cache key
-     * @param array $data OTP data to store
+     * @param array<string, mixed> $data OTP data to store
      * @return bool True if stored successfully
      */
     private function storeOTPAlternative(string $key, array $data): bool
@@ -297,7 +307,13 @@ class EmailVerification
         $key = self::OTP_PREFIX . $this->sanitizeEmailForCacheKey($email);
         $stored = $this->cache->get($key);
 
-        if (!$stored || empty($stored['otp']) || empty($stored['timestamp'])) {
+        if (
+            !is_array($stored) ||
+            !isset($stored['otp']) ||
+            $stored['otp'] === '' ||
+            !isset($stored['timestamp']) ||
+            $stored['timestamp'] === ''
+        ) {
             $this->incrementAttempts($email);
 
 
@@ -314,7 +330,7 @@ class EmailVerification
             try {
                 $userRepository = new UserRepository();
                 $user = $userRepository->findByEmail($email);
-                if ($user && isset($user['uuid'])) {
+                if (is_array($user) && isset($user['uuid'])) {
                     // Update the email_verified_at timestamp
                     $userRepository->update($user['uuid'], [
                         'email_verified_at' => date('Y-m-d H:i:s')
@@ -381,7 +397,7 @@ class EmailVerification
      * Handles password reset flow with verification using notification system.
      *
      * @param string $email User email address
-     * @return array Operation result with status
+     * @return array{success: bool, message: string, error_code?: string} Operation result with status
      */
     public static function sendPasswordResetEmail(string $email): array
     {
@@ -411,7 +427,7 @@ class EmailVerification
             // Check if email exists in users table
             $userRepository = new UserRepository();
             $userData = $userRepository->findByEmail($email);
-            if (!$userData) {
+            if ($userData === null) {
                 return [
                     'success' => false,
                     'message' => 'Email address not found',

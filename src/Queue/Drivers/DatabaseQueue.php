@@ -80,7 +80,7 @@ class DatabaseQueue implements QueueDriverInterface
     /**
      * Initialize driver with configuration
      *
-     * @param array $config Configuration options
+     * @param array<string, mixed> $config Configuration options
      * @return void
      */
     public function initialize(array $config): void
@@ -156,7 +156,7 @@ class DatabaseQueue implements QueueDriverInterface
      * Push job to queue
      *
      * @param string $job Job class name
-     * @param array $data Job data
+     * @param array<string, mixed> $data Job data
      * @param string|null $queue Queue name
      * @return string Job UUID
      */
@@ -170,7 +170,7 @@ class DatabaseQueue implements QueueDriverInterface
      *
      * @param int $delay Delay in seconds
      * @param string $job Job class name
-     * @param array $data Job data
+     * @param array<string, mixed> $data Job data
      * @param string|null $queue Queue name
      * @return string Job UUID
      */
@@ -183,7 +183,7 @@ class DatabaseQueue implements QueueDriverInterface
      * Push job to database
      *
      * @param string $job Job class name
-     * @param array $data Job data
+     * @param array<string, mixed> $data Job data
      * @param int $delay Delay in seconds
      * @param string|null $queue Queue name
      * @param string|null $batchUuid Batch UUID if part of batch
@@ -253,7 +253,7 @@ class DatabaseQueue implements QueueDriverInterface
                 ->get();
 
             $job = $jobs[0] ?? null;
-            if (empty($job)) {
+            if ($job === null) {
                 return null;
             }
 
@@ -339,15 +339,15 @@ class DatabaseQueue implements QueueDriverInterface
         }
 
         $result = $query->count();
-        return (int) $result;
+        return $result;
     }
 
     /**
      * Push multiple jobs in bulk
      *
-     * @param array $jobs Array of job definitions
+     * @param array<int, array<string, mixed>> $jobs Array of job definitions
      * @param string|null $queue Queue name
-     * @return array Array of job UUIDs
+     * @return array<int, string> Array of job UUIDs
      */
     public function bulk(array $jobs, ?string $queue = null): array
     {
@@ -387,7 +387,7 @@ class DatabaseQueue implements QueueDriverInterface
         }
 
         // Use batch insert for performance
-        if (!empty($rows)) {
+        if (count($rows) > 0) {
             $this->db->table($this->table)->insertBatch($rows);
         }
 
@@ -417,14 +417,14 @@ class DatabaseQueue implements QueueDriverInterface
         }
         $deleteQuery->delete();
 
-        return (int) $count;
+        return $count;
     }
 
     /**
      * Get queue statistics
      *
      * @param string|null $queue Queue name
-     * @return array Statistics
+     * @return array<string, mixed> Statistics
      */
     public function getStats(?string $queue = null): array
     {
@@ -448,10 +448,10 @@ class DatabaseQueue implements QueueDriverInterface
 
         $stats = $query->get();
 
-        $total = (int) ($stats[0]['total'] ?? 0);
-        $pending = (int) ($stats[0]['pending'] ?? 0);
-        $reserved = (int) ($stats[0]['reserved'] ?? 0);
-        $delayed = (int) ($stats[0]['delayed'] ?? 0);
+        $total = $stats[0]['total'] ?? 0;
+        $pending = $stats[0]['pending'] ?? 0;
+        $reserved = $stats[0]['reserved'] ?? 0;
+        $delayed = $stats[0]['delayed'] ?? 0;
 
         // Get failed job count
         $failedQuery = $this->db->table($this->failedTable);
@@ -465,7 +465,7 @@ class DatabaseQueue implements QueueDriverInterface
             'pending' => $pending,
             'reserved' => $reserved,
             'delayed' => $delayed,
-            'failed' => (int) $failed,
+            'failed' => $failed,
             'queues' => $this->getQueueList()
         ];
     }
@@ -473,7 +473,7 @@ class DatabaseQueue implements QueueDriverInterface
     /**
      * Get list of all queues
      *
-     * @return array Queue names
+     * @return array<int, string> Queue names
      */
     private function getQueueList(): array
     {
@@ -489,7 +489,7 @@ class DatabaseQueue implements QueueDriverInterface
     /**
      * Get supported features
      *
-     * @return array Feature list
+     * @return array<int, string> Feature list
      */
     public function getFeatures(): array
     {
@@ -499,7 +499,7 @@ class DatabaseQueue implements QueueDriverInterface
     /**
      * Get configuration schema
      *
-     * @return array Schema definition
+     * @return array<string, mixed> Schema definition
      */
     public function getConfigSchema(): array
     {

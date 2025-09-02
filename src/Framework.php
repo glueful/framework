@@ -118,11 +118,11 @@ class Framework
 
         // Enable development features
         if ($this->environment === 'development') {
-            if (env('ENABLE_QUERY_MONITORING', true)) {
+            if ((bool) env('ENABLE_QUERY_MONITORING', true)) {
                 \Glueful\Database\DevelopmentQueryMonitor::enable();
             }
 
-            if (env('APP_DEBUG', false) && class_exists(\Symfony\Component\VarDumper\VarDumper::class)) {
+            if ((bool) env('APP_DEBUG', false) && class_exists(\Symfony\Component\VarDumper\VarDumper::class)) {
                 \Symfony\Component\VarDumper\VarDumper::setHandler(function ($var) {
                     $cloner = new \Symfony\Component\VarDumper\Cloner\VarCloner();
                     $dumper = 'cli' === PHP_SAPI
@@ -134,9 +134,13 @@ class Framework
         }
 
         // Validate database connection on startup
-        if (PHP_SAPI !== 'cli' && env('DB_STARTUP_VALIDATION', true) && !env('SKIP_DB_VALIDATION', false)) {
+        if (
+            PHP_SAPI !== 'cli' &&
+            (bool) env('DB_STARTUP_VALIDATION', true) &&
+            !(bool) env('SKIP_DB_VALIDATION', false)
+        ) {
             \Glueful\Database\ConnectionValidator::validateOnStartup(
-                throwOnFailure: env('DB_STARTUP_STRICT', false)
+                throwOnFailure: (bool) env('DB_STARTUP_STRICT', false)
             );
         }
 
@@ -193,8 +197,15 @@ class Framework
                     try {
                         // Use global function if available (but may not exist yet)
                         if (function_exists('auth')) {
-                            $auth = \call_user_func('auth');
-                            if (is_object($auth) && method_exists($auth, 'check') && $auth->check()) {
+                            /** @var callable():object|null $authFunction */
+                            $authFunction = 'auth';
+                            $auth = $authFunction();
+                            if (
+                                is_object($auth) &&
+                                method_exists($auth, 'check') &&
+                                method_exists($auth, 'id') &&
+                                $auth->check()
+                            ) {
                                 return (string) $auth->id();
                             }
                         }

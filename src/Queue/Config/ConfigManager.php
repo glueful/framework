@@ -21,7 +21,7 @@ namespace Glueful\Queue\Config;
  */
 class ConfigManager
 {
-    /** @var array Loaded configuration */
+    /** @var array<string, mixed> Loaded configuration */
     private array $config = [];
 
     /** @var ConfigValidator Configuration validator */
@@ -33,10 +33,10 @@ class ConfigManager
     /** @var bool Whether configuration is loaded */
     private bool $loaded = false;
 
-    /** @var array Configuration cache */
+    /** @var array<string, array<string, mixed>> Configuration cache */
     private static array $cache = [];
 
-    /** @var array Default configuration values */
+    /** @var array<string, mixed> Default configuration values */
     private array $defaults = [
         'default' => 'database',
         'connections' => [
@@ -209,7 +209,7 @@ class ConfigManager
     /**
      * Get all configuration
      *
-     * @return array Complete configuration array
+     * @return array<string, mixed> Complete configuration array
      */
     public function all(): array
     {
@@ -221,7 +221,7 @@ class ConfigManager
      * Get connection configuration
      *
      * @param string|null $connection Connection name (default if null)
-     * @return array Connection configuration
+     * @return array<string, mixed> Connection configuration
      * @throws \InvalidArgumentException If connection not found
      */
     public function getConnection(?string $connection = null): array
@@ -232,7 +232,7 @@ class ConfigManager
         $connections = $this->get('connections', []);
 
         if (!isset($connections[$connectionName])) {
-            throw new \InvalidArgumentException("Queue connection '{$connectionName}' is not configured");
+            throw new \InvalidArgumentException("Queue connection '" . $connectionName . "' is not configured");
         }
 
         return $connections[$connectionName];
@@ -241,12 +241,13 @@ class ConfigManager
     /**
      * Get all connection names
      *
-     * @return array Connection names
+     * @return array<int, string> Connection names
      */
     public function getConnectionNames(): array
     {
         $this->ensureLoaded();
-        return array_keys($this->get('connections', []));
+        $connections = $this->get('connections', []);
+        return is_array($connections) ? array_keys($connections) : [];
     }
 
     /**
@@ -287,7 +288,7 @@ class ConfigManager
      * Export configuration to array
      *
      * @param bool $includeDefaults Whether to include default values
-     * @return array Configuration array
+     * @return array<string, mixed> Configuration array
      */
     public function toArray(bool $includeDefaults = true): array
     {
@@ -311,14 +312,18 @@ class ConfigManager
      */
     public function toJson(bool $includeDefaults = true, int $flags = JSON_PRETTY_PRINT): string
     {
-        return json_encode($this->toArray($includeDefaults), $flags);
+        $json = json_encode($this->toArray($includeDefaults), $flags);
+        if ($json === false) {
+            throw new \RuntimeException('Failed to encode configuration to JSON: ' . json_last_error_msg());
+        }
+        return $json;
     }
 
     /**
      * Merge configuration with defaults
      *
-     * @param array $config User configuration
-     * @return array Merged configuration
+     * @param array<string, mixed> $config User configuration
+     * @return array<string, mixed> Merged configuration
      */
     private function mergeConfigWithDefaults(array $config): array
     {
@@ -328,12 +333,13 @@ class ConfigManager
     /**
      * Resolve environment variables in configuration
      *
-     * @param array $config Configuration array
-     * @return array Configuration with resolved environment variables
+     * @param array<string, mixed> $config Configuration array
+     * @return array<string, mixed> Configuration with resolved environment variables
      */
     private function resolveEnvironmentVariables(array $config): array
     {
-        return $this->resolveEnvRecursive($config);
+        $resolved = $this->resolveEnvRecursive($config);
+        return is_array($resolved) ? $resolved : [];
     }
 
     /**
@@ -366,12 +372,12 @@ class ConfigManager
             }
 
             // Convert common string representations to appropriate types
-            if (in_array(strtolower($envValue), ['true', 'false'])) {
+            if (in_array(strtolower($envValue), ['true', 'false'], true)) {
                 return strtolower($envValue) === 'true';
             }
 
             if (is_numeric($envValue)) {
-                return str_contains($envValue, '.') ? (float) $envValue : (int) $envValue;
+                return str_contains((string) $envValue, '.') ? (float) $envValue : (int) $envValue;
             }
 
             return $envValue;
@@ -422,7 +428,7 @@ class ConfigManager
     /**
      * Get nested array value using dot notation
      *
-     * @param array $array Array to search
+     * @param array<string, mixed> $array Array to search
      * @param string $key Dot-notated key
      * @param mixed $default Default value
      * @return mixed Found value or default
@@ -445,7 +451,7 @@ class ConfigManager
     /**
      * Set nested array value using dot notation
      *
-     * @param array &$array Array to modify
+     * @param array<string, mixed> &$array Array to modify
      * @param string $key Dot-notated key
      * @param mixed $value Value to set
      * @return void
@@ -468,9 +474,9 @@ class ConfigManager
     /**
      * Recursively merge arrays
      *
-     * @param array $default Default array
-     * @param array $override Override array
-     * @return array Merged array
+     * @param array<string, mixed> $default Default array
+     * @param array<string, mixed> $override Override array
+     * @return array<string, mixed> Merged array
      */
     private function mergeArraysRecursive(array $default, array $override): array
     {

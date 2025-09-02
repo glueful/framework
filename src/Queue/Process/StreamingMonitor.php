@@ -16,9 +16,12 @@ class StreamingMonitor
 {
     private ProcessManager $processManager;
     private LoggerInterface $logger;
+    /** @var array<int, array<string, mixed>> */
     private array $outputBuffer = [];
+    /** @var array<string, mixed> */
     private array $filters = [];
     private bool $isStreaming = false;
+    /** @var array<string, callable> */
     private array $subscribers = [];
 
     public function __construct(ProcessManager $processManager, LoggerInterface $logger)
@@ -29,6 +32,7 @@ class StreamingMonitor
 
     /**
      * Start streaming worker output
+     * @param array<string, mixed> $options
      */
     public function startStreaming(array $options = []): void
     {
@@ -76,15 +80,15 @@ class StreamingMonitor
             $workerId = $workerInfo['id'];
             $worker = $this->processManager->getWorker($workerId);
 
-            if ($worker && $worker->isRunning()) {
+            if ($worker !== null && $worker->isRunning()) {
                 $output = $worker->getOutput();
                 $errorOutput = $worker->getErrorOutput();
 
-                if (!empty($output)) {
+                if ($output !== '') {
                     $this->processWorkerOutput($workerId, $output, 'stdout');
                 }
 
-                if (!empty($errorOutput)) {
+                if ($errorOutput !== '') {
                     $this->processWorkerOutput($workerId, $errorOutput, 'stderr');
                 }
             }
@@ -99,7 +103,7 @@ class StreamingMonitor
         $lines = explode("\n", trim($output));
 
         foreach ($lines as $line) {
-            if (empty($line)) {
+            if ($line === '') {
                 continue;
             }
 
@@ -204,7 +208,7 @@ class StreamingMonitor
 
         $workers = $this->processManager->getStatus();
 
-        if (empty($workers)) {
+        if (count($workers) === 0) {
             echo "No workers running\n";
             return;
         }
@@ -271,7 +275,7 @@ class StreamingMonitor
             fn($entry) => $entry['worker_id'] === $workerId
         );
 
-        if (empty($workerOutput)) {
+        if (count($workerOutput) === 0) {
             return 'No output';
         }
 
@@ -308,6 +312,9 @@ class StreamingMonitor
     /**
      * Check if output should be included based on filters
      */
+    /**
+     * @param array<string, mixed> $logEntry
+     */
     private function shouldIncludeOutput(array $logEntry): bool
     {
         // Worker ID filter
@@ -320,7 +327,7 @@ class StreamingMonitor
         // Log level filter
         if (isset($this->filters['level'])) {
             $allowedLevels = (array) $this->filters['level'];
-            if (!in_array($logEntry['level'], $allowedLevels)) {
+            if (!in_array($logEntry['level'], $allowedLevels, true)) {
                 return false;
             }
         }
@@ -333,7 +340,7 @@ class StreamingMonitor
         }
 
         // Hide heartbeat messages unless explicitly requested
-        if ($logEntry['level'] === 'heartbeat' && !($this->filters['include_heartbeat'] ?? false)) {
+        if ($logEntry['level'] === 'heartbeat' && ($this->filters['include_heartbeat'] ?? false) === false) {
             return false;
         }
 
@@ -407,6 +414,9 @@ class StreamingMonitor
     /**
      * Subscribe to streaming updates
      */
+    /**
+     * @param array<string, mixed> $filters
+     */
     public function subscribe(callable $callback, array $filters = []): string
     {
         $id = uniqid();
@@ -455,6 +465,9 @@ class StreamingMonitor
 
     /**
      * Get output buffer (for API access)
+     */
+    /**
+     * @return array<int, array<string, mixed>>
      */
     public function getOutputBuffer(int $limit = 100): array
     {
@@ -506,6 +519,9 @@ class StreamingMonitor
     /**
      * Export to CSV format
      */
+    /**
+     * @param array<int, array<string, mixed>> $data
+     */
     private function exportToCsv(string $filename, array $data): void
     {
         $file = fopen($filename, 'w');
@@ -528,6 +544,9 @@ class StreamingMonitor
 
     /**
      * Export to text format
+     */
+    /**
+     * @param array<int, array<string, mixed>> $data
      */
     private function exportToText(string $filename, array $data): void
     {

@@ -60,8 +60,8 @@ trait TransactionTrait
      * Takes an array of callables and executes them all within a single transaction.
      * If any operation fails, all operations are rolled back.
      *
-     * @param array $operations Array of callable operations
-     * @return array Results of all operations
+     * @param array<callable> $operations Array of callable operations
+     * @return array<mixed> Results of all operations
      * @throws DatabaseException If any operation fails
      */
     protected function executeMultipleInTransaction(array $operations): array
@@ -122,15 +122,15 @@ trait TransactionTrait
      * Processes large datasets in chunks within transactions for optimal performance.
      * Each chunk is processed in its own transaction to avoid long-running transactions.
      *
-     * @param array $data Data to process
+     * @param array<mixed> $data Data to process
      * @param callable $operation Operation to perform on each chunk
      * @param int $chunkSize Size of each processing chunk
-     * @return array Results from all chunks
+     * @return array<mixed> Results from all chunks
      * @throws DatabaseException If any chunk fails
      */
     protected function executeBulkInTransaction(array $data, callable $operation, int $chunkSize = 1000): array
     {
-        if (empty($data)) {
+        if ($data === []) {
             return [];
         }
 

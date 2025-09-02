@@ -63,14 +63,14 @@ use Symfony\Component\Lock\Exception\LockConflictedException;
  */
 class JobScheduler
 {
-    /** @var array List of registered jobs and their schedules */
+    /** @var array<string, array<string, mixed>> List of registered jobs and their schedules */
     protected array $jobs = [];
 
     /** @var Connection Database connection */
     protected Connection $db;
 
-    /** @var LockManagerInterface Lock manager for preventing concurrent executions */
-    protected LockManagerInterface $lockManager;
+    /** @var LockManagerInterface|null Lock manager for preventing concurrent executions */
+    protected ?LockManagerInterface $lockManager;
 
     /**
      * Constructor
@@ -80,7 +80,7 @@ class JobScheduler
         $this->db = new Connection();
 
         // Get lock manager from container if not provided
-        if ($lockManager) {
+        if ($lockManager !== null) {
             $this->lockManager = $lockManager;
         } else {
             global $container;
@@ -182,7 +182,7 @@ class JobScheduler
      */
     public function register(string $schedule, callable $callback, string $name = ''): void
     {
-        $jobName = $name ?: 'job_' . count($this->jobs);
+        $jobName = $name !== '' ? $name : 'job_' . count($this->jobs);
 
         $this->jobs[] = [
             'name' => $jobName,
@@ -197,7 +197,7 @@ class JobScheduler
      * @param string $name Job name
      * @param string $schedule Cron expression for job scheduling
      * @param string $handlerClass Class that will handle job execution
-     * @param array $parameters Optional parameters for the job
+     * @param array<string, mixed> $parameters Optional parameters for the job
      * @return string UUID of created job
      */
     public function registerInDatabase(
@@ -313,7 +313,7 @@ class JobScheduler
                 ->limit(1)
                 ->get();
 
-            if (!empty($jobs)) {
+            if ($jobs !== []) {
                 $job = $jobs[0];
                 $cronExpression = new CronExpression($job['schedule']);
                 $nextRunTime = $cronExpression->getNextRunDate()->format('Y-m-d H:i:s');
@@ -348,7 +348,7 @@ class JobScheduler
     /**
      * Run a job with distributed locking to prevent concurrent executions
      *
-     * @param array $job Job configuration array
+     * @param array<string, mixed> $job Job configuration array
      * @return mixed Job execution result or null if lock cannot be acquired
      */
     protected function runJobWithLock(array $job): mixed
@@ -358,7 +358,7 @@ class JobScheduler
         $lockTtl = 3600.0; // 1 hour max execution time
 
         // Skip if no lock manager available
-        if (!$this->lockManager) {
+        if ($this->lockManager === null) {
             $this->log("No lock manager available, running job '{$jobName}' without locking", 'warning');
             return $this->executeJob($job);
         }
@@ -386,7 +386,7 @@ class JobScheduler
     /**
      * Execute a job without locking (internal method)
      *
-     * @param array $job Job configuration array
+     * @param array<string, mixed> $job Job configuration array
      * @return mixed Job execution result
      */
     protected function executeJob(array $job): mixed
@@ -547,7 +547,7 @@ class JobScheduler
     /**
      * Get all registered jobs.
      *
-     * @return array List of jobs
+     * @return array<string, array<string, mixed>> List of jobs
      */
     public function getJobs(): array
     {
@@ -557,7 +557,7 @@ class JobScheduler
     /**
      * Get all due jobs from database
      *
-     * @return array List of jobs that should be executed now
+     * @return array<array<string, mixed>> List of jobs that should be executed now
      */
     public function getDueJobs(): array
     {

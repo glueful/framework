@@ -21,7 +21,7 @@ class DiscriminatorMap extends SymfonyDiscriminatorMap
      * Constructor
      *
      * @param string $typeProperty Property name that contains the type identifier
-     * @param array $mapping Array mapping type identifiers to class names
+     * @param array<string, class-string> $mapping Array mapping type identifiers to class names
      */
     public function __construct(string $typeProperty, array $mapping)
     {

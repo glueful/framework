@@ -31,8 +31,9 @@ class TableArchiveStats
     {
         $bytes = $this->currentSizeBytes;
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        $i = 0;
 
-        for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
+        for (; $bytes > 1024 && $i < count($units) - 1; $i++) {
             $bytes /= 1024;
         }
 
@@ -44,11 +45,12 @@ class TableArchiveStats
      */
     public function getDaysSinceLastArchive(): ?int
     {
-        if (!$this->lastArchiveDate) {
+        if ($this->lastArchiveDate === null) {
             return null;
         }
 
-        return (new \DateTime())->diff($this->lastArchiveDate)->days;
+        $days = (new \DateTime())->diff($this->lastArchiveDate)->days;
+        return $days !== false ? $days : null;
     }
 
     /**

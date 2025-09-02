@@ -25,10 +25,10 @@ class RedisJob implements JobInterface
     /** @var QueueDriverInterface Redis queue driver instance */
     private QueueDriverInterface $driver;
 
-    /** @var array Raw job data from Redis */
+    /** @var array<string, mixed> Raw job data from Redis */
     private array $rawData;
 
-    /** @var array Decoded payload data */
+    /** @var array<string, mixed> Decoded payload data */
     private array $payload;
 
     /** @var string Queue name */
@@ -44,7 +44,7 @@ class RedisJob implements JobInterface
      * Create new Redis job instance
      *
      * @param QueueDriverInterface $driver Redis queue driver
-     * @param array $rawData Raw job data from Redis
+     * @param array<string, mixed> $rawData Raw job data from Redis
      * @param string $queue Queue name
      */
     public function __construct(QueueDriverInterface $driver, array $rawData, string $queue)
@@ -88,7 +88,7 @@ class RedisJob implements JobInterface
     /**
      * Get job payload
      *
-     * @return array Job data
+     * @return array<string, mixed> Job data
      */
     public function getPayload(): array
     {
@@ -98,7 +98,7 @@ class RedisJob implements JobInterface
     /**
      * Get raw Redis data
      *
-     * @return array Raw data
+     * @return array<string, mixed> Raw data
      */
     public function getRawData(): array
     {
@@ -115,7 +115,7 @@ class RedisJob implements JobInterface
     {
         $jobClass = $this->payload['job'] ?? null;
 
-        if (!$jobClass || !class_exists($jobClass)) {
+        if ($jobClass === null || !class_exists($jobClass)) {
             throw new \RuntimeException("Job class '{$jobClass}' not found");
         }
 
@@ -183,7 +183,7 @@ class RedisJob implements JobInterface
 
         // Call failed method on job class if exists
         $jobClass = $this->payload['job'] ?? null;
-        if ($jobClass && class_exists($jobClass)) {
+        if ($jobClass !== null && class_exists($jobClass)) {
             try {
                 $job = $this->resolve($jobClass);
                 if (method_exists($job, 'failed')) {
@@ -314,7 +314,7 @@ class RedisJob implements JobInterface
     public function getReservedAt(): ?int
     {
         $reservedAt = $this->rawData['reservedAt'] ?? null;
-        return $reservedAt ? (int) $reservedAt : null;
+        return $reservedAt !== null ? (int) $reservedAt : null;
     }
 
     /**

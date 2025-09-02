@@ -146,7 +146,7 @@ class RouteCommand extends BaseCommand
             $compileTime = microtime(true) - $compileStartTime;
             $totalTime = microtime(true) - $startTime;
 
-            if ($result['success']) {
+            if (($result['success'] ?? false) === true) {
                 $output->writeln('<success>✅ Route cache created successfully!</success>');
                 $output->writeln('');
                 $output->writeln("<info>Built cache for:</info> env={$env} hash={$hash}");

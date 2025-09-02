@@ -34,7 +34,7 @@ use Glueful\Queue\Registry\DriverRegistry;
  */
 class PluginManager
 {
-    /** @var array Loaded plugins */
+    /** @var array<string, array<string, mixed>> Loaded plugins */
     private array $plugins = [];
 
     /** @var EventDispatcher Event dispatcher instance */
@@ -130,7 +130,7 @@ class PluginManager
     /**
      * Register a driver from plugin
      *
-     * @param array $driverConfig Driver configuration
+     * @param array<string, mixed> $driverConfig Driver configuration
      * @return void
      */
     private function registerPluginDriver(array $driverConfig): void
@@ -147,7 +147,7 @@ class PluginManager
         }
 
         // Register with driver registry if available
-        if ($this->driverRegistry) {
+        if ($this->driverRegistry !== null) {
             try {
                 $driver = new $driverConfig['class']();
                 $info = $driver->getDriverInfo();
@@ -166,8 +166,8 @@ class PluginManager
      * Execute plugin hooks
      *
      * @param string $hook Hook name
-     * @param array $data Hook data
-     * @return array Results from all hook handlers
+     * @param array<string, mixed> $data Hook data
+     * @return array<int, mixed> Results from all hook handlers
      */
     public function executeHook(string $hook, array $data = []): array
     {
@@ -220,7 +220,7 @@ class PluginManager
     /**
      * Get loaded plugins
      *
-     * @return array Array of loaded plugins
+     * @return array<string, array<string, mixed>> Array of loaded plugins
      */
     public function getPlugins(): array
     {
@@ -242,7 +242,7 @@ class PluginManager
      * Get plugin information
      *
      * @param string $name Plugin name
-     * @return array|null Plugin data or null if not found
+     * @return array<string, mixed>|null Plugin data or null if not found
      */
     public function getPlugin(string $name): ?array
     {
@@ -254,7 +254,7 @@ class PluginManager
      *
      * @param string $event Event name
      * @param mixed $data Event data
-     * @return array Results from event listeners
+     * @return array<int, mixed> Results from event listeners
      */
     public function dispatchEvent(string $event, $data = null): array
     {
@@ -264,7 +264,7 @@ class PluginManager
     /**
      * Register additional plugin manually
      *
-     * @param array $plugin Plugin configuration
+     * @param array<string, mixed> $plugin Plugin configuration
      * @return void
      */
     public function registerPlugin(array $plugin): void

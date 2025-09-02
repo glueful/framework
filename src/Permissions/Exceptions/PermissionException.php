@@ -15,7 +15,7 @@ namespace Glueful\Permissions\Exceptions;
  */
 class PermissionException extends \Exception
 {
-    /** @var array Additional context data */
+    /** @var array<string, mixed> Additional context data */
     private array $context;
 
     /**
@@ -24,7 +24,7 @@ class PermissionException extends \Exception
      * @param string $message Exception message
      * @param int $code Exception code
      * @param \Throwable|null $previous Previous exception
-     * @param array $context Additional context data
+     * @param array<string, mixed> $context Additional context data
      */
     public function __construct(string $message = "", int $code = 0, ?\Throwable $previous = null, array $context = [])
     {
@@ -35,7 +35,7 @@ class PermissionException extends \Exception
     /**
      * Get additional context data
      *
-     * @return array Context data
+     * @return array<string, mixed> Context data
      */
     public function getContext(): array
     {
@@ -45,7 +45,7 @@ class PermissionException extends \Exception
     /**
      * Set additional context data
      *
-     * @param array $context Context data
+     * @param array<string, mixed> $context Context data
      * @return void
      */
     public function setContext(array $context): void

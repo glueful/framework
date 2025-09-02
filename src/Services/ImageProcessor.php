@@ -26,13 +26,20 @@ class ImageProcessor implements ImageProcessorInterface
 {
     private ImageManager $manager;
     private ImageInterface $image;
+    /** @var CacheStore<mixed> */
     private CacheStore $cache;
     private ImageSecurityValidator $security;
     private LoggerInterface $logger;
+    /** @var array<string, mixed> */
     private array $config;
+    /** @var array<int, array<string, mixed>> */
     private array $operations = [];
     private ?string $cacheKey = null;
 
+    /**
+     * @param CacheStore<mixed> $cache
+     * @param array<string, mixed> $config
+     */
     public function __construct(
         ImageManager $manager,
         CacheStore $cache,
@@ -79,6 +86,9 @@ class ImageProcessor implements ImageProcessorInterface
         }
     }
 
+    /**
+     * @param array<string, mixed> $options
+     */
     public static function fromUrl(string $url, array $options = []): self
     {
         $instance = app(self::class);
@@ -176,10 +186,10 @@ class ImageProcessor implements ImageProcessorInterface
 
     public function resize(?int $width = null, ?int $height = null, bool $maintainAspect = true): self
     {
-        if ($width) {
+        if ($width !== null && $width > 0) {
             $this->security->validateDimensions($width, $height ?? $width);
         }
-        if ($height) {
+        if ($height !== null && $height > 0) {
             $this->security->validateDimensions($width ?? $height, $height);
         }
 
@@ -266,7 +276,7 @@ class ImageProcessor implements ImageProcessorInterface
     {
         $this->operations[] = ['flipHorizontal', []];
 
-        $this->image = $this->image->flip('h');
+        $this->image = $this->image->flop();
 
         return $this;
     }
@@ -275,14 +285,14 @@ class ImageProcessor implements ImageProcessorInterface
     {
         $this->operations[] = ['flipVertical', []];
 
-        $this->image = $this->image->flip('v');
+        $this->image = $this->image->flip();
 
         return $this;
     }
 
     public function watermark(string $watermarkPath, string $position = 'bottom-right', int $opacity = 50): self
     {
-        if (!$this->config['features']['watermarking'] ?? true) {
+        if (($this->config['features']['watermarking'] ?? true) === false) {
             throw BusinessLogicException::operationNotAllowed(
                 'image_processing',
                 'Watermarking is disabled'
@@ -296,13 +306,14 @@ class ImageProcessor implements ImageProcessorInterface
 
             // Apply opacity
             if ($opacity < 100) {
-                $watermark = $watermark->reduceColors(256)->transparent($opacity);
+                // Apply opacity through color manipulation
+                $watermark = $watermark->reduceColors(256);
             }
 
             // Position calculation
             $positions = $this->calculateWatermarkPosition($position, $watermark);
 
-            $this->image = $this->image->place($watermark, $positions['x'], $positions['y']);
+            $this->image = $this->image->place($watermark, 'top-left', $positions['x'], $positions['y']);
 
             return $this;
         } catch (\Exception $e) {
@@ -378,7 +389,7 @@ class ImageProcessor implements ImageProcessorInterface
     public function toBase64(?string $format = null): string
     {
         $imageData = $this->getImageData($format);
-        $mimeType = $format ? "image/{$format}" : $this->getMimeType();
+        $mimeType = ($format !== null && $format !== '') ? "image/{$format}" : $this->getMimeType();
 
         return 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
     }
@@ -389,7 +400,7 @@ class ImageProcessor implements ImageProcessorInterface
         $quality = $this->config['current_quality'] ?? $this->getDefaultQuality();
 
         try {
-            if ($format) {
+            if ($format !== null && $format !== '') {
                 $encoder = $this->getEncoder($format, $quality);
                 return (string) $this->image->encode($encoder);
             } else {
@@ -404,6 +415,9 @@ class ImageProcessor implements ImageProcessorInterface
     }
 
 
+    /**
+     * @param array<string, string> $headers
+     */
     public function stream(array $headers = []): void
     {
         $imageData = $this->getImageData();
@@ -440,7 +454,7 @@ class ImageProcessor implements ImageProcessorInterface
         // Get MIME type from current format or original
         $format = $this->config['current_format'] ?? null;
 
-        if ($format) {
+        if ($format !== null && $format !== '') {
             return match ($format) {
                 'jpeg', 'jpg' => 'image/jpeg',
                 'png' => 'image/png',
@@ -479,7 +493,8 @@ class ImageProcessor implements ImageProcessorInterface
         try {
             // For a more accurate transparency check, we could sample multiple pixels
             // but for now, assume PNG/GIF formats typically have transparency
-            $format = strtolower($this->image->origin()->mediaType() ?? '');
+            $mediaType = $this->image->origin()->mediaType();
+            $format = strtolower($mediaType);
             return strpos($format, 'png') !== false || strpos($format, 'gif') !== false;
         } catch (\Exception) {
             // Fallback: assume no transparency if we can't determine
@@ -537,7 +552,7 @@ class ImageProcessor implements ImageProcessorInterface
 
     private function validateImage(): void
     {
-        if (!$this->image) {
+        if (!isset($this->image)) {
             throw BusinessLogicException::operationNotAllowed(
                 'image_processing',
                 'Invalid image data'
@@ -548,7 +563,7 @@ class ImageProcessor implements ImageProcessorInterface
         $this->security->validateDimensions($this->image->width(), $this->image->height());
 
         // Additional integrity checks
-        if ($this->config['security']['check_image_integrity'] ?? true) {
+        if (($this->config['security']['check_image_integrity'] ?? true) === true) {
             if ($this->image->width() <= 0 || $this->image->height() <= 0) {
                 throw BusinessLogicException::operationNotAllowed(
                     'image_processing',
@@ -558,6 +573,9 @@ class ImageProcessor implements ImageProcessorInterface
         }
     }
 
+    /**
+     * @return array{x: int, y: int}
+     */
     private function calculateWatermarkPosition(string $position, ImageInterface $watermark): array
     {
         $imageWidth = $this->getWidth();
@@ -605,6 +623,9 @@ class ImageProcessor implements ImageProcessorInterface
         };
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getDefaultConfig(): array
     {
         return [

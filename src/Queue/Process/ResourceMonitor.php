@@ -15,10 +15,16 @@ use Psr\Log\LoggerInterface;
 class ResourceMonitor
 {
     private LoggerInterface $logger;
+    /** @var array<string, mixed> */
     private array $config;
+    /** @var array<int, array<string, mixed>> */
     private array $resourceHistory = [];
+    /** @var array<string, mixed> */
     private array $thresholds;
 
+    /**
+     * @param array<string, mixed> $config
+     */
     public function __construct(LoggerInterface $logger, array $config = [])
     {
         $this->logger = $logger;
@@ -28,6 +34,7 @@ class ResourceMonitor
 
     /**
      * Get current system resource usage
+     * @return array<string, mixed>
      */
     public function getCurrentResources(): array
     {
@@ -43,6 +50,7 @@ class ResourceMonitor
 
     /**
      * Check if scaling up is safe based on resource limits
+     * @return array<string, mixed>
      */
     public function canScaleUp(int $additionalWorkers = 1): array
     {
@@ -103,6 +111,7 @@ class ResourceMonitor
 
     /**
      * Check if scaling down is recommended due to resource constraints
+     * @return array<string, mixed>
      */
     public function shouldScaleDownForResources(): array
     {
@@ -150,6 +159,7 @@ class ResourceMonitor
 
     /**
      * Get memory usage information
+     * @return array<string, mixed>
      */
     private function getMemoryUsage(): array
     {
@@ -173,6 +183,7 @@ class ResourceMonitor
 
     /**
      * Parse /proc/meminfo file
+     * @return array<string, int>
      */
     private function parseMeminfo(): array
     {
@@ -197,6 +208,7 @@ class ResourceMonitor
 
     /**
      * Fallback memory usage detection
+     * @return array<string, int>
      */
     private function getMemoryUsageFallback(): array
     {
@@ -217,6 +229,7 @@ class ResourceMonitor
 
     /**
      * Get CPU usage information
+     * @return array<string, mixed>
      */
     private function getCpuUsage(): array
     {
@@ -262,6 +275,7 @@ class ResourceMonitor
 
     /**
      * Parse CPU statistics from /proc/stat
+     * @return array<string, int>
      */
     private function parseCpuStat(): array
     {
@@ -313,6 +327,7 @@ class ResourceMonitor
 
     /**
      * Get disk usage information
+     * @return array<string, mixed>
      */
     private function getDiskUsage(): array
     {
@@ -364,6 +379,8 @@ class ResourceMonitor
 
     /**
      * Project resource usage after adding workers
+     * @param array<string, mixed> $currentResources
+     * @return array<string, mixed>
      */
     private function projectResourceUsage(array $currentResources, int $additionalWorkers): array
     {
@@ -394,6 +411,7 @@ class ResourceMonitor
 
     /**
      * Calculate urgency level for resource constraints
+     * @param array<string, mixed> $resources
      */
     private function calculateUrgency(array $resources): string
     {
@@ -452,6 +470,7 @@ class ResourceMonitor
 
     /**
      * Get resource usage history
+     * @return array<int, array<string, mixed>>
      */
     public function getResourceHistory(int $limit = 50): array
     {
@@ -460,6 +479,7 @@ class ResourceMonitor
 
     /**
      * Get resource usage trends
+     * @return array<string, mixed>
      */
     public function getResourceTrends(): array
     {
@@ -486,10 +506,12 @@ class ResourceMonitor
 
     /**
      * Calculate average resources from history
+     * @param array<int, array<string, mixed>> $history
+     * @return array<string, mixed>
      */
     private function calculateAverageResources(array $history): array
     {
-        if (empty($history)) {
+        if (count($history) === 0) {
             return [
                 'memory' => ['percentage' => 0],
                 'cpu' => ['percentage' => 0],
@@ -511,6 +533,7 @@ class ResourceMonitor
 
     /**
      * Get default configuration
+     * @return array<string, mixed>
      */
     private function getDefaultConfig(): array
     {

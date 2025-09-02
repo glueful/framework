@@ -40,7 +40,7 @@ abstract class Job implements JobInterface
     /** @var string Job UUID */
     protected string $uuid;
 
-    /** @var array Job payload data */
+    /** @var array<string, mixed> Job payload data */
     protected array $payload;
 
     /** @var int Number of attempts */
@@ -61,7 +61,7 @@ abstract class Job implements JobInterface
     /**
      * Create new job instance
      *
-     * @param array $data Job data
+     * @param array<string, mixed> $data Job data
      */
     public function __construct(array $data = [])
     {
@@ -149,7 +149,7 @@ abstract class Job implements JobInterface
     /**
      * Get job payload
      *
-     * @return array Job data
+     * @return array<string, mixed> Job data
      */
     public function getPayload(): array
     {
@@ -159,7 +159,7 @@ abstract class Job implements JobInterface
     /**
      * Get raw job data
      *
-     * @return array Raw data
+     * @return array<string, mixed> Raw data
      */
     public function getRawData(): array
     {
@@ -169,7 +169,7 @@ abstract class Job implements JobInterface
     /**
      * Get job data
      *
-     * @return array Job data
+     * @return array<string, mixed> Job data
      */
     public function getData(): array
     {
@@ -179,7 +179,7 @@ abstract class Job implements JobInterface
     /**
      * Set job data
      *
-     * @param array $data Job data
+     * @param array<string, mixed> $data Job data
      * @return void
      */
     public function setData(array $data): void
@@ -211,7 +211,7 @@ abstract class Job implements JobInterface
      */
     public function release(int $delay = 0): void
     {
-        if ($this->driver) {
+        if ($this->driver !== null) {
             $this->driver->release($this, $delay);
         }
         $this->released = true;
@@ -224,7 +224,7 @@ abstract class Job implements JobInterface
      */
     public function delete(): void
     {
-        if ($this->driver) {
+        if ($this->driver !== null) {
             $this->driver->delete($this);
         }
         $this->deleted = true;
@@ -446,7 +446,7 @@ abstract class Job implements JobInterface
     /**
      * Create job from array data
      *
-     * @param array $data Job data
+     * @param array<string, mixed> $data Job data
      * @return self Job instance
      * @throws \Exception If job creation fails
      */
@@ -488,7 +488,7 @@ abstract class Job implements JobInterface
     /**
      * Convert job to array
      *
-     * @return array Job data as array
+     * @return array<string, mixed> Job data as array
      */
     public function toArray(): array
     {

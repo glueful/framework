@@ -38,7 +38,7 @@ abstract class BaseRepository implements RepositoryInterface
     protected string $primaryKey = 'uuid';
 
 
-    /** @var array Standard fields to retrieve in queries */
+    /** @var array<string> Standard fields to retrieve in queries */
     protected array $defaultFields = ['*'];
 
 
@@ -84,7 +84,7 @@ abstract class BaseRepository implements RepositoryInterface
      */
     public function __construct(?Connection $connection = null)
     {
-        if ($connection) {
+        if ($connection !== null) {
             self::$sharedConnection = $connection;
         }
 
@@ -103,6 +103,9 @@ abstract class BaseRepository implements RepositoryInterface
     /**
      * {@inheritdoc}
      */
+    /**
+     * @return array<string, mixed>|null
+     */
     public function find(string $uuid): ?array
     {
         $results = $this->db->table($this->table)
@@ -111,7 +114,7 @@ abstract class BaseRepository implements RepositoryInterface
             ->limit(1)
             ->get();
 
-        return !empty($results) ? $results[0] : null;
+        return $results !== [] ? $results[0] : null;
     }
 
     /**
@@ -125,6 +128,10 @@ abstract class BaseRepository implements RepositoryInterface
      * @param string $uuid The UUID to search for
      * @param array|null $fields Fields to retrieve (optional, defaults to defaultFields)
      * @return array|null Record data or null if not found
+     */
+    /**
+     * @param array<string>|null $fields
+     * @return array<string, mixed>|null
      */
     public function findRecordByUuid(string $uuid, ?array $fields = null): ?array
     {
@@ -141,6 +148,10 @@ abstract class BaseRepository implements RepositoryInterface
      * @param array|null $fields Fields to retrieve (optional, defaults to defaultFields)
      * @return array|null Record data or null if not found
      */
+    /**
+     * @param array<string>|null $fields
+     * @return array<string, mixed>|null
+     */
     public function findBySlug(string $slug, ?array $fields = null): ?array
     {
         return $this->findBy('slug', $slug, $fields);
@@ -149,13 +160,18 @@ abstract class BaseRepository implements RepositoryInterface
     /**
      * {@inheritdoc}
      */
+    /**
+     * @param array<string, mixed> $conditions
+     * @param array<string, string> $orderBy
+     * @return array<int, array<string, mixed>>
+     */
     public function findAll(array $conditions = [], array $orderBy = [], ?int $limit = null, ?int $offset = null): array
     {
         $query = $this->db->table($this->table)
             ->select($this->defaultFields)
             ->where($conditions);
 
-        if (!empty($orderBy)) {
+        if ($orderBy !== []) {
             $query->orderBy($orderBy);
         }
 
@@ -188,11 +204,14 @@ abstract class BaseRepository implements RepositoryInterface
      * - created_at: Set to current timestamp if not provided
      * - updated_at: Set to current timestamp if table supports it
      *
-     * @param array $data Record data to insert (UUID optional, will be generated)
+     * @param array<string, mixed> $data Record data to insert (UUID optional, will be generated)
      * @return string The UUID of the created record
      * @throws \Glueful\Exceptions\DatabaseException If database insert fails
      * @throws \InvalidArgumentException If required data fields are missing
      * @throws \RuntimeException If UUID generation fails
+     */
+    /**
+     * @param array<string, mixed> $data
      */
     public function create(array $data): string
     {
@@ -212,7 +231,7 @@ abstract class BaseRepository implements RepositoryInterface
         // Execute the insert
         $success = $this->db->table($this->table)->insert($data);
 
-        if (!$success) {
+        if ($success === false) {
             throw DatabaseException::createFailed($this->table);
         }
 
@@ -231,6 +250,9 @@ abstract class BaseRepository implements RepositoryInterface
 
     /**
      * {@inheritdoc}
+     */
+    /**
+     * @param array<string, mixed> $data
      */
     public function update(string $uuid, array $data): bool
     {
@@ -272,7 +294,7 @@ abstract class BaseRepository implements RepositoryInterface
         // Get the record before deleting
         $originalData = $this->find($uuid);
 
-        if (!$originalData) {
+        if ($originalData === null) {
             return false;
         }
 
@@ -292,6 +314,9 @@ abstract class BaseRepository implements RepositoryInterface
     /**
      * {@inheritdoc}
      */
+    /**
+     * @param array<string, mixed> $conditions
+     */
     public function count(array $conditions = []): int
     {
         return $this->db->table($this->table)->where($conditions)->count();
@@ -308,6 +333,12 @@ abstract class BaseRepository implements RepositoryInterface
     /**
      * {@inheritdoc}
      */
+    /**
+     * @param array<string, mixed> $conditions
+     * @param array<string, string> $orderBy
+     * @param array<string> $fields
+     * @return array<string, mixed>
+     */
     public function paginate(
         int $page,
         int $perPage,
@@ -317,15 +348,15 @@ abstract class BaseRepository implements RepositoryInterface
     ): array {
         // Use QueryBuilder's built-in pagination
         $query = $this->db->table($this->table)
-            ->select(!empty($fields) ? $fields : $this->defaultFields);
+            ->select($fields !== [] ? $fields : $this->defaultFields);
 
         // Only add conditions if they exist
-        if (!empty($conditions)) {
+        if ($conditions !== []) {
             $query->where($conditions);
         }
 
         // Add ordering if specified
-        if (!empty($orderBy)) {
+        if ($orderBy !== []) {
             $query->orderBy($orderBy);
         }
 
@@ -336,13 +367,18 @@ abstract class BaseRepository implements RepositoryInterface
     /**
      * {@inheritdoc}
      */
+    /**
+     * @param array<string, mixed> $where
+     * @param array<string, string> $orderBy
+     * @return array<int, array<string, mixed>>
+     */
     public function findWhere(array $where, array $orderBy = [], ?int $limit = null): array
     {
         $query = $this->db->table($this->table)
             ->select($this->defaultFields)
             ->where($where);
 
-        if (!empty($orderBy)) {
+        if ($orderBy !== []) {
             $query->orderBy($orderBy);
         }
 
@@ -356,14 +392,24 @@ abstract class BaseRepository implements RepositoryInterface
     /**
      * {@inheritdoc}
      */
+    /**
+     * @param array<string> $uuids
+     * @param array<string> $fields
+     * @return array<string, array<string, mixed>>
+     */
+    /**
+     * @param array<string> $uuids
+     * @param array<string> $fields
+     * @return array<string, array<string, mixed>>
+     */
     public function findMultiple(array $uuids, array $fields = []): array
     {
-        if (empty($uuids)) {
+        if ($uuids === []) {
             return [];
         }
 
         $results = $this->db->table($this->table)
-            ->select(!empty($fields) ? $fields : $this->defaultFields)
+            ->select($fields !== [] ? $fields : $this->defaultFields)
             ->where([$this->primaryKey => ['IN', $uuids]])
             ->get();
 
@@ -409,16 +455,20 @@ abstract class BaseRepository implements RepositoryInterface
      * $uuids = $repository->bulkCreate($userData);
      * ```
      *
-     * @param array $records Array of record data arrays to insert
+     * @param array<int, array<string, mixed>> $records Array of record data arrays to insert
      * @return array Array of UUIDs for the created records
      * @throws \InvalidArgumentException If records array is malformed
      * @throws \RuntimeException If bulk insert operation fails
      * @throws \Glueful\Exceptions\DatabaseException If transaction fails
      * @throws \Exception If any database operation fails (triggers rollback)
      */
+    /**
+     * @param array<int, array<string, mixed>> $records
+     * @return array<string>
+     */
     public function bulkCreate(array $records): array
     {
-        if (empty($records)) {
+        if ($records === []) {
             return [];
         }
 
@@ -447,7 +497,7 @@ abstract class BaseRepository implements RepositoryInterface
         try {
             // Use database bulk insert for better performance
             $success = $this->db->table($this->table)->insertBatch($bulkData);
-            if (!$success) {
+            if ($success === false) {
                 throw new \RuntimeException('Bulk insert failed');
             }
 
@@ -463,9 +513,17 @@ abstract class BaseRepository implements RepositoryInterface
     /**
      * {@inheritdoc}
      */
+    /**
+     * @param array<string> $uuids
+     * @param array<string, mixed> $data
+     */
+    /**
+     * @param array<string> $uuids
+     * @param array<string, mixed> $data
+     */
     public function bulkUpdate(array $uuids, array $data): int
     {
-        if (empty($uuids)) {
+        if ($uuids === []) {
             return 0;
         }
 
@@ -484,9 +542,12 @@ abstract class BaseRepository implements RepositoryInterface
     /**
      * {@inheritdoc}
      */
+    /**
+     * @param array<string> $uuids
+     */
     public function bulkDelete(array $uuids): int
     {
-        if (empty($uuids)) {
+        if ($uuids === []) {
             return 0;
         }
 
@@ -521,6 +582,9 @@ abstract class BaseRepository implements RepositoryInterface
     /**
      * {@inheritdoc}
      */
+    /**
+     * @param array<string> $uuids
+     */
     public function bulkSoftDelete(array $uuids, string $statusColumn = 'status', $deletedValue = 'deleted'): int
     {
         $affectedRows = $this->bulkUpdate($uuids, [
@@ -541,6 +605,12 @@ abstract class BaseRepository implements RepositoryInterface
      * @param array|null $fields Fields to retrieve
      * @return array|null Record data or null if not found
      */
+    /**
+     * @param array<string>|null $fields
+     * @param mixed $value
+     * @param array<string>|null $fields
+     * @return array<string, mixed>|null
+     */
     public function findBy(string $field, $value, ?array $fields = null): ?array
     {
         $query = $this->db->table($this->table)
@@ -549,7 +619,7 @@ abstract class BaseRepository implements RepositoryInterface
             ->limit(1)
             ->get();
 
-        return $query ? $query[0] : null;
+        return $query !== [] ? $query[0] : null;
     }
 
     /**
@@ -557,8 +627,8 @@ abstract class BaseRepository implements RepositoryInterface
      *
      * @param string $field Field name
      * @param mixed $value Field value
-     * @param array|null $fields Fields to retrieve
-     * @return array Records data
+     * @param array<string>|null $fields Fields to retrieve
+     * @return array<int, array<string, mixed>> Records data
      */
     public function findAllBy(string $field, $value, ?array $fields = null): array
     {

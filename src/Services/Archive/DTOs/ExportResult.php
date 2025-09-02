@@ -12,6 +12,10 @@ namespace Glueful\Services\Archive\DTOs;
  */
 class ExportResult
 {
+    /**
+     * @param array<int, array<string, mixed>> $data
+     * @param array<string, mixed> $metadata
+     */
     public function __construct(
         public readonly array $data,
         public readonly int $recordCount,
@@ -24,11 +28,13 @@ class ExportResult
      */
     public function hasData(): bool
     {
-        return !empty($this->data);
+        return count($this->data) > 0;
     }
 
     /**
      * Get the first record
+     *
+     * @return array<string, mixed>|null
      */
     public function getFirstRecord(): ?array
     {
@@ -37,9 +43,11 @@ class ExportResult
 
     /**
      * Get the last record
+     *
+     * @return array<string, mixed>|null
      */
     public function getLastRecord(): ?array
     {
-        return empty($this->data) ? null : $this->data[array_key_last($this->data)];
+        return count($this->data) === 0 ? null : $this->data[array_key_last($this->data)];
     }
 }

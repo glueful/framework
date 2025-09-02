@@ -275,7 +275,7 @@ class AutoScaleCommand extends BaseQueueCommand
             $this->resourceMonitor->recordResourceUsage();
             $resourceCheck = $this->resourceMonitor->shouldScaleDownForResources();
 
-            if ($resourceCheck['should_scale_down']) {
+            if ((bool) ($resourceCheck['should_scale_down'] ?? false)) {
                 $this->warning("Resource constraints detected: " . implode(', ', $resourceCheck['reasons']));
             }
         }
@@ -613,7 +613,7 @@ class AutoScaleCommand extends BaseQueueCommand
         $this->line(str_repeat('=', 80));
 
         foreach ($schedules as $name => $schedule) {
-            $status = $schedule['enabled'] ? '✅' : '❌';
+            $status = (bool) ($schedule['enabled'] ?? false) ? '✅' : '❌';
             $nextRun = $schedule['next_run'] ?? 'Not scheduled';
 
             $this->line(sprintf(
@@ -683,7 +683,7 @@ class AutoScaleCommand extends BaseQueueCommand
     }
 
     /**
-     * @param array<string, mixed> $history
+     * @param array<int, array<string, mixed>> $history
      */
     private function displayResourceHistory(array $history): void
     {

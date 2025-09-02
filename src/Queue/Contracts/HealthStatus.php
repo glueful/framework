@@ -28,13 +28,14 @@ class HealthStatus
      * Create new health status instance
      *
      * @param string $status Overall health status
-     * @param array $metrics Health metrics and measurements
+     * @param array<string, mixed> $metrics Health metrics and measurements
      * @param string $message Optional status message
      * @param float|null $responseTime Response time in milliseconds
      * @param \DateTime|null $checkedAt When health check was performed
      */
     public function __construct(
         public readonly string $status,
+        /** @var array<string, mixed> */
         public readonly array $metrics = [],
         public readonly string $message = '',
         public readonly ?float $responseTime = null,
@@ -45,7 +46,7 @@ class HealthStatus
     /**
      * Create healthy status instance
      *
-     * @param array $metrics Optional health metrics
+     * @param array<string, mixed> $metrics Optional health metrics
      * @param string $message Optional status message
      * @param float|null $responseTime Response time in milliseconds
      * @return self Healthy status instance
@@ -68,7 +69,7 @@ class HealthStatus
      * Create degraded status instance
      *
      * @param string $message Status message explaining degradation
-     * @param array $metrics Optional health metrics
+     * @param array<string, mixed> $metrics Optional health metrics
      * @param float|null $responseTime Response time in milliseconds
      * @return self Degraded status instance
      */
@@ -90,7 +91,7 @@ class HealthStatus
      * Create unhealthy status instance
      *
      * @param string $message Status message explaining problem
-     * @param array $metrics Optional health metrics
+     * @param array<string, mixed> $metrics Optional health metrics
      * @param float|null $responseTime Response time in milliseconds
      * @return self Unhealthy status instance
      */
@@ -112,7 +113,7 @@ class HealthStatus
      * Create unknown status instance
      *
      * @param string $message Status message
-     * @param array $metrics Optional health metrics
+     * @param array<string, mixed> $metrics Optional health metrics
      * @return self Unknown status instance
      */
     public static function unknown(string $message = 'Health status unknown', array $metrics = []): self
@@ -181,7 +182,13 @@ class HealthStatus
     /**
      * Convert health status to array format
      *
-     * @return array Health status as associative array
+     * @return array{
+     *     status: string,
+     *     message: string,
+     *     response_time: float|null,
+     *     checked_at: string|null,
+     *     metrics: array<string, mixed>
+     * } Health status as associative array
      */
     public function toArray(): array
     {

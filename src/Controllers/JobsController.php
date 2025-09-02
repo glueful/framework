@@ -349,7 +349,7 @@ class JobsController extends BaseController
                             'parameters' => is_array($job['parameters'] ?? null) ? $job['parameters'] : [],
                             'next_run' => $job['next_run'] ?? null,
                             'last_run' => $job['last_run'] ?? null,
-                            'status' => $job['status'] ?? ($job['enabled'] ? 'active' : 'inactive')
+                            'status' => $job['status'] ?? (($job['enabled'] ?? true) === true ? 'active' : 'inactive')
                         ];
                     }
                 }

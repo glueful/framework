@@ -11,12 +11,17 @@ use Symfony\Component\Process\Exception\ProcessFailedException;
 
 class ProcessManager
 {
+    /** @var array<string, WorkerProcess> */
     private array $workers = [];
     private ProcessFactory $factory;
     private WorkerMonitor $monitor;
     private LoggerInterface $logger;
+    /** @var array<string, mixed> */
     private array $config;
 
+    /**
+     * @param array<string, mixed> $config
+     */
     public function __construct(
         ProcessFactory $factory,
         WorkerMonitor $monitor,
@@ -156,6 +161,9 @@ class ProcessManager
         $this->spawn($queue, $options);
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     public function getStatus(): array
     {
         $status = [];
@@ -213,6 +221,9 @@ class ProcessManager
         return $this->workers[$workerId] ?? null;
     }
 
+    /**
+     * @return array<string, WorkerProcess>
+     */
     private function getWorkersByQueue(string $queue): array
     {
         return array_filter($this->workers, function (WorkerProcess $worker) use ($queue) {

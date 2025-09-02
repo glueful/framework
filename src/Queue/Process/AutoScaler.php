@@ -20,10 +20,16 @@ class AutoScaler
     private ProcessManager $processManager;
     private QueueManager $queueManager;
     private LoggerInterface $logger;
+    /** @var array<string, mixed> */
     private array $config;
+    /** @var array<string, int> */
     private array $lastScaleTime = [];
+    /** @var array<int, array<string, mixed>> */
     private array $scaleHistory = [];
 
+    /**
+     * @param array<string, mixed> $config
+     */
     public function __construct(
         ProcessManager $processManager,
         QueueManager $queueManager,
@@ -38,23 +44,24 @@ class AutoScaler
 
     /**
      * Perform auto-scaling check for all configured queues
+     * @return array<int, array<string, mixed>>
      */
     public function scale(): array
     {
-        if (!$this->config['enabled']) {
-            return ['message' => 'Auto-scaling is disabled'];
+        if (($this->config['enabled'] ?? false) === false) {
+            return [];
         }
 
         $scalingActions = [];
         $queueConfigs = $this->config['queues'] ?? [];
 
         foreach ($queueConfigs as $queueName => $queueConfig) {
-            if (!($queueConfig['auto_scale'] ?? false)) {
+            if (($queueConfig['auto_scale'] ?? false) === false) {
                 continue;
             }
 
             $action = $this->scaleQueue($queueName, $queueConfig);
-            if ($action) {
+            if ($action !== null) {
                 $scalingActions[] = $action;
             }
         }
@@ -64,6 +71,8 @@ class AutoScaler
 
     /**
      * Scale a specific queue based on load and configuration
+     * @param array<string, mixed> $queueConfig
+     * @return array<string, mixed>|null
      */
     public function scaleQueue(string $queueName, array $queueConfig): ?array
     {
@@ -110,6 +119,9 @@ class AutoScaler
 
     /**
      * Make scaling decision based on metrics and configuration
+     * @param array<string, mixed> $metrics
+     * @param array<string, mixed> $queueConfig
+     * @return array<string, mixed>
      */
     private function makeScalingDecision(
         string $queueName,
@@ -153,6 +165,8 @@ class AutoScaler
 
     /**
      * Check if queue should scale up
+     * @param array<string, mixed> $metrics
+     * @param array<string, mixed> $queueConfig
      */
     private function shouldScaleUp(array $metrics, int $currentWorkers, array $queueConfig): bool
     {
@@ -189,6 +203,8 @@ class AutoScaler
 
     /**
      * Check if queue should scale down
+     * @param array<string, mixed> $metrics
+     * @param array<string, mixed> $queueConfig
      */
     private function shouldScaleDown(array $metrics, int $currentWorkers, array $queueConfig): bool
     {
@@ -219,6 +235,7 @@ class AutoScaler
 
     /**
      * Gather metrics for scaling decisions
+     * @return array<string, mixed>
      */
     private function gatherQueueMetrics(string $queueName): array
     {
@@ -258,12 +275,13 @@ class AutoScaler
 
     /**
      * Calculate processing rate (jobs per minute)
+     * @param array<int, array<string, mixed>> $workers
      */
     private function calculateProcessingRate(string $queueName, array $workers): float
     {
         // This would ideally use historical data over a time window
         // For now, we'll estimate based on current worker performance
-        if (empty($workers)) {
+        if (count($workers) === 0) {
             return 0.0;
         }
 
@@ -346,6 +364,7 @@ class AutoScaler
 
     /**
      * Create worker options from queue configuration
+     * @param array<string, mixed> $queueConfig
      */
     private function createWorkerOptions(array $queueConfig): WorkerOptions
     {
@@ -359,6 +378,8 @@ class AutoScaler
 
     /**
      * Build scale-up reason message
+     * @param array<string, mixed> $metrics
+     * @param array<string, mixed> $queueConfig
      */
     private function buildScaleUpReason(array $metrics, array $queueConfig): string
     {
@@ -377,11 +398,13 @@ class AutoScaler
             $reasons[] = "High worker utilization ({$metrics['avg_worker_utilization']}%)";
         }
 
-        return implode(', ', $reasons) ?: 'Load-based scaling';
+        return count($reasons) > 0 ? implode(', ', $reasons) : 'Load-based scaling';
     }
 
     /**
      * Build scale-down reason message
+     * @param array<string, mixed> $metrics
+     * @param array<string, mixed> $queueConfig
      */
     private function buildScaleDownReason(array $metrics, array $queueConfig): string
     {
@@ -397,11 +420,12 @@ class AutoScaler
             $reasons[] = "Low worker utilization ({$metrics['avg_worker_utilization']}%)";
         }
 
-        return implode(', ', $reasons) ?: 'Low load scaling';
+        return count($reasons) > 0 ? implode(', ', $reasons) : 'Low load scaling';
     }
 
     /**
      * Get scaling history
+     * @return array<int, array<string, mixed>>
      */
     public function getScalingHistory(?string $queueName = null): array
     {
@@ -414,6 +438,7 @@ class AutoScaler
 
     /**
      * Get default configuration
+     * @return array<string, mixed>
      */
     private function getDefaultConfig(): array
     {

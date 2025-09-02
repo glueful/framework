@@ -26,8 +26,8 @@ class DriverInfo
      * @param string $version Driver version (semantic versioning)
      * @param string $author Driver author/maintainer
      * @param string $description Human-readable description
-     * @param array $supportedFeatures List of supported features
-     * @param array $requiredDependencies Required packages/extensions
+     * @param array<int, string> $supportedFeatures List of supported features
+     * @param array<string, string> $requiredDependencies Required packages/extensions
      * @param string $documentationUrl Optional documentation URL
      */
     public function __construct(
@@ -35,7 +35,9 @@ class DriverInfo
         public readonly string $version,
         public readonly string $author,
         public readonly string $description,
+        /** @var array<int, string> */
         public readonly array $supportedFeatures,
+        /** @var array<string, string> */
         public readonly array $requiredDependencies,
         public readonly string $documentationUrl = ''
     ) {
@@ -44,7 +46,15 @@ class DriverInfo
     /**
      * Convert driver info to array format
      *
-     * @return array Driver information as associative array
+     * @return array{
+     *     name: string,
+     *     version: string,
+     *     author: string,
+     *     description: string,
+     *     features: array<int, string>,
+     *     dependencies: array<string, string>,
+     *     docs: string
+     * } Driver information as associative array
      */
     public function toArray(): array
     {
@@ -83,7 +93,7 @@ class DriverInfo
     /**
      * Validate driver dependencies
      *
-     * @return array Array of missing dependencies
+     * @return array<int, string> Array of missing dependencies
      */
     public function validateDependencies(): array
     {

@@ -40,7 +40,7 @@ interface QueueDriverInterface
     /**
      * Initialize driver with configuration
      *
-     * @param array $config Driver configuration options
+     * @param array<string, mixed> $config Driver configuration options
      * @return void
      * @throws \RuntimeException On initialization failure
      */
@@ -58,7 +58,7 @@ interface QueueDriverInterface
      * Push job to queue for immediate processing
      *
      * @param string $job Job class name or identifier
-     * @param array $data Job payload data
+     * @param array<string, mixed> $data Job payload data
      * @param string|null $queue Target queue name
      * @return string Job UUID for tracking
      * @throws \RuntimeException On push failure
@@ -70,7 +70,7 @@ interface QueueDriverInterface
      *
      * @param int $delay Delay in seconds
      * @param string $job Job class name or identifier
-     * @param array $data Job payload data
+     * @param array<string, mixed> $data Job payload data
      * @param string|null $queue Target queue name
      * @return string Job UUID for tracking
      * @throws \RuntimeException On scheduling failure
@@ -117,23 +117,23 @@ interface QueueDriverInterface
     /**
      * Get list of supported driver features
      *
-     * @return array List of feature names
+     * @return array<int, string> List of feature names
      */
     public function getFeatures(): array;
 
     /**
      * Get configuration schema for validation
      *
-     * @return array Configuration schema definition
+     * @return array<string, mixed> Configuration schema definition
      */
     public function getConfigSchema(): array;
 
     /**
      * Push multiple jobs in bulk operation
      *
-     * @param array $jobs Array of job definitions
+     * @param array<int, array<string, mixed>> $jobs Array of job definitions
      * @param string|null $queue Target queue name
-     * @return array Array of job UUIDs
+     * @return array<int, string> Array of job UUIDs
      * @throws \RuntimeException On bulk operation failure
      */
     public function bulk(array $jobs, ?string $queue = null): array;
@@ -151,7 +151,7 @@ interface QueueDriverInterface
      * Get queue statistics and metrics
      *
      * @param string|null $queue Queue name to get stats for
-     * @return array Statistics data
+     * @return array<string, mixed> Statistics data
      * @throws \RuntimeException On stats retrieval failure
      */
     public function getStats(?string $queue = null): array;

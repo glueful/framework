@@ -30,7 +30,7 @@ class CachedSerializer
             return $this->serializer->serialize($data, $format, $context);
         }
 
-        $contextArray = $context ? $context->toArray() : [];
+        $contextArray = $context !== null ? $context->toArray() : [];
         $cacheKey = $this->cache->generateKey($data, array_merge($contextArray, ['format' => $format]));
 
         // Try to get from cache
@@ -48,6 +48,7 @@ class CachedSerializer
 
     /**
      * Normalize with caching
+     * @return array<string, mixed>
      */
     public function normalize(
         mixed $data,
@@ -57,7 +58,7 @@ class CachedSerializer
             return $this->serializer->normalize($data, $context);
         }
 
-        $contextArray = $context ? $context->toArray() : [];
+        $contextArray = $context !== null ? $context->toArray() : [];
         $cacheKey = $this->cache->generateKey($data, array_merge($contextArray, ['operation' => 'normalize']));
 
         // Try to get from cache
@@ -100,6 +101,7 @@ class CachedSerializer
 
     /**
      * Get cache stats
+     * @return array<string, mixed>
      */
     public function getCacheStats(): array
     {

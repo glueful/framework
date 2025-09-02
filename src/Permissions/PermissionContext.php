@@ -9,6 +9,7 @@ use Symfony\Component\HttpFoundation\Request;
 class PermissionContext
 {
     public function __construct(
+        /** @var array<string, mixed> */
         public readonly array $data = [],
         public readonly ?string $ipAddress = null,
         public readonly ?string $userAgent = null,
@@ -25,6 +26,9 @@ class PermissionContext
         );
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function toArray(): array
     {
         return array_filter([

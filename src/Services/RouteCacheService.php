@@ -72,6 +72,9 @@ class RouteCacheService
      * @param Router $router The router instance (used to access RouteCollection)
      * @return array Result array with success status and metadata
      */
+    /**
+     * @return array<string, mixed>
+     */
     public function cacheRoutes(Router $router, ?string $env = null): array
     {
         try {
@@ -118,7 +121,9 @@ PHP;
 
             // Cleanup older caches for this environment
             $envForCleanup = $env ?? (string) config('app.env', env('APP_ENV', 'production'));
-            foreach (glob($this->cacheDir . "/routes_{$envForCleanup}_*.php") ?: [] as $old) {
+            $globPattern = $this->cacheDir . "/routes_{$envForCleanup}_*.php";
+            $oldFiles = glob($globPattern);
+            foreach (($oldFiles !== false ? $oldFiles : []) as $old) {
                 if ($old !== $cacheFile) {
                     @unlink($old);
                 }

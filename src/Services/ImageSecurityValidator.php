@@ -14,8 +14,12 @@ use Glueful\Exceptions\BusinessLogicException;
  */
 class ImageSecurityValidator
 {
+    /** @var array<string, mixed> */
     private array $config;
 
+    /**
+     * @param array<string, mixed> $config
+     */
     public function __construct(array $config = [])
     {
         $this->config = array_merge($this->getDefaultConfig(), $config);
@@ -31,7 +35,7 @@ class ImageSecurityValidator
     public function validateUrl(string $url): bool
     {
         // Check if external URLs are disabled
-        if ($this->config['disable_external_urls'] && $this->isExternalUrl($url)) {
+        if (($this->config['disable_external_urls'] ?? false) === true && $this->isExternalUrl($url)) {
             throw BusinessLogicException::operationNotAllowed(
                 'image_processing',
                 'External image URLs are disabled'
@@ -70,7 +74,7 @@ class ImageSecurityValidator
         $format = strtolower(trim($format, '.'));
 
         // Check allowed formats
-        if (!in_array($format, $this->config['allowed_formats'])) {
+        if (!in_array($format, $this->config['allowed_formats'], true)) {
             throw BusinessLogicException::operationNotAllowed(
                 'image_processing',
                 "Format '{$format}' is not allowed"
@@ -78,8 +82,8 @@ class ImageSecurityValidator
         }
 
         // Validate MIME type if provided and validation is enabled
-        if ($mimeType && $this->config['validate_mime']) {
-            if (!in_array($mimeType, $this->config['allowed_mime_types'])) {
+        if ($mimeType !== null && $mimeType !== '' && ($this->config['validate_mime'] ?? false) === true) {
+            if (!in_array($mimeType, $this->config['allowed_mime_types'], true)) {
                 throw BusinessLogicException::operationNotAllowed(
                     'image_processing',
                     "MIME type '{$mimeType}' is not allowed"
@@ -201,7 +205,7 @@ class ImageSecurityValidator
         $allowedDomains = $this->config['allowed_domains'];
 
         // Allow all domains if * is specified
-        if (in_array('*', $allowedDomains)) {
+        if (in_array('*', $allowedDomains, true)) {
             return true;
         }
 
@@ -291,7 +295,7 @@ class ImageSecurityValidator
             return false;
         }
 
-        return in_array($mimeType, $formatMimeMap[$format]);
+        return in_array($mimeType, $formatMimeMap[$format], true);
     }
 
     /**
@@ -336,6 +340,9 @@ class ImageSecurityValidator
      * Get default security configuration
      *
      * @return array Default config
+     */
+    /**
+     * @return array<string, mixed>
      */
     private function getDefaultConfig(): array
     {

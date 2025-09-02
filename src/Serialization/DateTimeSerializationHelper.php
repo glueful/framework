@@ -13,6 +13,7 @@ class DateTimeSerializationHelper
 {
     /**
      * Create datetime range representation
+     * @return array<string, mixed>
      */
     public static function normalizeRange(
         \DateTimeInterface $start,
@@ -55,15 +56,17 @@ class DateTimeSerializationHelper
             $parts[] = $interval->i . ' minute' . ($interval->i > 1 ? 's' : '');
         }
 
-        if ($interval->s > 0 && empty($parts)) {
+        if ($interval->s > 0 && count($parts) === 0) {
             $parts[] = $interval->s . ' second' . ($interval->s > 1 ? 's' : '');
         }
 
-        return empty($parts) ? '0 seconds' : implode(', ', $parts);
+        return count($parts) === 0 ? '0 seconds' : implode(', ', $parts);
     }
 
     /**
      * Get timezone-aware schedule representation
+     * @param array<string> $timezones
+     * @return array<string, array<string, string>>
      */
     public static function normalizeSchedule(
         \DateTimeInterface $dateTime,

@@ -81,7 +81,7 @@ class OTP
         int $timestamp,
         int $expiry = self::DEFAULT_EXPIRY
     ): bool {
-        if (empty($storedOTP) || empty($providedOTP)) {
+        if ($storedOTP === '' || $providedOTP === '') {
             return false;
         }
 

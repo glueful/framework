@@ -21,8 +21,10 @@ class ConditionalNormalizer implements NormalizerInterface, NormalizerAwareInter
 
     /**
      * Normalize object with conditional serialization
+     * @param array $context
+     * @return array<string, mixed>
      */
-    public function normalize(mixed $object, ?string $format = null, array $context = []): array
+    public function normalize(mixed $object, ?string $format = null, array $context = []): array // @phpstan-ignore-line
     {
         // First, get the normal serialization
         $data = $this->normalizer->normalize($object, $format, $context);
@@ -81,6 +83,8 @@ class ConditionalNormalizer implements NormalizerInterface, NormalizerAwareInter
 
     /**
      * Check if this normalizer supports the data
+     * @param array $context
+     * @phpstan-ignore-next-line
      */
     public function supportsNormalization(mixed $data, ?string $format = null, array $context = []): bool
     {
@@ -106,14 +110,14 @@ class ConditionalNormalizer implements NormalizerInterface, NormalizerAwareInter
 
         // Check properties
         foreach ($reflection->getProperties() as $property) {
-            if (!empty($property->getAttributes(SerializeIf::class))) {
+            if (count($property->getAttributes(SerializeIf::class)) > 0) {
                 return true;
             }
         }
 
         // Check methods
         foreach ($reflection->getMethods(\ReflectionMethod::IS_PUBLIC) as $method) {
-            if (!empty($method->getAttributes(SerializeIf::class))) {
+            if (count($method->getAttributes(SerializeIf::class)) > 0) {
                 return true;
             }
         }

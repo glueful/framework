@@ -17,6 +17,9 @@ class SerializationCache
     private const CACHE_PREFIX = 'serialization:';
     private const DEFAULT_TTL = 3600; // 1 hour
 
+    /**
+     * @param CacheStore<array<string, mixed>> $cache
+     */
     public function __construct(
         private CacheStore $cache,
         private int $defaultTtl = self::DEFAULT_TTL
@@ -25,6 +28,7 @@ class SerializationCache
 
     /**
      * Get cached serialized data
+     * @return array<string, mixed>|null
      */
     public function get(string $key): ?array
     {
@@ -33,6 +37,7 @@ class SerializationCache
 
     /**
      * Store serialized data in cache
+     * @param array<string, mixed> $data
      */
     public function set(string $key, array $data, ?int $ttl = null): void
     {
@@ -58,6 +63,7 @@ class SerializationCache
 
     /**
      * Generate cache key from object and context
+     * @param array<string, mixed> $context
      */
     public function generateKey(object $object, array $context = []): string
     {
@@ -98,6 +104,8 @@ class SerializationCache
 
     /**
      * Cache serialization result with automatic key generation
+     * @param array<string, mixed> $context
+     * @param array<string, mixed> $result
      */
     public function cacheResult(object $object, array $context, array $result, ?int $ttl = null): void
     {
@@ -107,6 +115,8 @@ class SerializationCache
 
     /**
      * Get cached result with automatic key generation
+     * @param array<string, mixed> $context
+     * @return array<string, mixed>|null
      */
     public function getCachedResult(object $object, array $context): ?array
     {
@@ -143,6 +153,7 @@ class SerializationCache
 
     /**
      * Get cache statistics
+     * @return array<string, mixed>
      */
     public function getStats(): array
     {
@@ -175,6 +186,8 @@ class SerializationCache
 
     /**
      * Warm up cache for collection of objects
+     * @param array<object> $objects
+     * @param array<string, mixed> $context
      */
     public function warmupCollection(array $objects, array $context = [], ?int $ttl = null): int
     {

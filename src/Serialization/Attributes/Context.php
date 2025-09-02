@@ -21,8 +21,8 @@ class Context extends SymfonyContext
     /**
      * Constructor
      *
-     * @param array $context Context parameters
-     * @param array $groups Serialization groups to apply context to
+     * @param array<string, mixed> $context Context parameters
+     * @param array<string> $groups Serialization groups to apply context to
      */
     public function __construct(array $context = [], array $groups = [])
     {

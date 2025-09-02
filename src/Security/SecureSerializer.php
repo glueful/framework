@@ -25,7 +25,7 @@ class SecureSerializer
     /** @var int Maximum nesting depth */
     public const MAX_DEPTH = 32;
 
-    /** @var array Default allowed classes for PHP deserialization */
+    /** @var array<string> Default allowed classes for PHP deserialization */
     private static array $defaultAllowedClasses = [
         'stdClass',
         'DateTime',
@@ -39,7 +39,7 @@ class SecureSerializer
         'Glueful\\Extensions\\RBAC\\Models\\RolePermission',
     ];
 
-    /** @var array Runtime allowed classes */
+    /** @var array<string> Runtime allowed classes */
     private array $allowedClasses;
 
     /** @var bool Whether to use JSON as default format */
@@ -49,7 +49,7 @@ class SecureSerializer
     /**
      * Constructor
      *
-     * @param array $allowedClasses Additional allowed classes for PHP deserialization
+     * @param array<string> $allowedClasses Additional allowed classes for PHP deserialization
      * @param bool $useJsonDefault Whether to prefer JSON over PHP serialization
      */
     public function __construct(array $allowedClasses = [], bool $useJsonDefault = true)
@@ -92,13 +92,13 @@ class SecureSerializer
      * Deserialize data safely
      *
      * @param string $data Serialized data with format prefix
-     * @param array $additionalAllowedClasses Additional classes to allow for this operation
+     * @param array<string> $additionalAllowedClasses Additional classes to allow for this operation
      * @return mixed Deserialized data
      * @throws \InvalidArgumentException If data is invalid or contains unsafe classes
      */
     public function unserialize(string $data, array $additionalAllowedClasses = [])
     {
-        if (empty($data)) {
+        if ($data === '') {
             return null;
         }
 
@@ -152,7 +152,7 @@ class SecureSerializer
     /**
      * Check if array contents are JSON serializable
      *
-     * @param array $array Array to check
+     * @param array<mixed> $array Array to check
      * @return bool True if all contents are JSON serializable
      */
     private function isArrayJsonSerializable(array $array): bool
@@ -168,7 +168,7 @@ class SecureSerializer
     /**
      * Check array nesting depth
      *
-     * @param array $array Array to check
+     * @param array<mixed> $array Array to check
      * @param int $depth Current depth
      * @return bool True if within depth limit
      */
@@ -202,7 +202,7 @@ class SecureSerializer
      * Unserialize PHP data with class validation
      *
      * @param string $data PHP serialized data
-     * @param array $additionalAllowedClasses Additional allowed classes
+     * @param array<string> $additionalAllowedClasses Additional allowed classes
      * @return mixed Unserialized data
      */
     private function unserializePhp(string $data, array $additionalAllowedClasses = [])
@@ -225,7 +225,7 @@ class SecureSerializer
      * Handle legacy data without format prefix
      *
      * @param string $data Legacy serialized data
-     * @param array $additionalAllowedClasses Additional allowed classes
+     * @param array<string> $additionalAllowedClasses Additional allowed classes
      * @return mixed Unserialized data
      */
     private function unserializeLegacy(string $data, array $additionalAllowedClasses = [])
@@ -255,7 +255,7 @@ class SecureSerializer
         return (str_starts_with($data, '{') && str_ends_with($data, '}')) ||
                (str_starts_with($data, '[') && str_ends_with($data, ']')) ||
                (str_starts_with($data, '"') && str_ends_with($data, '"')) ||
-               in_array($data, ['true', 'false', 'null']) ||
+               in_array($data, ['true', 'false', 'null'], true) ||
                is_numeric($data);
     }
 
@@ -275,7 +275,7 @@ class SecureSerializer
      * Validate classes in serialized data
      *
      * @param string $data Serialized data
-     * @param array $additionalAllowedClasses Additional allowed classes
+     * @param array<string> $additionalAllowedClasses Additional allowed classes
      * @throws \InvalidArgumentException If dangerous classes found
      */
     private function validateSerializedClasses(string $data, array $additionalAllowedClasses = []): void
@@ -299,7 +299,7 @@ class SecureSerializer
      * Check if a class is allowed for deserialization
      *
      * @param string $className Class name to check
-     * @param array $allowedClasses Explicitly allowed classes
+     * @param array<string> $allowedClasses Explicitly allowed classes
      * @return bool True if class is allowed
      */
     private function isClassAllowed(string $className, array $allowedClasses): bool
@@ -382,7 +382,7 @@ class SecureSerializer
     /**
      * Get currently allowed classes
      *
-     * @return array Allowed class names
+     * @return array<string> Allowed class names
      */
     public function getAllowedClasses(): array
     {

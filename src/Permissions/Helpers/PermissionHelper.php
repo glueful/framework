@@ -22,7 +22,7 @@ class PermissionHelper
      * Check if user can access admin system
      *
      * @param string $userUuid User UUID
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return bool True if user has admin access
      */
     public static function canAccessAdmin(string $userUuid, array $context = []): bool
@@ -39,7 +39,7 @@ class PermissionHelper
      * Check if user can view users
      *
      * @param string $userUuid User UUID
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return bool True if user can view users
      */
     public static function canViewUsers(string $userUuid, array $context = []): bool
@@ -56,7 +56,7 @@ class PermissionHelper
      * Check if user can create users
      *
      * @param string $userUuid User UUID
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return bool True if user can create users
      */
     public static function canCreateUsers(string $userUuid, array $context = []): bool
@@ -73,7 +73,7 @@ class PermissionHelper
      * Check if user can edit users
      *
      * @param string $userUuid User UUID
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return bool True if user can edit users
      */
     public static function canEditUsers(string $userUuid, array $context = []): bool
@@ -90,7 +90,7 @@ class PermissionHelper
      * Check if user can delete users
      *
      * @param string $userUuid User UUID
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return bool True if user can delete users
      */
     public static function canDeleteUsers(string $userUuid, array $context = []): bool
@@ -107,7 +107,7 @@ class PermissionHelper
      * Check if user can manage users (all user operations)
      *
      * @param string $userUuid User UUID
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return bool True if user has all user management permissions
      */
     public static function canManageUsers(string $userUuid, array $context = []): bool
@@ -126,7 +126,7 @@ class PermissionHelper
      * @param string $userUuid User UUID
      * @param string $permission Permission to check
      * @param string $resource Resource identifier
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return bool True if user has permission
      */
     public static function hasPermission(
@@ -142,9 +142,9 @@ class PermissionHelper
      * Check if user has any of the specified permissions
      *
      * @param string $userUuid User UUID
-     * @param array $permissions Array of permissions to check
+     * @param array<string> $permissions Array of permissions to check
      * @param string $resource Resource identifier
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return bool True if user has at least one permission
      */
     public static function hasAnyPermission(
@@ -165,9 +165,9 @@ class PermissionHelper
      * Check if user has all of the specified permissions
      *
      * @param string $userUuid User UUID
-     * @param array $permissions Array of permissions to check
+     * @param array<string> $permissions Array of permissions to check
      * @param string $resource Resource identifier
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return bool True if user has all permissions
      */
     public static function hasAllPermissions(
@@ -214,7 +214,7 @@ class PermissionHelper
      * @param string $userUuid User UUID
      * @param string $permission Permission to check
      * @param string $resource Resource identifier
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return bool True if user has permission, false on error or no permission
      */
     private static function checkPermission(

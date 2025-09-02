@@ -31,7 +31,7 @@ interface ImageProcessorInterface
      * Create processor from remote URL with options
      *
      * @param string $url Remote image URL
-     * @param array $options HTTP options (timeout, headers, etc.)
+     * @param array<string, mixed> $options HTTP options (timeout, headers, etc.)
      * @return self
      * @throws \Glueful\Exceptions\BusinessLogicException If URL is invalid or unreachable
      */
@@ -189,7 +189,7 @@ interface ImageProcessorInterface
     /**
      * Stream image directly to output
      *
-     * @param array $headers Additional HTTP headers
+     * @param array<string, string> $headers Additional HTTP headers
      * @return void
      */
     public function stream(array $headers = []): void;

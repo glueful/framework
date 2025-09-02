@@ -33,7 +33,7 @@ class QueueMaintenance
     /** @var FailedJobProvider Failed job provider instance */
     private FailedJobProvider $failedJobProvider;
 
-    /** @var array Maintenance statistics */
+    /** @var array<string, mixed> Maintenance statistics */
     private array $stats = [];
 
     /**
@@ -57,7 +57,7 @@ class QueueMaintenance
     /**
      * Handle the maintenance job
      *
-     * @param array $parameters Job parameters
+     * @param array<string, mixed> $parameters Job parameters
      * @return void
      */
     public function handle(array $parameters = []): void
@@ -298,7 +298,7 @@ class QueueMaintenance
 
             $this->log("Health check: {$healthyConnections} healthy connections");
 
-            if (!empty($unhealthyConnections)) {
+            if (count($unhealthyConnections) > 0) {
                 foreach ($unhealthyConnections as $unhealthy) {
                     $this->log("Unhealthy connection {$unhealthy['connection']}: {$unhealthy['message']}", 'warning');
                 }
@@ -312,7 +312,7 @@ class QueueMaintenance
     /**
      * Save statistics to storage
      *
-     * @param array $stats Statistics data
+     * @param array<string, mixed> $stats Statistics data
      * @return void
      */
     private function saveStatistics(array $stats): void
@@ -419,7 +419,7 @@ class QueueMaintenance
     /**
      * Get maintenance statistics
      *
-     * @return array Maintenance statistics
+     * @return array<string, mixed> Maintenance statistics
      */
     public function getStats(): array
     {

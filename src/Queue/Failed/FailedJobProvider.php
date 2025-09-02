@@ -88,7 +88,7 @@ class FailedJobProvider
 
         // Extract job information from payload
         $payloadData = $this->decodePayload($payload);
-        if ($payloadData) {
+        if ($payloadData !== null) {
             $data['job_class'] = $payloadData['job'] ?? 'Unknown';
             $data['job_uuid'] = $payloadData['uuid'] ?? null;
             $data['attempts'] = $payloadData['attempts'] ?? 1;
@@ -101,10 +101,10 @@ class FailedJobProvider
     /**
      * Get all failed jobs
      *
-     * @param array $filters Filters for failed jobs
+     * @param array<string, mixed> $filters Filters for failed jobs
      * @param int $limit Result limit
      * @param int $offset Result offset
-     * @return array Failed jobs
+     * @return array<int, array<string, mixed>> Failed jobs
      */
     public function all(array $filters = [], int $limit = 50, int $offset = 0): array
     {
@@ -122,13 +122,13 @@ class FailedJobProvider
      * Find failed job by UUID
      *
      * @param string $uuid Failed job UUID
-     * @return array|null Failed job data
+     * @return array<string, mixed>|null Failed job data
      */
     public function find(string $uuid): ?array
     {
         $results = $this->db->table($this->table)->select(['*'])->where('uuid', $uuid)->limit(1)->get();
         $result = $results[0] ?? null;
-        return $result ?: null;
+        return $result !== null ? $result : null;
     }
 
     /**
@@ -146,7 +146,7 @@ class FailedJobProvider
     /**
      * Forget all failed jobs
      *
-     * @param array $filters Filters for jobs to forget
+     * @param array<string, mixed> $filters Filters for jobs to forget
      * @return bool True if jobs were forgotten
      */
     public function flush(array $filters = []): bool
@@ -166,19 +166,19 @@ class FailedJobProvider
     public function retry(string $uuid): bool
     {
         $failedJob = $this->find($uuid);
-        if (!$failedJob) {
+        if ($failedJob === null) {
             return false;
         }
 
         // Check if job is retryable
-        if (!$failedJob['retryable'] || $failedJob['retry_count'] >= $this->maxRetries) {
+        if ((bool)$failedJob['retryable'] === false || $failedJob['retry_count'] >= $this->maxRetries) {
             return false;
         }
 
         try {
             // Decode payload to recreate job
             $payloadData = $this->decodePayload($failedJob['payload']);
-            if (!$payloadData) {
+            if ($payloadData === null) {
                 return false;
             }
 
@@ -200,8 +200,8 @@ class FailedJobProvider
     /**
      * Retry multiple failed jobs
      *
-     * @param array $uuids Array of failed job UUIDs
-     * @return array Results array with success/failure status
+     * @param array<int, string> $uuids Array of failed job UUIDs
+     * @return array<string, mixed> Results array with success/failure status
      */
     public function retryMultiple(array $uuids): array
     {
@@ -215,8 +215,8 @@ class FailedJobProvider
     /**
      * Retry all retryable failed jobs
      *
-     * @param array $filters Filters for jobs to retry
-     * @return array Retry results
+     * @param array<string, mixed> $filters Filters for jobs to retry
+     * @return array<string, mixed> Retry results
      */
     public function retryAll(array $filters = []): array
     {
@@ -236,8 +236,8 @@ class FailedJobProvider
     /**
      * Get failed job statistics
      *
-     * @param array $filters Filters for statistics
-     * @return array Statistics
+     * @param array<string, mixed> $filters Filters for statistics
+     * @return array<string, mixed> Statistics
      */
     public function getStats(array $filters = []): array
     {
@@ -278,8 +278,8 @@ class FailedJobProvider
     /**
      * Get failure patterns analysis
      *
-     * @param array $conditions Base conditions
-     * @return array Failure patterns
+     * @param array<string, mixed> $conditions Base conditions
+     * @return array<string, mixed> Failure patterns
      */
     public function getFailurePatterns(array $conditions = []): array
     {
@@ -342,7 +342,7 @@ class FailedJobProvider
     /**
      * Export failed jobs data
      *
-     * @param array $filters Filters for export
+     * @param array<string, mixed> $filters Filters for export
      * @param string $format Export format (json, csv)
      * @return string Exported data
      */
@@ -365,8 +365,8 @@ class FailedJobProvider
     /**
      * Build query conditions from filters
      *
-     * @param array $filters Filter array
-     * @return array Database conditions
+     * @param array<string, mixed> $filters Filter array
+     * @return array<string, mixed> Database conditions
      */
     private function buildConditions(array $filters): array
     {
@@ -389,7 +389,7 @@ class FailedJobProvider
         }
 
         if (isset($filters['retryable'])) {
-            $conditions['retryable'] = $filters['retryable'] ? 1 : 0;
+            $conditions['retryable'] = (bool)$filters['retryable'] ? 1 : 0;
         }
 
         if (isset($filters['from_date'])) {
@@ -408,7 +408,7 @@ class FailedJobProvider
      * Decode job payload
      *
      * @param string $payload Serialized payload
-     * @return array|null Decoded payload data
+     * @return array<string, mixed>|null Decoded payload data
      */
     private function decodePayload(string $payload): ?array
     {
@@ -456,7 +456,7 @@ class FailedJobProvider
         $shortClass = substr($exceptionClass, strrpos($exceptionClass, '\\') + 1);
 
         // Check if it's a non-retryable exception
-        if (in_array($shortClass, $nonRetryableExceptions)) {
+        if (in_array($shortClass, $nonRetryableExceptions, true)) {
             return false;
         }
 
@@ -483,8 +483,8 @@ class FailedJobProvider
     /**
      * Re-queue failed job
      *
-     * @param array $failedJob Failed job data
-     * @param array $_payloadData Decoded payload
+     * @param array<string, mixed> $failedJob Failed job data
+     * @param array<string, mixed> $_payloadData Decoded payload
      * @return bool True if re-queued successfully
      */
     private function requeueJob(array $failedJob, array $_payloadData): bool
@@ -510,12 +510,12 @@ class FailedJobProvider
     /**
      * Export failed jobs to CSV format
      *
-     * @param array $failedJobs Failed jobs data
+     * @param array<int, array<string, mixed>> $failedJobs Failed jobs data
      * @return string CSV data
      */
     private function exportToCsv(array $failedJobs): string
     {
-        if (empty($failedJobs)) {
+        if (count($failedJobs) === 0) {
             return '';
         }
 
@@ -594,7 +594,7 @@ class FailedJobProvider
      * Apply conditions to query builder
      *
      * @param mixed $query Query builder instance
-     * @param array $conditions Conditions to apply
+     * @param array<string, mixed> $conditions Conditions to apply
      * @return void
      */
     private function applyConditionsToQuery($query, array $conditions): void

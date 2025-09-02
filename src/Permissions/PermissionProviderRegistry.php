@@ -28,10 +28,10 @@ class PermissionProviderRegistry
     /** @var array<string, PermissionProviderInterface> Registered providers */
     private static array $providers = [];
 
-    /** @var array<string, array> Provider configurations */
+    /** @var array<string, array<string, mixed>> Provider configurations */
     private static array $configurations = [];
 
-    /** @var array<string, array> Provider metadata cache */
+    /** @var array<string, array<string, mixed>> Provider metadata cache */
     private static array $metadataCache = [];
 
     /** @var string|null Currently active provider name */
@@ -42,7 +42,7 @@ class PermissionProviderRegistry
      *
      * @param string $name Unique name for the provider
      * @param PermissionProviderInterface $provider Provider instance
-     * @param array $config Provider configuration
+     * @param array<string, mixed> $config Provider configuration
      * @return void
      * @throws PermissionException If provider name already exists
      */
@@ -118,7 +118,7 @@ class PermissionProviderRegistry
     /**
      * Get all registered provider names
      *
-     * @return array List of registered provider names
+     * @return string[] List of registered provider names
      */
     public static function getProviderNames(): array
     {
@@ -139,7 +139,7 @@ class PermissionProviderRegistry
      * Get provider metadata
      *
      * @param string $name Provider name
-     * @return array Provider metadata
+     * @return array<string, mixed> Provider metadata
      * @throws ProviderNotFoundException If provider is not registered
      */
     public static function getProviderMetadata(string $name): array
@@ -163,7 +163,7 @@ class PermissionProviderRegistry
     /**
      * Get metadata for all registered providers
      *
-     * @return array Provider name => metadata mapping
+     * @return array<string, array<string, mixed>> Provider name => metadata mapping
      */
     public static function getAllProviderMetadata(): array
     {
@@ -184,7 +184,7 @@ class PermissionProviderRegistry
      * Get provider configuration
      *
      * @param string $name Provider name
-     * @return array Provider configuration
+     * @return array<string, mixed> Provider configuration
      * @throws ProviderNotFoundException If provider is not registered
      */
     public static function getProviderConfiguration(string $name): array
@@ -200,7 +200,7 @@ class PermissionProviderRegistry
      * Update provider configuration
      *
      * @param string $name Provider name
-     * @param array $config New configuration
+     * @param array<string, mixed> $config New configuration
      * @return void
      * @throws ProviderNotFoundException If provider is not registered
      */
@@ -249,7 +249,7 @@ class PermissionProviderRegistry
      */
     public static function getActiveProvider(): ?PermissionProviderInterface
     {
-        if (self::$activeProviderName && isset(self::$providers[self::$activeProviderName])) {
+        if (self::$activeProviderName !== null && isset(self::$providers[self::$activeProviderName])) {
             return self::$providers[self::$activeProviderName];
         }
 
@@ -281,8 +281,8 @@ class PermissionProviderRegistry
      *
      * Search for providers that support specific capabilities.
      *
-     * @param array $capabilities Required capabilities
-     * @return array Provider names that support all required capabilities
+     * @param string[] $capabilities Required capabilities
+     * @return string[] Provider names that support all required capabilities
      */
     public static function findProvidersByCapability(array $capabilities): array
     {
@@ -294,7 +294,7 @@ class PermissionProviderRegistry
                 $providerCapabilities = $metadata['capabilities'] ?? [];
 
                 // Check if provider supports all required capabilities
-                if (empty(array_diff($capabilities, $providerCapabilities))) {
+                if (count(array_diff($capabilities, $providerCapabilities)) === 0) {
                     $matching[] = $name;
                 }
             } catch (\Exception $e) {
@@ -310,7 +310,7 @@ class PermissionProviderRegistry
      * Find providers by version requirement
      *
      * @param string $minVersion Minimum required version
-     * @return array Provider names that meet version requirement
+     * @return string[] Provider names that meet version requirement
      */
     public static function findProvidersByVersion(string $minVersion): array
     {
@@ -336,7 +336,7 @@ class PermissionProviderRegistry
     /**
      * Perform health check on all providers
      *
-     * @return array Provider name => health status mapping
+     * @return array<string, array<string, mixed>> Provider name => health status mapping
      */
     public static function healthCheckAll(): array
     {
@@ -372,7 +372,7 @@ class PermissionProviderRegistry
     /**
      * Get registry statistics
      *
-     * @return array Registry statistics
+     * @return array<string, mixed> Registry statistics
      */
     public static function getStats(): array
     {

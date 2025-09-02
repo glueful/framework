@@ -32,10 +32,10 @@ use Glueful\Queue\Plugins\PluginManager;
  */
 class DriverRegistry
 {
-    /** @var array Registered driver definitions */
+    /** @var array<string, array{class: string, info: DriverInfo}> Registered driver definitions */
     private array $drivers = [];
 
-    /** @var array Cached driver instances */
+    /** @var array<string, QueueDriverInterface> Cached driver instances */
     private array $instances = [];
 
     /** @var DriverDiscovery Driver discovery service */
@@ -92,6 +92,9 @@ class DriverRegistry
      * @throws DriverNotFoundException If driver not found
      * @throws InvalidConfigurationException If configuration invalid
      */
+    /**
+     * @param array<string, mixed> $config
+     */
     public function getDriver(string $name, array $config = []): QueueDriverInterface
     {
         $cacheKey = $name . ':' . md5(serialize($config));
@@ -107,10 +110,10 @@ class DriverRegistry
         $className = $this->drivers[$name]['class'];
         $instance = new $className();
 
-        if (!empty($config)) {
+        if ($config !== []) {
             // Validate configuration against driver schema
             $errors = $this->validateConfig($name, $config);
-            if (!empty($errors)) {
+            if ($errors !== []) {
                 throw new InvalidConfigurationException(
                     "Invalid configuration for driver '{$name}': " . implode(', ', $errors)
                 );
@@ -139,6 +142,9 @@ class DriverRegistry
      *
      * @return array Driver names
      */
+    /**
+     * @return array<string>
+     */
     public function getDriverNames(): array
     {
         return array_keys($this->drivers);
@@ -160,6 +166,9 @@ class DriverRegistry
      *
      * @return array Driver information indexed by name
      */
+    /**
+     * @return array<string, DriverInfo>
+     */
     public function getAllDriverInfo(): array
     {
         $info = [];
@@ -175,6 +184,10 @@ class DriverRegistry
      * @param string $driverName Driver name
      * @param array $config Configuration to validate
      * @return array Validation errors (empty if valid)
+     */
+    /**
+     * @param array<string, mixed> $config
+     * @return array<string>
      */
     public function validateConfig(string $driverName, array $config): array
     {
@@ -200,6 +213,11 @@ class DriverRegistry
      * @param array $schema Schema definition
      * @return array Validation errors
      */
+    /**
+     * @param array<string, mixed> $config
+     * @param array<string, mixed> $schema
+     * @return array<string>
+     */
     private function validateConfigAgainstSchema(array $config, array $schema): array
     {
         $errors = [];
@@ -208,7 +226,7 @@ class DriverRegistry
             $value = $config[$key] ?? null;
 
             // Check required fields
-            if (($rules['required'] ?? false) && ($value === null || $value === '')) {
+            if ((bool) ($rules['required'] ?? false) && ($value === null || $value === '')) {
                 $errors[] = "Required field '{$key}' is missing";
                 continue;
             }
@@ -221,7 +239,7 @@ class DriverRegistry
             // Type validation
             if (isset($rules['type'])) {
                 $typeError = $this->validateType($key, $value, $rules['type']);
-                if ($typeError) {
+                if ($typeError !== null) {
                     $errors[] = $typeError;
                 }
             }

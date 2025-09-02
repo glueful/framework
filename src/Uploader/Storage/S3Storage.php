@@ -21,7 +21,8 @@ class S3Storage implements StorageInterface
             ]
         ];
 
-        if ($endpoint = config('services.storage.s3.endpoint')) {
+        $endpoint = config('services.storage.s3.endpoint');
+        if ($endpoint !== null && $endpoint !== false && $endpoint !== '') {
             $config['endpoint'] = $endpoint;
             $config['use_path_style_endpoint'] = true;
         }
@@ -53,7 +54,7 @@ class S3Storage implements StorageInterface
 
     public function exists(string $path): bool
     {
-        return $this->client->doesObjectExist(config('servicesstorage.s3.bucket'), $path);
+        return $this->client->doesObjectExistV2(config('servicesstorage.s3.bucket'), $path);
     }
 
     public function delete(string $path): bool

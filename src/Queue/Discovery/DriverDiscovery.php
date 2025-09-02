@@ -26,7 +26,7 @@ use Glueful\Queue\Contracts\QueueDriverInterface;
  */
 class DriverDiscovery
 {
-    /** @var array Default search paths for driver discovery */
+    /** @var array<int, string> Default search paths for driver discovery */
     private array $searchPaths = [
         // Core drivers
         __DIR__ . '/../Drivers',
@@ -37,7 +37,7 @@ class DriverDiscovery
     /**
      * Discover all available queue drivers
      *
-     * @return array Discovered drivers indexed by name
+     * @return array<string, array<string, mixed>> Discovered drivers indexed by name
      */
     public function discoverDrivers(): array
     {
@@ -55,7 +55,7 @@ class DriverDiscovery
     /**
      * Get expanded search paths including dynamic paths
      *
-     * @return array List of actual directory paths to search
+     * @return array<int, string> List of actual directory paths to search
      */
     private function getExpandedSearchPaths(): array
     {
@@ -83,7 +83,7 @@ class DriverDiscovery
      * Scan a directory path for queue drivers
      *
      * @param string $path Directory path to scan
-     * @return array Discovered drivers from this path
+     * @return array<string, array<string, mixed>> Discovered drivers from this path
      */
     private function scanPath(string $path): array
     {
@@ -99,7 +99,7 @@ class DriverDiscovery
         );
         foreach ($files as $file) {
             $driver = $this->analyzeDriverFile($file);
-            if ($driver) {
+            if ($driver !== null) {
                 $discovered[$driver['info']->name] = $driver;
             }
         }
@@ -111,12 +111,12 @@ class DriverDiscovery
      * Analyze a driver file for compliance and metadata
      *
      * @param string $file Path to driver file
-     * @return array|null Driver information or null if invalid
+     * @return array<string, mixed>|null Driver information or null if invalid
      */
     private function analyzeDriverFile(string $file): ?array
     {
         $className = $this->extractClassName($file);
-        if (!$className || !class_exists($className)) {
+        if ($className === null || !class_exists($className)) {
             return null;
         }
 
@@ -173,11 +173,11 @@ class DriverDiscovery
             $className = $matches[1];
         }
 
-        if (!$className) {
+        if ($className === null) {
             return null;
         }
 
-        return $namespace ? $namespace . '\\' . $className : $className;
+        return $namespace !== null ? $namespace . '\\' . $className : $className;
     }
 
     /**
@@ -198,7 +198,7 @@ class DriverDiscovery
     /**
      * Get all configured search paths
      *
-     * @return array List of search paths
+     * @return array<int, string> List of search paths
      */
     public function getSearchPaths(): array
     {
@@ -208,8 +208,8 @@ class DriverDiscovery
     /**
      * Validate discovered driver
      *
-     * @param array $driver Driver data from discovery
-     * @return array Validation results
+     * @param array<string, mixed> $driver Driver data from discovery
+     * @return array{valid: bool, errors: array<int, string>, warnings: array<int, string>} Validation results
      */
     public function validateDriver(array $driver): array
     {
@@ -219,22 +219,21 @@ class DriverDiscovery
         try {
             // Check driver info completeness
             $info = $driver['info'];
-            if (empty($info->name)) {
+            if ($info->name === '' || $info->name === null) {
                 $errors[] = 'Driver name is required';
             }
 
-            if (empty($info->version)) {
+            if ($info->version === '' || $info->version === null) {
                 $warnings[] = 'Driver version not specified';
             }
 
             // Validate dependencies
             $missingDeps = $info->validateDependencies();
-            if (!empty($missingDeps)) {
+            if (count($missingDeps) > 0) {
                 $errors = array_merge($errors, $missingDeps);
             }
 
             // Test driver instantiation
-            $className = $driver['class'];
             $reflection = $driver['reflection'];
 
             if ($reflection->getConstructor() && $reflection->getConstructor()->getNumberOfRequiredParameters() > 0) {
@@ -245,7 +244,7 @@ class DriverDiscovery
         }
 
         return [
-            'valid' => empty($errors),
+            'valid' => count($errors) === 0,
             'errors' => $errors,
             'warnings' => $warnings
         ];

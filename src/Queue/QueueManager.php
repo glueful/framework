@@ -41,10 +41,10 @@ class QueueManager
     /** @var PluginManager Plugin manager for extensibility */
     private PluginManager $plugins;
 
-    /** @var array Active driver connections */
+    /** @var array<string, QueueDriverInterface> Active driver connections */
     private array $connections = [];
 
-    /** @var array Queue configuration */
+    /** @var array<string, mixed> Queue configuration */
     private array $config;
 
     /** @var string Default connection name */
@@ -53,7 +53,7 @@ class QueueManager
     /**
      * Create queue manager
      *
-     * @param array $config Queue configuration
+     * @param array<string, mixed> $config Queue configuration
      */
     public function __construct(array $config = [])
     {
@@ -94,7 +94,7 @@ class QueueManager
      * Push job to queue
      *
      * @param string $job Job class name
-     * @param array $data Job data
+     * @param array<string, mixed> $data Job data
      * @param string|null $queue Queue name
      * @param string|null $connection Connection name
      * @return string Job UUID
@@ -109,7 +109,7 @@ class QueueManager
      *
      * @param int $delay Delay in seconds
      * @param string $job Job class name
-     * @param array $data Job data
+     * @param array<string, mixed> $data Job data
      * @param string|null $queue Queue name
      * @param string|null $connection Connection name
      * @return string Job UUID
@@ -127,10 +127,10 @@ class QueueManager
     /**
      * Push multiple jobs in bulk
      *
-     * @param array $jobs Array of job definitions
+     * @param array<int, array<string, mixed>> $jobs Array of job definitions
      * @param string|null $queue Queue name
      * @param string|null $connection Connection name
-     * @return array Array of job UUIDs
+     * @return string[] Array of job UUIDs
      */
     public function bulk(array $jobs, ?string $queue = null, ?string $connection = null): array
     {
@@ -166,7 +166,7 @@ class QueueManager
      *
      * @param string|null $queue Queue name
      * @param string|null $connection Connection name
-     * @return array Statistics
+     * @return array<string, mixed> Statistics
      */
     public function getStats(?string $queue = null, ?string $connection = null): array
     {
@@ -187,7 +187,7 @@ class QueueManager
     /**
      * Get available connections
      *
-     * @return array Connection names
+     * @return string[] Connection names
      */
     public function getAvailableConnections(): array
     {
@@ -197,7 +197,7 @@ class QueueManager
     /**
      * Get available drivers
      *
-     * @return array Driver information
+     * @return array<int, array<string, mixed>> Driver information
      */
     public function getAvailableDrivers(): array
     {
@@ -241,7 +241,7 @@ class QueueManager
     /**
      * Get configuration
      *
-     * @return array Configuration
+     * @return array<string, mixed> Configuration
      */
     public function getConfig(): array
     {
@@ -267,7 +267,7 @@ class QueueManager
 
         // Validate configuration
         $errors = $this->registry->validateConfig($driverName, $config);
-        if (!empty($errors)) {
+        if (count($errors) > 0) {
             throw new InvalidConfigurationException("Invalid configuration for '{$name}': " . implode(', ', $errors));
         }
 
@@ -287,7 +287,7 @@ class QueueManager
      * Get connection configuration
      *
      * @param string $name Connection name
-     * @return array Connection config
+     * @return array<string, mixed> Connection config
      * @throws InvalidConfigurationException If connection not configured
      */
     private function getConnectionConfig(string $name): array
@@ -309,8 +309,8 @@ class QueueManager
     /**
      * Normalize configuration with defaults
      *
-     * @param array $config Raw configuration
-     * @return array Normalized configuration
+     * @param array<string, mixed> $config Raw configuration
+     * @return array<string, mixed> Normalized configuration
      */
     private function normalizeConfig(array $config): array
     {
@@ -321,7 +321,7 @@ class QueueManager
         ];
 
         // Add default database connection if none specified
-        if (empty($normalized['connections'])) {
+        if (count($normalized['connections']) === 0) {
             $normalized['connections']['database'] = [
                 'driver' => 'database',
                 'table' => 'queue_jobs',
@@ -374,7 +374,7 @@ class QueueManager
      * Test connection health
      *
      * @param string|null $name Connection name
-     * @return array Health status
+     * @return array<string, mixed> Health status
      */
     public function testConnection(?string $name = null): array
     {

@@ -12,6 +12,9 @@ namespace Glueful\Services\Archive\DTOs;
  */
 class ArchiveSearchQuery
 {
+    /**
+     * @param array<int, string> $tables
+     */
     public function __construct(
         public readonly ?string $userUuid = null,
         public readonly ?string $endpoint = null,

@@ -18,7 +18,9 @@ class ScheduledScaler
 {
     private ProcessManager $processManager;
     private LoggerInterface $logger;
+    /** @var array<string, array<string, mixed>> */
     private array $schedules = [];
+    /** @var array<string, array<string, mixed>> */
     private array $activeSchedules = [];
 
     public function __construct(ProcessManager $processManager, LoggerInterface $logger)
@@ -29,6 +31,7 @@ class ScheduledScaler
 
     /**
      * Add a scaling schedule
+     * @param array<string, mixed> $options
      */
     public function addSchedule(
         string $name,
@@ -80,6 +83,7 @@ class ScheduledScaler
 
     /**
      * Process all scheduled scaling operations
+     * @return array<int, array<string, mixed>>
      */
     public function processSchedules(): array
     {
@@ -87,13 +91,13 @@ class ScheduledScaler
         $currentTime = new \DateTime();
 
         foreach ($this->schedules as $name => $schedule) {
-            if (!$schedule['enabled']) {
+            if (($schedule['enabled'] ?? false) === false) {
                 continue;
             }
 
             if ($this->shouldRunSchedule($name, $currentTime)) {
                 $result = $this->executeSchedule($name, $schedule);
-                if ($result) {
+                if ($result !== null) {
                     $results[] = $result;
                 }
             }
@@ -120,6 +124,8 @@ class ScheduledScaler
 
     /**
      * Execute a scheduled scaling operation
+     * @param array<string, mixed> $schedule
+     * @return array<string, mixed>|null
      */
     private function executeSchedule(string $name, array $schedule): ?array
     {
@@ -189,6 +195,7 @@ class ScheduledScaler
 
     /**
      * Create worker options from schedule options
+     * @param array<string, mixed> $options
      */
     private function createWorkerOptions(array $options): WorkerOptions
     {
@@ -202,6 +209,7 @@ class ScheduledScaler
 
     /**
      * Load schedules from configuration
+     * @param array<string, mixed> $config
      */
     public function loadSchedulesFromConfig(array $config): void
     {
@@ -220,6 +228,7 @@ class ScheduledScaler
 
     /**
      * Get all schedules
+     * @return array<string, array<string, mixed>>
      */
     public function getSchedules(): array
     {
@@ -228,6 +237,7 @@ class ScheduledScaler
 
     /**
      * Get schedule by name
+     * @return array<string, mixed>|null
      */
     public function getSchedule(string $name): ?array
     {
@@ -330,6 +340,9 @@ class ScheduledScaler
     /**
      * Preview when schedules will run
      */
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     public function previewSchedules(int $days = 7): array
     {
         $preview = [];
@@ -337,7 +350,7 @@ class ScheduledScaler
         $endDate = (clone $startDate)->modify("+{$days} days");
 
         foreach ($this->schedules as $name => $schedule) {
-            if (!$schedule['enabled']) {
+            if (($schedule['enabled'] ?? false) === false) {
                 continue;
             }
 
@@ -397,6 +410,9 @@ class ScheduledScaler
     /**
      * Force run a schedule now (bypass cron timing)
      */
+    /**
+     * @return array<string, mixed>|null
+     */
     public function forceRunSchedule(string $name): ?array
     {
         if (!isset($this->schedules[$name])) {
@@ -406,7 +422,7 @@ class ScheduledScaler
         $schedule = $this->schedules[$name];
         $result = $this->executeSchedule($name, $schedule);
 
-        if ($result) {
+        if ($result !== null) {
             $result['forced'] = true;
         }
 
@@ -415,6 +431,9 @@ class ScheduledScaler
 
     /**
      * Get statistics about schedule executions
+     */
+    /**
+     * @return array<string, mixed>
      */
     public function getScheduleStats(): array
     {
@@ -426,7 +445,7 @@ class ScheduledScaler
         ];
 
         foreach ($this->schedules as $schedule) {
-            if ($schedule['enabled']) {
+            if (($schedule['enabled'] ?? false) === true) {
                 $stats['enabled_schedules']++;
             } else {
                 $stats['disabled_schedules']++;

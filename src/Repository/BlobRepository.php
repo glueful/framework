@@ -22,7 +22,7 @@ use Glueful\Database\Connection;
  */
 class BlobRepository extends BaseRepository
 {
-    /** @var array Default fields to retrieve for blob operations */
+    /** @var array<string> Default fields to retrieve for blob operations */
     private array $defaultBlobFields = [
         'uuid', 'name', 'description', 'mime_type', 'size',
         'url', 'status', 'created_by', 'created_at', 'updated_at'
@@ -60,8 +60,12 @@ class BlobRepository extends BaseRepository
      * Returns null if blob doesn't exist or is marked as deleted.
      *
      * @param string $uuid Blob UUID to search for
-     * @param array|null $fields Optional array of specific fields to retrieve
+     * @param array<string>|null $fields Optional array of specific fields to retrieve
      * @return array|null Blob data or null if not found
+     */
+    /**
+     * @param array<string>|null $fields
+     * @return array<string, mixed>|null
      */
     public function findByUuid(string $uuid, ?array $fields = null): ?array
     {
@@ -76,6 +80,9 @@ class BlobRepository extends BaseRepository
      * @param string $uuid The UUID to search for
      * @param bool $includeDeleted Whether to include deleted blobs
      * @return array|null Blob data or null if not found
+     */
+    /**
+     * @return array<string, mixed>|null
      */
     public function findByUuidWithDeleteFilter(string $uuid, bool $includeDeleted = false): ?array
     {
@@ -95,12 +102,16 @@ class BlobRepository extends BaseRepository
      * Used by FilesController for optimized file operations.
      *
      * @param string $uuid Blob UUID
-     * @param array $fields Specific fields to retrieve
+     * @param array<string> $fields Specific fields to retrieve
      * @return array|null Blob data or null if not found
+     */
+    /**
+     * @param array<string> $fields
+     * @return array<string, mixed>|null
      */
     public function getBlobInfo(string $uuid, array $fields = []): ?array
     {
-        if (empty($fields)) {
+        if ($fields === []) {
             $fields = $this->defaultBlobFields;
         }
 
@@ -111,7 +122,7 @@ class BlobRepository extends BaseRepository
             ->limit(1)
             ->get();
 
-        return $query ? $query[0] : null;
+        return $query !== [] ? $query[0] : null;
     }
 
     /**
@@ -120,16 +131,19 @@ class BlobRepository extends BaseRepository
      * Inserts a new blob record with file metadata.
      * Used during file upload operations.
      *
-     * @param array $blobData Blob metadata (name, mime_type, size, url, etc.)
+     * @param array<string, mixed> $blobData Blob metadata (name, mime_type, size, url, etc.)
      * @return string New blob UUID
      * @throws \InvalidArgumentException If validation fails
+     */
+    /**
+     * @param array<string, mixed> $blobData
      */
     public function create(array $blobData): string
     {
         // Validate required fields
         $required = ['name', 'mime_type', 'size', 'url', 'created_by'];
         foreach ($required as $field) {
-            if (empty($blobData[$field])) {
+            if (($blobData[$field] ?? null) === null || ($blobData[$field] ?? '') === '') {
                 throw new \InvalidArgumentException("Field '{$field}' is required");
             }
         }
@@ -190,9 +204,13 @@ class BlobRepository extends BaseRepository
      *
      * @param string $creatorUuid Creator's user UUID
      * @param bool $activeOnly Whether to return only active blobs
-     * @param array $orderBy Sorting criteria
+     * @param array<string, string> $orderBy Sorting criteria
      * @param int|null $limit Maximum number of records
-     * @return array Array of blob records
+     * @return array<int, array<string, mixed>> Array of blob records
+     */
+    /**
+     * @param array<string, string> $orderBy
+     * @return array<int, array<string, mixed>>
      */
     public function findByCreator(
         string $creatorUuid,
@@ -217,9 +235,13 @@ class BlobRepository extends BaseRepository
      *
      * @param string $mimeType MIME type to filter by
      * @param bool $activeOnly Whether to return only active blobs
-     * @param array $orderBy Sorting criteria
+     * @param array<string, string> $orderBy Sorting criteria
      * @param int|null $limit Maximum number of records
-     * @return array Array of blob records
+     * @return array<int, array<string, mixed>> Array of blob records
+     */
+    /**
+     * @param array<string, string> $orderBy
+     * @return array<int, array<string, mixed>>
      */
     public function findByMimeType(
         string $mimeType,
@@ -244,9 +266,13 @@ class BlobRepository extends BaseRepository
      *
      * @param string $pattern MIME type pattern (e.g., 'image/%', 'video/%')
      * @param bool $activeOnly Whether to return only active blobs
-     * @param array $orderBy Sorting criteria
+     * @param array<string, string> $orderBy Sorting criteria
      * @param int|null $limit Maximum number of records
-     * @return array Array of blob records
+     * @return array<int, array<string, mixed>> Array of blob records
+     */
+    /**
+     * @param array<string, string> $orderBy
+     * @return array<int, array<string, mixed>>
      */
     public function findByMimePattern(
         string $pattern,
@@ -262,11 +288,11 @@ class BlobRepository extends BaseRepository
             $query->where(['status' => 'active']);
         }
 
-        if (!empty($orderBy)) {
+        if ($orderBy !== []) {
             $query->orderBy($orderBy);
         }
 
-        if ($limit) {
+        if ($limit !== null) {
             $query->limit($limit);
         }
 
@@ -281,11 +307,14 @@ class BlobRepository extends BaseRepository
      * @param string|null $creatorUuid Optional creator filter
      * @return array Storage statistics
      */
+    /**
+     * @return array<string, mixed>
+     */
     public function getStorageStats(?string $creatorUuid = null): array
     {
         $conditions = ['status' => 'active'];
 
-        if ($creatorUuid) {
+        if ($creatorUuid !== null) {
             $conditions['created_by'] = $creatorUuid;
         }
 
@@ -329,6 +358,9 @@ class BlobRepository extends BaseRepository
      * @param int|null $limit Maximum number of records to return
      * @return array Array of deleted blob records
      */
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     public function findOrphanedBlobs(int $olderThanDays = 7, ?int $limit = null): array
     {
         $cutoffDate = date('Y-m-d H:i:s', strtotime("-{$olderThanDays} days"));
@@ -339,7 +371,7 @@ class BlobRepository extends BaseRepository
             ->where(['updated_at' => ['<', $cutoffDate]])
             ->orderBy(['updated_at' => 'asc']);
 
-        if ($limit) {
+        if ($limit !== null) {
             $query->limit($limit);
         }
 
@@ -353,8 +385,11 @@ class BlobRepository extends BaseRepository
      * Does not modify file-specific fields like size or MIME type.
      *
      * @param string $uuid Blob UUID
-     * @param array $metadata Metadata to update (name, description)
+     * @param array<string, mixed> $metadata Metadata to update (name, description)
      * @return bool Success status
+     */
+    /**
+     * @param array<string, mixed> $metadata
      */
     public function updateMetadata(string $uuid, array $metadata): bool
     {
@@ -362,7 +397,7 @@ class BlobRepository extends BaseRepository
         $allowedFields = ['name', 'description'];
         $updateData = array_intersect_key($metadata, array_flip($allowedFields));
 
-        if (empty($updateData)) {
+        if ($updateData === []) {
             return false;
         }
 
@@ -396,11 +431,14 @@ class BlobRepository extends BaseRepository
      * @param string|null $creatorUuid Optional creator filter
      * @return array Array of recent blob records
      */
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     public function getRecent(int $limit = 10, ?string $creatorUuid = null): array
     {
         $conditions = ['status' => 'active'];
 
-        if ($creatorUuid) {
+        if ($creatorUuid !== null) {
             $conditions['created_by'] = $creatorUuid;
         }
 

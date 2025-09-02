@@ -18,6 +18,7 @@ use Symfony\Component\Serializer\Normalizer\DenormalizerInterface;
  */
 class EnhancedDateTimeNormalizer implements NormalizerInterface, DenormalizerInterface
 {
+    /** @var array<string> */
     private array $timezones = [];
     private ?string $defaultTimezone = null;
 
@@ -32,11 +33,14 @@ class EnhancedDateTimeNormalizer implements NormalizerInterface, DenormalizerInt
 
     /**
      * Normalize DateTime with enhanced features
+     * @param array $context
+     * @return array<string, mixed>|\ArrayObject<string, mixed>|string
+     * @phpstan-ignore-next-line
      */
     public function normalize(
         mixed $object,
         ?string $format = null,
-        array $context = []
+        array $context = [] // @phpstan-ignore-line
     ): array|string|int|float|bool|\ArrayObject|null {
         if (!$object instanceof \DateTimeInterface) {
             throw new \InvalidArgumentException('Object must implement DateTimeInterface');
@@ -50,7 +54,7 @@ class EnhancedDateTimeNormalizer implements NormalizerInterface, DenormalizerInt
         $dateTime = clone $object;
 
         // Convert timezone if specified
-        if ($timezone) {
+        if ($timezone !== null) {
             if ($dateTime instanceof \DateTime) {
                 $dateTime->setTimezone(new \DateTimeZone($timezone));
             } elseif ($dateTime instanceof \DateTimeImmutable) {
@@ -59,7 +63,7 @@ class EnhancedDateTimeNormalizer implements NormalizerInterface, DenormalizerInt
         }
 
         // Use custom format if available
-        if ($customFormat) {
+        if ($customFormat !== null) {
             return $dateTime->format($customFormat);
         }
 
@@ -71,6 +75,8 @@ class EnhancedDateTimeNormalizer implements NormalizerInterface, DenormalizerInt
 
     /**
      * Extended normalization with multiple formats
+     * @param array<string, string> $formats
+     * @return array<string, string>
      */
     public function normalizeWithFormats(
         \DateTimeInterface $dateTime,
@@ -83,7 +89,7 @@ class EnhancedDateTimeNormalizer implements NormalizerInterface, DenormalizerInt
         $dt = clone $dateTime;
 
         // Convert timezone if specified
-        if ($timezone) {
+        if ($timezone !== null) {
             if ($dt instanceof \DateTime) {
                 $dt->setTimezone(new \DateTimeZone($timezone));
             } elseif ($dt instanceof \DateTimeImmutable) {
@@ -92,7 +98,7 @@ class EnhancedDateTimeNormalizer implements NormalizerInterface, DenormalizerInt
         }
 
         // Default formats if none provided
-        if (empty($formats)) {
+        if (count($formats) === 0) {
             $formats = [
                 'iso' => \DateTime::ATOM,
                 'human' => 'Y-m-d H:i:s',
@@ -118,7 +124,7 @@ class EnhancedDateTimeNormalizer implements NormalizerInterface, DenormalizerInt
      */
     public function getRelativeTime(\DateTimeInterface $dateTime, ?\DateTimeInterface $now = null): string
     {
-        $now = $now ?: new \DateTime();
+        $now = $now !== null ? $now : new \DateTime();
         $diff = $now->diff($dateTime);
 
         if ($diff->days > 365) {
@@ -148,6 +154,7 @@ class EnhancedDateTimeNormalizer implements NormalizerInterface, DenormalizerInt
 
     /**
      * Get custom format from DateFormat attribute
+     * @param array<string, mixed> $context
      */
     private function getCustomFormat(array $context): ?string
     {
@@ -157,6 +164,7 @@ class EnhancedDateTimeNormalizer implements NormalizerInterface, DenormalizerInt
 
     /**
      * Get target timezone from context
+     * @param array<string, mixed> $context
      */
     private function getTargetTimezone(array $context): ?string
     {
@@ -207,6 +215,8 @@ class EnhancedDateTimeNormalizer implements NormalizerInterface, DenormalizerInt
 
     /**
      * Create business hours aware formatter
+     * @param array<string> $businessHours
+     * @return array<string, mixed>
      */
     public function formatBusinessHours(
         \DateTimeInterface $dateTime,
@@ -242,6 +252,8 @@ class EnhancedDateTimeNormalizer implements NormalizerInterface, DenormalizerInt
 
     /**
      * Denormalize string to DateTime
+     * @param array $context
+     * @phpstan-ignore-next-line
      */
     public function denormalize(
         mixed $data,
@@ -262,6 +274,8 @@ class EnhancedDateTimeNormalizer implements NormalizerInterface, DenormalizerInt
 
     /**
      * Check if normalization is supported
+     * @param array $context
+     * @phpstan-ignore-next-line
      */
     public function supportsNormalization(mixed $data, ?string $format = null, array $context = []): bool
     {
@@ -270,6 +284,8 @@ class EnhancedDateTimeNormalizer implements NormalizerInterface, DenormalizerInt
 
     /**
      * Check if denormalization is supported
+     * @param array $context
+     * @phpstan-ignore-next-line
      */
     public function supportsDenormalization(
         mixed $data,

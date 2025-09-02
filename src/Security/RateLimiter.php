@@ -20,7 +20,7 @@ class RateLimiter
     /** @var string Cache key prefix for rate limit entries */
     private const PREFIX = 'rate_limit:';
 
-    /** @var CacheStore Cache driver instance */
+    /** @var CacheStore<mixed> Cache driver instance */
     protected CacheStore $cache;
 
 
@@ -30,7 +30,7 @@ class RateLimiter
      * @param string $key Unique identifier for the rate limit
      * @param int $maxAttempts Maximum allowed attempts in window
      * @param int $windowSeconds Time window in seconds
-     * @param CacheStore|null $cache Cache driver instance
+     * @param CacheStore<mixed>|null $cache Cache driver instance
      * @param RequestContext|null $requestContext Request context instance
      */
     public function __construct(
@@ -71,7 +71,7 @@ class RateLimiter
         }
 
         // Add new request timestamp
-        $this->cache->zadd($key, [$now => $now]);
+        $this->cache->zadd($key, [(string)$now => $now]);
 
         // Set expiration time
         $this->cache->expire($key, $this->windowSeconds);
@@ -101,7 +101,7 @@ class RateLimiter
     public function getRetryAfter(): int
     {
         $timestamps = $this->cache->zrange($this->getCacheKey(), 0, 0);
-        return empty($timestamps) ? 0 : max(0, (int) $timestamps[0] + $this->windowSeconds - time());
+        return (count($timestamps) === 0) ? 0 : max(0, (int) $timestamps[0] + $this->windowSeconds - time());
     }
 
     /**

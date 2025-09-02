@@ -16,18 +16,18 @@ interface RepositoryInterface
      * Find a record by its UUID
      *
      * @param string $uuid The UUID of the record
-     * @return array|null The record data or null if not found
+     * @return array<string, mixed>|null The record data or null if not found
      */
     public function find(string $uuid): ?array;
 
     /**
      * Find all records with optional filtering
      *
-     * @param array $conditions Filter conditions
-     * @param array $orderBy Sorting criteria
+     * @param array<string, mixed> $conditions Filter conditions
+     * @param array<string, string> $orderBy Sorting criteria
      * @param int|null $limit Maximum number of records to return
      * @param int|null $offset Number of records to skip
-     * @return array Array of records
+     * @return array<int, array<string, mixed>> Array of records
      */
     public function findAll(
         array $conditions = [],
@@ -39,7 +39,7 @@ interface RepositoryInterface
     /**
      * Create a new record
      *
-     * @param array $data The data to insert
+     * @param array<string, mixed> $data The data to insert
      * @return string The UUID of the created record
      */
     public function create(array $data): string;
@@ -48,7 +48,7 @@ interface RepositoryInterface
      * Update a record by UUID
      *
      * @param string $uuid The UUID of the record to update
-     * @param array $data The data to update
+     * @param array<string, mixed> $data The data to update
      * @return bool True if the update was successful
      */
     public function update(string $uuid, array $data): bool;
@@ -64,7 +64,7 @@ interface RepositoryInterface
     /**
      * Count records with optional conditions
      *
-     * @param array $conditions Filter conditions
+     * @param array<string, mixed> $conditions Filter conditions
      * @return int Number of matching records
      */
     public function count(array $conditions = []): int;
@@ -82,10 +82,10 @@ interface RepositoryInterface
      *
      * @param int $page Page number (1-based)
      * @param int $perPage Number of records per page
-     * @param array $conditions Filter conditions
-     * @param array $orderBy Sorting criteria
-     * @param array $fields Fields to select (empty array = all fields)
-     * @return array Paginated result with data and metadata
+     * @param array<string, mixed> $conditions Filter conditions
+     * @param array<string, string> $orderBy Sorting criteria
+     * @param array<string> $fields Fields to select (empty array = all fields)
+     * @return array<string, mixed> Paginated result with data and metadata
      */
     public function paginate(
         int $page,
@@ -98,35 +98,35 @@ interface RepositoryInterface
     /**
      * Find records with complex where conditions
      *
-     * @param array $where Complex where conditions
-     * @param array $orderBy Sorting criteria
+     * @param array<string, mixed> $where Complex where conditions
+     * @param array<string, string> $orderBy Sorting criteria
      * @param int|null $limit Maximum number of records
-     * @return array Array of matching records
+     * @return array<int, array<string, mixed>> Array of matching records
      */
     public function findWhere(array $where, array $orderBy = [], ?int $limit = null): array;
 
     /**
      * Find multiple records by their UUIDs
      *
-     * @param array $uuids Array of UUIDs to find
-     * @param array $fields Fields to select (empty array = all fields)
-     * @return array Array of records indexed by UUID
+     * @param array<string> $uuids Array of UUIDs to find
+     * @param array<string> $fields Fields to select (empty array = all fields)
+     * @return array<string, array<string, mixed>> Array of records indexed by UUID
      */
     public function findMultiple(array $uuids, array $fields = []): array;
 
     /**
      * Bulk insert multiple records
      *
-     * @param array $records Array of record data
-     * @return array Array of created UUIDs
+     * @param array<int, array<string, mixed>> $records Array of record data
+     * @return array<string> Array of created UUIDs
      */
     public function bulkCreate(array $records): array;
 
     /**
      * Bulk update records by UUIDs
      *
-     * @param array $uuids Array of UUIDs to update
-     * @param array $data Data to update
+     * @param array<string> $uuids Array of UUIDs to update
+     * @param array<string, mixed> $data Data to update
      * @return int Number of affected records
      */
     public function bulkUpdate(array $uuids, array $data): int;
@@ -134,7 +134,7 @@ interface RepositoryInterface
     /**
      * Bulk delete records by UUIDs
      *
-     * @param array $uuids Array of UUIDs to delete
+     * @param array<string> $uuids Array of UUIDs to delete
      * @return int Number of affected records
      */
     public function bulkDelete(array $uuids): int;
@@ -152,7 +152,7 @@ interface RepositoryInterface
     /**
      * Bulk soft delete records
      *
-     * @param array $uuids Array of UUIDs to soft delete
+     * @param array<string> $uuids Array of UUIDs to soft delete
      * @param string $statusColumn The status column name
      * @param mixed $deletedValue The value to set for deleted status
      * @return int Number of affected records

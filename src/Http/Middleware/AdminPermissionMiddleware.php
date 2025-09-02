@@ -330,12 +330,12 @@ class AdminPermissionMiddleware implements MiddlewareInterface
             }
 
             // Check if user is active
-            if (!isset($user['is_active']) || !$user['is_active']) {
+            if (!isset($user['is_active']) || $user['is_active'] !== true) {
                 return false;
             }
 
             // Check if user is an admin
-            if (!isset($user['is_admin']) || !$user['is_admin']) {
+            if (!isset($user['is_admin']) || $user['is_admin'] !== true) {
                 return false;
             }
 

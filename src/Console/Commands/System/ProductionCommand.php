@@ -208,7 +208,7 @@ class ProductionCommand extends BaseCommand
         }
 
         // Step 2: Environment check
-        if (!$validation['is_production']) {
+        if (!(bool)$validation['is_production']) {
             $this->io->text("Current environment: {$validation['environment']}");
 
             if ($this->io->confirm('Migrate to production environment?', false)) {
@@ -236,7 +236,7 @@ class ProductionCommand extends BaseCommand
         $validation = SecurityManager::validateProductionEnvironment();
         $health = HealthService::getOverallHealth();
 
-        if (!$validation['is_production']) {
+        if (!(bool)$validation['is_production']) {
             $this->io->warning("⚠️ Current environment is not set to production");
             $this->io->text("Environment: {$validation['environment']}");
             $this->io->text('Set APP_ENV=production to enable production validation.');

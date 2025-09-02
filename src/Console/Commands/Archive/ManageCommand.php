@@ -404,7 +404,7 @@ class ManageCommand extends BaseCommand
             $report = $healthChecker->getDetailedHealthReport();
 
             // Display health status
-            $status = $report['healthy'] ? '✅ HEALTHY' : '❌ CRITICAL';
+            $status = (bool)($report['healthy'] ?? false) ? '✅ HEALTHY' : '❌ CRITICAL';
             $this->io->text("System Status: {$status}");
             $this->io->text("Checked at: " . $report['timestamp']);
             $this->io->newLine();
@@ -438,7 +438,7 @@ class ManageCommand extends BaseCommand
                 }
             }
 
-            return $report['healthy'] ? self::SUCCESS : self::FAILURE;
+            return (bool)($report['healthy'] ?? false) ? self::SUCCESS : self::FAILURE;
         } catch (\Exception $e) {
             $this->io->error('Health check failed: ' . $e->getMessage());
             return self::FAILURE;

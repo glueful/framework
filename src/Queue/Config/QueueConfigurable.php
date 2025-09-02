@@ -104,6 +104,8 @@ class QueueConfigurable extends ConfigurableService
 
     /**
      * Validate individual connection configuration
+     *
+     * @param array<string, mixed> $connection
      */
     private function validateConnection(string $name, array $connection): void
     {
@@ -286,6 +288,8 @@ class QueueConfigurable extends ConfigurableService
 
     /**
      * Get connection configuration
+     *
+     * @return array<string, mixed>
      */
     public function getConnection(string $name): array
     {
@@ -300,6 +304,8 @@ class QueueConfigurable extends ConfigurableService
 
     /**
      * Get all connections
+     *
+     * @return array<string, array<string, mixed>>
      */
     public function getConnections(): array
     {
@@ -317,6 +323,8 @@ class QueueConfigurable extends ConfigurableService
 
     /**
      * Get monitoring configuration
+     *
+     * @return array<string, mixed>
      */
     public function getMonitoringConfig(): array
     {
@@ -325,6 +333,8 @@ class QueueConfigurable extends ConfigurableService
 
     /**
      * Get worker configuration
+     *
+     * @return array<string, mixed>
      */
     public function getWorkersConfig(): array
     {

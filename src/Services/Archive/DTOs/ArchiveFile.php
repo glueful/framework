@@ -34,7 +34,8 @@ class ArchiveFile
     {
         $bytes = $this->size;
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-        for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
+        $i = 0;
+        for (; $bytes > 1024 && $i < count($units) - 1; $i++) {
             $bytes /= 1024;
         }
 
@@ -58,7 +59,12 @@ class ArchiveFile
             return false;
         }
 
-        $currentChecksum = hash('sha256', file_get_contents($this->path));
+        $fileContents = file_get_contents($this->path);
+        if ($fileContents === false) {
+            return false;
+        }
+
+        $currentChecksum = hash('sha256', $fileContents);
         return $currentChecksum === $this->checksum;
     }
 }

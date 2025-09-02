@@ -15,16 +15,22 @@ final class RouteHash
         $parts = [];
         // App routes
         if (is_dir($routesDir)) {
-            foreach (glob($routesDir . '/*.php') as $file) {
-                $parts[] = md5_file($file) ?: '';
+            $appRoutes = glob($routesDir . '/*.php');
+            foreach (($appRoutes !== false ? $appRoutes : []) as $file) {
+                $hash = md5_file($file);
+                $parts[] = $hash !== false ? $hash : '';
             }
         }
         // Extension routes
-        foreach (glob(base_path('extensions/*/routes.php')) ?: [] as $file) {
-            $parts[] = md5_file($file) ?: '';
+        $extensionRoutes = glob(base_path('extensions/*/routes.php'));
+        foreach (($extensionRoutes !== false ? $extensionRoutes : []) as $file) {
+            $hash = md5_file($file);
+            $parts[] = $hash !== false ? $hash : '';
         }
-        foreach (glob(base_path('extensions/*/src/routes.php')) ?: [] as $file) {
-            $parts[] = md5_file($file) ?: '';
+        $extensionSrcRoutes = glob(base_path('extensions/*/src/routes.php'));
+        foreach (($extensionSrcRoutes !== false ? $extensionSrcRoutes : []) as $file) {
+            $hash = md5_file($file);
+            $parts[] = $hash !== false ? $hash : '';
         }
         return md5(implode('|', $parts));
     }
@@ -45,8 +51,10 @@ final class RouteHash
     public static function countExtensionRouteFiles(): int
     {
         $count = 0;
-        $a = glob(base_path('extensions/*/routes.php')) ?: [];
-        $b = glob(base_path('extensions/*/src/routes.php')) ?: [];
+        $aGlob = glob(base_path('extensions/*/routes.php'));
+        $a = $aGlob !== false ? $aGlob : [];
+        $bGlob = glob(base_path('extensions/*/src/routes.php'));
+        $b = $bGlob !== false ? $bGlob : [];
         $count += count($a) + count($b);
         return $count;
     }

@@ -21,6 +21,7 @@ class ApiMetricsService
 {
     private Connection $db;
     private SchemaBuilderInterface $schemaManager;
+    /** @var CacheStore<mixed>|null */
     private ?CacheStore $cache;
     private string $metricsTable = 'api_metrics';
     private string $dailyMetricsTable = 'api_metrics_daily';
@@ -32,6 +33,9 @@ class ApiMetricsService
     private int $metricsFlushThreshold = 50; // Flush to database after this many metrics
     private string $cacheKeyPrefix = 'api_metrics_';
 
+    /**
+     * @param CacheStore<mixed>|null $cache
+     */
     public function __construct(
         ?CacheStore $cache = null,
         ?Connection $connection = null,
@@ -59,7 +63,7 @@ class ApiMetricsService
     /**
      * Record a metric asynchronously to avoid impacting API performance
      *
-     * @param array $metric The metric data to record
+     * @param array<string, mixed> $metric The metric data to record
      */
     public function recordMetricAsync(array $metric): void
     {
@@ -121,7 +125,7 @@ class ApiMetricsService
             $cacheKey = $this->cacheKeyPrefix . 'pending';
             $pendingMetrics = $this->cache?->get($cacheKey) ?? [];
 
-            if (empty($pendingMetrics)) {
+            if (count($pendingMetrics) === 0) {
                 error_log("API Metrics: No pending metrics to flush");
                 return;
             }
@@ -139,14 +143,14 @@ class ApiMetricsService
                     'method' => $metric['method'],
                     'response_time' => $metric['response_time'],
                     'status_code' => $metric['status_code'],
-                    'is_error' => $metric['is_error'] ? 1 : 0,
+                    'is_error' => (bool)($metric['is_error'] ?? false) ? 1 : 0,
                     'timestamp' => date('Y-m-d H:i:s', $metric['timestamp']),
                     'ip' => $metric['ip']
                 ];
             }
 
             // Batch insert raw metrics
-            if (!empty($rawMetricsToInsert)) {
+            if (count($rawMetricsToInsert) > 0) {
                 try {
                     $this->db->table($this->metricsTable)->insertBatch($rawMetricsToInsert);
                 } catch (Exception $e) {
@@ -171,11 +175,11 @@ class ApiMetricsService
     /**
      * Update daily aggregates for the metrics in bulk to avoid N+1 queries
      *
-     * @param array $metrics Array of metric data
+     * @param array<int, array<string, mixed>> $metrics Array of metric data
      */
     private function updateDailyAggregatesBulk(array $metrics): void
     {
-        if (empty($metrics)) {
+        if (count($metrics) === 0) {
             return;
         }
 
@@ -202,7 +206,7 @@ class ApiMetricsService
             // Aggregate the metrics
             $aggregates[$combinedKey]['calls']++;
             $aggregates[$combinedKey]['total_response_time'] += $metric['response_time'];
-            $aggregates[$combinedKey]['error_count'] += $metric['is_error'] ? 1 : 0;
+            $aggregates[$combinedKey]['error_count'] += (bool)($metric['is_error'] ?? false) ? 1 : 0;
 
             // Keep the latest timestamp
             $currentTimestamp = date('Y-m-d H:i:s', $metric['timestamp']);
@@ -278,7 +282,7 @@ class ApiMetricsService
 
         // Perform bulk operations in transaction for better performance
         $this->db->query()->transaction(function () use ($toUpdate, $toInsert) {
-            if (!empty($toUpdate)) {
+            if (count($toUpdate) > 0) {
                 foreach ($toUpdate as $update) {
                     $id = $update['id'];
                     unset($update['id']);
@@ -286,7 +290,7 @@ class ApiMetricsService
                 }
             }
 
-            if (!empty($toInsert)) {
+            if (count($toInsert) > 0) {
                 $this->db->table($this->dailyMetricsTable)->insertBatch($toInsert);
             }
         });
@@ -350,7 +354,7 @@ class ApiMetricsService
     /**
      * Get API metrics for the admin dashboard
      *
-     * @return array Metrics data
+     * @return array<string, mixed> Metrics data
      */
     public function getApiMetrics(): array
     {
@@ -382,7 +386,7 @@ class ApiMetricsService
                 ->get();
 
             // If no records from last 7 days, just get the latest records
-            if (empty($dailyMetrics)) {
+            if (count($dailyMetrics) === 0) {
                 $dailyMetrics = $this->db
                     ->table($this->dailyMetricsTable)
                     ->select(['*'])
@@ -426,7 +430,7 @@ class ApiMetricsService
                 // Check for null values to avoid passing null to strtotime()
                 if (
                     $metric['last_called'] !== null &&
-                    (!$endpointMap[$endpointKey]['lastCalled'] ||
+                    ($endpointMap[$endpointKey]['lastCalled'] === null ||
                      strtotime($metric['last_called']) > strtotime((string)$endpointMap[$endpointKey]['lastCalled']))
                 ) {
                     $endpointMap[$endpointKey]['lastCalled'] = $metric['last_called'];

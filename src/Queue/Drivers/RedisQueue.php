@@ -72,14 +72,14 @@ class RedisQueue implements QueueDriverInterface
                 'high_throughput',
                 'memory_efficient'
             ],
-            requiredDependencies: ['redis']
+            requiredDependencies: ['redis' => '*']
         );
     }
 
     /**
      * Initialize driver with configuration
      *
-     * @param array $config Configuration options
+     * @param array<string, mixed> $config Configuration options
      * @return void
      * @throws \Exception If Redis extension not available
      */
@@ -98,7 +98,7 @@ class RedisQueue implements QueueDriverInterface
         $host = $config['host'] ?? '127.0.0.1';
         $port = $config['port'] ?? 6379;
         $timeout = $config['timeout'] ?? 5;
-        $persistent = $config['persistent'] ?? false;
+        $persistent = (bool) ($config['persistent'] ?? false);
 
         if ($persistent) {
             $connected = $this->redis->pconnect($host, $port, $timeout);
@@ -113,7 +113,7 @@ class RedisQueue implements QueueDriverInterface
         }
 
         // Authenticate if password provided
-        if (!empty($config['password'])) {
+        if (isset($config['password']) && $config['password'] !== '') {
             if (!$this->redis->auth($config['password'])) {
                 throw DatabaseException::connectionFailed(
                     'Redis authentication failed'
@@ -160,7 +160,7 @@ class RedisQueue implements QueueDriverInterface
             $responseTime = (microtime(true) - $startTime) * 1000;
 
             // Get queue statistics
-            $queueCount = $this->redis->sCard('queues');
+            $queueCount = $this->redis->scard('queues');
             $totalJobs = 0;
             $queues = $this->redis->sMembers('queues');
 
@@ -193,7 +193,7 @@ class RedisQueue implements QueueDriverInterface
      * Push job to queue
      *
      * @param string $job Job class name
-     * @param array $data Job data
+     * @param array<string, mixed> $data Job data
      * @param string|null $queue Queue name
      * @return string Job UUID
      */
@@ -207,7 +207,7 @@ class RedisQueue implements QueueDriverInterface
      *
      * @param int $delay Delay in seconds
      * @param string $job Job class name
-     * @param array $data Job data
+     * @param array<string, mixed> $data Job data
      * @param string|null $queue Queue name
      * @return string Job UUID
      */
@@ -220,7 +220,7 @@ class RedisQueue implements QueueDriverInterface
      * Push job to Redis
      *
      * @param string $job Job class name
-     * @param array $data Job data
+     * @param array<string, mixed> $data Job data
      * @param int $delay Delay in seconds
      * @param string|null $queue Queue name
      * @param string|null $batchUuid Batch UUID if part of batch
@@ -257,7 +257,7 @@ class RedisQueue implements QueueDriverInterface
         $this->redis->multi();
 
         // Store job data
-        $this->redis->hMSet("job:{$uuid}", $jobData);
+        $this->redis->hMset("job:{$uuid}", $jobData);
         $this->redis->expire("job:{$uuid}", $this->jobExpiration);
 
         // Add to queue registry
@@ -308,7 +308,7 @@ class RedisQueue implements QueueDriverInterface
         // Get job data
         $jobData = $this->redis->hGetAll("job:{$uuid}");
 
-        if (empty($jobData)) {
+        if (count($jobData) === 0) {
             // Job data not found, skip
             return null;
         }
@@ -316,7 +316,7 @@ class RedisQueue implements QueueDriverInterface
         // Mark as reserved with timestamp
         $reservedAt = time();
         $this->redis->multi();
-        $this->redis->hMSet("job:{$uuid}", [
+        $this->redis->hMset("job:{$uuid}", [
             'attempts' => $jobData['attempts'] + 1,
             'reservedAt' => $reservedAt
         ]);
@@ -338,7 +338,7 @@ class RedisQueue implements QueueDriverInterface
 
         // Get all delayed jobs that are ready (score <= now)
         $readyJobs = $this->redis->zRangeByScore("queue:{$queue}:delayed", '0', (string)$now);
-        if (empty($readyJobs)) {
+        if (count($readyJobs) === 0) {
             return;
         }
 
@@ -366,7 +366,7 @@ class RedisQueue implements QueueDriverInterface
         // Get expired reserved jobs
         $expiredJobs = $this->redis->zRangeByScore("queue:{$queue}:reserved", '0', (string)$now);
 
-        if (empty($expiredJobs)) {
+        if (count($expiredJobs) === 0) {
             return;
         }
 
@@ -407,7 +407,7 @@ class RedisQueue implements QueueDriverInterface
         $this->redis->zRem("queue:{$queue}:reserved", $uuid);
 
         // Update job data
-        $this->redis->hMSet("job:{$uuid}", [
+        $this->redis->hMset("job:{$uuid}", [
             'availableAt' => $availableAt
         ]);
         $this->redis->hDel("job:{$uuid}", 'reservedAt');
@@ -441,7 +441,7 @@ class RedisQueue implements QueueDriverInterface
         $this->redis->multi();
 
         // Remove from all possible locations
-        $this->redis->lRem("queue:{$queue}", $uuid, 0);
+        $this->redis->lrem("queue:{$queue}", $uuid, 0);
         $this->redis->zRem("queue:{$queue}:delayed", $uuid);
         $this->redis->zRem("queue:{$queue}:reserved", $uuid);
 
@@ -481,9 +481,9 @@ class RedisQueue implements QueueDriverInterface
     /**
      * Push multiple jobs in bulk
      *
-     * @param array $jobs Array of job definitions
+     * @param array<int, array<string, mixed>> $jobs Array of job definitions
      * @param string|null $queue Queue name
-     * @return array Array of job UUIDs
+     * @return array<int, string> Array of job UUIDs
      */
     public function bulk(array $jobs, ?string $queue = null): array
     {
@@ -516,7 +516,7 @@ class RedisQueue implements QueueDriverInterface
             ];
 
             // Store job data
-            $this->redis->hMSet("job:{$uuid}", $jobData);
+            $this->redis->hMset("job:{$uuid}", $jobData);
             $this->redis->expire("job:{$uuid}", $this->jobExpiration);
 
             // Add to appropriate queue
@@ -562,7 +562,7 @@ class RedisQueue implements QueueDriverInterface
         $count = $this->size($queue);
 
         // Get all job UUIDs to delete their data
-        $immediate = $this->redis->lRange("queue:{$queue}", 0, -1);
+        $immediate = $this->redis->lrange("queue:{$queue}", 0, -1);
         $delayed = $this->redis->zRange("queue:{$queue}:delayed", 0, -1);
         $reserved = $this->redis->zRange("queue:{$queue}:reserved", 0, -1);
 
@@ -581,7 +581,7 @@ class RedisQueue implements QueueDriverInterface
         $this->redis->del("queue:{$queue}:reserved");
 
         // Remove from queue registry
-        $this->redis->sRem('queues', $queue);
+        $this->redis->srem('queues', $queue);
 
         $this->redis->exec();
 
@@ -592,7 +592,7 @@ class RedisQueue implements QueueDriverInterface
      * Get queue statistics
      *
      * @param string|null $queue Queue name
-     * @return array Statistics
+     * @return array<string, mixed> Statistics
      */
     public function getStats(?string $queue = null): array
     {
@@ -638,7 +638,7 @@ class RedisQueue implements QueueDriverInterface
     /**
      * Get supported features
      *
-     * @return array Feature list
+     * @return array<int, string> Feature list
      */
     public function getFeatures(): array
     {
@@ -648,7 +648,7 @@ class RedisQueue implements QueueDriverInterface
     /**
      * Get configuration schema
      *
-     * @return array Schema definition
+     * @return array<string, mixed> Schema definition
      */
     public function getConfigSchema(): array
     {

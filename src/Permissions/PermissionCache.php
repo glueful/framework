@@ -18,16 +18,16 @@ use Glueful\Cache\CacheStore;
  */
 class PermissionCache implements PermissionCacheInterface
 {
-    /** @var array Cache configuration */
+    /** @var array<string, mixed> Cache configuration */
     private array $config;
 
-    /** @var CacheStore|null Cache driver service */
+    /** @var CacheStore<mixed>|null Cache driver service */
     private ?CacheStore $cache;
 
-    /** @var array In-memory cache for request lifetime */
+    /** @var array<string, mixed> In-memory cache for request lifetime */
     private array $memoryCache = [];
 
-    /** @var array TTL configuration for different cache types */
+    /** @var array<string, int> TTL configuration for different cache types */
     private array $ttlConfig = [
         'user_permissions' => 3600, // 1 hour
         'permission_checks' => 1800, // 30 minutes
@@ -40,10 +40,16 @@ class PermissionCache implements PermissionCacheInterface
     /** @var bool Whether cache is enabled */
     private bool $enabled = true;
 
+    /** @var int Cache hit counter */
+    private int $hits = 0;
+
+    /** @var int Cache miss counter */
+    private int $misses = 0;
+
     /**
      * Constructor
      *
-     * @param CacheStore|null $cache Cache driver service
+     * @param CacheStore<mixed>|null $cache Cache driver service
      */
     public function __construct(?CacheStore $cache = null)
     {
@@ -54,7 +60,7 @@ class PermissionCache implements PermissionCacheInterface
     /**
      * Initialize the cache system
      *
-     * @param array $config Cache configuration
+     * @param array<string, mixed> $config Cache configuration
      * @return void
      * @throws \Exception If cache initialization fails
      */
@@ -84,7 +90,7 @@ class PermissionCache implements PermissionCacheInterface
      * Get cached permissions for a user
      *
      * @param string $userUuid User UUID to get cached permissions for
-     * @return array|null Cached permissions or null if not found
+     * @return array<string, mixed>|null Cached permissions or null if not found
      */
     public function getUserPermissions(string $userUuid): ?array
     {
@@ -95,26 +101,29 @@ class PermissionCache implements PermissionCacheInterface
         $key = $this->generateUserPermissionsKey($userUuid);
 
         // Check memory cache first
-        if ($this->config['memory_cache'] && isset($this->memoryCache[$key])) {
+        if (($this->config['memory_cache'] ?? false) === true && isset($this->memoryCache[$key])) {
+            $this->hits++;
             return $this->memoryCache[$key];
         }
 
         // Check distributed cache
-        if ($this->config['distributed_cache'] && $this->cache) {
+        if (($this->config['distributed_cache'] ?? false) === true && $this->cache !== null) {
             try {
                 $cached = $this->cache->get($key);
                 if ($cached !== null) {
+                    $this->hits++;
                     // Store in memory cache for faster subsequent access
-                    if ($this->config['memory_cache']) {
+                    if (($this->config['memory_cache'] ?? false) === true) {
                         $this->memoryCache[$key] = $cached;
                     }
                     return $cached;
                 }
-            } catch (\Exception $e) {
+            } catch (\Exception) {
                 // Cache error - continue without cache
             }
         }
 
+        $this->misses++;
         return null;
     }
 
@@ -122,7 +131,7 @@ class PermissionCache implements PermissionCacheInterface
      * Cache permissions for a user
      *
      * @param string $userUuid User UUID to cache permissions for
-     * @param array $permissions User's permissions to cache
+     * @param array<string, mixed> $permissions User's permissions to cache
      * @param int $ttl Time to live in seconds (0 = use default)
      * @return bool True if caching successful
      */
@@ -138,15 +147,15 @@ class PermissionCache implements PermissionCacheInterface
         $success = true;
 
         // Store in memory cache
-        if ($this->config['memory_cache']) {
+        if (($this->config['memory_cache'] ?? false) === true) {
             $this->memoryCache[$key] = $permissions;
         }
 
         // Store in distributed cache
-        if ($this->config['distributed_cache'] && $this->cache) {
+        if (($this->config['distributed_cache'] ?? false) === true && $this->cache !== null) {
             try {
                 $this->cache->set($key, $permissions, $actualTtl);
-            } catch (\Exception $e) {
+            } catch (\Exception) {
                 $success = false;
             }
         }
@@ -160,7 +169,7 @@ class PermissionCache implements PermissionCacheInterface
      * @param string $userUuid User UUID
      * @param string $permission Permission name
      * @param string $resource Resource identifier
-     * @param array $context Permission context
+     * @param array<string, mixed> $context Permission context
      * @return bool|null Cached result or null if not found
      */
     public function getPermissionCheck(
@@ -176,26 +185,29 @@ class PermissionCache implements PermissionCacheInterface
         $key = $this->generateKey($userUuid, $permission, $resource, $context);
 
         // Check memory cache first
-        if ($this->config['memory_cache'] && array_key_exists($key, $this->memoryCache)) {
+        if (($this->config['memory_cache'] ?? false) === true && array_key_exists($key, $this->memoryCache)) {
+            $this->hits++;
             return $this->memoryCache[$key];
         }
 
         // Check distributed cache
-        if ($this->config['distributed_cache'] && $this->cache) {
+        if (($this->config['distributed_cache'] ?? false) === true && $this->cache !== null) {
             try {
                 $cached = $this->cache->get($key);
                 if ($cached !== null) {
+                    $this->hits++;
                     // Store in memory cache
-                    if ($this->config['memory_cache']) {
+                    if (($this->config['memory_cache'] ?? false) === true) {
                         $this->memoryCache[$key] = $cached;
                     }
                     return $cached;
                 }
-            } catch (\Exception $e) {
+            } catch (\Exception) {
                 // Cache error - continue without cache
             }
         }
 
+        $this->misses++;
         return null;
     }
 
@@ -206,7 +218,7 @@ class PermissionCache implements PermissionCacheInterface
      * @param string $permission Permission name
      * @param string $resource Resource identifier
      * @param bool $result Permission check result
-     * @param array $context Permission context
+     * @param array<string, mixed> $context Permission context
      * @param int $ttl Time to live in seconds
      * @return bool True if caching successful
      */
@@ -228,15 +240,15 @@ class PermissionCache implements PermissionCacheInterface
         $success = true;
 
         // Store in memory cache
-        if ($this->config['memory_cache']) {
+        if (($this->config['memory_cache'] ?? false) === true) {
             $this->memoryCache[$key] = $result;
         }
 
         // Store in distributed cache
-        if ($this->config['distributed_cache'] && $this->cache) {
+        if (($this->config['distributed_cache'] ?? false) === true && $this->cache !== null) {
             try {
                 $this->cache->set($key, $result, $actualTtl);
-            } catch (\Exception $e) {
+            } catch (\Exception) {
                 $success = false;
             }
         }
@@ -259,7 +271,7 @@ class PermissionCache implements PermissionCacheInterface
         $success = true;
 
         // Clear from memory cache
-        if ($this->config['memory_cache']) {
+        if (($this->config['memory_cache'] ?? false) === true) {
             $userPrefix = $this->keyPrefix . 'user:' . $userUuid;
             foreach (array_keys($this->memoryCache) as $key) {
                 if (strpos($key, $userPrefix) === 0) {
@@ -269,7 +281,7 @@ class PermissionCache implements PermissionCacheInterface
         }
 
         // Clear from distributed cache
-        if ($this->config['distributed_cache'] && $this->cache) {
+        if (($this->config['distributed_cache'] ?? false) === true && $this->cache !== null) {
             try {
                 // Clear user permissions cache
                 $userPermissionsKey = $this->generateUserPermissionsKey($userUuid);
@@ -278,7 +290,7 @@ class PermissionCache implements PermissionCacheInterface
                 // Clear permission check caches for this user using advanced cache features
                 $pattern = $this->keyPrefix . 'check:' . $userUuid . ':*';
                 $this->cache->deletePattern($pattern);
-            } catch (\Exception $e) {
+            } catch (\Exception) {
                 $success = false;
             }
         }
@@ -302,9 +314,9 @@ class PermissionCache implements PermissionCacheInterface
         $success = true;
 
         // Clear from memory cache
-        if ($this->config['memory_cache']) {
+        if (($this->config['memory_cache'] ?? false) === true) {
             $searchPattern = ':' . $permission . ':';
-            if (!empty($resource)) {
+            if ($resource !== '') {
                 $searchPattern .= $resource . ':';
             }
 
@@ -316,15 +328,15 @@ class PermissionCache implements PermissionCacheInterface
         }
 
         // Clear from distributed cache
-        if ($this->config['distributed_cache'] && $this->cache) {
+        if (($this->config['distributed_cache'] ?? false) === true && $this->cache !== null) {
             try {
                 $pattern = $this->keyPrefix . 'check:*:' . $permission;
-                if (!empty($resource)) {
+                if ($resource !== '') {
                     $pattern .= ':' . $resource;
                 }
                 $pattern .= ':*';
                 $this->cache->deletePattern($pattern);
-            } catch (\Exception $e) {
+            } catch (\Exception) {
                 $success = false;
             }
         }
@@ -346,16 +358,16 @@ class PermissionCache implements PermissionCacheInterface
         $success = true;
 
         // Clear memory cache
-        if ($this->config['memory_cache']) {
+        if (($this->config['memory_cache'] ?? false) === true) {
             $this->memoryCache = [];
         }
 
         // Clear distributed cache
-        if ($this->config['distributed_cache'] && $this->cache) {
+        if (($this->config['distributed_cache'] ?? false) === true && $this->cache !== null) {
             try {
                 $pattern = $this->keyPrefix . '*';
                 $this->cache->deletePattern($pattern);
-            } catch (\Exception $e) {
+            } catch (\Exception) {
                 $success = false;
             }
         }
@@ -379,7 +391,7 @@ class PermissionCache implements PermissionCacheInterface
         try {
             $permissions = $permissionLoader($userUuid);
             return $this->setUserPermissions($userUuid, $permissions);
-        } catch (\Exception $e) {
+        } catch (\Exception) {
             return false;
         }
     }
@@ -387,26 +399,24 @@ class PermissionCache implements PermissionCacheInterface
     /**
      * Get cache statistics
      *
-     * @return array Cache statistics
+     * @return array{hits: int, misses: int, hit_rate: float, total_keys: int, memory_usage?: int}
      */
     public function getStats(): array
     {
+        $totalRequests = $this->hits + $this->misses;
+        $hitRate = $totalRequests > 0 ? ($this->hits / $totalRequests) : 0.0;
+        $totalKeys = count($this->memoryCache);
+
         $stats = [
-            'enabled' => $this->enabled,
-            'memory_cache_enabled' => $this->config['memory_cache'],
-            'distributed_cache_enabled' => $this->config['distributed_cache'],
-            'memory_cache_size' => count($this->memoryCache),
-            'key_prefix' => $this->keyPrefix,
-            'ttl_config' => $this->ttlConfig,
+            'hits' => $this->hits,
+            'misses' => $this->misses,
+            'hit_rate' => $hitRate,
+            'total_keys' => $totalKeys,
         ];
 
-        // Add distributed cache stats if available
-        if ($this->config['distributed_cache'] && $this->cache) {
-            try {
-                $stats['distributed_cache_stats'] = $this->cache->getStats();
-            } catch (\Exception $e) {
-                $stats['distributed_cache_error'] = $e->getMessage();
-            }
+        // Add memory usage if available
+        if (function_exists('memory_get_usage')) {
+            $stats['memory_usage'] = memory_get_usage(true);
         }
 
         return $stats;
@@ -424,7 +434,7 @@ class PermissionCache implements PermissionCacheInterface
         }
 
         // Test memory cache
-        if ($this->config['memory_cache']) {
+        if (($this->config['memory_cache'] ?? false) === true) {
             $testKey = $this->keyPrefix . 'health_check';
             $testValue = 'test_' . time();
             $this->memoryCache[$testKey] = $testValue;
@@ -436,7 +446,7 @@ class PermissionCache implements PermissionCacheInterface
         }
 
         // Test distributed cache
-        if ($this->config['distributed_cache'] && $this->cache) {
+        if (($this->config['distributed_cache'] ?? false) === true && $this->cache !== null) {
             try {
                 $testKey = $this->keyPrefix . 'health_check';
                 $testValue = 'test_' . time();
@@ -448,7 +458,7 @@ class PermissionCache implements PermissionCacheInterface
                 if ($retrieved !== $testValue) {
                     return false;
                 }
-            } catch (\Exception $e) {
+            } catch (\Exception) {
                 return false;
             }
         }
@@ -459,7 +469,7 @@ class PermissionCache implements PermissionCacheInterface
     /**
      * Set cache TTL configuration
      *
-     * @param array $ttlConfig Array of cache type => TTL mappings
+     * @param array<string, int> $ttlConfig Array of cache type => TTL mappings
      * @return void
      */
     public function configureTTL(array $ttlConfig): void
@@ -473,19 +483,19 @@ class PermissionCache implements PermissionCacheInterface
      * @param string $userUuid User UUID
      * @param string $permission Permission name
      * @param string $resource Resource identifier
-     * @param array $context Permission context
+     * @param array<string, mixed> $context Permission context
      * @return string Cache key
      */
     public function generateKey(string $userUuid, string $permission, string $resource, array $context = []): string
     {
-        $contextHash = empty($context) ? 'none' : md5(serialize($context));
+        $contextHash = $context === [] ? 'none' : md5(serialize($context));
         return $this->keyPrefix . 'check:' . $userUuid . ':' . $permission . ':' . $resource . ':' . $contextHash;
     }
 
     /**
      * Batch invalidate multiple users
      *
-     * @param array $userUuids Array of user UUIDs to invalidate
+     * @param array<string> $userUuids Array of user UUIDs to invalidate
      * @return bool True if batch invalidation successful
      */
     public function batchInvalidateUsers(array $userUuids): bool
@@ -507,7 +517,7 @@ class PermissionCache implements PermissionCacheInterface
     /**
      * Get cache configuration
      *
-     * @return array Cache configuration
+     * @return array<string, mixed> Cache configuration
      */
     public function getConfig(): array
     {

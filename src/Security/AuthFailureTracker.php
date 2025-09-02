@@ -19,7 +19,7 @@ class AuthFailureTracker
     /** @var string Cache key prefix for failed attempts */
     private const PREFIX = 'auth_fail:';
 
-    /** @var CacheStore Cache driver instance */
+    /** @var CacheStore<mixed> Cache driver instance */
     private CacheStore $cache;
 
     /**
@@ -28,7 +28,7 @@ class AuthFailureTracker
      * @param string $key Identifier (user ID or IP)
      * @param int $maxAttempts Maximum failed attempts before blocking
      * @param int $decaySeconds Block duration in seconds
-     * @param CacheStore|null $cache Cache driver instance
+     * @param CacheStore<mixed>|null $cache Cache driver instance
      */
     public function __construct(
         private readonly string $key, // Either user ID or IP
@@ -109,7 +109,7 @@ class AuthFailureTracker
     /**
      * Create cache instance with proper fallback handling
      *
-     * @return CacheStore Cache instance
+     * @return CacheStore<mixed> Cache instance
      * @throws \RuntimeException If cache cannot be created
      */
     private function createCacheInstance(): CacheStore
@@ -158,7 +158,7 @@ class AuthFailureTracker
     /**
      * Create cache instance for static factory methods
      *
-     * @return CacheStore|null Cache instance or null for graceful degradation
+     * @return CacheStore<mixed>|null Cache instance or null for graceful degradation
      */
     private static function createStaticCacheInstance(): ?CacheStore
     {

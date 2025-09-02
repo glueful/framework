@@ -25,10 +25,10 @@ class DatabaseJob implements JobInterface
     /** @var QueueDriverInterface Queue driver instance */
     private QueueDriverInterface $driver;
 
-    /** @var array Raw job data from database */
+    /** @var array<string, mixed> Raw job data from database */
     private array $rawData;
 
-    /** @var array Decoded payload data */
+    /** @var array<string, mixed> Decoded payload data */
     private array $payload;
 
     /** @var string Queue name */
@@ -44,7 +44,7 @@ class DatabaseJob implements JobInterface
      * Create new database job instance
      *
      * @param QueueDriverInterface $driver Database queue driver
-     * @param array $rawData Raw job data from database
+     * @param array<string, mixed> $rawData Raw job data from database
      * @param string $queue Queue name
      */
     public function __construct(QueueDriverInterface $driver, array $rawData, string $queue)
@@ -52,7 +52,8 @@ class DatabaseJob implements JobInterface
         $this->driver = $driver;
         $this->rawData = $rawData;
         $this->queue = $queue;
-        $this->payload = json_decode($rawData['payload'], true) ?: [];
+        $decodedPayload = json_decode($rawData['payload'], true);
+        $this->payload = $decodedPayload !== null ? $decodedPayload : [];
     }
 
     /**
@@ -88,7 +89,7 @@ class DatabaseJob implements JobInterface
     /**
      * Get job payload
      *
-     * @return array Job data
+     * @return array<string, mixed> Job data
      */
     public function getPayload(): array
     {
@@ -98,7 +99,7 @@ class DatabaseJob implements JobInterface
     /**
      * Get raw database data
      *
-     * @return array Raw data
+     * @return array<string, mixed> Raw data
      */
     public function getRawData(): array
     {
@@ -115,7 +116,7 @@ class DatabaseJob implements JobInterface
     {
         $jobClass = $this->payload['job'] ?? null;
 
-        if (!$jobClass || !class_exists($jobClass)) {
+        if ($jobClass === null || !class_exists($jobClass)) {
             throw new \RuntimeException("Job class '{$jobClass}' not found");
         }
 
@@ -183,7 +184,7 @@ class DatabaseJob implements JobInterface
 
         // Call failed method on job class if exists
         $jobClass = $this->payload['job'] ?? null;
-        if ($jobClass && class_exists($jobClass)) {
+        if ($jobClass !== null && class_exists($jobClass)) {
             try {
                 $job = $this->resolve($jobClass);
                 if (method_exists($job, 'failed')) {

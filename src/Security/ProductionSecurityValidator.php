@@ -14,20 +14,20 @@ namespace Glueful\Security;
  */
 class ProductionSecurityValidator
 {
-    /** @var array Required secure settings for production */
+    /** @var array<string, bool> Required secure settings for production */
     private const REQUIRED_PRODUCTION_SETTINGS = [
         'APP_DEBUG' => false,
         'API_DOCS_ENABLED' => false,
         'API_DEBUG_MODE' => false,
     ];
 
-    /** @var array Allowed environments that can show debug information */
+    /** @var array<string> Allowed environments that can show debug information */
     private const DEBUG_ALLOWED_ENVIRONMENTS = ['development', 'local', 'testing'];
 
     /**
      * Validate production security settings
      *
-     * @return array Validation results
+     * @return array{environment: mixed, is_production: bool, security_score: float, critical_issues: array<array<string, mixed>>, warnings: array<array<string, mixed>>, recommendations: array<string>, passed: bool} Validation results
      */
     public static function validateProductionSecurity(): array
     {
@@ -55,22 +55,22 @@ class ProductionSecurityValidator
 
         // Check debug information exposure
         $debugInfo = self::checkDebugInformationExposure();
-        if (!empty($debugInfo['risks'])) {
+        if (isset($debugInfo['risks']) && is_array($debugInfo['risks']) && count($debugInfo['risks']) > 0) {
             $issues = array_merge($issues, $debugInfo['risks']);
         }
 
         // Check error handling configuration
         $errorConfig = self::validateErrorHandling();
-        if (!empty($errorConfig['issues'])) {
+        if (isset($errorConfig['issues']) && is_array($errorConfig['issues']) && count($errorConfig['issues']) > 0) {
             $issues = array_merge($issues, $errorConfig['issues']);
         }
-        if (!empty($errorConfig['warnings'])) {
+        if (isset($errorConfig['warnings']) && is_array($errorConfig['warnings']) && count($errorConfig['warnings']) > 0) {
             $warnings = array_merge($warnings, $errorConfig['warnings']);
         }
 
         // Check environment consistency
         $envConsistency = self::checkEnvironmentConsistency();
-        if (!empty($envConsistency)) {
+        if (count($envConsistency) > 0) {
             $warnings = array_merge($warnings, $envConsistency);
         }
 
@@ -81,14 +81,14 @@ class ProductionSecurityValidator
             'critical_issues' => $issues,
             'warnings' => $warnings,
             'recommendations' => self::getRecommendations($issues, $warnings),
-            'passed' => empty($issues)
+            'passed' => count($issues) === 0
         ];
     }
 
     /**
      * Check for debug information exposure risks
      *
-     * @return array Debug exposure analysis
+     * @return array{risks: array<array<string, mixed>>} Debug exposure analysis
      */
     private static function checkDebugInformationExposure(): array
     {
@@ -98,7 +98,7 @@ class ProductionSecurityValidator
         $apiDebug = config('api.debug_mode', false);
 
         // Check if debug is enabled in non-debug environments
-        if (!in_array($environment, self::DEBUG_ALLOWED_ENVIRONMENTS) && $debugMode) {
+        if (!in_array($environment, self::DEBUG_ALLOWED_ENVIRONMENTS, true) && (bool) $debugMode) {
             $risks[] = [
                 'type' => 'HIGH',
                 'category' => 'DEBUG_EXPOSURE',
@@ -108,7 +108,7 @@ class ProductionSecurityValidator
         }
 
         // Check API debug mode
-        if (!in_array($environment, self::DEBUG_ALLOWED_ENVIRONMENTS) && $apiDebug) {
+        if (!in_array($environment, self::DEBUG_ALLOWED_ENVIRONMENTS, true) && (bool) $apiDebug) {
             $risks[] = [
                 'type' => 'HIGH',
                 'category' => 'API_DEBUG_EXPOSURE',
@@ -119,7 +119,7 @@ class ProductionSecurityValidator
 
         // Check for potentially exposed PHP settings
         $phpSettings = self::checkPHPSecuritySettings();
-        if (!empty($phpSettings)) {
+        if (count($phpSettings) > 0) {
             $risks = array_merge($risks, $phpSettings);
         }
 
@@ -129,7 +129,7 @@ class ProductionSecurityValidator
     /**
      * Validate error handling configuration
      *
-     * @return array Error handling validation results
+     * @return array{issues: array<array<string, mixed>>, warnings: array<array<string, mixed>>} Error handling validation results
      */
     private static function validateErrorHandling(): array
     {
@@ -179,7 +179,7 @@ class ProductionSecurityValidator
     /**
      * Check environment variable consistency
      *
-     * @return array Environment consistency warnings
+     * @return array<array<string, mixed>> Environment consistency warnings
      */
     private static function checkEnvironmentConsistency(): array
     {
@@ -190,7 +190,7 @@ class ProductionSecurityValidator
         if ($environment === 'production') {
             // Check if JWT key is properly set
             $jwtKey = env('JWT_KEY', '');
-            if (empty($jwtKey) || strlen($jwtKey) < 32) {
+            if ($jwtKey === '' || $jwtKey === null || strlen($jwtKey) < 32) {
                 $warnings[] = [
                     'type' => 'HIGH',
                     'category' => 'JWT_SECURITY',
@@ -217,7 +217,7 @@ class ProductionSecurityValidator
     /**
      * Check PHP security settings
      *
-     * @return array PHP security issues
+     * @return array<array<string, mixed>> PHP security issues
      */
     private static function checkPHPSecuritySettings(): array
     {
@@ -277,8 +277,8 @@ class ProductionSecurityValidator
     /**
      * Calculate security score based on issues
      *
-     * @param array $issues Critical issues
-     * @param array $warnings Warning issues
+     * @param array<array<string, mixed>> $issues Critical issues
+     * @param array<array<string, mixed>> $warnings Warning issues
      * @return float Security score (0-10)
      */
     private static function calculateSecurityScore(array $issues, array $warnings): float
@@ -312,15 +312,15 @@ class ProductionSecurityValidator
     /**
      * Get security recommendations
      *
-     * @param array $issues Critical issues
-     * @param array $warnings Warning issues
-     * @return array Recommendations
+     * @param array<array<string, mixed>> $issues Critical issues
+     * @param array<array<string, mixed>> $warnings Warning issues
+     * @return array<string> Recommendations
      */
     private static function getRecommendations(array $issues, array $warnings): array
     {
         $recommendations = [];
 
-        if (!empty($issues)) {
+        if (count($issues) > 0) {
             $recommendations[] = 'Address all critical security issues before deploying to production';
         }
 
@@ -341,7 +341,7 @@ class ProductionSecurityValidator
                 default => "Review {$category} configuration"
             };
 
-            if (!in_array($recommendation, $recommendations)) {
+            if (!in_array($recommendation, $recommendations, true)) {
                 $recommendations[] = $recommendation;
             }
         }
@@ -357,7 +357,7 @@ class ProductionSecurityValidator
     public static function isDebugAllowed(): bool
     {
         $environment = env('APP_ENV', 'production');
-        return in_array($environment, self::DEBUG_ALLOWED_ENVIRONMENTS);
+        return in_array($environment, self::DEBUG_ALLOWED_ENVIRONMENTS, true);
     }
 
     /**
@@ -374,7 +374,7 @@ class ProductionSecurityValidator
     /**
      * Get a summary of current security status
      *
-     * @return array Security status summary
+     * @return array<string, mixed> Security status summary
      */
     public static function getSecuritySummary(): array
     {

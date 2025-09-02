@@ -34,7 +34,7 @@ use Glueful\Exceptions\BusinessLogicException;
  */
 class SendNotification extends Job
 {
-    /** @var array Supported notification types */
+    /** @var array<int, string> Supported notification types */
     private const SUPPORTED_TYPES = [
         'email',
         'sms',
@@ -121,7 +121,7 @@ class SendNotification extends Job
         // Log successful notification
         $this->logNotificationResult($data['type'], $data, $parsedResult, $parsedResult['success']);
 
-        if (!$parsedResult['success']) {
+        if ((bool)$parsedResult['success'] === false) {
             throw BusinessLogicException::operationNotAllowed(
                 'notification_sending',
                 $parsedResult['message'] ?? 'Failed to send notification'
@@ -201,7 +201,7 @@ class SendNotification extends Job
     /**
      * Validate notification data
      *
-     * @param array $data Notification data
+     * @param array<string, mixed> $data Notification data
      * @return void
      * @throws \InvalidArgumentException If validation fails
      */
@@ -217,7 +217,7 @@ class SendNotification extends Job
         }
 
         // Validate notification type
-        if (!in_array($data['type'], self::SUPPORTED_TYPES)) {
+        if (!in_array($data['type'], self::SUPPORTED_TYPES, true)) {
             throw new \InvalidArgumentException(
                 "Unsupported notification type '{$data['type']}'. Supported types: " .
                 implode(', ', self::SUPPORTED_TYPES)
@@ -230,7 +230,10 @@ class SendNotification extends Job
                 if (!filter_var($data['recipient'], FILTER_VALIDATE_EMAIL)) {
                     throw new \InvalidArgumentException('Invalid email address');
                 }
-                if (empty($data['subject']) || empty($data['message'])) {
+                if (
+                    !isset($data['subject']) || $data['subject'] === '' ||
+                    !isset($data['message']) || $data['message'] === ''
+                ) {
                     throw new \InvalidArgumentException('Email subject and message are required');
                 }
                 break;
@@ -239,7 +242,7 @@ class SendNotification extends Job
                 if (!$this->isValidPhoneNumber($data['recipient'])) {
                     throw new \InvalidArgumentException('Invalid phone number');
                 }
-                if (empty($data['message'])) {
+                if (!isset($data['message']) || $data['message'] === '') {
                     throw new \InvalidArgumentException('SMS message is required');
                 }
                 break;
@@ -267,8 +270,9 @@ class SendNotification extends Job
         $dispatcher = new \Glueful\Notifications\Services\NotificationDispatcher($channelManager);
 
         // Initialize EmailNotificationProvider if available
-        if (class_exists('\\Glueful\\Extensions\\EmailNotification\\EmailNotificationProvider')) {
-            $emailProvider = new \Glueful\Extensions\EmailNotification\EmailNotificationProvider();
+        $emailProviderClass = '\\Glueful\\Extensions\\EmailNotification\\EmailNotificationProvider';
+        if (class_exists($emailProviderClass)) {
+            $emailProvider = new $emailProviderClass();
             $emailProvider->initialize();
             $emailProvider->register($channelManager);
         }
@@ -282,8 +286,8 @@ class SendNotification extends Job
      * Log notification result
      *
      * @param string $type Notification type
-     * @param array $data Notification data
-     * @param array $result Send result
+     * @param array<string, mixed> $data Notification data
+     * @param array<string, mixed> $result Send result
      * @param bool $success Whether notification was successful
      * @return void
      */
@@ -310,7 +314,7 @@ class SendNotification extends Job
     /**
      * Try fallback notification method
      *
-     * @param array $data Original notification data
+     * @param array<string, mixed> $data Original notification data
      * @param \Exception $exception Original exception
      * @return void
      */
@@ -350,7 +354,7 @@ class SendNotification extends Job
      * @param string $type Notification type
      * @param string $recipient Recipient (email, phone, URL, etc.)
      * @param string $message Message content
-     * @param array $options Additional options
+     * @param array<string, mixed> $options Additional options
      * @return self SendNotification job
      * @throws \InvalidArgumentException If invalid parameters
      */
@@ -380,7 +384,7 @@ class SendNotification extends Job
      * @param string $recipient Email address
      * @param string $subject Email subject
      * @param string $message Email content
-     * @param array $options Additional options
+     * @param array<string, mixed> $options Additional options
      * @return self SendNotification job
      */
     public static function email(
@@ -399,7 +403,7 @@ class SendNotification extends Job
      *
      * @param string $recipient Phone number
      * @param string $message SMS content
-     * @param array $options Additional options
+     * @param array<string, mixed> $options Additional options
      * @return self SendNotification job
      */
     public static function sms(
@@ -429,7 +433,7 @@ class SendNotification extends Job
     /**
      * Get notification summary for monitoring
      *
-     * @return array Notification summary
+     * @return array<string, mixed> Notification summary
      */
     public function getNotificationSummary(): array
     {

@@ -16,6 +16,7 @@ use Glueful\Repository\Interfaces\RepositoryInterface;
 class RepositoryFactory
 {
     private Connection $connection;
+    /** @var array<string, RepositoryInterface> */
     private array $repositories = [];
 
     public function __construct(?Connection $connection = null)

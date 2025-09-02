@@ -29,11 +29,11 @@ class ProviderNotFoundException extends PermissionException
     {
         $this->providerName = $providerName;
 
-        if (empty($message)) {
+        if ($message === '') {
             $message = "Permission provider '{$providerName}' not found";
         }
 
-        parent::__construct($message, $code ?: 2001, $previous, ['provider' => $providerName]);
+        parent::__construct($message, $code !== 0 ? $code : 2001, $previous, ['provider' => $providerName]);
     }
 
     /**

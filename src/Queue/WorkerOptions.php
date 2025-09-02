@@ -49,7 +49,7 @@ class WorkerOptions
     /** @var string Worker name for identification */
     public readonly string $name;
 
-    /** @var array Queue priorities (higher number = higher priority) */
+    /** @var array<string, int> Queue priorities (higher number = higher priority) */
     public readonly array $queuePriorities;
 
     /** @var int Batch size for batch processing */
@@ -71,7 +71,7 @@ class WorkerOptions
      * @param bool $verbose Enable verbose logging (default: false)
      * @param int $maxRuntime Max runtime before restart seconds (default: 3600)
      * @param string $name Worker name (default: auto-generated)
-     * @param array $queuePriorities Queue priorities (default: [])
+     * @param array<string, int> $queuePriorities Queue priorities (default: [])
      * @param int $batchSize Batch size for processing (default: 10)
      * @param bool $enableBatching Enable batch processing (default: false)
      */
@@ -99,7 +99,7 @@ class WorkerOptions
         $this->heartbeat = max(5, $heartbeat);
         $this->verbose = $verbose;
         $this->maxRuntime = max(60, $maxRuntime);
-        $this->name = $name ?: 'worker-' . uniqid();
+        $this->name = $name !== '' ? $name : 'worker-' . uniqid();
         $this->queuePriorities = $queuePriorities;
         $this->batchSize = max(1, $batchSize);
         $this->enableBatching = $enableBatching;
@@ -110,6 +110,9 @@ class WorkerOptions
      *
      * @param array $config Configuration array
      * @return self Worker options instance
+     */
+    /**
+     * @param array<string, mixed> $config
      */
     public static function fromArray(array $config): self
     {
@@ -132,6 +135,9 @@ class WorkerOptions
      * Convert options to array
      *
      * @return array Configuration array
+     */
+    /**
+     * @return array<string, mixed>
      */
     public function toArray(): array
     {
@@ -241,6 +247,10 @@ class WorkerOptions
      * @param array $queues Queue names
      * @return array Sorted queue names
      */
+    /**
+     * @param array<string> $queues
+     * @return array<string>
+     */
     public function sortQueuesByPriority(array $queues): array
     {
         usort($queues, function ($a, $b) {
@@ -256,6 +266,9 @@ class WorkerOptions
      * @param array $overrides Options to override
      * @return self New worker options instance
      */
+    /**
+     * @param array<string, mixed> $overrides
+     */
     public function with(array $overrides): self
     {
         $config = $this->toArray();
@@ -266,6 +279,9 @@ class WorkerOptions
      * Validate options for consistency
      *
      * @return array Validation errors (empty if valid)
+     */
+    /**
+     * @return array<string>
      */
     public function validate(): array
     {
@@ -309,6 +325,6 @@ class WorkerOptions
      */
     public function isValid(): bool
     {
-        return empty($this->validate());
+        return $this->validate() === [];
     }
 }

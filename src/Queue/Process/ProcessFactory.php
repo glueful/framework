@@ -14,12 +14,17 @@ class ProcessFactory
     private LoggerInterface $logger;
     private string $basePath;
     private ?string $phpBinary = null;
+    /** @var array<string, string> */
     private array $environment = [];
+    /** @var array<string, mixed> */
     private array $defaultOptions = [
         'timeout' => null, // No timeout by default for queue workers
         'env' => [],
     ];
 
+    /**
+     * @param array<string, string> $environment
+     */
     public function __construct(
         LoggerInterface $logger,
         string $basePath,
@@ -30,6 +35,10 @@ class ProcessFactory
         $this->environment = $environment;
     }
 
+    /**
+     * @param array<int, string> $args
+     * @param array<string, mixed> $options
+     */
     public function create(string $command, array $args = [], array $options = []): Process
     {
         $commandLine = array_merge([$command], $args);
@@ -77,6 +86,10 @@ class ProcessFactory
         );
     }
 
+    /**
+     * @param array<int, string> $script
+     * @param array<string, mixed> $options
+     */
     public function createPhpProcess(array $script, array $options = []): Process
     {
         $phpBinary = $this->getPhpBinary();
@@ -85,6 +98,9 @@ class ProcessFactory
         return $this->create($command[0], array_slice($command, 1), $options);
     }
 
+    /**
+     * @return array<int, string>
+     */
     private function buildWorkerCommand(string $queue, WorkerOptions $options): array
     {
         $phpBinary = $this->getPhpBinary();
@@ -131,6 +147,9 @@ class ProcessFactory
         return $command;
     }
 
+    /**
+     * @return array<string, string>
+     */
     private function buildWorkerEnvironment(string $workerId, WorkerOptions $options): array
     {
         return array_merge($this->environment, [
@@ -146,7 +165,7 @@ class ProcessFactory
         return sprintf(
             '%s-%s-%s',
             $queue,
-            gethostname() ?: 'unknown',
+            gethostname() !== false ? gethostname() : 'unknown',
             uniqid()
         );
     }
@@ -170,6 +189,9 @@ class ProcessFactory
         $this->phpBinary = $binary;
     }
 
+    /**
+     * @param array<string, string> $environment
+     */
     public function setEnvironment(array $environment): void
     {
         $this->environment = $environment;
@@ -180,11 +202,17 @@ class ProcessFactory
         $this->environment[$name] = $value;
     }
 
+    /**
+     * @param array<string, mixed> $options
+     */
     public function setDefaultOptions(array $options): void
     {
         $this->defaultOptions = array_merge($this->defaultOptions, $options);
     }
 
+    /**
+     * @param array<int, string> $queues
+     */
     public function createBatchWorker(array $queues, WorkerOptions $options): WorkerProcess
     {
         $workerId = $this->generateWorkerId(implode(',', $queues));
@@ -219,6 +247,9 @@ class ProcessFactory
         ]);
     }
 
+    /**
+     * @param array<int, string> $args
+     */
     public function createMaintenanceProcess(string $command, array $args = []): Process
     {
         return $this->createPhpProcess(

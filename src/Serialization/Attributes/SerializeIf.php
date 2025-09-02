@@ -40,7 +40,7 @@ class SerializeIf
                 return false;
             }
 
-            $result = $object->{$this->condition}();
+            $result = call_user_func([$object, $this->condition]);
             return $result === $this->value;
         } else {
             // Check property

@@ -45,13 +45,13 @@ class UnauthorizedException extends PermissionException
         $this->requiredPermission = $requiredPermission;
         $this->resource = $resource;
 
-        if (empty($message)) {
+        if ($message === '') {
             $message = "User '{$userUuid}' does not have permission '{$requiredPermission}' for resource '{$resource}'";
         }
 
         parent::__construct(
             $message,
-            $code ?: 3001,
+            $code !== 0 ? $code : 3001,
             $previous,
             [
                 'user' => $userUuid,

@@ -38,7 +38,7 @@ class AdaptiveRateLimiter extends RateLimiter
     /** @var float Current behavior score (0.0 = normal, 1.0 = highly suspicious) */
     private float $behaviorScore = 0.0;
 
-    /** @var array Request context information */
+    /** @var array<string, mixed> Request context information */
     private array $context = [];
 
     /** @var RequestContext Request context service */
@@ -65,9 +65,9 @@ class AdaptiveRateLimiter extends RateLimiter
      * @param string $key Unique identifier for this rate limiter
      * @param int $maxAttempts Maximum allowed attempts
      * @param int $windowSeconds Time window in seconds
-     * @param array $context Additional request context
+     * @param array<string, mixed> $context Additional request context
      * @param bool $enableDistributed Whether to enable distributed rate limiting
-     * @param CacheStore|null $cache Cache driver instance
+     * @param CacheStore<mixed>|null $cache Cache driver instance
      * @param RequestContext|null $requestContext Request context instance
      */
     public function __construct(
@@ -152,7 +152,7 @@ class AdaptiveRateLimiter extends RateLimiter
         }
 
         // Update distributed limits if enabled
-        if ($this->distributor) {
+        if ($this->distributor !== null) {
             $key = $this->getCacheKey();
             $currentCount = $this->cache->zcard($key);
             $this->distributor->updateGlobalLimit(
@@ -204,7 +204,7 @@ class AdaptiveRateLimiter extends RateLimiter
     private function getAdjustedLimitFromRules(): int
     {
         $applicableRules = $this->getActiveApplicableRules();
-        if (empty($applicableRules)) {
+        if ($applicableRules === []) {
             return $this->maxAttempts;
         }
 
@@ -281,7 +281,7 @@ class AdaptiveRateLimiter extends RateLimiter
         $rulesKey = Utils::sanitizeCacheKey('rate_limiter_rules:' . $this->limitKey);
         $cachedRules = $this->cache->get($rulesKey);
 
-        if ($cachedRules) {
+        if ($cachedRules !== null) {
             $ruleData = json_decode($cachedRules, true);
             if (is_array($ruleData)) {
                 foreach ($ruleData as $ruleArray) {
@@ -305,7 +305,7 @@ class AdaptiveRateLimiter extends RateLimiter
     /**
      * Get default set of rules
      *
-     * @return array Default rules
+     * @return array<RateLimiterRule> Default rules
      */
     private function getDefaultRules(): array
     {
@@ -389,14 +389,14 @@ class AdaptiveRateLimiter extends RateLimiter
      */
     private function computeBehaviorScore(): void
     {
-        if (empty($this->trackingId)) {
+        if ($this->trackingId === '') {
             return;
         }
 
         $behaviorKey = self::BEHAVIOR_PREFIX . $this->trackingId;
         $behaviorData = $this->cache->get($behaviorKey);
 
-        if (!$behaviorData) {
+        if ($behaviorData === null) {
             // No existing behavior profile, start with neutral score
             $this->behaviorScore = 0.25;
             return;
@@ -450,7 +450,7 @@ class AdaptiveRateLimiter extends RateLimiter
      */
     private function updateBehaviorProfile(): void
     {
-        if (empty($this->trackingId)) {
+        if ($this->trackingId === '') {
             return;
         }
 
@@ -458,8 +458,9 @@ class AdaptiveRateLimiter extends RateLimiter
         $existingData = $this->cache->get($behaviorKey);
 
         $profile = [];
-        if ($existingData) {
-            $profile = json_decode($existingData, true) ?: [];
+        if ($existingData !== null) {
+            $decoded = json_decode($existingData, true);
+            $profile = is_array($decoded) ? $decoded : [];
         }
 
         // Update basic metrics

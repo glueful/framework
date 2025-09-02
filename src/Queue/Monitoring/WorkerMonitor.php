@@ -57,7 +57,7 @@ class WorkerMonitor
      * Register a new worker
      *
      * @param string $workerUuid Worker UUID
-     * @param array $workerData Worker information
+     * @param array<string, mixed> $workerData Worker information
      * @return void
      */
     public function registerWorker(string $workerUuid, array $workerData): void
@@ -96,7 +96,7 @@ class WorkerMonitor
      * Update worker heartbeat
      *
      * @param string $workerUuid Worker UUID
-     * @param array $data Heartbeat data
+     * @param array<string, mixed> $data Heartbeat data
      * @return void
      */
     public function updateWorkerHeartbeat(string $workerUuid, array $data): void
@@ -131,7 +131,7 @@ class WorkerMonitor
      * Unregister worker
      *
      * @param string $workerUuid Worker UUID
-     * @param array $finalStats Final worker statistics
+     * @param array<string, mixed> $finalStats Final worker statistics
      * @return void
      */
     public function unregisterWorker(string $workerUuid, array $finalStats = []): void
@@ -244,7 +244,7 @@ class WorkerMonitor
     /**
      * Get active workers
      *
-     * @return array Active worker list
+     * @return array<int, array<string, mixed>> Active worker list
      */
     public function getActiveWorkers(): array
     {
@@ -266,7 +266,7 @@ class WorkerMonitor
      * Get worker statistics
      *
      * @param string|null $workerUuid Specific worker UUID (optional)
-     * @return array Worker statistics
+     * @return array<int, array<string, mixed>> Worker statistics
      */
     public function getWorkerStats(?string $workerUuid = null): array
     {
@@ -275,7 +275,7 @@ class WorkerMonitor
         }
 
         $query = $this->db->table($this->workersTable)->select(['*']);
-        if ($workerUuid) {
+        if ($workerUuid !== null) {
             $query->where('uuid', $workerUuid);
         }
         $workers = $query->get();
@@ -295,7 +295,7 @@ class WorkerMonitor
                 'jobs_failed' => (int) $worker['jobs_failed'],
                 'memory_usage' => (int) $worker['memory_usage'],
                 'memory_peak' => (int) $worker['memory_peak'],
-                'uptime' => $worker['started_at'] ?
+                'uptime' => $worker['started_at'] !== null ?
                     time() - strtotime($worker['started_at']) : 0
             ];
         }
@@ -306,8 +306,8 @@ class WorkerMonitor
     /**
      * Get job processing metrics
      *
-     * @param array $filters Filters for metrics
-     * @return array Job metrics
+     * @param array<string, mixed> $filters Filters for metrics
+     * @return array<int, array<string, mixed>> Job metrics
      */
     public function getJobMetrics(array $filters = []): array
     {
@@ -344,7 +344,7 @@ class WorkerMonitor
      * Get performance statistics
      *
      * @param string|null $queue Specific queue (optional)
-     * @return array Performance stats
+     * @return array<string, mixed> Performance stats
      */
     public function getPerformanceStats(?string $queue = null): array
     {
@@ -354,21 +354,21 @@ class WorkerMonitor
 
         // Get basic stats
         $totalQuery = $this->db->table($this->metricsTable);
-        if ($queue) {
+        if ($queue !== null) {
             $totalQuery->where('queue', $queue);
         }
         $totalJobs = $totalQuery->count();
 
         $completedQuery = $this->db->table($this->metricsTable)
             ->where('status', 'completed');
-        if ($queue) {
+        if ($queue !== null) {
             $completedQuery->where('queue', $queue);
         }
         $completedJobs = $completedQuery->count();
 
         $failedQuery = $this->db->table($this->metricsTable)
             ->where('status', 'failed');
-        if ($queue) {
+        if ($queue !== null) {
             $failedQuery->where('queue', $queue);
         }
         $failedJobs = $failedQuery->count();
@@ -380,7 +380,7 @@ class WorkerMonitor
                 ->selectRaw('AVG(processing_time) as avg_time')
                 ->where('status', 'completed');
 
-            if ($queue) {
+            if ($queue !== null) {
                 $query->where('queue', $queue);
             }
 
