@@ -24,7 +24,7 @@ class Choice extends Constraint
     /** @var string Error message for multiple choices */
     public string $multipleMessage = 'One or more of the given values for {{ field }} is invalid.';
 
-    /** @var array Available choices */
+    /** @var array<mixed> Available choices */
     public array $choices = [];
 
     /** @var bool Whether multiple choices are allowed */
@@ -42,14 +42,14 @@ class Choice extends Constraint
     /**
      * Constructor
      *
-     * @param array $choices Available choices
+     * @param array<mixed> $choices Available choices
      * @param bool $multiple Whether multiple choices are allowed
      * @param int|null $min Minimum number of choices
      * @param int|null $max Maximum number of choices
      * @param string|null $message Custom error message
      * @param string|null $multipleMessage Custom multiple choices message
      * @param array<string> $groups Validation groups
-     * @param array $options Additional options
+     * @param array<string, mixed> $options Additional options
      */
     public function __construct(
         array $choices = [],
@@ -59,7 +59,7 @@ class Choice extends Constraint
         ?string $message = null,
         ?string $multipleMessage = null,
         array $groups = [],
-        array $options = []
+        /** @var array<string, mixed> */ array $options = []
     ) {
         $this->choices = $choices;
         $this->multiple = $multiple;
@@ -74,7 +74,7 @@ class Choice extends Constraint
             $this->multipleMessage = $multipleMessage;
         }
 
-        $this->groups = !empty($groups) ? $groups : null;
+        $this->groups = count($groups) > 0 ? $groups : null;
 
         parent::__construct($options);
     }

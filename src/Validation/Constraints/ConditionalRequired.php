@@ -57,7 +57,7 @@ class ConditionalRequired extends Constraint
      * @param string $operator Comparison operator
      * @param string|null $message Custom error message
      * @param array<string> $groups Validation groups
-     * @param array $options Additional options
+     * @param array<string, mixed> $options Additional options
      */
     public function __construct(
         string $when,
@@ -66,7 +66,7 @@ class ConditionalRequired extends Constraint
         string $operator = 'equals',
         ?string $message = null,
         array $groups = [],
-        array $options = []
+        /** @var array<string, mixed> */ array $options = []
     ) {
         $this->when = $when;
         $this->field = $field;
@@ -77,7 +77,7 @@ class ConditionalRequired extends Constraint
             $this->message = $message;
         }
 
-        $this->groups = !empty($groups) ? $groups : null;
+        $this->groups = count($groups) > 0 ? $groups : null;
 
         parent::__construct($options);
     }
@@ -95,7 +95,7 @@ class ConditionalRequired extends Constraint
     /**
      * Get the targets for this constraint
      *
-     * @return string|array The validation target(s)
+     * @return 'class'|'property'|array<'class'|'property'> The validation target(s)
      */
     public function getTargets(): string|array
     {

@@ -32,8 +32,8 @@ class ConditionalBuilder
     /**
      * Apply constraints when condition is met
      *
-     * @param array $constraints Constraint rules to apply
-     * @return array Conditional constraint configuration
+     * @param array<string, mixed> $constraints Constraint rules to apply
+     * @return array<string, mixed> Conditional constraint configuration
      */
     public function then(array $constraints): array
     {

@@ -16,13 +16,20 @@ use ReflectionProperty;
  */
 class ConstraintCompiler
 {
+    /** @var CacheStore<mixed> */
     private CacheStore $cache;
+    /** @var array<string, mixed> */
     private array $config;
+    /** @var array<string, mixed> */
     private array $compiledConstraints = [];
 
     /** @var array<string, float> Performance metrics */
     private array $metrics = [];
 
+    /**
+     * @param CacheStore<mixed> $cache
+     * @param array<string, mixed> $config
+     */
     public function __construct(
         CacheStore $cache,
         array $config = []
@@ -35,14 +42,14 @@ class ConstraintCompiler
      * Compile constraints for a class and cache them
      *
      * @param string $className Class name to compile constraints for
-     * @return array Compiled constraints
+     * @return array<string, mixed> Compiled constraints
      */
     public function compileConstraints(string $className): array
     {
         $startTime = microtime(true);
 
         // Check cache first
-        if ($this->config['enable_cache']) {
+        if (($this->config['enable_cache'] ?? false) === true) {
             $cacheKey = $this->getCacheKey($className);
             $cached = $this->cache->get($cacheKey);
 
@@ -56,7 +63,7 @@ class ConstraintCompiler
         $constraints = $this->buildConstraints($className);
 
         // Cache compiled constraints
-        if ($this->config['enable_cache']) {
+        if (($this->config['enable_cache'] ?? false) === true) {
             $this->cache->set($cacheKey, $constraints, $this->config['cache_ttl']);
         }
 
@@ -68,7 +75,7 @@ class ConstraintCompiler
      * Build constraints for a class using reflection
      *
      * @param string $className Class name
-     * @return array Compiled constraints
+     * @return array<string, mixed> Compiled constraints
      */
     private function buildConstraints(string $className): array
     {
@@ -89,8 +96,8 @@ class ConstraintCompiler
     /**
      * Get class-level constraints
      *
-     * @param ReflectionClass $reflection Class reflection
-     * @return array Class constraints
+     * @param ReflectionClass<object> $reflection Class reflection
+     * @return array<int, mixed> Class constraints
      */
     private function getClassConstraints(ReflectionClass $reflection): array
     {
@@ -116,8 +123,8 @@ class ConstraintCompiler
     /**
      * Get property-level constraints
      *
-     * @param ReflectionClass $reflection Class reflection
-     * @return array Property constraints
+     * @param ReflectionClass<object> $reflection Class reflection
+     * @return array<string, mixed> Property constraints
      */
     private function getPropertyConstraints(ReflectionClass $reflection): array
     {
@@ -127,7 +134,7 @@ class ConstraintCompiler
         foreach ($properties as $property) {
             $propertyConstraints = $this->getPropertyConstraintData($property);
 
-            if (!empty($propertyConstraints)) {
+            if ($propertyConstraints !== []) {
                 $constraints[$property->getName()] = $propertyConstraints;
             }
         }
@@ -139,7 +146,7 @@ class ConstraintCompiler
      * Get constraint data for a property
      *
      * @param ReflectionProperty $property Property reflection
-     * @return array Property constraints
+     * @return array<int, mixed> Property constraints
      */
     private function getPropertyConstraintData(ReflectionProperty $property): array
     {
@@ -166,8 +173,8 @@ class ConstraintCompiler
     /**
      * Get class metadata for validation
      *
-     * @param ReflectionClass $reflection Class reflection
-     * @return array Class metadata
+     * @param ReflectionClass<object> $reflection Class reflection
+     * @return array<string, mixed> Class metadata
      */
     private function getClassMetadata(ReflectionClass $reflection): array
     {
@@ -209,7 +216,7 @@ class ConstraintCompiler
             try {
                 $reflection = new ReflectionClass($className);
                 return $reflection->isSubclassOf('Symfony\\Component\\Validator\\Constraint');
-            } catch (\Exception $e) {
+            } catch (\Exception) {
                 return false;
             }
         }
@@ -220,7 +227,7 @@ class ConstraintCompiler
     /**
      * Get cache key for a class
      *
-     * @param string $className Class name
+     * @param class-string $className Class name
      * @return string Cache key
      */
     private function getCacheKey(string $className): string
@@ -232,7 +239,7 @@ class ConstraintCompiler
     /**
      * Get hash for a class (for cache invalidation)
      *
-     * @param ReflectionClass $reflection Class reflection
+     * @param ReflectionClass<object> $reflection Class reflection
      * @return string Class hash
      */
     private function getClassHash(ReflectionClass $reflection): string
@@ -250,7 +257,7 @@ class ConstraintCompiler
      * Precompile constraints for multiple classes
      *
      * @param array<string> $classNames Array of class names
-     * @return array Compilation results
+     * @return array<string, mixed> Compilation results
      */
     public function precompileConstraints(array $classNames): array
     {
@@ -281,7 +288,7 @@ class ConstraintCompiler
     /**
      * Count constraints in compiled data
      *
-     * @param array $constraints Compiled constraints
+     * @param array<string, mixed> $constraints Compiled constraints
      * @return int Total constraint count
      */
     private function countConstraints(array $constraints): int
@@ -303,7 +310,7 @@ class ConstraintCompiler
      */
     public function clearCache(?string $className = null): bool
     {
-        if ($className) {
+        if ($className !== null) {
             $cacheKey = $this->getCacheKey($className);
             return $this->cache->delete($cacheKey);
         }
@@ -315,7 +322,7 @@ class ConstraintCompiler
     /**
      * Get compilation statistics
      *
-     * @return array Statistics
+     * @return array<string, mixed> Statistics
      */
     public function getStatistics(): array
     {
@@ -332,11 +339,11 @@ class ConstraintCompiler
      * Warm up constraint cache for common DTOs
      *
      * @param array<string> $dtoClasses Array of DTO class names
-     * @return array Warm-up results
+     * @return array<string, mixed> Warm-up results
      */
     public function warmupCache(array $dtoClasses = []): array
     {
-        if (empty($dtoClasses)) {
+        if ($dtoClasses === []) {
             $dtoClasses = $this->discoverDTOClasses();
         }
 
@@ -386,7 +393,7 @@ class ConstraintCompiler
     /**
      * Get default configuration
      *
-     * @return array Default config
+     * @return array<string, mixed> Default config
      */
     private function getDefaultConfig(): array
     {

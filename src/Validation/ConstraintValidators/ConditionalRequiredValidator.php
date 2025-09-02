@@ -113,7 +113,7 @@ class ConditionalRequiredValidator extends ConstraintValidator
      */
     private function isEmpty(mixed $value): bool
     {
-        return $value === null || $value === '' || (is_array($value) && empty($value));
+        return $value === null || $value === '' || (is_array($value) && count($value) === 0);
     }
 
     /**

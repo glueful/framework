@@ -34,7 +34,7 @@ class ChoiceValidator extends ConstraintValidator
             return;
         }
 
-        if (empty($constraint->choices)) {
+        if (count($constraint->choices) === 0) {
             $this->context->buildViolation('No choices provided for {{ field }}.')
                 ->setParameter('{{ field }}', $this->context->getPropertyName())
                 ->addViolation();

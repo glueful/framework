@@ -11,13 +11,13 @@ namespace Glueful\Validation;
  */
 class CollectionBuilder
 {
-    /** @var array Field constraints */
+    /** @var array<string, mixed> Field constraints */
     private array $fields;
 
     /**
      * Constructor
      *
-     * @param array $fields Field constraints
+     * @param array<string, mixed> $fields Field constraints
      */
     public function __construct(array $fields)
     {
@@ -27,7 +27,7 @@ class CollectionBuilder
     /**
      * Build collection constraint configuration
      *
-     * @return array Collection constraint configuration
+     * @return array<string, mixed> Collection constraint configuration
      */
     public function build(): array
     {

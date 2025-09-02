@@ -20,9 +20,10 @@ class LazyValidationProvider
 {
     private ContainerInterface $container;
     private ConstraintCompiler $compiler;
+    /** @var array<string, mixed> Configuration settings */
     private array $config;
 
-    /** @var array<string, array> Cache for loaded constraints */
+    /** @var array<string, array<mixed>> Cache for loaded constraints */
     private array $constraintCache = [];
 
     /** @var array<string, bool> Track which classes have been loaded */
@@ -31,6 +32,9 @@ class LazyValidationProvider
     /** @var array<string, float> Performance metrics */
     private array $metrics = [];
 
+    /**
+     * @param array<string, mixed> $config
+     */
     public function __construct(
         ContainerInterface $container,
         ConstraintCompiler $compiler,
@@ -45,7 +49,7 @@ class LazyValidationProvider
      * Get constraints for a class (lazy loaded)
      *
      * @param string $className Class name
-     * @return array Array of constraints
+     * @return array<string, mixed> Array of constraints
      */
     public function getConstraintsFor(string $className): array
     {
@@ -61,7 +65,7 @@ class LazyValidationProvider
         $constraints = $this->loadConstraints($className);
 
         // Cache for future use
-        if ($this->config['cache_constraints']) {
+        if ($this->config['cache_constraints'] === true) {
             $this->constraintCache[$className] = $constraints;
         }
 
@@ -73,7 +77,7 @@ class LazyValidationProvider
      * Load constraints for a class
      *
      * @param string $className Class name
-     * @return array Loaded constraints
+     * @return array<string, mixed> Loaded constraints
      */
     private function loadConstraints(string $className): array
     {
@@ -94,7 +98,7 @@ class LazyValidationProvider
      * Load compiled constraints
      *
      * @param string $className Class name
-     * @return array Compiled constraints
+     * @return array<string, mixed> Compiled constraints
      */
     private function loadCompiledConstraints(string $className): array
     {
@@ -107,7 +111,7 @@ class LazyValidationProvider
      * Load constraints using reflection
      *
      * @param string $className Class name
-     * @return array Reflection-based constraints
+     * @return array<string, mixed> Reflection-based constraints
      */
     private function loadReflectionConstraints(string $className): array
     {
@@ -123,17 +127,17 @@ class LazyValidationProvider
     /**
      * Get class-level constraints via reflection
      *
-     * @param ReflectionClass $reflection Class reflection
-     * @return array Class constraints
+     * @param ReflectionClass<object> $reflection Class reflection
+     * @return array<Constraint> Class constraints
      */
-    private function getClassConstraints(ReflectionClass $reflection): array
+    private function getClassConstraints(\ReflectionClass $reflection): array
     {
         $constraints = [];
         $attributes = $reflection->getAttributes();
 
         foreach ($attributes as $attribute) {
             $constraint = $this->createConstraintFromAttribute($attribute);
-            if ($constraint) {
+            if ($constraint !== null) {
                 $constraints[] = $constraint;
             }
         }
@@ -144,10 +148,10 @@ class LazyValidationProvider
     /**
      * Get property-level constraints via reflection
      *
-     * @param ReflectionClass $reflection Class reflection
-     * @return array Property constraints
+     * @param ReflectionClass<object> $reflection Class reflection
+     * @return array<string, array<Constraint>> Property constraints
      */
-    private function getPropertyConstraints(ReflectionClass $reflection): array
+    private function getPropertyConstraints(\ReflectionClass $reflection): array
     {
         $constraints = [];
         $properties = $reflection->getProperties();
@@ -155,7 +159,7 @@ class LazyValidationProvider
         foreach ($properties as $property) {
             $propertyConstraints = $this->getPropertyConstraintInstances($property);
 
-            if (!empty($propertyConstraints)) {
+            if (count($propertyConstraints) > 0) {
                 $constraints[$property->getName()] = $propertyConstraints;
             }
         }
@@ -167,7 +171,7 @@ class LazyValidationProvider
      * Get constraint instances for a property
      *
      * @param ReflectionProperty $property Property reflection
-     * @return array Property constraints
+     * @return array<Constraint> Property constraints
      */
     private function getPropertyConstraintInstances(ReflectionProperty $property): array
     {
@@ -176,7 +180,7 @@ class LazyValidationProvider
 
         foreach ($attributes as $attribute) {
             $constraint = $this->createConstraintFromAttribute($attribute);
-            if ($constraint) {
+            if ($constraint !== null) {
                 $constraints[] = $constraint;
             }
         }
@@ -187,7 +191,7 @@ class LazyValidationProvider
     /**
      * Create constraint instance from attribute
      *
-     * @param \ReflectionAttribute $attribute Attribute reflection
+     * @param \ReflectionAttribute<object> $attribute Attribute reflection
      * @return Constraint|null Constraint instance or null
      */
     private function createConstraintFromAttribute(\ReflectionAttribute $attribute): ?Constraint
@@ -232,8 +236,8 @@ class LazyValidationProvider
     /**
      * Transform compiled constraints to usable format
      *
-     * @param array $compiledConstraints Compiled constraints
-     * @return array Transformed constraints
+     * @param array<string, mixed> $compiledConstraints Compiled constraints
+     * @return array<string, mixed> Transformed constraints
      */
     private function transformCompiledConstraints(array $compiledConstraints): array
     {
@@ -245,7 +249,7 @@ class LazyValidationProvider
         // Transform class constraints
         foreach ($compiledConstraints['class'] as $constraintData) {
             $constraint = $this->createConstraintFromData($constraintData);
-            if ($constraint) {
+            if ($constraint !== null) {
                 $constraints['class'][] = $constraint;
             }
         }
@@ -256,7 +260,7 @@ class LazyValidationProvider
 
             foreach ($propertyConstraints as $constraintData) {
                 $constraint = $this->createConstraintFromData($constraintData);
-                if ($constraint) {
+                if ($constraint !== null) {
                     $constraints['properties'][$propertyName][] = $constraint;
                 }
             }
@@ -268,7 +272,7 @@ class LazyValidationProvider
     /**
      * Create constraint instance from compiled data
      *
-     * @param array $constraintData Constraint data
+     * @param array<string, mixed> $constraintData Constraint data
      * @return Constraint|null Constraint instance or null
      */
     private function createConstraintFromData(array $constraintData): ?Constraint
@@ -292,7 +296,7 @@ class LazyValidationProvider
      * Preload constraints for multiple classes
      *
      * @param array<string> $classNames Array of class names
-     * @return array Preload results
+     * @return array<string, mixed> Preload results
      */
     public function preloadConstraints(array $classNames): array
     {
@@ -323,7 +327,7 @@ class LazyValidationProvider
     /**
      * Count constraints in constraint array
      *
-     * @param array $constraints Constraints array
+     * @param array<string, mixed> $constraints Constraints array
      * @return int Total constraint count
      */
     private function countConstraints(array $constraints): int
@@ -366,7 +370,7 @@ class LazyValidationProvider
      */
     public function clearCache(?string $className = null): bool
     {
-        if ($className) {
+        if ($className !== null) {
             unset($this->constraintCache[$className]);
             unset($this->loadedClasses[$className]);
             return true;
@@ -380,7 +384,7 @@ class LazyValidationProvider
     /**
      * Get performance statistics
      *
-     * @return array Performance statistics
+     * @return array<string, mixed> Performance statistics
      */
     public function getStatistics(): array
     {
@@ -396,14 +400,14 @@ class LazyValidationProvider
     /**
      * Get metrics summary
      *
-     * @return array Metrics summary
+     * @return array<string, mixed> Metrics summary
      */
     private function getMetricsSummary(): array
     {
         $summary = [];
 
         foreach ($this->metrics as $metric => $values) {
-            if (is_array($values) && !empty($values)) {
+            if (is_array($values) && count($values) > 0) {
                 $summary[$metric] = [
                     'count' => count($values),
                     'total' => array_sum($values),
@@ -429,7 +433,7 @@ class LazyValidationProvider
      * Optimize constraint loading for production
      *
      * @param array<string> $frequentClasses Classes that are validated frequently
-     * @return array Optimization results
+     * @return array<string, mixed> Optimization results
      */
     public function optimizeForProduction(array $frequentClasses): array
     {
@@ -468,7 +472,7 @@ class LazyValidationProvider
     /**
      * Get default configuration
      *
-     * @return array Default config
+     * @return array<string, mixed> Default config
      */
     private function getDefaultConfig(): array
     {
@@ -483,7 +487,7 @@ class LazyValidationProvider
     /**
      * Get cache memory usage
      *
-     * @return array Memory usage information
+     * @return array<string, mixed> Memory usage information
      */
     public function getCacheMemoryUsage(): array
     {

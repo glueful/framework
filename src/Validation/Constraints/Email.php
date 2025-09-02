@@ -33,20 +33,20 @@ class Email extends Constraint
      * @param string|null $message Custom error message
      * @param string $mode Validation mode (html5, html5-allow-no-tld, strict)
      * @param array<string> $groups Validation groups
-     * @param array $options Additional options
+     * @param array<string, mixed> $options Additional options
      */
     public function __construct(
         ?string $message = null,
         string $mode = 'html5',
         array $groups = [],
-        array $options = []
+        /** @var array<string, mixed> */ array $options = []
     ) {
         if ($message !== null) {
             $this->message = $message;
         }
 
         $this->mode = $mode;
-        $this->groups = !empty($groups) ? $groups : null;
+        $this->groups = count($groups) > 0 ? $groups : null;
 
         parent::__construct($options);
     }

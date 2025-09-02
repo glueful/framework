@@ -48,7 +48,7 @@ class UniqueValidator extends ConstraintValidator
             return;
         }
 
-        $column = $constraint->column ?: $this->context->getPropertyName();
+        $column = $constraint->column !== '' ? $constraint->column : $this->context->getPropertyName();
 
         // Build base query using fluent interface
         $query = $this->db->table($constraint->table)
@@ -56,12 +56,12 @@ class UniqueValidator extends ConstraintValidator
             ->where($column, $value);
 
         // Add ignore condition if specified
-        if ($constraint->ignoreId && $constraint->ignoreValue !== null) {
+        if ($constraint->ignoreId !== null && $constraint->ignoreValue !== null) {
             $query->where($constraint->ignoreId, '!=', $constraint->ignoreValue);
         }
 
         // Add additional conditions
-        if (!empty($constraint->conditions)) {
+        if (count($constraint->conditions) > 0) {
             foreach ($constraint->conditions as $condColumn => $condValue) {
                 $query->where($condColumn, $condValue);
             }

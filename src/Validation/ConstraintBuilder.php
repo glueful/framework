@@ -123,7 +123,7 @@ class ConstraintBuilder
     /**
      * Add Choice constraint
      *
-     * @param array $choices Available choices
+     * @param array<int|string, mixed> $choices Available choices
      * @param bool $multiple Allow multiple selections
      * @param array<string> $groups Validation groups
      * @return self
@@ -165,7 +165,7 @@ class ConstraintBuilder
     /**
      * Build constraint instances
      *
-     * @return array Array of constraint instances
+     * @return array<int, mixed> Array of constraint instances
      */
     public function build(): array
     {
@@ -224,7 +224,7 @@ class ConstraintBuilder
     /**
      * Create a collection constraint builder
      *
-     * @param array $fields Field constraints
+     * @param array<string, mixed> $fields Field constraints
      * @return CollectionBuilder
      */
     public static function collection(array $fields): CollectionBuilder

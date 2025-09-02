@@ -30,7 +30,7 @@ class RequiredValidator extends ConstraintValidator
         }
 
         // Consider null, empty string, and empty arrays as invalid
-        if ($value === null || $value === '' || (is_array($value) && empty($value))) {
+        if ($value === null || $value === '' || (is_array($value) && count($value) === 0)) {
             $this->context->buildViolation($constraint->message)
                 ->setParameter('{{ field }}', $this->context->getPropertyName())
                 ->addViolation();

@@ -45,7 +45,7 @@ class Range extends Constraint
      * @param string|null $maxMessage Custom maximum message
      * @param string|null $notInRangeMessage Custom range message
      * @param array<string> $groups Validation groups
-     * @param array $options Additional options
+     * @param array<string, mixed> $options Additional options
      */
     public function __construct(
         int|float|null $min = null,
@@ -54,7 +54,7 @@ class Range extends Constraint
         ?string $maxMessage = null,
         ?string $notInRangeMessage = null,
         array $groups = [],
-        array $options = []
+        /** @var array<string, mixed> */ array $options = []
     ) {
         $this->min = $min;
         $this->max = $max;
@@ -71,7 +71,7 @@ class Range extends Constraint
             $this->notInRangeMessage = $notInRangeMessage;
         }
 
-        $this->groups = !empty($groups) ? $groups : null;
+        $this->groups = count($groups) > 0 ? $groups : null;
 
         parent::__construct($options);
     }

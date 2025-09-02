@@ -55,7 +55,7 @@ class SanitizationProcessor
     {
         $attributes = $property->getAttributes(Sanitize::class);
 
-        if (empty($attributes)) {
+        if (count($attributes) === 0) {
             return;
         }
 
@@ -77,7 +77,7 @@ class SanitizationProcessor
      * Apply sanitization filters to a value
      *
      * @param mixed $value The value to sanitize
-     * @param array $filterNames Array of filter names to apply
+     * @param array<string> $filterNames Array of filter names to apply
      * @return mixed The sanitized value
      */
     private function applyFilters(mixed $value, array $filterNames): mixed
@@ -113,7 +113,7 @@ class SanitizationProcessor
                 strtoupper($value) : $value,
 
             'sanitize_string' => fn($value) => is_string($value) ?
-                filter_var(trim($value), FILTER_SANITIZE_STRING) : $value,
+                filter_var(trim($value), FILTER_SANITIZE_FULL_SPECIAL_CHARS) : $value,
 
             'remove_whitespace' => fn($value) => is_string($value) ?
                 preg_replace('/\s+/', '', $value) : $value,
@@ -127,7 +127,7 @@ class SanitizationProcessor
             'floatval' => fn($value) => is_numeric($value) ? (float) $value : $value,
 
             'boolval' => fn($value) => is_bool($value) ? $value :
-                (in_array(strtolower((string) $value), ['true', '1', 'yes', 'on']) ? true : false),
+                (in_array(strtolower((string) $value), ['true', '1', 'yes', 'on'], true) ? true : false),
 
             'remove_html' => fn($value) => is_string($value) ?
                 preg_replace('/<[^>]*>/', '', $value) : $value,

@@ -30,7 +30,7 @@ class Sanitize
     /**
      * Constructor
      *
-     * @param array $filters Array of sanitization filters to apply
+     * @param array<int, string> $filters Array of sanitization filters to apply
      */
     public function __construct(public array $filters)
     {

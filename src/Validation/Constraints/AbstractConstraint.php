@@ -39,14 +39,14 @@ abstract class AbstractConstraint extends Constraint
      *
      * @param array<string> $groups Validation groups
      * @param mixed $payload Additional payload data
-     * @param array $options Additional constraint options
+     * @param array<string, mixed> $options Additional constraint options
      */
     public function __construct(
         array $groups = [],
         mixed $payload = null,
-        array $options = []
+        /** @var array<string, mixed> */ array $options = []
     ) {
-        $this->groups = !empty($groups) ? $groups : null;
+        $this->groups = count($groups) > 0 ? $groups : null;
         $this->payload = $payload;
 
         parent::__construct($options);
@@ -81,7 +81,7 @@ abstract class AbstractConstraint extends Constraint
     /**
      * Get constraint metadata for documentation and tooling
      *
-     * @return array Constraint metadata
+     * @return array<string, mixed> Constraint metadata
      */
     public function getMetadata(): array
     {
@@ -106,7 +106,7 @@ abstract class AbstractConstraint extends Constraint
 
         foreach ($reflection->getProperties(\ReflectionProperty::IS_PUBLIC) as $property) {
             $name = $property->getName();
-            $properties[$name] = $this->$name;
+            $properties[$name] = $property->getValue($this);
         }
 
         return $properties;
@@ -134,7 +134,7 @@ abstract class AbstractConstraint extends Constraint
         }
 
         $parts = explode('\\', static::class);
-        $extensionIndex = array_search('Extensions', $parts);
+        $extensionIndex = array_search('Extensions', $parts, true);
 
         return $extensionIndex !== false && isset($parts[$extensionIndex + 1])
             ? $parts[$extensionIndex + 1]

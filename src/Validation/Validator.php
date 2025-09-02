@@ -71,7 +71,7 @@ class Validator
      * violations and stores them in a user-friendly format.
      *
      * @param object $dto Data Transfer Object to validate
-     * @param array|null $groups Validation groups to apply (null for default group)
+     * @param array<string>|null $groups Validation groups to apply (null for default group)
      * @return bool True if validation passes, false otherwise
      */
     public function validate(object $dto, ?array $groups = null): bool
@@ -135,7 +135,7 @@ class Validator
      */
     public function hasErrors(): bool
     {
-        return !empty($this->errors);
+        return count($this->errors) > 0;
     }
 
     /**
@@ -146,7 +146,7 @@ class Validator
      */
     public function hasError(string $property): bool
     {
-        return isset($this->errors[$property]) && !empty($this->errors[$property]);
+        return isset($this->errors[$property]) && count($this->errors[$property]) > 0;
     }
 
     /**
@@ -211,11 +211,11 @@ class Validator
      * Returns performance metrics from the lazy validation provider
      * for monitoring and optimization purposes.
      *
-     * @return array Performance statistics
+     * @return array<string, mixed> Performance statistics
      */
     public function getPerformanceStatistics(): array
     {
-        if (!$this->lazyProvider) {
+        if ($this->lazyProvider === null) {
             return [
                 'lazy_provider_enabled' => false,
                 'message' => 'LazyValidationProvider not available',
@@ -236,11 +236,11 @@ class Validator
      * to improve performance in production environments.
      *
      * @param array<string> $dtoClasses Array of DTO class names to warm up
-     * @return array Warm-up results
+     * @return array<string, mixed> Warm-up results
      */
     public function warmupValidationCache(array $dtoClasses): array
     {
-        if (!$this->lazyProvider) {
+        if ($this->lazyProvider === null) {
             return [
                 'success' => false,
                 'message' => 'LazyValidationProvider not available',
@@ -264,7 +264,7 @@ class Validator
      */
     public function clearValidationCache(?string $className = null): bool
     {
-        if (!$this->lazyProvider) {
+        if ($this->lazyProvider === null) {
             return false;
         }
 

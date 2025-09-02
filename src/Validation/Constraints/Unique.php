@@ -44,7 +44,7 @@ class Unique extends Constraint
     /** @var mixed Value of ID to ignore during updates */
     public mixed $ignoreValue = null;
 
-    /** @var array Additional where conditions */
+    /** @var array<string, mixed> Additional where conditions */
     public array $conditions = [];
 
     /** @var array<string>|null Validation groups */
@@ -57,10 +57,10 @@ class Unique extends Constraint
      * @param string $column Column name to check
      * @param string|null $ignoreId ID field name to ignore
      * @param mixed $ignoreValue Value of ID to ignore
-     * @param array $conditions Additional where conditions
+     * @param array<string, mixed> $conditions Additional where conditions
      * @param string|null $message Custom error message
      * @param array<string> $groups Validation groups
-     * @param array $options Additional options
+     * @param array<string, mixed> $options Additional options
      */
     public function __construct(
         string $table,
@@ -70,7 +70,7 @@ class Unique extends Constraint
         array $conditions = [],
         ?string $message = null,
         array $groups = [],
-        array $options = []
+        /** @var array<string, mixed> */ array $options = []
     ) {
         $this->table = $table;
         $this->column = $column;
@@ -82,7 +82,7 @@ class Unique extends Constraint
             $this->message = $message;
         }
 
-        $this->groups = !empty($groups) ? $groups : null;
+        $this->groups = count($groups) > 0 ? $groups : null;
 
         parent::__construct($options);
     }

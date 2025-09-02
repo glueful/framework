@@ -183,7 +183,7 @@ class Groups
             default => null,
         };
 
-        if ($operationGroup) {
+        if ($operationGroup !== null) {
             $groups[] = $operationGroup;
         }
 
@@ -198,7 +198,7 @@ class Groups
             default => null,
         };
 
-        if ($contextGroup) {
+        if ($contextGroup !== null) {
             $groups[] = $contextGroup;
         }
 

@@ -51,7 +51,7 @@ class FieldsMatch extends Constraint
      * @param bool $caseSensitive Whether comparison should be case sensitive
      * @param string|null $message Custom error message
      * @param array<string> $groups Validation groups
-     * @param array $options Additional options
+     * @param array<string, mixed> $options Additional options
      */
     public function __construct(
         string $field,
@@ -59,17 +59,17 @@ class FieldsMatch extends Constraint
         bool $caseSensitive = true,
         ?string $message = null,
         array $groups = [],
-        array $options = []
+        /** @var array<string, mixed> */ array $options = []
     ) {
         $this->field = $field;
-        $this->otherField = $otherField ?: $field . 'Confirmation';
+        $this->otherField = $otherField !== '' ? $otherField : $field . 'Confirmation';
         $this->caseSensitive = $caseSensitive;
 
         if ($message !== null) {
             $this->message = $message;
         }
 
-        $this->groups = !empty($groups) ? $groups : null;
+        $this->groups = count($groups) > 0 ? $groups : null;
 
         parent::__construct($options);
     }
@@ -87,7 +87,7 @@ class FieldsMatch extends Constraint
     /**
      * Get the targets for this constraint
      *
-     * @return string|array The validation target(s)
+     * @return 'class'|'property'|array<'class'|'property'> The validation target(s)
      */
     public function getTargets(): string|array
     {

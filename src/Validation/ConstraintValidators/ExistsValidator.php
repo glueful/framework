@@ -57,7 +57,7 @@ class ExistsValidator extends ConstraintValidator
             return;
         }
 
-        $column = $constraint->column ?: $this->context->getPropertyName();
+        $column = $constraint->column !== '' ? $constraint->column : $this->context->getPropertyName();
 
         // Build query using fluent interface
         $query = $this->db->table($constraint->table)
@@ -65,7 +65,7 @@ class ExistsValidator extends ConstraintValidator
             ->where($column, $value);
 
         // Add additional conditions
-        if (!empty($constraint->conditions)) {
+        if (count($constraint->conditions) > 0) {
             foreach ($constraint->conditions as $condColumn => $condValue) {
                 $query->where($condColumn, $condValue);
             }

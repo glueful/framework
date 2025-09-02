@@ -38,7 +38,7 @@ class Exists extends Constraint
     /** @var string Column name to check (defaults to property name) */
     public string $column = '';
 
-    /** @var array Additional where conditions */
+    /** @var array<string, mixed> Additional where conditions */
     public array $conditions = [];
 
     /** @var bool Whether to allow null values */
@@ -52,11 +52,11 @@ class Exists extends Constraint
      *
      * @param string $table Database table name
      * @param string $column Column name to check
-     * @param array $conditions Additional where conditions
+     * @param array<string, mixed> $conditions Additional where conditions
      * @param bool $allowNull Whether to allow null values
      * @param string|null $message Custom error message
      * @param array<string> $groups Validation groups
-     * @param array $options Additional options
+     * @param array<string, mixed> $options Additional options
      */
     public function __construct(
         string $table,
@@ -65,7 +65,7 @@ class Exists extends Constraint
         bool $allowNull = true,
         ?string $message = null,
         array $groups = [],
-        array $options = []
+        /** @var array<string, mixed> */ array $options = []
     ) {
         $this->table = $table;
         $this->column = $column;
@@ -76,7 +76,7 @@ class Exists extends Constraint
             $this->message = $message;
         }
 
-        $this->groups = !empty($groups) ? $groups : null;
+        $this->groups = count($groups) > 0 ? $groups : null;
 
         parent::__construct($options);
     }
