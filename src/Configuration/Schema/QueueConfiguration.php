@@ -771,7 +771,8 @@ class QueueConfiguration implements ConfigurationInterface
             ->end()
             ->validate()
                 ->ifTrue(function ($v) {
-                    return $v['security']['encryption']['enabled'] && ($v['security']['encryption']['key'] ?? '') === '';
+                    return $v['security']['encryption']['enabled']
+                        && ($v['security']['encryption']['key'] ?? '') === '';
                 })
                 ->thenInvalid('Encryption key is required when encryption is enabled')
             ->end()

@@ -36,7 +36,9 @@ final class FileUploader
     ) {
         $this->fileManager = $fileManager ?? container()->get(FileManager::class);
         $this->blobRepository = new BlobRepository();
-        $driver = $this->storageDriver !== null && $this->storageDriver !== '' ? $this->storageDriver : config('services.storage.driver');
+        $driver = $this->storageDriver !== null && $this->storageDriver !== ''
+            ? $this->storageDriver
+            : config('services.storage.driver');
         $this->storage = match ($driver) {
             's3' => new S3Storage(),
             default => new LocalStorage(
@@ -91,7 +93,10 @@ final class FileUploader
     {
         $file = isset($key) ? ($fileParams[$key] ?? null) : $fileParams;
 
-        if (!is_array($file) || !isset($file['tmp_name']) || $file['tmp_name'] === '' || !isset($file['error']) || $file['error'] !== UPLOAD_ERR_OK) {
+        if (
+            !is_array($file) || !isset($file['tmp_name']) || $file['tmp_name'] === ''
+            || !isset($file['error']) || $file['error'] !== UPLOAD_ERR_OK
+        ) {
             throw new UploadException('Invalid file upload');
         }
 

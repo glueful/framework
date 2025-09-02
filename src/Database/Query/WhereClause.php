@@ -431,8 +431,12 @@ class WhereClause implements WhereClauseInterface
      *
      * @param string|array<string, mixed>|callable $column
      */
-    protected function addCondition(string|array|callable $column, ?string $operator, mixed $value, string $boolean): void
-    {
+    protected function addCondition(
+        string|array|callable $column,
+        ?string $operator,
+        mixed $value,
+        string $boolean
+    ): void {
         // Handle array format: ['column' => 'value']
         if (is_array($column)) {
             foreach ($column as $col => $val) {

@@ -256,7 +256,8 @@ class MigrationManager
      * - Specific migration file
      * - Provided list of pending migrations (to avoid duplicate queries)
      *
-     * @param  string|array<string>|null $specificFileOrPendingMigrations Optional specific migration file or array of pending
+     * @param  string|array<string>|null $specificFileOrPendingMigrations
+     *                                                            Optional specific migration file or array of pending
      *                                                            migrations
      * @return array{
      *     applied: array<string>,

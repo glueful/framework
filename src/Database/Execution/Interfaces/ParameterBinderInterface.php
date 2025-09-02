@@ -15,7 +15,7 @@ interface ParameterBinderInterface
 {
     /**
      * Flatten bindings to prevent nested arrays
-     * 
+     *
      * @param array<string, mixed> $bindings
      * @return array<string, mixed>
      */
@@ -23,7 +23,7 @@ interface ParameterBinderInterface
 
     /**
      * Bind parameters to a prepared statement
-     * 
+     *
      * @param array<string, mixed> $bindings
      */
     public function bindParameters(\PDOStatement $statement, array $bindings): void;
@@ -35,7 +35,7 @@ interface ParameterBinderInterface
 
     /**
      * Sanitize array of parameters for logging
-     * 
+     *
      * @param array<string, mixed> $bindings
      * @return array<string, mixed>
      */

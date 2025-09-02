@@ -14,7 +14,9 @@ interface TokenStorageInterface
      * Store a new session with tokens in both database and cache
      *
      * @param array<string, mixed> $sessionData Session information including user data
-     * @param array{access_token: string, refresh_token: string, expires_in?: int, token_type?: string}|array<string, mixed> $tokens Token pair
+     * @param array{access_token: string, refresh_token: string, expires_in?: int,
+     *               token_type?: string}|array<string, mixed> $tokens
+     *        Token pair
      * @return bool True on success, false on failure
      */
     public function storeSession(array $sessionData, array $tokens): bool;
@@ -23,7 +25,8 @@ interface TokenStorageInterface
      * Update existing session with new tokens
      *
      * @param string $sessionIdentifier Session ID or refresh token to identify session
-     * @param array{access_token: string, refresh_token: string, expires_in?: int}|array<string, mixed> $newTokens New token pair
+     * @param array{access_token: string, refresh_token: string, expires_in?: int}|array<string, mixed> $newTokens
+     *        New token pair
      * @return bool True on success, false on failure
      */
     public function updateSessionTokens(string $sessionIdentifier, array $newTokens): bool;

@@ -354,7 +354,10 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
         // Register connections for each server
         foreach ($this->ldapConfig['servers'] as $serverId => $config) {
             // Skip servers with incomplete configuration
-            if (!isset($config['hosts']) || $config['hosts'] === [] || !isset($config['base_dn']) || $config['base_dn'] === '') {
+            if (
+                !isset($config['hosts']) || $config['hosts'] === []
+                || !isset($config['base_dn']) || $config['base_dn'] === ''
+            ) {
                 continue;
             }
 
@@ -565,8 +568,9 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
                     // Try to construct from sAMAccountName + domain suffix
                     $sAMAccountName = $ldapUser->getFirstAttribute('sAMAccountName');
                     if (
-                        is_string($sAMAccountName) && $sAMAccountName !== '' &&
-                        isset($serverConfig['account_suffix']) && is_string($serverConfig['account_suffix']) && $serverConfig['account_suffix'] !== ''
+                        is_string($sAMAccountName) && $sAMAccountName !== ''
+                        && isset($serverConfig['account_suffix']) && is_string($serverConfig['account_suffix'])
+                        && $serverConfig['account_suffix'] !== ''
                     ) {
                         $userData['email'] = $sAMAccountName . $serverConfig['account_suffix'];
                     } else {
@@ -594,7 +598,10 @@ class LdapAuthenticationProvider implements AuthenticationProviderInterface
             }
 
             // Get group memberships if configured
-            if (isset($serverConfig['group_mapping']) && is_array($serverConfig['group_mapping']) && $serverConfig['group_mapping'] !== []) {
+            if (
+                isset($serverConfig['group_mapping']) && is_array($serverConfig['group_mapping'])
+                && $serverConfig['group_mapping'] !== []
+            ) {
                 $userData['roles'] = $this->getUserRolesFromGroups($ldapUser, $serverId);
             }
 

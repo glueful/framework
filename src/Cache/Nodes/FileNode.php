@@ -164,7 +164,10 @@ class FileNode extends CacheNode
             // Check expiration
             $meta = json_decode(file_get_contents($metaPath), true);
 
-            if (is_array($meta) && isset($meta['expires']) && (int)($meta['expires']) > 0 && (int)($meta['expires']) < time()) {
+            if (
+                is_array($meta) && isset($meta['expires'])
+                && (int)($meta['expires']) > 0 && (int)($meta['expires']) < time()
+            ) {
                 // Expired, delete files
                 unlink($filePath);
                 unlink($metaPath);
@@ -283,7 +286,10 @@ class FileNode extends CacheNode
             // Check expiration
             $meta = json_decode(file_get_contents($metaPath), true);
 
-            if (is_array($meta) && isset($meta['expires']) && (int)($meta['expires']) > 0 && (int)($meta['expires']) < time()) {
+            if (
+                is_array($meta) && isset($meta['expires'])
+                && (int)($meta['expires']) > 0 && (int)($meta['expires']) < time()
+            ) {
                 // Expired
                 return false;
             }
@@ -383,7 +389,7 @@ class FileNode extends CacheNode
 
             if (file_exists($tagPath)) {
                 $result = unserialize(file_get_contents($tagPath));
-            $tagSet = is_array($result) ? $result : [];
+                $tagSet = is_array($result) ? $result : [];
             }
 
             // Add the key with score

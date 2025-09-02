@@ -75,7 +75,8 @@ interface CDNAdapterInterface
     /**
      * Get adapter status
      *
-     * @return array{provider: string, configured: bool, enabled: bool} Status information including connectivity and configuration state
+     * @return array{provider: string, configured: bool, enabled: bool}
+     *         Status information including connectivity and configuration state
      */
     public function getStatus(): array;
 }

@@ -198,7 +198,8 @@ class DatabaseBackup
 
     /**
      * @param array<string, mixed> $parameters
-     * @return array{backup_created: bool, backup_file: string, backup_size: int, old_backups_deleted: int, errors: string[]}
+     * @return array{backup_created: bool, backup_file: string, backup_size: int,
+     *               old_backups_deleted: int, errors: string[]}
      */
     public function handle(array $parameters = []): array
     {

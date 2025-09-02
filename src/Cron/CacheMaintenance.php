@@ -240,7 +240,8 @@ class CacheMaintenance
 
     /**
      * @param array<string, mixed> $parameters
-     * @return array{cache_cleared: bool, expired_keys_removed: int, cache_size_before: int, cache_size_after: int, errors: string[]}
+     * @return array{cache_cleared: bool, expired_keys_removed: int, cache_size_before: int,
+     *               cache_size_after: int, errors: string[]}
      */
     public function handle(array $parameters = []): array
     {

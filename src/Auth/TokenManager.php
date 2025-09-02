@@ -96,7 +96,8 @@ class TokenManager
      * @param array<string, mixed> $userData User data to encode in tokens (must include 'uuid')
      * @param int|null $accessTokenLifetime Access token lifetime in seconds (default from config)
      * @param int|null $refreshTokenLifetime Refresh token lifetime in seconds (default from config)
-     * @return array{access_token: string, refresh_token: string, expires_in: int} Token pair with 'access_token' and 'refresh_token' keys
+     * @return array{access_token: string, refresh_token: string, expires_in: int}
+     *         Token pair with 'access_token' and 'refresh_token' keys
      * @throws \InvalidArgumentException If userData is empty or missing required fields
      * @throws \RuntimeException If JWT key is not configured or token generation fails
      * @throws \Glueful\Exceptions\AuthenticationException If token encoding fails
@@ -358,7 +359,10 @@ class TokenManager
         $normalizedUser['provider'] = $provider ?? 'jwt';
 
         // Ensure profile data exists
-        if (!isset($normalizedUser['profile']) || (is_array($normalizedUser['profile']) && $normalizedUser['profile'] === [])) {
+        if (
+            !isset($normalizedUser['profile'])
+            || (is_array($normalizedUser['profile']) && $normalizedUser['profile'] === [])
+        ) {
             // Try to fetch profile data from database
             $userRepository = new \Glueful\Repository\UserRepository();
             $profileData = $userRepository->getProfile($normalizedUser['uuid']);
@@ -605,7 +609,10 @@ class TokenManager
         }
 
         // Fallback to apache_request_headers() (case-insensitive)
-        if (($authorization_header === null || $authorization_header === '') && function_exists('apache_request_headers')) {
+        if (
+            ($authorization_header === null || $authorization_header === '')
+            && function_exists('apache_request_headers')
+        ) {
             foreach (apache_request_headers() as $name => $value) {
                 if (strcasecmp($name, 'Authorization') === 0) {
                     $authorization_header = $value;
@@ -615,7 +622,10 @@ class TokenManager
         }
 
         // Extract Bearer token using preg_match (handles extra spaces)
-        if ($authorization_header !== null && $authorization_header !== '' && preg_match('/Bearer\s+(.+)/i', $authorization_header, $matches)) {
+        if (
+            $authorization_header !== null && $authorization_header !== ''
+            && preg_match('/Bearer\s+(.+)/i', $authorization_header, $matches)
+        ) {
             return trim($matches[1]);
         }
 

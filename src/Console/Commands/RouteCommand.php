@@ -305,7 +305,8 @@ class RouteCommand extends BaseCommand
             if (file_exists($cacheFile)) {
                 try {
                     $res = include $cacheFile;
-                    $isCacheValid = is_callable($res) || $res instanceof \Symfony\Component\Routing\Matcher\UrlMatcherInterface;
+                    $isCacheValid = is_callable($res)
+                        || $res instanceof \Symfony\Component\Routing\Matcher\UrlMatcherInterface;
                 } catch (\Throwable) {
                     $isCacheValid = false;
                 }
@@ -327,7 +328,8 @@ class RouteCommand extends BaseCommand
 
             // Cache status
             $output->writeln('<info>Cache Status:</info>');
-            $output->writeln("<info>Compiled matcher active:</info> " . (Router::hasCompiledMatcher() ? '✅ Yes' : '❌ No'));
+            $output->writeln("<info>Compiled matcher active:</info> "
+                . (Router::hasCompiledMatcher() ? '✅ Yes' : '❌ No'));
             $hash = \Glueful\Services\RouteHash::computeEnvHash($environment);
             $extCount = \Glueful\Services\RouteHash::countExtensionRouteFiles();
             $output->writeln("<info>Current env/hash:</info> {$environment}/{$hash}");

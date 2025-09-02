@@ -18,12 +18,21 @@ class DevelopmentQueryMonitor
     private static bool $enabled = false;
 
     /**
-     * @var array<int, array{sql: string, normalized_sql: string, params: array<string, mixed>, execution_time: float, purpose: string, timestamp: float, memory_usage: int, backtrace: array<int, array{file: string, line: int, function: string}>, hash: string}> Query execution log
+     * @var array<int, array{sql: string, normalized_sql: string, params: array<string, mixed>,
+     *                       execution_time: float, purpose: string, timestamp: float,
+     *                       memory_usage: int, backtrace: array<int, array{file: string,
+     *                       line: int, function: string}>, hash: string}>
+     *      Query execution log
      */
     private static array $queryLog = [];
 
     /**
-     * @var array<string, array{count: int, first_seen: float, queries: array<int, array{sql: string, normalized_sql: string, params: array<string, mixed>, execution_time: float, purpose: string, timestamp: float, memory_usage: int, backtrace: array<int, array{file: string, line: int, function: string}>, hash: string}>}> N+1 query detection data
+     * @var array<string, array{count: int, first_seen: float,
+     *                          queries: array<int, array{sql: string, normalized_sql: string,
+     *                          params: array<string, mixed>, execution_time: float, purpose: string,
+     *                          timestamp: float, memory_usage: int, backtrace: array<int,
+     *                          array{file: string, line: int, function: string}>, hash: string}>}>
+     *      N+1 query detection data
      */
     private static array $queryPatterns = [];
 
@@ -38,7 +47,8 @@ class DevelopmentQueryMonitor
     private static int $nPlusOneThreshold = 10;
 
     /**
-     * @var array{total_queries: int, total_time: float, slow_queries: int, duplicate_queries: int} Current request query statistics
+     * @var array{total_queries: int, total_time: float, slow_queries: int, duplicate_queries: int}
+     *      Current request query statistics
      */
     private static array $requestStats = [
         'total_queries' => 0,
@@ -109,7 +119,10 @@ class DevelopmentQueryMonitor
     /**
      * Update request statistics
      *
-     * @param array{sql: string, normalized_sql: string, params: array<string, mixed>, execution_time: float, purpose: string, timestamp: float, memory_usage: int, backtrace: array<int, array{file: string, line: int, function: string}>, hash: string} $logEntry
+     * @param array{sql: string, normalized_sql: string, params: array<string, mixed>,
+     *               execution_time: float, purpose: string, timestamp: float,
+     *               memory_usage: int, backtrace: array<int, array{file: string,
+     *               line: int, function: string}>, hash: string} $logEntry
      */
     private static function updateRequestStats(array $logEntry): void
     {
@@ -131,7 +144,10 @@ class DevelopmentQueryMonitor
     /**
      * Detect query patterns for N+1 detection
      *
-     * @param array{sql: string, normalized_sql: string, params: array<string, mixed>, execution_time: float, purpose: string, timestamp: float, memory_usage: int, backtrace: array<int, array{file: string, line: int, function: string}>, hash: string} $logEntry
+     * @param array{sql: string, normalized_sql: string, params: array<string, mixed>,
+     *               execution_time: float, purpose: string, timestamp: float,
+     *               memory_usage: int, backtrace: array<int, array{file: string,
+     *               line: int, function: string}>, hash: string} $logEntry
      */
     private static function detectQueryPatterns(string $originalSql, array $logEntry): void
     {
@@ -157,7 +173,10 @@ class DevelopmentQueryMonitor
     /**
      * Handle slow query detection
      *
-     * @param array{sql: string, normalized_sql: string, params: array<string, mixed>, execution_time: float, purpose: string, timestamp: float, memory_usage: int, backtrace: array<int, array{file: string, line: int, function: string}>, hash: string} $logEntry
+     * @param array{sql: string, normalized_sql: string, params: array<string, mixed>,
+     *               execution_time: float, purpose: string, timestamp: float,
+     *               memory_usage: int, backtrace: array<int, array{file: string,
+     *               line: int, function: string}>, hash: string} $logEntry
      */
     private static function handleSlowQuery(array $logEntry): void
     {
@@ -178,7 +197,11 @@ class DevelopmentQueryMonitor
     /**
      * Handle potential N+1 query detection
      *
-     * @param array{count: int, first_seen: float, queries: array<int, array{sql: string, normalized_sql: string, params: array<string, mixed>, execution_time: float, purpose: string, timestamp: float, memory_usage: int, backtrace: array<int, array{file: string, line: int, function: string}>, hash: string}>} $patternData
+     * @param array{count: int, first_seen: float, queries: array<int,
+     *               array{sql: string, normalized_sql: string, params: array<string, mixed>,
+     *               execution_time: float, purpose: string, timestamp: float,
+     *               memory_usage: int, backtrace: array<int, array{file: string,
+     *               line: int, function: string}>, hash: string}>} $patternData
      */
     private static function handlePotentialNPlusOne(string $pattern, array $patternData): void
     {
@@ -315,7 +338,11 @@ class DevelopmentQueryMonitor
     /**
      * Generate optimization suggestion
      *
-     * @param array{count: int, first_seen: float, queries: array<int, array{sql: string, normalized_sql: string, params: array<string, mixed>, execution_time: float, purpose: string, timestamp: float, memory_usage: int, backtrace: array<int, array{file: string, line: int, function: string}>, hash: string}>} $patternData
+     * @param array{count: int, first_seen: float, queries: array<int,
+     *               array{sql: string, normalized_sql: string, params: array<string, mixed>,
+     *               execution_time: float, purpose: string, timestamp: float,
+     *               memory_usage: int, backtrace: array<int, array{file: string,
+     *               line: int, function: string}>, hash: string}>} $patternData
      */
     private static function generateOptimizationSuggestion(string $pattern, array $patternData): ?string
     {
@@ -364,7 +391,10 @@ class DevelopmentQueryMonitor
     /**
      * Log query to file
      *
-     * @param array{sql: string, normalized_sql: string, params: array<string, mixed>, execution_time: float, purpose: string, timestamp: float, memory_usage: int, backtrace: array<int, array{file: string, line: int, function: string}>, hash: string} $logEntry
+     * @param array{sql: string, normalized_sql: string, params: array<string, mixed>,
+     *               execution_time: float, purpose: string, timestamp: float,
+     *               memory_usage: int, backtrace: array<int, array{file: string,
+     *               line: int, function: string}>, hash: string} $logEntry
      */
     private static function logToFile(array $logEntry): void
     {
@@ -384,7 +414,9 @@ class DevelopmentQueryMonitor
     /**
      * Get current query statistics
      *
-     * @return array{enabled: bool, request_stats: array{total_queries: int, total_time: float, slow_queries: int, duplicate_queries: int}, query_count: int, patterns_detected: int, slow_query_threshold: float}
+     * @return array{enabled: bool, request_stats: array{total_queries: int,
+     *               total_time: float, slow_queries: int, duplicate_queries: int},
+     *               query_count: int, patterns_detected: int, slow_query_threshold: float}
      */
     public static function getStats(): array
     {

@@ -258,7 +258,10 @@ class RateLimiterDistributor
                 $nodeId = str_replace($nodesKey . ':', '', $fullKey);
                 $nodeData = $this->cache->get($nodesKey . ':' . $nodeId);
 
-                if ($nodeData === null || $nodeData === false || !is_array($nodeData) || !isset($nodeData['last_seen'])) {
+                if (
+                    $nodeData === null || $nodeData === false
+                    || !is_array($nodeData) || !isset($nodeData['last_seen'])
+                ) {
                     continue;
                 }
 

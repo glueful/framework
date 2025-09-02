@@ -27,7 +27,9 @@ class ProductionSecurityValidator
     /**
      * Validate production security settings
      *
-     * @return array{environment: mixed, is_production: bool, security_score: float, critical_issues: array<array<string, mixed>>, warnings: array<array<string, mixed>>, recommendations: array<string>, passed: bool} Validation results
+     * @return array{environment: mixed, is_production: bool, security_score: float,
+     *               critical_issues: array<array<string, mixed>>, warnings: array<array<string, mixed>>,
+     *               recommendations: array<string>, passed: bool} Validation results
      */
     public static function validateProductionSecurity(): array
     {
@@ -64,7 +66,10 @@ class ProductionSecurityValidator
         if (isset($errorConfig['issues']) && is_array($errorConfig['issues']) && count($errorConfig['issues']) > 0) {
             $issues = array_merge($issues, $errorConfig['issues']);
         }
-        if (isset($errorConfig['warnings']) && is_array($errorConfig['warnings']) && count($errorConfig['warnings']) > 0) {
+        if (
+            isset($errorConfig['warnings']) && is_array($errorConfig['warnings'])
+            && count($errorConfig['warnings']) > 0
+        ) {
             $warnings = array_merge($warnings, $errorConfig['warnings']);
         }
 
@@ -129,7 +134,8 @@ class ProductionSecurityValidator
     /**
      * Validate error handling configuration
      *
-     * @return array{issues: array<array<string, mixed>>, warnings: array<array<string, mixed>>} Error handling validation results
+     * @return array{issues: array<array<string, mixed>>, warnings: array<array<string, mixed>>}
+     *         Error handling validation results
      */
     private static function validateErrorHandling(): array
     {

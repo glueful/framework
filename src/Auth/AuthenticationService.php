@@ -148,7 +148,10 @@ class AuthenticationService
         }
 
         // Verify password against hash
-        if (!isset($user['password']) || $this->passwordHasher->verify($credentials['password'], $user['password']) === false) {
+        if (
+            !isset($user['password'])
+            || $this->passwordHasher->verify($credentials['password'], $user['password']) === false
+        ) {
             return null;
         }
 
@@ -172,7 +175,8 @@ class AuthenticationService
             $this->userRepository->update($userData['uuid'], [
                 'ip_address' => $clientIp,
                 'user_agent' => substr($userAgent, 0, 512), // Limit to field size
-                'x_forwarded_for_ip_address' => ($xForwardedFor !== null && $xForwardedFor !== '') ? substr($xForwardedFor, 0, 40) : null,
+                'x_forwarded_for_ip_address' => ($xForwardedFor !== null && $xForwardedFor !== '')
+                    ? substr($xForwardedFor, 0, 40) : null,
                 'last_login_date' => date('Y-m-d H:i:s')
             ]);
         } catch (\Exception $e) {

@@ -194,7 +194,10 @@ class SecurityHeadersMiddleware implements MiddlewareInterface
         }
 
         // Strict-Transport-Security (only for HTTPS requests)
-        if (($this->config['strict_transport_security']['enabled'] ?? false) === true && $request !== null && $request->isSecure()) {
+        if (
+            ($this->config['strict_transport_security']['enabled'] ?? false) === true
+            && $request !== null && $request->isSecure()
+        ) {
             $this->addStrictTransportSecurity($response);
         }
 
