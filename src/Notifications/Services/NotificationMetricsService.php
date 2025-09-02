@@ -29,7 +29,7 @@ class NotificationMetricsService
     private ?LogManager $logger;
 
     /**
-     * @var array Configuration options
+     * @var array<string, mixed> Configuration options
      */
     private array $config;
 
@@ -37,7 +37,7 @@ class NotificationMetricsService
      * NotificationMetricsService constructor
      *
      * @param LogManager|null $logger Logger instance
-     * @param array $config Configuration options
+     * @param array<string, mixed> $config Configuration options
      */
     public function __construct(?LogManager $logger = null, array $config = [])
     {
@@ -51,7 +51,7 @@ class NotificationMetricsService
     /**
      * Get the current configuration
      *
-     * @return array The current configuration options
+     * @return array<string, mixed> The current configuration options
      */
     public function getConfig(): array
     {
@@ -196,7 +196,7 @@ class NotificationMetricsService
      *
      * @param string $channel Notification channel
      * @param int $maxRetries Maximum retry count to report
-     * @return array Retry distribution counts
+     * @return array<int, int> Retry distribution counts
      */
     public function getRetryDistribution(string $channel, int $maxRetries = 3): array
     {
@@ -307,7 +307,7 @@ class NotificationMetricsService
      *
      * @param string $channel Notification channel
      * @param int $maxRetries Maximum number of retries to report in distribution
-     * @return array Metrics including average delivery time, success rate, etc.
+     * @return array<string, mixed> Metrics including average delivery time, success rate, etc.
      */
     public function getChannelMetrics(string $channel, int $maxRetries = 3): array
     {
@@ -327,8 +327,8 @@ class NotificationMetricsService
     /**
      * Get metrics for all channels
      *
-     * @param array $channels List of channels to get metrics for
-     * @return array Metrics for all channels
+     * @param array<string> $channels List of channels to get metrics for
+     * @return array<string, mixed> Metrics for all channels
      */
     public function getAllMetrics(array $channels = []): array
     {
@@ -343,7 +343,7 @@ class NotificationMetricsService
         }
 
         // Calculate aggregate metrics across all channels
-        if (!empty($channels)) {
+        if ($channels !== []) {
             $totalSent = 0;
             $totalFailed = 0;
             $totalAttempts = 0;
@@ -405,7 +405,7 @@ class NotificationMetricsService
 
             return true;
         } catch (\Exception $e) {
-            if ($this->logger) {
+            if ($this->logger !== null) {
                 $this->logger->error("Failed to reset metrics for channel {$channel}: " . $e->getMessage());
             }
             return false;

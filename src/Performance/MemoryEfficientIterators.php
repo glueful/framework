@@ -9,7 +9,8 @@ class MemoryEfficientIterators
      *
      * This method allows processing of large datasets without loading everything into memory
      *
-     * @param \Iterator|\Generator|array $dataSource The data source to iterate over
+     * @param \Iterator<mixed, mixed>|\Generator<mixed, mixed, mixed, mixed>|array<mixed, mixed> $dataSource
+     *        The data source to iterate over
      * @param int $bufferSize The number of items to buffer at a time (default: 100)
      * @return \Generator A generator that yields items from the data source
      */
@@ -31,14 +32,15 @@ class MemoryEfficientIterators
     /**
      * Process a large dataset in chunks to reduce memory usage
      *
-     * @param \Iterator|\Generator|array $dataSource The data source to chunk
+     * @param \Iterator<mixed, mixed>|\Generator<mixed, mixed, mixed, mixed>|array<mixed, mixed> $dataSource
+     *        The data source to chunk
      * @param callable $callback The callback to apply to each chunk
      * @param int $chunkSize The size of each chunk (default: 1000)
      * @param bool $preserveKeys Whether to preserve array keys (default: true)
-     * @return array An array of results from the callback
+     * @return array<mixed> An array of results from the callback
      */
     public static function processInChunks(
-        $dataSource,
+        \Iterator|\Generator|array $dataSource,
         callable $callback,
         int $chunkSize = 1000,
         bool $preserveKeys = true
@@ -75,14 +77,15 @@ class MemoryEfficientIterators
      * Process chunks in parallel using PHP's parallel extension if available
      * Falls back to sequential processing if parallel extension is not available
      *
-     * @param \Iterator|\Generator|array $dataSource The data source to chunk
+     * @param \Iterator<mixed, mixed>|\Generator<mixed, mixed, mixed, mixed>|array<mixed, mixed> $dataSource
+     *        The data source to chunk
      * @param callable $callback The callback to apply to each chunk
      * @param int $chunkSize The size of each chunk (default: 1000)
      * @param int $maxParallel Maximum number of parallel processes (default: 4)
-     * @return array An array of results from the callback
+     * @return array<mixed> An array of results from the callback
      */
     public static function processInParallelChunks(
-        $dataSource,
+        \Iterator|\Generator|array $dataSource,
         callable $callback,
         int $chunkSize = 1000,
         int $maxParallel = 4
@@ -159,7 +162,8 @@ class MemoryEfficientIterators
     /**
      * Map a function over each item in an iterator without loading everything into memory
      *
-     * @param \Iterator|\Generator|array $dataSource The data source to iterate over
+     * @param \Iterator<mixed, mixed>|\Generator<mixed, mixed, mixed, mixed>|array<mixed, mixed> $dataSource
+     *        The data source to iterate over
      * @param callable $mapFunction The function to apply to each item
      * @return \Generator A generator that yields the mapped items
      */
@@ -173,7 +177,8 @@ class MemoryEfficientIterators
     /**
      * Filter items from an iterator without loading everything into memory
      *
-     * @param \Iterator|\Generator|array $dataSource The data source to iterate over
+     * @param \Iterator<mixed, mixed>|\Generator<mixed, mixed, mixed, mixed>|array<mixed, mixed> $dataSource
+     *        The data source to iterate over
      * @param callable $filterFunction The function to determine which items to keep
      * @return \Generator A generator that yields the filtered items
      */

@@ -30,6 +30,9 @@ class DatabaseLogPruner
     /**
      * Prune old log entries based on age and quantity limits
      */
+    /**
+     * @return array{deleted_by_age: mixed, deleted_by_quantity: mixed}
+     */
     public function prune(): array
     {
         $deletedByAge = $this->pruneByAge();
@@ -73,7 +76,7 @@ class DatabaseLogPruner
             ->offset($this->maxRecords)
             ->get()[0] ?? null;
 
-        if (!$threshold) {
+        if ($threshold === null) {
             return 0;
         }
 

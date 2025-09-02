@@ -48,7 +48,7 @@ class NotificationTemplate implements JsonSerializable
     private string $content;
 
     /**
-     * @var array|null Additional parameters for the template
+     * @var array<string, mixed>|null Additional parameters for the template
      */
     private ?array $parameters;
 
@@ -70,7 +70,7 @@ class NotificationTemplate implements JsonSerializable
      * @param string $notificationType Notification type
      * @param string $channel Notification channel
      * @param string $content Template content
-     * @param array|null $parameters Additional parameters
+     * @param array<string, mixed>|null $parameters Additional parameters
      * @param string|null $uuid UUID for cross-system identification
      */
     public function __construct(
@@ -221,7 +221,7 @@ class NotificationTemplate implements JsonSerializable
     /**
      * Get template parameters
      *
-     * @return array|null Template parameters
+     * @return array<string, mixed>|null Template parameters
      */
     public function getParameters(): ?array
     {
@@ -231,7 +231,7 @@ class NotificationTemplate implements JsonSerializable
     /**
      * Set template parameters
      *
-     * @param array|null $parameters Template parameters
+     * @param array<string, mixed>|null $parameters Template parameters
      * @return self
      */
     public function setParameters(?array $parameters): self
@@ -266,7 +266,7 @@ class NotificationTemplate implements JsonSerializable
      *
      * Replace placeholders in template content with actual values
      *
-     * @param array $data Data to use for variable replacement
+     * @param array<string, mixed> $data Data to use for variable replacement
      * @return string Rendered content
      */
     public function render(array $data): string
@@ -285,7 +285,7 @@ class NotificationTemplate implements JsonSerializable
     /**
      * Convert the template to an array
      *
-     * @return array Template as array
+     * @return array<string, mixed> Template as array
      */
     public function toArray(): array
     {
@@ -298,14 +298,14 @@ class NotificationTemplate implements JsonSerializable
             'content' => $this->content,
             'parameters' => $this->parameters,
             'created_at' => $this->createdAt->format('Y-m-d H:i:s'),
-            'updated_at' => $this->updatedAt ? $this->updatedAt->format('Y-m-d H:i:s') : null,
+            'updated_at' => $this->updatedAt !== null ? $this->updatedAt->format('Y-m-d H:i:s') : null,
         ];
     }
 
     /**
      * Prepare the template for JSON serialization
      *
-     * @return array
+     * @return array<string, mixed>
      */
     public function jsonSerialize(): array
     {
@@ -315,7 +315,7 @@ class NotificationTemplate implements JsonSerializable
     /**
      * Create a template from a database record
      *
-     * @param array $data Database record
+     * @param array<string, mixed> $data Database record
      * @return self
      */
     public static function fromArray(array $data): self
@@ -334,11 +334,11 @@ class NotificationTemplate implements JsonSerializable
             $data['uuid'] ?? null
         );
 
-        if (!empty($data['created_at'])) {
+        if (isset($data['created_at']) && is_string($data['created_at']) && $data['created_at'] !== '') {
             $template->createdAt = new DateTime($data['created_at']);
         }
 
-        if (!empty($data['updated_at'])) {
+        if (isset($data['updated_at']) && is_string($data['updated_at']) && $data['updated_at'] !== '') {
             $template->updatedAt = new DateTime($data['updated_at']);
         }
 

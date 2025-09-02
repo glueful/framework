@@ -18,7 +18,7 @@ interface LogManagerInterface
      * Log an error message
      *
      * @param string $message
-     * @param array $context
+     * @param array<string, mixed> $context
      * @return void
      */
     public function error(string $message, array $context = []): void;

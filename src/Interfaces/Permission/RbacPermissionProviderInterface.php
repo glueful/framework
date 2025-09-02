@@ -27,4 +27,3 @@ interface RbacPermissionProviderInterface extends PermissionProviderInterface
      */
     public function batchGetUserPermissions(array $userUuids): array;
 }
-

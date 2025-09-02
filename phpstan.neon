@@ -65,3 +65,6 @@ parameters:
         - '#Method Glueful\\Security\\SecureSerializer::serialize\(\) should return string but returns string\|false\.#'
         - '#Method Glueful\\Security\\SecureSerializer::unserialize\(\) should return mixed but returns false\.#'
         
+        # PSR-3 LoggerInterface compatibility - array type specifications
+        - '#Method Glueful\\Logging\\LogManager::[a-zA-Z]+\(\) has parameter \$context with no value type specified in iterable type array\.#'
+        

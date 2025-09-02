@@ -24,7 +24,7 @@ class NotificationRead extends NotificationEvent
     private DateTime $readAt;
 
     /**
-     * @var array Optional metadata about the read event
+     * @var array<string, mixed> Optional metadata about the read event
      */
     private array $readMetadata;
 
@@ -34,8 +34,8 @@ class NotificationRead extends NotificationEvent
      * @param Notification $notification The notification
      * @param Notifiable $notifiable The recipient
      * @param string $channel The channel where notification was read
-     * @param array $readMetadata Additional metadata about the read event
-     * @param array $data Additional event data
+     * @param array<string, mixed> $readMetadata Additional metadata about the read event
+     * @param array<string, mixed> $data Additional event data
      */
     public function __construct(
         Notification $notification,
@@ -72,7 +72,7 @@ class NotificationRead extends NotificationEvent
     /**
      * Get the read metadata
      *
-     * @return array Metadata about the read event
+     * @return array<string, mixed> Metadata about the read event
      */
     public function getReadMetadata(): array
     {
@@ -82,7 +82,7 @@ class NotificationRead extends NotificationEvent
     /**
      * Convert the event to an array
      *
-     * @return array Event as array
+     * @return array<string, mixed> Event as array
      */
     public function toArray(): array
     {

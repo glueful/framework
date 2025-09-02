@@ -9,8 +9,12 @@ use Symfony\Component\Lock\Store\FlockStore;
 class FileLockStore extends FlockStore
 {
     private string $lockPath;
+    /** @var array{prefix: string, extension: string} */
     private array $options;
 
+    /**
+     * @param array<string, string> $options
+     */
     public function __construct(?string $lockPath = null, array $options = [])
     {
         $this->lockPath = $lockPath ?? sys_get_temp_dir() . '/glueful_locks';
@@ -31,6 +35,9 @@ class FileLockStore extends FlockStore
         return $this->lockPath;
     }
 
+    /**
+     * @return array{prefix: string, extension: string}
+     */
     public function getOptions(): array
     {
         return $this->options;

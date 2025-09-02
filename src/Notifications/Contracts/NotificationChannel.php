@@ -25,7 +25,7 @@ interface NotificationChannel
      * Send the notification to the specified notifiable entity.
      *
      * @param Notifiable $notifiable The entity receiving the notification
-     * @param array $data Notification data including content and metadata
+     * @param array<string, mixed> $data Notification data including content and metadata
      * @return bool Whether the notification was sent successfully
      */
     public function send(Notifiable $notifiable, array $data): bool;
@@ -33,9 +33,9 @@ interface NotificationChannel
     /**
      * Format the notification data for this channel.
      *
-     * @param array $data The raw notification data
+     * @param array<string, mixed> $data The raw notification data
      * @param Notifiable $notifiable The entity receiving the notification
-     * @return array The formatted notification data
+     * @return array<string, mixed> The formatted notification data
      */
     public function format(array $data, Notifiable $notifiable): array;
 
@@ -49,7 +49,7 @@ interface NotificationChannel
     /**
      * Get channel-specific configuration.
      *
-     * @return array The channel configuration
+     * @return array<string, mixed> The channel configuration
      */
     public function getConfig(): array;
 }

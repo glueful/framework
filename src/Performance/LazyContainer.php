@@ -4,8 +4,15 @@ namespace Glueful\Performance;
 
 class LazyContainer
 {
-    private $factories = [];
-    private $instances = [];
+    /**
+     * @var array<string, \Closure> Factory functions for lazy loading
+     */
+    private array $factories = [];
+
+    /**
+     * @var array<string, mixed> Cached instances
+     */
+    private array $instances = [];
 
     /**
      * Register a factory for lazy loading
@@ -17,8 +24,10 @@ class LazyContainer
 
     /**
      * Get or create an instance
+     *
+     * @return mixed The resolved instance
      */
-    public function get(string $id)
+    public function get(string $id): mixed
     {
         if (!isset($this->instances[$id])) {
             if (!isset($this->factories[$id])) {

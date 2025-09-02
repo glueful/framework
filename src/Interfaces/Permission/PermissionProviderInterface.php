@@ -28,7 +28,7 @@ interface PermissionProviderInterface
      * Use this to set up database connections, load configurations,
      * initialize caches, or perform any other setup tasks.
      *
-     * @param array $config Configuration array from extension or system
+     * @param array<string, mixed> $config Configuration array from extension or system
      * @return void
      * @throws \Exception If initialization fails
      */
@@ -48,7 +48,7 @@ interface PermissionProviderInterface
      * @param string $userUuid User UUID to check permissions for
      * @param string $permission Permission name (e.g., 'view', 'edit', 'delete')
      * @param string $resource Resource identifier (e.g., 'posts', 'users', 'posts.123')
-     * @param array $context Additional context (IP, time, location, etc.)
+     * @param array<string, mixed> $context Additional context (IP, time, location, etc.)
      * @return bool True if user has permission, false otherwise
      */
     public function can(string $userUuid, string $permission, string $resource, array $context = []): bool;
@@ -67,7 +67,7 @@ interface PermissionProviderInterface
      * ]
      *
      * @param string $userUuid User UUID to get permissions for
-     * @return array Associative array of resource => permissions[]
+     * @return array<string, string[]> Associative array of resource => permissions[]
      */
     public function getUserPermissions(string $userUuid): array;
 
@@ -81,7 +81,7 @@ interface PermissionProviderInterface
      * @param string $userUuid User UUID to assign permission to
      * @param string $permission Permission name to assign
      * @param string $resource Resource the permission applies to
-     * @param array $options Additional options (expiry, constraints, etc.)
+     * @param array<string, mixed> $options Additional options (expiry, constraints, etc.)
      * @return bool True if assignment successful, false otherwise
      */
     public function assignPermission(string $userUuid, string $permission, string $resource, array $options = []): bool;
@@ -114,7 +114,7 @@ interface PermissionProviderInterface
      *     'manage' => 'Full administrative access'
      * ]
      *
-     * @return array Permission name => description mapping
+     * @return array<string, string> Permission name => description mapping
      */
     public function getAvailablePermissions(): array;
 
@@ -131,7 +131,7 @@ interface PermissionProviderInterface
      *     'settings' => 'System Settings'
      * ]
      *
-     * @return array Resource name => description mapping
+     * @return array<string, string> Resource name => description mapping
      */
     public function getAvailableResources(): array;
 
@@ -149,8 +149,8 @@ interface PermissionProviderInterface
      * ]
      *
      * @param string $userUuid User UUID to assign permissions to
-     * @param array $permissions Array of permission/resource pairs
-     * @param array $options Additional options for all assignments
+     * @param array<int, array{permission: string, resource: string}> $permissions Array of permission/resource pairs
+     * @param array<string, mixed> $options Additional options for all assignments
      * @return bool True if all assignments successful, false otherwise
      */
     public function batchAssignPermissions(string $userUuid, array $permissions, array $options = []): bool;
@@ -162,7 +162,7 @@ interface PermissionProviderInterface
      * Should use transactions where possible for atomicity.
      *
      * @param string $userUuid User UUID to revoke permissions from
-     * @param array $permissions Array of permission/resource pairs
+     * @param array<int, array{permission: string, resource: string}> $permissions Array of permission/resource pairs
      * @return bool True if all revocations successful, false otherwise
      */
     public function batchRevokePermissions(string $userUuid, array $permissions): bool;
@@ -176,7 +176,7 @@ interface PermissionProviderInterface
      *
      * @param string $userUuid User UUID to assign role to
      * @param string $roleSlug Role identifier/slug to assign
-     * @param array $options Additional options (expiry, scope, constraints, etc.)
+     * @param array<string, mixed> $options Additional options (expiry, scope, constraints, etc.)
      * @return bool True if role assignment successful, false otherwise
      */
     public function assignRole(string $userUuid, string $roleSlug, array $options = []): bool;
@@ -229,7 +229,7 @@ interface PermissionProviderInterface
      *     'author' => 'Glueful Team'
      * ]
      *
-     * @return array Provider metadata
+     * @return array{name: string, version: string, description: string, capabilities: string[], author: string}
      */
     public function getProviderInfo(): array;
 
@@ -239,7 +239,7 @@ interface PermissionProviderInterface
      * Perform a health check of the permission provider.
      * Should verify database connections, cache availability, etc.
      *
-     * @return array Health check results with status and details
+     * @return array{status: string, healthy: bool, details: array<string, mixed>}
      */
     public function healthCheck(): array;
 }

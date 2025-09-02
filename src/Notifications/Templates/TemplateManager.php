@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Glueful\Notifications\Templates;
 
 use Glueful\Notifications\Models\NotificationTemplate;
-use InvalidArgumentException;
 
 /**
  * Template Manager
@@ -23,12 +22,12 @@ class TemplateManager
     private TemplateResolver $resolver;
 
     /**
-     * @var array In-memory template storage
+     * @var array<string, NotificationTemplate> In-memory template storage
      */
     private array $templates = [];
 
     /**
-     * @var array Configuration options
+     * @var array<string, mixed> Configuration options
      */
     private array $config;
 
@@ -36,7 +35,7 @@ class TemplateManager
      * TemplateManager constructor
      *
      * @param TemplateResolver|null $resolver Template resolver instance
-     * @param array $config Configuration options
+     * @param array<string, mixed> $config Configuration options
      */
     public function __construct(?TemplateResolver $resolver = null, array $config = [])
     {
@@ -66,7 +65,7 @@ class TemplateManager
     /**
      * Register multiple templates at once
      *
-     * @param array $templates Array of templates to register
+     * @param array<NotificationTemplate> $templates Array of templates to register
      * @return self
      */
     public function registerTemplates(array $templates): self
@@ -98,7 +97,7 @@ class TemplateManager
     /**
      * Get all registered templates
      *
-     * @return array All registered templates
+     * @return array<string, NotificationTemplate> All registered templates
      */
     public function getAllTemplates(): array
     {
@@ -109,7 +108,7 @@ class TemplateManager
      * Get templates for a specific notification type
      *
      * @param string $type Notification type
-     * @return array Templates for the specified type
+     * @return array<string, NotificationTemplate> Templates for the specified type
      */
     public function getTemplatesForType(string $type): array
     {
@@ -122,7 +121,7 @@ class TemplateManager
      * Get templates for a specific channel
      *
      * @param string $channel Channel name
-     * @return array Templates for the specified channel
+     * @return array<string, NotificationTemplate> Templates for the specified channel
      */
     public function getTemplatesForChannel(string $channel): array
     {
@@ -155,8 +154,8 @@ class TemplateManager
      *
      * @param string $type Notification type
      * @param string $name Template name
-     * @param array|null $channels Specific channels to resolve for (null for all)
-     * @return array Map of channel => template
+     * @param array<string>|null $channels Specific channels to resolve for (null for all)
+     * @return array<string, NotificationTemplate|null> Map of channel => template
      */
     public function resolveTemplates(string $type, string $name, ?array $channels = null): array
     {
@@ -173,7 +172,7 @@ class TemplateManager
     /**
      * Get available channels from registered templates
      *
-     * @return array List of unique channel names
+     * @return array<string> List of unique channel names
      */
     public function getAvailableChannels(): array
     {
@@ -181,7 +180,7 @@ class TemplateManager
 
         foreach ($this->templates as $template) {
             $channel = $template->getChannel();
-            if (!in_array($channel, $channels)) {
+            if (!in_array($channel, $channels, true)) {
                 $channels[] = $channel;
             }
         }
@@ -197,7 +196,7 @@ class TemplateManager
      * @param string $name Template name
      * @param string $channel Channel name
      * @param string $content Template content
-     * @param array|null $parameters Template parameters
+     * @param array<string, mixed>|null $parameters Template parameters
      * @param string|null $uuid Template UUID for cross-system identification
      * @return NotificationTemplate The created template
      */
@@ -278,7 +277,7 @@ class TemplateManager
      * @param string $type Notification type
      * @param string $name Template name
      * @param string $channel Channel name
-     * @param array $data Data for template rendering
+     * @param array<string, mixed> $data Data for template rendering
      * @return string|null Rendered template content or null if template not found
      */
     public function renderTemplate(string $type, string $name, string $channel, array $data): ?string

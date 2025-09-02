@@ -18,12 +18,12 @@ class NotificationResultParser
     /**
      * Parse notification service result into a standardized format
      *
-     * @param array|null $result The result from NotificationService->send()
-     * @param array $successData Additional data to include on success
+     * @param array<string, mixed>|null $result The result from NotificationService->send()
+     * @param array<string, mixed> $successData Additional data to include on success
      * @param string $successMessage Custom success message
      * @param string $defaultErrorMessage Default error message if no specific error is found
      * @param string $channelName The channel name to check for specific errors (e.g., 'email')
-     * @return array Standardized result with success, message, and error_code fields
+     * @return array<string, mixed> Standardized result with success, message, and error_code fields
      */
     public static function parse(
         $result,
@@ -128,10 +128,10 @@ class NotificationResultParser
     /**
      * Parse email notification result with email-specific messages
      *
-     * @param array|null $result The result from NotificationService->send()
-     * @param array $successData Additional data to include on success
+     * @param array<string, mixed>|null $result The result from NotificationService->send()
+     * @param array<string, mixed> $successData Additional data to include on success
      * @param string $successMessage Custom success message
-     * @return array Standardized result with success, message, and error_code fields
+     * @return array<string, mixed> Standardized result with success, message, and error_code fields
      */
     public static function parseEmailResult(
         $result,
@@ -150,10 +150,10 @@ class NotificationResultParser
     /**
      * Parse SMS notification result with SMS-specific messages
      *
-     * @param array|null $result The result from NotificationService->send()
-     * @param array $successData Additional data to include on success
+     * @param array<string, mixed>|null $result The result from NotificationService->send()
+     * @param array<string, mixed> $successData Additional data to include on success
      * @param string $successMessage Custom success message
-     * @return array Standardized result with success, message, and error_code fields
+     * @return array<string, mixed> Standardized result with success, message, and error_code fields
      */
     public static function parseSmsResult(
         $result,
@@ -172,10 +172,10 @@ class NotificationResultParser
     /**
      * Parse push notification result with push-specific messages
      *
-     * @param array|null $result The result from NotificationService->send()
-     * @param array $successData Additional data to include on success
+     * @param array<string, mixed>|null $result The result from NotificationService->send()
+     * @param array<string, mixed> $successData Additional data to include on success
      * @param string $successMessage Custom success message
-     * @return array Standardized result with success, message, and error_code fields
+     * @return array<string, mixed> Standardized result with success, message, and error_code fields
      */
     public static function parsePushResult(
         $result,

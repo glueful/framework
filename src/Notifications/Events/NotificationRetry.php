@@ -41,7 +41,7 @@ class NotificationRetry extends NotificationEvent
      * @param string $channel The delivery channel
      * @param int $attemptNumber The current retry attempt number
      * @param string|null $previousFailureReason Reason for the previous failure
-     * @param array $data Additional event data
+     * @param array<string, mixed> $data Additional event data
      */
     public function __construct(
         Notification $notification,
@@ -100,7 +100,7 @@ class NotificationRetry extends NotificationEvent
     /**
      * Convert the event to an array
      *
-     * @return array Event as array
+     * @return array<string, mixed> Event as array
      */
     public function toArray(): array
     {
@@ -108,7 +108,7 @@ class NotificationRetry extends NotificationEvent
         $data['retry_at'] = $this->retryAt->format('Y-m-d H:i:s');
         $data['attempt_number'] = $this->attemptNumber;
 
-        if ($this->previousFailureReason) {
+        if ($this->previousFailureReason !== null) {
             $data['previous_failure_reason'] = $this->previousFailureReason;
         }
 

@@ -27,7 +27,7 @@ interface PermissionCacheInterface
      * Set up cache connections, configurations, and any
      * necessary resources for caching operations.
      *
-     * @param array $config Cache configuration
+     * @param array<string, mixed> $config Cache configuration
      * @return void
      * @throws \Exception If cache initialization fails
      */
@@ -40,7 +40,7 @@ interface PermissionCacheInterface
      * Should return null if no cache exists or cache is expired.
      *
      * @param string $userUuid User UUID to get cached permissions for
-     * @return array|null Cached permissions or null if not found
+     * @return array<string, mixed>|null Cached permissions or null if not found
      */
     public function getUserPermissions(string $userUuid): ?array;
 
@@ -51,7 +51,7 @@ interface PermissionCacheInterface
      * Should include appropriate TTL (Time To Live) handling.
      *
      * @param string $userUuid User UUID to cache permissions for
-     * @param array $permissions User's permissions to cache
+     * @param array<string, mixed> $permissions User's permissions to cache
      * @param int $ttl Time to live in seconds (0 = no expiration)
      * @return bool True if caching successful
      */
@@ -66,7 +66,7 @@ interface PermissionCacheInterface
      * @param string $userUuid User UUID
      * @param string $permission Permission name
      * @param string $resource Resource identifier
-     * @param array $context Permission context
+     * @param array<string, mixed> $context Permission context
      * @return bool|null Cached result or null if not found
      */
     public function getPermissionCheck(
@@ -85,7 +85,7 @@ interface PermissionCacheInterface
      * @param string $permission Permission name
      * @param string $resource Resource identifier
      * @param bool $result Permission check result
-     * @param array $context Permission context
+     * @param array<string, mixed> $context Permission context
      * @param int $ttl Time to live in seconds
      * @return bool True if caching successful
      */
@@ -149,7 +149,7 @@ interface PermissionCacheInterface
      * Return information about cache usage, hit rates, and performance.
      * Useful for monitoring and optimization.
      *
-     * @return array Cache statistics
+     * @return array{hits: int, misses: int, hit_rate: float, total_keys: int, memory_usage?: int}
      */
     public function getStats(): array;
 
@@ -167,7 +167,7 @@ interface PermissionCacheInterface
      *
      * Configure default expiration times for different types of cached data.
      *
-     * @param array $ttlConfig Array of cache type => TTL mappings
+     * @param array<string, int> $ttlConfig Array of cache type => TTL mappings
      * @return void
      */
     public function configureTTL(array $ttlConfig): void;
@@ -181,7 +181,7 @@ interface PermissionCacheInterface
      * @param string $userUuid User UUID
      * @param string $permission Permission name
      * @param string $resource Resource identifier
-     * @param array $context Permission context
+     * @param array<string, mixed> $context Permission context
      * @return string Cache key
      */
     public function generateKey(string $userUuid, string $permission, string $resource, array $context = []): string;
@@ -192,7 +192,7 @@ interface PermissionCacheInterface
      * Efficiently invalidate cache for multiple users at once.
      * Useful for bulk operations or role changes.
      *
-     * @param array $userUuids Array of user UUIDs to invalidate
+     * @param string[] $userUuids Array of user UUIDs to invalidate
      * @return bool True if batch invalidation successful
      */
     public function batchInvalidateUsers(array $userUuids): bool;
@@ -202,7 +202,7 @@ interface PermissionCacheInterface
      *
      * Return current cache configuration for debugging.
      *
-     * @return array Cache configuration
+     * @return array<string, mixed> Cache configuration
      */
     public function getConfig(): array;
 }

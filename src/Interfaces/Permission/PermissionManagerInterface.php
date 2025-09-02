@@ -27,7 +27,7 @@ interface PermissionManagerInterface
      * Only one provider can be active at a time.
      *
      * @param PermissionProviderInterface $provider The provider to activate
-     * @param array $config Configuration for the provider
+     * @param array<string, mixed> $config Configuration for the provider
      * @return void
      * @throws \Exception If provider initialization fails
      */
@@ -52,7 +52,7 @@ interface PermissionManagerInterface
      * @param string $userUuid User UUID to check permissions for
      * @param string $permission Permission name (e.g., 'view', 'edit')
      * @param string $resource Resource identifier (e.g., 'posts', 'users')
-     * @param array $context Additional context for permission check
+     * @param array<string, mixed> $context Additional context for permission check
      * @return bool True if user has permission, false otherwise
      * @throws \Exception If no provider is registered
      */
@@ -67,7 +67,7 @@ interface PermissionManagerInterface
      * @param string $token Authentication token
      * @param string $permission Permission name
      * @param string $resource Resource identifier
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return bool True if user has permission, false otherwise
      * @throws \Exception If token is invalid or no provider is registered
      */
@@ -79,7 +79,7 @@ interface PermissionManagerInterface
      * Facade method that delegates to the active provider.
      *
      * @param string $userUuid User UUID to get permissions for
-     * @return array User's permissions
+     * @return array<string, mixed> User's permissions
      * @throws \Exception If no provider is registered
      */
     public function getUserPermissions(string $userUuid): array;
@@ -92,7 +92,7 @@ interface PermissionManagerInterface
      * @param string $userUuid User UUID
      * @param string $permission Permission name
      * @param string $resource Resource identifier
-     * @param array $options Assignment options
+     * @param array<string, mixed> $options Assignment options
      * @return bool Success status
      * @throws \Exception If no provider is registered
      */
@@ -120,7 +120,7 @@ interface PermissionManagerInterface
      *
      * @param string $userUuid User UUID
      * @param string $roleSlug Role identifier/slug
-     * @param array $options Assignment options
+     * @param array<string, mixed> $options Assignment options
      * @return bool Success status
      * @throws \Exception If no provider is registered
      */
@@ -154,7 +154,7 @@ interface PermissionManagerInterface
      * Returns information about the permission system state,
      * including active provider details and health status.
      *
-     * @return array System information
+     * @return array{provider: string|null, available: bool, health: string, cache_enabled: bool}
      */
     public function getSystemInfo(): array;
 
@@ -194,7 +194,7 @@ interface PermissionManagerInterface
      * Returns detailed information about recent permission
      * operations for debugging purposes.
      *
-     * @return array Debug information
+     * @return array<string, mixed> Debug information
      */
     public function getDebugInfo(): array;
 
@@ -204,7 +204,7 @@ interface PermissionManagerInterface
      * Checks the health of the permission system including
      * provider availability and functionality.
      *
-     * @return array Health check results
+     * @return array{status: string, provider: bool, cache: bool, errors: string[]}
      */
     public function healthCheck(): array;
 
@@ -214,7 +214,7 @@ interface PermissionManagerInterface
      * Allows registration of multiple providers for fallback
      * or selection purposes. Only one can be active at a time.
      *
-     * @param array $providers Array of provider instances
+     * @param PermissionProviderInterface[] $providers Array of provider instances
      * @return void
      */
     public function registerProviders(array $providers): void;
@@ -226,7 +226,7 @@ interface PermissionManagerInterface
      * Useful for testing or runtime provider switching.
      *
      * @param string $providerName Name of registered provider to activate
-     * @param array $config Configuration for the new provider
+     * @param array<string, mixed> $config Configuration for the new provider
      * @return bool True if switch successful
      */
     public function switchProvider(string $providerName, array $config = []): bool;
@@ -236,7 +236,7 @@ interface PermissionManagerInterface
      *
      * Returns list of registered permission providers.
      *
-     * @return array List of available providers
+     * @return string[] List of available providers
      */
     public function getAvailableProviders(): array;
 }

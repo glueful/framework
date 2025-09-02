@@ -42,7 +42,7 @@ class NotificationFailed extends NotificationEvent
      * @param string $channel The delivery channel
      * @param string $reason The failure reason
      * @param Throwable|null $exception The exception that caused the failure
-     * @param array $data Additional event data
+     * @param array<string, mixed> $data Additional event data
      */
     public function __construct(
         Notification $notification,
@@ -95,7 +95,7 @@ class NotificationFailed extends NotificationEvent
      */
     public function getExceptionMessage(): ?string
     {
-        return $this->exception ? $this->exception->getMessage() : null;
+        return $this->exception !== null ? $this->exception->getMessage() : null;
     }
 
     /**
@@ -111,7 +111,7 @@ class NotificationFailed extends NotificationEvent
     /**
      * Convert the event to an array
      *
-     * @return array Event as array
+     * @return array<string, mixed> Event as array
      */
     public function toArray(): array
     {
@@ -119,7 +119,7 @@ class NotificationFailed extends NotificationEvent
         $data['reason'] = $this->reason;
         $data['failed_at'] = $this->failedAt->format('Y-m-d H:i:s');
 
-        if ($this->exception) {
+        if ($this->exception !== null) {
             $data['exception'] = [
                 'message' => $this->exception->getMessage(),
                 'code' => $this->exception->getCode(),

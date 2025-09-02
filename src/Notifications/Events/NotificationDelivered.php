@@ -24,7 +24,7 @@ class NotificationDelivered extends NotificationEvent
     private DateTime $deliveredAt;
 
     /**
-     * @var array Delivery confirmation metadata
+     * @var array<string, mixed> Delivery confirmation metadata
      */
     private array $deliveryMetadata;
 
@@ -34,8 +34,8 @@ class NotificationDelivered extends NotificationEvent
      * @param Notification $notification The notification
      * @param Notifiable $notifiable The recipient
      * @param string $channel The delivery channel
-     * @param array $deliveryMetadata Additional delivery confirmation data
-     * @param array $data Additional event data
+     * @param array<string, mixed> $deliveryMetadata Additional delivery confirmation data
+     * @param array<string, mixed> $data Additional event data
      */
     public function __construct(
         Notification $notification,
@@ -72,7 +72,7 @@ class NotificationDelivered extends NotificationEvent
     /**
      * Get the delivery metadata
      *
-     * @return array Delivery confirmation metadata
+     * @return array<string, mixed> Delivery confirmation metadata
      */
     public function getDeliveryMetadata(): array
     {
@@ -82,7 +82,7 @@ class NotificationDelivered extends NotificationEvent
     /**
      * Convert the event to an array
      *
-     * @return array Event as array
+     * @return array<string, mixed> Event as array
      */
     public function toArray(): array
     {

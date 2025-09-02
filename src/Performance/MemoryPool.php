@@ -9,9 +9,9 @@ class MemoryPool
     /**
      * In-memory object storage
      *
-     * @var array
+     * @var array<string, mixed>
      */
-    private $pool = [];
+    private array $pool = [];
 
     /**
      * Maximum number of objects in the pool
@@ -30,9 +30,9 @@ class MemoryPool
     /**
      * Tracking when items were last accessed (for LRU)
      *
-     * @var array
+     * @var array<string, float>
      */
-    private $lastAccessed = [];
+    private array $lastAccessed = [];
 
     /**
      * Initialize the memory pool
@@ -153,7 +153,7 @@ class MemoryPool
      */
     private function evict(): void
     {
-        if (empty($this->lastAccessed)) {
+        if ($this->lastAccessed === []) {
             return;
         }
 
@@ -176,7 +176,7 @@ class MemoryPool
     /**
      * Get a list of all keys in the pool
      *
-     * @return array Array of key strings
+     * @return array<string> Array of key strings
      */
     public function getKeys(): array
     {
@@ -186,7 +186,7 @@ class MemoryPool
     /**
      * Get pool statistics
      *
-     * @return array Statistics including size, capacity, and usage
+     * @return array<string, mixed> Statistics including size, capacity, and usage
      */
     public function getStats(): array
     {

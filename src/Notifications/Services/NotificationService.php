@@ -63,7 +63,7 @@ class NotificationService implements ConfigurableInterface
      * @param NotificationRepository $repository Notification repository
      * @param TemplateManager|null $templateManager Template manager
      * @param NotificationMetricsService|null $metricsService Metrics service
-     * @param array $config Configuration options
+     * @param array<string, mixed> $config Configuration options
      */
     public function __construct(
         NotificationDispatcher $dispatcher,
@@ -94,9 +94,9 @@ class NotificationService implements ConfigurableInterface
      * @param string $type Notification type
      * @param Notifiable $notifiable Recipient of the notification
      * @param string $subject Subject of the notification
-     * @param array $data Additional notification data
-     * @param array $options Additional options (channels, priority, schedule)
-     * @return array Result of the send operation
+     * @param array<string, mixed> $data Additional notification data
+     * @param array<string, mixed> $options Additional options (channels, priority, schedule)
+     * @return array<string, mixed> Result of the send operation
      */
     public function send(
         string $type,
@@ -138,7 +138,7 @@ class NotificationService implements ConfigurableInterface
                                 $notification->getUuid(),
                                 $channel
                             );
-                            if ($creationTime) {
+                            if ($creationTime !== null) {
                                 $deliveryTime = time() - $creationTime;
                                 $this->metricsService->trackDeliveryTime(
                                     $notification->getUuid(),
@@ -173,8 +173,8 @@ class NotificationService implements ConfigurableInterface
      * @param string $type Notification type
      * @param Notifiable $notifiable Recipient of the notification
      * @param string $subject Subject of the notification
-     * @param array $data Additional notification data
-     * @param array $options Additional options (priority, schedule)
+     * @param array<string, mixed> $data Additional notification data
+     * @param array<string, mixed> $options Additional options (priority, schedule)
      * @return Notification The created notification
      */
     public function create(
@@ -220,9 +220,9 @@ class NotificationService implements ConfigurableInterface
      * @param string $type Notification type
      * @param Notifiable $notifiable Recipient of the notification
      * @param string $templateName Template name
-     * @param array $templateData Data for template rendering
-     * @param array $options Additional options (channels, priority, schedule)
-     * @return array Result of the send operation
+     * @param array<string, mixed> $templateData Data for template rendering
+     * @param array<string, mixed> $options Additional options (channels, priority, schedule)
+     * @return array<string, mixed> Result of the send operation
      * @throws InvalidArgumentException If template manager is not available or template not found
      */
     public function sendWithTemplate(
@@ -239,7 +239,7 @@ class NotificationService implements ConfigurableInterface
         // Get the template
         $templateMap = $this->templateManager->resolveTemplates($type, $templateName);
 
-        if (empty($templateMap)) {
+        if ($templateMap === []) {
             throw new InvalidArgumentException("No templates found for type '{$type}' and name '{$templateName}'.");
         }
 
@@ -311,9 +311,9 @@ class NotificationService implements ConfigurableInterface
      *
      * @param Notifiable $notifiable The user or entity
      * @param string $notificationType Notification type
-     * @param array|null $channels Preferred channels (null to use defaults)
+     * @param array<string>|null $channels Preferred channels (null to use defaults)
      * @param bool $enabled Whether notifications are enabled
-     * @param array|null $settings Additional settings
+     * @param array<string, mixed>|null $settings Additional settings
      * @param string|null $uuid UUID for cross-system identification
      * @return NotificationPreference The created/updated preference
      */
@@ -331,7 +331,7 @@ class NotificationService implements ConfigurableInterface
             : uniqid('preference_');
 
         // Generate a UUID if not provided
-        if (!$uuid) {
+        if ($uuid === null) {
             $uuid = Utils::generateNanoID();
         }
 
@@ -359,8 +359,8 @@ class NotificationService implements ConfigurableInterface
      * @param bool $onlyUnread Whether to get only unread notifications
      * @param int|null $limit Maximum number of notifications
      * @param int|null $offset Pagination offset
-     * @param array $filters Optional additional filters (type, priority, date range)
-     * @return array Array of Notification objects
+     * @param array<string, mixed> $filters Optional additional filters (type, priority, date range)
+     * @return array<Notification> Array of Notification objects
      */
     public function getNotifications(
         Notifiable $notifiable,
@@ -386,8 +386,8 @@ class NotificationService implements ConfigurableInterface
      * @param bool $onlyUnread Whether to get only unread notifications
      * @param int $page Page number (1-based)
      * @param int $perPage Number of items per page
-     * @param array $filters Optional additional filters
-     * @return array Paginated results with data and pagination info
+     * @param array<string, mixed> $filters Optional additional filters
+     * @return array<string, mixed> Paginated results with data and pagination info
      */
     public function getNotificationsWithPagination(
         Notifiable $notifiable,
@@ -411,7 +411,7 @@ class NotificationService implements ConfigurableInterface
      *
      * @param Notifiable $notifiable Recipient
      * @param bool $onlyUnread Whether to count only unread notifications
-     * @param array $filters Additional filters to apply
+     * @param array<string, mixed> $filters Additional filters to apply
      * @return int Total count of notifications
      */
     public function countNotifications(
@@ -475,7 +475,7 @@ class NotificationService implements ConfigurableInterface
      * to process notifications that were scheduled for delivery.
      *
      * @param int $batchSize Maximum number of notifications to process
-     * @return array Processing results
+     * @return array<string, int> Processing results
      */
     public function processScheduledNotifications(int $batchSize = 50): array
     {
@@ -498,7 +498,7 @@ class NotificationService implements ConfigurableInterface
             // You would need to implement this method or similar
             $notifiable = $this->getNotifiableEntity($notifiableType, $notifiableId);
 
-            if (!$notifiable) {
+            if ($notifiable === null) {
                 $results['failed']++;
                 continue;
             }
@@ -532,7 +532,7 @@ class NotificationService implements ConfigurableInterface
      * Get notification preferences for a user
      *
      * @param Notifiable $notifiable The user or entity
-     * @return array Array of NotificationPreference objects
+     * @return array<NotificationPreference> Array of NotificationPreference objects
      */
     public function getPreferences(Notifiable $notifiable): array
     {
@@ -627,7 +627,7 @@ class NotificationService implements ConfigurableInterface
                 $userRepository = new \Glueful\Repository\UserRepository();
                 $userData = $userRepository->findByUuid($id);
 
-                if (!$userData) {
+                if ($userData === null) {
                     return null;
                 }
 
@@ -712,23 +712,7 @@ class NotificationService implements ConfigurableInterface
             }
         }
 
-        // If no extension could resolve the entity, try notification extensions
-        if (isset($this->dispatcher)) {
-            foreach ($this->dispatcher->getExtensions() as $extension) {
-                // Check if notification extension supports resolving notifiable entities
-                if (method_exists($extension, 'resolveNotifiableEntity')) {
-                    try {
-                        $notifiable = $extension->resolveNotifiableEntity($type, $id);
-                        if ($notifiable instanceof \Glueful\Notifications\Contracts\Notifiable) {
-                            return $notifiable;
-                        }
-                    } catch (\Throwable $e) {
-                        // Log error but continue trying other extensions
-                        error_log("Notification extension failed to resolve notifiable entity: " . $e->getMessage());
-                    }
-                }
-            }
-        }
+        // Notification extensions don't handle entity resolution - only framework extensions do
 
         return null;
     }
@@ -758,7 +742,7 @@ class NotificationService implements ConfigurableInterface
     /**
      * Get notification performance metrics for all channels
      *
-     * @return array Performance metrics for all channels
+     * @return array<string, mixed> Performance metrics for all channels
      */
     public function getPerformanceMetrics(): array
     {
@@ -773,7 +757,7 @@ class NotificationService implements ConfigurableInterface
      * Get metrics for a specific channel
      *
      * @param string $channel Channel name
-     * @return array Channel-specific metrics
+     * @return array<string, mixed> Channel-specific metrics
      */
     public function getChannelMetrics(string $channel): array
     {
@@ -794,7 +778,7 @@ class NotificationService implements ConfigurableInterface
     /**
      * Get default notification channels
      *
-     * @return array Array of default channel names
+     * @return array<string> Array of default channel names
      */
     protected function getDefaultChannels(): array
     {
@@ -833,7 +817,7 @@ class NotificationService implements ConfigurableInterface
         // Validate default channels array
         $resolver->setNormalizer('default_channels', function ($options, $value) {
             unset($options); // Required by interface but not used
-            if (empty($value)) {
+            if ($value === '') {
                 throw new \InvalidArgumentException('default_channels cannot be empty');
             }
 
@@ -842,7 +826,7 @@ class NotificationService implements ConfigurableInterface
                 if (!is_string($channel)) {
                     throw new \InvalidArgumentException('All channel names must be strings');
                 }
-                if (!in_array($channel, $validChannels)) {
+                if (!in_array($channel, $validChannels, true)) {
                     throw new \InvalidArgumentException(
                         "Invalid channel '{$channel}'. Valid channels: " . implode(', ', $validChannels)
                     );
@@ -887,7 +871,7 @@ class NotificationService implements ConfigurableInterface
             // Test the generator to ensure it returns a string
             try {
                 $testId = $value();
-                if (!is_string($testId) || empty($testId)) {
+                if (!is_string($testId) || $testId === '') {
                     throw new \InvalidArgumentException(
                         'id_generator must return a non-empty string'
                     );

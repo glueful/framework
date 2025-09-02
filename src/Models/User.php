@@ -20,7 +20,9 @@ class User
         public readonly ?string $picture = null,
         public readonly string $status = 'active',
         public readonly ?string $lastLogin = null,
+        /** @var array<string> */
         public readonly array $roles = [],
+        /** @var array<string, mixed> */
         public readonly array $profile = [],
         public readonly bool $isAdmin = false,
         public readonly bool $rememberMe = false,
@@ -28,6 +30,9 @@ class User
     ) {
     }
 
+    /**
+     * @param array<string, mixed> $data
+     */
     public static function fromArray(array $data): self
     {
         return new self(
@@ -52,6 +57,9 @@ class User
         );
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function toArray(): array
     {
         return [

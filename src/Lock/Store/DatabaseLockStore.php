@@ -10,8 +10,12 @@ use Glueful\Database\DatabaseInterface;
 class DatabaseLockStore extends PdoStore
 {
     private DatabaseInterface $database;
+    /** @var array{table: string, id_col: string, token_col: string, expiration_col: string} */
     private array $options;
 
+    /**
+     * @param array<string, string> $options
+     */
     public function __construct(DatabaseInterface $database, array $options = [])
     {
         $this->database = $database;
@@ -32,6 +36,9 @@ class DatabaseLockStore extends PdoStore
         return $this->database;
     }
 
+    /**
+     * @return array{table: string, id_col: string, token_col: string, expiration_col: string}
+     */
     public function getOptions(): array
     {
         return $this->options;

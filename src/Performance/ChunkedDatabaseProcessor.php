@@ -4,16 +4,18 @@ namespace Glueful\Performance;
 
 /**
  * A utility class for processing database results in a memory-efficient way
+ *
+ * Supports PDO and mysqli connection types for chunked processing of large datasets.
  */
 class ChunkedDatabaseProcessor
 {
-    private $connection;
-    private $defaultChunkSize;
+    private mixed $connection;
+    private int $defaultChunkSize;
 
     /**
      * Create a new chunked database processor
      *
-     * @param mixed $connection The database connection (PDO, mysqli, or Laravel DB)
+     * @param mixed $connection The database connection (PDO or mysqli)
      * @param int $defaultChunkSize Default chunk size for operations
      */
     public function __construct($connection, int $defaultChunkSize = 1000)
@@ -27,9 +29,9 @@ class ChunkedDatabaseProcessor
      *
      * @param string $query The SQL query to execute
      * @param callable $processor Function to process each row
-     * @param array $params Parameters for the prepared statement
+     * @param array<int|string, mixed> $params Parameters for the prepared statement
      * @param int|null $chunkSize Size of each chunk (null for default)
-     * @return array Results from the processor for each chunk
+     * @return array<mixed> Results from the processor for each chunk
      */
     public function processSelectQuery(
         string $query,
@@ -44,16 +46,19 @@ class ChunkedDatabaseProcessor
             return $this->processPdoQuery($query, $processor, $params, $chunkSize);
         } elseif ($this->connection instanceof \mysqli) {
             return $this->processMysqliQuery($query, $processor, $params, $chunkSize);
-        } elseif (method_exists($this->connection, 'cursor')) {
-            // Laravel DB connection
-            return $this->processLaravelQuery($query, $processor, $params, $chunkSize);
         } else {
-            throw new \InvalidArgumentException('Unsupported connection type');
+            throw new \InvalidArgumentException('Unsupported connection type. Only PDO and mysqli are supported.');
         }
     }
 
     /**
      * Process a PDO query in chunks
+     *
+     * @param string $query The SQL query to execute
+     * @param callable $processor Function to process each chunk
+     * @param array<int|string, mixed> $params Parameters for the prepared statement
+     * @param int $chunkSize Size of each chunk
+     * @return array<mixed> Results from the processor for each chunk
      */
     private function processPdoQuery(string $query, callable $processor, array $params, int $chunkSize): array
     {
@@ -69,12 +74,18 @@ class ChunkedDatabaseProcessor
 
     /**
      * Process a mysqli query in chunks
+     *
+     * @param string $query The SQL query to execute
+     * @param callable $processor Function to process each chunk
+     * @param array<int|string, mixed> $params Parameters for the prepared statement
+     * @param int $chunkSize Size of each chunk
+     * @return array<mixed> Results from the processor for each chunk
      */
     private function processMysqliQuery(string $query, callable $processor, array $params, int $chunkSize): array
     {
         $stmt = $this->connection->prepare($query);
 
-        if (!empty($params)) {
+        if ($params !== []) {
             $types = '';
             $bindParams = [];
 
@@ -103,20 +114,6 @@ class ChunkedDatabaseProcessor
         );
     }
 
-    /**
-     * Process a Laravel query in chunks
-     */
-    private function processLaravelQuery(string $query, callable $processor, array $params, int $chunkSize): array
-    {
-        $results = [];
-
-        // Use Laravel's built-in chunking for efficiency
-        $this->connection->select($query, $params)->chunk($chunkSize, function ($chunk) use ($processor, &$results) {
-            $results[] = $processor($chunk->toArray());
-        });
-
-        return $results;
-    }
 
     /**
      * Process a large table in chunks using an ID-based approach
@@ -124,9 +121,9 @@ class ChunkedDatabaseProcessor
      * @param string $table The table name to process
      * @param callable $processor Function to process each chunk of rows
      * @param string $idColumn The primary key column (default: 'id')
-     * @param array $conditions Additional WHERE conditions
+     * @param array<string, mixed> $conditions Additional WHERE conditions
      * @param int|null $chunkSize Size of each chunk (null for default)
-     * @return array Results from the processor for each chunk
+     * @return array<mixed> Results from the processor for each chunk
      */
     public function processTableInChunks(
         string $table,

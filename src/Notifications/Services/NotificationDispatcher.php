@@ -30,7 +30,7 @@ class NotificationDispatcher
     private ChannelManager $channelManager;
 
     /**
-     * @var array Registered notification extensions
+     * @var array<string, NotificationExtension> Registered notification extensions
      */
     private array $extensions = [];
 
@@ -41,7 +41,7 @@ class NotificationDispatcher
 
 
     /**
-     * @var array Configuration options
+     * @var array<string, mixed> Configuration options
      */
     private array $config;
 
@@ -50,7 +50,7 @@ class NotificationDispatcher
      *
      * @param ChannelManager $channelManager Channel manager instance
      * @param LogManager|null $logger Logger instance
-     * @param array $config Configuration options
+     * @param array<string, mixed> $config Configuration options
      */
     public function __construct(
         ChannelManager $channelManager,
@@ -67,8 +67,8 @@ class NotificationDispatcher
      *
      * @param Notification $notification The notification to send
      * @param Notifiable $notifiable The recipient of the notification
-     * @param array|null $channels Specific channels to use (null for default channels)
-     * @return array Results of the sending operation per channel
+     * @param array<string>|null $channels Specific channels to use (null for default channels)
+     * @return array<string, mixed> Results of the sending operation per channel
      */
     public function send(Notification $notification, Notifiable $notifiable, ?array $channels = null): array
     {
@@ -95,7 +95,7 @@ class NotificationDispatcher
         // Determine which channels to use
         $channelsToUse = $this->resolveChannels($notification, $notifiable, $channels);
 
-        if (empty($channelsToUse)) {
+        if ($channelsToUse === []) {
             $this->log('warning', "No valid channels available for notification {$notification->getId()}.", [
                 'notification_id' => $notification->getId(),
                 'notifiable_id' => $notifiable->getNotifiableId()
@@ -248,7 +248,7 @@ class NotificationDispatcher
     /**
      * Get all registered extensions
      *
-     * @return array Array of extensions
+     * @return array<string, NotificationExtension> Array of extensions
      */
     public function getExtensions(): array
     {
@@ -296,8 +296,8 @@ class NotificationDispatcher
      *
      * @param Notification $notification The notification to send
      * @param Notifiable $notifiable The recipient
-     * @param array|null $explicitChannels Explicitly specified channels
-     * @return array Channels to use
+     * @param array<string>|null $explicitChannels Explicitly specified channels
+     * @return array<string> Channels to use
      */
     protected function resolveChannels(
         Notification $notification,
@@ -305,7 +305,7 @@ class NotificationDispatcher
         ?array $explicitChannels
     ): array {
         // If channels are explicitly specified, use those
-        if ($explicitChannels !== null && !empty($explicitChannels)) {
+        if ($explicitChannels !== null && $explicitChannels !== []) {
             return $explicitChannels;
         }
 
@@ -316,7 +316,7 @@ class NotificationDispatcher
         foreach ($preferences as $preference) {
             if ($preference->getNotificationType() === $notificationType) {
                 $preferredChannels = $preference->getChannels();
-                if (!empty($preferredChannels)) {
+                if ($preferredChannels !== null && $preferredChannels !== []) {
                     return $preferredChannels;
                 }
             }
@@ -324,7 +324,7 @@ class NotificationDispatcher
 
         // Fall back to default channels from config
         $defaultChannels = $this->getConfig('default_channels', []);
-        if (!empty($defaultChannels)) {
+        if ($defaultChannels !== []) {
             return $defaultChannels;
         }
 
@@ -335,11 +335,11 @@ class NotificationDispatcher
     /**
      * Process notification data through extensions before sending
      *
-     * @param array $data Notification data
+     * @param array<string, mixed> $data Notification data
      * @param Notifiable $notifiable The recipient
      * @param string $channel The channel being used
      * @param string $notificationType The notification type
-     * @return array Processed notification data
+     * @return array<string, mixed> Processed notification data
      */
     protected function processBeforeSend(
         array $data,
@@ -348,7 +348,7 @@ class NotificationDispatcher
         string $notificationType
     ): array {
         foreach ($this->extensions as $extension) {
-            if (in_array($notificationType, $extension->getSupportedNotificationTypes())) {
+            if (in_array($notificationType, $extension->getSupportedNotificationTypes(), true)) {
                 $data = $extension->beforeSend($data, $notifiable, $channel);
             }
         }
@@ -359,7 +359,7 @@ class NotificationDispatcher
     /**
      * Process notification after sending
      *
-     * @param array $data Notification data
+     * @param array<string, mixed> $data Notification data
      * @param Notifiable $notifiable The recipient
      * @param string $channel The channel used
      * @param bool $success Whether sending was successful
@@ -374,7 +374,7 @@ class NotificationDispatcher
         string $notificationType
     ): void {
         foreach ($this->extensions as $extension) {
-            if (in_array($notificationType, $extension->getSupportedNotificationTypes())) {
+            if (in_array($notificationType, $extension->getSupportedNotificationTypes(), true)) {
                 $extension->afterSend($data, $notifiable, $channel, $success);
             }
         }
@@ -436,7 +436,7 @@ class NotificationDispatcher
             'notifiable_id' => $notifiable->getNotifiableId(),
             'channel' => $channel,
             'reason' => $reason,
-            'exception' => $exception ? $exception->getMessage() : null
+            'exception' => $exception !== null ? $exception->getMessage() : null
         ]);
 
         // Dispatch the event
@@ -448,7 +448,7 @@ class NotificationDispatcher
      *
      * @param string $level Log level
      * @param string $message Log message
-     * @param array $context Log context
+     * @param array<string, mixed> $context Log context
      * @return void
      */
     protected function log(string $level, string $message, array $context = []): void

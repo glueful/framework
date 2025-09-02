@@ -7,10 +7,10 @@ use Psr\Log\NullLogger;
 
 class MemoryManager
 {
-    private $memoryLimit;
-    private $alertThreshold;
-    private $criticalThreshold;
-    private $logger;
+    private int $memoryLimit;
+    private float $alertThreshold;
+    private float $criticalThreshold;
+    private LoggerInterface $logger;
 
     /**
      * Initialize the Memory Manager
@@ -28,7 +28,7 @@ class MemoryManager
     /**
      * Monitor memory usage and take action if threshold exceeded
      *
-     * @return array Memory usage information with keys: current, limit, percentage
+     * @return array<string, mixed> Memory usage information with keys: current, limit, percentage
      */
     public function monitor(): array
     {
@@ -91,7 +91,7 @@ class MemoryManager
     /**
      * Get current memory usage statistics
      *
-     * @return array Memory usage information with keys: current, limit, percentage
+     * @return array<string, mixed> Memory usage information with keys: current, limit, percentage
      */
     public function getCurrentUsage(): array
     {
@@ -115,7 +115,7 @@ class MemoryManager
     /**
      * Handle high memory usage (alert threshold exceeded)
      *
-     * @param array $usage Memory usage information
+     * @param array<string, mixed> $usage Memory usage information
      * @return void
      */
     private function handleHighMemoryUsage(array $usage): void
@@ -134,7 +134,7 @@ class MemoryManager
     /**
      * Handle critical memory usage (critical threshold exceeded)
      *
-     * @param array $usage Memory usage information
+     * @param array<string, mixed> $usage Memory usage information
      * @return void
      */
     private function handleCriticalMemoryUsage(array $usage): void
@@ -164,7 +164,7 @@ class MemoryManager
         // as it required Laravel's app() helper function
 
         // Clear opcache if available and appropriate
-        if (function_exists('opcache_reset') && !in_array(php_sapi_name(), ['cli', 'phpdbg'])) {
+        if (function_exists('opcache_reset') && !in_array(php_sapi_name(), ['cli', 'phpdbg'], true)) {
             opcache_reset();
         }
     }

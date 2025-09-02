@@ -40,7 +40,7 @@ abstract class NotificationEvent extends Event
     protected DateTime $timestamp;
 
     /**
-     * @var array Additional event data
+     * @var array<string, mixed> Additional event data
      */
     protected array $data;
 
@@ -50,7 +50,7 @@ abstract class NotificationEvent extends Event
      * @param Notification $notification The notification
      * @param Notifiable $notifiable The recipient
      * @param string|null $channel The delivery channel
-     * @param array $data Additional event data
+     * @param array<string, mixed> $data Additional event data
      */
     public function __construct(
         Notification $notification,
@@ -108,7 +108,7 @@ abstract class NotificationEvent extends Event
     /**
      * Get additional data
      *
-     * @return array Event data
+     * @return array<string, mixed> Event data
      */
     public function getData(): array
     {
@@ -137,7 +137,7 @@ abstract class NotificationEvent extends Event
     /**
      * Convert the event to an array
      *
-     * @return array Event as array
+     * @return array<string, mixed> Event as array
      */
     public function toArray(): array
     {

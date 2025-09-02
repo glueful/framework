@@ -69,13 +69,13 @@ class LogManager implements LoggerInterface, LogManagerInterface
     /** @var bool Debug mode flag */
     private bool $debugMode = true;
 
-    /** @var array Recent log entries buffer */
+    /** @var array<int, array{level: string, message: string, context: array<string, mixed>, timestamp: float}> Recent log entries buffer */
     private array $recentLogs = [];
 
     /** @var int Maximum size for recent logs buffer */
     private int $maxBufferSize = 100;
 
-    /** @var array Active timers for performance tracking */
+    /** @var array<string, array<string, mixed>> Active timers for performance tracking */
     private array $timers = [];
 
     /** @var int Maximum number of daily log files to keep */
@@ -93,7 +93,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
     /** @var bool Whether to suppress logging exceptions */
     private bool $suppressExceptions = true;
 
-    /** @var array Log entries waiting to be flushed */
+    /** @var array<int, array{level: Level, message: string, context: array<string, mixed>}> Log entries waiting to be flushed */
     private array $logBatch = [];
 
     /** @var bool Whether batch mode is enabled */
@@ -120,7 +120,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
     /** @var bool Track log statistics */
     private bool $trackLogStatistics = false;
 
-    /** @var array Log statistics counters */
+    /** @var array<string, int> Log statistics counters */
     private array $logStatistics = [];
 
     /**
@@ -139,7 +139,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
         $this->minimumLevel = Level::Debug;
 
         // Get log directory from config
-        $logDirectory = config('logging.paths.log_directory') ?: base_path('storage/logs/');
+        $logDirectory = config('logging.paths.log_directory') ?? base_path('storage/logs/');
 
         // Create logs directory if it doesn't exist
         if (!is_dir($logDirectory) && !mkdir($logDirectory, 0755, true)) {
@@ -194,7 +194,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
         $this->logger->pushHandler($defaultHandler);  // Other logs go to default log
 
         // Add database handler if configured
-        if (config('logging.application.database_logging', false)) {
+        if ((bool) config('logging.application.database_logging', false)) {
             $this->logger->pushHandler(new DatabaseLogHandler());
         }
 
@@ -298,12 +298,12 @@ class LogManager implements LoggerInterface, LogManagerInterface
      * Set log output format
      *
      * @param string $format 'text' or 'json'
-     * @param array $options Formatter options
+     * @param array<string, mixed> $options Formatter options
      * @return self
      */
     public function setFormat(string $format, array $options = []): self
     {
-        if (!in_array($format, ['text', 'json'])) {
+        if (!in_array($format, ['text', 'json'], true)) {
             throw new \InvalidArgumentException("Log format must be 'text' or 'json'");
         }
 
@@ -469,7 +469,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
      * Configure database logging options
      *
      * @param bool $enabled Whether to enable database logging
-     * @param array $options Database logging options
+     * @param array<string, mixed> $options Database logging options
      * @return self
      */
     public function configureDatabaseLogging(bool $enabled, array $options = []): self
@@ -543,7 +543,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
      * End timing and log the result
      *
      * @param string $timerId Timer ID from startTimer()
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return float Duration in milliseconds or 0 if timer not found
      */
     public function endTimer(string $timerId, array $context = []): float
@@ -560,7 +560,8 @@ class LogManager implements LoggerInterface, LogManagerInterface
         }
 
         // Calculate duration in milliseconds
-        $duration = (microtime(true) - $timer['start']) * 1000;
+        $timerStart = $timer['start'] ?? 0.0;
+        $duration = (microtime(true) - $timerStart) * 1000;
         $duration = round($duration, 2);
 
         // Ensure duration is always greater than 0 for the first call
@@ -570,7 +571,8 @@ class LogManager implements LoggerInterface, LogManagerInterface
         $this->timers[$timerId]['end'] = microtime(true);
         $this->timers[$timerId]['duration'] = $duration;
 
-        $message = "Operation completed: {$timer['operation']} ({$duration}ms)";
+        $operation = $timer['operation'] ?? 'Unknown';
+        $message = "Operation completed: {$operation} ({$duration}ms)";
 
         // Only log if the context doesn't already have a duration_ms
         // This is to avoid duplicate logging in tests that are mocking the log method
@@ -601,7 +603,8 @@ class LogManager implements LoggerInterface, LogManagerInterface
     /**
      * Get recent logs from in-memory buffer
      *
-     * @return array Recent log entries
+     * @return array<int, array{level: string, message: string, context: array<string, mixed>, timestamp: float}>
+     *         Recent log entries
      */
     public function getRecentLogs(): array
     {
@@ -660,7 +663,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
      */
     public function flush(): self
     {
-        if (empty($this->logBatch)) {
+        if ($this->logBatch === []) {
             return $this;
         }
 
@@ -684,10 +687,10 @@ class LogManager implements LoggerInterface, LogManagerInterface
      *
      * @param mixed $level Log level
      * @param string|\Stringable $message Log message
-     * @param array<string, mixed> $context Additional context data
+     * @param array $context Additional context data
      * @return void
      */
-    public function log($level, $message, array $context = []): void
+    public function log($level, string|\Stringable $message, array $context = []): void
     {
         try {
             // Keep the original level for internal methods
@@ -723,8 +726,8 @@ class LogManager implements LoggerInterface, LogManagerInterface
             $currentChannel = $channel ?? $this->defaultChannel;
             $context['channel'] = $currentChannel;
 
-            // Convert message to string if it's Stringable
-            $messageStr = $message instanceof \Stringable ? (string)$message : (string)$message;
+            // Convert message to string
+            $messageStr = (string)$message;
 
             // Sanitize sensitive data in context
             $sanitizedContext = $this->sanitizeContext($context);
@@ -809,8 +812,12 @@ class LogManager implements LoggerInterface, LogManagerInterface
     /**
      * @param array<string, mixed> $context
      */
-    public function logWithChannel($message, array $context = [], $level = Level::Info, ?string $channel = null): void
-    {
+    public function logWithChannel(
+        string|\Stringable $message,
+        array $context = [],
+        mixed $level = Level::Info,
+        ?string $channel = null
+    ): void {
         if ($channel !== null) {
             $context['_channel'] = $channel;
         }
@@ -908,7 +915,8 @@ class LogManager implements LoggerInterface, LogManagerInterface
     public function logApiRequest($request, $response, $error = null, $startTime = null): void
     {
         $endTime = microtime(true);
-        $execTime = $startTime ? round(($endTime - $startTime) * 1000, 2) : null; // Calculate execution time in ms
+        // Calculate execution time in ms
+        $execTime = $startTime !== null ? round(($endTime - $startTime) * 1000, 2) : null;
 
         // Handle objects with methods or closures
         $method = 'UNKNOWN';
@@ -956,12 +964,12 @@ class LogManager implements LoggerInterface, LogManagerInterface
 
         // Add auth info
         $authInfo = $this->getAuthInfo();
-        if ($authInfo) {
+        if ($authInfo !== null) {
             $context['auth'] = $authInfo;
         }
 
         // Add error details if present
-        if ($error) {
+        if ($error !== null) {
             $context['error'] = [
                 'message' => $error->getMessage(),
                 'code'    => $error->getCode(),
@@ -984,7 +992,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
      */
     private function getLogFilename(string $channel, Level $level): string
     {
-        $baseDir = config('logging.paths.log_directory') ?: dirname(dirname(__FILE__)) . '/logs/';
+        $baseDir = config('logging.paths.log_directory') ?? dirname(dirname(__FILE__)) . '/logs/';
 
         // Organize logs in subdirectories by channel for better organization
         $channelDir = $baseDir . ($channel !== 'app' ? $channel . '/' : '');
@@ -1015,7 +1023,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
     {
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
         $bytes = max($bytes, 0);
-        $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+        $pow = floor(($bytes > 0 ? log($bytes) : 0) / log(1024));
         $pow = min($pow, count($units) - 1);
         $bytes /= (1 << (10 * $pow));
 
@@ -1058,11 +1066,11 @@ class LogManager implements LoggerInterface, LogManagerInterface
      */
     private function getClientIp(): ?string
     {
-        if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
+        if (isset($_SERVER['HTTP_CLIENT_IP']) && $_SERVER['HTTP_CLIENT_IP'] !== '') {
             return $_SERVER['HTTP_CLIENT_IP'];
         }
 
-        if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+        if (isset($_SERVER['HTTP_X_FORWARDED_FOR']) && $_SERVER['HTTP_X_FORWARDED_FOR'] !== '') {
             $ipList = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
             return trim($ipList[0]);
         }
@@ -1159,9 +1167,9 @@ class LogManager implements LoggerInterface, LogManagerInterface
     /**
      * Get authentication information
      *
-     * @return array|null Authentication details
+     * @return array<string, mixed>|null Authentication details
      */
-    private function getAuthInfo()
+    private function getAuthInfo(): ?array
     {
         // This is a placeholder - implement based on your auth system
         // Example with JWT tokens or session auth
@@ -1187,7 +1195,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
             }
         }
 
-        return empty($authInfo) ? null : $authInfo;
+        return $authInfo === [] ? null : $authInfo;
     }
 
     /**
@@ -1305,8 +1313,8 @@ class LogManager implements LoggerInterface, LogManagerInterface
     /**
      * Enrich log context with standard application information
      *
-     * @param array $context Original context array
-     * @return array Enriched context
+     * @param array<string, mixed> $context Original context array
+     * @return array<string, mixed> Enriched context
      */
     private function enrichContext(array $context): array
     {
@@ -1358,7 +1366,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
      *
      * @param mixed $level Log level
      * @param string $message Log message
-     * @param array $context Log context
+     * @param array<string, mixed> $context Log context
      * @return void
      */
     private function addToRecentLogs($level, string $message, array $context): void
@@ -1381,8 +1389,8 @@ class LogManager implements LoggerInterface, LogManagerInterface
    /**
      * Sanitize context parameters for logging (remove sensitive data)
      *
-     * @param array $context Context parameters
-     * @return array Sanitized context
+     * @param array<string, mixed> $context Context parameters
+     * @return array<string, mixed> Sanitized context
      */
     private function sanitizeContext(array $context): array
     {
@@ -1403,7 +1411,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
     /**
      * Configure logging options
      *
-     * @param array $options Configuration options
+     * @param array<string, mixed> $options Configuration options
      * @return self
      */
     public function configure(array $options = []): self
@@ -1465,10 +1473,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
      * @param array $context
      * @return void
      */
-    /**
-     * @param array<string, mixed> $context
-     */
-    public function emergency($message, array $context = []): void
+    public function emergency(string|\Stringable $message, array $context = []): void
     {
         $this->log(Level::Emergency, $message, $context);
     }
@@ -1480,10 +1485,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
      * @param array $context
      * @return void
      */
-    /**
-     * @param array<string, mixed> $context
-     */
-    public function alert($message, array $context = []): void
+    public function alert(string|\Stringable $message, array $context = []): void
     {
         $this->log(Level::Alert, $message, $context);
     }
@@ -1495,10 +1497,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
      * @param array $context
      * @return void
      */
-    /**
-     * @param array<string, mixed> $context
-     */
-    public function critical($message, array $context = []): void
+    public function critical(string|\Stringable $message, array $context = []): void
     {
         $this->log(Level::Critical, $message, $context);
     }
@@ -1510,10 +1509,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
      * @param array $context
      * @return void
      */
-    /**
-     * @param array<string, mixed> $context
-     */
-    public function error($message, array $context = []): void
+    public function error(string|\Stringable $message, array $context = []): void
     {
         $this->log(Level::Error, $message, $context);
     }
@@ -1525,10 +1521,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
      * @param array $context
      * @return void
      */
-    /**
-     * @param array<string, mixed> $context
-     */
-    public function warning($message, array $context = []): void
+    public function warning(string|\Stringable $message, array $context = []): void
     {
         $this->log(Level::Warning, $message, $context);
     }
@@ -1540,10 +1533,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
      * @param array $context
      * @return void
      */
-    /**
-     * @param array<string, mixed> $context
-     */
-    public function notice($message, array $context = []): void
+    public function notice(string|\Stringable $message, array $context = []): void
     {
         $this->log(Level::Notice, $message, $context);
     }
@@ -1555,10 +1545,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
      * @param array $context
      * @return void
      */
-    /**
-     * @param array<string, mixed> $context
-     */
-    public function info($message, array $context = []): void
+    public function info(string|\Stringable $message, array $context = []): void
     {
         $this->log(Level::Info, $message, $context);
     }
@@ -1570,10 +1557,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
      * @param array $context
      * @return void
      */
-    /**
-     * @param array<string, mixed> $context
-     */
-    public function debug($message, array $context = []): void
+    public function debug(string|\Stringable $message, array $context = []): void
     {
         $this->log(Level::Debug, $message, $context);
     }

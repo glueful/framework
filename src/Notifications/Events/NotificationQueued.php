@@ -27,7 +27,7 @@ class NotificationQueued extends NotificationEvent
      *
      * @param Notification $notification The notification
      * @param Notifiable $notifiable The recipient
-     * @param array $data Additional event data
+     * @param array<string, mixed> $data Additional event data
      */
     public function __construct(
         Notification $notification,
@@ -61,7 +61,7 @@ class NotificationQueued extends NotificationEvent
     /**
      * Convert the event to an array
      *
-     * @return array Event as array
+     * @return array<string, mixed> Event as array
      */
     public function toArray(): array
     {

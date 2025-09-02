@@ -24,14 +24,14 @@ class MemoryAlertingService
     private $memoryManager;
 
     /**
-     * @var array
+     * @var array<string, mixed>
      */
-    private $config;
+    private array $config;
 
     /**
-     * @var array
+     * @var array<string, int>
      */
-    private $lastAlerts = [];
+    private array $lastAlerts = [];
 
     /**
      * @var int
@@ -63,12 +63,12 @@ class MemoryAlertingService
      * Check memory usage and trigger alerts if thresholds are exceeded
      *
      * @param string $context Context identifier for the current operation
-     * @param array $tags Tags for categorizing the alert
-     * @return array Memory usage information
+     * @param array<string, mixed> $tags Tags for categorizing the alert
+     * @return array<string, mixed> Memory usage information
      */
     public function checkAndAlert(string $context = 'application', array $tags = []): array
     {
-        if (!$this->config['enabled']) {
+        if (($this->config['enabled'] ?? false) === false) {
             return $this->memoryManager->getCurrentUsage();
         }
 
@@ -88,9 +88,9 @@ class MemoryAlertingService
     /**
      * Trigger a warning alert for high memory usage
      *
-     * @param array $usage Memory usage information
+     * @param array<string, mixed> $usage Memory usage information
      * @param string $context Context identifier
-     * @param array $tags Alert tags
+     * @param array<string, mixed> $tags Alert tags
      * @return void
      */
     private function triggerWarningAlert(array $usage, string $context, array $tags): void
@@ -123,9 +123,9 @@ class MemoryAlertingService
     /**
      * Trigger a critical alert for dangerously high memory usage
      *
-     * @param array $usage Memory usage information
+     * @param array<string, mixed> $usage Memory usage information
      * @param string $context Context identifier
-     * @param array $tags Alert tags
+     * @param array<string, mixed> $tags Alert tags
      * @return void
      */
     private function triggerCriticalAlert(array $usage, string $context, array $tags): void
@@ -160,9 +160,9 @@ class MemoryAlertingService
      *
      * @param string $level Alert level (warning, critical)
      * @param string $message Alert message
-     * @param array $usage Memory usage data
+     * @param array<string, mixed> $usage Memory usage data
      * @param string $context Alert context
-     * @param array $tags Alert tags
+     * @param array<string, mixed> $tags Alert tags
      * @return void
      */
     private function sendAlert(string $level, string $message, array $usage, string $context, array $tags): void
@@ -208,7 +208,7 @@ class MemoryAlertingService
      *
      * @param string $level Alert level
      * @param string $message Alert message
-     * @param array $data Additional alert data
+     * @param array<string, mixed> $data Additional alert data
      * @return void
      */
     private function sendLogAlert(string $level, string $message, array $data): void
@@ -226,7 +226,7 @@ class MemoryAlertingService
      *
      * @param string $level Alert level
      * @param string $message Alert message
-     * @param array $data Additional alert data
+     * @param array<string, mixed> $data Additional alert data
      * @return void
      */
     private function sendSlackAlert(string $level, string $message, array $data): void
@@ -234,7 +234,7 @@ class MemoryAlertingService
         // Implementation depends on how Slack notifications are configured in the system
         $slackConfig = config('notifications.slack', null);
 
-        if (!$slackConfig || empty($slackConfig['webhook_url'])) {
+        if ($slackConfig === null || ($slackConfig['webhook_url'] ?? '') === '') {
             $this->logger->warning('Slack webhook URL not configured, could not send memory alert');
             return;
         }
@@ -304,7 +304,7 @@ class MemoryAlertingService
      *
      * @param string $level Alert level
      * @param string $message Alert message
-     * @param array $data Additional alert data
+     * @param array<string, mixed> $data Additional alert data
      * @return void
      */
     private function sendEmailAlert(string $level, string $message, array $data): void
@@ -312,7 +312,7 @@ class MemoryAlertingService
         // Implementation depends on how email notifications are configured in the system
         $emailConfig = config('notifications.email', null);
 
-        if (!$emailConfig || empty($emailConfig['to'])) {
+        if ($emailConfig === null || ($emailConfig['to'] ?? '') === '') {
             $this->logger->warning('Email configuration missing, could not send memory alert');
             return;
         }
@@ -326,14 +326,14 @@ class MemoryAlertingService
      *
      * @param string $level Alert level
      * @param string $message Alert message
-     * @param array $data Additional alert data
+     * @param array<string, mixed> $data Additional alert data
      * @return void
      */
     private function sendWebhookAlert(string $level, string $message, array $data): void
     {
         $webhookConfig = config('notifications.webhook', null);
 
-        if (!$webhookConfig || empty($webhookConfig['url'])) {
+        if ($webhookConfig === null || ($webhookConfig['url'] ?? '') === '') {
             $this->logger->warning('Webhook URL not configured, could not send memory alert');
             return;
         }
@@ -433,7 +433,7 @@ class MemoryAlertingService
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
 
         $bytes = max($bytes, 0);
-        $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+        $pow = floor(($bytes > 0 ? log($bytes) : 0) / log(1024));
         $pow = min($pow, count($units) - 1);
 
         $bytes /= pow(1024, $pow);

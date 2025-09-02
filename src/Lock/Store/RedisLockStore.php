@@ -8,8 +8,12 @@ use Symfony\Component\Lock\Store\RedisStore;
 
 class RedisLockStore extends RedisStore
 {
+    /** @var array{prefix: string, ttl: int} */
     private array $options;
 
+    /**
+     * @param array<string, mixed> $options
+     */
     public function __construct(\Redis|\RedisArray|\RedisCluster $redis, array $options = [])
     {
         $this->options = array_merge([
@@ -20,6 +24,9 @@ class RedisLockStore extends RedisStore
         parent::__construct($redis);
     }
 
+    /**
+     * @return array{prefix: string, ttl: int}
+     */
     public function getOptions(): array
     {
         return $this->options;

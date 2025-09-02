@@ -43,7 +43,7 @@ class NotificationPreference implements JsonSerializable
     private string $notificationType;
 
     /**
-     * @var array|null Channels the user wants to receive this notification on
+     * @var array<string>|null Channels the user wants to receive this notification on
      */
     private ?array $channels;
 
@@ -53,7 +53,7 @@ class NotificationPreference implements JsonSerializable
     private bool $enabled;
 
     /**
-     * @var array|null Additional settings for this notification preference
+     * @var array<string, mixed>|null Additional settings for this notification preference
      */
     private ?array $settings;
 
@@ -74,9 +74,9 @@ class NotificationPreference implements JsonSerializable
      * @param string $notifiableType Type of notifiable entity
      * @param string $notifiableId ID of notifiable entity
      * @param string $notificationType Notification type
-     * @param array|null $channels Preferred channels
+     * @param array<string>|null $channels Preferred channels
      * @param bool $enabled Whether notifications are enabled
-     * @param array|null $settings Additional settings
+     * @param array<string, mixed>|null $settings Additional settings
      * @param string|null $uuid UUID for cross-system identification
      */
     public function __construct(
@@ -180,7 +180,7 @@ class NotificationPreference implements JsonSerializable
     /**
      * Get preferred channels
      *
-     * @return array|null Preferred channels
+     * @return array<string>|null Preferred channels
      */
     public function getChannels(): ?array
     {
@@ -190,7 +190,7 @@ class NotificationPreference implements JsonSerializable
     /**
      * Set preferred channels
      *
-     * @param array|null $channels Preferred channels
+     * @param array<string>|null $channels Preferred channels
      * @return self
      */
     public function setChannels(?array $channels): self
@@ -212,7 +212,7 @@ class NotificationPreference implements JsonSerializable
             $this->channels = [];
         }
 
-        if (!in_array($channel, $this->channels)) {
+        if (!in_array($channel, $this->channels, true)) {
             $this->channels[] = $channel;
             $this->updatedAt = new DateTime();
         }
@@ -229,7 +229,7 @@ class NotificationPreference implements JsonSerializable
     public function removeChannel(string $channel): self
     {
         if ($this->channels !== null) {
-            $key = array_search($channel, $this->channels);
+            $key = array_search($channel, $this->channels, true);
             if ($key !== false) {
                 unset($this->channels[$key]);
                 $this->channels = array_values($this->channels); // Re-index array
@@ -248,7 +248,7 @@ class NotificationPreference implements JsonSerializable
      */
     public function hasChannel(string $channel): bool
     {
-        return $this->channels !== null && in_array($channel, $this->channels);
+        return $this->channels !== null && in_array($channel, $this->channels, true);
     }
 
     /**
@@ -277,7 +277,7 @@ class NotificationPreference implements JsonSerializable
     /**
      * Get additional settings
      *
-     * @return array|null Additional settings
+     * @return array<string, mixed>|null Additional settings
      */
     public function getSettings(): ?array
     {
@@ -287,7 +287,7 @@ class NotificationPreference implements JsonSerializable
     /**
      * Set additional settings
      *
-     * @param array|null $settings Additional settings
+     * @param array<string, mixed>|null $settings Additional settings
      * @return self
      */
     public function setSettings(?array $settings): self
@@ -355,7 +355,7 @@ class NotificationPreference implements JsonSerializable
     /**
      * Convert the preference to an array
      *
-     * @return array Preference as array
+     * @return array<string, mixed> Preference as array
      */
     public function toArray(): array
     {
@@ -369,14 +369,14 @@ class NotificationPreference implements JsonSerializable
             'enabled' => $this->enabled,
             'settings' => $this->settings,
             'created_at' => $this->createdAt->format('Y-m-d H:i:s'),
-            'updated_at' => $this->updatedAt ? $this->updatedAt->format('Y-m-d H:i:s') : null,
+            'updated_at' => $this->updatedAt !== null ? $this->updatedAt->format('Y-m-d H:i:s') : null,
         ];
     }
 
     /**
      * Prepare the preference for JSON serialization
      *
-     * @return array
+     * @return array<string, mixed>
      */
     public function jsonSerialize(): array
     {
@@ -386,7 +386,7 @@ class NotificationPreference implements JsonSerializable
     /**
      * Create a preference from a database record
      *
-     * @param array $data Database record
+     * @param array<string, mixed> $data Database record
      * @return self
      */
     public static function fromArray(array $data): self
@@ -406,11 +406,11 @@ class NotificationPreference implements JsonSerializable
             $data['uuid'] ?? null
         );
 
-        if (!empty($data['created_at'])) {
+        if (isset($data['created_at']) && is_string($data['created_at']) && $data['created_at'] !== '') {
             $preference->createdAt = new DateTime($data['created_at']);
         }
 
-        if (!empty($data['updated_at'])) {
+        if (isset($data['updated_at']) && is_string($data['updated_at']) && $data['updated_at'] !== '') {
             $preference->updatedAt = new DateTime($data['updated_at']);
         }
 

@@ -4,23 +4,26 @@ namespace Glueful\Performance;
 
 /**
  * A memory-efficient streaming iterator for large datasets
+ *
+ * @implements \Iterator<mixed, mixed>
  */
 class StreamingIterator implements \Iterator
 {
-    private $source;
-    private $position = 0;
-    private $currentKey;
-    private $currentValue;
-    private $valid = true;
-    private $bufferSize;
+    /** @var iterable<mixed, mixed> */
+    private \Iterator|\Generator|array|\Traversable $source;
+    private int $position = 0;
+    private mixed $currentKey;
+    private mixed $currentValue;
+    private bool $valid = true;
+    private int $bufferSize;
 
     /**
      * Create a new streaming iterator
      *
-     * @param \Iterator|\Generator|array|\Traversable $source The data source to stream
+     * @param iterable<mixed, mixed> $source The data source to stream
      * @param int $bufferSize The buffer size for internal operations
      */
-    public function __construct($source, int $bufferSize = 100)
+    public function __construct(\Iterator|\Generator|array|\Traversable $source, int $bufferSize = 100)
     {
         if (is_array($source)) {
             $this->source = new \ArrayIterator($source);
@@ -128,7 +131,7 @@ class StreamingIterator implements \Iterator
      *
      * @param callable $callback Function to apply to each chunk
      * @param int $chunkSize Size of each chunk
-     * @return array Results of applying the callback to each chunk
+     * @return array<mixed> Results of applying the callback to each chunk
      */
     public function chunk(callable $callback, int $chunkSize = 1000): array
     {
@@ -139,7 +142,7 @@ class StreamingIterator implements \Iterator
      * Convert the iterator to an array, with chunking to avoid memory issues
      *
      * @param int $maxItems Maximum number of items to convert (0 for all)
-     * @return array The iterator contents as an array
+     * @return array<mixed, mixed> The iterator contents as an array
      */
     public function toArray(int $maxItems = 0): array
     {

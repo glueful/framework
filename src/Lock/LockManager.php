@@ -13,6 +13,7 @@ use Psr\Log\NullLogger;
 class LockManager implements LockManagerInterface
 {
     private LockFactory $factory;
+    /** @var array<string, LockInterface> */
     private array $locks = [];
     private LoggerInterface $logger;
     private string $prefix;

@@ -24,7 +24,7 @@ interface NotificationExtension
     /**
      * Initialize the extension.
      *
-     * @param array $config Configuration options for the extension
+     * @param array<string, mixed> $config Configuration options for the extension
      * @return bool Whether the initialization was successful
      */
     public function initialize(array $config = []): bool;
@@ -32,24 +32,24 @@ interface NotificationExtension
     /**
      * Get the supported notification types.
      *
-     * @return array List of notification types supported by this extension
+     * @return array<string> List of notification types supported by this extension
      */
     public function getSupportedNotificationTypes(): array;
 
     /**
      * Process the notification before it's sent.
      *
-     * @param array $data The notification data
+     * @param array<string, mixed> $data The notification data
      * @param Notifiable $notifiable The entity receiving the notification
      * @param string $channel The notification channel
-     * @return array The processed notification data
+     * @return array<string, mixed> The processed notification data
      */
     public function beforeSend(array $data, Notifiable $notifiable, string $channel): array;
 
     /**
      * Process after a notification has been sent.
      *
-     * @param array $data The notification data
+     * @param array<string, mixed> $data The notification data
      * @param Notifiable $notifiable The entity that received the notification
      * @param string $channel The notification channel
      * @param bool $success Whether the notification was sent successfully

@@ -18,24 +18,24 @@ use InvalidArgumentException;
 class TemplateResolver
 {
     /**
-     * @var array Template cache for quick lookups
+     * @var array<string, NotificationTemplate|null> Template cache for quick lookups
      */
     protected array $templateCache = [];
 
     /**
-     * @var array Fallback patterns for templates
+     * @var array<string> Fallback patterns for templates
      */
     protected array $fallbackPatterns = [];
 
     /**
      * TemplateResolver constructor
      *
-     * @param array $fallbackPatterns Optional custom fallback patterns
+     * @param array<string> $fallbackPatterns Optional custom fallback patterns
      */
     public function __construct(array $fallbackPatterns = [])
     {
         // Default fallback patterns if none provided
-        $this->fallbackPatterns = !empty($fallbackPatterns) ? $fallbackPatterns : [
+        $this->fallbackPatterns = $fallbackPatterns !== [] ? $fallbackPatterns : [
             // Try type-specific template for channel first
             '%s.%s.%s', // [type].[name].[channel]
 
@@ -56,7 +56,7 @@ class TemplateResolver
      * @param string $type Notification type
      * @param string $name Template name
      * @param string $channel Channel name
-     * @param array $templates Array of available templates
+     * @param array<string, NotificationTemplate> $templates Array of available templates
      * @return NotificationTemplate|null The resolved template or null if not found
      */
     public function resolve(string $type, string $name, string $channel, array $templates): ?NotificationTemplate
@@ -97,9 +97,9 @@ class TemplateResolver
      *
      * @param string $type Notification type
      * @param string $name Template name
-     * @param array $channels List of channels to resolve for
-     * @param array $templates Array of available templates
-     * @return array Map of channel => template
+     * @param array<string> $channels List of channels to resolve for
+     * @param array<string, NotificationTemplate> $templates Array of available templates
+     * @return array<string, NotificationTemplate|null> Map of channel => template
      */
     public function resolveForChannels(string $type, string $name, array $channels, array $templates): array
     {
@@ -129,7 +129,7 @@ class TemplateResolver
      * Parse a template identifier into its components
      *
      * @param string $templateId Template identifier
-     * @return array Array with type, name, and channel
+     * @return array{type: string, name: string, channel: string} Array with type, name, and channel
      * @throws InvalidArgumentException If the template ID format is invalid
      */
     public function parseTemplateId(string $templateId): array
@@ -163,7 +163,7 @@ class TemplateResolver
     /**
      * Set custom fallback patterns
      *
-     * @param array $patterns Fallback patterns
+     * @param array<string> $patterns Fallback patterns
      * @return self
      */
     public function setFallbackPatterns(array $patterns): self
@@ -175,7 +175,7 @@ class TemplateResolver
     /**
      * Get current fallback patterns
      *
-     * @return array Current fallback patterns
+     * @return array<string> Current fallback patterns
      */
     public function getFallbackPatterns(): array
     {

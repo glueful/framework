@@ -18,19 +18,19 @@ use InvalidArgumentException;
 class ChannelManager
 {
     /**
-     * @var array Registered notification channels
+     * @var array<string, NotificationChannel> Registered notification channels
      */
     private array $channels = [];
 
     /**
-     * @var array Configuration options for the channel manager
+     * @var array<string, mixed> Configuration options for the channel manager
      */
     private array $config;
 
     /**
      * ChannelManager constructor
      *
-     * @param array $config Configuration options
+     * @param array<string, mixed> $config Configuration options
      */
     public function __construct(array $config = [])
     {
@@ -102,7 +102,7 @@ class ChannelManager
     /**
      * Get all registered channels
      *
-     * @return array Array of registered channels
+     * @return array<string, NotificationChannel> Array of registered channels
      */
     public function getChannels(): array
     {
@@ -112,7 +112,7 @@ class ChannelManager
     /**
      * Get available channel names
      *
-     * @return array Array of channel names
+     * @return array<string> Array of channel names
      */
     public function getAvailableChannels(): array
     {
@@ -122,7 +122,7 @@ class ChannelManager
     /**
      * Get only channels that are currently available for sending
      *
-     * @return array Array of available channels
+     * @return array<string, NotificationChannel> Array of available channels
      */
     public function getActiveChannels(): array
     {
@@ -134,7 +134,7 @@ class ChannelManager
     /**
      * Get the manager configuration
      *
-     * @return array Manager configuration
+     * @return array<string, mixed> Manager configuration
      */
     public function getConfig(): array
     {

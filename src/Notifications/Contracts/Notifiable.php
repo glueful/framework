@@ -48,7 +48,7 @@ interface Notifiable
     /**
      * Get notification preferences for this notifiable entity.
      *
-     * @return array The notification preferences
+     * @return array<string, mixed> The notification preferences
      */
     public function getNotificationPreferences(): array;
 }

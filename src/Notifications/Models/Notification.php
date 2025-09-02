@@ -38,7 +38,7 @@ class Notification implements JsonSerializable
     private string $subject;
 
     /**
-     * @var array|null Data associated with the notification
+     * @var array<string, mixed>|null Data associated with the notification
      */
     private ?array $data;
 
@@ -89,7 +89,7 @@ class Notification implements JsonSerializable
      * @param string $subject Notification subject
      * @param string $notifiableType Type of notifiable entity
      * @param string $notifiableId ID of notifiable entity
-     * @param array|null $data Additional notification data
+     * @param array<string, mixed>|null $data Additional notification data
      * @param string|null $uuid UUID for cross-system identification
      * @param string|null $id Unique identifier (moved to the end as optional parameter)
      */
@@ -199,7 +199,7 @@ class Notification implements JsonSerializable
     /**
      * Get notification data
      *
-     * @return array|null Notification data
+     * @return array<string, mixed>|null Notification data
      */
     public function getData(): ?array
     {
@@ -209,7 +209,7 @@ class Notification implements JsonSerializable
     /**
      * Set notification data
      *
-     * @param array|null $data Notification data
+     * @param array<string, mixed>|null $data Notification data
      * @return self
      */
     public function setData(?array $data): self
@@ -386,7 +386,7 @@ class Notification implements JsonSerializable
     /**
      * Convert the notification to an array
      *
-     * @return array Notification as array
+     * @return array<string, mixed> Notification as array
      */
     public function toArray(): array
     {
@@ -399,18 +399,18 @@ class Notification implements JsonSerializable
             'priority' => $this->priority,
             'notifiable_type' => $this->notifiableType,
             'notifiable_id' => $this->notifiableId,
-            'read_at' => $this->readAt ? $this->readAt->format('Y-m-d H:i:s') : null,
-            'scheduled_at' => $this->scheduledAt ? $this->scheduledAt->format('Y-m-d H:i:s') : null,
-            'sent_at' => $this->sentAt ? $this->sentAt->format('Y-m-d H:i:s') : null,
+            'read_at' => $this->readAt !== null ? $this->readAt->format('Y-m-d H:i:s') : null,
+            'scheduled_at' => $this->scheduledAt !== null ? $this->scheduledAt->format('Y-m-d H:i:s') : null,
+            'sent_at' => $this->sentAt !== null ? $this->sentAt->format('Y-m-d H:i:s') : null,
             'created_at' => $this->createdAt->format('Y-m-d H:i:s'),
-            'updated_at' => $this->updatedAt ? $this->updatedAt->format('Y-m-d H:i:s') : null,
+            'updated_at' => $this->updatedAt !== null ? $this->updatedAt->format('Y-m-d H:i:s') : null,
         ];
     }
 
     /**
      * Prepare the notification for JSON serialization
      *
-     * @return array
+     * @return array<string, mixed>
      */
     public function jsonSerialize(): array
     {
@@ -420,7 +420,7 @@ class Notification implements JsonSerializable
     /**
      * Create a notification from a database record
      *
-     * @param array $data Database record
+     * @param array<string, mixed> $data Database record
      * @return self
      */
     public static function fromArray(array $data): self
@@ -439,23 +439,23 @@ class Notification implements JsonSerializable
             $notification->setPriority($data['priority']);
         }
 
-        if (!empty($data['read_at'])) {
+        if (isset($data['read_at']) && is_string($data['read_at']) && $data['read_at'] !== '') {
             $notification->readAt = new DateTime($data['read_at']);
         }
 
-        if (!empty($data['scheduled_at'])) {
+        if (isset($data['scheduled_at']) && is_string($data['scheduled_at']) && $data['scheduled_at'] !== '') {
             $notification->scheduledAt = new DateTime($data['scheduled_at']);
         }
 
-        if (!empty($data['sent_at'])) {
+        if (isset($data['sent_at']) && is_string($data['sent_at']) && $data['sent_at'] !== '') {
             $notification->sentAt = new DateTime($data['sent_at']);
         }
 
-        if (!empty($data['created_at'])) {
+        if (isset($data['created_at']) && is_string($data['created_at']) && $data['created_at'] !== '') {
             $notification->createdAt = new DateTime($data['created_at']);
         }
 
-        if (!empty($data['updated_at'])) {
+        if (isset($data['updated_at']) && is_string($data['updated_at']) && $data['updated_at'] !== '') {
             $notification->updatedAt = new DateTime($data['updated_at']);
         }
 

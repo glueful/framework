@@ -38,7 +38,7 @@ class DatabaseLogHandler extends AbstractProcessingHandler
      * Sets up the handler with specified log level and establishes
      * database connection through SchemaBuilder.
      *
-     * @param array $options Minimum logging level (defaults to DEBUG)
+     * @param array<string, mixed> $options Minimum logging level (defaults to DEBUG)
      */
     public function __construct(array $options = [])
     {
