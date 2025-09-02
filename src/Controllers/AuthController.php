@@ -116,7 +116,7 @@ class AuthController
         $userAgent = $request->headers->get('User-Agent');
 
         // Extract remember me preference from credentials
-        $rememberMe = isset($credentials['remember']) && $credentials['remember'];
+        $rememberMe = isset($credentials['remember']) && (bool)$credentials['remember'];
 
         // Add remember_me to credentials for authentication service
         $credentials['remember_me'] = $rememberMe;

@@ -15,6 +15,7 @@ use Symfony\Component\HttpFoundation\Response;
 class ApiMetricsMiddleware implements MiddlewareInterface
 {
     private ?ApiMetricsService $metricsService = null;
+    /** @var array<string, mixed> */
     private static array $metricData = [];
     private static float $startTime = 0;
 
@@ -48,7 +49,7 @@ class ApiMetricsMiddleware implements MiddlewareInterface
             self::$metricData = [
                 'endpoint' => $request->getPathInfo(),
                 'method' => $request->getMethod(),
-                'ip' => $request->getClientIp() ?: '0.0.0.0',
+                'ip' => $request->getClientIp() ?? '0.0.0.0',
                 'timestamp' => time(),
                 // Other fields will be filled in by the shutdown function
                 'response_time' => 0,
@@ -81,7 +82,7 @@ class ApiMetricsMiddleware implements MiddlewareInterface
     public function recordMetricsOnShutdown(): void
     {
         // Skip if no metrics data was collected or service is not available
-        if (empty(self::$metricData) || $this->metricsService === null) {
+        if (count(self::$metricData) === 0 || $this->metricsService === null) {
             return;
         }
 

@@ -52,13 +52,13 @@ class RequestContext
     {
         // Check for forwarded IP addresses
         $forwardedFor = $this->getServerParam('HTTP_X_FORWARDED_FOR');
-        if ($forwardedFor) {
+        if ($forwardedFor !== null) {
             $ips = array_map('trim', explode(',', $forwardedFor));
             return $ips[0]; // First IP is the original client
         }
 
         $realIp = $this->getServerParam('HTTP_X_REAL_IP');
-        if ($realIp) {
+        if ($realIp !== null) {
             return $realIp;
         }
 
@@ -162,19 +162,19 @@ class RequestContext
     {
         // Check Authorization header
         $auth = $this->getServerParam('HTTP_AUTHORIZATION');
-        if ($auth) {
+        if ($auth !== null) {
             return $auth;
         }
 
         // Check alternative header (some servers use this)
         $auth = $this->getServerParam('REDIRECT_HTTP_AUTHORIZATION');
-        if ($auth) {
+        if ($auth !== null) {
             return $auth;
         }
 
         // Check PHP_AUTH_DIGEST for digest auth
         $auth = $this->getServerParam('PHP_AUTH_DIGEST');
-        if ($auth) {
+        if ($auth !== null) {
             return $auth;
         }
 
@@ -189,7 +189,7 @@ class RequestContext
     public function getBearerToken(): ?string
     {
         $auth = $this->getAuthorizationHeader();
-        if ($auth && preg_match('/Bearer\s+(.+)$/i', $auth, $matches)) {
+        if ($auth !== null && preg_match('/Bearer\s+(.+)$/i', $auth, $matches)) {
             return $matches[1];
         }
 
@@ -204,7 +204,7 @@ class RequestContext
     public function getContentType(): string
     {
         $contentType = $this->request->getHeaderLine('Content-Type');
-        return $contentType ?: '';
+        return $contentType;
     }
 
     /**
@@ -236,7 +236,7 @@ class RequestContext
     public function isHttps(): bool
     {
         $https = $this->getServerParam('HTTPS');
-        return $https && $https !== 'off';
+        return $https !== null && $https !== 'off';
     }
 
     /**

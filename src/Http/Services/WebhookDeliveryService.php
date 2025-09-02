@@ -26,6 +26,8 @@ class WebhookDeliveryService
 
     /**
      * Deliver a single webhook
+     * @param array<string, mixed> $payload
+     * @param array<string, mixed> $options
      */
     public function deliverWebhook(
         string $url,
@@ -89,6 +91,18 @@ class WebhookDeliveryService
 
     /**
      * Deliver multiple webhooks in batch
+     * @param array<int|string, array{
+     *     url: string,
+     *     payload: array<string, mixed>,
+     *     options?: array<string, mixed>
+     * }> $webhooks
+     * @return array<int|string, array{
+     *     success: bool,
+     *     status_code?: int,
+     *     duration_ms: float,
+     *     response?: string,
+     *     error?: string
+     * }>
      */
     public function deliverBatchWebhooks(array $webhooks): array
     {
@@ -169,6 +183,8 @@ class WebhookDeliveryService
 
     /**
      * Deliver webhook with retry mechanism
+     * @param array<string, mixed> $payload
+     * @param array<string, mixed> $options
      */
     public function deliverWebhookWithRetries(
         string $url,
@@ -218,6 +234,7 @@ class WebhookDeliveryService
 
     /**
      * Create a webhook-specific HTTP client
+     * @param array<string, mixed> $options
      */
     private function createWebhookClient(array $options): Client
     {
@@ -233,6 +250,9 @@ class WebhookDeliveryService
 
     /**
      * Build request options including signature
+     * @param array<string, mixed> $payload
+     * @param array<string, mixed> $options
+     * @return array<string, mixed>
      */
     private function buildRequestOptions(array $payload, array $options): array
     {
@@ -260,6 +280,7 @@ class WebhookDeliveryService
 
     /**
      * Generate HMAC signature for webhook security
+     * @param array<string, mixed> $payload
      */
     private function generateSignature(array $payload, string $secret): string
     {
@@ -278,6 +299,7 @@ class WebhookDeliveryService
 
     /**
      * Log webhook delivery failure
+     * @param array<string, mixed> $payload
      */
     private function logWebhookFailure(
         string $url,
@@ -297,6 +319,13 @@ class WebhookDeliveryService
 
     /**
      * Log batch delivery results
+     * @param array<int|string, array{
+     *     success: bool,
+     *     status_code?: int,
+     *     duration_ms: float,
+     *     response?: string,
+     *     error?: string
+     * }> $responses
      */
     private function logBatchResults(array $responses): void
     {
@@ -342,6 +371,8 @@ class WebhookDeliveryService
 
     /**
      * Create webhook delivery configuration
+     * @param array<string, mixed> $config
+     * @return array<string, mixed>
      */
     public static function createConfig(array $config = []): array
     {

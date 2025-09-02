@@ -20,6 +20,7 @@ use Symfony\Component\HttpFoundation\Response;
 class DeprecationMiddleware implements MiddlewareInterface
 {
     private LoggerInterface $logger;
+    /** @var array<string, mixed> */
     private array $deprecatedRoutes;
     private bool $enabled;
 
@@ -43,7 +44,7 @@ class DeprecationMiddleware implements MiddlewareInterface
         // Check for exact route match first, then pattern matches
         $deprecation = $this->findDeprecatedRoute($routeKey, $routePath, $method);
 
-        if ($deprecation) {
+        if ($deprecation !== null) {
             $this->logDeprecation($request, $routePath, $method, $deprecation);
             $response = $handler->handle($request);
             return $this->addDeprecationHeaders($response, $deprecation);
@@ -54,6 +55,7 @@ class DeprecationMiddleware implements MiddlewareInterface
 
     /**
      * Find deprecated route configuration
+     * @return array<string, mixed>|null
      */
     private function findDeprecatedRoute(string $routeKey, string $routePath, string $method): ?array
     {
@@ -66,7 +68,7 @@ class DeprecationMiddleware implements MiddlewareInterface
         if (
             isset($this->deprecatedRoutes[$routePath]) &&
             (!isset($this->deprecatedRoutes[$routePath]['methods']) ||
-             in_array($method, $this->deprecatedRoutes[$routePath]['methods']))
+             in_array($method, $this->deprecatedRoutes[$routePath]['methods'], true))
         ) {
             return $this->deprecatedRoutes[$routePath];
         }
@@ -107,6 +109,7 @@ class DeprecationMiddleware implements MiddlewareInterface
 
     /**
      * Log deprecation warning (framework concern)
+     * @param array<string, mixed> $deprecation
      */
     private function logDeprecation(Request $request, string $routePath, string $method, array $deprecation): void
     {
@@ -128,6 +131,7 @@ class DeprecationMiddleware implements MiddlewareInterface
 
     /**
      * Add deprecation headers to response
+     * @param array<string, mixed> $deprecation
      */
     private function addDeprecationHeaders(Response $response, array $deprecation): Response
     {

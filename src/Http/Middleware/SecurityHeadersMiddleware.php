@@ -23,13 +23,13 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class SecurityHeadersMiddleware implements MiddlewareInterface
 {
-    /** @var array Security header configuration */
+    /** @var array<string, mixed> Security header configuration */
     private array $config;
 
     /**
      * Create a new security headers middleware
      *
-     * @param array $config Security header configuration
+     * @param array<string, mixed> $config Security header configuration
      */
     public function __construct(array $config = [])
     {
@@ -77,9 +77,9 @@ class SecurityHeadersMiddleware implements MiddlewareInterface
     /**
      * Normalize config to handle both legacy and new formats
      *
-     * @param array $defaultConfig Default configuration
-     * @param array $userConfig User-provided configuration
-     * @return array Normalized configuration
+     * @param array<string, mixed> $defaultConfig Default configuration
+     * @param array<string, mixed> $userConfig User-provided configuration
+     * @return array<string, mixed> Normalized configuration
      */
     private function normalizeConfig(array $defaultConfig, array $userConfig): array
     {
@@ -90,8 +90,8 @@ class SecurityHeadersMiddleware implements MiddlewareInterface
         if (isset($userConfig['content_security_policy']) && is_string($userConfig['content_security_policy'])) {
             // Parse CSP string into directives
             $cspString = $userConfig['content_security_policy'];
-            $config['content_security_policy']['enabled'] = !empty($cspString);
-            if (!empty($cspString)) {
+            $config['content_security_policy']['enabled'] = $cspString !== '';
+            if ($cspString !== '') {
                 // Simple parsing - for more complex CSP strings, this could be enhanced
                 $config['content_security_policy']['directives']['default-src'] = [$cspString];
             }
@@ -108,7 +108,7 @@ class SecurityHeadersMiddleware implements MiddlewareInterface
         }
 
         if (isset($userConfig['x_content_type_options'])) {
-            $config['x_content_type_options'] = !empty($userConfig['x_content_type_options']);
+            $config['x_content_type_options'] = ($userConfig['x_content_type_options'] ?? false) !== false;
         }
 
         if (isset($userConfig['x_xss_protection'])) {
@@ -117,7 +117,7 @@ class SecurityHeadersMiddleware implements MiddlewareInterface
 
         if (isset($userConfig['strict_transport_security'])) {
             if (is_string($userConfig['strict_transport_security'])) {
-                $config['strict_transport_security']['enabled'] = !empty($userConfig['strict_transport_security']);
+                $config['strict_transport_security']['enabled'] = $userConfig['strict_transport_security'] !== '';
             } elseif (is_array($userConfig['strict_transport_security'])) {
                 $config['strict_transport_security'] = array_merge(
                     $config['strict_transport_security'],
@@ -174,37 +174,37 @@ class SecurityHeadersMiddleware implements MiddlewareInterface
     private function addSecurityHeaders(Response $response, ?Request $request = null): void
     {
         // Content Security Policy
-        if ($this->config['content_security_policy']['enabled']) {
+        if (($this->config['content_security_policy']['enabled'] ?? false) === true) {
             $this->addContentSecurityPolicy($response);
         }
 
         // X-Content-Type-Options
-        if ($this->config['x_content_type_options']) {
+        if (($this->config['x_content_type_options'] ?? false) === true) {
             $response->headers->set('X-Content-Type-Options', 'nosniff');
         }
 
         // X-Frame-Options
-        if ($this->config['x_frame_options']) {
+        if (($this->config['x_frame_options'] ?? false) !== false) {
             $response->headers->set('X-Frame-Options', $this->config['x_frame_options']);
         }
 
         // X-XSS-Protection
-        if ($this->config['x_xss_protection']) {
+        if (($this->config['x_xss_protection'] ?? false) !== false) {
             $response->headers->set('X-XSS-Protection', $this->config['x_xss_protection']);
         }
 
         // Strict-Transport-Security (only for HTTPS requests)
-        if ($this->config['strict_transport_security']['enabled'] && $request && $request->isSecure()) {
+        if (($this->config['strict_transport_security']['enabled'] ?? false) === true && $request !== null && $request->isSecure()) {
             $this->addStrictTransportSecurity($response);
         }
 
         // Referrer-Policy
-        if ($this->config['referrer_policy']) {
+        if (($this->config['referrer_policy'] ?? false) !== false) {
             $response->headers->set('Referrer-Policy', $this->config['referrer_policy']);
         }
 
         // Permissions-Policy
-        if ($this->config['permissions_policy']['enabled']) {
+        if (($this->config['permissions_policy']['enabled'] ?? false) === true) {
             $this->addPermissionsPolicy($response);
         }
     }
@@ -222,7 +222,7 @@ class SecurityHeadersMiddleware implements MiddlewareInterface
             $directives[] = $directive . ' ' . implode(' ', $sources);
         }
 
-        $headerName = $this->config['content_security_policy']['report_only']
+        $headerName = (($this->config['content_security_policy']['report_only'] ?? false) === true)
             ? 'Content-Security-Policy-Report-Only'
             : 'Content-Security-Policy';
 
@@ -239,11 +239,11 @@ class SecurityHeadersMiddleware implements MiddlewareInterface
         $config = $this->config['strict_transport_security'];
         $value = 'max-age=' . $config['max_age'];
 
-        if ($config['include_subdomains']) {
+        if (($config['include_subdomains'] ?? false) === true) {
             $value .= '; includeSubDomains';
         }
 
-        if ($config['preload']) {
+        if (($config['preload'] ?? false) === true) {
             $value .= '; preload';
         }
 

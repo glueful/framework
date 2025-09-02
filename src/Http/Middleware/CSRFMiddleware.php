@@ -53,10 +53,10 @@ class CSRFMiddleware implements MiddlewareInterface
     /** @var int Token length in characters */
     private const TOKEN_LENGTH = 32;
 
-    /** @var array HTTP methods that require CSRF protection */
+    /** @var array<string> HTTP methods that require CSRF protection */
     private const PROTECTED_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
-    /** @var array Routes exempt from CSRF protection */
+    /** @var array<string> Routes exempt from CSRF protection */
     private array $exemptRoutes;
 
     /** @var int Token lifetime in seconds */
@@ -71,18 +71,19 @@ class CSRFMiddleware implements MiddlewareInterface
     /** @var bool Whether to enforce CSRF protection */
     private bool $enabled;
 
-    /** @var CacheStore|null Cache instance */
+    /** @var CacheStore<string>|null Cache instance */
     private ?CacheStore $cache;
 
 
     /**
      * Create CSRF middleware
      *
-     * @param array $exemptRoutes Routes to exempt from CSRF protection
+     * @param array<string> $exemptRoutes Routes to exempt from CSRF protection
      * @param int $tokenLifetime Token lifetime in seconds
      * @param bool $useDoubleSubmit Whether to use double-submit cookie pattern
      * @param bool $enabled Whether CSRF protection is enabled
      * @param Container|null $container DI Container instance
+     * @param CacheStore<string>|null $cache Cache instance
      */
     public function __construct(
         array $exemptRoutes = [],
@@ -233,13 +234,13 @@ class CSRFMiddleware implements MiddlewareInterface
     private function validateToken(Request $request): bool
     {
         $expectedToken = $this->getToken($request);
-        if (!$expectedToken) {
+        if ($expectedToken === null) {
             return false;
         }
 
         // Get token from various sources
         $submittedToken = $this->getSubmittedToken($request);
-        if (!$submittedToken) {
+        if ($submittedToken === null) {
             return false;
         }
 
@@ -265,19 +266,19 @@ class CSRFMiddleware implements MiddlewareInterface
     {
         // Check header first (for AJAX requests)
         $token = $request->headers->get(self::CSRF_HEADER);
-        if ($token) {
+        if ($token !== null) {
             return $token;
         }
 
         // Check form data
         $token = $request->request->get(self::CSRF_FIELD);
-        if ($token) {
+        if ($token !== null) {
             return $token;
         }
 
         // Check query parameters (for URL-based tokens, use carefully)
         $token = $request->query->get(self::CSRF_FIELD);
-        if ($token) {
+        if ($token !== null) {
             return $token;
         }
 
@@ -301,7 +302,7 @@ class CSRFMiddleware implements MiddlewareInterface
     private function generateTokenIfNeeded(Request $request): void
     {
         $existingToken = $this->getToken($request);
-        if (!$existingToken) {
+        if ($existingToken === null) {
             $this->generateToken($request);
         }
     }
@@ -359,19 +360,19 @@ class CSRFMiddleware implements MiddlewareInterface
         $apiVersion = env('API_VERSION', 'v1');
 
         // Extract base path from API_BASE_URL (everything after domain)
-        if ($apiBaseUrl) {
+        if ($apiBaseUrl !== '') {
             $parsedUrl = parse_url($apiBaseUrl);
             $basePath = isset($parsedUrl['path']) ? trim($parsedUrl['path'], '/') : '';
 
             // Remove base path if it exists at the start
-            if ($basePath && strpos($cleanPath, $basePath) === 0) {
+            if ($basePath !== '' && strpos($cleanPath, $basePath) === 0) {
                 $cleanPath = substr($cleanPath, strlen($basePath));
                 $cleanPath = ltrim($cleanPath, '/');
             }
         }
 
         // Remove API version if it exists at the start
-        if ($apiVersion && strpos($cleanPath, $apiVersion) === 0) {
+        if ($apiVersion !== '' && strpos($cleanPath, $apiVersion) === 0) {
             $cleanPath = substr($cleanPath, strlen($apiVersion));
             $cleanPath = ltrim($cleanPath, '/');
         }
@@ -422,8 +423,8 @@ class CSRFMiddleware implements MiddlewareInterface
     /**
      * Normalize exempt routes patterns
      *
-     * @param array $routes Raw route patterns
-     * @return array Normalized route patterns
+     * @param array<string> $routes Raw route patterns
+     * @return array<string> Normalized route patterns
      */
     private function normalizeRoutes(array $routes): array
     {
@@ -453,7 +454,7 @@ class CSRFMiddleware implements MiddlewareInterface
     /**
      * Create middleware with common API routes exempted
      *
-     * @param array $additionalExemptions Additional routes to exempt
+     * @param array<string> $additionalExemptions Additional routes to exempt
      * @return self Configured CSRF middleware
      */
     public static function withApiExemptions(array $additionalExemptions = []): self
@@ -490,7 +491,7 @@ class CSRFMiddleware implements MiddlewareInterface
      * Get the current CSRF token for JavaScript usage
      *
      * @param Request $request The HTTP request
-     * @return array Token data for JSON response
+     * @return array<string, mixed> Token data for JSON response
      */
     public function getTokenData(Request $request): array
     {

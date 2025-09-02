@@ -7,7 +7,6 @@ namespace Glueful\Http\Middleware;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\JsonResponse;
-use Glueful\Exceptions\ExceptionHandler;
 use Glueful\DI\Container;
 use Glueful\Events\Http\RequestEvent;
 use Glueful\Events\Http\ResponseEvent;
@@ -43,8 +42,9 @@ class MiddlewareDispatcher implements RequestHandlerInterface
     {
         $this->container = $container ?? $this->getDefaultContainer();
 
-        $this->fallbackHandler = $fallbackHandler ?: function (Request $request) {
+        $this->fallbackHandler = $fallbackHandler ?? function (Request $request) {
             // Default fallback handler returns a JSON 404 response
+            // Note: $request parameter is required by callable signature but not used
             return new JsonResponse([
                 'success' => false,
                 'message' => 'Route not found',
@@ -68,7 +68,7 @@ class MiddlewareDispatcher implements RequestHandlerInterface
     /**
      * Add multiple middleware to the stack
      *
-     * @param array $middlewareList Array of MiddlewareInterface instances
+     * @param array<MiddlewareInterface> $middlewareList Array of MiddlewareInterface instances
      * @return self Fluent interface
      */
     public function pipeMany(array $middlewareList): self
@@ -85,13 +85,13 @@ class MiddlewareDispatcher implements RequestHandlerInterface
      * Add middleware by class name (resolved through DI container)
      *
      * @param string $middlewareClass The middleware class name
-     * @param array $constructorArgs Additional constructor arguments
+     * @param array<mixed> $constructorArgs Additional constructor arguments
      * @return self Fluent interface
      */
     public function pipeClass(string $middlewareClass, array $constructorArgs = []): self
     {
         // Resolve middleware through DI container if available
-        if ($this->container && empty($constructorArgs)) {
+        if ($this->container !== null && count($constructorArgs) === 0) {
             $middleware = $this->container->get($middlewareClass);
         } else {
             // If constructor args are provided or no container, create instance manually
@@ -108,7 +108,7 @@ class MiddlewareDispatcher implements RequestHandlerInterface
     /**
      * Add multiple middleware by class names
      *
-     * @param array $middlewareClasses Array of middleware class names or [class => args] pairs
+     * @param array<string|array<mixed>> $middlewareClasses Array of middleware class names or [class => args] pairs
      * @return self Fluent interface
      */
     public function pipeManyClasses(array $middlewareClasses): self
@@ -134,6 +134,9 @@ class MiddlewareDispatcher implements RequestHandlerInterface
     public function createMiddleware(callable $callable): MiddlewareInterface
     {
         return new class ($callable) implements MiddlewareInterface {
+            /**
+             * @var callable
+             */
             private $callable;
 
             public function __construct(callable $callable)
@@ -175,7 +178,7 @@ class MiddlewareDispatcher implements RequestHandlerInterface
             ]));
 
             // If there are no middleware, use the fallback handler
-            if (empty($this->middlewareStack)) {
+            if (count($this->middlewareStack) === 0) {
                 $response = $this->processFallback($request);
             } else {
                 // Take the first middleware and create a new dispatcher with the remaining stack

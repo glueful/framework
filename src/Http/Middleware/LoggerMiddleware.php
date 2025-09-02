@@ -73,42 +73,61 @@ class LoggerMiddleware implements MiddlewareInterface
 
             // Add user context if available (after authentication middleware)
             $user = $request->attributes->get('user');
-            if ($user) {
+            if ($user !== null) {
                 $context['user_id'] = $user->uuid ?? $user->id ?? null;
             }
 
             // Return a wrapper object that automatically includes context
             return new class ($this->logger, $context) {
                 private LogManager $logger;
+                /** @var array<string, mixed> */
                 private array $context;
 
+                /**
+                 * @param array<string, mixed> $context
+                 */
                 public function __construct(LogManager $logger, array $context)
                 {
                     $this->logger = $logger;
                     $this->context = $context;
                 }
 
-                public function info($message, array $extraContext = []): void
+                /**
+                 * @param array<string, mixed> $extraContext
+                 */
+                public function info(string $message, array $extraContext = []): void
                 {
                     $this->logger->info($message, array_merge($this->context, $extraContext));
                 }
 
-                public function error($message, array $extraContext = []): void
+                /**
+                 * @param array<string, mixed> $extraContext
+                 */
+                public function error(string $message, array $extraContext = []): void
                 {
                     $this->logger->error($message, array_merge($this->context, $extraContext));
                 }
 
-                public function warning($message, array $extraContext = []): void
+                /**
+                 * @param array<string, mixed> $extraContext
+                 */
+                public function warning(string $message, array $extraContext = []): void
                 {
                     $this->logger->warning($message, array_merge($this->context, $extraContext));
                 }
 
-                public function debug($message, array $extraContext = []): void
+                /**
+                 * @param array<string, mixed> $extraContext
+                 */
+                public function debug(string $message, array $extraContext = []): void
                 {
                     $this->logger->debug($message, array_merge($this->context, $extraContext));
                 }
 
-                public function log($level, $message, array $extraContext = []): void
+                /**
+                 * @param array<string, mixed> $extraContext
+                 */
+                public function log(string $level, string $message, array $extraContext = []): void
                 {
                     $this->logger->log($level, $message, array_merge($this->context, $extraContext));
                 }
@@ -172,7 +191,7 @@ class LoggerMiddleware implements MiddlewareInterface
         }
 
         // Log the request
-        $this->logger->{$this->level}('API request started', $context);
+        $this->logWithLevel($this->level, 'API request started', $context);
     }
 
     /**
@@ -201,7 +220,7 @@ class LoggerMiddleware implements MiddlewareInterface
         $level = $this->determineLogLevel($response->getStatusCode());
 
         // Log the response
-        $this->logger->{$level}('API request completed', $context);
+        $this->logWithLevel($level, 'API request completed', $context);
     }
 
     /**
@@ -255,15 +274,15 @@ class LoggerMiddleware implements MiddlewareInterface
     /**
      * Sanitize parameters for logging (remove sensitive data)
      *
-     * @param array $parameters The parameters to sanitize
-     * @return array The sanitized parameters
+     * @param array<string, mixed> $parameters The parameters to sanitize
+     * @return array<string, mixed> The sanitized parameters
      */
     private function sanitizeParameters(array $parameters): array
     {
         $sensitiveFields = ['password', 'password_confirmation', 'token', 'secret', 'key', 'apikey', 'api_key'];
 
         foreach ($parameters as $key => $value) {
-            if (in_array(strtolower($key), $sensitiveFields)) {
+            if (in_array(strtolower($key), $sensitiveFields, true)) {
                 $parameters[$key] = '[REDACTED]';
             } elseif (is_array($value)) {
                 $parameters[$key] = $this->sanitizeParameters($value);
@@ -283,9 +302,9 @@ class LoggerMiddleware implements MiddlewareInterface
     {
         // Check for malformed JSON (framework concern)
         $contentType = $request->headers->get('Content-Type');
-        if ($contentType && strpos($contentType, 'application/json') !== false) {
+        if ($contentType !== null && strpos($contentType, 'application/json') !== false) {
             $content = $request->getContent();
-            if (!empty($content) && json_decode($content) === null && json_last_error() !== JSON_ERROR_NONE) {
+            if ($content !== '' && json_decode($content) === null && json_last_error() !== JSON_ERROR_NONE) {
                 $this->logger->error('Malformed JSON request body', [
                     'type' => 'request_error',
                     'path' => $request->getPathInfo(),
@@ -340,5 +359,27 @@ class LoggerMiddleware implements MiddlewareInterface
                 'timestamp' => date('c')
             ]);
         }
+    }
+
+    /**
+     * Log a message with the specified level
+     *
+     * @param string $level The log level
+     * @param string $message The log message
+     * @param array<string, mixed> $context The log context
+     */
+    private function logWithLevel(string $level, string $message, array $context): void
+    {
+        match ($level) {
+            'debug' => $this->logger->debug($message, $context),
+            'info' => $this->logger->info($message, $context),
+            'notice' => $this->logger->notice($message, $context),
+            'warning' => $this->logger->warning($message, $context),
+            'error' => $this->logger->error($message, $context),
+            'critical' => $this->logger->critical($message, $context),
+            'alert' => $this->logger->alert($message, $context),
+            'emergency' => $this->logger->emergency($message, $context),
+            default => $this->logger->info($message, $context)
+        };
     }
 }

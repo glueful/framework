@@ -18,7 +18,7 @@ class RequestHelper
      * Get request data (POST/PUT/PATCH) with automatic JSON parsing
      *
      * @param Request|null $request Request instance (null uses createFromGlobals)
-     * @return array
+     * @return array<string, mixed>
      */
     public static function getRequestData(?Request $request = null): array
     {
@@ -27,7 +27,7 @@ class RequestHelper
 
         if (str_contains($contentType, 'application/json')) {
             $content = $request->getContent();
-            return $content ? json_decode($content, true) ?? [] : [];
+            return ($content !== '' && $content !== false) ? (json_decode($content, true) ?? []) : [];
         }
 
         return $request->request->all();
@@ -37,7 +37,7 @@ class RequestHelper
      * Get PUT/PATCH data with automatic JSON parsing
      *
      * @param Request|null $request Request instance (null uses createFromGlobals)
-     * @return array
+     * @return array<string, mixed>
      */
     public static function getPutData(?Request $request = null): array
     {
@@ -46,7 +46,7 @@ class RequestHelper
 
         if (str_contains($contentType, 'application/json')) {
             $content = $request->getContent();
-            return $content ? json_decode($content, true) ?? [] : [];
+            return ($content !== '' && $content !== false) ? (json_decode($content, true) ?? []) : [];
         }
 
         // For form-encoded PUT data

@@ -15,6 +15,7 @@ use Glueful\Http\Authentication\AuthenticationMethods;
  */
 class OAuthClientBuilder
 {
+    /** @var array<string, mixed> */
     private array $options = [];
 
     public function __construct(private Client $baseClient)
@@ -132,6 +133,9 @@ class OAuthClientBuilder
     /**
      * Set scopes
      */
+    /**
+     * @param array<string> $scopes
+     */
     public function scopes(array $scopes): self
     {
         $this->options['scopes'] = $scopes;
@@ -213,6 +217,9 @@ class OAuthClientBuilder
 
     /**
      * Get current configuration
+     */
+    /**
+     * @return array<string, mixed>
      */
     public function getConfig(): array
     {

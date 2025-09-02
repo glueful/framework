@@ -12,11 +12,17 @@ namespace Glueful\Helpers;
  */
 class StaticFileDetector
 {
+    /** @var array<string> */
     private array $staticExtensions;
+    /** @var array<string> */
     private array $staticMimeTypes;
+    /** @var array<string, bool> */
     private array $cache = [];
     private int $maxCacheSize = 1000;
 
+    /**
+     * @param array<string, mixed> $config
+     */
     public function __construct(array $config = [])
     {
         $this->staticExtensions = $config['extensions'] ?? $this->getDefaultExtensions();
@@ -56,7 +62,7 @@ class StaticFileDetector
     {
         // Method 1: Extension-based detection
         $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-        if (in_array($extension, $this->staticExtensions)) {
+        if (in_array($extension, $this->staticExtensions, true)) {
             return true;
         }
 
@@ -128,7 +134,7 @@ class StaticFileDetector
     /**
      * Get default static file extensions
      *
-     * @return array Default extensions
+     * @return array<string> Default extensions
      */
     private function getDefaultExtensions(): array
     {
@@ -153,7 +159,7 @@ class StaticFileDetector
     /**
      * Get default static MIME types
      *
-     * @return array Default MIME type patterns
+     * @return array<string> Default MIME type patterns
      */
     private function getDefaultMimeTypes(): array
     {

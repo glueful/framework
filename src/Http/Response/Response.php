@@ -53,6 +53,8 @@ class Response
 
     /**
      * Get all response headers
+     *
+     * @return array<string, mixed>
      */
     public function getHeaders(): array
     {
@@ -61,6 +63,9 @@ class Response
 
     /**
      * Get a specific response header
+     *
+     * @param mixed $default
+     * @return mixed
      */
     public function getHeader(string $name, $default = null)
     {
@@ -78,6 +83,8 @@ class Response
 
     /**
      * Parse response as JSON array
+     *
+     * @return array<string, mixed>
      */
     public function toArray(): array
     {
@@ -90,6 +97,8 @@ class Response
 
     /**
      * Parse response as JSON (compatible with existing HttpResponse)
+     *
+     * @return mixed
      */
     public function json(bool $assoc = true, int $depth = 512, int $options = 0)
     {

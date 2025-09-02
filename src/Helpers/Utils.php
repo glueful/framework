@@ -19,18 +19,21 @@ use Glueful\Auth\JWTService;
  */
 class Utils
 {
-    /** @var CacheStore|null Cache driver instance */
+    /** @var CacheStore<mixed>|null Cache driver instance */
     private static ?CacheStore $cache = null;
 
     /**
      * Get cache instance
      *
-     * @return CacheStore
+     * @return CacheStore<mixed>
      */
     private static function getCache(): CacheStore
     {
         return self::$cache ??= CacheHelper::createCacheInstance();
     }
+    /**
+     * @param array<string, mixed> $data
+     */
     public static function export(
         string $format,
         array $data,
@@ -44,6 +47,9 @@ class Utils
         };
     }
 
+    /**
+     * @param array<string, mixed> $data
+     */
     private static function exportJSON(array $data, string $key, bool $encrypt): void
     {
         $json = json_encode($data);
@@ -56,6 +62,9 @@ class Utils
         echo $json;
     }
 
+    /**
+     * @param array<string, mixed> $data
+     */
     private static function exportXML(array $data, string $key, bool $encrypt): void
     {
         // Convert array to XML
@@ -71,6 +80,9 @@ class Utils
         echo $output;
     }
 
+    /**
+     * @param array<string, mixed> $data
+     */
     private static function exportYAML(array $data, string $key, bool $encrypt): void
     {
         if (!function_exists('yaml_emit')) {
@@ -107,6 +119,9 @@ class Utils
         return $result;
     }
 
+    /**
+     * @return array<string, mixed>|null
+     */
     public static function getSession(): ?array
     {
         $token = $_SERVER['HTTP_AUTHORIZATION'] ?? null;
@@ -120,6 +135,9 @@ class Utils
         return $sessionCacheManager->getSession($token);
     }
 
+    /**
+     * @return array<string, mixed>|null
+     */
     public static function getCurrentUser(): ?array
     {
         $session = self::getSession();
@@ -137,7 +155,7 @@ class Utils
     public static function generateNanoID(?int $length = null): string
     {
 
-        if (!$length) {
+        if ($length === null || $length === 0) {
             $length = (int)config('security.nanoid_length', 12);
         }
         return RandomStringGenerator::generate(
@@ -168,11 +186,11 @@ class Utils
      * Get user information from JWT token
      *
      * @param string|null $token JWT token
-     * @return array{uuid: string, role: string, info: array}|null User information or null if invalid
+     * @return array{uuid: string, role: string, info: array<string, mixed>}|null User information or null if invalid
      */
     public static function getUser(?string $token = null): ?array
     {
-        if (!$token) {
+        if ($token === null || $token === '') {
             // Try to get token from Authorization header
             $headers = getallheaders();
             if (isset($headers['Authorization'])) {
@@ -180,7 +198,7 @@ class Utils
             }
         }
 
-        if (!$token) {
+        if ($token === null || $token === '') {
             return null;
         }
 
@@ -268,7 +286,7 @@ class Utils
     /**
      * Initialize the cache driver
      *
-     * @param CacheStore|null $cache Cache driver instance
+     * @param CacheStore<mixed>|null $cache Cache driver instance
      * @return void
      */
     public static function initializeCacheDriver(?CacheStore $cache = null): void
@@ -316,7 +334,7 @@ class Utils
         ];
 
         foreach ($headers as $header) {
-            if (!empty($_SERVER[$header])) {
+            if (isset($_SERVER[$header]) && $_SERVER[$header] !== '') {
                 $ips = explode(',', $_SERVER[$header]);
                 $ip = trim($ips[0]);
 
@@ -333,9 +351,9 @@ class Utils
     /**
      * Validate required fields in request data
      *
-     * @param array $data Request data
-     * @param array $requiredFields Required field names
-     * @return array Empty array if valid, array of missing fields if invalid
+     * @param array<string, mixed> $data Request data
+     * @param array<string> $requiredFields Required field names
+     * @return array<string> Empty array if valid, array of missing fields if invalid
      */
     public static function validateRequiredFields(array $data, array $requiredFields): array
     {
@@ -369,7 +387,7 @@ class Utils
      * @param bool $requireSpecialChars Require special characters
      * @param bool $requireNumbers Require numbers
      * @param bool $requireUppercase Require uppercase letters
-     * @return array Validation result with 'valid' boolean and 'errors' array
+     * @return array{valid: bool, errors: array<string>} Validation result with 'valid' boolean and 'errors' array
      */
     public static function validatePassword(
         string $password,
@@ -397,7 +415,7 @@ class Utils
         }
 
         return [
-            'valid' => empty($errors),
+            'valid' => count($errors) === 0,
             'errors' => $errors
         ];
     }
@@ -423,7 +441,7 @@ class Utils
      * Parse and validate JSON data
      *
      * @param string $json JSON string
-     * @return array Parsed data or empty array if invalid
+     * @return array<string, mixed> Parsed data or empty array if invalid
      */
     public static function parseJson(string $json): array
     {
@@ -440,16 +458,16 @@ class Utils
      * Build search conditions for database queries
      *
      * @param string $searchTerm Search term
-     * @param array $searchFields Fields to search in
+     * @param array<string> $searchFields Fields to search in
      * @param string $operator SQL operator (LIKE, ILIKE, etc.)
-     * @return array Search conditions
+     * @return array{raw: string, fields: array<string>, term: string}|array{} Search conditions
      */
     public static function buildSearchConditions(
         string $searchTerm,
         array $searchFields,
         string $operator = 'LIKE'
     ): array {
-        if (empty($searchTerm) || empty($searchFields)) {
+        if ($searchTerm === '' || count($searchFields) === 0) {
             return [];
         }
 
@@ -470,10 +488,10 @@ class Utils
     /**
      * Parse date range from request parameters
      *
-     * @param array $params Request parameters
+     * @param array<string, mixed> $params Request parameters
      * @param string $fromKey Parameter key for start date
      * @param string $toKey Parameter key for end date
-     * @return array Date range with 'from' and 'to' keys
+     * @return array{from: string|null, to: string|null} Date range with 'from' and 'to' keys
      */
     public static function parseDateRange(
         array $params,
@@ -482,16 +500,18 @@ class Utils
     ): array {
         $range = ['from' => null, 'to' => null];
 
-        if (isset($params[$fromKey]) && !empty($params[$fromKey])) {
-            $fromDate = date('Y-m-d H:i:s', strtotime($params[$fromKey]));
-            if ($fromDate !== false) {
+        if (isset($params[$fromKey]) && $params[$fromKey] !== '') {
+            $timestamp = strtotime((string)$params[$fromKey]);
+            if ($timestamp !== false) {
+                $fromDate = date('Y-m-d H:i:s', $timestamp);
                 $range['from'] = $fromDate;
             }
         }
 
-        if (isset($params[$toKey]) && !empty($params[$toKey])) {
-            $toDate = date('Y-m-d H:i:s', strtotime($params[$toKey]));
-            if ($toDate !== false) {
+        if (isset($params[$toKey]) && $params[$toKey] !== '') {
+            $timestamp = strtotime((string)$params[$toKey]);
+            if ($timestamp !== false) {
+                $toDate = date('Y-m-d H:i:s', $timestamp);
                 $range['to'] = $toDate;
             }
         }
@@ -511,7 +531,7 @@ class Utils
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
 
         $bytes = max($bytes, 0);
-        $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+        $pow = floor(($bytes > 0 ? log($bytes) : 0) / log(1024));
         $pow = min($pow, count($units) - 1);
 
         $bytes /= (1 << (10 * $pow));
@@ -522,11 +542,11 @@ class Utils
     /**
      * Mask sensitive data in arrays
      *
-     * @param array $data Data to mask
-     * @param array $sensitiveFields Fields to mask
+     * @param array<string, mixed> $data Data to mask
+     * @param array<string> $sensitiveFields Fields to mask
      * @param string $mask Mask character
      * @param int $visibleChars Number of visible characters
-     * @return array Masked data
+     * @return array<string, mixed> Masked data
      */
     public static function maskSensitiveData(
         array $data,
@@ -535,7 +555,7 @@ class Utils
         int $visibleChars = 4
     ): array {
         foreach ($data as $key => $value) {
-            if (in_array(strtolower($key), array_map('strtolower', $sensitiveFields))) {
+            if (in_array(strtolower($key), array_map('strtolower', $sensitiveFields), true)) {
                 if (is_string($value) && strlen($value) > $visibleChars) {
                     $data[$key] = substr($value, 0, $visibleChars) .
                         str_repeat($mask, max(3, strlen($value) - $visibleChars));
@@ -553,7 +573,7 @@ class Utils
     /**
      * Extract nested value from array using dot notation
      *
-     * @param array $array Source array
+     * @param array<string, mixed> $array Source array
      * @param string $key Dot notation key (e.g., 'user.profile.name')
      * @param mixed $default Default value if key not found
      * @return mixed
@@ -580,10 +600,10 @@ class Utils
     /**
      * Set nested value in array using dot notation
      *
-     * @param array $array Target array
+     * @param array<string, mixed> $array Target array
      * @param string $key Dot notation key
      * @param mixed $value Value to set
-     * @return array Modified array
+     * @return array<string, mixed> Modified array
      */
     public static function arraySet(array $array, string $key, $value): array
     {
@@ -605,8 +625,8 @@ class Utils
     /**
      * Convert array to CSV string
      *
-     * @param array $data Array data
-     * @param array $headers Column headers
+     * @param array<mixed> $data Array data
+     * @param array<string> $headers Column headers
      * @return string CSV content
      */
     public static function arrayToCsv(array $data, array $headers = []): string
@@ -614,7 +634,7 @@ class Utils
         $output = fopen('php://temp', 'r+');
 
         // Write headers if provided
-        if (!empty($headers)) {
+        if (count($headers) > 0) {
             fputcsv($output, $headers);
         }
 
@@ -636,7 +656,7 @@ class Utils
      * Clean and validate URL
      *
      * @param string $url URL to validate
-     * @param array $allowedSchemes Allowed URL schemes
+     * @param array<string> $allowedSchemes Allowed URL schemes
      * @return string|null Valid URL or null if invalid
      */
     public static function validateUrl(string $url, array $allowedSchemes = ['http', 'https']): ?string
@@ -648,7 +668,7 @@ class Utils
         }
 
         $scheme = parse_url($url, PHP_URL_SCHEME);
-        if (!in_array($scheme, $allowedSchemes)) {
+        if (!in_array($scheme, $allowedSchemes, true)) {
             return null;
         }
 
@@ -690,8 +710,8 @@ class Utils
      * Build audit context from request data
      *
      * @param mixed $request Request object
-     * @param array $additionalContext Additional context data
-     * @return array Audit context
+     * @param array<string, mixed> $additionalContext Additional context data
+     * @return array<string, mixed> Audit context
      */
     public static function buildAuditContext($request = null, array $additionalContext = []): array
     {
@@ -701,13 +721,13 @@ class Utils
             'user_agent' => 'unknown'
         ];
 
-        if ($request && method_exists($request, 'getClientIp')) {
+        if (is_object($request) && method_exists($request, 'getClientIp')) {
             $context['ip_address'] = $request->getClientIp() ?? 'unknown';
         } elseif (isset($_SERVER['REMOTE_ADDR'])) {
             $context['ip_address'] = $_SERVER['REMOTE_ADDR'];
         }
 
-        if ($request && method_exists($request, 'headers') && isset($request->headers)) {
+        if (is_object($request) && method_exists($request, 'headers') && isset($request->headers)) {
             $context['user_agent'] = $request->headers->get('User-Agent') ?? 'unknown';
         } elseif (isset($_SERVER['HTTP_USER_AGENT'])) {
             $context['user_agent'] = $_SERVER['HTTP_USER_AGENT'];
@@ -744,7 +764,7 @@ class Utils
      * Get CSRF token data for JavaScript usage
      *
      * @param \Symfony\Component\HttpFoundation\Request $request Request instance
-     * @return array Token data for JSON response
+     * @return array<string, mixed> Token data for JSON response
      */
     public static function csrfTokenData(\Symfony\Component\HttpFoundation\Request $request): array
     {

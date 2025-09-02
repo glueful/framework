@@ -17,7 +17,7 @@ class HttpResponse
     private int $statusCode;
 
     /**
-     * @var array Response headers
+     * @var array<string, mixed> Response headers
      */
     private array $headers;
 
@@ -30,7 +30,7 @@ class HttpResponse
      * Create a new HttpResponse instance
      *
      * @param int $statusCode HTTP status code
-     * @param array $headers Response headers
+     * @param array<string, mixed> $headers Response headers
      * @param string $body Response body
      */
     public function __construct(int $statusCode, array $headers, string $body)
@@ -53,7 +53,7 @@ class HttpResponse
     /**
      * Get all response headers
      *
-     * @return array
+     * @return array<string, mixed>
      */
     public function getHeaders(): array
     {

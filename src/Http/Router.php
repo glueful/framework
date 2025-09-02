@@ -67,10 +67,14 @@ class Router
     /** @var MiddlewareInterface[] PSR-15 middleware stack */
     private static array $middlewareStack = [];
 
-    private static array $protectedRoutes = []; // Routes that require authentication
+    /** @var string[] Routes that require authentication */
+    private static array $protectedRoutes = [];
+    /** @var string[] Current group prefixes */
     private static array $currentGroups = [];
+    /** @var array<array{auth: bool, admin: bool}> Current group authentication settings */
     private static array $currentGroupAuth = [];
-    private static array $adminProtectedRoutes = []; // Routes that require admin authentication
+    /** @var string[] Routes that require admin authentication */
+    private static array $adminProtectedRoutes = [];
 
 
     /** @var string API version prefix for all routes */
@@ -152,43 +156,55 @@ class Router
     }
 
 
+    /**
+     * @param array<string, string> $requirements
+     */
     public static function get(
         string $path,
         callable $handler,
         bool $requiresAuth = false,
         bool $requiresAdminAuth = false,
         array $requirements = []
-    ) {
+    ): void {
         self::addRoute($path, ['GET'], $handler, $requiresAuth, $requiresAdminAuth, $requirements);
     }
 
+    /**
+     * @param array<string, string> $requirements
+     */
     public static function post(
         string $path,
         callable $handler,
         bool $requiresAuth = false,
         bool $requiresAdminAuth = false,
         array $requirements = []
-    ) {
+    ): void {
         self::addRoute($path, ['POST'], $handler, $requiresAuth, $requiresAdminAuth, $requirements);
     }
 
+    /**
+     * @param array<string, string> $requirements
+     */
     public static function put(
         string $path,
         callable $handler,
         bool $requiresAuth = false,
         bool $requiresAdminAuth = false,
         array $requirements = []
-    ) {
+    ): void {
         self::addRoute($path, ['PUT'], $handler, $requiresAuth, $requiresAdminAuth, $requirements);
     }
 
+    /**
+     * @param array<string, string> $requirements
+     */
     public static function delete(
         string $path,
         callable $handler,
         bool $requiresAuth = false,
         bool $requiresAdminAuth = false,
         array $requirements = []
-    ) {
+    ): void {
         self::addRoute($path, ['DELETE'], $handler, $requiresAuth, $requiresAdminAuth, $requirements);
     }
 
@@ -228,6 +244,9 @@ class Router
      * @param bool $requiresAuth Whether authentication is required to access these files
      * @param array $options Additional options (indexFile, allowedExtensions, etc.)
      */
+    /**
+     * @param array<string, mixed> $options
+     */
     public static function static(
         string $urlPath,
         string $directory,
@@ -253,7 +272,7 @@ class Router
             $filePath = $request->attributes->get('path', '');
 
             // If no file specified, try index file
-            if (empty($filePath) || str_ends_with($filePath, '/')) {
+            if ($filePath === '' || str_ends_with($filePath, '/')) {
                 $filePath = rtrim($filePath, '/') . '/' . $options['indexFile'];
             }
 
@@ -276,7 +295,7 @@ class Router
             // Check allowed extensions if specified
             if ($options['allowedExtensions'] !== null) {
                 $extension = pathinfo($fullPath, PATHINFO_EXTENSION);
-                if (!in_array($extension, $options['allowedExtensions'])) {
+                if (!in_array($extension, $options['allowedExtensions'], true)) {
                     return new Response('Forbidden', 403);
                 }
             }
@@ -295,13 +314,14 @@ class Router
             $response->headers->set('Content-Type', $mimeType);
 
             // Set cache headers if enabled
-            if ($options['cache']) {
+            if ((bool) $options['cache']) {
                 $response->headers->set('Cache-Control', 'public, max-age=' . $options['cacheMaxAge']);
                 $response->headers->set('ETag', md5_file($fullPath));
 
                 // Check if client has cached version
                 $etag = $request->headers->get('If-None-Match');
-                if ($etag === md5_file($fullPath)) {
+                $fileHash = md5_file($fullPath);
+                if ($etag !== null && $fileHash !== false && $etag === $fileHash) {
                     return new Response('', 304); // Not Modified
                 }
             } else {
@@ -386,6 +406,9 @@ class Router
      * @param bool $requiresAuth Apply authentication to all routes in this group
      * @param bool $requiresAdminAuth Apply admin authentication to all routes in this group
      */
+    /**
+     * @param array<MiddlewareInterface> $middleware
+     */
     public static function group(
         string $prefix,
         callable $callback,
@@ -418,12 +441,15 @@ class Router
      *
      * @return array Contains 'prefix' (string) and 'auth' settings (array with 'auth' and 'admin' keys)
      */
+    /**
+     * @return array{prefix: string, auth: array{auth: bool, admin: bool}}
+     */
     private static function getCurrentGroupContext(): array
     {
-        $prefix = empty(self::$currentGroups) ? '' : implode('', self::$currentGroups);
+        $prefix = self::$currentGroups === [] ? '' : implode('', self::$currentGroups);
 
         // Get the latest auth settings or use default values
-        $authSettings = !empty(self::$currentGroupAuth)
+        $authSettings = self::$currentGroupAuth !== []
             ? end(self::$currentGroupAuth)
             : ['auth' => false, 'admin' => false];
 
@@ -445,6 +471,10 @@ class Router
      * @param bool $requiresAuth Whether this route requires authentication
      * @param bool $requiresAdminAuth Whether this route requires admin authentication
      */
+    /**
+     * @param string[] $methods
+     * @param array<string, string> $requirements
+     */
     private static function addRoute(
         string $path,
         array $methods,
@@ -452,7 +482,7 @@ class Router
         bool $requiresAuth = false,
         bool $requiresAdminAuth = false,
         array $requirements = []
-    ) {
+    ): void {
         // Ensure router is initialized
         self::ensureInitialized();
         // Get the current group context
@@ -506,6 +536,9 @@ class Router
      *
      * @param array $middlewareList The list of middleware to add
      */
+    /**
+     * @param MiddlewareInterface[] $middlewareList
+     */
     public static function addMiddlewares(array $middlewareList): void
     {
         foreach ($middlewareList as $middleware) {
@@ -521,6 +554,9 @@ class Router
      * @param string $middlewareClass The middleware class name
      * @param array $constructorArgs Additional constructor arguments
      */
+    /**
+     * @param mixed[] $constructorArgs
+     */
     public static function addMiddlewareClass(string $middlewareClass, array $constructorArgs = []): void
     {
         // Get DI container
@@ -531,7 +567,7 @@ class Router
             $middleware = new $middlewareClass(...$constructorArgs);
         } else {
             // Resolve middleware through DI container
-            if (empty($constructorArgs)) {
+            if ($constructorArgs === []) {
                 $middleware = $container->get($middlewareClass);
             } else {
                 // If constructor args are provided, create instance manually
@@ -548,6 +584,9 @@ class Router
      * Add multiple middleware by class names
      *
      * @param array $middlewareClasses Array of middleware class names or [class => args] pairs
+     */
+    /**
+     * @param array<string, mixed[]|string> $middlewareClasses
      */
     public static function addMiddlewareClasses(array $middlewareClasses): void
     {
@@ -575,7 +614,7 @@ class Router
     public static function convertToMiddleware(callable $callable): MiddlewareInterface
     {
         return new class ($callable) implements MiddlewareInterface {
-            private $callable;
+            private mixed $callable;
 
             public function __construct(callable $callable)
             {
@@ -680,17 +719,19 @@ class Router
             $parametersInfo = $reflection->getParameters();
 
             // Check if there are parameters before trying to access them
-            if (
-                !empty($parametersInfo) &&
-                $parametersInfo[0]->getType() &&
-                (
+            $hasRequestParameter = false;
+            if ($parametersInfo !== []) {
+                $firstParamType = $parametersInfo[0]->getType();
+                if ($firstParamType !== null) {
                     // Use is_a to safely check the parameter type across PHP versions
-                    (method_exists($parametersInfo[0]->getType(), 'getName') &&
-                     $parametersInfo[0]->getType()->getName() === Request::class) ||
-                    (method_exists($parametersInfo[0]->getType(), '__toString') &&
-                     (string)$parametersInfo[0]->getType() === Request::class)
-                )
-            ) {
+                    $hasRequestParameter = (method_exists($firstParamType, 'getName') &&
+                        $firstParamType->getName() === Request::class) ||
+                        (method_exists($firstParamType, '__toString') &&
+                        (string)$firstParamType === Request::class);
+                }
+            }
+
+            if ($hasRequestParameter) {
                 $result = call_user_func($controller, $request);
             } else {
                 $result = call_user_func($controller, $parameters);
@@ -715,13 +756,13 @@ class Router
         // Add authentication middleware if required, using our new abstraction
         $authManager = \Glueful\Auth\AuthBootstrap::getManager();
 
-        if (in_array($routeName, self::$adminProtectedRoutes)) {
+        if (in_array($routeName, self::$adminProtectedRoutes, true)) {
             $dispatcher->pipeClass(AuthenticationMiddleware::class, [
                 true, // requires admin
                 $authManager, // using our new authentication manager
                 ['admin', 'jwt', 'api_key'] // try each auth method in sequence until one succeeds
             ]);
-        } elseif (in_array($routeName, self::$protectedRoutes)) {
+        } elseif (in_array($routeName, self::$protectedRoutes, true)) {
             $dispatcher->pipeClass(AuthenticationMiddleware::class, [
                 false, // standard authentication
                 $authManager, // using our new authentication manager

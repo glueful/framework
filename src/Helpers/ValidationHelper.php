@@ -19,8 +19,8 @@ class ValidationHelper
     /**
      * Validate required fields
      *
-     * @param array $data Data to validate
-     * @param array $required Array of required field names
+     * @param array<string, mixed> $data Data to validate
+     * @param array<string> $required Array of required field names
      * @throws ValidationException If any required field is missing
      */
     public static function validateRequired(array $data, array $required): void
@@ -33,7 +33,7 @@ class ValidationHelper
             }
         }
 
-        if (!empty($missing)) {
+        if (count($missing) > 0) {
             throw new ValidationException([
                 'required_fields' => "The following fields are required: " . implode(', ', $missing),
                 'missing_fields' => $missing
@@ -104,8 +104,8 @@ class ValidationHelper
     /**
      * Validate array contains only allowed values
      *
-     * @param array $values Values to validate
-     * @param array $allowed Allowed values
+     * @param array<mixed> $values Values to validate
+     * @param array<mixed> $allowed Allowed values
      * @param string $fieldName Field name for error message
      * @throws ValidationException If any value is not allowed
      */
@@ -113,7 +113,7 @@ class ValidationHelper
     {
         $invalid = array_diff($values, $allowed);
 
-        if (!empty($invalid)) {
+        if (count($invalid) > 0) {
             throw new ValidationException([
                 $fieldName => "Invalid values: " . implode(', ', $invalid) . ". Allowed: " . implode(', ', $allowed)
             ]);
@@ -203,9 +203,9 @@ class ValidationHelper
     /**
      * Validate and sanitize multiple fields
      *
-     * @param array $data Data to validate
-     * @param array $rules Validation rules
-     * @return array Sanitized data
+     * @param array<string, mixed> $data Data to validate
+     * @param array<string, mixed> $rules Validation rules
+     * @return array<string, mixed> Sanitized data
      * @throws ValidationException If validation fails
      */
     public static function validateAndSanitize(array $data, array $rules): array
@@ -218,7 +218,7 @@ class ValidationHelper
                 $value = $data[$field] ?? null;
 
                 // Apply validation rules
-                if (isset($rule['required']) && $rule['required'] && ($value === null || $value === '')) {
+                if (isset($rule['required']) && $rule['required'] === true && ($value === null || $value === '')) {
                     $errors[$field] = "{$field} is required";
                     continue;
                 }
@@ -261,7 +261,7 @@ class ValidationHelper
                     if (isset($rule['allowed'])) {
                         if (is_array($value)) {
                             self::validateAllowedValues($value, $rule['allowed'], $field);
-                        } elseif (!in_array($value, $rule['allowed'])) {
+                        } elseif (!in_array($value, $rule['allowed'], true)) {
                             $errors[$field] = "Invalid value for {$field}. Allowed: " . implode(', ', $rule['allowed']);
                             continue;
                         }
@@ -273,7 +273,7 @@ class ValidationHelper
                     } else {
                         $sanitized[$field] = $value;
                     }
-                } elseif (!isset($rule['required']) || !$rule['required']) {
+                } elseif (!isset($rule['required']) || $rule['required'] !== true) {
                     $sanitized[$field] = $value;
                 }
             } catch (ValidationException $e) {
@@ -281,7 +281,7 @@ class ValidationHelper
             }
         }
 
-        if (!empty($errors)) {
+        if (count($errors) > 0) {
             throw new ValidationException($errors);
         }
 

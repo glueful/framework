@@ -64,6 +64,9 @@ class Response extends JsonResponse
     public const HTTP_INTERNAL_SERVER_ERROR = ErrorCodes::INTERNAL_SERVER_ERROR;
     public const HTTP_SERVICE_UNAVAILABLE = ErrorCodes::SERVICE_UNAVAILABLE;
 
+    /**
+     * @param array<string, string> $headers
+     */
     public function __construct(
         mixed $data = null,
         int $status = ErrorCodes::SUCCESS,
@@ -100,7 +103,7 @@ class Response extends JsonResponse
             'data' => $data ?? []
         ];
 
-        if (self::$serializer && $context && $data !== null) {
+        if (self::$serializer !== null && $context !== null && $data !== null) {
             $responseData['data'] = self::$serializer->normalize($data, $context);
         }
 
@@ -123,7 +126,7 @@ class Response extends JsonResponse
     ): self {
         // Serialize items if context is provided
         $serializedItems = $items;
-        if (self::$serializer && $context) {
+        if (self::$serializer !== null && $context !== null) {
             $serializedItems = array_map(
                 fn($item) => self::$serializer->normalize($item, $context),
                 $items
@@ -162,7 +165,7 @@ class Response extends JsonResponse
             'data' => $data ?? []
         ];
 
-        if (self::$serializer && $context && $data !== null) {
+        if (self::$serializer !== null && $context !== null && $data !== null) {
             $responseData['data'] = self::$serializer->normalize($data, $context);
         }
 
@@ -261,8 +264,8 @@ class Response extends JsonResponse
     /**
      * Create successful response with custom metadata (flattened structure)
      *
-     * @param list<mixed> $data
-     * @param array<string, scalar|array|null> $meta
+     * @param array<mixed> $data
+     * @param array<string, mixed> $meta
      * @return self  Returns JSON with SuccessResponse plus flattened meta fields
      */
     public static function successWithMeta(
@@ -273,7 +276,7 @@ class Response extends JsonResponse
     ): self {
         // Serialize data if context is provided
         $serializedData = $data;
-        if (self::$serializer && $context) {
+        if (self::$serializer !== null && $context !== null) {
             $serializedData = array_map(
                 fn($item) => self::$serializer->normalize($item, $context),
                 $data
@@ -318,6 +321,10 @@ class Response extends JsonResponse
 
     /**
      * Add CORS headers
+     *
+     * @param array<string> $allowedOrigins
+     * @param array<string> $allowedMethods
+     * @param array<string> $allowedHeaders
      */
     public function withCors(
         array $allowedOrigins = ['*'],

@@ -31,7 +31,7 @@ class AuthenticationMiddleware implements MiddlewareInterface
     /** @var AuthenticationManager Authentication manager instance */
     private AuthenticationManager $authManager;
 
-    /** @var array Optional provider names to try */
+    /** @var array<string> Optional provider names to try */
     private array $providerNames = [];
 
     /** @var Container|null DI Container */
@@ -46,7 +46,7 @@ class AuthenticationMiddleware implements MiddlewareInterface
      *
      * @param bool $requiresAdmin Whether to require admin privileges
      * @param AuthenticationManager|null $authManager Optional custom auth manager
-     * @param array $providerNames Provider names to try in sequence
+     * @param array<string> $providerNames Provider names to try in sequence
      * @param Container|null $container DI Container instance
      */
     public function __construct(
@@ -59,21 +59,21 @@ class AuthenticationMiddleware implements MiddlewareInterface
         $this->requiresAdmin = $requiresAdmin;
 
         // Use provided AuthManager, get from DI container, or fall back to AuthBootstrap
-        if ($authManager) {
+        if ($authManager !== null) {
             $this->authManager = $authManager;
-        } elseif ($this->container && $this->container->has(AuthenticationManager::class)) {
+        } elseif ($this->container !== null && $this->container->has(AuthenticationManager::class)) {
             $this->authManager = $this->container->get(AuthenticationManager::class);
         } else {
             $this->authManager = AuthBootstrap::getManager();
         }
 
         // Initialize logger from container
-        if ($this->container && $this->container->has(LoggerInterface::class)) {
+        if ($this->container !== null && $this->container->has(LoggerInterface::class)) {
             $this->logger = $this->container->get(LoggerInterface::class);
         }
 
         // Default to using JWT and API key auth if none specified
-        $this->providerNames = !empty($providerNames) ? $providerNames : ['jwt', 'api_key'];
+        $this->providerNames = count($providerNames) > 0 ? $providerNames : ['jwt', 'api_key'];
     }
 
     /**
@@ -89,9 +89,9 @@ class AuthenticationMiddleware implements MiddlewareInterface
             // Check for Authorization header first (framework concern)
             $token = TokenManager::extractTokenFromRequest();
 
-            if (!$token) {
+            if ($token === null) {
                 // Framework logs HTTP-level auth failure
-                if ($this->logger) {
+                if ($this->logger !== null) {
                     $this->logger->warning('Missing Authorization header', [
                         'type' => 'auth_framework',
                         'message' => 'Missing Authorization header',
@@ -113,7 +113,7 @@ class AuthenticationMiddleware implements MiddlewareInterface
 
             // Try to authenticate the request
             $userData = $this->authenticate($request);
-            if (!$userData) {
+            if ($userData === null) {
                 // Emit event for application business logic
                 Event::dispatch(new HttpAuthFailureEvent(
                     'authentication_failed',
@@ -150,7 +150,7 @@ class AuthenticationMiddleware implements MiddlewareInterface
                 str_contains($e->getMessage(), 'token expired')
             ) {
                 // Framework logs HTTP protocol JWT failures
-                if ($this->logger) {
+                if ($this->logger !== null) {
                     $this->logger->warning('JWT token validation failed', [
                         'type' => 'auth_framework',
                         'message' => 'JWT validation failed',
@@ -177,13 +177,13 @@ class AuthenticationMiddleware implements MiddlewareInterface
      * Authenticate the request with appropriate providers
      *
      * @param Request $request The HTTP request
-     * @return array|null User data if authenticated, null otherwise
+     * @return array<string, mixed>|null User data if authenticated, null otherwise
      * @throws AuthenticationException If token is expired
      */
     private function authenticate(Request $request): ?array
     {
         // If specific providers are requested, try them in sequence
-        if (!empty($this->providerNames)) {
+        if (count($this->providerNames) > 0) {
             $userData = $this->authManager->authenticateWithProviders($this->providerNames, $request);
         } else {
             // Otherwise use the default provider
@@ -191,7 +191,7 @@ class AuthenticationMiddleware implements MiddlewareInterface
         }
 
         // If authentication succeeded, validate token expiration
-        if ($userData) {
+        if ($userData !== null) {
             $this->validateTokenExpiration($userData, $request);
         }
 
@@ -201,7 +201,7 @@ class AuthenticationMiddleware implements MiddlewareInterface
     /**
      * Validate token expiration from user data
      *
-     * @param array $userData User session data
+     * @param array<string, mixed> $userData User session data
      * @param Request $request The HTTP request
      * @throws AuthenticationException If tokens are expired
      */

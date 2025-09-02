@@ -16,7 +16,9 @@ use Psr\Log\LoggerInterface;
  */
 class ExternalApiService
 {
+    /** @var array<string, array{data: mixed, timestamp: int}> */
     private array $cachedResponses = [];
+    /** @var array<string, array{count: int, window_start: int}> */
     private array $rateLimitCounters = [];
 
     public function __construct(
@@ -27,6 +29,8 @@ class ExternalApiService
 
     /**
      * Make a cached API call
+     * @param array<string, mixed> $options
+     * @return array<string, mixed>
      */
     public function cachedApiCall(
         string $cacheKey,
@@ -62,6 +66,8 @@ class ExternalApiService
 
     /**
      * Make API call with rate limiting
+     * @param array<string, mixed> $options
+     * @return array<string, mixed>
      */
     public function rateLimitedApiCall(
         string $rateLimitKey,
@@ -87,6 +93,8 @@ class ExternalApiService
 
     /**
      * Make API call with automatic retry and exponential backoff
+     * @param array<string, mixed> $options
+     * @return array<string, mixed>
      */
     public function retryApiCall(
         string $method,
@@ -145,6 +153,8 @@ class ExternalApiService
 
     /**
      * Make paginated API calls and collect all results
+     * @param array<string, mixed> $options
+     * @return array<int, mixed>
      */
     public function paginatedApiCall(
         string $baseUrl,
@@ -157,7 +167,7 @@ class ExternalApiService
         $page = 1;
         $hasMorePages = true;
 
-        while ($hasMorePages && $page <= $maxPages) {
+        while ((bool) $hasMorePages && $page <= $maxPages) {
             $options['query'][$pageParam] = $page;
 
             $response = $this->httpClient->get($baseUrl, $options);
@@ -167,13 +177,13 @@ class ExternalApiService
                 $allData = array_merge($allData, $data[$dataKey]);
 
                 // Check if there are more pages
-                $hasMorePages = !empty($data[$dataKey]);
+                $hasMorePages = $data[$dataKey] !== [];
 
                 // Some APIs provide pagination metadata
                 if (isset($data['has_more'])) {
                     $hasMorePages = $data['has_more'];
                 } elseif (isset($data['next'])) {
-                    $hasMorePages = !empty($data['next']);
+                    $hasMorePages = $data['next'] !== '' && $data['next'] !== false;
                 }
             } else {
                 $hasMorePages = false;
@@ -193,6 +203,9 @@ class ExternalApiService
 
     /**
      * Transform API response data
+     * @param array<string, mixed> $data
+     * @param array<string, mixed> $mapping
+     * @return array<string, mixed>
      */
     public function transformApiResponse(array $data, array $mapping): array
     {
@@ -270,6 +283,7 @@ class ExternalApiService
 
     /**
      * Get cache statistics
+     * @return array<string, mixed>
      */
     public function getCacheStats(): array
     {

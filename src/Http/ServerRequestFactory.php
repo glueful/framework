@@ -45,7 +45,7 @@ class ServerRequestFactory
         $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
         if (strpos($contentType, 'application/json') !== false) {
             $content = file_get_contents('php://input');
-            if (!empty($content)) {
+            if ($content !== '' && $content !== false) {
                 $parsedBody = json_decode($content, true);
                 if (json_last_error() === JSON_ERROR_NONE) {
                     $request = $request->withParsedBody($parsedBody);

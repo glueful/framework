@@ -14,9 +14,11 @@ use Glueful\Services\FileFinder;
  */
 class ConfigManager
 {
+    /** @var array<string, mixed> */
     private static array $config = [];
     private static bool $loaded = false;
     private static string $environment;
+    /** @var array<string> */
     private static array $requiredConfigs = [
         'app', 'database', 'security', 'cache'
     ];
@@ -28,7 +30,7 @@ class ConfigManager
             return;
         }
 
-        $configPath = $configPath ?: base_path('config');
+        $configPath = $configPath ?? base_path('config');
 
         // Improved environment detection with fallbacks
         self::$environment = env('APP_ENV', 'production');
@@ -52,7 +54,7 @@ class ConfigManager
 
         foreach ($configFiles as $file) {
             $name = $file->getBasename('.php');
-            if (!in_array($name, self::$requiredConfigs)) {
+            if (!in_array($name, self::$requiredConfigs, true)) {
                 self::loadConfigFile($configPath, $name, false);
             }
         }
@@ -71,7 +73,11 @@ class ConfigManager
         self::$loaded = true;
     }
 
-    public static function get(string $key, $default = null)
+    /**
+     * @param mixed $default
+     * @return mixed
+     */
+    public static function get(string $key, mixed $default = null): mixed
     {
         if (!self::$loaded) {
             self::load();
@@ -80,7 +86,10 @@ class ConfigManager
         return self::getNestedValue(self::$config, $key, $default);
     }
 
-    public static function set(string $key, $value): void
+    /**
+     * @param mixed $value
+     */
+    public static function set(string $key, mixed $value): void
     {
         self::setNestedValue(self::$config, $key, $value);
     }
@@ -90,6 +99,9 @@ class ConfigManager
         return self::get($key) !== null;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public static function all(): array
     {
         if (!self::$loaded) {
@@ -151,22 +163,22 @@ class ConfigManager
         $errors = [];
 
         // Validate database config
-        if (!self::get('database.default')) {
+        if (self::get('database.default') === null) {
             $errors[] = 'Database default connection not configured';
         }
 
         $defaultDb = self::get('database.default');
-        if ($defaultDb && !self::get("database.connections.{$defaultDb}")) {
+        if ($defaultDb !== null && self::get("database.connections.{$defaultDb}") === null) {
             $errors[] = "Database connection '{$defaultDb}' is not defined";
         }
 
         // Validate security config
         if (self::$environment === 'production') {
-            if (!self::get('security.jwt.secret')) {
+            if (self::get('security.jwt.secret') === null) {
                 $errors[] = 'JWT secret not configured for production';
             }
 
-            if (!self::get('app.key')) {
+            if (self::get('app.key') === null) {
                 $errors[] = 'Application key not configured for production';
             }
 
@@ -176,18 +188,23 @@ class ConfigManager
         }
 
         // Validate cache config
-        if (!self::get('cache.default')) {
+        if (self::get('cache.default') === null) {
             $errors[] = 'Default cache driver not configured';
         }
 
-        if (!empty($errors)) {
+        if (count($errors) > 0) {
             throw new \RuntimeException(
                 "Configuration validation failed:\n- " . implode("\n- ", $errors)
             );
         }
     }
 
-    private static function getNestedValue(array $array, string $key, $default = null)
+    /**
+     * @param array<string, mixed> $array
+     * @param mixed $default
+     * @return mixed
+     */
+    private static function getNestedValue(array $array, string $key, mixed $default = null): mixed
     {
         $keys = explode('.', $key);
         $value = $array;
@@ -202,7 +219,11 @@ class ConfigManager
         return $value;
     }
 
-    private static function setNestedValue(array &$array, string $key, $value): void
+    /**
+     * @param array<string, mixed> $array
+     * @param mixed $value
+     */
+    private static function setNestedValue(array &$array, string $key, mixed $value): void
     {
         $keys = explode('.', $key);
         $current = &$array;
@@ -219,6 +240,9 @@ class ConfigManager
 
     /**
      * Proper deep merge that replaces values instead of creating arrays
+     * @param array<string, mixed> $array1
+     * @param array<string, mixed> $array2
+     * @return array<string, mixed>
      */
     private static function deepMerge(array $array1, array $array2): array
     {
@@ -278,7 +302,7 @@ class ConfigManager
      */
     private static function saveToCache(string $configPath): void
     {
-        if (!self::$cacheFile) {
+        if (self::$cacheFile === null || self::$cacheFile === '') {
             self::$cacheFile = sys_get_temp_dir() . '/glueful_config_' . md5($configPath) . '.php';
         }
 
@@ -295,7 +319,7 @@ class ConfigManager
      */
     public static function clearCache(): void
     {
-        if (self::$cacheFile && file_exists(self::$cacheFile)) {
+        if (self::$cacheFile !== null && self::$cacheFile !== '' && file_exists(self::$cacheFile)) {
             unlink(self::$cacheFile);
         }
     }

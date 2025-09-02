@@ -40,10 +40,10 @@ class AdminPermissionMiddleware implements MiddlewareInterface
     /** @var string Resource being accessed */
     private string $resource;
 
-    /** @var array Additional context for permission check */
+    /** @var array<string, mixed> Additional context for permission check */
     private array $context;
 
-    /** @var array Allowed IP addresses for admin access */
+    /** @var array<string> Allowed IP addresses for admin access */
     private array $allowedIps;
 
     /** @var bool Whether to require elevated authentication */
@@ -60,8 +60,8 @@ class AdminPermissionMiddleware implements MiddlewareInterface
      *
      * @param string $adminPermission Admin permission required (defaults to system.access)
      * @param string $resource Resource identifier (e.g., 'users', 'system', 'settings')
-     * @param array $context Additional context for permission checking
-     * @param array $allowedIps Allowed IP addresses (empty = allow all)
+     * @param array<string, mixed> $context Additional context for permission checking
+     * @param array<string> $allowedIps Allowed IP addresses (empty = allow all)
      * @param bool $requireElevated Whether to require elevated authentication
      */
     public function __construct(
@@ -112,7 +112,7 @@ class AdminPermissionMiddleware implements MiddlewareInterface
 
             // Get and validate user
             $userUuid = $this->getUserUuid($request);
-            if (!$userUuid) {
+            if ($userUuid === null) {
                 $this->logSecurityEvent($request, 'admin_authentication_required', null);
                 return $this->createAdminErrorResponse(
                     'Admin authentication required',
@@ -213,12 +213,12 @@ class AdminPermissionMiddleware implements MiddlewareInterface
     private function checkIpAccess(Request $request): bool
     {
         // If no IP restrictions configured, allow all
-        if (empty($this->allowedIps)) {
+        if (count($this->allowedIps) === 0) {
             return true;
         }
 
         $clientIp = $request->getClientIp();
-        if (!$clientIp) {
+        if ($clientIp === null) {
             return false;
         }
 
@@ -268,20 +268,20 @@ class AdminPermissionMiddleware implements MiddlewareInterface
     {
         // Try session first (preferred for admin)
         $sessionUser = $request->getSession()->get('user');
-        if ($sessionUser && isset($sessionUser['uuid'])) {
+        if ($sessionUser !== null && isset($sessionUser['uuid'])) {
             return $sessionUser['uuid'];
         }
 
         // Try Authorization header
         $authHeader = $request->headers->get('Authorization');
-        if ($authHeader && str_starts_with($authHeader, 'Bearer ')) {
+        if ($authHeader !== null && str_starts_with($authHeader, 'Bearer ')) {
             $token = substr($authHeader, 7);
             return $this->getUserUuidFromToken($token);
         }
 
         // Try custom auth token header
         $tokenHeader = $request->headers->get('X-Admin-Token');
-        if ($tokenHeader) {
+        if ($tokenHeader !== null) {
             return $this->getUserUuidFromToken($tokenHeader);
         }
 
@@ -300,12 +300,12 @@ class AdminPermissionMiddleware implements MiddlewareInterface
             // Try to get session from TokenStorageService
             $tokenStorage = new \Glueful\Auth\TokenStorageService();
             $sessionData = $tokenStorage->getSessionByAccessToken($token);
-            if ($sessionData && isset($sessionData['user_uuid'])) {
+            if ($sessionData !== null && isset($sessionData['user_uuid'])) {
                 return $sessionData['user_uuid'];
             }
 
             $user = AuthenticationService::validateAccessToken($token);
-            if ($user && isset($user['uuid'])) {
+            if ($user !== null && isset($user['uuid'])) {
                 return $user['uuid'];
             }
 
@@ -325,7 +325,7 @@ class AdminPermissionMiddleware implements MiddlewareInterface
     {
         try {
             $user = $this->userRepository->findByUuid($userUuid);
-            if (!$user) {
+            if ($user === null) {
                 return false;
             }
 
@@ -358,13 +358,13 @@ class AdminPermissionMiddleware implements MiddlewareInterface
         // Check for recent authentication (within last 15 minutes for admin actions)
         $session = $request->getSession();
         $lastAuth = $session->get('last_admin_auth');
-        if ($lastAuth && (time() - $lastAuth) < 900) { // 15 minutes
+        if ($lastAuth !== null && (time() - $lastAuth) < 900) { // 15 minutes
             return true;
         }
 
         // Check for elevated auth header
         $elevatedHeader = $request->headers->get('X-Elevated-Auth');
-        if ($elevatedHeader) {
+        if ($elevatedHeader !== null) {
             // Validate elevated auth token/signature
             return $this->validateElevatedAuth($elevatedHeader, $userUuid);
         }
@@ -444,11 +444,11 @@ class AdminPermissionMiddleware implements MiddlewareInterface
             'resource' => $this->resource
         ];
 
-        if ($userUuid) {
+        if ($userUuid !== null) {
             $logData['user_uuid'] = $userUuid;
         }
 
-        if ($details) {
+        if ($details !== null) {
             $logData['details'] = $details;
         }
 
@@ -462,7 +462,7 @@ class AdminPermissionMiddleware implements MiddlewareInterface
      * @param string $message Error message
      * @param int $statusCode HTTP status code
      * @param string $errorCode Application error code
-     * @param array $details Additional error details
+     * @param array<string, mixed> $details Additional error details
      * @return JsonResponse Error response
      */
     private function createAdminErrorResponse(
@@ -480,7 +480,7 @@ class AdminPermissionMiddleware implements MiddlewareInterface
             ]
         ];
 
-        if (!empty($details)) {
+        if (count($details) > 0) {
             $error['error']['details'] = $details;
         }
 
@@ -491,7 +491,7 @@ class AdminPermissionMiddleware implements MiddlewareInterface
      * Create middleware for superuser access
      *
      * @param string $resource Resource identifier
-     * @param array $allowedIps Allowed IP addresses
+     * @param array<string> $allowedIps Allowed IP addresses
      * @return self Middleware instance
      */
     public static function superuser(string $resource = 'system', array $allowedIps = []): self
@@ -509,7 +509,7 @@ class AdminPermissionMiddleware implements MiddlewareInterface
      * Create middleware for system admin access
      *
      * @param string $resource Resource identifier
-     * @param array $allowedIps Allowed IP addresses
+     * @param array<string> $allowedIps Allowed IP addresses
      * @return self Middleware instance
      */
     public static function systemAdmin(string $resource = 'system', array $allowedIps = []): self
@@ -526,7 +526,7 @@ class AdminPermissionMiddleware implements MiddlewareInterface
     /**
      * Create middleware for user admin access
      *
-     * @param array $allowedIps Allowed IP addresses
+     * @param array<string> $allowedIps Allowed IP addresses
      * @return self Middleware instance
      */
     public static function userAdmin(array $allowedIps = []): self
@@ -543,7 +543,7 @@ class AdminPermissionMiddleware implements MiddlewareInterface
     /**
      * Create middleware for content admin access
      *
-     * @param array $allowedIps Allowed IP addresses
+     * @param array<string> $allowedIps Allowed IP addresses
      * @return self Middleware instance
      */
     public static function contentAdmin(array $allowedIps = []): self

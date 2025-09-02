@@ -37,7 +37,7 @@ class PermissionMiddleware implements MiddlewareInterface
     /** @var string Resource being accessed */
     private string $resource;
 
-    /** @var array Additional context for permission check */
+    /** @var array<string, mixed> Additional context for permission check */
     private array $context;
 
     /** @var bool Whether to require authentication */
@@ -51,7 +51,7 @@ class PermissionMiddleware implements MiddlewareInterface
      *
      * @param string $permission Required permission (e.g., 'view', 'edit', 'delete')
      * @param string $resource Resource identifier (e.g., 'users', 'posts', 'settings')
-     * @param array $context Additional context for permission checking
+     * @param array<string, mixed> $context Additional context for permission checking
      * @param bool $requireAuth Whether authentication is required
      */
     public function __construct(
@@ -81,7 +81,7 @@ class PermissionMiddleware implements MiddlewareInterface
             $userUuid = $this->getUserUuid($request);
 
             // If authentication is required but no user found
-            if ($this->requireAuth && !$userUuid) {
+            if ($this->requireAuth && $userUuid === null) {
                 return $this->createErrorResponse(
                     'Authentication required',
                     401,
@@ -90,7 +90,7 @@ class PermissionMiddleware implements MiddlewareInterface
             }
 
             // If we have a user, check permissions
-            if ($userUuid) {
+            if ($userUuid !== null) {
                 // Check if permission system is available
                 if (!$this->permissionManager->isAvailable()) {
                     // Fallback: Allow any authenticated user when permission system unavailable
@@ -130,7 +130,7 @@ class PermissionMiddleware implements MiddlewareInterface
             // If provider not found, apply fallback logic
             $userUuid = $this->getUserUuid($request);
 
-            if ($this->requireAuth && !$userUuid) {
+            if ($this->requireAuth && $userUuid === null) {
                 return $this->createErrorResponse(
                     'Authentication required',
                     401,
@@ -138,7 +138,7 @@ class PermissionMiddleware implements MiddlewareInterface
                 );
             }
 
-            if ($userUuid) {
+            if ($userUuid !== null) {
                 // Fallback: Allow authenticated user when provider not found
                 error_log("FALLBACK: Provider not found exception, allowing authenticated access for: " .
                           "{$this->permission}");
@@ -190,20 +190,20 @@ class PermissionMiddleware implements MiddlewareInterface
     {
         // Try to get user from session first
         $sessionUser = $request->getSession()->get('user');
-        if ($sessionUser && isset($sessionUser['uuid'])) {
+        if ($sessionUser !== null && isset($sessionUser['uuid'])) {
             return $sessionUser['uuid'];
         }
 
         // Try to get user from Authorization header (Bearer token)
         $authHeader = $request->headers->get('Authorization');
-        if ($authHeader && str_starts_with($authHeader, 'Bearer ')) {
+        if ($authHeader !== null && str_starts_with($authHeader, 'Bearer ')) {
             $token = substr($authHeader, 7);
             return $this->getUserUuidFromToken($token);
         }
 
         // Try to get user from custom auth token header
         $tokenHeader = $request->headers->get('X-Auth-Token');
-        if ($tokenHeader) {
+        if ($tokenHeader !== null) {
             return $this->getUserUuidFromToken($tokenHeader);
         }
 
@@ -228,13 +228,13 @@ class PermissionMiddleware implements MiddlewareInterface
             // Try to get session from TokenStorageService
             $tokenStorage = new \Glueful\Auth\TokenStorageService();
             $sessionData = $tokenStorage->getSessionByAccessToken($token);
-            if ($sessionData && isset($sessionData['user_uuid'])) {
+            if ($sessionData !== null && isset($sessionData['user_uuid'])) {
                 return $sessionData['user_uuid'];
             }
 
             // Fallback: try direct token validation
             $user = AuthenticationService::validateAccessToken($token);
-            if ($user && isset($user['uuid'])) {
+            if ($user !== null && isset($user['uuid'])) {
                 return $user['uuid'];
             }
 
@@ -287,7 +287,7 @@ class PermissionMiddleware implements MiddlewareInterface
      * @param string $message Error message
      * @param int $statusCode HTTP status code
      * @param string $errorCode Application error code
-     * @param array $details Additional error details
+     * @param array<string, mixed> $details Additional error details
      * @return JsonResponse Error response
      */
     private function createErrorResponse(
@@ -304,7 +304,7 @@ class PermissionMiddleware implements MiddlewareInterface
             ]
         ];
 
-        if (!empty($details)) {
+        if (count($details) > 0) {
             $error['error']['details'] = $details;
         }
 
@@ -318,7 +318,7 @@ class PermissionMiddleware implements MiddlewareInterface
      *
      * @param string $permission Required permission
      * @param string $resource Resource identifier
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @param bool $requireAuth Whether authentication is required
      * @return self Middleware instance
      */
@@ -335,7 +335,7 @@ class PermissionMiddleware implements MiddlewareInterface
      * Create middleware for read/view access
      *
      * @param string $resource Resource identifier
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return self Middleware instance
      */
     public static function read(string $resource, array $context = []): self
@@ -347,7 +347,7 @@ class PermissionMiddleware implements MiddlewareInterface
      * Create middleware for write access
      *
      * @param string $resource Resource identifier
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return self Middleware instance
      */
     public static function write(string $resource, array $context = []): self
@@ -359,7 +359,7 @@ class PermissionMiddleware implements MiddlewareInterface
      * Create middleware for delete access
      *
      * @param string $resource Resource identifier
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return self Middleware instance
      */
     public static function delete(string $resource, array $context = []): self
@@ -371,7 +371,7 @@ class PermissionMiddleware implements MiddlewareInterface
      * Create middleware for admin access
      *
      * @param string $resource Resource identifier
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return self Middleware instance
      */
     public static function admin(string $resource, array $context = []): self
@@ -383,7 +383,7 @@ class PermissionMiddleware implements MiddlewareInterface
      * Create middleware for user management access
      *
      * @param string $action User action (view, create, edit, delete)
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return self Middleware instance
      */
     public static function users(string $action = PermissionStandards::ACTION_VIEW, array $context = []): self

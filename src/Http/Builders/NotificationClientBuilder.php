@@ -15,6 +15,7 @@ use Glueful\Http\Authentication\AuthenticationMethods;
  */
 class NotificationClientBuilder
 {
+    /** @var array<string, mixed> */
     private array $options = [];
 
     public function __construct(private Client $baseClient)
@@ -171,6 +172,9 @@ class NotificationClientBuilder
     /**
      * Add authentication
      */
+    /**
+     * @param array<string, mixed> $authConfig
+     */
     public function auth(array $authConfig): self
     {
         if (isset($authConfig['headers'])) {
@@ -227,6 +231,9 @@ class NotificationClientBuilder
 
     /**
      * Get current configuration
+     */
+    /**
+     * @return array<string, mixed>
      */
     public function getConfig(): array
     {

@@ -69,7 +69,7 @@ class Cors
      * - supportsCredentials: Whether credentials (cookies, auth) are allowed
      * - debug: Development flag for additional debugging information
      *
-     * @var array
+     * @var array<string, mixed>
      */
     private array $config;
 
@@ -94,7 +94,7 @@ class Cors
      * - security.cors.max_age: Cache duration for preflight responses
      * - security.cors.supports_credentials: Boolean for credential support
      *
-     * @param array $config Override configuration options
+     * @param array<string, mixed> $config Override configuration options
      */
     public function __construct(array $config = [])
     {
@@ -111,7 +111,7 @@ class Cors
 
         // If no origins configured, allow all (wildcard) for easy development
         // Note: This disables credential support for security reasons
-        if (empty($allowedOrigins)) {
+        if (count($allowedOrigins) === 0) {
             $allowedOrigins = ['*'];
         }
 
@@ -158,7 +158,7 @@ class Cors
     public function handle($request = null): bool
     {
        // Check for empty $request and use fallback if needed
-        if (empty($request)) {
+        if ($request === null) {
             $request = Request::createFromGlobals();
         }
         $origin = $request->headers->get('Origin', '');
@@ -205,7 +205,7 @@ class Cors
 
         // Validate requested method
         $requestedMethod = $request->headers->get('Access-Control-Request-Method');
-        if ($requestedMethod && !in_array($requestedMethod, $this->config['allowedMethods'], true)) {
+        if ($requestedMethod !== null && !in_array($requestedMethod, $this->config['allowedMethods'], true)) {
             http_response_code(403);
             header('Content-Type: application/json');
             echo json_encode(['error' => 'CORS method not allowed']);
@@ -219,7 +219,7 @@ class Cors
         header('Access-Control-Allow-Headers: ' . implode(', ', $this->config['allowedHeaders']));
         header('Access-Control-Max-Age: ' . $this->config['maxAge']);
 
-        if ($this->config['supportsCredentials']) {
+        if ($this->config['supportsCredentials'] === true) {
             header('Access-Control-Allow-Credentials: true');
         }
 
@@ -250,11 +250,11 @@ class Cors
         header('Access-Control-Allow-Origin: ' . $origin);
 
         // Add optional CORS headers
-        if (!empty($this->config['exposedHeaders'])) {
+        if (count($this->config['exposedHeaders']) > 0) {
             header('Access-Control-Expose-Headers: ' . implode(', ', $this->config['exposedHeaders']));
         }
 
-        if ($this->config['supportsCredentials']) {
+        if ($this->config['supportsCredentials'] === true) {
             header('Access-Control-Allow-Credentials: true');
         }
     }
@@ -276,7 +276,7 @@ class Cors
      */
     private function isOriginAllowed(string $origin): bool
     {
-        if (empty($origin)) {
+        if ($origin === '') {
             return false;
         }
 
@@ -378,7 +378,7 @@ class Cors
      * ]);
      * ```
      *
-     * @param array $allowedOrigins List of specific domains allowed to access the API
+     * @param array<string> $allowedOrigins List of specific domains allowed to access the API
      * @return self New CORS instance configured for production
      */
     public static function production(array $allowedOrigins): self
@@ -405,7 +405,7 @@ class Cors
      * Perfect for APIs that serve public data or use token-based
      * authentication without cookies.
      *
-     * @param array $allowedOrigins Origins allowed to access the API (default: all)
+     * @param array<string> $allowedOrigins Origins allowed to access the API (default: all)
      * @return self New CORS instance configured for API-only usage
      */
     public static function apiOnly(array $allowedOrigins = ['*']): self
@@ -443,7 +443,7 @@ class Cors
      * ]);
      * ```
      *
-     * @param string|array $frontendUrls Single URL or array of frontend URLs
+     * @param string|array<string> $frontendUrls Single URL or array of frontend URLs
      * @return self New CORS instance configured for frontend applications
      */
     public static function frontend(string|array $frontendUrls): self
@@ -552,7 +552,7 @@ class Cors
      *      ->withDebug(false);
      * ```
      *
-     * @param string|array $origins Single origin URL or array of origin URLs to add
+     * @param string|array<string> $origins Single origin URL or array of origin URLs to add
      * @return self Current instance for method chaining (fluent interface)
      */
     public function allowOrigins(string|array $origins): self

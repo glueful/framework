@@ -14,7 +14,9 @@ namespace Glueful\Http;
  */
 class EnvironmentContext
 {
+    /** @var array<string, string|false> */
     private array $env;
+    /** @var array<string, mixed> */
     private array $cache = [];
 
     public function __construct()
@@ -161,7 +163,7 @@ class EnvironmentContext
      * Get all environment variables (filtered for security)
      *
      * @param bool $includeSensitive
-     * @return array
+     * @return array<string, string|false>
      */
     public function all(bool $includeSensitive = false): array
     {

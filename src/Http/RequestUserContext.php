@@ -7,7 +7,6 @@ namespace Glueful\Http;
 use Glueful\Auth\TokenManager;
 use Glueful\Auth\SessionCacheManager;
 use Glueful\Models\User;
-use Glueful\Security\SecureSerializer;
 
 /**
  * Request User Context
@@ -122,7 +121,7 @@ class RequestUserContext
         try {
             // Extract token once per request
             $this->token = TokenManager::extractTokenFromRequest();
-            if ($this->token) {
+            if ($this->token !== null) {
                 // Get optimized session data with context-aware caching
                 $context = [
                     'request_id' => $this->requestId,
@@ -138,12 +137,12 @@ class RequestUserContext
                     } else {
                         // Extract user data from JWT token
                         $userData = $this->extractUserDataFromToken($this->token);
-                        if ($userData) {
+                        if ($userData !== null) {
                             $this->user = User::fromArray($userData);
                         }
                     }
 
-                    if ($this->user) {
+                    if ($this->user !== null) {
                         $this->isAuthenticated = true;
                         // Pre-cache user capabilities with enhanced permission data
                         $this->loadUserCapabilities();
@@ -195,7 +194,6 @@ class RequestUserContext
      * Get session data
      *
      * @return array<string, mixed>|null Session data or null
-     * @phpstan-return AuthSessionPayload|null
      */
     public function getSessionData(): ?array
     {
@@ -227,7 +225,7 @@ class RequestUserContext
 
         if (!isset($this->permissionCache[$cacheKey])) {
             $user = $this->getUser();
-            if (!$user) {
+            if ($user === null) {
                 $this->permissionCache[$cacheKey] = false;
             } else {
                 // Use AuthenticationManager's proper admin check
@@ -247,7 +245,7 @@ class RequestUserContext
      *
      * @param string $permission Permission to check
      * @param string $resource Resource identifier
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return bool True if user has permission
      */
     public function hasPermission(string $permission, string $resource = 'system', array $context = []): bool
@@ -257,7 +255,7 @@ class RequestUserContext
         if (!isset($this->permissionCache[$cacheKey])) {
             $user = $this->getUser();
 
-            if (!$user) {
+            if ($user === null) {
                 $this->permissionCache[$cacheKey] = false;
             } elseif ($this->isAdmin()) {
                 $this->permissionCache[$cacheKey] = true;
@@ -273,7 +271,7 @@ class RequestUserContext
     /**
      * Get user roles (cached)
      *
-     * @return array User roles
+     * @return array<string> User roles
      */
     public function getUserRoles(): array
     {
@@ -282,7 +280,7 @@ class RequestUserContext
         if (!isset($this->userCapabilities[$cacheKey])) {
             $user = $this->getUser();
 
-            if (!$user) {
+            if ($user === null) {
                 $this->userCapabilities[$cacheKey] = [];
             } else {
                 // Load roles from session data (nested in user object)
@@ -296,7 +294,7 @@ class RequestUserContext
     /**
      * Get user permissions (cached)
      *
-     * @return array User permissions
+     * @return array<string> User permissions
      */
     public function getUserPermissions(): array
     {
@@ -305,7 +303,7 @@ class RequestUserContext
         if (!isset($this->userCapabilities[$cacheKey])) {
             $user = $this->getUser();
 
-            if (!$user) {
+            if ($user === null) {
                 $this->userCapabilities[$cacheKey] = [];
             } else {
                 // Load permissions from session data (nested in user object)
@@ -324,7 +322,7 @@ class RequestUserContext
      *
      * @param string $permission Permission to check
      * @param string $resource Resource identifier
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return bool True if user has permission
      */
     private function checkSessionPermission(string $permission, string $resource, array $context): bool
@@ -333,7 +331,7 @@ class RequestUserContext
         $userPermissions = $this->getUserPermissions();
 
         // Try cached permissions first (fast path)
-        if (!empty($userPermissions)) {
+        if (count($userPermissions) > 0) {
             // Check for direct permission match
             if ($this->hasDirectPermission($userPermissions, $permission, $resource)) {
                 return true;
@@ -356,7 +354,7 @@ class RequestUserContext
         // - Dynamic permissions not cached
         // - RBAC provider has additional permissions
         $userUuid = $this->getUserUuid();
-        if (!$userUuid) {
+        if ($userUuid === null) {
             return false;
         }
 
@@ -385,7 +383,7 @@ class RequestUserContext
     /**
      * Check for direct permission match in session data
      *
-     * @param array $userPermissions User permissions from session
+     * @param array<mixed> $userPermissions User permissions from session
      * @param string $permission Permission to check
      * @param string $resource Resource identifier
      * @return bool True if direct match found
@@ -393,17 +391,17 @@ class RequestUserContext
     private function hasDirectPermission(array $userPermissions, string $permission, string $resource): bool
     {
         // Check resource-specific permissions
-        if (isset($userPermissions[$resource]) && in_array($permission, $userPermissions[$resource])) {
+        if (isset($userPermissions[$resource]) && in_array($permission, $userPermissions[$resource], true)) {
             return true;
         }
 
         // Check system-wide permissions
-        if (isset($userPermissions['system']) && in_array($permission, $userPermissions['system'])) {
+        if (isset($userPermissions['system']) && in_array($permission, $userPermissions['system'], true)) {
             return true;
         }
 
         // Check flat permission array (backward compatibility)
-        if (is_array($userPermissions) && in_array($permission, $userPermissions)) {
+        if (in_array($permission, $userPermissions, true)) {
             return true;
         }
 
@@ -413,7 +411,7 @@ class RequestUserContext
     /**
      * Check for wildcard permission match
      *
-     * @param array $userPermissions User permissions from session
+     * @param array<mixed> $userPermissions User permissions from session
      * @param string $permission Permission to check
      * @param string $resource Resource identifier
      * @return bool True if wildcard match found
@@ -423,7 +421,7 @@ class RequestUserContext
         $wildcardPermissions = array_merge(
             $userPermissions[$resource] ?? [],
             $userPermissions['system'] ?? [],
-            is_array($userPermissions) ? $userPermissions : []
+            $userPermissions
         );
 
         foreach ($wildcardPermissions as $userPerm) {
@@ -440,7 +438,7 @@ class RequestUserContext
      *
      * @param string $permission Permission to check
      * @param string $resource Resource identifier
-     * @param array $context Additional context
+     * @param array<string, mixed> $context Additional context
      * @return bool True if role grants permission
      */
     private function hasRoleBasedPermission(string $permission, string $resource, array $context): bool
@@ -449,12 +447,12 @@ class RequestUserContext
         unset($permission, $resource, $context);
 
         $userRoles = $this->getUserRoles();
-        if (empty($userRoles)) {
+        if (count($userRoles) === 0) {
             return false;
         }
 
         // For simple implementation, check if user has admin role
-        if (in_array('admin', $userRoles) || in_array('administrator', $userRoles)) {
+        if (in_array('admin', $userRoles, true) || in_array('administrator', $userRoles, true)) {
             return true;
         }
 
@@ -466,7 +464,7 @@ class RequestUserContext
     /**
      * Get request metadata for audit logging
      *
-     * @return array Request metadata
+     * @return array<string, mixed> Request metadata
      */
     public function getRequestMetadata(): array
     {
@@ -476,7 +474,7 @@ class RequestUserContext
     /**
      * Get audit context data
      *
-     * @return array Audit context with user and request data
+     * @return array<string, mixed> Audit context with user and request data
      */
     public function getAuditContext(): array
     {
@@ -523,7 +521,7 @@ class RequestUserContext
      */
     private function loadUserCapabilities(): void
     {
-        if (!$this->user || !$this->sessionData) {
+        if ($this->user === null || $this->sessionData === null) {
             return;
         }
 
@@ -542,13 +540,16 @@ class RequestUserContext
      * Extract user data from JWT token
      *
      * @param string $token JWT token
-     * @return array|null User data or null if extraction fails
+     * @return array<string, mixed>|null User data or null if extraction fails
+     */
+    /**
+     * @return array<string, mixed>|null
      */
     private function extractUserDataFromToken(string $token): ?array
     {
         try {
             $jwtPayload = \Glueful\Auth\JWTService::decode($token);
-            if (!$jwtPayload) {
+            if ($jwtPayload === null) {
                 return null;
             }
 
@@ -558,7 +559,7 @@ class RequestUserContext
                 'id' => $jwtPayload['id'] ?? $jwtPayload['uuid'],
                 'username' => $jwtPayload['username'],
                 'email' => $jwtPayload['email'],
-                'email_verified' => !empty($jwtPayload['email_verified_at']),
+                'email_verified' => ($jwtPayload['email_verified_at'] ?? null) !== null,
                 'locale' => 'en-US', // Default locale
                 'name' => isset($jwtPayload['profile'])
                     ? trim(($jwtPayload['profile']['first_name'] ?? '') . ' ' .
@@ -662,7 +663,7 @@ class RequestUserContext
     /**
      * Get cached statistics
      *
-     * @return array Cache statistics
+     * @return array<string, mixed> Cache statistics
      */
     public function getCacheStats(): array
     {
@@ -693,7 +694,7 @@ class RequestUserContext
     public function __destruct()
     {
         // Log cache performance for monitoring
-        if (config('app.debug', false)) {
+        if (config('app.debug', false) === true) {
             $stats = $this->getCacheStats();
             error_log("RequestUserContext stats: " . json_encode($stats));
         }

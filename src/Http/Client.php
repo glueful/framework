@@ -28,6 +28,7 @@ class Client
 
     /**
      * Send a GET request
+     * @param array<string, mixed> $options
      */
     public function get(string $url, array $options = []): Response
     {
@@ -36,6 +37,7 @@ class Client
 
     /**
      * Send a POST request
+     * @param array<string, mixed> $options
      */
     public function post(string $url, array $options = []): Response
     {
@@ -44,6 +46,7 @@ class Client
 
     /**
      * Send a PUT request
+     * @param array<string, mixed> $options
      */
     public function put(string $url, array $options = []): Response
     {
@@ -52,6 +55,7 @@ class Client
 
     /**
      * Send a DELETE request
+     * @param array<string, mixed> $options
      */
     public function delete(string $url, array $options = []): Response
     {
@@ -60,6 +64,7 @@ class Client
 
     /**
      * Send a PATCH request
+     * @param array<string, mixed> $options
      */
     public function patch(string $url, array $options = []): Response
     {
@@ -68,6 +73,7 @@ class Client
 
     /**
      * Send an HTTP request
+     * @param array<string, mixed> $options
      */
     public function request(string $method, string $url, array $options = []): Response
     {
@@ -127,6 +133,9 @@ class Client
     /**
      * Create a scoped client with default options
      */
+    /**
+     * @param array<string, mixed> $defaultOptions
+     */
     public function createScopedClient(array $defaultOptions = []): self
     {
         $scopedClient = $this->httpClient->withOptions($defaultOptions);
@@ -136,6 +145,9 @@ class Client
     /**
      * Send an async request (returns Symfony ResponseInterface)
      */
+    /**
+     * @param array<string, mixed> $options
+     */
     public function requestAsync(string $method, string $url, array $options = []): ResponseInterface
     {
         $symfonyOptions = $this->transformOptions($options);
@@ -144,6 +156,10 @@ class Client
 
     /**
      * Send multiple requests in batch
+     */
+    /**
+     * @param array<mixed> $requests
+     * @return array<mixed>
      */
     public function requestBatch(array $requests): array
     {
@@ -160,6 +176,10 @@ class Client
 
     /**
      * Transform Glueful options to Symfony HttpClient format
+     */
+    /**
+     * @param array<string, mixed> $options
+     * @return array<string, mixed>
      */
     private function transformOptions(array $options): array
     {

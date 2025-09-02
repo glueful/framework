@@ -21,6 +21,8 @@ class LoggingMiddleware
 
     /**
      * Log an outgoing HTTP request
+     *
+     * @param array<string, mixed> $options
      */
     public function logRequest(
         string $method,
@@ -179,6 +181,9 @@ class LoggingMiddleware
 
     /**
      * Sanitize headers to remove sensitive information
+     *
+     * @param array<string, mixed> $headers
+     * @return array<string, mixed>
      */
     private function sanitizeHeaders(array $headers): array
     {
@@ -196,7 +201,7 @@ class LoggingMiddleware
         $sanitized = [];
         foreach ($headers as $name => $value) {
             $lowerName = strtolower($name);
-            if (in_array($lowerName, $sensitiveHeaders)) {
+            if (in_array($lowerName, $sensitiveHeaders, true)) {
                 $sanitized[$name] = '[REDACTED]';
             } else {
                 $sanitized[$name] = $value;
@@ -235,13 +240,16 @@ class LoggingMiddleware
 
     /**
      * Recursively sanitize array fields
+     *
+     * @param array<string, mixed> $array
+     * @param array<string> $sensitiveFields
      */
     private function sanitizeArray(array &$array, array $sensitiveFields): void
     {
         foreach ($array as $key => &$value) {
             if (is_array($value)) {
                 $this->sanitizeArray($value, $sensitiveFields);
-            } elseif (in_array(strtolower($key), $sensitiveFields)) {
+            } elseif (in_array(strtolower((string)$key), $sensitiveFields, true)) {
                 $value = '[REDACTED]';
             }
         }
@@ -262,6 +270,8 @@ class LoggingMiddleware
 
     /**
      * Build URL from parsed components
+     *
+     * @param array<string, mixed> $parsed
      */
     private function buildUrl(array $parsed): string
     {

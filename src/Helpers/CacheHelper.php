@@ -25,7 +25,7 @@ class CacheHelper
      * configuration issues), it returns null to allow services to continue
      * operating without caching.
      *
-     * @return CacheStore|null Cache instance or null if cache unavailable
+     * @return CacheStore<mixed>|null Cache instance or null if cache unavailable
      */
     public static function createCacheInstance(): ?CacheStore
     {
@@ -42,7 +42,7 @@ class CacheHelper
     /**
      * Check if cache is available and healthy
      *
-     * @param CacheStore|null $cache Cache instance to test
+     * @param CacheStore<mixed>|null $cache Cache instance to test
      * @return bool True if cache is available and responding
      */
     public static function isCacheHealthy(?CacheStore $cache): bool
@@ -67,7 +67,7 @@ class CacheHelper
     /**
      * Safely execute a cache operation with fallback
      *
-     * @param CacheStore|null $cache Cache instance
+     * @param CacheStore<mixed>|null $cache Cache instance
      * @param callable $operation Cache operation to execute
      * @param mixed $fallback Fallback value if cache operation fails
      * @return mixed Result of cache operation or fallback value
@@ -107,9 +107,9 @@ class CacheHelper
     /**
      * Get multiple cache keys with automatic prefix
      *
-     * @param array $keys Array of base cache keys
+     * @param array<string> $keys Array of base cache keys
      * @param string|null $prefix Optional prefix override
-     * @return array Array of prefixed cache keys
+     * @return array<string> Array of prefixed cache keys
      */
     public static function keys(array $keys, ?string $prefix = null): array
     {
@@ -120,9 +120,9 @@ class CacheHelper
     /**
      * Create associative array with prefixed keys
      *
-     * @param array $values Associative array of key => value pairs
+     * @param array<string, mixed> $values Associative array of key => value pairs
      * @param string|null $prefix Optional prefix override
-     * @return array Array with prefixed keys
+     * @return array<string, mixed> Array with prefixed keys
      */
     public static function prefixValues(array $values, ?string $prefix = null): array
     {
@@ -261,7 +261,7 @@ class CacheHelper
      * When multiple processes try to regenerate the same cache key simultaneously,
      * only one process will execute the callback while others wait for the result.
      *
-     * @param CacheStore $cache Cache instance
+     * @param CacheStore<mixed> $cache Cache instance
      * @param string $key Cache key
      * @param callable $callback Function to execute on cache miss
      * @param int $ttl Cache TTL in seconds (default: 3600)
@@ -334,7 +334,7 @@ class CacheHelper
      * If cache is close to expiring, it triggers background refresh while
      * returning the current cached value.
      *
-     * @param CacheStore $cache Cache instance
+     * @param CacheStore<mixed> $cache Cache instance
      * @param string $key Cache key
      * @param callable $callback Function to execute on cache miss
      * @param int $ttl Cache TTL in seconds
@@ -383,7 +383,7 @@ class CacheHelper
     /**
      * Simple wrapper around cache remember with optional stampede protection
      *
-     * @param CacheStore|null $cache Cache instance
+     * @param CacheStore<mixed>|null $cache Cache instance
      * @param string $key Cache key
      * @param callable $callback Function to execute on cache miss
      * @param int $ttl Cache TTL in seconds
@@ -402,20 +402,21 @@ class CacheHelper
         }
 
         // Determine if stampede protection should be used
-        $shouldUseStampedeProtection = $useStampedeProtection ?? config('cache.stampede_protection.enabled', false);
+        $shouldUseStampedeProtection = $useStampedeProtection ??
+            (bool) config('cache.stampede_protection.enabled', false);
 
         if ($shouldUseStampedeProtection) {
             // Check if early expiration is enabled
-            $earlyExpirationEnabled = config('cache.stampede_protection.early_expiration.enabled', false);
+            $earlyExpirationEnabled = (bool) config('cache.stampede_protection.early_expiration.enabled', false);
 
             if ($earlyExpirationEnabled) {
-                $threshold = config('cache.stampede_protection.early_expiration.threshold', 0.8);
-                $lockTtl = config('cache.stampede_protection.lock_ttl', 60);
+                $threshold = (float) config('cache.stampede_protection.early_expiration.threshold', 0.8);
+                $lockTtl = (int) config('cache.stampede_protection.lock_ttl', 60);
                 return self::rememberWithEarlyExpiration($cache, $key, $callback, $ttl, $threshold, $lockTtl);
             } else {
-                $lockTtl = config('cache.stampede_protection.lock_ttl', 60);
-                $maxWait = config('cache.stampede_protection.max_wait_time', 30);
-                $retryInterval = config('cache.stampede_protection.retry_interval', 100000);
+                $lockTtl = (int) config('cache.stampede_protection.lock_ttl', 60);
+                $maxWait = (int) config('cache.stampede_protection.max_wait_time', 30);
+                $retryInterval = (int) config('cache.stampede_protection.retry_interval', 100000);
                 return self::rememberWithStampedeProtection(
                     $cache,
                     $key,
@@ -428,18 +429,8 @@ class CacheHelper
             }
         }
 
-        // Use cache's built-in remember if available, otherwise implement manually
-        if (method_exists($cache, 'remember')) {
-            return $cache->remember($key, $callback, $ttl);
-        }
-
-        $value = $cache->get($key);
-        if ($value === null) {
-            $value = $callback();
-            $cache->set($key, $value, $ttl);
-        }
-
-        return $value;
+        // CacheStore interface always has remember method, so we can call it directly
+        return $cache->remember($key, $callback, $ttl);
     }
 
     /**
@@ -457,7 +448,7 @@ class CacheHelper
     /**
      * Release a distributed lock safely
      *
-     * @param CacheStore $cache Cache instance
+     * @param CacheStore<mixed> $cache Cache instance
      * @param string $lockKey Lock key
      * @param string $lockValue Lock value for verification
      * @return bool True if lock was released

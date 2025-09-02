@@ -23,7 +23,7 @@ use Glueful\Exceptions\ExceptionHandler;
  */
 class SecureErrorResponse
 {
-    /** @var array Standard error messages for common scenarios */
+    /** @var array<string, string> Standard error messages for common scenarios */
     private const ERROR_MESSAGES = [
         'general' => 'An error occurred while processing your request',
         'validation' => 'The provided data is invalid',
@@ -36,7 +36,7 @@ class SecureErrorResponse
         'rate_limit' => 'Too many requests. Please try again later',
     ];
 
-    /** @var array HTTP status codes for different error types */
+    /** @var array<string, int> HTTP status codes for different error types */
     private const STATUS_CODES = [
         'general' => 500,
         'validation' => 400,
@@ -54,8 +54,8 @@ class SecureErrorResponse
      *
      * @param \Throwable $exception The exception to handle
      * @param string|null $errorType Optional error type override
-     * @param array $context Additional context for development environments
-     * @return array Secure error response
+     * @param array<string, mixed> $context Additional context for development environments
+     * @return array<string, mixed> Secure error response
      */
     public static function fromException(\Throwable $exception, ?string $errorType = null, array $context = []): array
     {
@@ -98,9 +98,9 @@ class SecureErrorResponse
     /**
      * Create a secure validation error response
      *
-     * @param array $errors Validation errors
+     * @param array<string, mixed> $errors Validation errors
      * @param string $message Custom message
-     * @return array Secure validation error response
+     * @return array<string, mixed> Secure validation error response
      */
     public static function validationError(array $errors, string $message = 'Validation failed'): array
     {
@@ -122,7 +122,7 @@ class SecureErrorResponse
      *
      * @param \Throwable $exception Database exception
      * @param string $operation Operation that failed (e.g., 'create', 'update', 'delete')
-     * @return array Secure database error response
+     * @return array<string, mixed> Secure database error response
      */
     public static function databaseError(\Throwable $exception, string $operation = 'operation'): array
     {
@@ -141,7 +141,7 @@ class SecureErrorResponse
      *
      * @param \Throwable $exception File operation exception
      * @param string $operation File operation type
-     * @return array Secure file error response
+     * @return array<string, mixed> Secure file error response
      */
     public static function fileError(\Throwable $exception, string $operation = 'file operation'): array
     {
@@ -155,7 +155,7 @@ class SecureErrorResponse
      *
      * @param \Throwable $exception Service exception
      * @param string $service Service name
-     * @return array Secure service error response
+     * @return array<string, mixed> Secure service error response
      */
     public static function externalServiceError(\Throwable $exception, string $service = 'external service'): array
     {
@@ -170,8 +170,8 @@ class SecureErrorResponse
      * @param string $message User-friendly message
      * @param int $statusCode HTTP status code
      * @param string $errorType Error type
-     * @param array $context Additional context
-     * @return array Secure error response
+     * @param array<string, mixed> $context Additional context
+     * @return array<string, mixed> Secure error response
      */
     public static function create(
         string $message,
@@ -340,7 +340,7 @@ class SecureErrorResponse
         $environment = env('APP_ENV', 'production');
         $debugMode = config('app.debug', false);
 
-        return $debugMode && in_array($environment, ['development', 'local']);
+        return (bool) $debugMode && in_array($environment, ['development', 'local'], true);
     }
 
     /**

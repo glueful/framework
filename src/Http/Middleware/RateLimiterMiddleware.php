@@ -100,7 +100,7 @@ class RateLimiterMiddleware implements MiddlewareInterface
             // Emit event for application business logic
             $currentAttempts = $this->maxAttempts - $limiter->remaining();
             Event::dispatch(new RateLimitExceededEvent(
-                $request->getClientIp() ?: '0.0.0.0',
+                $request->getClientIp() ?? '0.0.0.0',
                 $this->type,
                 $currentAttempts,
                 $this->maxAttempts,
@@ -139,7 +139,7 @@ class RateLimiterMiddleware implements MiddlewareInterface
     {
         // Create context data for adaptive rate limiting
         $context = [
-            'ip' => $request->getClientIp() ?: '0.0.0.0',
+            'ip' => $request->getClientIp() ?? '0.0.0.0',
             'user_agent' => $request->headers->get('User-Agent', ''),
             'method' => $request->getMethod(),
             'path' => $request->getPathInfo(),
@@ -168,9 +168,9 @@ class RateLimiterMiddleware implements MiddlewareInterface
             $userId = $this->getUserIdFromRequest($request);
 
             // If no user ID is available, fall back to IP-based limiting
-            if (!$userId) {
+            if ($userId === null) {
                 return RateLimiter::perIp(
-                    $request->getClientIp() ?: '0.0.0.0',
+                    $request->getClientIp() ?? '0.0.0.0',
                     $this->maxAttempts,
                     $this->windowSeconds
                 );
@@ -184,7 +184,7 @@ class RateLimiterMiddleware implements MiddlewareInterface
         } elseif ($this->type === 'endpoint') {
             // Create an endpoint-specific limiter
             $endpoint = $request->getPathInfo();
-            $identifier = $request->getClientIp() ?: '0.0.0.0';
+            $identifier = $request->getClientIp() ?? '0.0.0.0';
 
             return RateLimiter::perEndpoint(
                 $endpoint,
@@ -196,7 +196,7 @@ class RateLimiterMiddleware implements MiddlewareInterface
 
         // Default to IP-based rate limiting
         return RateLimiter::perIp(
-            $request->getClientIp() ?: '0.0.0.0',
+            $request->getClientIp() ?? '0.0.0.0',
             $this->maxAttempts,
             $this->windowSeconds
         );
@@ -209,6 +209,9 @@ class RateLimiterMiddleware implements MiddlewareInterface
      * @param array $context Request context for behavior analysis
      * @return AdaptiveRateLimiter Adaptive rate limiter instance
      */
+    /**
+     * @param array<string, mixed> $context
+     */
     private function createAdaptiveLimiter(Request $request, array $context): RateLimiter|AdaptiveRateLimiter
     {
         $key = '';
@@ -218,19 +221,19 @@ class RateLimiterMiddleware implements MiddlewareInterface
             $userId = $this->getUserIdFromRequest($request);
 
             // If no user ID is available, fall back to IP-based limiting
-            if (!$userId) {
-                $key = "ip:" . ($request->getClientIp() ?: '0.0.0.0');
+            if ($userId === null) {
+                $key = "ip:" . ($request->getClientIp() ?? '0.0.0.0');
             } else {
                 $key = "user:$userId";
             }
         } elseif ($this->type === 'endpoint') {
             // Create an endpoint-specific limiter
             $endpoint = $request->getPathInfo();
-            $identifier = $request->getClientIp() ?: '0.0.0.0';
+            $identifier = $request->getClientIp() ?? '0.0.0.0';
             $key = "endpoint:$endpoint:$identifier";
         } else {
             // Default to IP-based rate limiting
-            $key = "ip:" . ($request->getClientIp() ?: '0.0.0.0');
+            $key = "ip:" . ($request->getClientIp() ?? '0.0.0.0');
         }
 
         // Create new AdaptiveRateLimiter instance with specific parameters
@@ -277,13 +280,13 @@ class RateLimiterMiddleware implements MiddlewareInterface
         // Try to get the user ID from the request attributes
         $userId = $request->attributes->get('user_id');
 
-        if ($userId) {
+        if ($userId !== null) {
             return $userId;
         }
 
         // Try to get the user from token if available
         $token = $request->headers->get('Authorization');
-        if ($token) {
+        if ($token !== null) {
             // Remove 'Bearer ' prefix if present
             $token = str_replace('Bearer ', '', $token);
 
@@ -318,7 +321,7 @@ class RateLimiterMiddleware implements MiddlewareInterface
 
             // Add active rules if any were applied
             $activeRules = $limiter->getActiveApplicableRules();
-            if (!empty($activeRules)) {
+            if (count($activeRules) > 0) {
                 $responseData['rules_applied'] = array_keys($activeRules);
             }
         }

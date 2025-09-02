@@ -24,7 +24,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
  */
 class ApiVersionMiddleware implements MiddlewareInterface
 {
-    /** @var array Supported API versions */
+    /** @var array<string> Supported API versions */
     private array $supportedVersions;
 
     /** @var string Default version to use when none specified */
@@ -39,10 +39,10 @@ class ApiVersionMiddleware implements MiddlewareInterface
     /**
      * Create a new API version middleware
      *
-     * @param array $supportedVersions List of supported API versions (e.g., ['v1', 'v2'])
-     * @param string $defaultVersion Default version to use when none specified
-     * @param string $strategy Versioning strategy ('url', 'header', 'both')
-     * @param string $currentVersion Current API version
+     * @param array<string>|null $supportedVersions List of supported API versions (e.g., ['v1', 'v2'])
+     * @param string|null $defaultVersion Default version to use when none specified
+     * @param string|null $strategy Versioning strategy ('url', 'header', 'both')
+     * @param string|null $currentVersion Current API version
      */
     public function __construct(
         ?array $supportedVersions = null,
@@ -71,12 +71,12 @@ class ApiVersionMiddleware implements MiddlewareInterface
         $requestedVersion = $this->extractVersionFromRequest($request);
 
         // Use default version if none specified
-        if (!$requestedVersion) {
+        if ($requestedVersion === null) {
             $requestedVersion = $this->defaultVersion;
         }
 
         // Validate the requested version
-        if (!in_array($requestedVersion, $this->supportedVersions)) {
+        if (!in_array($requestedVersion, $this->supportedVersions, true)) {
             return new JsonResponse([
                 'success' => false,
                 'message' => 'API version not supported',
@@ -92,7 +92,7 @@ class ApiVersionMiddleware implements MiddlewareInterface
         $request->attributes->set('api_version', $requestedVersion);
 
         // Set version prefix in router if using URL strategy
-        if (in_array($this->strategy, ['url', 'both'])) {
+        if (in_array($this->strategy, ['url', 'both'], true)) {
             \Glueful\Http\Router::setVersion($requestedVersion);
         }
 
@@ -116,14 +116,14 @@ class ApiVersionMiddleware implements MiddlewareInterface
         $version = null;
 
         // Try header-based versioning
-        if (in_array($this->strategy, ['header', 'both'])) {
+        if (in_array($this->strategy, ['header', 'both'], true)) {
             $version = $request->headers->get('X-API-Version')
                     ?? $request->headers->get('API-Version')
                     ?? $request->headers->get('Accept-Version');
         }
 
         // Try URL-based versioning
-        if (!$version && in_array($this->strategy, ['url', 'both'])) {
+        if ($version === null && in_array($this->strategy, ['url', 'both'], true)) {
             $pathInfo = $request->getPathInfo();
 
             // Extract version from URL pattern like /v1/users or /api/v2/users
@@ -158,7 +158,7 @@ class ApiVersionMiddleware implements MiddlewareInterface
         $response->headers->set('X-API-Current-Version', $this->currentVersion);
 
         // Add deprecation warning if using an old version
-        if ($version !== $this->currentVersion && in_array($version, $this->supportedVersions)) {
+        if ($version !== $this->currentVersion && in_array($version, $this->supportedVersions, true)) {
             $response->headers->set(
                 'X-API-Deprecation-Warning',
                 "API version {$version} is deprecated. Please upgrade to {$this->currentVersion}"

@@ -15,6 +15,7 @@ use Psr\Log\LoggerInterface;
  */
 class HealthCheckService
 {
+    /** @var array<string, array{service: string, endpoint: string, status: string, response_time_ms: float, timestamp: string, details: array<string, mixed>, status_code?: int}> */
     private array $serviceStatuses = [];
 
     public function __construct(
@@ -25,6 +26,16 @@ class HealthCheckService
 
     /**
      * Check health of a single service
+     * @param array<string, mixed> $options
+     * @return array{
+     *     service: string,
+     *     endpoint: string,
+     *     status: string,
+     *     response_time_ms: float,
+     *     timestamp: string,
+     *     details: array<string, mixed>,
+     *     status_code?: int
+     * }
      */
     public function checkServiceHealth(
         string $serviceName,
@@ -63,7 +74,7 @@ class HealthCheckService
                 // Try to parse response for additional health info
                 try {
                     $body = $response->getContent();
-                    if (!empty($body)) {
+                    if ($body !== '') {
                         $healthData = json_decode($body, true);
                         if (json_last_error() === JSON_ERROR_NONE) {
                             $result['details'] = $healthData;
@@ -108,6 +119,16 @@ class HealthCheckService
 
     /**
      * Check health of multiple services
+     * @param array<string, string|array{endpoint?: string, timeout?: int, expected_status?: int}> $services
+     * @return array<string, array{
+     *     service: string,
+     *     endpoint: string,
+     *     status: string,
+     *     response_time_ms: float,
+     *     timestamp: string,
+     *     details: array<string, mixed>,
+     *     status_code?: int
+     * }>
      */
     public function checkMultipleServices(array $services): array
     {
@@ -129,10 +150,23 @@ class HealthCheckService
 
     /**
      * Get overall system health status
+     * @param array<string, string|array{endpoint?: string, timeout?: int, expected_status?: int}> $services
+     * @return array{
+     *     overall_status: string,
+     *     timestamp: string,
+     *     summary: array{
+     *         total_services: int,
+     *         healthy: int,
+     *         unhealthy: int,
+     *         unknown: int,
+     *         average_response_time_ms: float
+     *     },
+     *     services: array<string, mixed>
+     * }
      */
     public function getSystemHealth(array $services = []): array
     {
-        if (!empty($services)) {
+        if ($services !== []) {
             $results = $this->checkMultipleServices($services);
         } else {
             $results = $this->serviceStatuses;
@@ -206,6 +240,7 @@ class HealthCheckService
 
     /**
      * Get service status history
+     * @return array{service: string, current_status: array<string, mixed>, uptime_24h: float, uptime_7d: float}
      */
     public function getServiceHistory(string $serviceName): array
     {
@@ -230,6 +265,15 @@ class HealthCheckService
 
     /**
      * Get all stored service statuses
+     * @return array<string, array{
+     *     service: string,
+     *     endpoint: string,
+     *     status: string,
+     *     response_time_ms: float,
+     *     timestamp: string,
+     *     details: array<string, mixed>,
+     *     status_code?: int
+     * }>
      */
     public function getAllStatuses(): array
     {
@@ -238,6 +282,8 @@ class HealthCheckService
 
     /**
      * Create health check configuration for common services
+     * @param array<string, string> $services
+     * @return array<string, array{endpoint: string, timeout: int, expected_status: int}>
      */
     public static function createServiceConfig(array $services): array
     {

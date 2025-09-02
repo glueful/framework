@@ -18,14 +18,17 @@ class HttpClientConfig
         public int $maxRedirects = 3,
         public string $httpVersion = '2.0',
         public bool $verifySsl = true,
+        /** @var array<string, string> */
         public array $defaultHeaders = [],
         public ?string $baseUri = null,
+        /** @var array<string, mixed> */
         public array $retryConfig = []
     ) {
     }
 
     /**
      * Create configuration from array
+     * @param array<string, mixed> $config
      */
     public static function fromArray(array $config): self
     {
@@ -43,6 +46,7 @@ class HttpClientConfig
 
     /**
      * Convert configuration to Symfony HttpClient format
+     * @return array<string, mixed>
      */
     public function toSymfonyOptions(): array
     {
@@ -60,6 +64,7 @@ class HttpClientConfig
 
     /**
      * Convert to array format
+     * @return array<string, mixed>
      */
     public function toArray(): array
     {
@@ -115,7 +120,7 @@ class HttpClientConfig
             'Content-Type' => 'application/json',
         ];
 
-        if ($apiKey) {
+        if ($apiKey !== null) {
             $headers['Authorization'] = 'Bearer ' . $apiKey;
         }
 
@@ -129,6 +134,7 @@ class HttpClientConfig
 
     /**
      * Validate configuration values
+     * @return array<string>
      */
     public function validate(): array
     {
@@ -146,11 +152,11 @@ class HttpClientConfig
             $errors[] = 'Max redirects cannot be negative';
         }
 
-        if (!in_array($this->httpVersion, ['1.0', '1.1', '2.0'])) {
+        if (!in_array($this->httpVersion, ['1.0', '1.1', '2.0'], true)) {
             $errors[] = 'HTTP version must be 1.0, 1.1, or 2.0';
         }
 
-        if ($this->baseUri && !filter_var($this->baseUri, FILTER_VALIDATE_URL)) {
+        if ($this->baseUri !== null && !filter_var($this->baseUri, FILTER_VALIDATE_URL)) {
             $errors[] = 'Base URI must be a valid URL';
         }
 
@@ -162,7 +168,7 @@ class HttpClientConfig
      */
     public function isValid(): bool
     {
-        return empty($this->validate());
+        return count($this->validate()) === 0;
     }
 
     /**

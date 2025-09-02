@@ -16,6 +16,7 @@ use Glueful\Http\Middleware\RetryMiddleware;
  */
 class ApiClientBuilder
 {
+    /** @var array<string, mixed> */
     private array $options = [];
 
     public function __construct(private Client $baseClient)
@@ -79,6 +80,7 @@ class ApiClientBuilder
 
     /**
      * Add or merge custom headers
+     * @param array<string, string> $headers
      */
     public function headers(array $headers): self
     {
@@ -167,6 +169,7 @@ class ApiClientBuilder
 
     /**
      * Add custom authentication method
+     * @param array<string, mixed> $authConfig
      */
     public function auth(array $authConfig): self
     {
@@ -185,6 +188,7 @@ class ApiClientBuilder
     /**
      * Enable retry mechanism
      * Note: Retry functionality requires using RetryMiddleware.create() after building the client
+     * @param array<string, mixed> $config
      */
     public function retries(int $maxRetries, array $config = []): self
     {
@@ -303,6 +307,7 @@ class ApiClientBuilder
 
     /**
      * Get retry configuration if set
+     * @return array<string, mixed>|null
      */
     public function getRetryConfig(): ?array
     {
@@ -311,6 +316,7 @@ class ApiClientBuilder
 
     /**
      * Get the current configuration array
+     * @return array<string, mixed>
      */
     public function getOptions(): array
     {

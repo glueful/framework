@@ -79,7 +79,7 @@ class DatabaseController extends BaseController
             $columnDef = $columnType;
 
             // Add PRIMARY KEY if specified
-            if (isset($options['primary']) && $options['primary']) {
+            if (isset($options['primary']) && (bool)$options['primary']) {
                 $columnDef .= " " . (is_string($options['primary']) ? $options['primary'] : "PRIMARY KEY");
             }
 
@@ -98,7 +98,7 @@ class DatabaseController extends BaseController
                     $columnDef .= " " . $options['nullable'];
                 } else {
                     // If it's a boolean, convert to appropriate SQL
-                    $columnDef .= $options['nullable'] ? " NULL" : " NOT NULL";
+                    $columnDef .= (bool)$options['nullable'] ? " NULL" : " NOT NULL";
                 }
             }
 
@@ -1087,7 +1087,8 @@ class DatabaseController extends BaseController
         // Prevent destructive operations if the safety flag is not set
         $isSafeQuery = $data['allow_write'] ?? false;
         $firstWord = strtoupper(explode(' ', $sql)[0]);
-        if (!$isSafeQuery && in_array($firstWord, ['DELETE', 'TRUNCATE', 'DROP', 'ALTER', 'UPDATE', 'INSERT'], true)) {
+        $writeOperations = ['DELETE', 'TRUNCATE', 'DROP', 'ALTER', 'UPDATE', 'INSERT'];
+        if ($isSafeQuery === false && in_array($firstWord, $writeOperations, true)) {
             return Response::forbidden(
                 'Write operations require explicit allow_write flag for safety'
             );
@@ -1450,7 +1451,7 @@ class DatabaseController extends BaseController
         $columnNames = array_column($tableColumns, 'name');
 
         // Skip first row if it contains headers and option is enabled
-        if ($skipFirstRow && count($importData) > 0) {
+        if ($skipFirstRow === true && count($importData) > 0) {
             array_shift($importData);
         }
 
@@ -1729,7 +1730,7 @@ class DatabaseController extends BaseController
         }
 
         // If soft delete is requested, validate that the status column exists
-        if ($softDelete) {
+        if ($softDelete === true) {
             $tableColumns = $this->schemaManager->getTableColumns($tableName);
             $columnNames = array_column($tableColumns, 'name');
 
@@ -1744,7 +1745,7 @@ class DatabaseController extends BaseController
         // Perform bulk delete/update using transaction
         $placeholders = implode(', ', array_fill(0, count($ids), '?'));
 
-        if ($softDelete) {
+        if ($softDelete === true) {
             // Perform soft delete by updating status column
             $sql = $this->buildBulkSoftDeleteQuery($tableName, $statusColumn, $placeholders);
             $values = array_merge([$deletedValue], $ids);
@@ -2122,7 +2123,7 @@ class DatabaseController extends BaseController
         }
 
         // Check if validation-only mode
-        if ($options['validate_only'] ?? false) {
+        if (($options['validate_only'] ?? false) === true) {
             return Response::success([
             'table_name' => $tableName,
             'validation' => $validation,
@@ -2219,7 +2220,7 @@ class DatabaseController extends BaseController
         $revertOps = $this->schemaManager->generateRevertOperations($originalChange);
 
         // If not confirmed, return preview
-        if (!$confirm) {
+        if ($confirm !== true) {
             return Response::success([
             'change_id' => $changeId,
             'original_change' => $originalChange,

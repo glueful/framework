@@ -15,6 +15,7 @@ use Glueful\Http\Authentication\AuthenticationMethods;
  */
 class PaymentClientBuilder
 {
+    /** @var array<string, mixed> */
     private array $options = [];
 
     public function __construct(private Client $baseClient)
@@ -149,6 +150,9 @@ class PaymentClientBuilder
     /**
      * Add authentication
      */
+    /**
+     * @param array<string, mixed> $authConfig
+     */
     public function auth(array $authConfig): self
     {
         if (isset($authConfig['headers'])) {
@@ -224,6 +228,9 @@ class PaymentClientBuilder
 
     /**
      * Get current configuration
+     */
+    /**
+     * @return array<string, mixed>
      */
     public function getConfig(): array
     {

@@ -57,6 +57,7 @@ class ScopedClientFactory
 
     /**
      * Create a client from array configuration
+     * @param array<string, mixed> $config
      */
     public function createFromArray(array $config): Client
     {
@@ -96,6 +97,7 @@ class ScopedClientFactory
 
     /**
      * Create a client with custom headers
+     * @param array<string, string> $headers
      */
     public function createWithHeaders(string $baseUri, array $headers): Client
     {

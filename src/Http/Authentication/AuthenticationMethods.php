@@ -14,6 +14,7 @@ class AuthenticationMethods
 {
     /**
      * Create Bearer token authentication headers
+     * @return array<string, array<string, string>>
      */
     public static function bearerToken(string $token): array
     {
@@ -26,6 +27,7 @@ class AuthenticationMethods
 
     /**
      * Create Basic authentication configuration
+     * @return array<string, array<int, string>>
      */
     public static function basicAuth(string $username, string $password): array
     {
@@ -36,6 +38,7 @@ class AuthenticationMethods
 
     /**
      * Create API key authentication headers
+     * @return array<string, array<string, string>>
      */
     public static function apiKey(string $key, string $headerName = 'X-API-Key'): array
     {
@@ -48,6 +51,7 @@ class AuthenticationMethods
 
     /**
      * Create OAuth2 Bearer token authentication (alias for bearerToken)
+     * @return array<string, array<string, string>>
      */
     public static function oauth2(string $accessToken): array
     {
@@ -56,6 +60,7 @@ class AuthenticationMethods
 
     /**
      * Create custom header authentication
+     * @return array<string, array<string, string>>
      */
     public static function customHeader(string $name, string $value): array
     {
@@ -68,6 +73,7 @@ class AuthenticationMethods
 
     /**
      * Create JWT token authentication
+     * @return array<string, array<string, string>>
      */
     public static function jwt(string $token): array
     {
@@ -76,6 +82,7 @@ class AuthenticationMethods
 
     /**
      * Create API key in query parameter
+     * @return array<string, array<string, string>>
      */
     public static function apiKeyQuery(string $key, string $paramName = 'api_key'): array
     {
@@ -88,6 +95,7 @@ class AuthenticationMethods
 
     /**
      * Create AWS Signature V4 authentication headers
+     * @return array<string, array<string, string>>
      */
     public static function awsSignature(string $accessKey, string $secretKey, string $service, string $region): array
     {
@@ -103,12 +111,13 @@ class AuthenticationMethods
 
     /**
      * Create OAuth 1.0 authentication headers
+     * @return array<string, array<string, string>>
      */
     public static function oauth1(
         string $consumerKey,
         string $consumerSecret,
         ?string $token = null,
-        string $tokenSecret = null
+        ?string $tokenSecret = null
     ): array {
         $oauth = [
             'oauth_consumer_key' => $consumerKey,
@@ -118,7 +127,7 @@ class AuthenticationMethods
             'oauth_version' => '1.0',
         ];
 
-        if ($token) {
+        if ($token !== null) {
             $oauth['oauth_token'] = $token;
         }
 
@@ -143,6 +152,7 @@ class AuthenticationMethods
 
     /**
      * Create GitHub App authentication
+     * @return array<string, array<string, string>>
      */
     public static function githubApp(string $appId, string $privateKey): array
     {
@@ -160,6 +170,7 @@ class AuthenticationMethods
 
     /**
      * Create Slack Bot authentication
+     * @return array<string, array<string, string>>
      */
     public static function slackBot(string $botToken): array
     {
@@ -173,6 +184,7 @@ class AuthenticationMethods
 
     /**
      * Create Discord Bot authentication
+     * @return array<string, array<string, string>>
      */
     public static function discordBot(string $botToken): array
     {
@@ -186,6 +198,7 @@ class AuthenticationMethods
 
     /**
      * Create Stripe API authentication
+     * @return array<string, mixed>
      */
     public static function stripe(string $apiKey): array
     {
@@ -199,6 +212,7 @@ class AuthenticationMethods
 
     /**
      * Create PayPal API authentication
+     * @return array<string, mixed>
      */
     public static function paypal(string $clientId, string $clientSecret): array
     {
@@ -213,6 +227,7 @@ class AuthenticationMethods
 
     /**
      * Create Twilio authentication
+     * @return array<string, array<int, string>>
      */
     public static function twilio(string $accountSid, string $authToken): array
     {
@@ -223,6 +238,7 @@ class AuthenticationMethods
 
     /**
      * Create SendGrid authentication
+     * @return array<string, array<string, string>>
      */
     public static function sendGrid(string $apiKey): array
     {
@@ -236,6 +252,7 @@ class AuthenticationMethods
 
     /**
      * Create Mailgun authentication
+     * @return array<string, array<int, string>>
      */
     public static function mailgun(string $apiKey): array
     {
@@ -246,6 +263,8 @@ class AuthenticationMethods
 
     /**
      * Merge multiple authentication methods
+     * @param array<string, mixed> ...$authMethods
+     * @return array<string, mixed>
      */
     public static function merge(array ...$authMethods): array
     {
@@ -268,7 +287,7 @@ class AuthenticationMethods
 
         // Remove empty arrays
         return array_filter($merged, function ($value) {
-            return !empty($value);
+            return !is_array($value) || count($value) > 0;
         });
     }
 }

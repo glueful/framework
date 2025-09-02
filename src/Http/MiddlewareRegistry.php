@@ -24,6 +24,7 @@ class MiddlewareRegistry
 {
     private static bool $registered = false;
     private static ?Container $container = null;
+    /** @var array<string> */
     private static array $registeredClasses = [];
 
     /**
@@ -48,7 +49,7 @@ class MiddlewareRegistry
 
         // Check if we should replace manual registration
         $shouldReplace = $replaceManualRegistration &&
-                        ($middlewareConfig['settings']['replace_manual_registration'] ?? true);
+                        (($middlewareConfig['settings']['replace_manual_registration'] ?? true) === true);
 
         if ($shouldReplace) {
             // Clear any manually registered middleware to prevent duplicates
@@ -63,7 +64,7 @@ class MiddlewareRegistry
         self::$registered = true;
 
         // Log registration if enabled
-        if ($middlewareConfig['settings']['log_registration'] ?? false) {
+        if (($middlewareConfig['settings']['log_registration'] ?? false) === true) {
             error_log("MiddlewareRegistry: Registered " . count(self::$registeredClasses) . " middleware classes");
         }
     }
@@ -84,18 +85,18 @@ class MiddlewareRegistry
     /**
      * Register global middleware stack
      *
-     * @param array $middlewareList List of middleware configurations
+     * @param array<mixed> $middlewareList List of middleware configurations
      * @return void
      */
     private static function registerGlobalMiddleware(array $middlewareList): void
     {
         foreach ($middlewareList as $middlewareSpec) {
             $middleware = self::resolveMiddleware($middlewareSpec);
-            if ($middleware) {
+            if ($middleware !== null) {
                 $className = get_class($middleware);
 
                 // Prevent duplicate registration
-                if (!in_array($className, self::$registeredClasses)) {
+                if (!in_array($className, self::$registeredClasses, true)) {
                     Router::addMiddleware($middleware);
                     self::$registeredClasses[] = $className;
                 }
@@ -139,8 +140,8 @@ class MiddlewareRegistry
      * Create middleware instance with configuration reference
      *
      * @param string $className Middleware class name
-     * @param array $config Configuration from referenced file
-     * @param array $params Parameter mapping
+     * @param array<string, mixed> $config Configuration from referenced file
+     * @param array<string, mixed> $params Parameter mapping
      * @return MiddlewareInterface|null Created middleware instance
      */
     private static function createMiddlewareWithConfigRef(
@@ -164,7 +165,7 @@ class MiddlewareRegistry
 
                 case MemoryTrackingMiddleware::class:
                     // MemoryTrackingMiddleware requires MemoryManager, LoggerInterface is optional
-                    if (self::$container) {
+                    if (self::$container !== null) {
                         try {
                             $memoryManager = self::$container->get('Glueful\\Performance\\MemoryManager');
 
@@ -187,7 +188,7 @@ class MiddlewareRegistry
                 case EdgeCacheMiddleware::class:
                     // EdgeCacheMiddleware may not implement MiddlewareInterface
                     // and requires EdgeCacheService, not array config
-                    if (self::$container && self::$container->has('Glueful\Cache\EdgeCacheService')) {
+                    if (self::$container !== null && self::$container->has('Glueful\Cache\EdgeCacheService')) {
                         $cacheService = self::$container->get('Glueful\Cache\EdgeCacheService');
                         return new EdgeCacheMiddleware($cacheService);
                     }
@@ -207,7 +208,7 @@ class MiddlewareRegistry
      * Create middleware instance with optional configuration
      *
      * @param string $className Middleware class name
-     * @param array $config Configuration for the middleware
+     * @param array<string, mixed> $config Configuration for the middleware
      * @return MiddlewareInterface|null Created middleware instance
      */
     private static function createMiddlewareInstance(string $className, array $config = []): ?MiddlewareInterface
@@ -226,7 +227,7 @@ class MiddlewareRegistry
 
                 default:
                     // Try DI container first
-                    if (self::$container && self::$container->has($className)) {
+                    if (self::$container !== null && self::$container->has($className)) {
                         $instance = self::$container->get($className);
                         if ($instance instanceof MiddlewareInterface) {
                             return $instance;
@@ -258,13 +259,13 @@ class MiddlewareRegistry
      */
     public static function isMiddlewareRegistered(string $className): bool
     {
-        return in_array($className, self::$registeredClasses);
+        return in_array($className, self::$registeredClasses, true);
     }
 
     /**
      * Get list of registered middleware classes
      *
-     * @return array List of registered middleware class names
+     * @return array<string> List of registered middleware class names
      */
     public static function getRegisteredMiddleware(): array
     {

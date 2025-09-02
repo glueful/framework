@@ -18,6 +18,8 @@ class RetryMiddleware
 {
     /**
      * Create a retryable HTTP client with the specified configuration
+     *
+     * @param array<string, mixed> $config
      */
     public static function create(HttpClientInterface $client, array $config = []): RetryableHttpClient
     {
@@ -94,6 +96,9 @@ class RetryMiddleware
 
     /**
      * Create a retry configuration from array
+     *
+     * @param array<string, mixed> $retryConfig
+     * @return array<string, mixed>
      */
     public static function createFromConfig(array $retryConfig): array
     {
@@ -109,6 +114,9 @@ class RetryMiddleware
 
     /**
      * Validate retry configuration
+     *
+     * @param array<string, mixed> $config
+     * @return array<string>
      */
     public static function validateConfig(array $config): array
     {

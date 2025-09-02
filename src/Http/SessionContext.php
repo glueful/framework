@@ -232,7 +232,7 @@ class SessionContext
     /**
      * Get all session data (for debugging)
      *
-     * @return array
+     * @return array<string, mixed>
      */
     public function all(): array
     {

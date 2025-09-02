@@ -76,7 +76,7 @@ class LockdownMiddleware implements MiddlewareInterface
 
         $maintenanceData = json_decode(file_get_contents($maintenanceFile), true);
 
-        if (!$maintenanceData || !($maintenanceData['enabled'] ?? false)) {
+        if ($maintenanceData === null || ($maintenanceData['enabled'] ?? false) !== true) {
             return false;
         }
 
@@ -109,7 +109,7 @@ class LockdownMiddleware implements MiddlewareInterface
         ];
 
         foreach ($headers as $header) {
-            if (!empty($_SERVER[$header])) {
+            if (isset($_SERVER[$header]) && $_SERVER[$header] !== '') {
                 $ip = $_SERVER[$header];
                 // Handle comma-separated list (X-Forwarded-For)
                 if (strpos($ip, ',') !== false) {
@@ -138,7 +138,8 @@ class LockdownMiddleware implements MiddlewareInterface
      */
     private function getRequestPath(Request $request): string
     {
-        return $request->getPathInfo() ?: '/';
+        $path = $request->getPathInfo();
+        return $path !== '' ? $path : '/';
     }
 
     /**
@@ -156,7 +157,7 @@ class LockdownMiddleware implements MiddlewareInterface
             return false;
         }
 
-        $blockedIps = json_decode(file_get_contents($blockedIpsFile), true) ?: [];
+        $blockedIps = json_decode(file_get_contents($blockedIpsFile), true) ?? [];
 
         if (!isset($blockedIps[$ip])) {
             return false;
@@ -190,7 +191,7 @@ class LockdownMiddleware implements MiddlewareInterface
 
         $routeData = json_decode(file_get_contents($lockdownRoutes), true);
 
-        if (!$routeData) {
+        if ($routeData === null) {
             return true;
         }
 
@@ -212,7 +213,7 @@ class LockdownMiddleware implements MiddlewareInterface
         }
 
         // If '*' is in disabled endpoints, block everything except allowed
-        if (in_array('*', $disabledEndpoints)) {
+        if (in_array('*', $disabledEndpoints, true)) {
             return false;
         }
 
@@ -281,7 +282,7 @@ class LockdownMiddleware implements MiddlewareInterface
 
         $maintenanceData = [];
         if (file_exists($maintenanceFile)) {
-            $maintenanceData = json_decode(file_get_contents($maintenanceFile), true) ?: [];
+            $maintenanceData = json_decode(file_get_contents($maintenanceFile), true) ?? [];
         }
 
         $message = $maintenanceData['message'] ?? 'System temporarily unavailable for maintenance';
@@ -293,7 +294,7 @@ class LockdownMiddleware implements MiddlewareInterface
             'Content-Type' => 'text/html; charset=UTF-8'
         ]);
 
-        if ($endTime) {
+        if ($endTime !== null) {
             $response->headers->set('Retry-After', (string)($endTime - time()));
         } else {
             $response->headers->set('Retry-After', '3600');
@@ -331,7 +332,7 @@ class LockdownMiddleware implements MiddlewareInterface
     private function generateMaintenanceHTML(string $message, ?int $endTime): string
     {
         $endTimeText = '';
-        if ($endTime) {
+        if ($endTime !== null) {
             $endTimeText = '<p>Expected to be resolved by: ' . date('Y-m-d H:i:s T', $endTime) . '</p>';
         }
 
@@ -417,7 +418,7 @@ HTML;
             return;
         }
 
-        $blockedIps = json_decode(file_get_contents($blockedIpsFile), true) ?: [];
+        $blockedIps = json_decode(file_get_contents($blockedIpsFile), true) ?? [];
 
         if (isset($blockedIps[$ip])) {
             unset($blockedIps[$ip]);

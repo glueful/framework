@@ -21,13 +21,13 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class CacheControlMiddleware implements MiddlewareInterface
 {
-    /** @var array Cache configuration for this middleware */
+    /** @var array<string, mixed> Cache configuration for this middleware */
     private array $config;
 
     /**
      * Create a new cache control middleware
      *
-     * @param array $config Cache configuration settings
+     * @param array<string, mixed> $config Cache configuration settings
      */
     public function __construct(array $config = [])
     {
@@ -78,7 +78,7 @@ class CacheControlMiddleware implements MiddlewareInterface
         $this->applyCacheHeaders($request, $response);
 
         // Generate and add ETag if configured
-        if ($this->config['etag']) {
+        if ($this->config['etag'] === true) {
             $this->addETag($response);
         }
 
@@ -126,7 +126,7 @@ class CacheControlMiddleware implements MiddlewareInterface
         $cacheControl = [];
 
         // Public or private cache
-        $cacheControl[] = $settings['public'] ? 'public' : 'private';
+        $cacheControl[] = ($settings['public'] === true) ? 'public' : 'private';
 
         // Max age directive
         if (isset($settings['max_age'])) {
@@ -139,12 +139,12 @@ class CacheControlMiddleware implements MiddlewareInterface
         }
 
         // Must revalidate directive
-        if ($settings['must_revalidate'] ?? false) {
+        if (($settings['must_revalidate'] ?? false) === true) {
             $cacheControl[] = 'must-revalidate';
         }
 
         // Immutable directive for unchanging resources
-        if ($settings['immutable'] ?? false) {
+        if (($settings['immutable'] ?? false) === true) {
             $cacheControl[] = 'immutable';
         }
 
@@ -163,7 +163,7 @@ class CacheControlMiddleware implements MiddlewareInterface
      * Get cache settings for the current request
      *
      * @param Request $request The request
-     * @return array Cache settings
+     * @return array<string, mixed> Cache settings
      */
     private function getCacheSettings(Request $request): array
     {
@@ -188,8 +188,8 @@ class CacheControlMiddleware implements MiddlewareInterface
      * Apply content type specific cache settings
      *
      * @param Response $response The response
-     * @param array $settings The current cache settings
-     * @return array Updated cache settings
+     * @param array<string, mixed> $settings The current cache settings
+     * @return array<string, mixed> Updated cache settings
      */
     private function applyContentTypeSettings(Response $response, array $settings): array
     {
