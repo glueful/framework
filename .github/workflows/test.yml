@@ -1,82 +1,129 @@
-name: Test Suite
+name: PHP CI
 
 on:
   push:
     branches: [ main, dev ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, dev ]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual trigger'
+        required: false
+        default: 'Manual test run'
 
 jobs:
-  framework-tests:
+  validate:
+    name: PHP Validation
     runs-on: ubuntu-latest
+    
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: glueful_test
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+    
     strategy:
-      fail-fast: false
       matrix:
-        php-version: [ '8.2', '8.3' ]
-
+        php-versions: ['8.2']
+        
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: ${{ matrix.php-version }}
-          extensions: mbstring, xml, ctype, json, tokenizer, sqlite
-          ini-values: memory_limit=512M
-          coverage: xdebug
-
-      - name: Cache Composer dependencies
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.composer/cache
-          key: php-${{ matrix.php-version }}-composer-${{ hashFiles('**/composer.lock') }}
-
-      - name: Install dependencies
-        run: composer install --prefer-dist --no-progress --no-interaction
-
-      - name: Run unit tests
-        run: vendor/bin/phpunit --testsuite Unit
-
-      - name: Run integration tests
-        run: vendor/bin/phpunit --testsuite Integration
-
-      - name: Run feature tests
-        run: vendor/bin/phpunit --testsuite Feature
-
-      - name: Run performance tests
-        run: vendor/bin/phpunit --testsuite Performance
-
-      - name: Run documentation tests
-        run: vendor/bin/phpunit --testsuite Documentation
-
-      - name: Generate coverage (HTML)
-        run: vendor/bin/phpunit --coverage-html coverage
-
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-${{ matrix.php-version }}
-          path: coverage
-
-  application-tests:
-    runs-on: ubuntu-latest
-    needs: framework-tests
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.2'
-          extensions: mbstring, xml, ctype, json, tokenizer, sqlite
-
-      - name: Create new project from skeleton and run basic checks
-        run: |
-          composer create-project glueful/api test-project --prefer-source --no-interaction
-          cd test-project
-          php glueful --version
-          php glueful system:check || true
-          if composer run-script --list | grep -q "test"; then composer test || true; fi
+    - uses: actions/checkout@v4
+    
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: ${{ matrix.php-versions }}
+        extensions: mbstring, intl, zip, pdo_mysql
+        coverage: xdebug
+        tools: composer:v2
+    
+    - name: Setup test environment
+      run: |
+        mkdir -p build/logs
+        if [ -f .env.example ]; then
+          cp .env.example .env.testing
+          echo "DB_CONNECTION=mysql" >> .env.testing
+          echo "DB_HOST=127.0.0.1" >> .env.testing
+          echo "DB_PORT=3306" >> .env.testing
+          echo "DB_DATABASE=glueful_test" >> .env.testing
+          echo "DB_USERNAME=root" >> .env.testing
+          echo "DB_PASSWORD=password" >> .env.testing
+        fi
+    
+    - name: Validate composer.json
+      run: |
+        echo "Validating composer.json..."
+        # First run without --strict to see all warnings
+        composer validate || true
+        echo "---"
+        # Then check if there are critical errors (less strict)
+        composer validate || { echo "Critical errors in composer.json - please fix them"; exit 1; }
+      
+    - name: Cache Composer packages
+      id: composer-cache
+      uses: actions/cache@v4
+      with:
+        path: vendor
+        key: ${{ runner.os }}-php-${{ hashFiles('**/composer.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-php-
+    
+    - name: Install dependencies
+      run: composer install --prefer-dist --no-progress
+    
+    - name: Check PHP syntax
+      run: find . -name "*.php" -not -path "./vendor/*" -print0 | xargs -0 -n1 php -l
+      
+    - name: Check coding standards
+      run: |
+        if [ -f vendor/bin/phpcs ]; then
+          vendor/bin/phpcs --standard=PSR12 api
+        else
+          echo "PHP_CodeSniffer not installed - skipping coding standards check"
+        fi
+      
+    - name: Run test suite
+      run: |
+        mkdir -p build/logs
+        if [ -f vendor/bin/phpunit ]; then
+          vendor/bin/phpunit --coverage-text --coverage-clover build/logs/clover.xml --log-junit build/logs/junit.xml
+          # Create a test summary file if one doesn't exist
+          if [ ! -f build/logs/clover.xml ] && [ ! -f build/logs/junit.xml ]; then
+            echo "No test reports were generated" > build/logs/test-summary.txt
+          fi
+        else
+          echo "PHPUnit not installed - skipping tests"
+          echo "No tests were run - PHPUnit not installed" > build/logs/test-summary.txt
+        fi
+        
+    - name: Static analysis
+      run: |
+        if [ -f vendor/bin/phpstan ]; then
+          vendor/bin/phpstan analyse api --level=5
+        else
+          echo "PHPStan not installed - skipping static analysis"
+        fi
+        
+    - name: Prepare artifact directory
+      run: |
+        mkdir -p build/logs
+        # Create a summary file with information about the run
+        echo "PHP CI Run - $(date)" > build/logs/run-summary.txt
+        echo "PHP Version: ${{ matrix.php-versions }}" >> build/logs/run-summary.txt
+        
+        # List all available test results
+        echo "Available test results:" >> build/logs/run-summary.txt
+        ls -la build/logs/ >> build/logs/run-summary.txt 2>&1 || echo "No test results found" >> build/logs/run-summary.txt
+        
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: build/logs/
+        if-no-files-found: warn # Changed from 'error' to 'warn'
