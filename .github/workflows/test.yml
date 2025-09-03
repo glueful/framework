@@ -82,7 +82,7 @@ jobs:
     - name: Check coding standards
       run: |
         if [ -f vendor/bin/phpcs ]; then
-          vendor/bin/phpcs --standard=PSR12 api
+          vendor/bin/phpcs --standard=PSR12 src
         else
           echo "PHP_CodeSniffer not installed - skipping coding standards check"
         fi
