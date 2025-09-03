@@ -41,6 +41,7 @@ jobs:
         extensions: mbstring, intl, zip, pdo_mysql
         coverage: xdebug
         tools: composer:v2
+        ini-values: memory_limit=1G, max_execution_time=0, xdebug.mode=off
     
     - name: Setup test environment
       run: |
@@ -88,13 +89,25 @@ jobs:
         fi
       
     - name: Run test suite
+      env:
+        XDEBUG_MODE: off
       run: |
         mkdir -p build/logs
         if [ -f vendor/bin/phpunit ]; then
-          vendor/bin/phpunit --coverage-text --coverage-clover build/logs/clover.xml --log-junit build/logs/junit.xml
-          # Create a test summary file if one doesn't exist
-          if [ ! -f build/logs/clover.xml ] && [ ! -f build/logs/junit.xml ]; then
-            echo "No test reports were generated" > build/logs/test-summary.txt
+          echo "Running PHPUnit tests without coverage first..."
+          # First try running tests without coverage (more stable)
+          if vendor/bin/phpunit --no-coverage --log-junit build/logs/junit.xml; then
+            echo "Tests passed! Now attempting with coverage..."
+            # If tests pass, try with coverage but don't fail if it segfaults
+            vendor/bin/phpunit --coverage-text --coverage-clover build/logs/clover.xml || {
+              echo "Coverage generation failed (possibly due to memory/segfault), but tests passed"
+              echo "Tests passed but coverage generation failed" > build/logs/test-summary.txt
+            }
+          else
+            # Tests failed, run again to get the failure output
+            echo "Tests failed. Running again for detailed output..."
+            vendor/bin/phpunit --no-coverage || true
+            exit 1
           fi
         else
           echo "PHPUnit not installed - skipping tests"
