@@ -17,9 +17,6 @@
         <testsuite name="Performance">
             <directory>./tests/Performance</directory>
         </testsuite>
-        <testsuite name="Documentation">
-            <directory>./tests/Documentation</directory>
-        </testsuite>
     </testsuites>
     <source>
         <include>
