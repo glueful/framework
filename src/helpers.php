@@ -57,19 +57,22 @@ if (!function_exists('config')) {
      */
     function config(string $key, mixed $default = null): mixed
     {
-        // Prefer repository-backed configuration if available
-        try {
-            if (function_exists('app')) {
-                $container = app();
-                if ($container && $container->has(\Glueful\Configuration\ConfigRepositoryInterface::class)) {
-                    $repo = $container->get(\Glueful\Configuration\ConfigRepositoryInterface::class);
-                    return $repo->get($key, $default);
-                }
-            }
-        } catch (\Throwable) {
-            // Fall back to legacy loader below
+        // Use fast ConfigurationCache if loaded (modern bootstrap)
+        if (\Glueful\Bootstrap\ConfigurationCache::isLoaded()) {
+            return \Glueful\Bootstrap\ConfigurationCache::get($key, $default);
         }
 
+        // Fallback to repository if container is ready (legacy support)
+        if (isset($GLOBALS['container'], $GLOBALS['config_repository_ready'])) {
+            try {
+                $repo = $GLOBALS['container']->get(\Glueful\Configuration\ConfigRepositoryInterface::class);
+                return $repo->get($key, $default);
+            } catch (\Throwable) {
+                // Fall back to file loading below
+            }
+        }
+
+        // Final fallback to direct file loading (legacy support)
         static $config = [];
         $segments = explode('.', $key);
         $file = array_shift($segments);
@@ -225,25 +228,16 @@ if (!function_exists('app')) {
      */
     function app(?string $abstract = null): mixed
     {
-        // Prefer the DI-managed reference
-        $container = \Glueful\DI\ContainerBootstrap::getContainer();
+        $container = $GLOBALS['container'] ?? null;
 
-        // Fallbacks for early bootstrap contexts
-        if (!$container && isset($GLOBALS['container'])) {
-            $container = $GLOBALS['container'];
-        }
         if (!$container) {
-            // As a last resort, attempt to build/return a container via helper
-            try {
-                $container = container();
-            } catch (\Throwable) {
-                throw new \RuntimeException('DI container not initialized and cannot be created');
-            }
+            throw new \RuntimeException('DI container not initialized. Make sure framework bootstrap is complete.');
         }
 
         if ($abstract === null) {
             return $container;
         }
+
         return $container->get($abstract);
     }
 }
@@ -259,16 +253,14 @@ if (!function_exists('container')) {
      */
     function container(): \Glueful\DI\Container
     {
-        // Try to get paths from globals first (if already initialized)
-        $basePath = $GLOBALS['base_path'] ?? dirname(__DIR__);
-        $applicationConfigPath = $basePath . '/config';
-        $environment = $GLOBALS['app_environment'] ?? env('APP_ENV', 'development');
+        // Simply return the global container - don't try to initialize
+        $container = $GLOBALS['container'] ?? null;
 
-        return \Glueful\DI\ContainerBootstrap::initialize(
-            $basePath,
-            $applicationConfigPath,
-            $environment
-        );
+        if (!$container) {
+            throw new \RuntimeException('DI container not initialized. Framework bootstrap must run first.');
+        }
+
+        return $container;
     }
 }
 
@@ -334,7 +326,7 @@ if (!function_exists('service')) {
      */
     function service(string $id): mixed
     {
-        return container()->get($id);
+        return app($id);
     }
 }
 
@@ -350,7 +342,13 @@ if (!function_exists('parameter')) {
      */
     function parameter(string $name): mixed
     {
-        return container()->getParameter($name);
+        $container = $GLOBALS['container'] ?? null;
+
+        if (!$container) {
+            throw new \RuntimeException('DI container not initialized.');
+        }
+
+        return $container->getParameter($name);
     }
 }
 
@@ -366,7 +364,13 @@ if (!function_exists('has_service')) {
      */
     function has_service(string $id): bool
     {
-        return container()->has($id);
+        $container = $GLOBALS['container'] ?? null;
+
+        if (!$container) {
+            return false;
+        }
+
+        return $container->has($id);
     }
 }
 
@@ -436,7 +440,8 @@ if (!function_exists('image')) {
      */
     function image(string $source): \Glueful\Services\ImageProcessorInterface
     {
-        return app(\Glueful\Services\ImageProcessorInterface::class)::make($source);
+        $processor = app(\Glueful\Services\ImageProcessorInterface::class);
+        return $processor::make($source);
     }
 }
 
@@ -499,18 +504,37 @@ if (!function_exists('base_path')) {
      */
     function base_path(string $path = ''): string
     {
-        // Try to get base path from container first
-        try {
-            $container = app();
-            if ($container->hasParameter('app.base_path')) {
-                $basePath = $container->getParameter('app.base_path');
-            } else {
-                // Fallback: assume we're in src/ directory, go up 1 level to project root
-                $basePath = dirname(__DIR__);
+        static $basePath = null;
+
+        if ($basePath === null) {
+            // Priority 1: Explicit global set by bootstrap
+            if (isset($GLOBALS['base_path'])) {
+                $basePath = $GLOBALS['base_path'];
+            } elseif (isset($GLOBALS['container'])) {
+                try {
+                    $container = $GLOBALS['container'];
+                    if ($container->hasParameter('app.base_path')) {
+                        $basePath = $container->getParameter('app.base_path');
+                    }
+                } catch (\Throwable) {
+                    // Ignore and use fallback
+                }
             }
-        } catch (\Exception) {
-            // Final fallback: assume we're in src/ directory, go up 1 level
-            $basePath = dirname(__DIR__);
+
+            // Priority 3: Intelligent path detection
+            if ($basePath === null) {
+                $basePath = dirname(__DIR__); // Default: framework src -> project root
+
+                // Try to detect if we're in a vendor directory
+                $composerPath = $basePath . '/composer.json';
+                if (!file_exists($composerPath)) {
+                    // We might be in vendor/glueful/framework/src, go up to project root
+                    $potentialRoot = dirname(dirname(dirname($basePath)));
+                    if (file_exists($potentialRoot . '/composer.json')) {
+                        $basePath = $potentialRoot;
+                    }
+                }
+            }
         }
 
         if (empty($path)) {
@@ -535,35 +559,36 @@ if (!function_exists('config_path')) {
      */
     function config_path(string $path = ''): string
     {
+        static $appConfigPath = null;
+
+        if ($appConfigPath === null) {
+            // Priority 1: Explicit global set by bootstrap
+            if (isset($GLOBALS['config_paths']['application'])) {
+                $appConfigPath = $GLOBALS['config_paths']['application'];
+            } elseif (isset($GLOBALS['container'])) {
+                try {
+                    $container = $GLOBALS['container'];
+                    if ($container->hasParameter('app.config_path')) {
+                        $appConfigPath = $container->getParameter('app.config_path');
+                    }
+                } catch (\Throwable) {
+                    // Ignore and use fallback
+                }
+            }
+
+            // Priority 3: Derive from base_path
+            if ($appConfigPath === null) {
+                $appConfigPath = base_path('config');
+            }
+        }
+
         // If no specific file requested, return app config directory
         if (empty($path)) {
-            try {
-                $container = app();
-                if ($container->hasParameter('app.config_path')) {
-                    return $container->getParameter('app.config_path');
-                }
-            } catch (\Exception) {
-                // Fallback to base_path + '/config'
-            }
-            return base_path('config');
+            return $appConfigPath;
         }
 
         // For specific files, check both app and framework locations
-        $appConfigPath = null;
-        // Framework config directory (package-relative)
         $frameworkConfigPath = dirname(__DIR__) . '/config';
-
-        try {
-            $container = app();
-            if ($container->hasParameter('app.config_path')) {
-                $appConfigPath = $container->getParameter('app.config_path');
-            } else {
-                $appConfigPath = base_path('config');
-            }
-        } catch (\Exception) {
-            $appConfigPath = base_path('config');
-        }
-
         $normalizedPath = ltrim($path, '/');
         $appFilePath = $appConfigPath . '/' . $normalizedPath;
         $frameworkFilePath = $frameworkConfigPath . '/' . $normalizedPath;

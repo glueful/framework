@@ -8,8 +8,8 @@
  */
 
 return [
-    // Default cache driver (redis, memcached, file)
-    'default' => env('CACHE_DRIVER', 'redis'),
+    // Default cache driver (file, redis, memcached)
+    'default' => env('CACHE_DRIVER', 'file'),
 
     // Global cache prefix for key namespacing
     'prefix' => env('CACHE_PREFIX', 'glueful:'),

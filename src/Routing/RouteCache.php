@@ -1,0 +1,106 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Glueful\Routing;
+
+class RouteCache
+{
+    private string $cacheDir;
+    private int $devTtl = 5; // 5 seconds in dev
+
+    public function __construct()
+    {
+        $this->cacheDir = base_path('storage/cache');
+        if (!is_dir($this->cacheDir)) {
+            mkdir($this->cacheDir, 0755, true);
+        }
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function load(): ?array
+    {
+        $cacheFile = $this->getCacheFile();
+
+        if (!file_exists($cacheFile)) {
+            return null;
+        }
+
+        // Development: check TTL and file changes
+        if ($this->isDevelopment()) {
+            $age = time() - filemtime($cacheFile);
+            if ($age > $this->devTtl) {
+                return null;
+            }
+
+            // Check if route files changed
+            if ($this->routeFilesChanged(filemtime($cacheFile))) {
+                unlink($cacheFile);
+                return null;
+            }
+        }
+
+        return include $cacheFile;
+    }
+
+    public function save(Router $router): bool
+    {
+        $compiler = new RouteCompiler();
+        $code = $compiler->compile($router);
+
+        $cacheFile = $this->getCacheFile();
+        $tmpFile = $cacheFile . '.tmp';
+
+        // Atomic write with proper permissions
+        file_put_contents($tmpFile, $code, LOCK_EX);
+        chmod($tmpFile, 0644);
+        rename($tmpFile, $cacheFile);
+
+        // Warm opcache
+        if (function_exists('opcache_compile_file')) {
+            opcache_compile_file($cacheFile);
+        }
+
+        return true;
+    }
+
+    public function clear(): void
+    {
+        $cacheFile = $this->getCacheFile();
+        if (file_exists($cacheFile)) {
+            unlink($cacheFile);
+        }
+    }
+
+    private function getCacheFile(): string
+    {
+        $env = $this->isDevelopment() ? 'dev' : 'prod';
+        return $this->cacheDir . "/routes_{$env}.php";
+    }
+
+    private function isDevelopment(): bool
+    {
+        return env('APP_ENV', 'production') !== 'production';
+    }
+
+    private function routeFilesChanged(int $cacheTime): bool
+    {
+        $routeFiles = glob(base_path('routes/*.php'));
+        $extensionFiles = glob(base_path('extensions/*/routes.php'));
+
+        $files = array_merge(
+            $routeFiles !== false ? $routeFiles : [],
+            $extensionFiles !== false ? $extensionFiles : []
+        );
+
+        foreach ($files as $file) {
+            if (filemtime($file) > $cacheTime) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}

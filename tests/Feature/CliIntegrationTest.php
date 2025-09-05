@@ -11,8 +11,27 @@ final class CliIntegrationTest extends TestCase
 {
     private function runCli(array $args, ?string $cwd = null): Process
     {
-        $bin = base_path('bin/glueful');
-        $process = new Process(array_merge(['php', $bin], $args), $cwd ?? base_path());
+        // Use dirname to get the framework root directly, avoiding potential pollution from base_path()
+        $frameworkRoot = dirname(dirname(__DIR__));
+        $bin = $frameworkRoot . '/bin/glueful';
+        $process = new Process(array_merge(['php', $bin], $args), $cwd ?? $frameworkRoot);
+
+        // Pass test environment variables to the CLI process
+        // Include PATH from current environment to find PHP
+        $env = [
+            'APP_ENV' => 'testing',
+            'CACHE_DRIVER' => 'array',
+            'DB_DRIVER' => 'sqlite',
+            'DB_SQLITE_DATABASE' => ':memory:',
+            'DB_POOLING_ENABLED' => 'false',
+            'DB_STARTUP_VALIDATION' => 'false',
+            'LOG_TO_FILE' => 'false',
+            'LOG_TO_DB' => 'false',
+            'PATH' => getenv('PATH') ?: '/usr/local/bin:/usr/bin:/bin',
+        ];
+
+        $process->setEnv($env);
+
         $process->run();
         return $process;
     }
@@ -20,7 +39,9 @@ final class CliIntegrationTest extends TestCase
     public function testCliListShowsAvailableCommands(): void
     {
         $process = $this->runCli(['list']);
-        $this->assertTrue($process->isSuccessful(), 'CLI list command failed: ' . $process->getErrorOutput());
+        $errorMsg = 'CLI list command failed: ' . $process->getErrorOutput() .
+                    "\nOutput: " . $process->getOutput();
+        $this->assertTrue($process->isSuccessful(), $errorMsg);
         $out = $process->getOutput();
 
         $this->assertStringContainsString('serve', $out);
@@ -31,7 +52,9 @@ final class CliIntegrationTest extends TestCase
     public function testCliHelpCommandRuns(): void
     {
         $process = $this->runCli(['help']);
-        $this->assertTrue($process->isSuccessful(), 'CLI help command failed: ' . $process->getErrorOutput());
+        $errorMsg = 'CLI help command failed: ' . $process->getErrorOutput() .
+                    "\nOutput: " . $process->getOutput();
+        $this->assertTrue($process->isSuccessful(), $errorMsg);
         $this->assertStringContainsString('Usage:', $process->getOutput());
     }
 }

@@ -21,15 +21,26 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
     /** @var string|null Last authentication error message */
     private ?string $lastError = null;
 
-    /** @var UserRepository User repository for looking up API keys */
-    private UserRepository $userRepository;
+    /** @var UserRepository|null User repository for looking up API keys */
+    private ?UserRepository $userRepository = null;
 
     /**
      * Create a new API key authentication provider
      */
     public function __construct()
     {
-        $this->userRepository = new UserRepository();
+        // Defer UserRepository initialization until needed
+    }
+
+    /**
+     * Get the user repository instance
+     */
+    private function getUserRepository(): UserRepository
+    {
+        if ($this->userRepository === null) {
+            $this->userRepository = new UserRepository();
+        }
+        return $this->userRepository;
     }
 
     /**
@@ -50,7 +61,7 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
             }
 
             // Validate the API key and get associated user
-            $userData = $this->userRepository->findByApiKey($apiKey);
+            $userData = $this->getUserRepository()->findByApiKey($apiKey);
 
             if ($userData === null) {
                 $this->lastError = 'Invalid API key';
@@ -154,7 +165,7 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
     {
         try {
             // Check if the API key exists and is valid in the database
-            $userData = $this->userRepository->findByApiKey($token);
+            $userData = $this->getUserRepository()->findByApiKey($token);
 
             if ($userData === null) {
                 $this->lastError = 'Invalid API key';
@@ -244,7 +255,7 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
             // For API Key authentication, we don't have separate refresh tokens
             // We just verify if the API key is still valid
 
-            $userData = $this->userRepository->findByApiKey($refreshToken);
+            $userData = $this->getUserRepository()->findByApiKey($refreshToken);
 
             if ($userData === null) {
                 $this->lastError = 'Invalid API key';

@@ -14,6 +14,7 @@ use Glueful\Queue\Config\ConfigManager;
 use Glueful\Queue\Config\ConfigValidator;
 use Glueful\Queue\Failed\FailedJobProvider;
 use Glueful\Queue\Monitoring\WorkerMonitor;
+use Glueful\Scheduler\JobScheduler;
 
 /**
  * Queue Service Provider
@@ -47,6 +48,10 @@ class QueueServiceProvider implements ServiceProviderInterface
             ->setPublic(true);
 
         $container->register(FailedJobProvider::class)
+            ->setPublic(true);
+
+        // Job scheduler
+        $container->register(JobScheduler::class)
             ->setPublic(true);
 
         // Backward compatibility aliases

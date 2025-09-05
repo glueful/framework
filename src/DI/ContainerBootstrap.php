@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Glueful\DI;
 
 /**
- * Pure Symfony DI Bootstrap - Complete replacement
+ * Simplified Container Bootstrap - Heavy logic moved to ApplicationKernel
  */
 class ContainerBootstrap
 {
@@ -17,44 +17,34 @@ class ContainerBootstrap
             return self::$container;
         }
 
-        // Set up config hierarchy
-        $frameworkConfigPath = dirname(__DIR__, 2) . '/config';  // Framework defaults
-        self::initializeConfigSystem($basePath, $frameworkConfigPath, $applicationConfigPath, $environment);
+        // Since ApplicationKernel now handles configuration loading via ConfigurationCache,
+        // we only need to create a basic container here
+        self::initializeBasicConfig($basePath, $applicationConfigPath, $environment);
 
-        // Create container with proper environment detection
+        // Create container - prefer compiled for production
         $isProduction = $environment === 'production' && !($_ENV['APP_DEBUG'] ?? false);
-        if ($isProduction) {
-            // Prefer compiled container for production
-            if (ContainerFactory::hasCompiledContainer()) {
-                self::$container = ContainerFactory::create(true);
-            } else {
-                self::$container = ContainerFactory::buildProductionContainer();
-            }
+        if ($isProduction && ContainerFactory::hasCompiledContainer()) {
+            self::$container = ContainerFactory::create(true);
         } else {
             self::$container = ContainerFactory::create(false);
         }
 
-        // Boot with all configs loaded
-        self::bootContainer($basePath);
+        // Minimal bootstrapping - heavy service loading is now lazy
+        self::registerEssentialServices();
 
         return self::$container;
     }
 
-    private static function initializeConfigSystem(
+    private static function initializeBasicConfig(
         string $basePath,
-        string $frameworkConfigPath,
         string $applicationConfigPath,
         string $environment
     ): void {
-        // Register config paths globally so config() helper can find them
-        $GLOBALS['config_paths'] = [
-            'framework' => $frameworkConfigPath,      // Framework defaults (lowest priority)
-            'application' => $applicationConfigPath,  // User config (highest priority)
-        ];
-        $GLOBALS['app_environment'] = $environment;
+        // Keep minimal globals for backward compatibility
         $GLOBALS['base_path'] = $basePath;
+        $GLOBALS['app_environment'] = $environment;
 
-        // Register paths in container for Application access
+        // Essential container parameters
         $GLOBALS['container_parameters'] = [
             'app.base_path' => $basePath,
             'app.config_path' => $applicationConfigPath,
@@ -62,99 +52,34 @@ class ContainerBootstrap
         ];
     }
 
-    private static function bootContainer(string $basePath): void
+    private static function registerEssentialServices(): void
     {
-        // Boot service providers that need post-compilation setup
-        $providers = [
+        // Only register absolutely essential services that can't be lazy-loaded
+        $coreProviders = [
             new ServiceProviders\CoreServiceProvider(),
             new ServiceProviders\ConfigServiceProvider(),
-            new ServiceProviders\SecurityServiceProvider(),
-            new ServiceProviders\ValidatorServiceProvider(),
-            new ServiceProviders\SerializerServiceProvider(),
-            new ServiceProviders\HttpClientServiceProvider(),
-            new ServiceProviders\RequestServiceProvider(),
-            new ServiceProviders\FileServiceProvider(),
-            new ServiceProviders\LockServiceProvider(),
-            new ServiceProviders\EventServiceProvider(),
-            new ServiceProviders\ConsoleServiceProvider(),
-            new ServiceProviders\VarDumperServiceProvider(),
-            new ServiceProviders\ExtensionServiceProvider(),
-            new ServiceProviders\ArchiveServiceProvider(),
-            new ServiceProviders\ControllerServiceProvider(),
-            new ServiceProviders\QueueServiceProvider(),
-            new ServiceProviders\RepositoryServiceProvider(),
-            new ServiceProviders\SpaServiceProvider(),
         ];
 
-        foreach ($providers as $provider) {
+        foreach ($coreProviders as $provider) {
             $provider->boot(self::$container);
         }
 
-        // Boot extension service providers
-        self::bootExtensionServiceProviders($basePath);
+        // All other services are now registered as lazy services by ApplicationKernel
     }
 
-    private static function bootExtensionServiceProviders(string $basePath): void
-    {
-        // Use provided basePath instead of hardcoded dirname(__DIR__, 2)
-        $extensionsConfig = $basePath . '/extensions/extensions.json';
-
-        if (!file_exists($extensionsConfig)) {
-            return;
-        }
-
-        $extensionsData = json_decode(file_get_contents($extensionsConfig), true);
-        if (!isset($extensionsData['extensions'])) {
-            return;
-        }
-
-        foreach ($extensionsData['extensions'] as $extensionName => $config) {
-            if (($config['enabled'] ?? false) !== true) {
-                continue;
-            }
-
-            $serviceProviders = $config['provides']['services'] ?? [];
-            foreach ($serviceProviders as $serviceProviderPath) {
-                $absolutePath = $basePath . '/' . $serviceProviderPath;
-
-                if (!file_exists($absolutePath)) {
-                    continue;
-                }
-
-                // Build class name from path (existing logic)
-                $pathInfo = pathinfo($serviceProviderPath);
-                $className = $pathInfo['filename'];
-                $pathParts = explode('/', $serviceProviderPath);
-                $fullClassName = null;
-
-                if (count($pathParts) >= 5 && $pathParts[2] === 'src') {
-                    $subNamespace = $pathParts[3];
-                    $fullClassName = "Glueful\\Extensions\\{$extensionName}\\{$subNamespace}\\{$className}";
-                } else {
-                    $fullClassName = "Glueful\\Extensions\\{$extensionName}\\{$className}";
-                }
-
-                if (!class_exists($fullClassName)) {
-                    continue;
-                }
-
-                // Create instance and boot
-                $serviceProvider = new $fullClassName();
-                if (method_exists($serviceProvider, 'boot')) {
-                    $serviceProvider->boot(self::$container);
-                }
-            }
-        }
-    }
-
-    public static function reset(): void
-    {
-        self::$container = null;
-        unset($GLOBALS['config_paths'], $GLOBALS['app_environment'], $GLOBALS['base_path']);
-    }
-
+    /**
+     * Get the current container instance
+     */
     public static function getContainer(): ?Container
     {
         return self::$container;
+    }
+
+    /**
+     * Reset container (useful for testing)
+     */
+    public static function reset(): void
+    {
+        self::$container = null;
     }
 }

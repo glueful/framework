@@ -97,14 +97,17 @@ class ExtensionServiceProvider implements ServiceProviderInterface
             $extensionManager->setClassLoader($classLoader);
         }
 
-        // Load enabled extensions during framework boot
+        // Defer extension loading until after boot to prevent circular dependencies
+        // Extensions will be loaded on first access or via explicit call
+        // This prevents hangs during framework boot process
         try {
-            $extensionManager->loadEnabledExtensions();
+            // Only register extensions, don't load them yet
+            $extensionManager->discoverExtensions();
         } catch (\Exception $e) {
             // Log error but don't fail the boot process
             if ($container->has('logger')) {
                 $logger = $container->get('logger');
-                $logger->error('Failed to load enabled extensions: ' . $e->getMessage());
+                $logger->error('Failed to discover extensions: ' . $e->getMessage());
             }
         }
     }

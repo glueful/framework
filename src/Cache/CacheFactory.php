@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Cache;
 
-use Glueful\Cache\Drivers\{RedisCacheDriver, MemcachedCacheDriver};
+use Glueful\Cache\Drivers\{RedisCacheDriver, MemcachedCacheDriver, ArrayCacheDriver};
 use Redis;
 use Memcached;
 use Glueful\Exceptions\BusinessLogicException;
@@ -43,8 +43,9 @@ class CacheFactory
             $password = config('cache.stores.redis.password', null) ?? env('REDIS_PASSWORD');
 
             try {
-                // Set connection timeout to prevent long hangs
-                $connected = $redis->connect($host, $port, $timeout);
+                // Set connection timeout to prevent long hangs - use shorter timeout
+                $actualTimeout = min($timeout, 1.0); // Max 1 second for local connections
+                $connected = $redis->connect($host, $port, $actualTimeout);
 
                 if (!$connected) {
                     throw DatabaseException::connectionFailed(
@@ -118,6 +119,11 @@ class CacheFactory
                     $e
                 );
             }
+        }
+
+        // Support array driver for testing
+        if ($cacheType === 'array') {
+            return new ArrayCacheDriver();
         }
 
         // Fall back to file-based caching if enabled

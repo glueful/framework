@@ -135,6 +135,22 @@ class Container implements ContainerInterface
     }
 
     /**
+     * Set a service in the container
+     *
+     * @param string $id Service identifier
+     * @param mixed $service Service instance
+     * @return void
+     */
+    public function set(string $id, mixed $service): void
+    {
+        if ($this->container instanceof \Symfony\Component\DependencyInjection\ContainerBuilder) {
+            $this->container->set($id, $service);
+        } else {
+            throw new \RuntimeException('Cannot set services on compiled container');
+        }
+    }
+
+    /**
      * Register a service provider
      *
      * @param object $serviceProvider Service provider instance

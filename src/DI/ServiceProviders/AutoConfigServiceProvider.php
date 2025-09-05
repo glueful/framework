@@ -48,8 +48,10 @@ final class AutoConfigServiceProvider implements ServiceProviderInterface
         }
 
         // Only wire if Redis is the intended cache or explicitly enabled
-        $default = (string) (config('cache.default', 'redis'));
-        $explicit = (bool) config('cache.stores.redis.enabled', true);
+        $defaultConfig = config('cache.default', 'redis');
+        $default = is_string($defaultConfig) ? $defaultConfig : 'redis';
+        $explicitConfig = config('cache.stores.redis.enabled', true);
+        $explicit = is_bool($explicitConfig) ? $explicitConfig : true;
         if ($default !== 'redis' && !$explicit) {
             return;
         }
@@ -92,8 +94,10 @@ final class AutoConfigServiceProvider implements ServiceProviderInterface
         }
 
         // Read consolidated config from services.php
-        $defaultMailer = config('services.mail.default', null);
-        $mailers = (array) config('services.mail.mailers', []);
+        $defaultMailerConfig = config('services.mail.default', null);
+        $defaultMailer = is_string($defaultMailerConfig) ? $defaultMailerConfig : null;
+        $mailersConfig = config('services.mail.mailers', []);
+        $mailers = is_array($mailersConfig) ? $mailersConfig : [];
 
         // If no mail configuration present, skip wiring
         if ($defaultMailer === null || !isset($mailers[$defaultMailer])) {
@@ -107,7 +111,7 @@ final class AutoConfigServiceProvider implements ServiceProviderInterface
             $mailerConfig = (array) $mailers[$defaultMailer];
             $dsn = (string) ($mailerConfig['dsn'] ?? '');
             if ($dsn === '') {
-                $dsn = self::buildMailerDsn($mailerConfig, (string) $defaultMailer);
+                $dsn = self::buildMailerDsn($mailerConfig, $defaultMailer);
             }
         }
 

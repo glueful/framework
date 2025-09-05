@@ -96,6 +96,9 @@ class Router
         self::$context = new RequestContext();
         // Try to load cached routes in production for performance
         $this->tryLoadCachedRoutes();
+
+        // Note: Route loading is now handled by ApplicationKernel::initializeHttpLayer()
+        // This ensures proper boot sequence and architectural consistency
     }
 
     /**
@@ -844,6 +847,30 @@ class Router
     }
 
     /**
+     * Load routes from files when cache is not available
+     *
+     * This method loads routes from both extension routes and core route files
+     * using the same logic as reloadRoutes() but designed for initial loading.
+     */
+    private function loadRoutesFromFiles(): void
+    {
+        try {
+            // Load extension routes first
+            if (function_exists('container')) {
+                $extensionManager = container()->get(\Glueful\Extensions\ExtensionManager::class);
+                $extensionManager->loadEnabledExtensions();
+                $extensionManager->loadExtensionRoutes();
+            }
+
+            // Load core application routes
+            \Glueful\Helpers\RoutesManager::loadRoutes();
+        } catch (\Exception $e) {
+            // Log but don't fail - let the application continue with empty routes
+            error_log("Failed to load routes from files: " . $e->getMessage());
+        }
+    }
+
+    /**
      * Check if cached routes should be used
      *
      * Routes are cached only in production environment and when
@@ -895,6 +922,17 @@ class Router
      */
     public static function getRoutes(): RouteCollection
     {
+        if (!isset(self::$routes)) {
+            self::getInstance();
+        }
+
+        // Fallback: if routes are empty and not from cache, try loading from files
+        // This handles cases where ApplicationKernel hasn't run or failed
+        if (self::$routes->count() === 0 && !self::$routesLoadedFromCache) {
+            $instance = self::getInstance();
+            $instance->loadRoutesFromFiles();
+        }
+
         return self::$routes;
     }
 }

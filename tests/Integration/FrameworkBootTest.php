@@ -19,6 +19,9 @@ final class FrameworkBootTest extends TestCase
     {
         parent::setUp();
 
+        // Clear any cached configuration from previous tests
+        \Glueful\Bootstrap\ConfigurationCache::clear();
+
         $this->testAppPath = sys_get_temp_dir() . '/glueful-test-' . uniqid();
         $this->testConfigPath = $this->testAppPath . '/config';
 
