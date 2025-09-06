@@ -15,6 +15,14 @@ class CoreServiceProvider implements ServiceProviderInterface
 {
     public function register(ContainerBuilder $container): void
     {
+        // Register the Glueful Container wrapper
+        $container->register('glueful.container', \Glueful\DI\Container::class)
+            ->setArguments([new Reference('service_container')])
+            ->setPublic(true);
+
+        $container->setAlias(\Glueful\DI\Container::class, 'glueful.container')
+            ->setPublic(true);
+
         // Database services
         $container->register('database', \Glueful\Database\Connection::class)
             ->setPublic(true);
@@ -35,6 +43,21 @@ class CoreServiceProvider implements ServiceProviderInterface
 
         // Alias for CacheStore class name resolution
         $container->setAlias(\Glueful\Cache\CacheStore::class, 'cache.store')
+            ->setPublic(true);
+
+        // Next-Gen Router services
+        $container->register(\Glueful\Routing\Router::class)
+            ->setArguments([new Reference('glueful.container')])
+            ->setPublic(true);
+
+        $container->register(\Glueful\Routing\RouteCache::class)
+            ->setPublic(true);
+
+        $container->register(\Glueful\Routing\RouteCompiler::class)
+            ->setPublic(true);
+
+        $container->register(\Glueful\Routing\AttributeRouteLoader::class)
+            ->setArguments([new Reference(\Glueful\Routing\Router::class)])
             ->setPublic(true);
 
         // Logger service

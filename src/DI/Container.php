@@ -79,7 +79,21 @@ class Container implements ContainerInterface
 
     public function isCompiled(): bool
     {
-        return !$this->container instanceof \Symfony\Component\DependencyInjection\ContainerBuilder;
+        // ContainerBuilder has isCompiled() method after compilation
+        if ($this->container instanceof \Symfony\Component\DependencyInjection\ContainerBuilder) {
+            return $this->container->isCompiled();
+        }
+        // Non-ContainerBuilder instances (dumped containers) are always compiled
+        return true;
+    }
+
+    /**
+     * Indicates whether the container is frozen (compiled) and immutable.
+     * Alias of isCompiled() for readability with extension docs.
+     */
+    public function isFrozen(): bool
+    {
+        return $this->isCompiled();
     }
 
     public function getParameter(string $name): mixed
@@ -144,10 +158,14 @@ class Container implements ContainerInterface
     public function set(string $id, mixed $service): void
     {
         if ($this->container instanceof \Symfony\Component\DependencyInjection\ContainerBuilder) {
+            // Disallow mutations once compiled/frozen
+            if ($this->container->isCompiled()) {
+                throw new \RuntimeException('Cannot set services on compiled container');
+            }
             $this->container->set($id, $service);
-        } else {
-            throw new \RuntimeException('Cannot set services on compiled container');
+            return;
         }
+        throw new \RuntimeException('Cannot set services on compiled container');
     }
 
     /**

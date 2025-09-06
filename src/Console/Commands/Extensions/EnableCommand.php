@@ -1,231 +1,57 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Glueful\Console\Commands\Extensions;
 
-use Glueful\Console\Commands\Extensions\BaseExtensionCommand;
-use Glueful\Extensions\ExtensionManager;
-use Symfony\Component\Console\Attribute\AsCommand;
-use Symfony\Component\Console\Input\InputInterface;
+use Glueful\Console\BaseCommand;
 use Symfony\Component\Console\Input\InputArgument;
-use Symfony\Component\Console\Input\InputOption;
+use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\Attribute\AsCommand;
 
 /**
  * Extensions Enable Command
- * - Interactive confirmation with dependency checking
- * - Validation of extension requirements and compatibility
- * - Progress indicators for enabling process
- * - Detailed error messages with troubleshooting tips
- * - Rollback capability on failure
- * @package Glueful\Console\Commands\Extensions
+ *
+ * Enable extension in development environment by editing config/extensions.php.
+ * This is a development-only convenience command.
  */
 #[AsCommand(
     name: 'extensions:enable',
-    description: 'Enable an installed extension'
+    description: 'Enable extension (development only)'
 )]
-class EnableCommand extends BaseExtensionCommand
+final class EnableCommand extends BaseCommand
 {
     protected function configure(): void
     {
-        $this->setDescription('Enable an installed extension')
-             ->setHelp(
-                 'This command enables an extension, making it active in the application with dependency validation.'
-             )
-             ->addArgument(
-                 'name',
-                 InputArgument::REQUIRED,
-                 'The name of the extension to enable'
-             )
-             ->addOption(
-                 'force',
-                 'f',
-                 InputOption::VALUE_NONE,
-                 'Force enable without confirmation or dependency checks'
-             )
-             ->addOption(
-                 'check-dependencies',
-                 'd',
-                 InputOption::VALUE_NONE,
-                 'Perform thorough dependency validation before enabling'
-             );
+        $this
+            ->setDescription('Enable extension (development only)')
+            ->addArgument('extension', InputArgument::REQUIRED, 'Extension provider class or slug');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $extensionName = $input->getArgument('name');
-        $force = $input->getOption('force');
-        $checkDependencies = $input->getOption('check-dependencies');
-
-        try {
-            $this->info("Enabling extension: {$extensionName}");
-
-            $extensionsManager = $this->getService(ExtensionManager::class);
-
-            // Validate extension exists
-            if (!$this->validateExtensionExists($extensionsManager, $extensionName)) {
-                return self::FAILURE;
-            }
-
-            // Check if already enabled
-            if ($this->isExtensionEnabled($extensionsManager, $extensionName)) {
-                $this->warning("Extension '{$extensionName}' is already enabled.");
-                return self::SUCCESS;
-            }
-
-            // Dependency validation
-            if ((bool)$checkDependencies || !(bool)$force) {
-                if (!$this->validateDependencies($extensionsManager, $extensionName)) {
-                    return self::FAILURE;
-                }
-            }
-
-            // Confirm action if not forced
-            if (!(bool)$force && !$this->confirmEnable($extensionName)) {
-                $this->info('Extension enable operation cancelled.');
-                return self::SUCCESS;
-            }
-
-            // Enable the extension
-            try {
-                $result = $extensionsManager->enable($extensionName);
-
-                if (is_bool($result)) {
-                    if (!$result) {
-                        $this->error("Failed to enable extension '{$extensionName}'");
-                        return self::FAILURE;
-                    }
-                } else {
-                    // Handle array response format
-                    if (!$result['success']) {
-                        $this->error($result['error'] ?? "Failed to enable extension '{$extensionName}'");
-                        return self::FAILURE;
-                    }
-                }
-
-                $this->success("Extension '{$extensionName}' enabled successfully!");
-            } catch (\Exception $e) {
-                $this->error("Failed to enable extension '{$extensionName}': " . $e->getMessage());
-                return self::FAILURE;
-            }
-            $this->displayNextSteps($extensionName);
-
-            return self::SUCCESS;
-        } catch (\Exception $e) {
-            $this->error("Failed to enable extension '{$extensionName}': " . $e->getMessage());
-            $this->displayTroubleshootingTips();
+        if (env('APP_ENV') === 'production') {
+            $output->writeln(
+                '<error>This command is not available in production. Edit config/extensions.php directly.</error>'
+            );
             return self::FAILURE;
         }
-    }
 
-    private function validateExtensionExists(ExtensionManager $manager, string $name): bool
-    {
-        $extension = $this->findExtension($manager, $name);
+        $extension = (string) $input->getArgument('extension');
 
-        if ($extension === null) {
-            $this->error("Extension '{$name}' not found.");
+        $output->writeln('<comment>Development-only command</comment>');
+        $output->writeln("To enable '{$extension}', add the following to config/extensions.php:");
+        $output->writeln('');
+        $output->writeln("    'enabled' => [");
+        $output->writeln("        // existing entries...");
+        $output->writeln("        {$extension}::class,");
+        $output->writeln("    ],");
+        $output->writeln('');
+        $output->writeln(
+            '<info>Note: In production, manage extensions through configuration files and deployment.</info>'
+        );
 
-            // Suggest similar extensions
-            $extensions = $manager->listInstalled();
-            $available = array_map(fn($ext) => $ext['name'], $extensions);
-            $suggestions = $this->findSimilarExtensions($name, $available);
-
-            if (count($suggestions) > 0) {
-                $this->line('');
-                $this->info('Did you mean:');
-                foreach ($suggestions as $suggestion) {
-                    $this->line("• {$suggestion}");
-                }
-            } else {
-                $this->line('');
-                $this->info('Available extensions:');
-                foreach ($available as $extensionName) {
-                    $this->line("• {$extensionName}");
-                }
-            }
-
-            return false;
-        }
-
-        return true;
-    }
-
-
-    private function validateDependencies(ExtensionManager $manager, string $name): bool
-    {
-        $this->info('Validating dependencies...');
-
-        $extension = $this->findExtension($manager, $name);
-        $dependencies = $extension['metadata']['dependencies']['extensions'] ?? [];
-
-        if (count($dependencies) === 0) {
-            $this->line('✓ No dependencies required');
-            return true;
-        }
-
-        $missingDeps = [];
-        $disabledDeps = [];
-
-        foreach ($dependencies as $depName) {
-            $depExtension = $this->findExtension($manager, $depName);
-            if ($depExtension === null) {
-                $missingDeps[] = $depName;
-            } elseif (!(bool)($depExtension['metadata']['enabled'] ?? false)) {
-                $disabledDeps[] = $depName;
-            }
-        }
-
-        if (count($missingDeps) > 0) {
-            $this->error('Missing required dependencies:');
-            foreach ($missingDeps as $dep) {
-                $this->line("• {$dep}");
-            }
-            return false;
-        }
-
-        if (count($disabledDeps) > 0) {
-            $this->warning('Required dependencies are disabled:');
-            foreach ($disabledDeps as $dep) {
-                $this->line("• {$dep}");
-            }
-
-            if ($this->confirm('Enable required dependencies automatically?', true)) {
-                foreach ($disabledDeps as $dep) {
-                    $this->line("Enabling dependency: {$dep}");
-                    $manager->enable($dep);
-                }
-            } else {
-                return false;
-            }
-        }
-
-        $this->success('✓ All dependencies validated');
-        return true;
-    }
-
-    private function confirmEnable(string $name): bool
-    {
-        return $this->confirm("Enable extension '{$name}'?", true);
-    }
-
-
-    private function displayNextSteps(string $name): void
-    {
-        $this->line('');
-        $this->info('Next steps:');
-        $this->line("1. Extension '{$name}' is now active");
-        $this->line('2. Check extension documentation for configuration options');
-        $this->line('3. Restart application if required by the extension');
-        $this->line('4. Test extension functionality');
-    }
-
-    private function displayTroubleshootingTips(): void
-    {
-        $this->line('');
-        $this->warning('Troubleshooting tips:');
-        $this->line('1. Verify extension exists in extensions/ directory');
-        $this->line('2. Check extension configuration file (extension.json)');
-        $this->line('3. Ensure all dependencies are installed');
-        $this->line('4. Check file permissions');
-        $this->line('5. Review application logs for detailed errors');
+        return self::SUCCESS;
     }
 }

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Glueful;
 
 use Glueful\DI\Container;
-use Glueful\Http\Router;
+use Glueful\Routing\Router;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
@@ -33,8 +33,9 @@ class Application
         $startTime = microtime(true);
         $requestId = $this->getRequestId();
 
-        // Dispatch via router using Symfony Request
-        $response = Router::dispatch($request);
+        // Dispatch via Next-Gen Router
+        $router = $this->container->get(Router::class);
+        $response = $router->dispatch($request);
 
         $totalTime = round((microtime(true) - $startTime) * 1000, 2);
         $this->logger->info(

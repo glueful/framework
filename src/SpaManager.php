@@ -7,7 +7,7 @@ namespace Glueful;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Glueful\Helpers\StaticFileDetector;
-use Glueful\Extensions\BaseExtension;
+use Glueful\Extensions\ServiceProvider;
 
 /**
  * SPA Manager
@@ -43,28 +43,14 @@ class SpaManager
             return;
         }
 
-        if (!is_subclass_of($extensionClass, BaseExtension::class)) {
+        if (!is_subclass_of($extensionClass, ServiceProvider::class)) {
             $this->logger->warning("Class {$extensionClass} is not a valid extension");
             return;
         }
 
-        try {
-            $spaConfigs = $extensionClass::getSpaConfigurations();
-
-            foreach ($spaConfigs as $config) {
-                $this->registerSpaApp(
-                    $config['path_prefix'],
-                    $config['build_path'],
-                    $config
-                );
-            }
-
-            $this->logger->debug("Registered SPA configurations from {$extensionClass}", [
-                'count' => count($spaConfigs)
-            ]);
-        } catch (\Throwable $e) {
-            $this->logger->error("Failed to register SPA from {$extensionClass}: " . $e->getMessage());
-        }
+        // Note: SPA registration is now handled automatically by ServiceProvider::mountStatic()
+        // during provider boot phase. This method is kept for backwards compatibility.
+        $this->logger->debug("Extension {$extensionClass} uses ServiceProvider::mountStatic() for SPA support");
     }
 
     /**

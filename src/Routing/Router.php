@@ -63,6 +63,11 @@ class Router
         return $this->add('DELETE', $path, $handler);
     }
 
+    public function head(string $path, mixed $handler): Route
+    {
+        return $this->add('HEAD', $path, $handler);
+    }
+
     // Core route registration
     private function add(string $method, string $path, mixed $handler): Route
     {

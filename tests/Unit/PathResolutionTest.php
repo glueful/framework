@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Glueful\Tests\Unit;
 
-use Glueful\Framework;
 use PHPUnit\Framework\TestCase;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -34,7 +33,10 @@ final class PathResolutionTest extends TestCase
 
         // Create minimal config files to prevent bootstrap errors
         file_put_contents($this->tmpConfig . '/app.php', "<?php return ['env' => 'testing', 'debug' => true];");
-        file_put_contents($this->tmpConfig . '/extensions.php', "<?php return ['discovery' => ['allow_local' => false, 'allow_composer' => false]];");
+        file_put_contents(
+            $this->tmpConfig . '/extensions.php',
+            "<?php return ['discovery' => ['allow_local' => false, 'allow_composer' => false]];"
+        );
     }
 
     protected function tearDown(): void
@@ -76,7 +78,6 @@ final class PathResolutionTest extends TestCase
         ];
 
         $target = storage_path('cache/demo/test.txt');
-        $dir = dirname($target);
         // Note: storage_path() creates parent directories as a convenience feature
 
         // storage_path should create parent dirs when writing
@@ -90,13 +91,12 @@ final class PathResolutionTest extends TestCase
         // Clear globals that path functions check
         unset($GLOBALS['base_path'], $GLOBALS['config_paths'], $GLOBALS['container']);
 
-        // Force base_path() to re-initialize by calling it with a special marker
-        // The static variable will be reset when we unset the globals
-        // and call the function again
+        // Reset static variables in path functions
         if (function_exists('base_path')) {
-            // We need to trigger re-evaluation of the static variable
-            // by ensuring the globals are cleared first
-            clearstatcache();
+            base_path('__RESET__');
+        }
+        if (function_exists('config_path')) {
+            config_path('__RESET__');
         }
     }
 

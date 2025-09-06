@@ -1,22 +1,19 @@
-# Glueful Extension System Documentation
+# Glueful Extensions System Documentation
 
 ## Overview
 
-The Glueful Extension System provides a high-performance, modular architecture for extending the framework's functionality. With pre-computed autoload mappings and JSON-based configuration, extensions load in under 1ms with minimal memory overhead.
+The Glueful Extensions System provides a modern, Laravel/Symfony-inspired architecture for extending the framework's functionality. Built on the industry-standard ServiceProvider pattern, it delivers high performance with minimal complexity - just ~400 lines of core code.
 
 ## Table of Contents
 
 - [Quick Start](#quick-start)
-- [System Architecture](#system-architecture)
+- [Architecture](#architecture)
 - [Creating Extensions](#creating-extensions)
-- [Extension Templates](#extension-templates)
-- [Dependency Management](#dependency-management)
+- [ServiceProvider Pattern](#serviceprovider-pattern)
+- [Configuration](#configuration)
 - [Command Reference](#command-reference)
-- [Built-in Extensions](#built-in-extensions)
-- [Social Login Providers](#social-login-providers)
-- [Queue Extensions](#queue-extensions)
-- [RBAC Extensions](#rbac-extensions)
-- [Template System](#template-system)
+- [Real-World Example](#real-world-example)
+- [Migration Guide](#migration-guide)
 - [Performance](#performance)
 - [Troubleshooting](#troubleshooting)
 
@@ -25,800 +22,659 @@ The Glueful Extension System provides a high-performance, modular architecture f
 ### 1. Check System Status
 
 ```bash
-# List all extensions
-php glueful extensions:info
+# List all extensions with status (shows enabled/disabled)
+php glueful extensions:list
 
-# Validate extension configuration
-php glueful extensions:validate
+# Show detailed extension information
+php glueful extensions:info blog
 
-# Run performance benchmark
-php glueful extensions:benchmark
+# Explain why a provider was included or excluded
+php glueful extensions:why BlogProvider
+
+# Show system summary with performance metrics
+php glueful extensions:summary
 ```
 
 ### 2. Create Your First Extension
 
 ```bash
-# Create new extension
-php glueful extensions:create MyExtension
+# Create new local extension
+php glueful create:extension my-extension
 
-# Enable it
-php glueful extensions:enable MyExtension
-
-# Verify it's loaded
-php glueful extensions:info MyExtension
+# The extension will be created in extensions/my-extension/
+# with a basic ServiceProvider and composer.json
 ```
 
-### 3. Key Commands
+### 3. Install a Composer Extension
 
 ```bash
-php glueful extensions:info [name]      # List extensions or show details
-php glueful extensions:create <name>    # Create new extension
-php glueful extensions:enable <name>    # Enable extension
-php glueful extensions:disable <name>   # Disable extension
-php glueful extensions:validate <name>  # Validate extension
-php glueful extensions:install <source> # Install extension from source
-php glueful extensions:delete <name>    # Delete extension completely
-php glueful extensions:benchmark        # Performance benchmarks
-php glueful extensions:debug            # Debug information
+# Install via Composer (recommended)
+composer require vendor/my-extension
+
+# Extension will be auto-discovered if type is "glueful-extension"
+# Rebuild cache after adding new packages
+php glueful extensions:cache
 ```
 
-## System Architecture
+## Architecture
 
-### Extension Structure
+### Core Principles
+
+1. **Composer-native discovery** - Leverages existing package manager
+2. **ServiceProvider pattern** - Familiar to all PHP developers
+3. **PHP config files** - Type-safe and IDE-friendly
+4. **Standard interfaces** - Reuses Symfony/PSR interfaces
+5. **Convention over configuration** - Minimal boilerplate
+
+### Extension Types
+
+#### Composer Package (Recommended)
+
+```json
+// composer.json
+{
+    "name": "vendor/my-extension",
+    "type": "glueful-extension",
+    "autoload": {
+        "psr-4": {
+            "Vendor\\MyExtension\\": "src/"
+        }
+    },
+    "extra": {
+        "glueful": {
+            "provider": "Vendor\\MyExtension\\MyExtensionServiceProvider"
+        }
+    }
+}
+```
+
+#### Local Development Extension
 
 ```
 extensions/
-└── MyExtension/
-    ├── MyExtension.php        # Main extension class (matches directory name)
-    ├── manifest.json          # Extension metadata
-    ├── composer.json          # Dependencies
+└── my-extension/
+    ├── composer.json
     ├── src/
-    │   ├── Controllers/       # Extension controllers
-    │   ├── Services/          # Business logic services
-    │   ├── Models/            # Data models
-    │   ├── Repositories/      # Data repositories
-    │   ├── Providers/         # Service providers (for auth extensions)
-    │   ├── config.php         # Configuration
-    │   └── routes.php         # Route definitions
-    ├── migrations/            # Database migrations
-    ├── assets/
-    │   └── icon.png          # Extension icon
-    ├── CHANGELOG.md          # Version history
-    └── README.md             # Documentation
+    │   └── MyExtensionServiceProvider.php
+    ├── routes/
+    │   └── routes.php
+    ├── config/
+    │   └── my-extension.php
+    └── database/
+        └── migrations/
 ```
 
-### Configuration Schema (manifest.json)
+## ServiceProvider Pattern
 
-```json
-{
-    "name": "ExtensionName",
-    "version": "1.0.0",
-    "type": "optional",
-    "description": "Extension description",
-    "author": "Author Name",
-    "license": "MIT",
-    "main_class": "Glueful\\Extensions\\ExtensionName",
-    "autoload": {
-        "psr-4": {
-            "Glueful\\Extensions\\ExtensionName\\": "src/"
-        }
-    },
-    "dependencies": {
-        "glueful": ">=0.29.0",
-        "php": ">=8.2.0",
-        "extensions": ["RequiredExtension"]
-    },
-    "provides": {
-        "routes": ["src/routes.php"],
-        "migrations": ["migrations/"],
-        "commands": ["src/Commands/"]
-    }
-}
-```
-
-## Creating Extensions
-
-### Basic Extension
-
-```bash
-php glueful extensions:create MyExtension
-```
-
-This creates:
-- Basic extension structure
-- Main extension class
-- Configuration file
-- PSR-4 autoloading setup
-
-### Extension Class Template
+Each extension has a single ServiceProvider that registers all functionality:
 
 ```php
-namespace Glueful\Extensions\MyExtension;
+<?php
 
-use Glueful\Core\Extension\BaseExtension;
-use Glueful\Core\Container\Container;
+namespace MyExtension;
 
-class Extension extends BaseExtension
+use Glueful\Extensions\ServiceProvider;
+
+class MyExtensionServiceProvider extends ServiceProvider
 {
-    public function boot(Container $container): void
+    /**
+     * Define services for container compilation (production-ready)
+     */
+    public static function services(): array
     {
-        // Register services
-        $this->registerServices($container);
-        
-        // Register routes
-        $this->registerRoutes();
-        
-        // Register event listeners
-        $this->registerEventListeners();
-        
-        // Register middleware
-        $this->registerMiddleware();
+        return [
+            MyService::class => [
+                'class' => MyService::class,
+                'shared' => true,
+                'arguments' => ['@db']
+            ]
+        ];
     }
     
-    protected function registerServices(Container $container): void
+    /**
+     * Register runtime services and config defaults
+     */
+    public function register(): void
     {
-        $container->singleton(MyService::class, function($container) {
-            return new MyService(
-                $container->get(DatabaseInterface::class)
-            );
-        });
+        // Note: Service registration happens via static services() method
+        // This method is for configuration merging and other runtime setup
+        
+        // Merge default configuration
+        $this->mergeConfig('my-extension', require __DIR__.'/../config/config.php');
     }
-}
-```
-
-## Extension Templates
-
-### Available Templates
-
-1. **Basic** - Simple extension structure with minimal components
-2. **Advanced** - Full-featured extension with services, middleware, and migrations
-
-### Creating from Template
-
-```bash
-# Create basic extension
-php glueful extensions:create --template=basic MyExtension
-
-# Create advanced extension with full features
-php glueful extensions:create --template=advanced PaymentAPI
-
-# Create extension interactively (prompts for template)
-php glueful extensions:create MyExtension
-```
-
-## Dependency Management
-
-### Declaring Dependencies
-
-Extensions can declare dependencies on:
-- PHP version
-- Other extensions
-- Composer packages
-
-```json
-{
-    "dependencies": {
-        "php": "^8.2",
-        "extensions": [
-            "CoreAuth",
-            "DatabaseExtension"
-        ],
-        "packages": {
-            "guzzlehttp/guzzle": "^7.0",
-            "league/oauth2-client": "^2.0"
+    
+    /**
+     * Boot after all providers are registered
+     */
+    public function boot(): void
+    {
+        // Load routes
+        $this->loadRoutesFrom(__DIR__.'/../routes/routes.php');
+        
+        // Load migrations
+        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        
+        // Register console commands
+        if ($this->runningInConsole()) {
+            $this->commands([
+                Commands\MyCommand::class,
+            ]);
+        }
+        
+        // Register extension metadata (if container has ExtensionManager)
+        if ($this->app->has(\Glueful\Extensions\ExtensionManager::class)) {
+            $this->app->get(\Glueful\Extensions\ExtensionManager::class)->registerMeta(self::class, [
+                'slug' => 'my-extension',
+                'name' => 'My Extension',
+                'version' => '1.0.0',
+                'description' => 'My awesome extension',
+            ]);
         }
     }
 }
 ```
 
-### Dependency Resolution
+### Available Helper Methods
 
-The system automatically:
-- Validates dependencies before enabling
-- Orders extension loading based on dependencies
-- Prevents circular dependencies
-- Handles version constraints
+- `loadRoutesFrom(string $path)` - Load route definitions
+- `loadMigrationsFrom(string $dir)` - Register migration directory  
+- `mergeConfig(string $key, array $defaults)` - Merge default configuration
+- `loadMessageCatalogs(string $dir, string $domain = 'messages')` - Load translation catalogs
+- `mountStatic(string $mount, string $dir)` - Serve static assets (dev/admin UIs)
+- `commands(array $commands)` - Register console commands
+- `runningInConsole()` - Check if running in CLI
 
-### Checking Dependencies
+### Optional Interfaces
 
-```bash
-# Validate all dependencies
-php glueful extensions:validate MyExtension
+#### OrderedProvider
 
-# View dependency tree
-php glueful extensions:debug
+Control provider boot order:
+
+```php
+use Glueful\Extensions\OrderedProvider;
+
+class MyServiceProvider extends ServiceProvider implements OrderedProvider
+{
+    public function priority(): int
+    {
+        return 10; // Lower number boots first
+    }
+    
+    public function bootAfter(): array
+    {
+        return [
+            DatabaseServiceProvider::class,
+            CacheServiceProvider::class,
+        ];
+    }
+}
+```
+
+#### DeferrableProvider
+
+Declare provided services (for future lazy loading):
+
+```php
+use Glueful\Extensions\DeferrableProvider;
+
+class MyServiceProvider extends ServiceProvider implements DeferrableProvider
+{
+    public function provides(): array
+    {
+        return [
+            MyService::class,
+            MyRepository::class,
+        ];
+    }
+}
+```
+
+## Configuration
+
+### config/extensions.php
+
+```php
+return [
+    /*
+    |--------------------------------------------------------------------------
+    | Enabled Extensions
+    |--------------------------------------------------------------------------
+    |
+    | List of extension service providers to load. Discovery order:
+    | 1) enabled, 2) dev_only (non-prod), 3) local dev, 4) composer.
+    |
+    */
+    'enabled' => [
+        // Core extensions
+        Glueful\Blog\BlogServiceProvider::class,
+        Glueful\Shop\ShopServiceProvider::class,
+        
+        // Third-party
+        Vendor\Analytics\AnalyticsServiceProvider::class,
+    ],
+    
+    /*
+    |--------------------------------------------------------------------------
+    | Development Extensions
+    |--------------------------------------------------------------------------
+    |
+    | Extensions only loaded in non-production environments.
+    |
+    */
+    'dev_only' => [
+        Glueful\Debug\DebugServiceProvider::class,
+        Glueful\Profiler\ProfilerServiceProvider::class,
+    ],
+    
+    /*
+    |--------------------------------------------------------------------------
+    | Disabled Extensions (Blacklist)
+    |--------------------------------------------------------------------------
+    |
+    | Block specific extensions even if discovered. Useful for temporarily
+    | disabling problematic extensions or blocking transitive dependencies.
+    |
+    */
+    'disabled' => [
+        // Example: Block debug tools in production
+        // Barryvdh\Debugbar\ServiceProvider::class,
+    ],
+    
+    /*
+    |--------------------------------------------------------------------------
+    | Exclusive Allow-List Mode (Ultra-Secure)
+    |--------------------------------------------------------------------------
+    |
+    | When 'only' is set, ONLY these providers load. Nothing else.
+    | This overrides all other discovery methods for maximum security.
+    |
+    */
+    // 'only' => [
+    //     'App\\Core\\CoreProvider',
+    //     'Vendor\\Approved\\ApprovedProvider',
+    // ],
+    
+    /*
+    |--------------------------------------------------------------------------
+    | Local Extensions Path
+    |--------------------------------------------------------------------------
+    |
+    | Path to scan for local extensions during development.
+    | Set to null to disable local extension scanning.
+    |
+    */
+    'local_path' => env('APP_ENV') === 'production' ? null : 'extensions',
+    
+    /*
+    |--------------------------------------------------------------------------
+    | Composer Package Scanning
+    |--------------------------------------------------------------------------
+    |
+    | Whether to scan Composer packages for glueful-extension types.
+    | Set to false to disable Composer scanning (for troubleshooting).
+    |
+    */
+    'scan_composer' => true,
+];
 ```
 
 ## Command Reference
 
-### Information Commands
+### Discovery & Information
 
 ```bash
-# List all extensions
-php glueful extensions:info
-
-# Show specific extension details
-php glueful extensions:info ExtensionName
-
-# Show with namespace mappings
-php glueful extensions:info --namespaces
-
-# Filter by status
-php glueful extensions:info --status=enabled
-
-# Output as JSON
-php glueful extensions:info --format=json
+php glueful extensions:list              # List all discovered extensions with status
+php glueful extensions:info <slug>       # Show detailed extension information
+php glueful extensions:why <provider>    # Explain why a provider was included/excluded
+php glueful extensions:summary           # Show system summary with performance metrics
 ```
 
-### Management Commands
+### Cache Management
 
 ```bash
-# Enable/disable extensions
-php glueful extensions:enable ExtensionName
-php glueful extensions:disable ExtensionName
-
-# Create new extension
-php glueful extensions:create MyExtension
-php glueful extensions:create --template=advanced SocialAuth
-
-# Install from various sources
-php glueful extensions:install https://example.com/extension.zip
-php glueful extensions:install /path/to/extension.zip
-php glueful extensions:install git@github.com:user/extension.git
-
-# Delete extension with options
-php glueful extensions:delete ExtensionName --force
-php glueful extensions:delete ExtensionName --backup
-php glueful extensions:delete ExtensionName --dry-run
+php glueful extensions:cache             # Build extensions cache for production
+php glueful extensions:clear             # Clear extensions cache
 ```
 
-### Development Commands
+### Development Tools
 
 ```bash
-# Validate extension structure and dependencies
-php glueful extensions:validate ExtensionName
-php glueful extensions:validate ExtensionName --autofix
-
-# Debug system state and issues
-php glueful extensions:debug
-php glueful extensions:debug --verbose
-
-# Performance benchmarking
-php glueful extensions:benchmark
-php glueful extensions:benchmark --iterations=100
-php glueful extensions:benchmark --memory-profile
+php glueful create:extension <name>      # Create new local extension scaffold
+php glueful extensions:enable <name>     # Enable extension (dev only)
+php glueful extensions:disable <name>    # Disable extension (dev only)
 ```
 
-## Built-in Extensions
+**Note**: `enable` and `disable` commands modify your local `config/extensions.php` file for development convenience.
 
-### Currently Available Extensions
-
-Glueful includes these production-ready extensions:
-
-#### 1. EmailNotification Extension
-- **Type**: Core extension (always enabled)
-- **Version**: 0.21.0
-- **Features**: Multi-channel email notification system
-- **Templates**: HTML email templates with partials
-- **Channels**: Email delivery with formatting support
-
-#### 2. SocialLogin Extension  
-- **Type**: Optional extension
-- **Version**: 0.18.0
-- **Features**: OAuth authentication for Google, Facebook, GitHub, Apple
-- **Database**: Social account linking and management
-- **Configuration**: Environment-based provider setup
-
-#### 3. Admin Extension
-- **Type**: Optional extension
-- **Version**: 0.18.0
-- **Features**: Administrative dashboard interface
-- **Capabilities**: API visualization, system monitoring, extension management
-- **Interface**: Web-based admin panel
-
-#### 4. RBAC Extension
-- **Type**: Optional extension
-- **Version**: 0.29.0
-- **Features**: Role-based access control system
-- **Database**: Hierarchical roles and permissions
-- **API**: RESTful endpoints for role/permission management
-
-#### 5. BeanstalkdQueue Extension
-- **Type**: Queue driver extension
-- **Version**: 1.0.0
-- **Features**: High-performance job queue processing
-- **Capabilities**: Tube management, priority scheduling, job statistics
-- **Requirements**: Beanstalkd server installation
-
-## Social Login Extension
-
-### SocialLogin Extension
-
-The SocialLogin extension provides OAuth authentication through multiple social providers:
+### Example CLI Output
 
 ```bash
-# Enable the SocialLogin extension
-php glueful extensions:enable SocialLogin
+$ php glueful extensions:list
+✓ App\Extensions\BlogProvider (enabled, composer)
+✓ App\Extensions\ShopProvider (enabled, local scan)
+✗ App\Extensions\TestProvider (disabled in config)
+✓ VendorPackage\CmsProvider (enabled, composer)
+
+$ php glueful extensions:why BlogProvider
+✓ Found: App\Extensions\BlogProvider
+✓ Source: composer scan (vendor/myapp/blog-extension)
+✓ Status: included in final provider list
+✓ Load order: priority 100, no dependencies
+✓ Boot phase: registered 3 services, mounted /blog static assets
+
+$ php glueful extensions:summary
+Extensions: 3 loaded, 1 disabled, 2 deferred
+Cache: enabled (built 2 hours ago)
+Boot time: 45ms (12ms discovery, 33ms registration)
 ```
 
-### Supported Providers
+## Real-World Example
 
-The extension includes these OAuth providers:
+### Blog Extension
 
-1. **Google OAuth** - Google Sign-In integration
-2. **Facebook Login** - Facebook OAuth authentication
-3. **GitHub OAuth** - GitHub OAuth integration  
-4. **Apple Sign In** - Apple OAuth authentication
+#### composer.json
 
-### Configuration
-
-Configure providers in your `.env` file:
-
-```env
-# Google OAuth
-GOOGLE_CLIENT_ID=your-google-client-id
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-GOOGLE_REDIRECT_URI=https://yourapp.com/auth/google/callback
-
-# Facebook OAuth
-FACEBOOK_APP_ID=your-facebook-app-id
-FACEBOOK_APP_SECRET=your-facebook-app-secret
-FACEBOOK_REDIRECT_URI=https://yourapp.com/auth/facebook/callback
-
-# GitHub OAuth
-GITHUB_CLIENT_ID=your-github-client-id
-GITHUB_CLIENT_SECRET=your-github-client-secret
-GITHUB_REDIRECT_URI=https://yourapp.com/auth/github/callback
-
-# Apple OAuth
-APPLE_CLIENT_ID=your-apple-service-id
-APPLE_CLIENT_SECRET=your-apple-client-secret
-APPLE_TEAM_ID=your-apple-team-id
-APPLE_KEY_ID=your-apple-key-id
-APPLE_REDIRECT_URI=https://yourapp.com/auth/apple/callback
-```
-
-### Extension Features
-
-- **Auto-registration**: Automatically create user accounts for new social logins
-- **Account linking**: Link social accounts to existing users
-- **Profile synchronization**: Sync profile data from social providers
-- **Multiple providers**: Support for Google, Facebook, GitHub, and Apple
-- **Database integration**: Stores social account associations
-
-### Usage Example
-
-The extension provides authentication routes and handles OAuth flows automatically. Use the standard authentication endpoints with social provider support:
-
-```php
-// Access social login routes (automatically registered)
-// GET /auth/{provider} - Redirect to provider
-// GET /auth/{provider}/callback - Handle OAuth callback
-
-// Example: Redirect to Google OAuth
-// GET /auth/google
-
-// Example: Handle Google OAuth callback
-// GET /auth/google/callback
-```
-
-### Database Migration
-
-The extension includes a migration that automatically creates the required database table:
-
-**Migration File**: `CreateSocialAccountsTable.php`
-
-This migration creates the `social_accounts` table with:
-- **UUID-based design**: Uses 12-character UUIDs for primary keys
-- **Foreign key constraints**: Links to the users table with CASCADE delete
-- **Unique constraints**: Prevents duplicate social accounts per provider
-- **Profile data storage**: JSON field for storing provider-specific data
-- **Proper indexing**: Optimized for lookups by user and provider
-
-The migration runs automatically when you enable the extension or run:
-```bash
-php glueful migrate:run
-```
-
-## Queue Extensions
-
-### BeanstalkdQueue Extension
-
-The BeanstalkdQueue extension provides high-performance job queue processing:
-
-```bash
-php glueful extensions:enable BeanstalkdQueue
-```
-
-Configuration:
-```env
-QUEUE_CONNECTION=beanstalkd
-BEANSTALKD_HOST=127.0.0.1
-BEANSTALKD_PORT=11300
-BEANSTALKD_QUEUE=default
-BEANSTALKD_RETRY_AFTER=90
-```
-
-#### Features
-
-- **Tube Management**: Multiple queues (tubes)
-- **Priority Jobs**: 0-4294967295 priority levels
-- **Delayed Jobs**: Schedule jobs for future
-- **Job Statistics**: Real-time queue metrics
-- **Buried Jobs**: Failed job management
-- **Connection Pooling**: Reuse connections
-
-#### Usage
-
-```php
-use Glueful\Extensions\BeanstalkdQueue\BeanstalkdQueue;
-
-// Push job to queue
-$queue->push('process-email', [
-    'to' => 'user@example.com',
-    'subject' => 'Welcome!'
-], 'emails');
-
-// Push with priority
-$queue->pushWithPriority('urgent-job', $data, 1024);
-
-// Delay job by 5 minutes
-$queue->later(300, 'scheduled-job', $data);
-
-// Process jobs
-$queue->work('emails', function($job) {
-    // Process job
-    $job->delete(); // Remove from queue
-});
-```
-
-#### Monitoring
-
-```bash
-# Queue statistics
-php glueful queue:stats --driver=beanstalkd
-
-# List tubes
-php glueful queue:tubes
-
-# Peek at jobs
-php glueful queue:peek --tube=emails
-```
-
-### Custom Queue Driver
-
-```php
-namespace Glueful\Extensions\MyQueue;
-
-use Glueful\Queue\Contracts\Queue;
-
-class MyQueueDriver implements Queue
+```json
 {
-    public function push(string $job, array $data = [], string $queue = null): string
-    {
-        // Implementation
-    }
-    
-    public function pop(string $queue = null): ?Job
-    {
-        // Implementation
+    "name": "glueful/blog",
+    "description": "Blog functionality for Glueful",
+    "type": "glueful-extension",
+    "require": {
+        "php": "^8.2",
+        "glueful/framework": "^1.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Glueful\\Blog\\": "src/"
+        }
+    },
+    "extra": {
+        "glueful": {
+            "provider": "Glueful\\Blog\\BlogServiceProvider",
+            "minVersion": "1.0.0"
+        }
     }
 }
 ```
 
-## RBAC Extension
-
-### Role-Based Access Control System
-
-The RBAC extension provides comprehensive role and permission management:
-
-```bash
-# Enable the RBAC extension
-php glueful extensions:enable RBAC
-```
-
-### Key Features
-
-- **Hierarchical Roles**: Multi-level role inheritance system
-- **Direct User Permissions**: Override role permissions for specific users
-- **Resource-Level Filtering**: Granular permission control
-- **Temporal Permissions**: Time-based permission expiry
-- **Audit Trail**: Comprehensive logging of all RBAC operations
-- **Multi-Layer Caching**: Performance-optimized permission checking
-- **Scoped Permissions**: Multi-tenancy support
-
-### Database Structure
-
-The extension creates these tables:
-- `roles` - Role definitions
-- `permissions` - Permission definitions
-- `user_roles` - User-role assignments
-- `user_permissions` - Direct user permissions
-- `role_permissions` - Role-permission mappings
-
-### Default System Roles
-
-The extension creates these default roles:
-
-1. **RBAC Administrator** (`rbac_admin`)
-   - Full access to RBAC system management
-   - Can manage all roles, permissions, and assignments
-
-2. **Role Manager** (`role_manager`)
-   - Can create, update, and assign roles
-   - Limited to role management operations
-
-3. **Permission Manager** (`permission_manager`)
-   - Can assign and revoke permissions
-   - Limited to permission management operations
-
-### Default System Permissions
-
-The extension includes comprehensive RBAC permissions:
-
-**Role Management**:
-- `rbac.roles.view` - View roles and role information
-- `rbac.roles.create` - Create new roles
-- `rbac.roles.update` - Update existing roles
-- `rbac.roles.delete` - Delete roles
-- `rbac.roles.assign` - Assign roles to users
-- `rbac.roles.revoke` - Revoke roles from users
-- `rbac.roles.manage` - Full role management access
-
-**Permission Management**:
-- `rbac.permissions.view` - View permissions
-- `rbac.permissions.create` - Create new permissions
-- `rbac.permissions.update` - Update permissions
-- `rbac.permissions.delete` - Delete permissions
-- `rbac.permissions.assign` - Assign permissions to users
-- `rbac.permissions.revoke` - Revoke permissions from users
-- `rbac.permissions.manage` - Full permission management
-
-**User Management**:
-- `rbac.users.view` - View user role and permission assignments
-- `rbac.users.manage` - Manage user assignments
-
-### Configuration Options
-
-The extension supports extensive configuration:
+#### BlogServiceProvider.php
 
 ```php
-// Key configuration options in config.php
-'permissions' => [
-    'cache_enabled' => true,
-    'cache_ttl' => 3600, // 1 hour
-    'inheritance_enabled' => true,
-    'temporal_permissions' => true,
-    'resource_filtering' => true,
-    'scoped_permissions' => true
-],
+<?php
 
-'roles' => [
-    'max_hierarchy_depth' => 10,
-    'inherit_permissions' => true,
-    'allow_circular_references' => false,
-    'system_roles_protected' => true
-],
+namespace Glueful\Blog;
 
-'security' => [
-    'require_authentication' => true,
-    'audit_trail' => true,
-    'permission_inheritance_check' => true
-]
-```
+use Glueful\Extensions\ServiceProvider;
+use Glueful\Blog\Services\BlogService;
+use Glueful\Blog\Controllers\BlogController;
 
-### API Endpoints
-
-The extension provides RESTful API endpoints:
-
-```bash
-# Role management
-GET    /rbac/roles          # List roles
-POST   /rbac/roles          # Create role
-GET    /rbac/roles/{id}     # Get role details
-PUT    /rbac/roles/{id}     # Update role
-DELETE /rbac/roles/{id}     # Delete role
-
-# Permission management
-GET    /rbac/permissions    # List permissions
-POST   /rbac/permissions    # Create permission
-GET    /rbac/permissions/{id} # Get permission details
-PUT    /rbac/permissions/{id} # Update permission
-DELETE /rbac/permissions/{id} # Delete permission
-
-# User role/permission management
-GET    /rbac/users/{id}/roles       # Get user roles
-POST   /rbac/users/{id}/roles       # Assign role to user
-DELETE /rbac/users/{id}/roles/{roleId} # Remove role from user
-GET    /rbac/users/{id}/permissions # Get user permissions
-POST   /rbac/users/{id}/permissions # Assign permission to user
-```
-
-### Migrations
-
-The extension includes three migrations:
-1. `001_CreateRolesTables.php` - Creates roles and user_roles tables
-2. `002_CreatePermissionsTables.php` - Creates permissions and mapping tables
-3. `003_SeedDefaultRoles.php` - Seeds default roles and permissions
-
-## Extension Development
-
-### Extension Structure
-
-Each extension follows this standard structure:
-
-```
-MyExtension/
-├── MyExtension.php        # Main extension class (matches directory name)
-├── extension.json         # Extension metadata
-├── composer.json          # Dependencies
-├── src/
-│   ├── Controllers/       # Extension controllers
-│   ├── Services/          # Business logic services
-│   ├── Models/            # Data models
-│   ├── Repositories/      # Data repositories
-│   ├── Providers/         # Service providers (for auth extensions)
-│   ├── config.php         # Configuration
-│   └── routes.php         # Route definitions
-├── migrations/            # Database migrations
-├── assets/
-│   └── icon.png          # Extension icon
-├── CHANGELOG.md          # Version history
-└── README.md             # Documentation
-```
-
-### Extension Class Example
-
-```php
-namespace Glueful\Extensions\MyExtension;
-
-use Glueful\Extensions;
-use Glueful\IExtensions;
-
-class MyExtension extends Extensions implements IExtensions
+class BlogServiceProvider extends ServiceProvider
 {
-    public static function process(array $queryParams, array $bodyParams): array
+    public static function services(): array
     {
-        // Handle extension-specific API calls
-        return ['status' => 'success'];
+        return [
+            BlogService::class => [
+                'class' => BlogService::class,
+                'shared' => true,
+                'arguments' => ['@db', '@cache']
+            ]
+        ];
     }
     
-    public static function init(): void
+    public function register(): void
     {
-        // Initialize extension services and dependencies
+        // Note: Service registration happens via static services() method
+        // This method handles configuration merging and other setup
+        
+        // Merge default config
+        $this->mergeConfig('blog', require __DIR__.'/../config/blog.php');
     }
+    
+    public function boot(): void
+    {
+        // Load routes
+        $this->loadRoutesFrom(__DIR__.'/../routes/blog.php');
+        
+        // Load migrations
+        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        
+        // Register middleware
+        $this->app->get('middleware.registry')->register([
+            'blog.auth' => Middleware\BlogAuthMiddleware::class,
+        ]);
+        
+        // Register console commands
+        if ($this->runningInConsole()) {
+            $this->commands([
+                Commands\BlogInstallCommand::class,
+            ]);
+        }
+        
+        // Register metadata (if container has ExtensionManager)
+        if ($this->app->has(\Glueful\Extensions\ExtensionManager::class)) {
+            $this->app->get(\Glueful\Extensions\ExtensionManager::class)->registerMeta(self::class, [
+                'slug' => 'blog',
+                'name' => 'Blog Extension',
+                'version' => '1.0.0',
+                'description' => 'Blogging functionality for Glueful',
+            ]);
+        }
+    }
+}
+```
+
+#### routes/blog.php
+
+```php
+<?php
+
+use Glueful\Blog\Controllers\BlogController;
+use Glueful\Routing\Router;
+
+// $router is available from the container
+$router->group(['prefix' => 'blog'], function (Router $router) {
+    // Public routes
+    $router->get('/', [BlogController::class, 'index'])->name('blog.index');
+    $router->get('/posts/{slug}', [BlogController::class, 'show'])
+           ->where('slug', '[a-z0-9\-]+')
+           ->name('blog.show');
+    
+    // Admin routes
+    $router->group(['middleware' => ['auth:api', 'role:admin']], function (Router $router) {
+        $router->post('/posts', [BlogController::class, 'store'])->name('blog.store');
+        $router->put('/posts/{id}', [BlogController::class, 'update'])->name('blog.update');
+        $router->delete('/posts/{id}', [BlogController::class, 'destroy'])->name('blog.destroy');
+    });
+});
+```
+
+## Migration Guide
+
+### From Old Extension System
+
+If migrating from the old manifest.json-based system:
+
+| Old System | New System |
+|------------|------------|
+| `manifest.json` | `composer.json` with `extra.glueful.provider` |
+| `BaseExtension` class | `ServiceProvider` class |
+| `Extension.php` | `ServiceProvider.php` |
+| Routes in manifest | `loadRoutesFrom()` in provider |
+| Migrations in manifest | `loadMigrationsFrom()` in provider |
+| Config publishing | `mergeConfig()` in register() |
+| Runtime service registration | Static `services()` method + runtime fallback |
+
+### Migration Steps
+
+1. Create a `composer.json` with type `glueful-extension`
+2. Convert your main extension class to extend `ServiceProvider`
+3. **Add static `services()` method for production compilation**
+4. Move initialization logic to `register()` and `boot()` methods
+5. Update route and migration loading to use helper methods
+6. Remove old `manifest.json` file
+
+### Service Registration Patterns
+
+**Extensions use static services definition for container compilation:**
+
+```php
+// Static services definition for container compilation
+public static function services(): array 
+{
+    return [
+        MyService::class => [
+            'class' => MyService::class,
+            'shared' => true,
+            'arguments' => ['@db']
+        ]
+    ];
+}
+
+// Runtime configuration and setup
+public function register(): void 
+{
+    // Handle configuration merging and other non-service setup
+    $this->mergeConfig('my-extension', require __DIR__.'/../config/config.php');
+}
+
+public function boot(): void
+{
+    // Load routes, migrations, commands, etc.
+    $this->loadRoutesFrom(__DIR__.'/../routes/routes.php');
+    $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
 }
 ```
 
 ## Performance
 
-### Performance Metrics
+### Metrics
 
-The extension system is optimized for production use:
+| Aspect | Performance |
+|--------|------------|
+| **Discovery Time** | < 5ms (cached) |
+| **Boot Time** | < 10ms for 10 extensions |
+| **Memory Usage** | ~400KB per extension |
+| **Cache Hit** | 100% in production |
 
-- **Load Time**: Extensions load in <1ms with pre-computed autoload mappings
-- **Memory Usage**: Minimal memory overhead (~26KB per extension)
-- **Caching**: Multi-layer caching for configuration and autoload data
-- **Dependency Resolution**: Efficient dependency validation and loading order
+### Optimization
 
-### Optimization Tips
+#### Production Deployment
 
-1. **Enable Caching**
-   ```env
-   EXTENSION_CACHE_ENABLED=true
-   ```
+For optimal production performance, follow this deployment sequence:
 
-2. **Optimize Autoloading**
-   ```bash
-   composer dump-autoload --optimize
-   ```
+```bash
+# 1. Clear any existing cache
+php glueful extensions:clear
 
-3. **Validate Configuration**
-   ```bash
-   php glueful extensions:validate-config
-   ```
+# 2. Build extensions cache
+php glueful extensions:cache
 
-4. **Monitor Performance**
-   ```bash
-   php glueful extensions:benchmark
-   ```
+# 3. Compile DI container with extension services
+php glueful di:container:compile
+
+# 4. Clear application cache if needed
+php glueful cache:clear
+```
+
+#### Production Caching
+
+```bash
+# Build cache for production
+php glueful extensions:cache
+
+# Cache location: bootstrap/cache/extensions.php
+# Cache persists until explicitly cleared
+```
+
+#### Development Mode
+
+- Cache expires after 5 seconds by default (configurable via `EXTENSIONS_CACHE_TTL_DEV`)
+- Local extensions scanned on each request if `extensions.local_path` is set
+- Full discovery mode enabled including composer packages
+- Supports development commands for enabling/disabling extensions
 
 ## Troubleshooting
 
 ### Common Issues
 
-#### Extension Not Loading
+#### Extension Not Found
+
+```
+[Extensions] Extension provider not found ['provider' => 'MyExtension\\Provider']
+```
+
+**Solution**: Ensure the provider class exists and is properly autoloaded.
+
+#### Invalid composer.json
+
+```
+[Extensions] Invalid composer.json in /path/to/extension/composer.json: Syntax error
+```
+
+**Solution**: Validate JSON syntax and ensure file is valid.
+
+#### Provider Boot Failure
+
+```
+[Extensions] Provider failed during boot() ['provider' => 'MyExtension\\Provider', 'error' => '...']
+```
+
+**Solution**: Check provider's boot() method for errors. System continues with other providers.
+
+#### Circular Dependencies
+
+```
+[Extensions] Circular dependency detected in provider bootAfter(), using priority fallback
+```
+
+**Solution**: Review `bootAfter()` dependencies to remove cycles.
+
+### Debug Commands
 
 ```bash
-# Check if enabled
-php glueful extensions:info ExtensionName
+# Show all registered providers
+php glueful extensions:list
 
-# Validate configuration
-php glueful extensions:validate ExtensionName
+# Check specific extension
+php glueful extensions:info my-extension
 
-# Debug information
-php glueful extensions:debug
+# View system summary
+php glueful extensions:summary
+
+# Clear cache if having issues
+php glueful extensions:clear
 ```
 
-#### Class Not Found Errors
+## API-First Philosophy
 
-```bash
-# Check namespace mappings
-php glueful extensions:info --namespaces
+Glueful follows an API-first approach:
 
-# Verify autoload configuration
-composer dump-autoload
-```
+- **No runtime views**: Extensions don't use view templating
+- **No asset publishing**: No file copying into the app
+- **Prebuilt frontends**: SPAs are compiled and served as static assets
+- **Configuration via files**: No in-app configuration UIs
 
-#### Permission Errors
+For frontend assets, use `mountStatic()` in development or serve via CDN in production.
 
-```bash
-# Check file permissions
-ls -la extensions/
+## Security
 
-# Fix permissions
-chmod -R 755 extensions/
-chown -R www-data:www-data extensions/
-```
+The extension system includes multiple security features:
 
-### Debug Mode
-
-Enable debug mode for detailed error information:
-
-```env
-EXTENSION_DEBUG=true
-EXTENSION_LOG_LEVEL=debug
-```
-
-### Getting Help
-
-```bash
-# Command help
-php glueful extensions:info --help
-
-# System diagnostics
-php glueful extensions:debug
-
-# Performance analysis
-php glueful extensions:benchmark
-```
-
-## Best Practices
-
-### 1. Follow Standards
-- Use PSR-4 autoloading
-- Follow PSR-12 coding standards
-- Use semantic versioning
-
-### 2. Declare Dependencies
-- List all required extensions
-- Specify version constraints
-- Document requirements
-
-### 3. Test Thoroughly
-- Write unit tests
-- Test with different configurations
-- Validate before production
-
-### 4. Document Your Extension
-- Clear README.md
-- API documentation
-- Configuration examples
-
-### 5. Performance Considerations
-- Lazy load services
-- Cache when appropriate
-- Profile regularly
+- **Path traversal protection** in `mountStatic()`
+- **File size limits** for local extension scanning (100KB max)
+- **Symlink detection** to prevent traversal
+- **Graceful error handling** - failures don't crash the system
+- **PSR-3 logging** for security events
 
 ## Summary
 
-The Glueful Extension System provides:
+The Glueful Extensions System provides:
 
-- **🚀 Lightning Fast**: <1ms load times
-- **💾 Memory Efficient**: ~26KB overhead
-- **🔧 Developer Friendly**: Comprehensive tooling
-- **📦 Modular**: Clean dependency management
-- **🛡️ Secure**: Validated and sandboxed
-- **📊 Observable**: Built-in monitoring
+- **Simple architecture** - Just 3 core files, ~400 lines
+- **Familiar patterns** - ServiceProvider from Laravel/Symfony
+- **Modern tooling** - Composer packages, PSR-4 autoloading
+- **High performance** - Production caching, lazy loading
+- **Developer friendly** - Clear structure, good IDE support
+- **Production ready** - Error handling, logging, security
 
-For more information, see the [API Reference](/docs/API.md) or run `php glueful help extensions`.
+For more examples and advanced usage, see the framework documentation.

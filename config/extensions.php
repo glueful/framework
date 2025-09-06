@@ -1,85 +1,94 @@
 <?php
 
-/**
- * Extensions Configuration
- *
- * Configuration for the extension system including local directory access,
- * Composer package discovery, and environment-specific settings.
- */
-
 return [
-    
-    // Extension Discovery Settings
-    'discovery' => [
-        // Allow local extensions directory scanning
-        // - Production: false (Composer packages only for security)
-        // - Development: true (allows local extensions for development)
-        'allow_local' => env('ALLOW_LOCAL_EXTENSIONS', env('APP_ENV') !== 'production'),
-        
-        // Cache discovery results to improve performance
-        'cache_enabled' => env('EXTENSION_CACHE_ENABLED', true),
-        
-        // Cache TTL in seconds (1 hour default)
-        'cache_ttl' => env('EXTENSION_CACHE_TTL', 3600),
+     /*
+    |--------------------------------------------------------------------------
+    | Exclusive Allow-List Mode
+    |--------------------------------------------------------------------------
+    |
+    | When 'only' is set, ONLY these providers load. Nothing else.
+    | This overrides all other discovery methods for maximum security.
+    |
+    */
+    // 'only' => [
+    //     // Core business logic
+    //     'App\\Banking\\CoreBankingProvider',
+    //     'App\\Banking\\TransactionProvider',
+    //     'App\\Banking\\ComplianceProvider',
+
+    //     // Approved third-party
+    //     'Vendor\\Audit\\AuditProvider',
+    //     'Vendor\\Encryption\\FIPSProvider',
+
+    //     // NOTHING else can load - no auto-discovery
+    // ],
+
+    // Note: 'enabled', 'disabled', 'dev_only' are ignored when 'only' is set
+    /*
+    |--------------------------------------------------------------------------
+    | Enabled Extensions
+    |--------------------------------------------------------------------------
+    |
+    | List of extension service providers to load. These are loaded
+    | in the order specified. Overall discovery order:
+    | 1) enabled, 2) dev_only (non-prod), 3) local dev, 4) composer.
+    |
+    */
+    'enabled' => [
+        // Core extensions
+        // Glueful\Blog\BlogServiceProvider::class,
+        // Glueful\Shop\ShopServiceProvider::class,
+
+        // Third-party
+        // Vendor\Analytics\AnalyticsServiceProvider::class,
     ],
-    
-    // Local Extensions Security
-    'local' => [
-        // Disallow symlinks in extensions directory for security
-        'disallow_symlinks' => env('EXTENSIONS_DISALLOW_SYMLINKS', true),
-        
-        // Validate file ownership and permissions
-        'validate_ownership' => env('EXTENSIONS_VALIDATE_OWNERSHIP', false),
-        
-        // Required file permissions (octal)
-        'required_permissions' => env('EXTENSIONS_REQUIRED_PERMS', 0644),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Development Extensions
+    |--------------------------------------------------------------------------
+    |
+    | Extensions only loaded in non-production environments.
+    |
+    */
+    'dev_only' => [
+        // Glueful\Debug\DebugServiceProvider::class,
+        // Glueful\Profiler\ProfilerServiceProvider::class,
     ],
-    
-    // Composer Extensions
-    'composer' => [
-        // Package type to discover
-        'package_type' => 'glueful-extension',
-        
-        // Required extra section in composer.json
-        'required_extra' => 'glueful.extension-class',
-        
-        // Enable PSR-4 autoloading registration
-        'autoload_enabled' => env('EXTENSIONS_AUTOLOAD_ENABLED', true),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Disabled Extensions (Blacklist)
+    |--------------------------------------------------------------------------
+    |
+    | Block specific extensions even if discovered. Useful for temporarily
+    | disabling problematic extensions during development.
+    |
+    */
+    'disabled' => [
+        // Example: Temporarily disable broken extension
+        // Vendor\Broken\BrokenServiceProvider::class,
     ],
-    
-    // Extension Precedence
-    'precedence' => [
-        // When conflicts occur between Composer and local extensions
-        // 'composer' = prefer Composer packages
-        // 'local' = prefer local extensions  
-        // 'error' = throw error on conflicts
-        'conflict_resolution' => env('EXTENSION_CONFLICT_RESOLUTION', 'composer'),
-        
-        // Log conflicts for debugging
-        'log_conflicts' => env('EXTENSION_LOG_CONFLICTS', true),
-    ],
-    
-    // Extension Loading
-    'loading' => [
-        // Enable debug mode for extension loading
-        'debug' => env('EXTENSION_DEBUG', env('APP_DEBUG', false)),
-        
-        // Automatically enable extensions found in Composer
-        'auto_enable_composer' => env('EXTENSION_AUTO_ENABLE_COMPOSER', false),
-        
-        // Automatically enable local extensions in development
-        'auto_enable_local' => env('EXTENSION_AUTO_ENABLE_LOCAL', env('APP_ENV') === 'development'),
-    ],
-    
-    // Extension Paths
-    'paths' => [
-        // Local extensions directory
-        'local_directory' => dirname(__DIR__) . '/extensions',
-        
-        // Extensions configuration file
-        'config_file' => dirname(__DIR__) . '/extensions/extensions.json',
-        
-        // Extension manifests directory
-        'manifests' => dirname(__DIR__) . '/extensions/manifests',
-    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Local Extensions Path
+    |--------------------------------------------------------------------------
+    |
+    | Path to scan for local extensions during development.
+    | Set to null to disable local extension scanning.
+    |
+    */
+    'local_path' => env('APP_ENV') === 'production' ? null : 'extensions',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Composer Package Scanning
+    |--------------------------------------------------------------------------
+    |
+    | Whether to scan Composer packages for glueful-extension types.
+    | Set to false to disable Composer scanning (for troubleshooting).
+    |
+    */
+    'scan_composer' => true,
 ];

@@ -215,26 +215,36 @@ class Framework
 
         // Initialize authentication providers
         $this->initializeAuth();
+
+        // Initialize extensions system
+        $this->initializeExtensions();
     }
 
     /**
-     * Phase 5: Initialize HTTP layer (middleware and routes)
+     * Phase 5: Initialize HTTP layer (Next-Gen Router and routes)
      */
     private function initializeHttpLayer(): void
     {
         try {
-            // Register middleware from configuration
-            MiddlewareRegistry::registerFromConfig($this->container);
+            // Get the Next-Gen Router instance
+            $router = $this->container->get(\Glueful\Routing\Router::class);
 
-            // Load extensions and their routes
-            if ($this->container->has(\Glueful\Extensions\ExtensionManager::class)) {
-                $extensionManager = $this->container->get(\Glueful\Extensions\ExtensionManager::class);
-                $extensionManager->loadEnabledExtensions();
-                $extensionManager->loadExtensionRoutes();
+            // Load core application routes if they exist
+            if (file_exists($this->basePath . '/routes/api.php')) {
+                require $this->basePath . '/routes/api.php';
             }
 
-            // Load core application routes
-            RoutesManager::loadRoutes();
+            // Auto-discover controllers with attributes if directory exists
+            if (is_dir($this->basePath . '/app/Controllers')) {
+                $attributeLoader = $this->container->get(\Glueful\Routing\AttributeRouteLoader::class);
+                $attributeLoader->scanDirectory($this->basePath . '/app/Controllers');
+            }
+
+            // Cache routes in production
+            if ($this->environment === 'production') {
+                $cache = $this->container->get(\Glueful\Routing\RouteCache::class);
+                $cache->save($router);
+            }
         } catch (\Throwable $e) {
             // Log but don't fail the boot process
             error_log("HTTP layer initialization failed: " . $e->getMessage());
@@ -251,9 +261,7 @@ class Framework
         // LAZY: Heavy services (load on first access)
         $this->lazyRegistry->lazy('cache.store', \Glueful\DI\ServiceFactories\CacheStoreFactory::class);
         $this->lazyRegistry->lazy('database', \Glueful\DI\ServiceFactories\DatabaseFactory::class);
-        $this->lazyRegistry->lazy('extension.manager', \Glueful\DI\ServiceFactories\ExtensionManagerFactory::class);
         $this->lazyRegistry->lazy('auth.manager', \Glueful\DI\ServiceFactories\AuthManagerFactory::class);
-        $this->lazyRegistry->lazy('router', \Glueful\DI\ServiceFactories\RouterFactory::class);
         $this->lazyRegistry->lazy('security.manager', \Glueful\DI\ServiceFactories\SecurityManagerFactory::class);
 
         // Store registry in global for background initialization
@@ -311,6 +319,21 @@ class Framework
             }
         } catch (\Throwable $e) {
             error_log("Auth initialization failed: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Initialize extensions system
+     */
+    private function initializeExtensions(): void
+    {
+        try {
+            $extensions = $this->container->get(\Glueful\Extensions\ExtensionManager::class);
+
+            // Boot (routes, views, etc.) - discovery already happens in service provider
+            $extensions->boot();
+        } catch (\Throwable $e) {
+            error_log("Extensions initialization failed: " . $e->getMessage());
         }
     }
 

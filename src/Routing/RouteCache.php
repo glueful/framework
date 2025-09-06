@@ -87,13 +87,10 @@ class RouteCache
 
     private function routeFilesChanged(int $cacheTime): bool
     {
-        $routeFiles = glob(base_path('routes/*.php'));
-        $extensionFiles = glob(base_path('extensions/*/routes.php'));
-
-        $files = array_merge(
-            $routeFiles !== false ? $routeFiles : [],
-            $extensionFiles !== false ? $extensionFiles : []
-        );
+        $files = glob(base_path('routes/*.php'));
+        if ($files === false) {
+            $files = [];
+        }
 
         foreach ($files as $file) {
             if (filemtime($file) > $cacheTime) {

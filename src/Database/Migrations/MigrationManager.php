@@ -7,7 +7,6 @@ namespace Glueful\Database\Migrations;
 use Glueful\Database\Migrations\MigrationInterface;
 use Glueful\Database\Schema\Interfaces\SchemaBuilderInterface;
 use Glueful\Database\Connection;
-use Glueful\Extensions\ExtensionManager;
 use Glueful\Exceptions\DatabaseException;
 use Glueful\Exceptions\BusinessLogicException;
 use Glueful\Services\FileFinder;
@@ -58,15 +57,16 @@ class MigrationManager
      */
     private string $migrationsPath;
 
-    /**
-     * @var ExtensionManager Extensions manager for checking enabled extensions
-     */
-    private ExtensionManager $extensionsManager;
 
     /**
      * @var FileFinder File finder service for migration discovery
      */
     private FileFinder $fileFinder;
+
+    /**
+     * @var array<string> Additional migration paths from extensions
+     */
+    private array $additionalMigrationPaths = [];
 
     /**
      * @var string Name of migrations tracking table
@@ -79,13 +79,11 @@ class MigrationManager
      * Sets up schema manager and ensures version table exists.
      *
      * @param  string|null           $migrationsPath    Custom path to migrations directory
-     * @param  ExtensionManager|null $extensionsManager Extensions manager instance
      * @param  FileFinder|null       $fileFinder        File finder service instance
      * @throws \Glueful\Exceptions\DatabaseException If database connection fails
      */
     public function __construct(
         ?string $migrationsPath = null,
-        ?ExtensionManager $extensionsManager = null,
         ?FileFinder $fileFinder = null
     ) {
         $connection = new Connection();
@@ -93,11 +91,22 @@ class MigrationManager
         $this->schema = $connection->getSchemaBuilder();
 
         $this->migrationsPath = $migrationsPath ?? config(('app.paths.migrations'));
-        $this->extensionsManager = $extensionsManager ?? container()->get(ExtensionManager::class);
         $this->fileFinder = $fileFinder ?? container()->get(FileFinder::class);
         // echo $this->migrationsPath;
         // exit;
         $this->ensureVersionTable();
+    }
+
+    /**
+     * Add a migration path for extensions
+     *
+     * @param string $path Path to migration directory
+     */
+    public function addMigrationPath(string $path): void
+    {
+        if (is_dir($path)) {
+            $this->additionalMigrationPaths[] = $path;
+        }
     }
 
     /**
@@ -156,17 +165,11 @@ class MigrationManager
             $files[] = $file->getPathname();
         }
 
-        // Get migrations from enabled extensions only
-        $enabledExtensions = $this->extensionsManager->listEnabled();
-
-        foreach ($enabledExtensions as $extensionName) {
-            $extensionPath = $this->extensionsManager->getExtensionPath($extensionName);
-            if ($extensionPath !== null) {
-                $migrationDir = $extensionPath . '/migrations';
-                $extensionMigrations = $this->fileFinder->findMigrations($migrationDir);
-                foreach ($extensionMigrations as $file) {
-                    $files[] = $file->getPathname();
-                }
+        // Get migrations from additional paths (extensions register their paths)
+        foreach ($this->additionalMigrationPaths as $migrationDir) {
+            $extensionMigrations = $this->fileFinder->findMigrations($migrationDir);
+            foreach ($extensionMigrations as $file) {
+                $files[] = $file->getPathname();
             }
         }
 
@@ -223,16 +226,11 @@ class MigrationManager
             $files[] = $file->getPathname();
         }
 
-        // Get migrations from enabled extensions only
-        $enabledExtensions = $this->extensionsManager->listEnabled();
-        foreach ($enabledExtensions as $extensionName) {
-            $extensionPath = $this->extensionsManager->getExtensionPath($extensionName);
-            if ($extensionPath !== null) {
-                $migrationDir = $extensionPath . '/migrations';
-                $extensionMigrations = $this->fileFinder->findMigrations($migrationDir);
-                foreach ($extensionMigrations as $file) {
-                    $files[] = $file->getPathname();
-                }
+        // Get migrations from additional paths (extensions register their paths)
+        foreach ($this->additionalMigrationPaths as $migrationDir) {
+            $extensionMigrations = $this->fileFinder->findMigrations($migrationDir);
+            foreach ($extensionMigrations as $file) {
+                $files[] = $file->getPathname();
             }
         }
 
@@ -364,12 +362,12 @@ class MigrationManager
 
         // Determine if this is an extension migration
         $extensionName = null;
-        $enabledExtensions = $this->extensionsManager->listEnabled();
 
-        foreach ($enabledExtensions as $extension) {
-            $extensionPath = $this->extensionsManager->getExtensionPath($extension);
-            if ($extensionPath !== null && strpos($file, $extensionPath) === 0) {
-                $extensionName = $extension;
+        foreach ($this->additionalMigrationPaths as $migrationPath) {
+            if (strpos($file, $migrationPath) === 0) {
+                // Extract extension name from path (assume path contains extension name)
+                $pathParts = explode('/', str_replace('\\', '/', $migrationPath));
+                $extensionName = end($pathParts) !== false ? end($pathParts) : 'extension';
                 break;
             }
         }
@@ -488,32 +486,27 @@ class MigrationManager
         // First check in main migrations directory
         $file = $this->migrationsPath . '/' . $filename;
 
-        // If not found in main directory, check in enabled extension directories
+        // If not found in main directory, check in additional migration paths
         if (!file_exists($file)) {
             $found = false;
-            $enabledExtensions = $this->extensionsManager->listEnabled();
 
-            foreach ($enabledExtensions as $extensionName) {
-                $extensionPath = $this->extensionsManager->getExtensionPath($extensionName);
-                if ($extensionPath !== null) {
-                    $migrationDir = $extensionPath . '/migrations';
-                    $extensionFile = $migrationDir . '/' . $filename;
+            foreach ($this->additionalMigrationPaths as $migrationDir) {
+                $extensionFile = $migrationDir . '/' . $filename;
 
-                    // Use FileFinder to check if migration directory exists and file exists
-                    $extensionMigrations = $this->fileFinder->findMigrations($migrationDir);
-                    $matchingFile = null;
-                    foreach ($extensionMigrations as $migFile) {
-                        if ($migFile->getFilename() === $filename) {
-                            $matchingFile = $migFile;
-                            break;
-                        }
-                    }
-
-                    if ($matchingFile !== null && file_exists($extensionFile)) {
-                        $file = $extensionFile;
-                        $found = true;
+                // Use FileFinder to check if migration directory exists and file exists
+                $extensionMigrations = $this->fileFinder->findMigrations($migrationDir);
+                $matchingFile = null;
+                foreach ($extensionMigrations as $migFile) {
+                    if ($migFile->getFilename() === $filename) {
+                        $matchingFile = $migFile;
                         break;
                     }
+                }
+
+                if ($matchingFile !== null && file_exists($extensionFile)) {
+                    $file = $extensionFile;
+                    $found = true;
+                    break;
                 }
             }
 

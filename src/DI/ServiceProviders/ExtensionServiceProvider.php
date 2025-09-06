@@ -19,59 +19,18 @@ class ExtensionServiceProvider implements ServiceProviderInterface
 {
     public function register(ContainerBuilder $container): void
     {
-        // Register ExtensionLoader
-        $container->register(\Glueful\Extensions\Services\ExtensionLoader::class)
-            ->setArguments([
-                new Reference(\Glueful\Services\FileFinder::class),
-                new Reference(\Glueful\Services\FileManager::class),
-                new Reference('logger')
-            ])
-            ->addMethodCall('setDebugMode', [true])
-            ->setPublic(true)
-            ->addTag(ServiceTags::EXTENSION_SERVICE, ['extension' => 'core']);
+        // Register ExtensionMetadataRegistry
+        $container->register(\Glueful\Extensions\ExtensionMetadataRegistry::class)
+            ->setPublic(true);
 
-        // Register ExtensionConfig
-        $container->register(\Glueful\Extensions\Services\ExtensionConfig::class)
-            ->setPublic(true)
-            ->addTag(ServiceTags::EXTENSION_SERVICE, ['extension' => 'core']);
+        // Register PackageManifest for Composer extension discovery
+        $container->register(\Glueful\Extensions\PackageManifest::class)
+            ->setPublic(true);
 
-        // Register ExtensionCatalog
-        $container->register(\Glueful\Extensions\Services\ExtensionCatalog::class)
-            ->setPublic(true)
-            ->addTag(ServiceTags::EXTENSION_SERVICE, ['extension' => 'core']);
-
-        // Register ExtensionValidator
-        $container->register(\Glueful\Extensions\Services\ExtensionValidator::class)
-            ->setPublic(true)
-            ->addTag(ServiceTags::EXTENSION_SERVICE, ['extension' => 'core']);
-
-        // Register interface bindings
-        $container->setAlias(
-            \Glueful\Extensions\Services\Interfaces\ExtensionLoaderInterface::class,
-            \Glueful\Extensions\Services\ExtensionLoader::class
-        );
-        $container->setAlias(
-            \Glueful\Extensions\Services\Interfaces\ExtensionConfigInterface::class,
-            \Glueful\Extensions\Services\ExtensionConfig::class
-        );
-        $container->setAlias(
-            \Glueful\Extensions\Services\Interfaces\ExtensionCatalogInterface::class,
-            \Glueful\Extensions\Services\ExtensionCatalog::class
-        );
-        $container->setAlias(
-            \Glueful\Extensions\Services\Interfaces\ExtensionValidatorInterface::class,
-            \Glueful\Extensions\Services\ExtensionValidator::class
-        );
-
-        // Register the main ExtensionManager facade
+        // Register the main ExtensionManager (updated to match current constructor)
         $container->register('extension.manager', \Glueful\Extensions\ExtensionManager::class)
             ->setArguments([
-                new Reference(\Glueful\Extensions\Services\Interfaces\ExtensionLoaderInterface::class),
-                new Reference(\Glueful\Extensions\Services\Interfaces\ExtensionConfigInterface::class),
-                new Reference(\Glueful\Extensions\Services\Interfaces\ExtensionCatalogInterface::class),
-                new Reference(\Glueful\Extensions\Services\Interfaces\ExtensionValidatorInterface::class),
-                new Reference('logger'),
-                new Reference('service_container')
+                new Reference('glueful.container')
             ])
             ->setPublic(true);
 
@@ -87,22 +46,11 @@ class ExtensionServiceProvider implements ServiceProviderInterface
     public function boot(Container $container): void
     {
         // Initialize the extension system after all services are registered
-        $extensionManager = $container->get('extension.manager');
-
-        // Set up composer class loader if available
-        $classLoaders = \Composer\Autoload\ClassLoader::getRegisteredLoaders();
-        if (count($classLoaders) > 0) {
-            // Get the first registered class loader
-            $classLoader = reset($classLoaders);
-            $extensionManager->setClassLoader($classLoader);
-        }
-
-        // Defer extension loading until after boot to prevent circular dependencies
-        // Extensions will be loaded on first access or via explicit call
-        // This prevents hangs during framework boot process
         try {
-            // Only register extensions, don't load them yet
-            $extensionManager->discoverExtensions();
+            $extensionManager = $container->get('extension.manager');
+
+            // Discover extensions (this will load from Composer and local paths)
+            $extensionManager->discover();
         } catch (\Exception $e) {
             // Log error but don't fail the boot process
             if ($container->has('logger')) {

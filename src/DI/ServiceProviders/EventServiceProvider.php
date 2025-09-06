@@ -63,9 +63,6 @@ class EventServiceProvider implements ServiceProviderInterface
         if ($this->areEventsEnabled()) {
             // Register core event subscribers
             $this->registerCoreEventSubscribers($eventDispatcher, $container);
-
-            // Register extension event subscribers
-            $this->registerExtensionEventSubscribers($eventDispatcher, $container);
         }
     }
 
@@ -94,14 +91,6 @@ class EventServiceProvider implements ServiceProviderInterface
             ->setArguments([new Reference('logger')])
             ->setPublic(true)
             ->addTag(ServiceTags::EVENT_LISTENER);
-
-        // Extension event registry
-        $container->register(ExtensionEventRegistry::class)
-            ->setArguments([
-                new Reference(EventDispatcherInterface::class),
-                new Reference('logger')
-            ])
-            ->setPublic(true);
     }
 
     /**
@@ -139,32 +128,6 @@ class EventServiceProvider implements ServiceProviderInterface
             class_exists(\Glueful\Cache\CacheInvalidationService::class)
         ) {
             \Glueful\Cache\CacheInvalidationService::registerWithEventDispatcher($eventDispatcher);
-        }
-    }
-
-    /**
-     * Register extension event subscribers
-     *
-     * @param EventDispatcherInterface $eventDispatcher Event dispatcher
-     * @param Container $container
-     * @return void
-     */
-    protected function registerExtensionEventSubscribers(
-        EventDispatcherInterface $eventDispatcher,
-        Container $container
-    ): void {
-        // Use the ExtensionEventRegistry for proper subscriber registration
-        if ($container->has(ExtensionEventRegistry::class)) {
-            $registry = $container->get(ExtensionEventRegistry::class);
-
-            // Get loaded extensions from extension manager if available
-            if ($container->has(ExtensionManager::class)) {
-                $extensionManager = $container->get(ExtensionManager::class);
-                $loadedExtensions = $extensionManager->getLoadedExtensions();
-
-                // Register all extension event subscribers
-                $registry->registerExtensionSubscribers($loadedExtensions);
-            }
         }
     }
 

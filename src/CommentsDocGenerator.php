@@ -71,18 +71,21 @@ class CommentsDocGenerator
     {
         $generatedFiles = [];
 
-        // Generate docs only for enabled extensions
-        $enabledExtensions = $this->extensionsManager->listEnabled();
-        foreach ($enabledExtensions as $extensionName) {
-            $extensionPath = $this->extensionsManager->getExtensionPath($extensionName);
-            if ($extensionPath !== null) {
-                $routeFile = $extensionPath . '/src/routes.php';
+        // Generate docs for all registered extensions (modern system doesn't distinguish enabled/disabled)
+        $providers = $this->extensionsManager->getProviders();
+        $meta = $this->extensionsManager->listMeta();
 
-                if (file_exists($routeFile)) {
-                    $docFile = $this->generateForExtension($extensionName, $routeFile);
-                    if ($docFile !== null) {
-                        $generatedFiles[] = $docFile;
-                    }
+        foreach ($providers as $providerClass => $_provider) {
+            $metadata = $meta[$providerClass] ?? [];
+            $extensionName = $metadata['slug'] ?? basename(str_replace('\\', '/', $providerClass));
+
+            // Try to find routes file - modern extensions use routes/ directory
+            $routeFile = $this->findExtensionRoutesFile($providerClass, $extensionName);
+
+            if ($routeFile !== null && file_exists($routeFile)) {
+                $docFile = $this->generateForExtension($extensionName, $routeFile);
+                if ($docFile !== null) {
+                    $generatedFiles[] = $docFile;
                 }
             }
         }
@@ -92,6 +95,59 @@ class CommentsDocGenerator
         $generatedFiles = array_merge($generatedFiles, $routeFiles);
 
         return $generatedFiles;
+    }
+
+    /**
+     * Find the routes file for an extension based on its provider class
+     *
+     * @param string $providerClass The provider class name
+     * @param string $extensionName The extension slug/name
+     * @return string|null Path to routes file or null if not found
+     */
+    private function findExtensionRoutesFile(string $providerClass, string $extensionName): ?string
+    {
+        // Try to determine extension path from provider class
+        try {
+            $reflection = new \ReflectionClass($providerClass);
+            $providerFile = $reflection->getFileName();
+
+            if ($providerFile) {
+                $extensionDir = dirname($providerFile);
+
+                // Look for routes in common locations
+                $routesPaths = [
+                    $extensionDir . '/../routes/' . $extensionName . '.php',
+                    $extensionDir . '/../routes/routes.php',
+                    $extensionDir . '/../routes/api.php',
+                    $extensionDir . '/routes.php',
+                ];
+
+                foreach ($routesPaths as $path) {
+                    if (file_exists($path)) {
+                        return $path;
+                    }
+                }
+            }
+        } catch (\ReflectionException) {
+            // Provider class not found, skip
+        }
+
+        // Fallback: try the extensions directory if available
+        if (isset($this->extensionsPath) && is_dir($this->extensionsPath)) {
+            $fallbackPaths = [
+                $this->extensionsPath . '/' . $extensionName . '/routes/' . $extensionName . '.php',
+                $this->extensionsPath . '/' . $extensionName . '/routes/routes.php',
+                $this->extensionsPath . '/' . $extensionName . '/src/routes.php',
+            ];
+
+            foreach ($fallbackPaths as $path) {
+                if (file_exists($path)) {
+                    return $path;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

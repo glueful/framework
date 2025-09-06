@@ -9,7 +9,8 @@ use Symfony\Component\DependencyInjection\Dumper\PhpDumper;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
 use Symfony\Component\Config\FileLocator;
 use Glueful\DI\Passes\TaggedServicePass;
-use Glueful\DI\Passes\ExtensionServicePass;
+use Glueful\Extensions\ProviderLocator;
+use Glueful\Extensions\ExtensionServiceCompiler;
 
 /**
  * Pure Symfony Container Factory - No legacy code
@@ -96,7 +97,6 @@ class ContainerFactory
     private static function addCompilerPasses(ContainerBuilder $builder): void
     {
         $builder->addCompilerPass(new TaggedServicePass());
-        $builder->addCompilerPass(new ExtensionServicePass());
     }
 
     private static function loadServiceProviders(ContainerBuilder $builder): void
@@ -169,84 +169,18 @@ class ContainerFactory
 
     private static function loadExtensionServices(ContainerBuilder $builder): void
     {
-        // Load extension services from extensions.json
-        $extensionsConfig = base_path('extensions/extensions.json');
-        if (!file_exists($extensionsConfig)) {
-            return;
-        }
-
-        $extensionsData = json_decode(file_get_contents($extensionsConfig), true);
-        if (!isset($extensionsData['extensions'])) {
-            return;
-        }
-
-        foreach ($extensionsData['extensions'] as $extensionName => $config) {
-            if (($config['enabled'] ?? false) !== true) {
-                continue;
-            }
-
-            // Load service providers defined in the extension config
-            $serviceProviders = $config['provides']['services'] ?? [];
-
-            foreach ($serviceProviders as $serviceProviderPath) {
-                $absolutePath = base_path($serviceProviderPath);
-
-                if (!file_exists($absolutePath)) {
-                    continue;
-                }
-
-                // Include the file
-                require_once $absolutePath;
-
-                // Build the class name from the path
-                $pathInfo = pathinfo($serviceProviderPath);
-                $className = $pathInfo['filename'];
-
-                // Build full class name based on path structure
-                $pathParts = explode('/', $serviceProviderPath);
-                $fullClassName = null;
-
-                // Pattern: extensions/ExtensionName/src/Services/ServiceProvider.php
-                if (count($pathParts) >= 5 && $pathParts[2] === 'src') {
-                    $subNamespace = $pathParts[3]; // e.g., "Services"
-                    $fullClassName = "Glueful\\Extensions\\{$extensionName}\\{$subNamespace}\\{$className}";
-                } else {
-                    $fullClassName = "Glueful\\Extensions\\{$extensionName}\\{$className}";
-                }
-
-                if (!class_exists($fullClassName)) {
-                    continue;
-                }
-
-                // Instantiate and register the service provider
-                $serviceProvider = new $fullClassName();
-
-                // Set extension properties if it's a BaseExtensionServiceProvider
-                if ($serviceProvider instanceof \Glueful\DI\ServiceProviders\BaseExtensionServiceProvider) {
-                    $extensionPath = "extensions/{$extensionName}";
-
-                    // Use reflection to set protected properties
-                    $reflection = new \ReflectionClass($serviceProvider);
-
-                    $nameProperty = $reflection->getProperty('extensionName');
-                    $nameProperty->setAccessible(true);
-                    $nameProperty->setValue($serviceProvider, $extensionName);
-
-                    $pathProperty = $reflection->getProperty('extensionPath');
-                    $pathProperty->setAccessible(true);
-                    $pathProperty->setValue($serviceProvider, $extensionPath);
-
-                    // Set the container builder if property exists
-                    if ($reflection->hasProperty('containerBuilder')) {
-                        $builderProperty = $reflection->getProperty('containerBuilder');
-                        $builderProperty->setAccessible(true);
-                        $builderProperty->setValue($serviceProvider, $builder);
-                    }
-                }
-
-                // Register the service provider
-                if ($serviceProvider instanceof ServiceProviderInterface) {
-                    $serviceProvider->register($builder);
+        // Compile extension services discovered from providers into the builder
+        // Discovery is unified via ProviderLocator to keep dev/prod parity
+        $compiler = new ExtensionServiceCompiler($builder);
+        foreach (ProviderLocator::all() as $providerClass) {
+            if (method_exists($providerClass, 'services')) {
+                try {
+                    /** @var array<string, array<string,mixed>> $defs */
+                    $defs = $providerClass::services();
+                    $compiler->register($defs, $providerClass);
+                } catch (\Throwable $e) {
+                    // Best-effort: don't break container build if an extension misbehaves
+                    error_log("[Extensions] Failed compiling services for {$providerClass}: " . $e->getMessage());
                 }
             }
         }

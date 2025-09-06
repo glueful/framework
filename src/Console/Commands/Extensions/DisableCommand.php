@@ -1,209 +1,57 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Glueful\Console\Commands\Extensions;
 
-use Glueful\Console\Commands\Extensions\BaseExtensionCommand;
-use Glueful\Extensions\ExtensionManager;
-use Symfony\Component\Console\Attribute\AsCommand;
-use Symfony\Component\Console\Input\InputInterface;
+use Glueful\Console\BaseCommand;
 use Symfony\Component\Console\Input\InputArgument;
-use Symfony\Component\Console\Input\InputOption;
+use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\Attribute\AsCommand;
 
 /**
  * Extensions Disable Command
- * - Interactive confirmation with dependent extensions checking
- * - Validation of extension dependencies to prevent breaking changes
- * - Progress indicators for disabling process
- * - Detailed warnings about affected functionality
- * - Safe disable with rollback capability
- * @package Glueful\Console\Commands\Extensions
+ *
+ * Disable extension in development environment by editing config/extensions.php.
+ * This is a development-only convenience command.
  */
 #[AsCommand(
     name: 'extensions:disable',
-    description: 'Disable an active extension'
+    description: 'Disable extension (development only)'
 )]
-class DisableCommand extends BaseExtensionCommand
+final class DisableCommand extends BaseCommand
 {
     protected function configure(): void
     {
-        $this->setDescription('Disable an active extension')
-             ->setHelp('This command disables an extension, making it inactive with dependent extension validation.')
-             ->addArgument(
-                 'name',
-                 InputArgument::REQUIRED,
-                 'The name of the extension to disable'
-             )
-             ->addOption(
-                 'force',
-                 'f',
-                 InputOption::VALUE_NONE,
-                 'Force disable without confirmation or dependent checks'
-             )
-             ->addOption(
-                 'check-dependents',
-                 'd',
-                 InputOption::VALUE_NONE,
-                 'Check for extensions that depend on this extension'
-             );
+        $this
+            ->setDescription('Disable extension (development only)')
+            ->addArgument('extension', InputArgument::REQUIRED, 'Extension provider class or slug');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $extensionName = $input->getArgument('name');
-        $force = $input->getOption('force');
-        $checkDependents = $input->getOption('check-dependents');
-
-        try {
-            $this->info("Disabling extension: {$extensionName}");
-
-            $extensionsManager = $this->getService(ExtensionManager::class);
-
-            // Validate extension exists and is enabled
-            if (!$this->validateExtensionCanBeDisabled($extensionsManager, $extensionName)) {
-                return self::FAILURE;
-            }
-
-            // Check for dependent extensions
-            if ($checkDependents === true || $force !== true) {
-                if (!$this->validateDependents($extensionsManager, $extensionName, $force)) {
-                    return self::FAILURE;
-                }
-            }
-
-            // Confirm action if not forced
-            if ($force !== true && !$this->confirmDisable($extensionName)) {
-                $this->info('Extension disable operation cancelled.');
-                return self::SUCCESS;
-            }
-
-            // Disable the extension
-            try {
-                $result = $extensionsManager->disable($extensionName);
-
-                if (is_bool($result)) {
-                    if (!$result) {
-                        $this->error("Failed to disable extension '{$extensionName}'");
-                        return self::FAILURE;
-                    }
-                } else {
-                    // Handle array response format
-                    if (!$result['success']) {
-                        $this->error($result['error'] ?? "Failed to disable extension '{$extensionName}'");
-                        return self::FAILURE;
-                    }
-                }
-                $this->success("Extension '{$extensionName}' disabled successfully!");
-            } catch (\Exception $e) {
-                $this->error("Failed to disable extension '{$extensionName}': " . $e->getMessage());
-                return self::FAILURE;
-            }
-            $this->displayNextSteps($extensionName);
-
-            return self::SUCCESS;
-        } catch (\Exception $e) {
-            $this->error("Failed to disable extension '{$extensionName}': " . $e->getMessage());
+        if (env('APP_ENV') === 'production') {
+            $output->writeln(
+                '<error>This command is not available in production. Edit config/extensions.php directly.</error>'
+            );
             return self::FAILURE;
         }
-    }
 
-    private function validateExtensionCanBeDisabled(ExtensionManager $manager, string $name): bool
-    {
-        $extension = $this->findExtension($manager, $name);
+        $extension = (string) $input->getArgument('extension');
 
-        if ($extension === null) {
-            $this->error("Extension '{$name}' not found.");
-            return false;
-        }
+        $output->writeln('<comment>Development-only command</comment>');
+        $output->writeln("To disable '{$extension}', remove it from config/extensions.php:");
+        $output->writeln('');
+        $output->writeln("    'enabled' => [");
+        $output->writeln("        // other entries...");
+        $output->writeln("        // {$extension}::class, <- comment out or remove");
+        $output->writeln("    ],");
+        $output->writeln('');
+        $output->writeln(
+            '<info>Note: In production, manage extensions through configuration files and deployment.</info>'
+        );
 
-        if (($extension['metadata']['enabled'] ?? false) !== true) {
-            $this->warning("Extension '{$name}' is already disabled.");
-            return false;
-        }
-
-        return true;
-    }
-
-    private function validateDependents(ExtensionManager $manager, string $name, bool $force): bool
-    {
-        $this->info('Checking for dependent extensions...');
-
-        $extensions = $this->getExtensionsKeyed($manager);
-        $dependents = [];
-
-        foreach ($extensions as $extension) {
-            $metadata = $extension['metadata'];
-            if (($metadata['enabled'] ?? false) !== true) {
-                continue; // Skip disabled extensions
-            }
-
-            $dependencies = $metadata['dependencies']['extensions'] ?? [];
-            if (in_array($name, $dependencies, true)) {
-                $dependents[] = $extension['name'];
-            }
-        }
-
-        if (count($dependents) === 0) {
-            $this->line('✓ No dependent extensions found');
-            return true;
-        }
-
-        $this->warning('The following extensions depend on this extension:');
-        foreach ($dependents as $dependent) {
-            $this->line("• {$dependent}");
-        }
-
-        if ($force) {
-            $this->warning('Force flag specified - proceeding anyway');
-            return true;
-        }
-
-        $this->line('');
-        $this->line('Disabling this extension may break dependent extensions.');
-
-        $choice = $this->choice('How would you like to proceed?', [
-            'cancel' => 'Cancel the operation',
-            'disable-dependents' => 'Disable dependent extensions first',
-            'force' => 'Force disable (may break functionality)'
-        ], 'cancel');
-
-        switch ($choice) {
-            case 'cancel':
-                $this->info('Operation cancelled to prevent breaking dependent extensions.');
-                return false;
-
-            case 'disable-dependents':
-                foreach ($dependents as $dependent) {
-                    $this->line("Disabling dependent extension: {$dependent}");
-                    $manager->disable($dependent);
-                }
-                $this->success('Dependent extensions disabled successfully');
-                return true;
-
-            case 'force':
-                $this->warning('Proceeding with force disable - dependent extensions may break');
-                return true;
-
-            default:
-                return false;
-        }
-    }
-
-    private function confirmDisable(string $name): bool
-    {
-        $this->warning("This will disable extension '{$name}' and its functionality.");
-        return $this->confirm('Are you sure you want to continue?', false);
-    }
-
-
-    private function displayNextSteps(string $name): void
-    {
-        $this->line('');
-        $this->info('Next steps:');
-        $this->line("1. Extension '{$name}' is now inactive");
-        $this->line('2. Associated functionality has been disabled');
-        $this->line('3. Configuration settings are preserved');
-        $this->line("4. Re-enable with: extensions:enable {$name}");
-        $this->line('5. Restart application if required');
+        return self::SUCCESS;
     }
 }

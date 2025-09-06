@@ -506,6 +506,12 @@ if (!function_exists('base_path')) {
     {
         static $basePath = null;
 
+        // Special reset mechanism for testing
+        if ($path === '__RESET__') {
+            $basePath = null;
+            return '';
+        }
+
         if ($basePath === null) {
             // Priority 1: Explicit global set by bootstrap
             if (isset($GLOBALS['base_path'])) {
@@ -560,6 +566,12 @@ if (!function_exists('config_path')) {
     function config_path(string $path = ''): string
     {
         static $appConfigPath = null;
+
+        // Special reset mechanism for testing
+        if ($path === '__RESET__') {
+            $appConfigPath = null;
+            return '';
+        }
 
         if ($appConfigPath === null) {
             // Priority 1: Explicit global set by bootstrap
@@ -627,5 +639,29 @@ if (!function_exists('request_id')) {
         }
 
         return $requestId;
+    }
+}
+
+if (!function_exists('response')) {
+    /**
+     * Create a new response instance or return response helper
+     *
+     * This helper provides compatibility with Laravel-style response() calls:
+     * - response() -> Returns ResponseHelper for method chaining
+     * - response($content, $status, $headers) -> Returns Response instance directly
+     *
+     * @param mixed $content Response content
+     * @param int $status HTTP status code
+     * @param array<string, string> $headers Response headers
+     * @return \Glueful\Http\Response|\Glueful\Http\ResponseHelper
+     * @phpstan-return ($content is '' ? \Glueful\Http\ResponseHelper : \Glueful\Http\Response)
+     */
+    function response(mixed $content = '', int $status = 200, array $headers = []): mixed
+    {
+        if (func_num_args() === 0) {
+            return new \Glueful\Http\ResponseHelper();
+        }
+
+        return new \Glueful\Http\Response($content, $status, $headers);
     }
 }

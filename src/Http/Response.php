@@ -339,6 +339,15 @@ class Response extends JsonResponse
     }
 
     /**
+     * Add a header to the response for method chaining
+     */
+    public function header(string $key, string $value): self
+    {
+        $this->headers->set($key, $value);
+        return $this;
+    }
+
+    /**
      * Set response as downloadable file
      */
     public function asDownload(string $filename, string $mimeType = 'application/octet-stream'): self
