@@ -98,7 +98,7 @@ class Framework
         $profiler->time('core', fn() => $this->initializeCoreServices());
 
         // Phase 5: HTTP Layer (10-13ms)
-        // $profiler->time('http', fn() => $this->initializeHttpLayer());
+        $profiler->time('http', fn() => $this->initializeHttpLayer());
 
         // Phase 6: Lazy Registration (13-15ms)
         $profiler->time('services', fn() => $this->registerLazyServices());
@@ -228,6 +228,14 @@ class Framework
         try {
             // Get the Next-Gen Router instance
             $router = $this->container->get(\Glueful\Routing\Router::class);
+
+            // Load framework core routes
+            $frameworkRoutesPath = dirname(__DIR__) . '/routes';
+
+            // Load auth routes (framework core authentication)
+            if (file_exists($frameworkRoutesPath . '/auth.php')) {
+                require $frameworkRoutesPath . '/auth.php';
+            }
 
             // Load core application routes if they exist
             if (file_exists($this->basePath . '/routes/api.php')) {

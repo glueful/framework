@@ -7,13 +7,20 @@ namespace Glueful\Routing;
 class RouteManifest
 {
     /**
-     * @return array{core_routes: array<string>, generated_at: int}
+     * @return array{framework_routes: array<string>, core_routes: array<string>, generated_at: int}
      */
     public static function generate(): array
     {
         return [
+            'framework_routes' => [
+                '/routes/auth.php',
+                '/routes/health.php',
+                '/routes/extensions.php',
+                '/routes/files.php',
+                '/routes/notifications.php',
+                '/routes/resource.php',
+            ],
             'core_routes' => [
-                '/routes/web.php',
                 '/routes/api.php',
                 '/routes/admin.php',
             ],
@@ -26,7 +33,16 @@ class RouteManifest
         // Router parameter reserved for future use
         $manifest = self::generate();
 
-        // Load core routes
+        // Load framework routes first (from framework directory)
+        $frameworkPath = dirname(dirname(__DIR__));
+        foreach ($manifest['framework_routes'] as $file) {
+            $frameworkFile = $frameworkPath . $file;
+            if (file_exists($frameworkFile)) {
+                require $frameworkFile;
+            }
+        }
+
+        // Load application core routes (from application directory)
         foreach ($manifest['core_routes'] as $file) {
             if (file_exists(base_path($file))) {
                 require base_path($file);
