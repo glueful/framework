@@ -1,0 +1,299 @@
+<?php
+
+namespace Glueful\Console\Commands\Generate;
+
+use Glueful\Console\BaseCommand;
+use Glueful\ApiDefinitionGenerator;
+use Glueful\Services\FileFinder;
+use Glueful\Services\FileManager;
+use Symfony\Component\Console\Attribute\AsCommand;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
+use Symfony\Component\Console\Output\OutputInterface;
+
+/**
+ * Generate API Documentation Command
+ * Generates comprehensive OpenAPI/Swagger documentation including:
+ * - Database-driven CRUD API definitions from schema analysis
+ * - Route-based API definitions from OpenAPI annotations
+ * - Complete swagger.json specification file
+ * - Individual JSON definition files for each endpoint
+ *
+ * Features:
+ * - Interactive prompts for database and table selection
+ * - Progress indicators for generation process
+ * - Detailed validation with helpful error messages
+ * - Enhanced output formatting with tables
+ * - Better error handling and recovery
+ * @package Glueful\Console\Commands\Generate
+ */
+#[AsCommand(
+    name: 'generate:api-definitions',
+    description: 'Generate complete OpenAPI/Swagger documentation from database schema and route annotations'
+)]
+class ApiDefinitionsCommand extends BaseCommand
+{
+    private ?FileFinder $fileFinder = null;
+    private ?FileManager $fileManager = null;
+
+    protected function configure(): void
+    {
+        $this->setDescription(
+            'Generate complete OpenAPI/Swagger documentation from database schema and route annotations'
+        )
+             ->setHelp(
+                 'This command generates comprehensive API documentation including:\n' .
+                 '• Database-driven CRUD endpoints from schema analysis\n' .
+                 '• Route-based endpoints from OpenAPI annotations in route files\n' .
+                 '• Complete swagger.json specification for API documentation\n' .
+                 '• Individual JSON definition files for each endpoint\n\n' .
+                 'The generated documentation can be used with API documentation tools like ' .
+                 'RapiDoc, Swagger UI, or Redoc.'
+             )
+             ->addOption(
+                 'database',
+                 'd',
+                 InputOption::VALUE_REQUIRED,
+                 'Specific database name to generate definitions for'
+             )
+             ->addOption(
+                 'table',
+                 'T',
+                 InputOption::VALUE_REQUIRED,
+                 'Specific table name to generate definitions for (requires --database)'
+             )
+             ->addOption(
+                 'force',
+                 'f',
+                 InputOption::VALUE_NONE,
+                 'Force generation of new definitions, even if manual files exist'
+             )
+             ->addOption(
+                 'clean',
+                 'c',
+                 InputOption::VALUE_NONE,
+                 'Clean all existing JSON definitions before generating new ones'
+             );
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        $database = $input->getOption('database');
+        $table = $input->getOption('table');
+        $force = $input->getOption('force');
+        $clean = $input->getOption('clean');
+
+        // Validate table option requires database
+        if (($table !== null && $table !== '') && !($database !== null && $database !== '')) {
+            $this->error('Table option requires database option to be specified.');
+            $this->tip('Use: --database=mydb --table=users');
+            return self::FAILURE;
+        }
+
+        try {
+            // Clean existing definitions if requested
+            if ((bool)$clean) {
+                $this->cleanDefinitionDirectories();
+                $this->line(''); // Add blank line for visual separation
+            }
+
+            $this->info('Initializing API Definition Generator...');
+            $generator = new ApiDefinitionGenerator(true);
+
+            // Display generation scope
+            $this->displayGenerationScope($database, $table, $force);
+
+            // Confirm if not forced and potentially destructive
+            if (!(bool)$force && !$this->confirmGeneration($database, $table)) {
+                $this->info('API documentation generation cancelled.');
+                return self::SUCCESS;
+            }
+
+            // Perform generation with progress indication
+            $this->generateDefinitions($generator, $database, $table, $force);
+
+            $this->success('API documentation generated successfully!');
+            $this->displayGenerationResults($database, $table);
+
+            return self::SUCCESS;
+        } catch (\Exception $e) {
+            $this->error('Failed to generate API documentation: ' . $e->getMessage());
+            return self::FAILURE;
+        }
+    }
+
+    private function displayGenerationScope(?string $database, ?string $table, bool $force): void
+    {
+        $this->info('Generation Scope:');
+
+        $scope = [];
+        if (($database !== null && $database !== '') && ($table !== null && $table !== '')) {
+            $scope[] = ['Target', "Table '{$table}' in database '{$database}'"];
+        } elseif ($database !== null && $database !== '') {
+            $scope[] = ['Target', "All tables in database '{$database}'"];
+        } else {
+            $scope[] = ['Target', 'All tables in all databases'];
+        }
+
+        $scope[] = ['Force Overwrite', $force ? 'Yes' : 'No'];
+        $scope[] = ['Clean Before Generate', (bool)$this->input->getOption('clean') ? 'Yes' : 'No'];
+
+        $this->table(['Property', 'Value'], $scope);
+    }
+
+    private function confirmGeneration(?string $database, ?string $table): bool
+    {
+        if (($database !== null && $database !== '') && ($table !== null && $table !== '')) {
+            return $this->confirm("Generate API definitions for table '{$table}' in database '{$database}'?", true);
+        } elseif ($database !== null && $database !== '') {
+            return $this->confirm("Generate API definitions for all tables in database '{$database}'?", true);
+        } else {
+            return $this->confirm('Generate API definitions for all databases and tables?', false);
+        }
+    }
+
+    private function generateDefinitions(
+        ApiDefinitionGenerator $generator,
+        ?string $database,
+        ?string $table,
+        bool $force
+    ): void {
+        $this->info('Generating API documentation...');
+
+        if (($database !== null && $database !== '') && ($table !== null && $table !== '')) {
+            $this->line("Processing table: {$table}");
+            $generator->generate($database, $table, $force);
+        } elseif ($database !== null && $database !== '') {
+            $this->line("Processing database: {$database}");
+            $generator->generate($database, null, $force);
+        } else {
+            $this->line('Processing all databases...');
+            $generator->generate(null, null, $force);
+        }
+    }
+
+    private function displayGenerationResults(?string $database, ?string $table): void
+    {
+        $this->line('');
+        $this->info('Generation completed successfully!');
+
+        if (($database !== null && $database !== '') && ($table !== null && $table !== '')) {
+            $this->line("✓ Generated API documentation for table: {$table}");
+        } elseif ($database !== null && $database !== '') {
+            $this->line("✓ Generated API documentation for database: {$database}");
+        } else {
+            $this->line('✓ Generated API documentation for all databases');
+        }
+
+        $this->line('✓ Processed route-based API annotations');
+        $this->line('✓ Created individual endpoint definitions');
+        $this->line('✓ Generated swagger.json specification');
+
+        $this->line('');
+        $this->info('Next steps:');
+        $this->line('1. Review generated swagger.json and API definition files');
+        $this->line('2. Customize route annotations as needed for your API');
+
+        $docsUrl = config('app.paths.api_docs_url');
+
+        $this->line("3. Visit the API documentation with api explorer at {$docsUrl}");
+        $this->line('4. Test your API endpoints');
+    }
+
+    /**
+     * Get FileFinder service instance
+     *
+     * @return FileFinder
+     */
+    private function getFileFinder(): FileFinder
+    {
+        if ($this->fileFinder === null) {
+            $this->fileFinder = $this->getService(FileFinder::class);
+        }
+        return $this->fileFinder;
+    }
+
+    /**
+     * Get FileManager service instance
+     *
+     * @return FileManager
+     */
+    private function getFileManager(): FileManager
+    {
+        if ($this->fileManager === null) {
+            $this->fileManager = $this->getService(FileManager::class);
+        }
+        return $this->fileManager;
+    }
+
+    /**
+     * Clean all JSON definition directories
+     *
+     * Removes all JSON files from both api-json-definitions and json-definitions
+     * directories, including subdirectories in json-definitions.
+     *
+     * @return void
+     */
+    private function cleanDefinitionDirectories(): void
+    {
+        $fileManager = $this->getFileManager();
+        $fileFinder = $this->getFileFinder();
+
+        // Temporarily disable file extension restrictions for directory removal
+        $originalAllowedExtensions = $fileManager->getConfig('allowed_extensions');
+        $fileManager->setConfig('allowed_extensions', null);
+
+        try {
+            $jsonDefinitionsPath = config('app.paths.database_json_definitions');
+            $apiDocDefinitionsPath = config('app.paths.api_docs') . 'json-definitions';
+
+            // Clean api-json-definitions directory (just .json files)
+            if ($fileManager->exists($jsonDefinitionsPath)) {
+                $this->info("Cleaning JSON definitions from: {$jsonDefinitionsPath}");
+
+                $finder = $fileFinder->createFinder();
+                $jsonFiles = $finder->files()->in($jsonDefinitionsPath)->name('*.json');
+
+                $count = 0;
+                foreach ($jsonFiles as $file) {
+                    $fileManager->remove($file->getPathname());
+                    $count++;
+                }
+
+                $this->line("Removed {$count} JSON files from {$jsonDefinitionsPath}");
+            }
+
+            // Clean json-definitions directory (including subdirectories)
+            if ($fileManager->exists($apiDocDefinitionsPath)) {
+                $this->info("Cleaning API doc definitions from: {$apiDocDefinitionsPath}");
+
+                // First, find and remove all subdirectories
+                $finder = $fileFinder->createFinder();
+                $directories = $finder->directories()->in($apiDocDefinitionsPath)->depth(0);
+
+                $dirCount = 0;
+                foreach ($directories as $directory) {
+                    $fileManager->remove($directory->getPathname());
+                    $dirCount++;
+                }
+
+                // Then, remove any remaining JSON files in the root
+                $finder = $fileFinder->createFinder();
+                $jsonFiles = $finder->files()->in($apiDocDefinitionsPath)->name('*.json')->depth(0);
+
+                $fileCount = 0;
+                foreach ($jsonFiles as $file) {
+                    $fileManager->remove($file->getPathname());
+                    $fileCount++;
+                }
+
+                $this->line("Removed {$dirCount} directories and {$fileCount} files from {$apiDocDefinitionsPath}");
+            }
+
+            $this->success('Definition directories cleaned successfully!');
+        } finally {
+            // Restore original file extension restrictions
+            $fileManager->setConfig('allowed_extensions', $originalAllowedExtensions);
+        }
+    }
+}

@@ -1,0 +1,138 @@
+{
+    "name": "glueful/framework",
+    "description": "Glueful API Framework - High-performance PHP API framework",
+    "type": "library",
+    "keywords": ["api", "framework", "rest", "php", "high-performance", "jwt", "database", "cache", "queue"],
+    "homepage": "https://glueful.com/",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Michael Tawiah Sowah",
+            "email": "michael@glueful.dev"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/glueful/framework/issues",
+        "source": "https://github.com/glueful/framework",
+        "docs": "https://glueful.com/docs/getting-started"
+    },
+    "funding": [
+        {
+            "type": "github",
+            "url": "https://github.com/sponsors/glueful"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "aws/aws-sdk-php": "^3.339",
+        "directorytree/ldaprecord": "^3.8",
+        "dragonmantank/cron-expression": "^3.4",
+        "intervention/image": "^3.11",
+        "league/oauth2-server": "^9.2",
+        "monolog/monolog": "^3.8",
+        "nyholm/psr7": "^1.8",
+        "nyholm/psr7-server": "^1.1",
+        "onelogin/php-saml": "^4.2",
+        "psr/http-client": "^1.0",
+        "psr/http-factory": "^1.1",
+        "psr/simple-cache": "^3.0",
+        "symfony/config": "^7.3",
+        "symfony/console": "^7.3",
+        "symfony/dependency-injection": "^7.3",
+        "symfony/event-dispatcher": "^7.3",
+        "symfony/filesystem": "^7.3",
+        "symfony/finder": "^7.3",
+        "symfony/http-client": "^7.3",
+        "symfony/http-foundation": "^7.2",
+        "symfony/lock": "^7.3",
+        "symfony/mailer": "^7.3",
+        "symfony/mime": "^7.3",
+        "symfony/options-resolver": "^7.3",
+        "symfony/process": "^7.3",
+        "symfony/property-access": "^7.3",
+        "symfony/property-info": "^7.3",
+        "symfony/routing": "^7.2",
+        "symfony/serializer": "^7.3",
+        "symfony/validator": "^7.3",
+        "symfony/yaml": "^7.3",
+        "vlucas/phpdotenv": "^5.6"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5",
+        "squizlabs/php_codesniffer": "^3.6",
+        "phpstan/phpstan": "^1.0",
+        "phpstan/phpstan-strict-rules": "^1.0",
+        "phpstan/phpstan-deprecation-rules": "^1.0",
+        "phpstan/phpstan-phpunit": "^1.3",
+        "symfony/var-dumper": "^7.3"
+    },
+    "autoload": {
+        "files": [
+            "src/helpers.php",
+            "src/Exceptions/ExceptionHandler.php"
+        ],
+        "psr-4": {
+            "Glueful\\": "src/",
+            "Glueful\\Database\\": [
+                "src/Database/",
+                "src/Database/Driver/"
+            ]
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Glueful\\Tests\\": "tests/"
+        }
+    },
+  "scripts": {
+        "test": "vendor/bin/phpunit",
+        "test:unit": "vendor/bin/phpunit --testsuite Unit",
+        "test:integration": "vendor/bin/phpunit --testsuite Integration",
+        "test:coverage": "vendor/bin/phpunit --coverage-html coverage",
+        "phpstan": "PHPSTAN_DISABLE_PARALLEL=1 vendor/bin/phpstan analyse --no-progress --memory-limit=512M",
+        "analyse": "vendor/bin/phpstan analyse src --no-progress --memory-limit=512M",
+        "analyse:strict": "vendor/bin/phpstan analyse src --level=8 --no-progress",
+        "analyse:changed": "bash -lc 'BASE=$(git merge-base origin/main HEAD 2>/dev/null || git merge-base main HEAD 2>/dev/null || echo HEAD~1); CHANGED=$(git diff --name-only --diff-filter=AMR $BASE...HEAD | grep ^src/ || true); if [ -z \"$CHANGED\" ]; then echo \"No changed files under src/.\"; else echo \"Analysing changed files:\n$CHANGED\"; vendor/bin/phpstan analyse --no-progress $CHANGED; fi'",
+        "phpcs": "vendor/bin/phpcs",
+        "phpcbf": "vendor/bin/phpcbf",
+        "format": "@phpcbf",
+        "phpstan:di": "PHPSTAN_DISABLE_PARALLEL=1 vendor/bin/phpstan analyse src/DI --level=8 --no-progress",
+        "phpstan:db": "PHPSTAN_DISABLE_PARALLEL=1 vendor/bin/phpstan analyse src/Database --level=8 --no-progress",
+        "phpstan:http": "PHPSTAN_DISABLE_PARALLEL=1 vendor/bin/phpstan analyse src/Http --level=7 --no-progress",
+        "phpstan:cache": "PHPSTAN_DISABLE_PARALLEL=1 vendor/bin/phpstan analyse -c phpstan.cache-strict.neon --no-progress",
+        "types:validate": [
+            "@phpstan:di",
+            "@phpstan:db",
+            "@phpstan:http",
+            "@phpstan:cache"
+        ],
+        "ci": [
+            "@test",
+            "@analyse",
+            "@phpcs"
+        ],
+        "ci:fast": [
+            "@test",
+            "@analyse:changed",
+            "@phpcs"
+        ],
+        "optimize": [
+            "@composer dump-autoload --optimize --classmap-authoritative",
+            "php -r \"function_exists('opcache_reset') ? opcache_reset() : null;\"",
+            "echo 'Framework optimized for production'"
+        ]
+    },
+    "config": {
+        "allow-plugins": {
+            "php-http/discovery": true
+        },
+        "sort-packages": true,
+        "optimize-autoloader": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+,
+    "bin": [
+        "bin/glueful"
+    ]
+}

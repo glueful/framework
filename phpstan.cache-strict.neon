@@ -1,0 +1,7 @@
+includes:
+    - phpstan.neon
+
+parameters:
+    # Restrict analysis to cache path for staged rollout
+    paths:
+        - src/Cache

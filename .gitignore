@@ -1,0 +1,6 @@
+
+.DS_Store
+vendor
+.phpunit.cache/
+src/storage/
+:memory:

@@ -1,0 +1,158 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Glueful\Events\Database;
+
+use Glueful\Events\BaseEvent;
+
+/**
+ * Entity Updated Event
+ *
+ * Dispatched when an entity is updated in the database.
+ * Used for cache invalidation, audit logging, and change notifications.
+ *
+ * @package Glueful\Events\Database
+ */
+class EntityUpdatedEvent extends BaseEvent
+{
+    /**
+     * @param mixed $entity The updated entity/data
+     * @param string $table Database table name
+     * @param array<string, mixed> $changes Changed fields
+     * @param array<string, mixed> $metadata Additional metadata
+     */
+    public function __construct(
+        private readonly mixed $entity,
+        private readonly string $table,
+        private readonly array $changes = [],
+        array $metadata = []
+    ) {
+        parent::__construct();
+
+        // Set metadata using BaseEvent's setMetadata method
+        foreach ($metadata as $key => $value) {
+            $this->setMetadata($key, $value);
+        }
+    }
+
+    /**
+     * Get updated entity
+     *
+     * @return mixed Entity data
+     */
+    public function getEntity(): mixed
+    {
+        return $this->entity;
+    }
+
+    /**
+     * Get table name
+     *
+     * @return string Table name
+     */
+    public function getTable(): string
+    {
+        return $this->table;
+    }
+
+    /**
+     * Get changed fields
+     *
+     * @return array<string, mixed> Changed fields
+     */
+    public function getChanges(): array
+    {
+        return $this->changes;
+    }
+
+
+    /**
+     * Get entity ID if available
+     *
+     * @return mixed Entity ID
+     */
+    public function getEntityId(): mixed
+    {
+        if (is_array($this->entity)) {
+            return $this->entity['id'] ?? $this->entity['uuid'] ?? null;
+        }
+
+        if (is_object($this->entity)) {
+            return $this->entity->id ?? $this->entity->uuid ?? null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Check if specific field was changed
+     *
+     * @param string $field Field name
+     * @return bool True if changed
+     */
+    public function hasFieldChanged(string $field): bool
+    {
+        return array_key_exists($field, $this->changes);
+    }
+
+    /**
+     * Get old value for a field
+     *
+     * @param string $field Field name
+     * @return mixed Old value
+     */
+    public function getOldValue(string $field): mixed
+    {
+        return $this->changes[$field]['old'] ?? null;
+    }
+
+    /**
+     * Get new value for a field
+     *
+     * @param string $field Field name
+     * @return mixed New value
+     */
+    public function getNewValue(string $field): mixed
+    {
+        return $this->changes[$field]['new'] ?? null;
+    }
+
+    /**
+     * Get cache tags to invalidate
+     *
+     * @return array Cache tags
+     */
+    /**
+     * @return array<int, string>
+     */
+    public function getCacheTags(): array
+    {
+        $tags = [$this->table];
+
+        $entityId = $this->getEntityId();
+        if ($entityId !== null) {
+            $tags[] = $this->table . ':' . $entityId;
+        }
+
+        return array_merge($tags, $this->getMetadata('cache_tags') ?? []);
+    }
+
+    /**
+     * Check if this is a critical field update
+     *
+     * @return bool True if critical
+     */
+    public function isCriticalUpdate(): bool
+    {
+        $criticalFields = ['status', 'active', 'enabled', 'permissions'];
+
+        foreach ($criticalFields as $field) {
+            if ($this->hasFieldChanged($field)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}

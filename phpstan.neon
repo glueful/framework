@@ -1,0 +1,70 @@
+includes:
+    - vendor/phpstan/phpstan-strict-rules/rules.neon
+    - vendor/phpstan/phpstan-deprecation-rules/rules.neon
+    - vendor/phpstan/phpstan-phpunit/extension.neon
+    - vendor/phpstan/phpstan-phpunit/rules.neon
+
+parameters:
+    level: 6
+    paths:
+        - src
+        - config
+    excludePaths:
+        - src/bootstrap.php  # Legacy bootstrap file
+        - src/index.php      # Entry point with global state
+        - src/_denyDirectAccess.php  # Security file
+        - src/version.php    # Simple version constants
+        - src/helpers.php    # Global helper functions
+        - src/apiDefinitionLoader.php  # API definition loader
+        - src/api-json-definitions/  # API definitions
+    
+    # Enable proper autoloading
+    bootstrapFiles:
+        - vendor/autoload.php
+    
+    # Improve analysis quality
+    treatPhpDocTypesAsCertain: false
+    # Deprecated in recent PHPStan; omit to avoid warnings
+    checkGenericClassInNonGenericObjectType: true
+    # Ignore patterns may be forward-looking; don't fail when unmatched
+    reportUnmatchedIgnoredErrors: false
+    ignoreErrors:
+        - '#Instanceof between mixed and Monolog\\Handler\\AbstractProcessingHandler will always evaluate to false\.#'
+        
+        # EmailVerification.php issues with unknown class
+        - '#Property Glueful\\Security\\EmailVerification::\$emailProvider has unknown class Glueful\\Extensions\\EmailNotification\\EmailNotificationProvider as its type\.#'
+        - '#Instantiated class Glueful\\Extensions\\EmailNotification\\EmailNotificationProvider not found\.#'
+        - '#Call to method [a-zA-Z0-9_]+\(\) on an unknown class Glueful\\Extensions\\EmailNotification\\EmailNotificationProvider\.#'
+
+        # Framework utilities and helpers
+        - '#Function config invoked with [0-9]+ parameter, 0-2 required\.#'
+        - '#Function env invoked with [0-9]+ parameter, 1-2 required\.#'
+        - '#Cannot call method [a-zA-Z0-9_]+\(\) on mixed\.#'
+        
+        # Database-related dynamic property access
+        - '#Access to an undefined property PDO::\$[a-zA-Z0-9_]+\.#'
+        - '#Call to an undefined method PDO::[a-zA-Z0-9_]+\(\)\.#'
+        
+        # Container and DI patterns
+        - '#Method Glueful\\DI\\Container::get\(\) invoked with [0-9]+ parameter, 1 required\.#'
+        - '#Parameter \#1 \$id of method Glueful\\DI\\Container::get\(\) expects string, .* given\.#'
+        
+        # Configuration array access patterns
+        - '#Offset .* does not exist on array.*\.#'
+        - '#Cannot access offset .* on mixed\.#'
+        
+        # Logging and error handling
+        - '#Constructor of class Glueful\\Logging\\LogManager has an unused parameter \$logFile\.#'
+        - '#Variable \$messageStr might not be defined\.#'
+        
+        # Development/unused methods (may be used by extensions or future features)
+        - '#Method Glueful\\[a-zA-Z0-9\\_]+::[a-zA-Z0-9_]+\(\) is unused\.#'
+        - '#Property .* is never read, only written\.#'
+        
+        # Cache and serialization
+        - '#Method Glueful\\Security\\SecureSerializer::serialize\(\) should return string but returns string\|false\.#'
+        - '#Method Glueful\\Security\\SecureSerializer::unserialize\(\) should return mixed but returns false\.#'
+        
+        # PSR-3 LoggerInterface compatibility - array type specifications
+        - '#Method Glueful\\Logging\\LogManager::[a-zA-Z]+\(\) has parameter \$context with no value type specified in iterable type array\.#'
+        
