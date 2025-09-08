@@ -232,9 +232,13 @@ class Framework
             // Load framework core routes
             $frameworkRoutesPath = dirname(__DIR__) . '/routes';
 
-            // Load auth routes (framework core authentication)
+            // Load auth routes (framework core routes)
             if (file_exists($frameworkRoutesPath . '/auth.php')) {
                 require $frameworkRoutesPath . '/auth.php';
+            }
+
+            if (file_exists($frameworkRoutesPath . '/resource.php')) {
+                require $frameworkRoutesPath . '/resource.php';
             }
 
             // Load core application routes if they exist

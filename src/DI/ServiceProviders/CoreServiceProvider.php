@@ -60,6 +60,21 @@ class CoreServiceProvider implements ServiceProviderInterface
             ->setArguments([new Reference(\Glueful\Routing\Router::class)])
             ->setPublic(true);
 
+        // Routing Middleware
+        $container->register(\Glueful\Routing\Middleware\AuthMiddleware::class)
+            ->setArguments([new Reference(\Glueful\Auth\AuthenticationManager::class)])
+            ->setPublic(true);
+
+        $container->register(\Glueful\Routing\Middleware\RateLimiterMiddleware::class)
+            ->setPublic(true);
+
+        // Register middleware aliases
+        $container->setAlias('auth', \Glueful\Routing\Middleware\AuthMiddleware::class)
+            ->setPublic(true);
+
+        $container->setAlias('rate_limit', \Glueful\Routing\Middleware\RateLimiterMiddleware::class)
+            ->setPublic(true);
+
         // Logger service
         $container->register('logger', \Psr\Log\LoggerInterface::class)
             ->setFactory([$this, 'createLogger'])
