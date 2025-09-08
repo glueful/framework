@@ -3,4 +3,5 @@
 vendor
 .phpunit.cache/
 src/storage/
+storage/
 :memory:
