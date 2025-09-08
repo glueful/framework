@@ -46,7 +46,7 @@ $router->group(['prefix' => '/auth'], function (Router $router) {
     $router->post('/login', function (Request $request) {
         $authController = container()->get(AuthController::class);
         return $authController->login();
-    });
+    })->middleware('rate_limit:5,60'); // 5 attempts per minute
 
     /**
      * @route POST /auth/verify-email
@@ -91,7 +91,29 @@ $router->group(['prefix' => '/auth'], function (Router $router) {
     $router->post('/verify-otp', function () {
         $authController = container()->get(AuthController::class);
         return $authController->verifyOtp();
-    });
+    })->middleware('rate_limit:3,60'); // 3 attempts per minute
+
+    /**
+     * @route POST /auth/resend-otp
+     * @summary Resend OTP
+     * @description Resends the one-time password (OTP) to the user's email
+     * @tag Authentication
+     * @requestBody email:string="Email address to resend OTP to" {required=email}
+     * @response 200 application/json "OTP resent successfully" {
+     *   success:boolean="true",
+     *   message:string="Success message",
+     *   data:{
+     *     email:string="Email address",
+     *     expires_in:integer="OTP expiration time in seconds"
+     *   },
+     * }
+     * @response 400 "Invalid email address"
+     * @response 404 "Email not found"
+     */
+    $router->post('/resend-otp', function () {
+        $authController = container()->get(AuthController::class);
+        return $authController->resendOtp();
+    })->middleware('rate_limit:2,120'); // 2 attempts per 2 minutes (stricter for resend)
 
     /**
      * @route POST /auth/forgot-password
@@ -197,6 +219,30 @@ $router->group(['prefix' => '/auth'], function (Router $router) {
     $router->post('/logout', function () {
         $authController = container()->get(AuthController::class);
         return $authController->logout();
+    })->middleware(['auth']);
+
+    /**
+     * @route POST /auth/refresh-permissions
+     * @summary Refresh User Permissions
+     * @description Updates the session with fresh user permissions and returns a new token
+     * @tag Authentication
+     * @requiresAuth true
+     * @response 200 application/json "Permissions refreshed successfully" {
+     *   success:boolean="true",
+     *   message:string="Success message",
+     *   data:{
+     *     access_token:string="Updated JWT access token",
+     *     refresh_token:string="Updated JWT refresh token",
+     *     permissions:array="Updated user permissions",
+     *     updated_at:string="Timestamp of permission update"
+     *   },
+     * }
+     * @response 401 "Unauthorized - invalid token"
+     * @response 400 "Missing or invalid token"
+     */
+    $router->post('/refresh-permissions', function () {
+        $authController = container()->get(AuthController::class);
+        return $authController->refreshPermissions();
     })->middleware(['auth']);
 });
 

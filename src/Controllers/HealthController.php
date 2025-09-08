@@ -171,7 +171,11 @@ class HealthController extends BaseController
         $this->requirePermission('system.middleware.health', 'health:middleware');
         $this->rateLimit('health_middleware', 20, 60);
 
-        $middlewareHealth = $this->checkMiddlewarePipeline();
+        // Middleware are now handled per-route, no pipeline health check needed
+        $middlewareHealth = [
+            'status' => 'healthy',
+            'note' => 'Middleware are applied per-route in the new routing system'
+        ];
 
         return $this->privateCached(
             Response::success($middlewareHealth, 'Middleware health check completed'),
@@ -243,8 +247,6 @@ class HealthController extends BaseController
 
             // Middleware pipeline
             'middleware' => [
-                'pipeline_health' => $this->checkMiddlewarePipeline(),
-                'active_middleware' => $this->getActiveMiddlewareCount(),
                 'middleware_performance' => $this->getMiddlewarePerformanceMetrics(),
                 'validation_metrics' => $this->getResponseValidationMetrics(),
                 'compression_metrics' => $this->getCompressionMetrics(),
@@ -366,60 +368,6 @@ class HealthController extends BaseController
         }
     }
 
-    /**
-     * Check middleware pipeline health
-     * @return array<string, mixed>
-     */
-    private function checkMiddlewarePipeline(): array
-    {
-        try {
-            $middlewareConfig = config('middleware', []);
-            $globalMiddleware = $middlewareConfig['global'] ?? [];
-
-            $health = [
-                'status' => 'healthy',
-                'total_middleware' => count($globalMiddleware),
-                'active_middleware' => $this->getActiveMiddlewareCount(),
-                'middleware_order' => array_map(function ($middleware) {
-                    return is_array($middleware) ? $middleware['class'] : $middleware;
-                }, $globalMiddleware),
-                'pipeline_integrity' => $this->validateMiddlewarePipeline($globalMiddleware),
-            ];
-
-            // Check if critical middleware is present
-            $criticalMiddleware = [
-                'SecurityHeadersMiddleware',
-                'RateLimiterMiddleware'
-            ];
-
-            $missingCritical = [];
-            foreach ($criticalMiddleware as $critical) {
-                $found = false;
-                foreach ($globalMiddleware as $middleware) {
-                    $className = is_array($middleware) ? $middleware['class'] : $middleware;
-                    if (strpos($className, $critical) !== false) {
-                        $found = true;
-                        break;
-                    }
-                }
-                if (!$found) {
-                    $missingCritical[] = $critical;
-                }
-            }
-
-            if ($missingCritical !== []) {
-                $health['status'] = 'warning';
-                $health['missing_critical_middleware'] = $missingCritical;
-            }
-
-            return $health;
-        } catch (\Throwable $e) {
-            return [
-                'status' => 'error',
-                'error' => 'Unable to check middleware pipeline: ' . $e->getMessage()
-            ];
-        }
-    }
 
     /**
      * Get response cache hit metrics
@@ -602,17 +550,6 @@ class HealthController extends BaseController
     private function getErrorBreakdown(): array
     {
         return [];
-    }
-    private function getActiveMiddlewareCount(): int
-    {
-        return count(config('middleware.global', []));
-    }
-    /**
-     * @param array<int, mixed> $middleware
-     */
-    private function validateMiddlewarePipeline(array $middleware): bool
-    {
-        return true;
     }
     /**
      * @return array<string, mixed>

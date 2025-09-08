@@ -39,10 +39,6 @@ class ControllerServiceProvider implements ServiceProviderInterface
         $container->register(ConfigController::class)
             ->setPublic(true);
 
-        // Database Controller
-        $container->register(DatabaseController::class)
-            ->setPublic(true);
-
         // Resource Controller
         $container->register(ResourceController::class)
             ->setArguments([new Reference(\Glueful\Repository\RepositoryFactory::class)])
@@ -52,42 +48,15 @@ class ControllerServiceProvider implements ServiceProviderInterface
         $container->register(MetricsController::class)
             ->setPublic(true);
 
-        // Migrations Controller
-        $container->register(MigrationsController::class)
-            ->setPublic(true);
-
-        // Jobs Controller
-        $container->register(JobsController::class)
-            ->setPublic(true);
-
-        // Files Controller - inject dependencies for BaseController compatibility
-        $container->register(FilesController::class)
-            ->setArguments([new Reference(\Glueful\Repository\RepositoryFactory::class)])
-            ->setPublic(true);
-
         // Health Controller - inject dependencies for BaseController
         $container->register(HealthController::class)
             ->setArguments([new Reference(\Glueful\Repository\RepositoryFactory::class)])
             ->setPublic(true);
 
-        // Notifications Controller
-        $container->register(NotificationsController::class)
-            ->setPublic(true);
 
         // Extensions Controller
         $container->register(ExtensionsController::class)
             ->setArguments([new Reference(\Glueful\Extensions\ExtensionManager::class)])
-            ->setPublic(true);
-
-        // Users Controller
-        $container->register(UsersController::class)
-            ->setArguments([
-                new Reference(\Glueful\Repository\RepositoryFactory::class),
-                new Reference(\Glueful\Auth\AuthenticationManager::class),
-                null, // Request is injected per-request
-                new Reference(\Glueful\Repository\UserRepository::class),
-                new Reference(\Glueful\Auth\TokenStorageService::class)
-            ])
             ->setPublic(true);
     }
 

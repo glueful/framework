@@ -10,21 +10,30 @@ use Glueful\Repository\RepositoryFactory;
 use Glueful\Constants\ErrorCodes;
 
 /**
- * ResourceController - Performance-First CRUD API
+ * ResourceController - RESTful CRUD API Controller
  *
- * Provides fast, minimal CRUD operations for any resource table.
- * Security features are available as optional traits for enhanced protection.
+ * Provides complete CRUD (Create, Read, Update, Delete) operations for any
+ * resource table with performance-first design and optional security features.
+ *
+ * CRUD Operations:
+ * - GET    /resource/{table}     -> get() method (Read multiple/paginated)
+ * - GET    /resource/{table}/{id} -> getSingle() method (Read single record)
+ * - POST   /resource/{table}     -> post() method (Create new record)
+ * - PUT    /resource/{table}/{id} -> put() method (Update existing record)
+ * - DELETE /resource/{table}/{id} -> delete() method (Delete record)
  *
  * Performance-First Design:
  * - Minimal overhead by default
- * - Security features are opt-in via traits
+ * - Security features are opt-in via configuration
+ * - Built-in rate limiting and caching support
  * - Configurable limits and restrictions
  *
- * Available Security Traits:
+ * Available Security Features (opt-in):
  * - TableAccessControlTrait: Restrict sensitive tables
  * - FieldLevelPermissionsTrait: Hide sensitive fields
  * - BulkOperationsTrait: Secure bulk operations
  * - QueryRestrictionsTrait: Limit query parameters
+ * - Ownership validation for user-specific data
  *
  * @package Glueful\Controllers
  */

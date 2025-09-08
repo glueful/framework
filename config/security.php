@@ -26,6 +26,17 @@ return [
     'enabled_permissions' => env('ENABLE_PERMISSIONS', true),
     'nanoid_length' => env('NANOID_LENGTH', 12),
 
+    // Sensitive configuration files
+    // These files require additional permissions for viewing/editing
+    'sensitive_config_files' => [
+        'security',  // Security configurations, API keys
+        'database',  // Database credentials
+        'app',       // Application secrets and keys
+        'auth',      // Authentication providers and secrets
+        'services',  // Third-party service credentials
+        'mail',      // SMTP credentials
+    ],
+
     // CORS Configuration
     'cors' => [
         // Smart CORS defaults: permissive in development, secure guidance in production

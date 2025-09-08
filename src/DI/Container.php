@@ -12,6 +12,9 @@ use Symfony\Component\DependencyInjection\ContainerInterface as SymfonyContainer
  */
 class Container implements ContainerInterface
 {
+    /** @var array<string, mixed> Runtime service instances that override container definitions */
+    private array $instances = [];
+
     public function __construct(
         private SymfonyContainerInterface $container
     ) {
@@ -23,6 +26,11 @@ class Container implements ContainerInterface
      */
     public function get(string $id): mixed
     {
+        // Check runtime instances first (highest precedence)
+        if (isset($this->instances[$id])) {
+            return $this->instances[$id];
+        }
+
         try {
             return $this->container->get($id);
         } catch (\Throwable $e) {
@@ -69,7 +77,8 @@ class Container implements ContainerInterface
 
     public function has(string $id): bool
     {
-        return $this->container->has($id);
+        // Service exists if it's in runtime instances OR in the container
+        return isset($this->instances[$id]) || $this->container->has($id);
     }
 
     public function getSymfonyContainer(): SymfonyContainerInterface
@@ -181,5 +190,62 @@ class Container implements ContainerInterface
             // Pass the underlying Symfony container, not the wrapper
             $serviceProvider->register($this->container);
         }
+    }
+
+    /**
+     * Bind a specific instance to a service identifier
+     *
+     * This creates a runtime override that takes precedence over container definitions.
+     * Useful for request-scoped customization, middleware overrides, and testing.
+     *
+     * @param string $id Service identifier (typically a class name)
+     * @param mixed $instance The instance to bind
+     * @return void
+     *
+     * @example
+     * // Override default Projector with custom expanders for this request
+     * $container->instance(Projector::class, $customProjector);
+     *
+     * // Now all calls to get(Projector::class) return the custom instance
+     * $projector = $container->get(Projector::class); // returns $customProjector
+     */
+    public function instance(string $id, mixed $instance): void
+    {
+        $this->instances[$id] = $instance;
+    }
+
+    /**
+     * Remove a runtime instance binding
+     *
+     * After calling this, get() will fall back to the container's definition.
+     *
+     * @param string $id Service identifier to remove
+     * @return void
+     */
+    public function forgetInstance(string $id): void
+    {
+        unset($this->instances[$id]);
+    }
+
+    /**
+     * Clear all runtime instance bindings
+     *
+     * Useful for cleaning up after requests or in testing scenarios.
+     *
+     * @return void
+     */
+    public function clearInstances(): void
+    {
+        $this->instances = [];
+    }
+
+    /**
+     * Get all currently bound runtime instances
+     *
+     * @return array<string, mixed> Service ID => Instance mappings
+     */
+    public function getInstances(): array
+    {
+        return $this->instances;
     }
 }

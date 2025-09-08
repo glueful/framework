@@ -23,7 +23,24 @@ class ConfigController extends BaseController
         parent::__construct();
     }
 
-    private const SENSITIVE_CONFIG_FILES = ['security', 'database', 'app'];
+    /**
+     * Get the list of sensitive configuration files
+     *
+     * This method allows the sensitive files list to be configured via the security config
+     * rather than being hardcoded. Falls back to the default list if not configured.
+     *
+     * @return array<string> List of config file names considered sensitive
+     */
+    private function getSensitiveConfigFiles(): array
+    {
+        return config('security.sensitive_config_files', [
+            'security',
+            'database',
+            'app',
+            'auth',
+            'services' // API keys and service credentials
+        ]);
+    }
 
     /**
      * Get all configuration files with HTTP caching
@@ -70,7 +87,7 @@ class ConfigController extends BaseController
         }
 
         // Check for sensitive config access
-        if (in_array($configName, self::SENSITIVE_CONFIG_FILES, true)) {
+        if (in_array($configName, $this->getSensitiveConfigFiles(), true)) {
             $this->requirePermission('system.config.sensitive.view');
 
             // Sensitive configs get private caching (5 minutes)
@@ -126,6 +143,13 @@ class ConfigController extends BaseController
     {
         // No authentication required for public config
 
+        // Add modest public rate limiting to prevent abuse
+        $this->rateLimitMethod('public_config', [
+            'attempts' => 60,
+            'window' => 60,
+            'adaptive' => true
+        ]);
+
         $publicConfig = [
             'app_name' => ConfigManager::get('app.name', 'Glueful'),
             'api_version' => ConfigManager::get('app.version', '1.0'),
@@ -173,7 +197,7 @@ class ConfigController extends BaseController
         }
 
         // Check for sensitive config modifications
-        if (in_array($configName, self::SENSITIVE_CONFIG_FILES, true)) {
+        if (in_array($configName, $this->getSensitiveConfigFiles(), true)) {
             $this->requirePermission('system.config.sensitive.edit');
         }
 
@@ -187,8 +211,26 @@ class ConfigController extends BaseController
         // Create rollback point before making changes
         $this->createConfigRollbackPoint($configName, $existingConfig);
 
-        // Merge and validate
-        $newConfig = array_merge($existingConfig, $data);
+        // Merge (optionally recursive) and then validate via schema if available
+        $newConfig = $this->shouldUseRecursiveMerge()
+            ? $this->recursiveMerge($existingConfig, $data)
+            : array_merge($existingConfig, $data);
+
+        // Schema validation before persist (if schema exists)
+        try {
+            /** @var ConfigurationProcessor $processor */
+            $processor = container()->get(ConfigurationProcessor::class);
+            if ($processor->hasSchema($configName)) {
+                $newConfig = $processor->processConfiguration($configName, $newConfig);
+            }
+        } catch (ConfigurationException $e) {
+            return $this->validationError([
+                'config_name' => $configName,
+                'errors' => [$e->getMessage()]
+            ], 'Configuration validation failed');
+        } catch (\Throwable $e) {
+            return $this->serverError('Failed to validate configuration: ' . $e->getMessage());
+        }
 
         // Update in ConfigManager (runtime)
         ConfigManager::set($configName, $newConfig);
@@ -255,6 +297,17 @@ class ConfigController extends BaseController
             }
         }
 
+        // Optionally validate against schema (if defined)
+        try {
+            /** @var ConfigurationProcessor $processor */
+            $processor = container()->get(ConfigurationProcessor::class);
+            if ($processor->hasSchema($configName)) {
+                $data = $processor->processConfiguration($configName, $data);
+            }
+        } catch (ConfigurationException $e) {
+            throw new ValidationException('Configuration validation failed: ' . $e->getMessage());
+        }
+
         // Generate configuration content
         $configContent = "<?php\n\n";
         $configContent .= "/**\n";
@@ -264,8 +317,8 @@ class ConfigController extends BaseController
         $configContent .= " */\n\n";
         $configContent .= "return " . var_export($data, true) . ";\n";
 
-        // Write configuration file
-        $success = $fileManager->writeFile($filePath, $configContent);
+        // Atomic write via temp file + rename
+        $success = $this->writeAtomic($filePath, $configContent);
 
         if (!$success) {
             throw new BusinessLogicException('Failed to write configuration file');
@@ -852,13 +905,26 @@ class ConfigController extends BaseController
         $configPath = config_path();
         $filePath = $configPath . '/' . $configName . '.php';
 
+        // Create a backup before writing
+        $this->createConfigRollbackPoint($configName, $config);
+
         $configContent = "<?php\n\nreturn " . var_export($config, true) . ";\n";
 
-        return file_put_contents($filePath, $configContent) !== false;
+        return $this->writeAtomic($filePath, $configContent);
     }
 
     /**
-     * @param array<string, mixed> $data
+     * Update corresponding .env variables for config changes
+     *
+     * LIMITATIONS:
+     * - Only supports top-level config keys (e.g., 'app.name' -> 'APP_NAME')
+     * - Nested config changes are NOT mapped (e.g., 'database.connections.mysql.host' won't update)
+     * - Values are quoted as strings; complex types (arrays/objects) are not supported
+     * - Boolean values are converted to '1' or '0' for compatibility
+     *
+     * For nested config changes, manual .env updates or direct config file editing is required.
+     *
+     * @param array<string, mixed> $data Top-level config key-value pairs
      */
     private function updateEnvVariables(array $data): void
     {
@@ -872,6 +938,11 @@ class ConfigController extends BaseController
         $updated = false;
 
         foreach ($data as $key => $value) {
+            // Only process top-level keys (single dot notation)
+            if (substr_count($key, '.') !== 1) {
+                continue; // Skip nested keys
+            }
+
             $envKey = $this->findEnvKeyForConfigValue($key);
             if ($envKey !== '') {
                 $lines = $this->updateEnvLine($lines, $envKey, $value);
@@ -884,9 +955,22 @@ class ConfigController extends BaseController
         }
     }
 
+    /**
+     * Convert config key to .env key format
+     *
+     * Maps dot notation to underscore format (e.g., 'app.name' -> 'APP_NAME')
+     * Only handles single-level dot notation for simplicity and security.
+     *
+     * @param string $key Config key in dot notation
+     * @return string ENV key in uppercase with underscores
+     */
     private function findEnvKeyForConfigValue(string $key): string
     {
-        return strtoupper(str_replace('.', '_', $key));
+        // Only convert simple top-level keys for safety
+        if (substr_count($key, '.') === 1) {
+            return strtoupper(str_replace('.', '_', $key));
+        }
+        return ''; // Return empty for nested keys
     }
 
     /**
@@ -915,10 +999,79 @@ class ConfigController extends BaseController
      */
     private function createConfigRollbackPoint(string $configName, array $config): void
     {
-        // TODO: Implement config rollback functionality
-        // For now, this is a placeholder that doesn't break the flow
-        // Prevent unused parameter warnings
-        unset($configName, $config);
+        try {
+            $configDir = config_path();
+            $filePath = $configDir . '/' . $configName . '.php';
+            if (!file_exists($filePath)) {
+                return; // nothing to back up
+            }
+
+            $backupDir = $configDir . '/backups';
+            if (!is_dir($backupDir)) {
+                @mkdir($backupDir, 0755, true);
+            }
+
+            $timestamp = date('Ymd_His');
+            $backupPath = sprintf('%s/%s.php.bak.%s', $backupDir, $configName, $timestamp);
+            @copy($filePath, $backupPath);
+        } catch (\Throwable $e) {
+            // Non-fatal: log and continue
+            error_log('Failed to create config backup: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Perform an atomic write: write to temp file then rename.
+     */
+    private function writeAtomic(string $filePath, string $content): bool
+    {
+        $dir = dirname($filePath);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+
+        $tmpPath = $filePath . '.tmp.' . uniqid('', true);
+        $bytes = @file_put_contents($tmpPath, $content, LOCK_EX);
+        if ($bytes === false) {
+            @unlink($tmpPath);
+            return false;
+        }
+
+        $renamed = @rename($tmpPath, $filePath);
+        if (!$renamed) {
+            @unlink($tmpPath);
+            return false;
+        }
+
+        @chmod($filePath, 0644);
+        return true;
+    }
+
+    /**
+     * Determine whether to use recursive merge for updates.
+     */
+    private function shouldUseRecursiveMerge(): bool
+    {
+        return (bool) (ConfigManager::get('config.updates.recursive_merge', true));
+    }
+
+    /**
+     * Recursively merge configuration arrays (override scalar values with updates).
+     *
+     * @param array<string, mixed> $base
+     * @param array<string, mixed> $overrides
+     * @return array<string, mixed>
+     */
+    private function recursiveMerge(array $base, array $overrides): array
+    {
+        foreach ($overrides as $key => $value) {
+            if (is_array($value) && isset($base[$key]) && is_array($base[$key])) {
+                $base[$key] = $this->recursiveMerge($base[$key], $value);
+            } else {
+                $base[$key] = $value;
+            }
+        }
+        return $base;
     }
 
     /**

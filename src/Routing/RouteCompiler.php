@@ -43,10 +43,12 @@ class RouteCompiler
                 $pattern = $route->getPattern();
                 $handlerMeta = $this->normalizeHandler($route->getHandler());
                 $params = var_export($route->getParamNames(), true);
+                $middleware = var_export($route->getMiddleware(), true);
                 $code .= "            [\n";
                 $code .= "                'pattern' => '{$pattern}',\n";
                 $code .= "                'handler' => " . var_export($handlerMeta, true) . ",\n";
-                $code .= "                'params' => {$params}\n";
+                $code .= "                'params' => {$params},\n";
+                $code .= "                'middleware' => {$middleware}\n";
                 $code .= "            ],\n";
             }
             $code .= "        ],\n";
