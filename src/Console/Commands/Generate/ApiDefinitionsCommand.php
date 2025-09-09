@@ -3,7 +3,7 @@
 namespace Glueful\Console\Commands\Generate;
 
 use Glueful\Console\BaseCommand;
-use Glueful\ApiDefinitionGenerator;
+use Glueful\Support\Documentation\ApiDefinitionGenerator;
 use Glueful\Services\FileFinder;
 use Glueful\Services\FileManager;
 use Symfony\Component\Console\Attribute\AsCommand;

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Glueful\Config;
+namespace Glueful\Support\Options;
 
 use Symfony\Component\OptionsResolver\OptionsResolver;
 
@@ -12,7 +12,7 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
  * Defines the contract for classes that use Symfony OptionsResolver
  * for configuration validation and normalization.
  *
- * @package Glueful\Config
+ * @package Glueful\Support\Options
  */
 interface ConfigurableInterface
 {

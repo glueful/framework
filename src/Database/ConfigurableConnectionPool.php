@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Database;
 
-use Glueful\Config\ConfigurableService;
+use Glueful\Support\Options\ConfigurableService;
 use Glueful\Database\Driver\DatabaseDriver;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 
@@ -18,7 +18,7 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
  */
 class ConfigurableConnectionPool extends ConnectionPool
 {
-    use \Glueful\Config\ConfigurableTrait;
+    use \Glueful\Support\Options\ConfigurableTrait;
 
     /**
      * Create a new configurable connection pool
