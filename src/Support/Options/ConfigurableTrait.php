@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Glueful\Config;
+namespace Glueful\Support\Options;
 
 use Symfony\Component\OptionsResolver\OptionsResolver;
 
@@ -12,7 +12,7 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
  * Provides common functionality for classes that implement ConfigurableInterface.
  * Handles option resolution using Symfony OptionsResolver.
  *
- * @package Glueful\Config
+ * @package Glueful\Support\Options
  */
 trait ConfigurableTrait
 {

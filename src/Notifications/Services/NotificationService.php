@@ -14,8 +14,8 @@ use Glueful\Notifications\Templates\TemplateManager;
 use Glueful\Repository\NotificationRepository;
 use InvalidArgumentException;
 use Glueful\Logging\LogManager;
-use Glueful\Config\ConfigurableInterface;
-use Glueful\Config\ConfigurableTrait;
+use Glueful\Support\Options\ConfigurableInterface;
+use Glueful\Support\Options\ConfigurableTrait;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 
 /**

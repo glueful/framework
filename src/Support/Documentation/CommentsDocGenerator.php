@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Glueful;
+namespace Glueful\Support\Documentation;
 
 use ReflectionClass;
 use ReflectionMethod;
