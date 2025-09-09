@@ -5,6 +5,7 @@ namespace Glueful\Console;
 use Symfony\Component\Console\Application as BaseApplication;
 use Symfony\Component\Console\Command\Command;
 use Glueful\DI\Container;
+use Glueful\Support\Version;
 
 /**
  * Glueful Symfony Console Application
@@ -32,6 +33,7 @@ class Application extends BaseApplication
         \Glueful\Console\Commands\Migrate\RollbackCommand::class,
         // Development commands
         \Glueful\Console\Commands\ServeCommand::class,
+        \Glueful\Console\Commands\VersionCommand::class,
         // Cache commands
         \Glueful\Console\Commands\Cache\ClearCommand::class,
         \Glueful\Console\Commands\Cache\StatusCommand::class,
@@ -108,9 +110,9 @@ class Application extends BaseApplication
      * @param Container $container DI Container instance
      * @param string $version Application version
      */
-    public function __construct(Container $container, string $version = '1.0.0')
+    public function __construct(Container $container, ?string $version = null)
     {
-        parent::__construct('Glueful CLI', $version);
+        parent::__construct('Glueful CLI', $version ?? Version::getVersion());
 
         $this->container = $container;
         $this->registerCommands();
