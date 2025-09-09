@@ -271,6 +271,20 @@ class CoreServiceProvider implements ServiceProviderInterface
         // Migration services
         $container->register(\Glueful\Database\Migrations\MigrationManager::class)
             ->setPublic(true);
+
+        // Field Selection services
+        $container->register(\Glueful\Support\FieldSelection\Projector::class)
+            ->setFactory([$this, 'createProjector'])
+            ->setArguments([new Reference('service_container')])
+            ->setPublic(true);
+
+        $container->register(\Glueful\Routing\Middleware\FieldSelectionMiddleware::class)
+            ->setArguments([new Reference(\Glueful\Support\FieldSelection\Projector::class)])
+            ->setPublic(true);
+
+        // Alias middleware
+        $container->setAlias('field_selection', \Glueful\Routing\Middleware\FieldSelectionMiddleware::class)
+            ->setPublic(true);
     }
 
     public function boot(Container $container): void
@@ -356,5 +370,23 @@ class CoreServiceProvider implements ServiceProviderInterface
     {
         \Glueful\Auth\TokenManager::initialize();
         return new \Glueful\Auth\TokenManager();
+    }
+
+    /**
+     * Factory method for creating Projector
+     *
+     * @param mixed $container
+     */
+    public static function createProjector(mixed $container): \Glueful\Support\FieldSelection\Projector
+    {
+        $cfg = \function_exists('config') ? (array)\config('api.field_selection', []) : [];
+        $whitelist = (array)($cfg['whitelists'] ?? []);
+        return new \Glueful\Support\FieldSelection\Projector(
+            whitelist: $whitelist,
+            strictDefault: (bool)($cfg['strict'] ?? false),
+            maxDepthDefault: (int)($cfg['maxDepth'] ?? 6),
+            maxFieldsDefault: (int)($cfg['maxFields'] ?? 200),
+            maxItemsDefault: (int)($cfg['maxItems'] ?? 1000),
+        );
     }
 }

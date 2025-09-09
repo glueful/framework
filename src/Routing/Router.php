@@ -551,6 +551,23 @@ class Router
                     continue;
                 }
 
+                // Inject FieldSelector from request attributes or create from request
+                if ($typeName === \Glueful\Support\FieldSelection\FieldSelector::class) {
+                    $selector = $request->attributes->get(\Glueful\Support\FieldSelection\FieldSelector::class);
+                    if ($selector === null) {
+                        // Create default if not set by middleware
+                        $selector = \Glueful\Support\FieldSelection\FieldSelector::fromRequest($request);
+                    }
+                    $args[] = $selector;
+                    continue;
+                }
+
+                // Inject Projector from container
+                if ($typeName === \Glueful\Support\FieldSelection\Projector::class) {
+                    $args[] = $this->container->get($typeName);
+                    continue;
+                }
+
                 // Inject from container
                 if ($this->container->has($typeName)) {
                     $args[] = $this->container->get($typeName);
