@@ -9,7 +9,6 @@ use Glueful\Services\HealthService;
 use Glueful\Repository\RepositoryFactory;
 use Glueful\Auth\AuthenticationManager;
 use Glueful\Constants\ErrorCodes;
-use Glueful\Http\Router;
 use Glueful\Services\ApiMetricsService;
 use Glueful\Cache\CacheStore;
 use Symfony\Component\HttpFoundation\Request;
@@ -645,7 +644,8 @@ class HealthController extends BaseController
      */
     private function getRouteCacheStatus(): array
     {
-        return ['enabled' => Router::isUsingCachedRoutes()];
+        // New router handles caching automatically, always enabled in production
+        return ['enabled' => env('APP_ENV', 'production') === 'production'];
     }
     /**
      * @return array<string, mixed>

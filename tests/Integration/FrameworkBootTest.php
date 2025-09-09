@@ -103,7 +103,8 @@ final class FrameworkBootTest extends TestCase
 
         $this->assertTrue($container->has(LoggerInterface::class));
         $this->assertTrue($container->has(ConfigRepositoryInterface::class));
-        $this->assertNotEmpty(\Glueful\Http\Router::getVersionPrefix());
+        // Test that new router is properly registered in container
+        $this->assertTrue($container->has(\Glueful\Routing\Router::class));
     }
 
     private function recursiveRemoveDirectory(string $directory): void

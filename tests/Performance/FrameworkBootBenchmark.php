@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Tests\Performance;
 
 use Glueful\Framework;
-use Glueful\Http\Router;
+use Glueful\Routing\Router;
 use Glueful\Http\Response as ApiResponse;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
@@ -63,8 +63,9 @@ final class FrameworkBootBenchmark extends TestCase
         );
         Framework::create($testPath)->withEnvironment('testing')->boot(allowReboot: true);
 
-        // Register a simple route
-        Router::get('/perf-test', function () {
+        // Register a simple route using DI container
+        $router = container()->get(Router::class);
+        $router->get('/perf-test', function () {
             return ApiResponse::success(['timestamp' => microtime(true)]);
         });
 
@@ -75,7 +76,7 @@ final class FrameworkBootBenchmark extends TestCase
             $request = Request::create('/perf-test', 'GET');
 
             $start = microtime(true);
-            $response = Router::dispatch($request);
+            $response = $router->dispatch($request);
             $end = microtime(true);
 
             // Ensure OK and small payload

@@ -744,7 +744,7 @@ class Utils
      */
     public static function csrfToken(\Symfony\Component\HttpFoundation\Request $request): string
     {
-        $middleware = new \Glueful\Http\Middleware\CSRFMiddleware();
+        $middleware = new \Glueful\Routing\Middleware\CSRFMiddleware();
         return $middleware->getToken($request) ?? $middleware->generateToken($request);
     }
 
@@ -756,7 +756,7 @@ class Utils
      */
     public static function csrfField(\Symfony\Component\HttpFoundation\Request $request): string
     {
-        $middleware = new \Glueful\Http\Middleware\CSRFMiddleware();
+        $middleware = new \Glueful\Routing\Middleware\CSRFMiddleware();
         return $middleware->getTokenField($request);
     }
 
@@ -768,7 +768,7 @@ class Utils
      */
     public static function csrfTokenData(\Symfony\Component\HttpFoundation\Request $request): array
     {
-        $middleware = new \Glueful\Http\Middleware\CSRFMiddleware();
+        $middleware = new \Glueful\Routing\Middleware\CSRFMiddleware();
         return $middleware->getTokenData($request);
     }
 

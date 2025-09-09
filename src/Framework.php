@@ -15,9 +15,6 @@ use Glueful\Database\ConnectionValidator;
 use Glueful\Database\DevelopmentQueryMonitor;
 use Glueful\Exceptions\ExceptionHandler;
 use Glueful\Helpers\Utils;
-use Glueful\Http\Router;
-use Glueful\Http\MiddlewareRegistry;
-use Glueful\Helpers\RoutesManager;
 use Glueful\Security\SecurityManager;
 use Psr\Log\LoggerInterface;
 
@@ -189,16 +186,6 @@ class Framework
 
         // Initialize Cache Driver
         Utils::initializeCacheDriver();
-
-        // Initialize API versioning
-        try {
-            $apiVersion = $this->container->hasParameter('app.api_version')
-                ? $this->container->getParameter('app.api_version')
-                : 'v1';
-            Router::setVersion($apiVersion);
-        } catch (\Throwable) {
-            Router::setVersion('v1');
-        }
 
         // Enable cache services
         CacheTaggingService::enable();
