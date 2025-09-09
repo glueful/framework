@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Routing;
 
-use Glueful\Routing\Attributes\{Route, Controller, Middleware, Get, Post, Put, Delete};
+use Glueful\Routing\Attributes\{Route, Controller, Middleware, Get, Post, Put, Delete, Fields};
 
 class AttributeRouteLoader
 {
@@ -163,6 +163,9 @@ class AttributeRouteLoader
                 if (count($route->where) > 0) {
                     $registered->where($route->where);
                 }
+
+                // Process Fields attribute for this route
+                $this->processFieldsAttribute($method, $registered);
             }
         }
 
@@ -212,6 +215,9 @@ class AttributeRouteLoader
                 if (count($attr->where) > 0) {
                     $route->where($attr->where);
                 }
+
+                // Process Fields attribute for this route
+                $this->processFieldsAttribute($method, $route);
             }
         }
     }
@@ -273,5 +279,47 @@ class AttributeRouteLoader
         }
 
         return null;
+    }
+
+    /**
+     * Process Fields attribute and set configuration on route
+     */
+    private function processFieldsAttribute(\ReflectionMethod $method, \Glueful\Routing\Route $route): void
+    {
+        $fieldsAttributes = $method->getAttributes(Fields::class);
+
+        if (count($fieldsAttributes) > 0) {
+            $fieldsAttr = $fieldsAttributes[0]->newInstance();
+
+            $config = [];
+
+            if ($fieldsAttr->strict !== null) {
+                $config['strict'] = $fieldsAttr->strict;
+            }
+
+            if ($fieldsAttr->allowed !== null) {
+                $config['allowed'] = $fieldsAttr->allowed;
+            }
+
+            if ($fieldsAttr->whitelistKey !== null) {
+                $config['whitelistKey'] = $fieldsAttr->whitelistKey;
+            }
+
+            if ($fieldsAttr->maxDepth !== null) {
+                $config['maxDepth'] = $fieldsAttr->maxDepth;
+            }
+
+            if ($fieldsAttr->maxFields !== null) {
+                $config['maxFields'] = $fieldsAttr->maxFields;
+            }
+
+            if ($fieldsAttr->maxItems !== null) {
+                $config['maxItems'] = $fieldsAttr->maxItems;
+            }
+
+            if (count($config) > 0) {
+                $route->setFieldsConfig($config);
+            }
+        }
     }
 }

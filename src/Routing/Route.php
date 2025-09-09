@@ -17,6 +17,8 @@ class Route
     private ?string $name = null;
     /** @var array<string, string> */
     private array $where = [];
+    /** @var array<string,mixed>|null */
+    private ?array $fieldsConfig = null;
 
     public function __construct(
         private Router $router, // Back-reference for named route registration
@@ -214,5 +216,26 @@ class Route
         }
 
         return $url;
+    }
+
+    /**
+     * Set field selection configuration for this route
+     *
+     * @param array<string,mixed> $config
+     */
+    public function setFieldsConfig(array $config): self
+    {
+        $this->fieldsConfig = $config;
+        return $this;
+    }
+
+    /**
+     * Get field selection configuration for this route
+     *
+     * @return array<string,mixed>|null
+     */
+    public function getFieldsConfig(): ?array
+    {
+        return $this->fieldsConfig;
     }
 }

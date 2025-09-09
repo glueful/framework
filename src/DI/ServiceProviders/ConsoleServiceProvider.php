@@ -109,6 +109,11 @@ class ConsoleServiceProvider implements ServiceProviderInterface
             \Glueful\Console\Commands\Container\ContainerDebugCommand::class,
             \Glueful\Console\Commands\Container\ContainerCompileCommand::class,
             \Glueful\Console\Commands\Container\ContainerValidateCommand::class,
+            // Field analysis commands
+            \Glueful\Console\Commands\Fields\AnalyzeCommand::class,
+            \Glueful\Console\Commands\Fields\ValidateCommand::class,
+            \Glueful\Console\Commands\Fields\PerformanceCommand::class,
+            \Glueful\Console\Commands\Fields\WhitelistCheckCommand::class,
         ];
 
         // Register commands with tags for automatic discovery
