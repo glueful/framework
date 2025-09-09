@@ -68,11 +68,95 @@ class CoreServiceProvider implements ServiceProviderInterface
         $container->register(\Glueful\Routing\Middleware\RateLimiterMiddleware::class)
             ->setPublic(true);
 
+        $container->register(\Glueful\Routing\Middleware\CSRFMiddleware::class)
+            ->setArguments([
+                [], // exemptRoutes - will use defaults
+                7200, // tokenLifetime - 2 hours
+                false, // useDoubleSubmit
+                true, // enabled
+                true, // validateOrigin
+                false, // autoRotateTokens
+                false, // useStatelessTokens
+                [], // allowedOrigins - will use defaults
+                new Reference('glueful.container'),
+                new Reference('cache.store'),
+                new Reference('logger')
+            ])
+            ->setPublic(true);
+
+        $container->register(\Glueful\Routing\Middleware\SecurityHeadersMiddleware::class)
+            ->setArguments([
+                [], // config - will use defaults from security.php
+                true, // enabled
+                null, // environment - will auto-detect
+                false, // generateNonces
+                null, // reportUri - will get from env
+                [], // exemptPaths
+                new Reference('logger')
+            ])
+            ->setPublic(true);
+
+        $container->register(\Glueful\Routing\Middleware\AdminPermissionMiddleware::class)
+            ->setArguments([
+                'admin.access', // adminPermission
+                'admin', // resource
+                [], // context
+                [], // allowedIps
+                [], // blockedIps
+                true, // requireElevated
+                false, // requireMfa
+                900, // sessionTimeout - 15 minutes
+                [], // allowedHours
+                [], // allowedCountries
+                'warning', // logLevel
+                new Reference('permission.manager'),
+                new Reference(\Glueful\Repository\UserRepository::class),
+                new Reference('logger'),
+                new Reference('glueful.container')
+            ])
+            ->setPublic(true);
+
+        $container->register(\Glueful\Routing\Middleware\RequestResponseLoggingMiddleware::class)
+            ->setArguments([
+                'both', // logMode - log both requests and responses
+                true, // logHeaders
+                false, // logBodies - disabled by default for security
+                'info', // logLevel
+                2000, // slowThreshold - 2 seconds
+                10240, // bodySizeLimit - 10KB
+                false, // anonymizeIps - disabled by default
+                new Reference('logger'),
+                new Reference('glueful.container')
+            ])
+            ->setPublic(true);
+
+        $container->register(\Glueful\Routing\Middleware\LockdownMiddleware::class)
+            ->setArguments([
+                new Reference('logger'),
+                new Reference('glueful.container')
+            ])
+            ->setPublic(true);
+
         // Register middleware aliases
         $container->setAlias('auth', \Glueful\Routing\Middleware\AuthMiddleware::class)
             ->setPublic(true);
 
         $container->setAlias('rate_limit', \Glueful\Routing\Middleware\RateLimiterMiddleware::class)
+            ->setPublic(true);
+
+        $container->setAlias('csrf', \Glueful\Routing\Middleware\CSRFMiddleware::class)
+            ->setPublic(true);
+
+        $container->setAlias('security_headers', \Glueful\Routing\Middleware\SecurityHeadersMiddleware::class)
+            ->setPublic(true);
+
+        $container->setAlias('admin', \Glueful\Routing\Middleware\AdminPermissionMiddleware::class)
+            ->setPublic(true);
+
+        $container->setAlias('request_logging', \Glueful\Routing\Middleware\RequestResponseLoggingMiddleware::class)
+            ->setPublic(true);
+
+        $container->setAlias('lockdown', \Glueful\Routing\Middleware\LockdownMiddleware::class)
             ->setPublic(true);
 
         // Logger service
