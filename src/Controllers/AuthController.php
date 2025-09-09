@@ -137,7 +137,7 @@ class AuthController
         // Add CSRF token to login response only if CSRF protection is enabled
         if (env('CSRF_PROTECTION_ENABLED', true) === true) {
             try {
-                $csrfMiddleware = new \Glueful\Http\Middleware\CSRFMiddleware();
+                $csrfMiddleware = new \Glueful\Routing\Middleware\CSRFMiddleware();
                 $csrfToken = $csrfMiddleware->generateToken($request);
                 $result['csrf_token'] = [
                     'token' => $csrfToken,

@@ -14,10 +14,7 @@ class RoutesManager
      */
     public static function loadRoutes(): void
     {
-        // Skip loading if routes are already loaded from cache
-        if (\Glueful\Http\Router::isUsingCachedRoutes()) {
-            return;
-        }
+        // New router handles caching automatically - always load route definitions
 
         $routesDir = base_path('routes');
 
