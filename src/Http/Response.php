@@ -190,13 +190,15 @@ class Response extends JsonResponse
         int $status = self::HTTP_BAD_REQUEST,
         mixed $details = null
     ): self {
+        // Prefer global request_id() if available for consistency with Application logging
+        $reqId = function_exists('request_id') ? request_id() : ('req_' . bin2hex(random_bytes(6)));
         $errorData = [
             'success' => false,
             'message' => $message,
             'error' => [
                 'code' => $status,
                 'timestamp' => date('c'),
-                'request_id' => 'req_' . bin2hex(random_bytes(6))
+                'request_id' => $reqId
             ]
         ];
 
@@ -329,9 +331,25 @@ class Response extends JsonResponse
     public function withCors(
         array $allowedOrigins = ['*'],
         array $allowedMethods = ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-        array $allowedHeaders = ['Content-Type', 'Authorization']
+        array $allowedHeaders = ['Content-Type', 'Authorization'],
+        ?string $requestOrigin = null
     ): self {
-        $this->headers->set('Access-Control-Allow-Origin', implode(', ', $allowedOrigins));
+        // Determine Access-Control-Allow-Origin value
+        $allowOrigin = '*';
+        if (!in_array('*', $allowedOrigins, true)) {
+            if ($requestOrigin !== null && in_array($requestOrigin, $allowedOrigins, true)) {
+                $allowOrigin = $requestOrigin;
+                $this->headers->set('Vary', 'Origin');
+            } elseif (count($allowedOrigins) === 1) {
+                $allowOrigin = $allowedOrigins[0];
+            } else {
+                // Fallback: pick first and mark Vary for caches
+                $allowOrigin = $allowedOrigins[0];
+                $this->headers->set('Vary', 'Origin');
+            }
+        }
+
+        $this->headers->set('Access-Control-Allow-Origin', $allowOrigin);
         $this->headers->set('Access-Control-Allow-Methods', implode(', ', $allowedMethods));
         $this->headers->set('Access-Control-Allow-Headers', implode(', ', $allowedHeaders));
 
