@@ -37,7 +37,7 @@ class Router
         // Try to load cached routes
         $cached = $this->cache->load();
         if ($cached !== null) {
-            $this->staticRoutes = $cached['static'];
+            $this->staticRoutes = $this->reconstructStaticRoutes($cached['static']);
             $this->dynamicRoutes = $this->reconstructDynamicRoutes($cached['dynamic']);
         }
     }
@@ -837,7 +837,9 @@ class Router
 
                 // Create a new Route object with the cached data
                 // Need to create path from pattern for Route constructor
-                $path = $this->patternToPath($routeData['pattern']);
+                // Use cached param names when reconstructing path
+                $paramNames = is_array($routeData['params'] ?? null) ? $routeData['params'] : [];
+                $path = $this->patternToPath($routeData['pattern'], $paramNames);
                 $route = new Route($this, $method, $path, $handler);
 
                 // Apply middleware if present
@@ -854,12 +856,32 @@ class Router
 
     /**
      * Convert regex pattern back to original path for Route constructor
+     *
+     * @param string $pattern The regex pattern to convert
+     * @param array<int, string> $paramNames Parameter names in order
+     * @return string The reconstructed path
      */
-    private function patternToPath(string $pattern): string
+    private function patternToPath(string $pattern, array $paramNames = []): string
     {
-        // This is a simplified conversion - the exact path might not be recoverable
-        // but Route will regenerate the pattern from the path anyway
-        return preg_replace('/\([^)]+\)/', '{param}', $pattern);
+        // Strip regex delimiters and anchors produced by compiler (e.g. #^...$#u)
+        if ($pattern !== '' && $pattern[0] === '#') {
+            $last = strrpos($pattern, '#');
+            if ($last !== false && $last > 0) {
+                $pattern = substr($pattern, 1, $last - 1);
+            }
+        }
+        $pattern = ltrim($pattern, '^');
+        $pattern = rtrim($pattern, '$');
+
+        // Replace each capturing group with the corresponding {paramName}
+        $index = 0;
+        $result = preg_replace_callback('/\((?:[^()]+)\)/', function () use (&$index, $paramNames) {
+            $name = $paramNames[$index] ?? ('param' . $index);
+            $index++;
+            return '{' . $name . '}';
+        }, $pattern) ?? $pattern;
+
+        return $result;
     }
 
     /**
@@ -897,5 +919,38 @@ class Router
             default:
                 return $target;
         }
+    }
+
+    /**
+     * Reconstruct static routes from cached array data
+     * @param array<string, array<string, mixed>> $cachedStatic
+     * @return array<string, Route>
+     */
+    private function reconstructStaticRoutes(array $cachedStatic): array
+    {
+        $reconstructed = [];
+
+        foreach ($cachedStatic as $key => $data) {
+            // Key format is METHOD:/path
+            [$method, $path] = explode(':', (string) $key, 2);
+            $handler = isset($data['handler']) && is_array($data['handler'])
+                ? $this->reconstructHandler($data['handler'])
+                : ($data['handler'] ?? null);
+
+            if ($handler === null) {
+                // Skip invalid entries
+                continue;
+            }
+
+            $route = new Route($this, $method, $path, $handler);
+
+            if (isset($data['middleware']) && is_array($data['middleware']) && count($data['middleware']) > 0) {
+                $route->middleware($data['middleware']);
+            }
+
+            $reconstructed[$key] = $route;
+        }
+
+        return $reconstructed;
     }
 }

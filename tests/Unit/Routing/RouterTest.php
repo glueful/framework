@@ -20,6 +20,11 @@ class RouterTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Clear route cache to ensure clean test state
+        $cache = new \Glueful\Routing\RouteCache();
+        $cache->clear();
+
         // Setup real container with Symfony ContainerBuilder
         $symfonyContainer = new ContainerBuilder();
         $this->container = new Container($symfonyContainer);

@@ -139,7 +139,27 @@ class Framework
 
         // Production security validation
         if ($this->environment === 'production') {
-            SecurityManager::validateProductionEnvironment();
+            $validation = SecurityManager::validateProductionEnvironment();
+            try {
+                if (
+                    isset($validation['warnings']) && is_array($validation['warnings']) &&
+                    count($validation['warnings']) > 0
+                ) {
+                    foreach ($validation['warnings'] as $warning) {
+                        error_log('[security] WARNING: ' . $warning);
+                    }
+                }
+                if (
+                    isset($validation['recommendations']) && is_array($validation['recommendations']) &&
+                    count($validation['recommendations']) > 0
+                ) {
+                    foreach ($validation['recommendations'] as $rec) {
+                        error_log('[security] RECOMMENDATION: ' . $rec);
+                    }
+                }
+            } catch (\Throwable) {
+                // best-effort logging only
+            }
         }
     }
 

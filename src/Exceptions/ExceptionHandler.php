@@ -829,14 +829,38 @@ class ExceptionHandler
             HttpAuthException::class
         ];
 
-        // Also consider uncaught exceptions in framework code (by file path)
-        $exceptionFile = $exception->getFile();
-        $isFrameworkFile = strpos($exceptionFile, '/api/') !== false &&
-                          !strpos($exceptionFile, '/Controllers/') &&
-                          !strpos($exceptionFile, '/Services/') &&
-                          !strpos($exceptionFile, '/Repository/');
+        if (in_array(get_class($exception), $frameworkExceptions, true)) {
+            return true;
+        }
 
-        return in_array(get_class($exception), $frameworkExceptions, true) || $isFrameworkFile;
+        // Path-based classification: consider files within this framework's src directory as framework code
+        $file = $exception->getFile();
+        if ($file === '') {
+            return false;
+        }
+
+        // Resolve real paths for robust comparison
+        $fileReal = realpath($file) !== false ? realpath($file) : $file;
+        $frameworkSrc = realpath(dirname(__DIR__)); // path to framework/src
+
+        if ($frameworkSrc !== false) {
+            // Use strncmp to avoid PHP version differences for str_starts_with
+            if (strncmp($fileReal, $frameworkSrc . DIRECTORY_SEPARATOR, strlen($frameworkSrc) + 1) === 0) {
+                return true;
+            }
+        }
+
+        // As a secondary signal, classify by namespace if available (Glueful\* treated as framework)
+        $trace = $exception->getTrace();
+        foreach ($trace as $frame) {
+            if (isset($frame['class']) && is_string($frame['class'])) {
+                if (strncmp($frame['class'], 'Glueful\\', 8) === 0) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

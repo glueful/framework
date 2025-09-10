@@ -29,7 +29,11 @@ class RouterIntegrationTest extends TestCase
         $this->tempCacheDir = sys_get_temp_dir() . '/router_test_' . uniqid();
         mkdir($this->tempCacheDir, 0755, true);
 
-        // Create router - cache will be empty since temp directory is new
+        // Clear route cache to ensure clean state for each test
+        $cache = new \Glueful\Routing\RouteCache();
+        $cache->clear();
+
+        // Create router - cache will be empty since we cleared it
         $this->router = new Router($this->container);
     }
 
