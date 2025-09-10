@@ -20,7 +20,7 @@ class SpaServiceProvider implements ServiceProviderInterface
             ->setPublic(true);
 
         // Register SpaManager
-        $container->register(\Glueful\SpaManager::class)
+        $container->register(\Glueful\Extensions\SpaManager::class)
             ->setArguments([
                 new Reference(\Psr\Log\LoggerInterface::class),
                 new Reference(\Glueful\Helpers\StaticFileDetector::class)
