@@ -12,6 +12,7 @@ use Psr\Http\Server\MiddlewareInterface as Psr15Middleware;
 class Router
 {
     use Psr15MiddlewareResolverTrait;
+
     /** @var array<string, Route> */
     private array $staticRoutes = [];     // O(1) lookup for static paths
     /** @var array<string, array<Route>> */
@@ -698,7 +699,8 @@ class Router
                 };
             }
             throw new \RuntimeException(
-                'Encountered PSR-15 middleware without adapter. Enable http.psr15.auto_detect or install the PSR-7 bridge.'
+                'Encountered PSR-15 middleware without adapter. ' .
+                'Enable http.psr15.auto_detect or install the PSR-7 bridge.'
             );
         }
 
