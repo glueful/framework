@@ -75,4 +75,21 @@ return [
         'log_responses' => env('HTTP_LOG_RESPONSES', true),
         'log_body' => env('HTTP_LOG_BODY', false),
     ],
+    'psr15' => [
+        'enabled' => env('PSR15_ENABLED', true),
+        'auto_detect' => env('PSR15_AUTO_DETECT', true),
+        /**
+         * Optional callable that returns [requestFactory, streamFactory, uploadedFileFactory, responseFactory]
+         * If null, we auto-detect Nyholm\Psr7\Factory\Psr17Factory when installed.
+         */
+        'factory_provider' => null,
+        'throw_on_missing_bridge' => env('PSR15_STRICT', true),
+        'cache_adapters' => env('PSR15_CACHE_ADAPTERS', true),
+        // Common aliases -> FQCNs you might bind in a ServiceProvider
+        'popular_packages' => [
+            // 'cors' => \Middlewares\Cors::class,
+            // 'security_headers' => \Middlewares\SecurityHeaders::class,
+            // 'uuid' => \Middlewares\Uuid::class,
+        ],
+    ],
 ];

@@ -6,9 +6,13 @@ namespace Glueful\Routing;
 
 use Glueful\DI\Container;
 use Symfony\Component\HttpFoundation\{Request, Response, JsonResponse, StreamedResponse, BinaryFileResponse};
+use Glueful\Routing\Internal\Psr15MiddlewareResolverTrait;
+use Psr\Http\Server\MiddlewareInterface as Psr15Middleware;
 
 class Router
 {
+    use Psr15MiddlewareResolverTrait;
+
     /** @var array<string, Route> */
     private array $staticRoutes = [];     // O(1) lookup for static paths
     /** @var array<string, array<Route>> */
@@ -674,10 +678,36 @@ class Router
         // Get middleware instance from container
         $instance = $this->container->get($name);
 
-        // Return callable that invokes middleware with parameters
-        return function (Request $request, callable $next) use ($instance, $params) {
+        // Attempt PSR-15 auto-adaptation if enabled
+        $httpConfig = (array) config('http', []);
+        $maybe = $this->maybeWrapPsr15Middleware($instance, $httpConfig);
+
+        if (is_callable($maybe)) {
+            // PSR-15 adapted: wrapper expects only (Request, callable)
+            return function (Request $req, callable $next) use ($maybe) {
+                return $maybe($req, $next);
+            };
+        }
+
+        // If PSR-15 was detected but not wrapped (auto_detect disabled or missing bridge),
+        // decide based on strict flag: no-op passthrough in non-strict mode, otherwise error.
+        if ($maybe instanceof Psr15Middleware) {
+            $strict = (bool) (($httpConfig['psr15']['throw_on_missing_bridge'] ?? true));
+            if (!$strict) {
+                return function (Request $req, callable $next) {
+                    return $next($req);
+                };
+            }
+            throw new \RuntimeException(
+                'Encountered PSR-15 middleware without adapter. ' .
+                'Enable http.psr15.auto_detect or install the PSR-7 bridge.'
+            );
+        }
+
+        // Fallback: Glueful-native middleware signature with params
+        return function (Request $request, callable $next) use ($maybe, $params) {
             // Expect handle(Request $req, callable $next, ...$params): mixed
-            return $instance->handle($request, $next, ...$params);
+            return $maybe->handle($request, $next, ...$params);
         };
     }
 

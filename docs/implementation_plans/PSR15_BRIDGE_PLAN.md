@@ -195,3 +195,41 @@ if ($instance instanceof \Psr\Http\Server\MiddlewareInterface) {
 - Comprehensive test coverage includes error conditions and edge cases.
 - Performance monitoring and metrics collection for bridge usage.
 - Production deployment guide with optimization recommendations.
+
+## Quickstart
+
+- Install bridges and PSR‑17 factories
+  ```bash
+  composer require symfony/psr-http-message-bridge nyholm/psr7
+  composer dump-autoload
+  ```
+
+- Enable detection via config
+  ```php
+  // config/http.php
+  return [
+    'psr15' => [
+      'enabled' => true,
+      'auto_detect' => true,
+      // Optional: provide a PSR‑17 factories provider via DI service id
+      // 'factory_provider' => 'psr17.factory_provider',
+      'throw_on_missing_bridge' => true,
+      'popular_packages' => [
+        // 'cors' => \Middlewares\Cors::class,
+      ],
+    ],
+  ];
+  ```
+
+- Use a PSR‑15 middleware by alias in routes (optional)
+  ```php
+  // After binding a PSR-15 class to 'psr15.cors' via the service provider
+  $router->group(['middleware' => ['psr15.cors']], function($r) {
+      $r->get('/ping', fn() => new \Glueful\Http\Response(['ok' => true]));
+  });
+  ```
+
+- Non‑strict mode
+  - If `throw_on_missing_bridge` is false and the PSR‑7 bridge isn’t installed,
+    Glueful inserts a no‑op passthrough for PSR‑15 middleware so requests still flow.
+  - In strict mode (true), missing bridges cause a clear error prompting installation.
