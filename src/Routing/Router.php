@@ -667,7 +667,9 @@ class Router
     // Resolve middleware from container with parameter support
     private function resolveMiddleware(string|callable $middleware): callable
     {
-        if (is_callable($middleware)) {
+        // Only pass through closures/array callables. String names (e.g., 'auth')
+        // should be resolved via the container, even if a global function exists.
+        if (is_callable($middleware) && !is_string($middleware)) {
             return $middleware;
         }
 

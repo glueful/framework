@@ -60,14 +60,18 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
 
 ### Phase 2 Tasks Checklist
 
-- [ ] Health endpoints hardening (Owners: Backend, SRE)
-  - Actions
-    - Add explicit liveness/readiness endpoints and keep detailed checks at `/health/*`.
-    - Restrict detailed endpoints to an IP allowlist or auth (env‑driven).
+- [x] Health endpoints hardening (Owners: Backend, SRE)
+  - Actions (completed)
+    - Added explicit liveness `/healthz` and readiness `/ready` endpoints; detailed checks remain under `/health/*`.
+    - Implemented readiness in `Glueful\\Controllers\\HealthController::readiness()`.
+    - Protected readiness with IP allowlist middleware (see notes).
   - Where
-    - Routes: `routes/health.php`
-    - Config: `config/security.php` (new keys `health_ip_allowlist`, `health_auth_required`)
-    - Middleware: `src/Routing/Middleware/AllowIpMiddleware.php` (new)
+    - Routes: `routes/health.php` (`/healthz`, `/ready`)
+    - Controller: `src/Controllers/HealthController.php` (method `readiness`)
+    - Config: `config/security.php` key `health_ip_allowlist`
+    - Middleware: `src/Routing/Middleware/AllowIpMiddleware.php`
+  - Notes
+    - Ensure a container alias exists for `'allow_ip'` → `Glueful\\Routing\\Middleware\\AllowIpMiddleware` so middleware resolution works in routes.
   - Snippets
     ```php
     // routes/health.php (append)
@@ -95,59 +99,29 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
     }
     ```
 
-- [ ] Logging processors standardization (Owner: Platform)
-  - Actions
-    - Ensure `StandardLogProcessor` is attached to both framework and application channels.
-    - Add request_id/user_id consistently; document log shipping configuration.
+- [x] Logging processors standardization (Owner: Platform)
+  - Actions (completed)
+    - Framework logger now always pushes `StandardLogProcessor` with environment, framework version, and user id resolver.
+    - `StandardLogProcessor` enriches logs with `request_id` (from helper/header), `user_id`, env, version, timestamp, memory, pid.
   - Where
-    - Framework: `src/DI/ServiceProviders/CoreServiceProvider.php`
-    - Application: your app’s service provider (e.g., `app/Providers/AppServiceProvider.php`) or a new `src/DI/ServiceProviders/AppLoggingServiceProvider.php`.
-  - Snippet
-    ```php
-    // In a service provider
-    $logger->pushProcessor(new \Glueful\Logging\StandardLogProcessor(
-        (string) config('app.env', 'production'),
-        (string) config('app.version_full', '1.0.0'),
-        fn() => $_SESSION['user_uuid'] ?? null
-    ));
-    ```
+    - Framework: `src/DI/ServiceProviders/CoreServiceProvider.php` (method `createLogger`)
+    - Processor: `src/Logging/StandardLogProcessor.php`
+  - Notes
+    - Application-specific channels can also push the same processor to unify fields across app logs.
+    - For log shipping, configure paths/levels in `config/logging.php` and forward files via your log agent (e.g., Datadog/New Relic/Elastic).
 
-- [ ] Metrics integration (Owner: Backend)
-  - Actions
-    - Introduce a light MetricsMiddleware that measures duration and enqueues a record via `ApiMetricsService::recordMetricAsync`.
-    - Apply globally (group) or to selected route groups.
-    - Expose aggregates via an admin endpoint or console command.
+- [x] Metrics integration (Owner: Backend)
+  - Actions (completed)
+    - Implemented `MetricsMiddleware` to measure duration and enqueue metrics via `ApiMetricsService::recordMetricAsync`.
+    - Registered DI service and alias `'metrics'` for easy route group usage.
   - Where
-    - Middleware: `src/Routing/Middleware/MetricsMiddleware.php` (new)
-    - Wiring: register service in DI and reference by name `metrics` in route groups.
-  - Snippets
+    - Middleware: `src/Routing/Middleware/MetricsMiddleware.php`
+    - DI registration/alias: `src/DI/ServiceProviders/CoreServiceProvider.php` (service + `'metrics'` alias)
+  - Example usage
     ```php
-    // src/Routing/Middleware/MetricsMiddleware.php (skeleton)
-    <?php
-    declare(strict_types=1);
-    namespace Glueful\Routing\Middleware;
-    use Glueful\Services\ApiMetricsService; use Symfony\Component\HttpFoundation\Request;
-    final class MetricsMiddleware implements \Glueful\Routing\RouteMiddleware {
-        public function __construct(private ApiMetricsService $metrics) {}
-        public function handle(Request $request, callable $next): mixed {
-            $t = microtime(true); $resp = $next($request);
-            $dt = (microtime(true) - $t) * 1000;
-            $this->metrics->recordMetricAsync([
-                'endpoint' => $request->getPathInfo(),
-                'method' => $request->getMethod(),
-                'response_time' => (int) round($dt),
-                'status_code' => method_exists($resp, 'getStatusCode') ? $resp->getStatusCode() : 200,
-                'ip' => $request->getClientIp(),
-                'timestamp' => time(),
-            ]);
-            return $resp;
-        }
-    }
-    ```
-    ```php
-    // routes/resource.php (example usage)
-    $router->group(['middleware' => ['metrics']], function(\Glueful\Routing\Router $router) {
-        // ... existing routes
+    // routes/resource.php
+    $router->group(['middleware' => ['metrics']], function(Glueful\Routing\Router $router) {
+        $router->get('/ping', fn() => new Glueful\Http\Response(['ok' => true]));
     });
     ```
   - Metrics endpoints rate limiting
@@ -161,59 +135,149 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
       });
       ```
 
-- [ ] Tracing hooks (Owner: Platform)
-  - Actions
-    - Add optional OpenTelemetry setup and a TracingMiddleware to wrap request handling in a span when enabled.
+- [x] Tracing hooks (Owner: Platform) — pluggable
+  - Rationale
+    - Keep tracing optional and vendor‑agnostic. Support OpenTelemetry and other APMs (Datadog, New Relic, Zipkin/Jaeger) via adapters.
+  - Actions (completed in core)
+    - Define a minimal tracer abstraction used by middleware and services (core contracts):
+      - `Glueful\Observability\Tracing\TracerInterface` with `startSpan(string $name, array $attrs = []): SpanBuilderInterface`.
+      - `Glueful\Observability\Tracing\SpanBuilderInterface` with attribute setters and `startSpan(): SpanInterface`.
+      - `Glueful\Observability\Tracing\SpanInterface` with `setAttribute(string $k, mixed $v): void`, `end(): void`.
+    - Implement adapters:
+      - `OtelTracerAdapter` (uses OpenTelemetry API if installed), `DatadogTracerAdapter`, `NewRelicTracerAdapter`.
+    - Add config to select driver and enable/disable tracing.
+    - Provide a `TracingServiceProvider` that binds `TracerInterface` to the chosen adapter; falls back to `NoopTracer`.
+    - Tracing middleware depends only on `TracerInterface`.
   - Where
-    - Service provider: `src/DI/ServiceProviders/TracingServiceProvider.php` (new)
-    - Middleware: `src/Routing/Middleware/TracingMiddleware.php` (new)
-    - Config: `config/observability.php` (new flags)
+    - Interfaces (core): `src/Observability/Tracing/{TracerInterface.php, SpanInterface.php, SpanBuilderInterface.php}`
+    - No‑op (core): `src/Observability/Tracing/{NoopTracer.php, NoopSpanBuilder.php, NoopSpan.php}`
+    - Middleware (core): `src/Routing/Middleware/TracingMiddleware.php` depends only on contracts; alias `'tracing'` recommended.
+    - Adapters (extensions): `src/Observability/Tracing/Adapters/{OtelTracerAdapter.php, DatadogTracerAdapter.php, NewRelicTracerAdapter.php}` (new)
+    - Service provider (extension): `src/DI/ServiceProviders/TracingServiceProvider.php` (binds adapter)
+    - Config (core): `config/observability.php` (select driver + options)
+  - Notes
+    - Default DI binding (TracerInterface → NoopTracer) and container alias `'tracing'` → TracingMiddleware should be added in CoreServiceProvider (if not already) so the middleware can be enabled via routes without extra wiring.
   - Snippets
     ```php
     // config/observability.php (new)
-    return [ 'tracing' => [ 'enabled' => env('OTEL_ENABLED', false) ] ];
+    return [
+      'tracing' => [
+        'enabled' => env('TRACING_ENABLED', false),
+        'driver'  => env('TRACING_DRIVER', 'noop'), // noop|otel|datadog|newrelic
+        'drivers' => [
+          'otel' => [ /* exporter, endpoint, headers */ ],
+          'datadog' => [ /* service, env, version */ ],
+          'newrelic' => [ /* app name, license */ ],
+        ],
+      ],
+    ];
     ```
     ```php
-    // src/Routing/Middleware/TracingMiddleware.php (skeleton)
-    <?php
-    declare(strict_types=1);
-    namespace Glueful\Routing\Middleware;
-    use Symfony\Component\HttpFoundation\Request; use Glueful\Http\Response;
+    // src/Observability/Tracing/Contracts (sketch)
+    interface TracerInterface { public function startSpan(string $name, array $attrs = []): SpanBuilderInterface; }
+    interface SpanBuilderInterface { public function setAttribute(string $k, mixed $v): self; public function setParent(?SpanInterface $parent): self; public function startSpan(): SpanInterface; }
+    interface SpanInterface { public function setAttribute(string $k, mixed $v): void; public function end(): void; }
+    ```
+    ```php
+    // src/Routing/Middleware/TracingMiddleware.php (core, agnostic)
     final class TracingMiddleware implements \Glueful\Routing\RouteMiddleware {
-        public function __construct(private $tracer=null) {}
-        public function handle(Request $request, callable $next): mixed {
-            if (!$this->tracer) { return $next($request); }
-            $span = $this->tracer->spanBuilder('http.request')->startSpan();
-            // Set semantic attributes (OpenTelemetry HTTP conventions)
-            $span->setAttribute('http.method', $request->getMethod());
-            $span->setAttribute('http.target', $request->getRequestUri());
-            $span->setAttribute('http.route', $request->attributes->get('_route') ?? $request->getPathInfo());
-            $span->setAttribute('user_agent.original', $request->headers->get('User-Agent'));
-            $span->setAttribute('net.peer.ip', $request->getClientIp());
-            if (function_exists('request_id')) { $span->setAttribute('glueful.request_id', request_id()); }
-            $resp = null;
-            try {
-                $resp = $next($request);
-                if (is_object($resp) && method_exists($resp, 'getStatusCode')) {
-                    $span->setAttribute('http.status_code', $resp->getStatusCode());
-                    if ($resp->getStatusCode() >= 500) { $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::ERROR); }
-                }
-                // Add enduser.id if available
-                if (isset($_SESSION['user_uuid'])) { $span->setAttribute('enduser.id', $_SESSION['user_uuid']); }
-                return $resp;
-            } finally {
-                $span->end();
-            }
-        }
+      public function __construct(private \Glueful\Observability\Tracing\TracerInterface $tracer) {}
+      public function handle(\Symfony\Component\HttpFoundation\Request $request, callable $next): mixed {
+        $builder = $this->tracer->startSpan('http.request')
+          ->setAttribute('http.method', $request->getMethod())
+          ->setAttribute('http.route', $request->attributes->get('_route') ?? $request->getPathInfo())
+          ->setAttribute('user_agent', $request->headers->get('User-Agent'))
+          ->setAttribute('net.peer.ip', $request->getClientIp());
+        if (function_exists('request_id')) { $builder->setAttribute('glueful.request_id', request_id()); }
+        $span = $builder->startSpan();
+        try {
+          $resp = $next($request);
+          if (is_object($resp) && method_exists($resp, 'getStatusCode')) { $span->setAttribute('http.status_code', $resp->getStatusCode()); }
+          if (isset($_SESSION['user_uuid'])) { $span->setAttribute('enduser.id', $_SESSION['user_uuid']); }
+          return $resp;
+        } finally { $span->end(); }
+      }
     }
     ```
+  - Example usage (core alias)
+    ```php
+    // routes/api.php
+    $router->group(['middleware' => ['tracing']], function(Glueful\Routing\Router $router) {
+        $router->get('/ping', fn() => new Glueful\Http\Response(['ok' => true]));
+    });
+    ```
 
-- [ ] Dashboards & KPIs (Owner: SRE)
-  - Actions
-    - Define P95 latency, error rate, throughput KPIs per route group.
-    - Publish sample dashboards under `docs/observability/DASHBOARDS.md` (to be created later).
+ - [x] Dashboards & KPIs (Owner: SRE)
+  - Actions (defined and templated)
+    - Defined core KPIs with targets and example queries for common backends (Prometheus/OTel, Datadog logs/APM, New Relic).
+    - Included sample dashboard layouts and panels for Exec, API, Errors, Dependencies, Queue, Security.
   - Where
-    - Docs only; no code changes yet.
+    - This document (quick reference) and `docs/observability/DASHBOARDS.md` (full board JSON/YAML when ready).
+  - KPIs (targets are illustrative — tune per service)
+    - API latency P95 per route group: target < 200ms (web), < 500ms (heavy endpoints)
+    - Error rate (5m): target < 1% overall; spike alert > 3%
+    - Throughput (RPS) and saturation: alert on sudden drops or abnormal spikes
+    - Readiness failures: target 0; alert on > 1 in 5m
+    - Cache hit ratio: target > 80%; alert on < 60%
+    - DB slow queries count (> 200ms): target 0; alert on > 10 in 5m
+    - Queue backlog and lag: target < 100 jobs backlog; lag < 30s
+    - Rate-limit violations: unexpected spikes may indicate abuse
+  - Sample dashboards (panels)
+    - Executive Summary
+      - Requests (sum over 5m), Error rate, P95 latency, Readiness failures last 1h
+    - API Performance
+      - P50/P95/P99 latency by route group; Trend of RPS; Top 10 slow endpoints
+    - Errors & Exceptions
+      - Error rate by route; Top exception classes; Recent 20 high‑severity errors (with request_id)
+    - Dependencies
+      - Cache hit ratio; DB slow queries count; DB response time trend
+    - Queue & Workers
+      - Backlog by queue; Oldest job age; Worker CPU/memory (node exporter/infra agent)
+    - Security Signals
+      - Rate‑limit violations; Auth failures; 4xx/5xx distribution
+  - Example queries
+    - Prometheus/OTel (example metric names; adapt to your exporter)
+      ```promql
+      # RPS (sum over 1m)
+      sum(rate(glueful_http_requests_total[1m]))
+
+      # Error rate over 5m
+      sum(rate(glueful_http_requests_total{status=~"5..|4.."}[5m]))
+        /
+      sum(rate(glueful_http_requests_total[5m]))
+
+      # P95 latency (histogram)
+      histogram_quantile(0.95,
+        sum(rate(glueful_http_request_duration_ms_bucket[5m])) by (le, route))
+
+      # Cache hit ratio
+      sum(rate(glueful_cache_hits_total[5m])) / (sum(rate(glueful_cache_hits_total[5m])) + sum(rate(glueful_cache_misses_total[5m])))
+      ```
+    - Datadog Logs (log‑based metrics; adapt to your facets)
+      ```text
+      # Error rate (5m)
+      service:glueful-api @status:[400 TO 599] | measure:count() by 5m / (service:glueful-api | measure:count() by 5m)
+
+      # P95 latency
+      service:glueful-api @duration_ms:* | measure:p95(@duration_ms) by route
+      ```
+    - New Relic (NRQL)
+      ```sql
+      SELECT percentile(duration, 95) FROM Transaction WHERE appName = 'glueful-api' FACET request.uri SINCE 5 minutes ago
+      ```
+  - Sample panel JSON (Grafana, Prometheus datasource)
+    ```json
+    {
+      "title": "P95 Latency by Route",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(glueful_http_request_duration_ms_bucket[5m])) by (le, route))",
+          "legendFormat": "{{route}}"
+        }
+      ]
+    }
+    ```
 
 - [ ] CI observability gates (Owner: DevEx)
   - Actions
@@ -401,3 +465,59 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
 - Recommended next steps in Phase 1:
   - Add/port minimal router and route-cache tests per [CI harness scaffolds](../CI_TEST_BENCHMARK_HARNESS.md).
   - If desired, add a simple bench script and upload its output as an artifact (see harness doc for example).
+
+## Sample Usage
+
+### Health Endpoints
+
+- Configure allowlist (development example)
+  ```php
+  // config/security.php
+  return [
+    // ...
+    'health_ip_allowlist' => ['127.0.0.1'],
+  ];
+  ```
+
+- Liveness probe
+  ```bash
+  curl -s http://localhost:8080/healthz | jq
+  # { "status": "ok" }
+  ```
+
+- Readiness probe (protected with allow_ip)
+  ```bash
+  curl -s http://localhost:8080/ready | jq
+  # { "success": true, "message": "Service is ready", "data": { "status": "ready", ... } }
+  ```
+
+### Logging (request_id, user_id)
+
+- Trigger an application log (example)
+  ```php
+  // In a controller or service
+  /** @var Psr\\Log\\LoggerInterface $logger */
+  $logger = container()->get(Psr\\Log\\LoggerInterface::class);
+  $logger->info('Ping received', ['path' => '/ping']);
+  ```
+- Inspect framework log file; entries include request_id and user_id (when available)
+  ```bash
+  tail -n 2 storage/logs/framework-$(date +%F).log
+  ```
+
+### Metrics Middleware (optional)
+
+- Apply to a route group
+  ```php
+  // routes/resource.php
+  $router->group(['middleware' => ['metrics']], function(Glueful\\Routing\\Router $router) {
+      $router->get('/ping', fn() => new Glueful\\Http\\Response(['ok' => true]));
+  });
+  ```
+
+### Security Audit (CI or local)
+
+- Run a production-profile security check
+  ```bash
+  php vendor/bin/glueful security:check --production
+  ```

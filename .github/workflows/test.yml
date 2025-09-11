@@ -29,7 +29,7 @@ jobs:
     
     strategy:
       matrix:
-        php-versions: ['8.2']
+        php-versions: ['8.2', '8.3']
         
     steps:
     - uses: actions/checkout@v4
@@ -121,6 +121,69 @@ jobs:
         else
           echo "PHPStan not installed - skipping static analysis"
         fi
+
+    - name: Security audit (production profile)
+      run: |
+        if [ -f vendor/bin/glueful ]; then
+          php vendor/bin/glueful security:check --production || exit 1
+        else
+          echo "Glueful CLI not installed - skipping security audit"
+        fi
+
+    - name: Health endpoints smoke test
+      if: hashFiles('public/index.php') != ''
+      run: |
+        # Start PHP built-in server (adjust docroot/entrypoint as needed)
+        php -S 127.0.0.1:8080 -t public/ >/dev/null 2>&1 &
+        SERVER_PID=$!
+        # Wait for server to be ready (with timeout)
+        for i in {1..10}; do
+          if curl -fsS http://127.0.0.1:8080/healthz; then break; fi
+          echo "Waiting for server... attempt $i"; sleep 1
+        done
+        # Test readiness (may require auth/allowlist in production)
+        curl -fsS http://127.0.0.1:8080/ready || echo "Readiness may require auth/allowlist"
+        # Cleanup
+        kill $SERVER_PID
+    
+    - name: Benchmarks (report only)
+      run: |
+        mkdir -p build/logs
+        if [ -f tools/bench/bench.php ]; then
+          php tools/bench/bench.php | tee build/logs/bench.txt
+        else
+          echo "Bench script missing; see docs/observability/CI_TEST_BENCHMARK_HARNESS.md" | tee build/logs/bench.txt
+        fi
+    
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results-${{ matrix.php-versions }}-${{ runner.os }}
+        path: build/logs/bench.txt
+        if-no-files-found: warn
+
+    - name: Restore bench baseline (optional)
+      uses: actions/cache@v4
+      with:
+        path: build/logs/bench-baseline.txt
+        key: bench-baseline-${{ runner.os }}
+
+    - name: Enforce dispatch latency budget (optional)
+      run: |
+        if [ -f build/logs/bench.txt ]; then
+          BUDGET=1500 # ms for 1000 dispatches example
+          ACTUAL=$(grep -Eo 'Dispatch x1000: [0-9]+\.?[0-9]*' build/logs/bench.txt | awk '{print $3}')
+          echo "Actual: $ACTUAL ms (budget $BUDGET ms)"
+          awk -v a="$ACTUAL" -v b="$BUDGET" 'BEGIN{ if (a>b) exit 1 }'
+        fi
+        if [ -f build/logs/bench-baseline.txt ] && [ -f build/logs/bench.txt ]; then
+          BASE=$(awk '{print $3}' build/logs/bench-baseline.txt)
+          CURR=$(awk '{print $3}' build/logs/bench.txt)
+          TOL=0.10
+          MAX=$(awk -v b="$BASE" -v t="$TOL" 'BEGIN{print b*(1+t)}')
+          echo "Baseline: $BASE ms; Current: $CURR ms; Max: $MAX ms"
+          awk -v c="$CURR" -v m="$MAX" 'BEGIN{ if (c>m) exit 1 }'
+        fi
         
     - name: Prepare artifact directory
       run: |
@@ -137,6 +200,6 @@ jobs:
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: test-results
+        name: test-results-${{ matrix.php-versions }}-${{ runner.os }}
         path: build/logs/
         if-no-files-found: warn # Changed from 'error' to 'warn'

@@ -393,7 +393,7 @@ class AdaptiveRateLimiter extends RateLimiter
             return;
         }
 
-        $behaviorKey = self::BEHAVIOR_PREFIX . $this->trackingId;
+        $behaviorKey = Utils::sanitizeCacheKey(self::BEHAVIOR_PREFIX . $this->trackingId);
         $behaviorData = $this->cache->get($behaviorKey);
 
         if ($behaviorData === null) {
@@ -454,7 +454,7 @@ class AdaptiveRateLimiter extends RateLimiter
             return;
         }
 
-        $behaviorKey = self::BEHAVIOR_PREFIX . $this->trackingId;
+        $behaviorKey = Utils::sanitizeCacheKey(self::BEHAVIOR_PREFIX . $this->trackingId);
         $existingData = $this->cache->get($behaviorKey);
 
         $profile = [];
@@ -544,7 +544,7 @@ class AdaptiveRateLimiter extends RateLimiter
 
         // Save anomaly score separately with longer TTL for historical analysis
         if (isset($profile['anomaly_score'])) {
-            $anomalyKey = self::ANOMALY_PREFIX . $this->trackingId;
+            $anomalyKey = Utils::sanitizeCacheKey(self::ANOMALY_PREFIX . $this->trackingId);
             $this->cache->set($anomalyKey, (string) $profile['anomaly_score'], 604800); // 7 days
         }
     }

@@ -42,6 +42,20 @@ final class StandardLogProcessor implements ProcessorInterface
             'process_id' => getmypid(),
         ]);
 
+        // Add request_id if available from global helper or header
+        try {
+            if (function_exists('request_id')) {
+                $rid = request_id();
+            } else {
+                $rid = $_SERVER['HTTP_X_REQUEST_ID'] ?? null;
+            }
+            if (is_string($rid) && $rid !== '') {
+                $record->extra['request_id'] = $rid;
+            }
+        } catch (\Throwable) {
+            // ignore
+        }
+
         $userId = $this->resolveUserId();
         if ($userId !== null) {
             $record->extra['user_id'] = $userId;

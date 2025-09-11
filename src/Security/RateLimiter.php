@@ -70,8 +70,9 @@ class RateLimiter
             return false;
         }
 
-        // Add new request timestamp
-        $this->cache->zadd($key, [(string)$now => $now]);
+        // Add new request timestamp with unique member key
+        $memberId = $now . ':' . uniqid();
+        $this->cache->zadd($key, [$memberId => $now]);
 
         // Set expiration time
         $this->cache->expire($key, $this->windowSeconds);
@@ -115,13 +116,20 @@ class RateLimiter
     }
 
     /**
-     * Check if limit exceeded
+     * Check if limit exceeded without consuming an attempt
      *
      * @return bool True if rate limit is exceeded
      */
     public function isExceeded(): bool
     {
-        return !$this->attempt();
+        $key = $this->getCacheKey();
+        $now = time();
+
+        // Remove expired entries
+        $this->cache->zremrangebyscore($key, '-inf', (string) ($now - $this->windowSeconds));
+
+        // Check current attempt count without consuming an attempt
+        return $this->cache->zcard($key) >= $this->maxAttempts;
     }
 
     /**

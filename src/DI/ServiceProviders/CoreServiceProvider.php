@@ -96,6 +96,10 @@ class CoreServiceProvider implements ServiceProviderInterface
             ])
             ->setPublic(true);
 
+        // Allow IP middleware (used to protect sensitive endpoints like readiness)
+        $container->register(\Glueful\Routing\Middleware\AllowIpMiddleware::class)
+            ->setPublic(true);
+
         $container->register(\Glueful\Routing\Middleware\AdminPermissionMiddleware::class)
             ->setArguments([
                 'admin.access', // adminPermission
@@ -130,6 +134,26 @@ class CoreServiceProvider implements ServiceProviderInterface
             ])
             ->setPublic(true);
 
+        // Tracing: default Noop tracer binding and middleware registration
+        $container->register(
+            \Glueful\Observability\Tracing\TracerInterface::class,
+            \Glueful\Observability\Tracing\NoopTracer::class
+        )
+        ->setPublic(true);
+
+        $container->register(\Glueful\Routing\Middleware\TracingMiddleware::class)
+            ->setArguments([
+                new Reference(\Glueful\Observability\Tracing\TracerInterface::class)
+            ])
+            ->setPublic(true);
+
+        // Metrics middleware
+        $container->register(\Glueful\Routing\Middleware\MetricsMiddleware::class)
+            ->setArguments([
+                new Reference(\Glueful\Services\ApiMetricsService::class)
+            ])
+            ->setPublic(true);
+
         $container->register(\Glueful\Routing\Middleware\LockdownMiddleware::class)
             ->setArguments([
                 new Reference('logger'),
@@ -159,6 +183,18 @@ class CoreServiceProvider implements ServiceProviderInterface
         $container->setAlias('lockdown', \Glueful\Routing\Middleware\LockdownMiddleware::class)
             ->setPublic(true);
 
+        // Alias for IP allowlist middleware
+        $container->setAlias('allow_ip', \Glueful\Routing\Middleware\AllowIpMiddleware::class)
+            ->setPublic(true);
+
+        // Alias for metrics middleware
+        $container->setAlias('metrics', \Glueful\Routing\Middleware\MetricsMiddleware::class)
+            ->setPublic(true);
+
+        // Alias for tracing middleware
+        $container->setAlias('tracing', \Glueful\Routing\Middleware\TracingMiddleware::class)
+            ->setPublic(true);
+
         // Logger service
         $container->register('logger', \Psr\Log\LoggerInterface::class)
             ->setFactory([$this, 'createLogger'])
@@ -179,6 +215,10 @@ class CoreServiceProvider implements ServiceProviderInterface
             ->setPublic(true);
 
         $container->register(\Glueful\Auth\AuthenticationManager::class)
+            ->setPublic(true);
+
+        $container->register(\Glueful\Auth\AuthenticationGuard::class)
+            ->setArguments([new Reference(\Glueful\Auth\AuthenticationService::class)])
             ->setPublic(true);
 
         // Request service
@@ -355,7 +395,105 @@ class CoreServiceProvider implements ServiceProviderInterface
             } else {
                 $version = (string) config('app.version_full', '1.0.0');
             }
-            $logger->pushProcessor(new \Glueful\Logging\StandardLogProcessor($env, $version));
+
+            // Comprehensive user resolution with multiple authentication sources
+            $userIdResolver = function (): ?string {
+                try {
+                    // Priority 1: Request context (middleware-set user)
+                    if (isset($GLOBALS['container'])) {
+                        $container = $GLOBALS['container'];
+                        if ($container->has('request')) {
+                            $request = $container->get('request');
+                            if ($request && $request->attributes->has('user')) {
+                                $user = $request->attributes->get('user');
+                                if (is_object($user)) {
+                                    // Try multiple user ID methods
+                                    if (method_exists($user, 'getId')) {
+                                        $id = $user->getId();
+                                        if (is_scalar($id)) {
+                                            return (string) $id;
+                                        }
+                                    } elseif (method_exists($user, 'id')) {
+                                        $id = $user->id();
+                                        if (is_scalar($id)) {
+                                            return (string) $id;
+                                        }
+                                    } elseif (method_exists($user, 'getUuid')) {
+                                        $id = $user->getUuid();
+                                        if (is_scalar($id)) {
+                                            return (string) $id;
+                                        }
+                                    } elseif (method_exists($user, 'uuid')) {
+                                        $id = $user->uuid();
+                                        if (is_scalar($id)) {
+                                            return (string) $id;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Priority 2: AuthenticationService current user
+                    if (function_exists('has_service') && has_service(\Glueful\Auth\AuthenticationService::class)) {
+                        $authService = app(\Glueful\Auth\AuthenticationService::class);
+                        if (method_exists($authService, 'getCurrentUser')) {
+                            $user = $authService->getCurrentUser();
+                            if ($user && method_exists($user, 'getId')) {
+                                return (string) $user->getId();
+                            }
+                        }
+                    }
+
+                    // Priority 3: JWT token user (for API authentication)
+                    if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
+                        $authHeader = $_SERVER['HTTP_AUTHORIZATION'];
+                        if (str_starts_with($authHeader, 'Bearer ')) {
+                            $token = substr($authHeader, 7);
+                            if (function_exists('has_service') && has_service(\Glueful\Auth\TokenManager::class)) {
+                                $tokenManager = app(\Glueful\Auth\TokenManager::class);
+                                if (method_exists($tokenManager, 'validateToken')) {
+                                    $payload = $tokenManager->validateToken($token);
+                                    if (is_array($payload) && isset($payload['sub'])) {
+                                        return (string) $payload['sub'];
+                                    }
+                                    if (is_array($payload) && isset($payload['user_id'])) {
+                                        return (string) $payload['user_id'];
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Priority 4: Session fallback (existing + enhanced)
+                    if (isset($_SESSION['user_uuid']) && is_string($_SESSION['user_uuid'])) {
+                        return $_SESSION['user_uuid'];
+                    }
+                    if (isset($_SESSION['user_id']) && is_scalar($_SESSION['user_id'])) {
+                        return (string) $_SESSION['user_id'];
+                    }
+
+                    // Priority 5: Laravel-style auth() helper (future compatibility)
+                    if (function_exists('auth')) {
+                        /** @var callable():object|null $authFunction */
+                        $authFunction = 'auth';
+                        $auth = $authFunction();
+                        if (
+                            is_object($auth) && method_exists($auth, 'check') &&
+                            method_exists($auth, 'id') && $auth->check()
+                        ) {
+                            $id = $auth->id();
+                            return is_scalar($id) ? (string) $id : null;
+                        }
+                    }
+                } catch (\Throwable) {
+                    // Fail silently to prevent logging system disruption
+                }
+
+                return null;
+            };
+
+            $logger->pushProcessor(new \Glueful\Logging\StandardLogProcessor($env, $version, $userIdResolver));
         } catch (\Throwable) {
             // Processor is optional; ignore failures
         }

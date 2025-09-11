@@ -230,3 +230,50 @@ $router->group(['prefix' => '/health'], function (Router $router) {
         return $healthController->responseApi();
     })->middleware(['auth', 'rate_limit:15,60']); // Authenticated, 15 requests per minute
 });
+
+/**
+ * @route GET /healthz
+ * @summary Liveness Check
+ * @description Simple liveness check for load balancers and orchestration systems
+ * @tag Health
+ * @response 200 application/json "Service is alive" {
+ *   status:string="ok"
+ * }
+ */
+$router->get('/healthz', fn() => new \Glueful\Http\Response(['status' => 'ok']))
+       ->middleware('rate_limit:60,60');
+
+/**
+ * @route GET /ready
+ * @summary Readiness Check
+ * @description Detailed readiness check to determine if service is ready to handle traffic
+ * @tag Health
+ * @requiresAuth false
+ * @security IP allowlist required
+ * @response 200 application/json "Service is ready" {
+ *   success:boolean="true",
+ *   message:string="Service readiness check completed",
+ *   data:{
+ *     status:string="Readiness status (ready|not_ready)",
+ *     timestamp:string="ISO timestamp of check",
+ *     dependencies:{
+ *       database:object="Database readiness status",
+ *       cache:object="Cache readiness status",
+ *       external_services:object="External service dependencies"
+ *     },
+ *     health_score:number="Overall health score (0-100)"
+ *   }
+ * }
+ * @response 503 application/json "Service is not ready" {
+ *   success:boolean="false",
+ *   message:string="Service readiness check failed",
+ *   data:{
+ *     status:string="not_ready",
+ *     timestamp:string="ISO timestamp of check",
+ *     issues:array="List of issues preventing readiness"
+ *   }
+ * }
+ * @response 403 "Access restricted - IP not in allowlist"
+ */
+$router->get('/ready', [\Glueful\Controllers\HealthController::class, 'readiness'])
+       ->middleware(['rate_limit:30,60', 'allow_ip']);
