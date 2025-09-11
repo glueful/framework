@@ -49,6 +49,11 @@ return [
             'driver' => 'file',
             'path' => env('CACHE_FILE_PATH', dirname(__DIR__) . '/storage/cache/'),
         ],
+
+        // In-memory array cache (for testing)
+        'array' => [
+            'driver' => 'array',
+        ],
     ],
 
     // Global cache settings

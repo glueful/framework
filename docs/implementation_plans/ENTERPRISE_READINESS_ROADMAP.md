@@ -207,12 +207,77 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
     });
     ```
 
-- [ ] Dashboards & KPIs (Owner: SRE)
-  - Actions
-    - Define P95 latency, error rate, throughput KPIs per route group.
-    - Publish sample dashboards under `docs/observability/DASHBOARDS.md` (to be created later).
+ - [x] Dashboards & KPIs (Owner: SRE)
+  - Actions (defined and templated)
+    - Defined core KPIs with targets and example queries for common backends (Prometheus/OTel, Datadog logs/APM, New Relic).
+    - Included sample dashboard layouts and panels for Exec, API, Errors, Dependencies, Queue, Security.
   - Where
-    - Docs only; no code changes yet.
+    - This document (quick reference) and `docs/observability/DASHBOARDS.md` (full board JSON/YAML when ready).
+  - KPIs (targets are illustrative — tune per service)
+    - API latency P95 per route group: target < 200ms (web), < 500ms (heavy endpoints)
+    - Error rate (5m): target < 1% overall; spike alert > 3%
+    - Throughput (RPS) and saturation: alert on sudden drops or abnormal spikes
+    - Readiness failures: target 0; alert on > 1 in 5m
+    - Cache hit ratio: target > 80%; alert on < 60%
+    - DB slow queries count (> 200ms): target 0; alert on > 10 in 5m
+    - Queue backlog and lag: target < 100 jobs backlog; lag < 30s
+    - Rate-limit violations: unexpected spikes may indicate abuse
+  - Sample dashboards (panels)
+    - Executive Summary
+      - Requests (sum over 5m), Error rate, P95 latency, Readiness failures last 1h
+    - API Performance
+      - P50/P95/P99 latency by route group; Trend of RPS; Top 10 slow endpoints
+    - Errors & Exceptions
+      - Error rate by route; Top exception classes; Recent 20 high‑severity errors (with request_id)
+    - Dependencies
+      - Cache hit ratio; DB slow queries count; DB response time trend
+    - Queue & Workers
+      - Backlog by queue; Oldest job age; Worker CPU/memory (node exporter/infra agent)
+    - Security Signals
+      - Rate‑limit violations; Auth failures; 4xx/5xx distribution
+  - Example queries
+    - Prometheus/OTel (example metric names; adapt to your exporter)
+      ```promql
+      # RPS (sum over 1m)
+      sum(rate(glueful_http_requests_total[1m]))
+
+      # Error rate over 5m
+      sum(rate(glueful_http_requests_total{status=~"5..|4.."}[5m]))
+        /
+      sum(rate(glueful_http_requests_total[5m]))
+
+      # P95 latency (histogram)
+      histogram_quantile(0.95,
+        sum(rate(glueful_http_request_duration_ms_bucket[5m])) by (le, route))
+
+      # Cache hit ratio
+      sum(rate(glueful_cache_hits_total[5m])) / (sum(rate(glueful_cache_hits_total[5m])) + sum(rate(glueful_cache_misses_total[5m])))
+      ```
+    - Datadog Logs (log‑based metrics; adapt to your facets)
+      ```text
+      # Error rate (5m)
+      service:glueful-api @status:[400 TO 599] | measure:count() by 5m / (service:glueful-api | measure:count() by 5m)
+
+      # P95 latency
+      service:glueful-api @duration_ms:* | measure:p95(@duration_ms) by route
+      ```
+    - New Relic (NRQL)
+      ```sql
+      SELECT percentile(duration, 95) FROM Transaction WHERE appName = 'glueful-api' FACET request.uri SINCE 5 minutes ago
+      ```
+  - Sample panel JSON (Grafana, Prometheus datasource)
+    ```json
+    {
+      "title": "P95 Latency by Route",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(glueful_http_request_duration_ms_bucket[5m])) by (le, route))",
+          "legendFormat": "{{route}}"
+        }
+      ]
+    }
+    ```
 
 - [ ] CI observability gates (Owner: DevEx)
   - Actions

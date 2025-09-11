@@ -24,6 +24,11 @@ if (!$loaded) {
     exit(1);
 }
 
+// Put ExceptionHandler in test mode when available
+if (class_exists(Glueful\Exceptions\ExceptionHandler::class)) {
+      Glueful\Exceptions\ExceptionHandler::setTestMode(true);
+}
+
 // Set default timezone for consistent test results
 date_default_timezone_set('UTC');
 

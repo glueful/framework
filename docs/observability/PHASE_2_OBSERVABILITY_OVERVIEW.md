@@ -756,21 +756,23 @@ class OtelSpan implements SpanInterface
 
 ### Health Check Smoke Tests
 
-**File**: `.github/workflows/test.yml` (add step)
+**File**: `.github/workflows/test.yml` (add step; adjust to your entrypoint)
 ```yaml
 - name: Health endpoints smoke test
+  if: hashFiles('public/index.php') != ''
   run: |
-    # Start test server in background
-    php glueful serve --port=8080 &
+    # Start PHP built-in server (adjust docroot/entrypoint as needed)
+    php -S 127.0.0.1:8080 -t public/ >/dev/null 2>&1 &
     SERVER_PID=$!
-    sleep 2
-    
-    # Test liveness endpoint
-    curl -f http://localhost:8080/healthz || exit 1
-    
-    # Test readiness endpoint (may require auth in production)
-    curl -f http://localhost:8080/ready || echo "Readiness check may require auth"
-    
+    # Wait for server to be ready (with timeout)
+    for i in {1..10}; do
+      if curl -fsS http://127.0.0.1:8080/healthz; then break; fi
+      echo "Waiting for server... attempt $i"; sleep 1
+    done
+
+    # Test readiness endpoint (may require auth/allowlist in production)
+    curl -fsS http://127.0.0.1:8080/ready || echo "Readiness may require auth/allowlist"
+
     # Cleanup
     kill $SERVER_PID
 ```
@@ -795,14 +797,15 @@ class OtelSpan implements SpanInterface
     if [ -f tools/bench/bench.php ]; then
       php tools/bench/bench.php | tee build/logs/bench.txt
     else
-      echo "Bench script missing; see docs/CI_TEST_BENCHMARK_HARNESS.md" | tee build/logs/bench.txt
+      echo "Bench script missing; see docs/observability/CI_TEST_BENCHMARK_HARNESS.md" | tee build/logs/bench.txt
     fi
 
 - name: Upload benchmark results
-  uses: actions/upload-artifact@v3
+  uses: actions/upload-artifact@v4
   with:
     name: benchmark-results
     path: build/logs/bench.txt
+    if-no-files-found: warn
 ```
 
 ### Performance Budget Enforcement (Optional)
@@ -816,6 +819,34 @@ class OtelSpan implements SpanInterface
       echo "Actual: $ACTUAL ms (budget $BUDGET ms)"
       awk -v a="$ACTUAL" -v b="$BUDGET" 'BEGIN{ if (a>b) exit 1 }'
     fi
+
+### PHP Version Matrix (optional)
+
+```yaml
+strategy:
+  matrix:
+    php-version: ['8.2', '8.3']
+```
+
+### Cache Benchmark Baseline (optional)
+
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: build/logs/bench-baseline.txt
+    key: bench-baseline-${{ runner.os }}
+
+- name: Compare to baseline (tolerate ±10%)
+  run: |
+    if [ -f build/logs/bench-baseline.txt ] && [ -f build/logs/bench.txt ]; then
+      BASE=$(awk '{print $3}' build/logs/bench-baseline.txt)
+      CURR=$(awk '{print $3}' build/logs/bench.txt)
+      TOL=0.10
+      MAX=$(awk -v b="$BASE" -v t="$TOL" 'BEGIN{print b*(1+t)}')
+      echo "Baseline: $BASE ms; Current: $CURR ms; Max: $MAX ms"
+      awk -v c="$CURR" -v m="$MAX" 'BEGIN{ if (c>m) exit 1 }'
+    fi
+```
 ```
 
 ## 🧪 **Integration Tests**
