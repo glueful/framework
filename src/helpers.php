@@ -642,6 +642,37 @@ if (!function_exists('request_id')) {
     }
 }
 
+if (!function_exists('auth')) {
+    /**
+     * Get authentication guard instance
+     *
+     * Provides Laravel-style auth() helper for consistent authentication access.
+     * Returns a wrapper around Glueful's authentication system.
+     *
+     * @param string|null $guard Guard name (currently unused, for future multi-guard support)
+     * @return \Glueful\Auth\AuthenticationGuard|null
+     */
+    function auth(?string $guard = null): ?\Glueful\Auth\AuthenticationGuard
+    {
+        try {
+            if (has_service(\Glueful\Auth\AuthenticationGuard::class)) {
+                return app(\Glueful\Auth\AuthenticationGuard::class);
+            }
+
+            // Fallback: create guard from existing services
+            if (has_service(\Glueful\Auth\AuthenticationService::class)) {
+                return new \Glueful\Auth\AuthenticationGuard(
+                    app(\Glueful\Auth\AuthenticationService::class)
+                );
+            }
+        } catch (\Throwable) {
+            // Ignore errors in auth helper
+        }
+
+        return null;
+    }
+}
+
 if (!function_exists('response')) {
     /**
      * Create a new response instance or return response helper

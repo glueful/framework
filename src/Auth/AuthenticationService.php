@@ -638,4 +638,42 @@ class AuthenticationService
         $authManager = AuthBootstrap::getManager();
         return $authManager->authenticateWithProviders($providers, $request);
     }
+
+    /**
+     * Get current authenticated user
+     *
+     * Attempts to get the current authenticated user from the request context
+     * or global request. Returns a user object if authenticated, null otherwise.
+     *
+     * @return object|null User object if authenticated, null otherwise
+     */
+    public function getCurrentUser(): ?object
+    {
+        try {
+            // Try to get request from container first
+            if (isset($GLOBALS['container'])) {
+                $container = $GLOBALS['container'];
+                if ($container->has('request')) {
+                    $request = $container->get('request');
+                    if ($request instanceof Request) {
+                        $userData = self::authenticateWithProviders($request);
+                        if ($userData !== null && isset($userData['user'])) {
+                            return (object) $userData['user'];
+                        }
+                    }
+                }
+            }
+
+            // Fallback to global request
+            $request = Request::createFromGlobals();
+            $userData = self::authenticateWithProviders($request);
+            if ($userData !== null && isset($userData['user'])) {
+                return (object) $userData['user'];
+            }
+        } catch (\Throwable) {
+            // Ignore errors to prevent auth system disruption
+        }
+
+        return null;
+    }
 }

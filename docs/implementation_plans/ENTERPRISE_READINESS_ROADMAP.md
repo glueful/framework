@@ -99,22 +99,16 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
     }
     ```
 
-- [ ] Logging processors standardization (Owner: Platform)
-  - Actions
-    - Ensure `StandardLogProcessor` is attached to both framework and application channels.
-    - Add request_id/user_id consistently; document log shipping configuration.
+- [x] Logging processors standardization (Owner: Platform)
+  - Actions (completed)
+    - Framework logger now always pushes `StandardLogProcessor` with environment, framework version, and user id resolver.
+    - `StandardLogProcessor` enriches logs with `request_id` (from helper/header), `user_id`, env, version, timestamp, memory, pid.
   - Where
-    - Framework: `src/DI/ServiceProviders/CoreServiceProvider.php`
-    - Application: your app’s service provider (e.g., `app/Providers/AppServiceProvider.php`) or a new `src/DI/ServiceProviders/AppLoggingServiceProvider.php`.
-  - Snippet
-    ```php
-    // In a service provider
-    $logger->pushProcessor(new \Glueful\Logging\StandardLogProcessor(
-        (string) config('app.env', 'production'),
-        (string) config('app.version_full', '1.0.0'),
-        fn() => $_SESSION['user_uuid'] ?? null
-    ));
-    ```
+    - Framework: `src/DI/ServiceProviders/CoreServiceProvider.php` (method `createLogger`)
+    - Processor: `src/Logging/StandardLogProcessor.php`
+  - Notes
+    - Application-specific channels can also push the same processor to unify fields across app logs.
+    - For log shipping, configure paths/levels in `config/logging.php` and forward files via your log agent (e.g., Datadog/New Relic/Elastic).
 
 - [ ] Metrics integration (Owner: Backend)
   - Actions
@@ -405,3 +399,59 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
 - Recommended next steps in Phase 1:
   - Add/port minimal router and route-cache tests per [CI harness scaffolds](../CI_TEST_BENCHMARK_HARNESS.md).
   - If desired, add a simple bench script and upload its output as an artifact (see harness doc for example).
+
+## Sample Usage
+
+### Health Endpoints
+
+- Configure allowlist (development example)
+  ```php
+  // config/security.php
+  return [
+    // ...
+    'health_ip_allowlist' => ['127.0.0.1'],
+  ];
+  ```
+
+- Liveness probe
+  ```bash
+  curl -s http://localhost:8080/healthz | jq
+  # { "status": "ok" }
+  ```
+
+- Readiness probe (protected with allow_ip)
+  ```bash
+  curl -s http://localhost:8080/ready | jq
+  # { "success": true, "message": "Service is ready", "data": { "status": "ready", ... } }
+  ```
+
+### Logging (request_id, user_id)
+
+- Trigger an application log (example)
+  ```php
+  // In a controller or service
+  /** @var Psr\\Log\\LoggerInterface $logger */
+  $logger = container()->get(Psr\\Log\\LoggerInterface::class);
+  $logger->info('Ping received', ['path' => '/ping']);
+  ```
+- Inspect framework log file; entries include request_id and user_id (when available)
+  ```bash
+  tail -n 2 storage/logs/framework-$(date +%F).log
+  ```
+
+### Metrics Middleware (optional)
+
+- Apply to a route group
+  ```php
+  // routes/resource.php
+  $router->group(['middleware' => ['metrics']], function(Glueful\\Routing\\Router $router) {
+      $router->get('/ping', fn() => new Glueful\\Http\\Response(['ok' => true]));
+  });
+  ```
+
+### Security Audit (CI or local)
+
+- Run a production-profile security check
+  ```bash
+  php vendor/bin/glueful security:check --production
+  ```
