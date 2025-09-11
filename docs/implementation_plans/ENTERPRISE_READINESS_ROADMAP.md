@@ -110,42 +110,18 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
     - Application-specific channels can also push the same processor to unify fields across app logs.
     - For log shipping, configure paths/levels in `config/logging.php` and forward files via your log agent (e.g., Datadog/New Relic/Elastic).
 
-- [ ] Metrics integration (Owner: Backend)
-  - Actions
-    - Introduce a light MetricsMiddleware that measures duration and enqueues a record via `ApiMetricsService::recordMetricAsync`.
-    - Apply globally (group) or to selected route groups.
-    - Expose aggregates via an admin endpoint or console command.
+- [x] Metrics integration (Owner: Backend)
+  - Actions (completed)
+    - Implemented `MetricsMiddleware` to measure duration and enqueue metrics via `ApiMetricsService::recordMetricAsync`.
+    - Registered DI service and alias `'metrics'` for easy route group usage.
   - Where
-    - Middleware: `src/Routing/Middleware/MetricsMiddleware.php` (new)
-    - Wiring: register service in DI and reference by name `metrics` in route groups.
-  - Snippets
+    - Middleware: `src/Routing/Middleware/MetricsMiddleware.php`
+    - DI registration/alias: `src/DI/ServiceProviders/CoreServiceProvider.php` (service + `'metrics'` alias)
+  - Example usage
     ```php
-    // src/Routing/Middleware/MetricsMiddleware.php (skeleton)
-    <?php
-    declare(strict_types=1);
-    namespace Glueful\Routing\Middleware;
-    use Glueful\Services\ApiMetricsService; use Symfony\Component\HttpFoundation\Request;
-    final class MetricsMiddleware implements \Glueful\Routing\RouteMiddleware {
-        public function __construct(private ApiMetricsService $metrics) {}
-        public function handle(Request $request, callable $next): mixed {
-            $t = microtime(true); $resp = $next($request);
-            $dt = (microtime(true) - $t) * 1000;
-            $this->metrics->recordMetricAsync([
-                'endpoint' => $request->getPathInfo(),
-                'method' => $request->getMethod(),
-                'response_time' => (int) round($dt),
-                'status_code' => method_exists($resp, 'getStatusCode') ? $resp->getStatusCode() : 200,
-                'ip' => $request->getClientIp(),
-                'timestamp' => time(),
-            ]);
-            return $resp;
-        }
-    }
-    ```
-    ```php
-    // routes/resource.php (example usage)
-    $router->group(['middleware' => ['metrics']], function(\Glueful\Routing\Router $router) {
-        // ... existing routes
+    // routes/resource.php
+    $router->group(['middleware' => ['metrics']], function(Glueful\Routing\Router $router) {
+        $router->get('/ping', fn() => new Glueful\Http\Response(['ok' => true]));
     });
     ```
   - Metrics endpoints rate limiting

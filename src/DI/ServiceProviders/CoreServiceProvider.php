@@ -134,6 +134,13 @@ class CoreServiceProvider implements ServiceProviderInterface
             ])
             ->setPublic(true);
 
+        // Metrics middleware
+        $container->register(\Glueful\Routing\Middleware\MetricsMiddleware::class)
+            ->setArguments([
+                new Reference(\Glueful\Services\ApiMetricsService::class)
+            ])
+            ->setPublic(true);
+
         $container->register(\Glueful\Routing\Middleware\LockdownMiddleware::class)
             ->setArguments([
                 new Reference('logger'),
@@ -165,6 +172,10 @@ class CoreServiceProvider implements ServiceProviderInterface
 
         // Alias for IP allowlist middleware
         $container->setAlias('allow_ip', \Glueful\Routing\Middleware\AllowIpMiddleware::class)
+            ->setPublic(true);
+
+        // Alias for metrics middleware
+        $container->setAlias('metrics', \Glueful\Routing\Middleware\MetricsMiddleware::class)
             ->setPublic(true);
 
         // Logger service
