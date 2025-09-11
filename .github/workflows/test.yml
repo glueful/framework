@@ -158,7 +158,7 @@ jobs:
     - name: Upload benchmark results
       uses: actions/upload-artifact@v4
       with:
-        name: benchmark-results
+        name: benchmark-results-${{ matrix.php-versions }}-${{ runner.os }}
         path: build/logs/bench.txt
         if-no-files-found: warn
 
@@ -200,6 +200,6 @@ jobs:
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: test-results
+        name: test-results-${{ matrix.php-versions }}-${{ runner.os }}
         path: build/logs/
         if-no-files-found: warn # Changed from 'error' to 'warn'
