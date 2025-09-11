@@ -44,6 +44,17 @@ class FileCacheDriver implements CacheStore
     /** @var string Extension for sorted set files */
     private const ZSET_EXT = '.zset';
 
+    /** @var bool Shard files into subdirectories based on hash */
+    private bool $shardDirectories = false;
+
+    /** @var bool Enable in-process stats cache */
+    private bool $statsCacheEnabled = false;
+
+    /** @var int|null */
+    private ?int $statsTotalKeys = null;
+    /** @var int|null */
+    private ?int $statsExpiredKeys = null;
+
     /**
      * Constructor - requires FileManager and FileFinder services
      *
@@ -81,7 +92,83 @@ class FileCacheDriver implements CacheStore
      */
     private function getFilePath(string $key, string $extension = self::FILE_EXT): string
     {
-        return $this->directory . md5($key) . $extension;
+        $hash = md5($key);
+        if ($this->shardDirectories) {
+            $dir = substr($hash, 0, 2);
+            return $this->directory . $dir . '/' . substr($hash, 2) . $extension;
+        }
+        return $this->directory . $hash . $extension;
+    }
+
+    /** Enable/disable directory sharding (default: disabled) */
+    public function setShardDirectories(bool $enabled): void
+    {
+        $this->shardDirectories = $enabled;
+    }
+
+    /** Enable/disable in-process stats caching (default: disabled) */
+    public function setStatsCacheEnabled(bool $enabled): void
+    {
+        $this->statsCacheEnabled = $enabled;
+        if ($enabled && $this->statsTotalKeys === null) {
+            try {
+                $finder = $this->fileFinder->createFinder();
+                $metaFiles = $finder->files()->in($this->directory)->name('*' . self::META_EXT);
+                $total = 0;
+                $expired = 0;
+                $now = time();
+                foreach ($metaFiles as $file) {
+                    $total++;
+                    $meta = $this->loadFromFile($file->getPathname());
+                    if ($this->isExpiredMeta(is_array($meta) ? $meta : null, $now)) {
+                        $expired++;
+                    }
+                }
+                $this->statsTotalKeys = $total;
+                $this->statsExpiredKeys = $expired;
+            } catch (\Exception) {
+                $this->statsTotalKeys = null;
+                $this->statsExpiredKeys = null;
+            }
+        }
+    }
+
+    /**
+     * Determine if meta indicates expiration
+     * @param array<string, mixed>|null $meta
+     */
+    private function isExpiredMeta(?array $meta, ?int $now = null): bool
+    {
+        if ($meta === null) {
+            return true;
+        }
+        $expires = (int)($meta['expires'] ?? 0);
+        if ($expires === 0) {
+            return false; // no expiry
+        }
+        $now = $now ?? time();
+        return $expires < $now;
+    }
+
+    /** Execute a callback with an exclusive per-key file lock */
+    private function withLock(string $key, callable $fn): mixed
+    {
+        $filePath = $this->getFilePath($key);
+        $lockPath = $filePath . '.lock';
+        $lockFile = fopen($lockPath, 'c');
+        if (!$lockFile) {
+            return null;
+        }
+        try {
+            if (!flock($lockFile, LOCK_EX)) {
+                return null;
+            }
+            return $fn();
+        } finally {
+            flock($lockFile, LOCK_UN);
+            fclose($lockFile);
+            $this->fileManager->remove($lockPath);
+        }
     }
 
     /**
@@ -141,15 +228,15 @@ class FileCacheDriver implements CacheStore
 
         // Check if expired
         $meta = $this->loadFromFile($metaPath);
-        if ($meta === null || (isset($meta['expires']) && $meta['expires'] > 0 && $meta['expires'] < time())) {
+        if ($this->isExpiredMeta(is_array($meta) ? $meta : null)) {
             // Clean up expired files
-            $this->fileManager->remove($filePath);
-            $this->fileManager->remove($metaPath);
+            $this->del($key);
             return $default;
         }
 
+        // Return the stored value as-is (even if null); default only when missing/expired
         $value = $this->loadFromFile($filePath);
-        return $value !== null ? $value : $default;
+        return $value;
     }
 
     /**
@@ -168,17 +255,25 @@ class FileCacheDriver implements CacheStore
         $metaPath = $this->getFilePath($key, self::META_EXT);
 
         $seconds = $this->normalizeTtl($ttl);
+        $now = time();
         $meta = [
-            'created' => time(),
-            'expires' => ($seconds !== null && $seconds > 0) ? time() + $seconds : 0,
+            'key' => $key,
+            'created' => $now,
+            'expires' => ($seconds === null ? 0 : ($seconds > 0 ? $now + $seconds : $now)),
             'ttl' => $seconds ?? 0
         ];
+
+        $isNew = !($this->fileManager->exists($filePath) && $this->fileManager->exists($metaPath));
 
         if (!$this->saveToFile($metaPath, $meta)) {
             return false;
         }
 
-        return $this->saveToFile($filePath, $value);
+        $ok = $this->saveToFile($filePath, $value);
+        if ($ok && $isNew && $this->statsCacheEnabled && $this->statsTotalKeys !== null) {
+            $this->statsTotalKeys++;
+        }
+        return $ok;
     }
 
     /**
@@ -193,35 +288,26 @@ class FileCacheDriver implements CacheStore
      */
     public function setNx(string $key, mixed $value, int $ttl = 3600): bool
     {
-        $filePath = $this->getFilePath($key);
-        $metaPath = $this->getFilePath($key, self::META_EXT);
-        $lockPath = $filePath . '.lock';
-
-        // Use file locking for atomicity
-        $lockFile = fopen($lockPath, 'c');
-        if (!$lockFile) {
-            return false;
-        }
-
-        try {
-            // Acquire exclusive lock
-            if (!flock($lockFile, LOCK_EX)) {
-                return false;
-            }
+        $result = $this->withLock($key, function () use ($key, $value, $ttl) {
+            $filePath = $this->getFilePath($key);
+            $metaPath = $this->getFilePath($key, self::META_EXT);
 
             // Check if key already exists (and is not expired)
             if ($this->fileManager->exists($filePath) && $this->fileManager->exists($metaPath)) {
                 $meta = $this->loadFromFile($metaPath);
-                if ($meta !== null && (!isset($meta['expires']) || $meta['expires'] >= time())) {
+                if (!$this->isExpiredMeta(is_array($meta) ? $meta : null)) {
                     // Key exists and is not expired
                     return false;
                 }
             }
 
             // Key doesn't exist or is expired, set it
+            $now = time();
+            $expires = ($ttl > 0) ? $now + $ttl : $now; // ttl=0 -> immediate expiry
             $meta = [
-                'created' => time(),
-                'expires' => ($ttl > 0) ? time() + $ttl : 0,
+                'key' => $key,
+                'created' => $now,
+                'expires' => $expires,
                 'ttl' => $ttl
             ];
 
@@ -230,12 +316,9 @@ class FileCacheDriver implements CacheStore
             }
 
             return $this->saveToFile($filePath, $value);
-        } finally {
-            // Always release lock and clean up
-            flock($lockFile, LOCK_UN);
-            fclose($lockFile);
-            $this->fileManager->remove($lockPath);
-        }
+        });
+
+        return (bool) $result;
     }
 
     /**
@@ -295,21 +378,49 @@ class FileCacheDriver implements CacheStore
      */
     public function increment(string $key, int $value = 1): int
     {
-        $currentValue = $this->get($key, 0);
+        $result = $this->withLock($key, function () use ($key, $value) {
+            $filePath = $this->getFilePath($key);
+            $metaPath = $this->getFilePath($key, self::META_EXT);
 
-        if (!is_numeric($currentValue)) {
-            $currentValue = 0;
-        }
+            $currentValue = $this->get($key, 0);
+            if (!is_numeric($currentValue)) {
+                $currentValue = 0;
+            }
 
-        $newValue = (int) $currentValue + $value;
+            $newValue = (int) $currentValue + $value;
 
-        // Preserve existing TTL
-        $metaPath = $this->getFilePath($key, self::META_EXT);
-        $meta = $this->loadFromFile($metaPath);
-        $ttl = $meta['ttl'] ?? 3600;
+            // Preserve existing TTL; if expired or missing, use default 3600
+            $meta = $this->loadFromFile($metaPath);
+            $now = time();
+            $expired = $this->isExpiredMeta(is_array($meta) ? $meta : null, $now);
 
-        $this->set($key, $newValue, $ttl);
-        return $newValue;
+            $ttl = 3600;
+            if (is_array($meta) && isset($meta['ttl'])) {
+                $ttl = (int) $meta['ttl'];
+            }
+            if ($expired) {
+                $ttl = 3600; // reset to default if previously expired
+            }
+
+            $newMeta = [
+                'key' => $key,
+                'created' => $now,
+                'expires' => ($ttl > 0) ? $now + $ttl : $now,
+                'ttl' => $ttl,
+            ];
+
+            if (!$this->saveToFile($metaPath, $newMeta)) {
+                return (int) $currentValue;
+            }
+
+            if (!$this->saveToFile($filePath, $newValue)) {
+                return (int) $currentValue;
+            }
+
+            return $newValue;
+        });
+
+        return is_int($result) ? $result : 0;
     }
 
     /**
@@ -434,11 +545,20 @@ class FileCacheDriver implements CacheStore
             return 0;
         }
 
-        $zset = $this->loadFromFile($zsetPath) ?? [];
+        $zsetData = $this->loadFromFile($zsetPath);
+        if (!is_array($zsetData)) {
+            return 0; // No data or invalid data
+        }
+
+        $zset = $zsetData;
         $count = 0;
 
+        $minF = $this->parseScoreBound($min, true);
+        $maxF = $this->parseScoreBound($max, false);
+
         foreach ($zset as $value => $score) {
-            if ($score >= $min && $score <= $max) {
+            $scoreF = (float) $score;
+            if ($scoreF >= $minF && $scoreF <= $maxF) {
                 unset($zset[$value]);
                 $count++;
             }
@@ -551,6 +671,9 @@ class FileCacheDriver implements CacheStore
         $zsetPath = $this->getFilePath($key, self::ZSET_EXT);
 
         $success = true;
+        $existed = $this->fileManager->exists($metaPath) ||
+            $this->fileManager->exists($filePath) ||
+            $this->fileManager->exists($zsetPath);
 
         if ($this->fileManager->exists($filePath)) {
             $success = $this->fileManager->remove($filePath);
@@ -560,13 +683,47 @@ class FileCacheDriver implements CacheStore
             $success = $this->fileManager->remove($metaPath);
         }
 
-        if ($this->fileManager->exists($zsetPath)) {
-            $success = $success && $this->fileManager->remove($zsetPath);
+        if ($this->fileManager->exists($zsetPath) && $success) {
+            $success = $this->fileManager->remove($zsetPath);
         }
 
+        if (
+            $success && $existed && $this->statsCacheEnabled &&
+            $this->statsTotalKeys !== null
+        ) {
+            $this->statsTotalKeys--;
+        }
         return $success;
     }
 
+    /**
+     * Convert wildcard pattern to regex for key matching
+     */
+    private function wildcardToRegex(string $pattern): string
+    {
+        $escaped = preg_quote($pattern, '/');
+        $escaped = str_replace(['\\*', '\\?'], ['.*', '.'], $escaped);
+        return '/^' . $escaped . '$/';
+    }
+
+    /**
+     * Parse sorted set bounds like -inf/+inf or numeric strings
+     */
+    private function parseScoreBound(string $bound, bool $isMin): float
+    {
+        $b = strtolower(trim($bound));
+        if ($b === '-inf') {
+            return -INF;
+        }
+        if ($b === '+inf' || $b === 'inf' || $b === 'infinity') {
+            return INF;
+        }
+        if (is_numeric($b)) {
+            return (float) $b;
+        }
+        // Fallback: treat unknown as extreme
+        return $isMin ? -INF : INF;
+    }
     /**
      * Delete keys matching a pattern
      *
@@ -578,15 +735,21 @@ class FileCacheDriver implements CacheStore
     public function deletePattern(string $pattern): bool
     {
         try {
-            // Convert cache key pattern to file pattern
-            $filePattern = str_replace(['*', '/', '\\'], ['*', '_', '_'], $pattern) . '.*';
-
             $finder = $this->fileFinder->createFinder();
-            $files = $finder->files()->in($this->directory)->name($filePattern);
+            // operate on meta files to recover original keys
+            $files = $finder->files()->in($this->directory)->name('*' . self::META_EXT);
 
             $success = true;
+            $regex = $this->wildcardToRegex($pattern);
             foreach ($files as $file) {
-                $success = $success && $this->fileManager->remove($file->getPathname());
+                $meta = $this->loadFromFile($file->getPathname());
+                if (!is_array($meta) || !isset($meta['key'])) {
+                    continue;
+                }
+                $key = (string) $meta['key'];
+                if (preg_match($regex, $key) === 1) {
+                    $success = $success && $this->del($key);
+                }
             }
 
             return $success;
@@ -606,17 +769,20 @@ class FileCacheDriver implements CacheStore
     public function getKeys(string $pattern = '*'): array
     {
         try {
-            $filePattern = str_replace(['*', '/', '\\'], ['*', '_', '_'], $pattern) . '.cache';
-
             $finder = $this->fileFinder->createFinder();
-            $files = $finder->files()->in($this->directory)->name($filePattern);
+            $files = $finder->files()->in($this->directory)->name('*' . self::META_EXT);
 
+            $regex = $this->wildcardToRegex($pattern);
             $keys = [];
             foreach ($files as $file) {
-                $basename = $file->getBasename('.cache');
-                // Convert file name back to cache key
-                $key = str_replace('_', '/', $basename);
-                $keys[] = $key;
+                $meta = $this->loadFromFile($file->getPathname());
+                if (!is_array($meta) || !isset($meta['key'])) {
+                    continue;
+                }
+                $key = (string) $meta['key'];
+                if (preg_match($regex, $key) === 1) {
+                    $keys[] = $key;
+                }
             }
 
             return $keys;
@@ -636,21 +802,30 @@ class FileCacheDriver implements CacheStore
     {
         try {
             $finder = $this->fileFinder->createFinder();
-            $files = $finder->files()->in($this->directory)->name('*.cache');
-            $totalFiles = 0;
+            $valueFiles = $finder->files()->in($this->directory)->name('*' . self::FILE_EXT);
+
             $totalSize = 0;
-            $expiredCount = 0;
-
-            foreach ($files as $file) {
-                $totalFiles++;
+            foreach ($valueFiles as $file) {
                 $totalSize += $file->getSize();
+            }
 
-                // Check if file is expired
-                $key = $file->getBasename('.cache');
-                $key = str_replace('_', '/', $key);
+            // Count keys and expired via meta files (or cached)
+            if ($this->statsCacheEnabled && $this->statsTotalKeys !== null) {
+                $totalKeys = $this->statsTotalKeys;
+                $expiredCount = $this->statsExpiredKeys ?? 0;
+            } else {
+                $finderMeta = $this->fileFinder->createFinder();
+                $metaFiles = $finderMeta->files()->in($this->directory)->name('*' . self::META_EXT);
 
-                if ($this->ttl($key) === -2) {
-                    $expiredCount++;
+                $totalKeys = 0;
+                $expiredCount = 0;
+                $now = time();
+                foreach ($metaFiles as $file) {
+                    $totalKeys++;
+                    $meta = $this->loadFromFile($file->getPathname());
+                    if (is_array($meta) && isset($meta['expires']) && $meta['expires'] > 0 && $meta['expires'] < $now) {
+                        $expiredCount++;
+                    }
                 }
             }
 
@@ -661,9 +836,9 @@ class FileCacheDriver implements CacheStore
                 'driver' => 'file',
                 'directory' => $this->directory,
                 'permissions' => substr(sprintf('%o', fileperms($this->directory)), -4),
-                'total_keys' => $totalFiles,
+                'total_keys' => $totalKeys,
                 'expired_keys' => $expiredCount,
-                'active_keys' => $totalFiles - $expiredCount,
+                'active_keys' => $totalKeys - $expiredCount,
                 'total_size' => $totalSize,
                 'total_size_human' => $this->formatBytes($totalSize),
                 'disk_free_space' => $dfsInt,
@@ -708,10 +883,9 @@ class FileCacheDriver implements CacheStore
 
         // Check if expired
         $meta = $this->loadFromFile($metaPath);
-        if ($meta === null || (isset($meta['expires']) && $meta['expires'] > 0 && $meta['expires'] < time())) {
+        if ($this->isExpiredMeta(is_array($meta) ? $meta : null)) {
             // Clean up expired files
-            $this->fileManager->remove($filePath);
-            $this->fileManager->remove($metaPath);
+            $this->del($key);
             return false;
         }
 
@@ -854,15 +1028,13 @@ class FileCacheDriver implements CacheStore
      */
     public function remember(string $key, callable $callback, ?int $ttl = null): mixed
     {
-        $value = $this->get($key);
-
-        if ($value !== null) {
-            return $value;
+        // If the key exists (even if the stored value is null), return the cached value
+        if ($this->has($key)) {
+            return $this->get($key);
         }
 
         $value = $callback();
         $this->set($key, $value, $ttl ?? 3600);
-
         return $value;
     }
 
@@ -924,6 +1096,7 @@ class FileCacheDriver implements CacheStore
             return $future->getTimestamp() - $now->getTimestamp();
         }
 
-        return max(1, $ttl);
+        // Allow 0 to mean immediate expiration
+        return max(0, $ttl);
     }
 }
