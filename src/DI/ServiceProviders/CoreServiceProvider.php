@@ -134,6 +134,19 @@ class CoreServiceProvider implements ServiceProviderInterface
             ])
             ->setPublic(true);
 
+        // Tracing: default Noop tracer binding and middleware registration
+        $container->register(
+            \Glueful\Observability\Tracing\TracerInterface::class,
+            \Glueful\Observability\Tracing\NoopTracer::class
+        )
+        ->setPublic(true);
+
+        $container->register(\Glueful\Routing\Middleware\TracingMiddleware::class)
+            ->setArguments([
+                new Reference(\Glueful\Observability\Tracing\TracerInterface::class)
+            ])
+            ->setPublic(true);
+
         // Metrics middleware
         $container->register(\Glueful\Routing\Middleware\MetricsMiddleware::class)
             ->setArguments([
@@ -176,6 +189,10 @@ class CoreServiceProvider implements ServiceProviderInterface
 
         // Alias for metrics middleware
         $container->setAlias('metrics', \Glueful\Routing\Middleware\MetricsMiddleware::class)
+            ->setPublic(true);
+
+        // Alias for tracing middleware
+        $container->setAlias('tracing', \Glueful\Routing\Middleware\TracingMiddleware::class)
             ->setPublic(true);
 
         // Logger service

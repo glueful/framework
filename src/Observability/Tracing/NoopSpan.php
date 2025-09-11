@@ -1,0 +1,16 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Glueful\Observability\Tracing;
+
+class NoopSpan implements SpanInterface
+{
+    public function setAttribute(string $key, mixed $value): void
+    {
+    }
+
+    public function end(): void
+    {
+    }
+}

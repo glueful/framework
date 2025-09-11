@@ -135,51 +135,76 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
       });
       ```
 
-- [ ] Tracing hooks (Owner: Platform)
-  - Actions
-    - Add optional OpenTelemetry setup and a TracingMiddleware to wrap request handling in a span when enabled.
+- [x] Tracing hooks (Owner: Platform) — pluggable
+  - Rationale
+    - Keep tracing optional and vendor‑agnostic. Support OpenTelemetry and other APMs (Datadog, New Relic, Zipkin/Jaeger) via adapters.
+  - Actions (completed in core)
+    - Define a minimal tracer abstraction used by middleware and services (core contracts):
+      - `Glueful\Observability\Tracing\TracerInterface` with `startSpan(string $name, array $attrs = []): SpanBuilderInterface`.
+      - `Glueful\Observability\Tracing\SpanBuilderInterface` with attribute setters and `startSpan(): SpanInterface`.
+      - `Glueful\Observability\Tracing\SpanInterface` with `setAttribute(string $k, mixed $v): void`, `end(): void`.
+    - Implement adapters:
+      - `OtelTracerAdapter` (uses OpenTelemetry API if installed), `DatadogTracerAdapter`, `NewRelicTracerAdapter`.
+    - Add config to select driver and enable/disable tracing.
+    - Provide a `TracingServiceProvider` that binds `TracerInterface` to the chosen adapter; falls back to `NoopTracer`.
+    - Tracing middleware depends only on `TracerInterface`.
   - Where
-    - Service provider: `src/DI/ServiceProviders/TracingServiceProvider.php` (new)
-    - Middleware: `src/Routing/Middleware/TracingMiddleware.php` (new)
-    - Config: `config/observability.php` (new flags)
+    - Interfaces (core): `src/Observability/Tracing/{TracerInterface.php, SpanInterface.php, SpanBuilderInterface.php}`
+    - No‑op (core): `src/Observability/Tracing/{NoopTracer.php, NoopSpanBuilder.php, NoopSpan.php}`
+    - Middleware (core): `src/Routing/Middleware/TracingMiddleware.php` depends only on contracts; alias `'tracing'` recommended.
+    - Adapters (extensions): `src/Observability/Tracing/Adapters/{OtelTracerAdapter.php, DatadogTracerAdapter.php, NewRelicTracerAdapter.php}` (new)
+    - Service provider (extension): `src/DI/ServiceProviders/TracingServiceProvider.php` (binds adapter)
+    - Config (core): `config/observability.php` (select driver + options)
+  - Notes
+    - Default DI binding (TracerInterface → NoopTracer) and container alias `'tracing'` → TracingMiddleware should be added in CoreServiceProvider (if not already) so the middleware can be enabled via routes without extra wiring.
   - Snippets
     ```php
     // config/observability.php (new)
-    return [ 'tracing' => [ 'enabled' => env('OTEL_ENABLED', false) ] ];
+    return [
+      'tracing' => [
+        'enabled' => env('TRACING_ENABLED', false),
+        'driver'  => env('TRACING_DRIVER', 'noop'), // noop|otel|datadog|newrelic
+        'drivers' => [
+          'otel' => [ /* exporter, endpoint, headers */ ],
+          'datadog' => [ /* service, env, version */ ],
+          'newrelic' => [ /* app name, license */ ],
+        ],
+      ],
+    ];
     ```
     ```php
-    // src/Routing/Middleware/TracingMiddleware.php (skeleton)
-    <?php
-    declare(strict_types=1);
-    namespace Glueful\Routing\Middleware;
-    use Symfony\Component\HttpFoundation\Request; use Glueful\Http\Response;
+    // src/Observability/Tracing/Contracts (sketch)
+    interface TracerInterface { public function startSpan(string $name, array $attrs = []): SpanBuilderInterface; }
+    interface SpanBuilderInterface { public function setAttribute(string $k, mixed $v): self; public function setParent(?SpanInterface $parent): self; public function startSpan(): SpanInterface; }
+    interface SpanInterface { public function setAttribute(string $k, mixed $v): void; public function end(): void; }
+    ```
+    ```php
+    // src/Routing/Middleware/TracingMiddleware.php (core, agnostic)
     final class TracingMiddleware implements \Glueful\Routing\RouteMiddleware {
-        public function __construct(private $tracer=null) {}
-        public function handle(Request $request, callable $next): mixed {
-            if (!$this->tracer) { return $next($request); }
-            $span = $this->tracer->spanBuilder('http.request')->startSpan();
-            // Set semantic attributes (OpenTelemetry HTTP conventions)
-            $span->setAttribute('http.method', $request->getMethod());
-            $span->setAttribute('http.target', $request->getRequestUri());
-            $span->setAttribute('http.route', $request->attributes->get('_route') ?? $request->getPathInfo());
-            $span->setAttribute('user_agent.original', $request->headers->get('User-Agent'));
-            $span->setAttribute('net.peer.ip', $request->getClientIp());
-            if (function_exists('request_id')) { $span->setAttribute('glueful.request_id', request_id()); }
-            $resp = null;
-            try {
-                $resp = $next($request);
-                if (is_object($resp) && method_exists($resp, 'getStatusCode')) {
-                    $span->setAttribute('http.status_code', $resp->getStatusCode());
-                    if ($resp->getStatusCode() >= 500) { $span->setStatus(\OpenTelemetry\API\Trace\StatusCode::ERROR); }
-                }
-                // Add enduser.id if available
-                if (isset($_SESSION['user_uuid'])) { $span->setAttribute('enduser.id', $_SESSION['user_uuid']); }
-                return $resp;
-            } finally {
-                $span->end();
-            }
-        }
+      public function __construct(private \Glueful\Observability\Tracing\TracerInterface $tracer) {}
+      public function handle(\Symfony\Component\HttpFoundation\Request $request, callable $next): mixed {
+        $builder = $this->tracer->startSpan('http.request')
+          ->setAttribute('http.method', $request->getMethod())
+          ->setAttribute('http.route', $request->attributes->get('_route') ?? $request->getPathInfo())
+          ->setAttribute('user_agent', $request->headers->get('User-Agent'))
+          ->setAttribute('net.peer.ip', $request->getClientIp());
+        if (function_exists('request_id')) { $builder->setAttribute('glueful.request_id', request_id()); }
+        $span = $builder->startSpan();
+        try {
+          $resp = $next($request);
+          if (is_object($resp) && method_exists($resp, 'getStatusCode')) { $span->setAttribute('http.status_code', $resp->getStatusCode()); }
+          if (isset($_SESSION['user_uuid'])) { $span->setAttribute('enduser.id', $_SESSION['user_uuid']); }
+          return $resp;
+        } finally { $span->end(); }
+      }
     }
+    ```
+  - Example usage (core alias)
+    ```php
+    // routes/api.php
+    $router->group(['middleware' => ['tracing']], function(Glueful\Routing\Router $router) {
+        $router->get('/ping', fn() => new Glueful\Http\Response(['ok' => true]));
+    });
     ```
 
 - [ ] Dashboards & KPIs (Owner: SRE)
