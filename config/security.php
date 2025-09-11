@@ -15,6 +15,10 @@ return [
         'strict' => 3,      // Token + IP + User Agent validation
     ],
 
+    // Health endpoint security
+    'health_ip_allowlist' => explode(',', env('HEALTH_IP_ALLOWLIST', '')),
+    'health_auth_required' => env('HEALTH_AUTH_REQUIRED', false),
+
     // Smart environment-aware security level (stricter for production, flexible for development)
     'default_level' => env('DEFAULT_SECURITY_LEVEL', match (env('APP_ENV')) {
         'production' => 2,  // Moderate security for production

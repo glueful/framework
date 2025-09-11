@@ -96,6 +96,10 @@ class CoreServiceProvider implements ServiceProviderInterface
             ])
             ->setPublic(true);
 
+        // Allow IP middleware (used to protect sensitive endpoints like readiness)
+        $container->register(\Glueful\Routing\Middleware\AllowIpMiddleware::class)
+            ->setPublic(true);
+
         $container->register(\Glueful\Routing\Middleware\AdminPermissionMiddleware::class)
             ->setArguments([
                 'admin.access', // adminPermission
@@ -157,6 +161,10 @@ class CoreServiceProvider implements ServiceProviderInterface
             ->setPublic(true);
 
         $container->setAlias('lockdown', \Glueful\Routing\Middleware\LockdownMiddleware::class)
+            ->setPublic(true);
+
+        // Alias for IP allowlist middleware
+        $container->setAlias('allow_ip', \Glueful\Routing\Middleware\AllowIpMiddleware::class)
             ->setPublic(true);
 
         // Logger service

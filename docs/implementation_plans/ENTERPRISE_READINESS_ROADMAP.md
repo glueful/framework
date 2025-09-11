@@ -60,14 +60,18 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
 
 ### Phase 2 Tasks Checklist
 
-- [ ] Health endpoints hardening (Owners: Backend, SRE)
-  - Actions
-    - Add explicit liveness/readiness endpoints and keep detailed checks at `/health/*`.
-    - Restrict detailed endpoints to an IP allowlist or auth (env‑driven).
+- [x] Health endpoints hardening (Owners: Backend, SRE)
+  - Actions (completed)
+    - Added explicit liveness `/healthz` and readiness `/ready` endpoints; detailed checks remain under `/health/*`.
+    - Implemented readiness in `Glueful\\Controllers\\HealthController::readiness()`.
+    - Protected readiness with IP allowlist middleware (see notes).
   - Where
-    - Routes: `routes/health.php`
-    - Config: `config/security.php` (new keys `health_ip_allowlist`, `health_auth_required`)
-    - Middleware: `src/Routing/Middleware/AllowIpMiddleware.php` (new)
+    - Routes: `routes/health.php` (`/healthz`, `/ready`)
+    - Controller: `src/Controllers/HealthController.php` (method `readiness`)
+    - Config: `config/security.php` key `health_ip_allowlist`
+    - Middleware: `src/Routing/Middleware/AllowIpMiddleware.php`
+  - Notes
+    - Ensure a container alias exists for `'allow_ip'` → `Glueful\\Routing\\Middleware\\AllowIpMiddleware` so middleware resolution works in routes.
   - Snippets
     ```php
     // routes/health.php (append)

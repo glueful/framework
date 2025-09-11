@@ -130,6 +130,53 @@ class HealthController extends BaseController
     }
 
     /**
+     * Readiness probe for orchestrators (K8s / load balancers)
+     *
+     * Performs lightweight checks on critical dependencies and returns 200 when
+     * the service is able to handle traffic, 503 otherwise. Avoids heavy work
+     * to keep probe fast and reliable.
+     */
+    public function readiness(): Response
+    {
+        // Minimal protection to avoid probe abuse
+        $this->rateLimit('health_readiness', 60, 60);
+
+        $db = HealthService::checkDatabase();
+        $cache = HealthService::checkCache();
+        $config = HealthService::checkConfiguration();
+
+        $checks = [
+            'database' => $db,
+            'cache' => $cache,
+            'config' => $config,
+        ];
+
+        $hasError = ($db['status'] ?? 'ok') === 'error'
+            || ($cache['status'] ?? 'ok') === 'error'
+            || ($config['status'] ?? 'ok') === 'error';
+
+        if ($hasError) {
+            return Response::error(
+                'Service not ready',
+                Response::HTTP_SERVICE_UNAVAILABLE,
+                [
+                    'timestamp' => date('c'),
+                    'checks' => $checks
+                ]
+            );
+        }
+
+        return Response::success(
+            [
+                'status' => 'ready',
+                'timestamp' => date('c'),
+                'checks' => $checks
+            ],
+            'Service is ready'
+        );
+    }
+
+    /**
      * Get detailed production monitoring metrics
      *
      * Comprehensive health endpoint with Response API metrics, middleware pipeline status,
