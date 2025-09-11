@@ -332,7 +332,7 @@ class FileFinder
             $finder->ignoreDotFiles(true);
         }
 
-        if (!(bool)($this->config['follow_links'] ?? false)) {
+        if ((bool)($this->config['follow_links'] ?? false)) {
             $finder->followLinks();
         }
 
