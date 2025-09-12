@@ -31,15 +31,23 @@ final class ProviderLocator
         $providers = [];
 
         // 1) enabled (preserve order) — app providers first, then extensions
-        foreach ((array) config('serviceproviders.enabled', []) as $cls) { $providers[] = $cls; }
-        foreach ((array) config('extensions.enabled', []) as $cls) { $providers[] = $cls; }
+        foreach ((array) config('serviceproviders.enabled', []) as $cls) {
+            $providers[] = $cls;
+        }
+        foreach ((array) config('extensions.enabled', []) as $cls) {
+            $providers[] = $cls;
+        }
 
         // 2) dev_only (preserve order)
         $appEnv = $_ENV['APP_ENV'] ?? (getenv('APP_ENV') !== false ? getenv('APP_ENV') : 'production');
         if ($appEnv !== 'production') {
             // 2) dev_only — app providers first, then extensions
-            foreach ((array) config('serviceproviders.dev_only', []) as $cls) { $providers[] = $cls; }
-            foreach ((array) config('extensions.dev_only', []) as $cls) { $providers[] = $cls; }
+            foreach ((array) config('serviceproviders.dev_only', []) as $cls) {
+                $providers[] = $cls;
+            }
+            foreach ((array) config('extensions.dev_only', []) as $cls) {
+                $providers[] = $cls;
+            }
 
             // 3) local scan (sort by folder name for stability)
             $localPath = config('extensions.local_path');
