@@ -992,6 +992,251 @@ class DebugMiddleware implements RouteMiddleware
 }
 ```
 
+## Advanced Authentication Middleware Examples
+
+### Environment-Specific Configuration
+
+```php
+use Glueful\Routing\Middleware\AuthMiddleware;
+
+// Development - verbose logging, no expiration validation
+if (config('app.env') === 'development') {
+    $devMiddleware = new AuthMiddleware(
+        options: [
+            'validate_expiration' => false,  // Skip expiration in dev
+            'enable_events' => false,        // Skip events in dev
+            'enable_logging' => true         // But keep logging for debugging
+        ]
+    );
+    
+    $router->group(['middleware' => [$devMiddleware]], function($router) {
+        $router->get('/api/dev/test', 'DevController@test');
+    });
+}
+
+// Production - full security features enabled
+if (config('app.env') === 'production') {
+    $prodMiddleware = new AuthMiddleware(
+        providerNames: ['jwt', 'api_key'],
+        options: [
+            'validate_expiration' => true,   // Strict expiration checking
+            'enable_events' => true,         // Full event dispatching
+            'enable_logging' => true         // Comprehensive logging
+        ]
+    );
+    
+    $router->group(['middleware' => [$prodMiddleware]], function($router) {
+        $router->get('/api/secure-data', 'SecureController@getData');
+    });
+}
+```
+
+### Multi-Tenant Authentication
+
+```php
+// Different tenants might use different authentication providers
+$tenant1Middleware = new AuthMiddleware(
+    providerNames: ['jwt'],  // Simple JWT for basic tenants
+    options: ['validate_expiration' => true, 'enable_events' => true, 'enable_logging' => true]
+);
+
+$tenant2Middleware = new AuthMiddleware(
+    providerNames: ['saml', 'ldap'],  // Enterprise auth for premium tenants
+    options: ['validate_expiration' => true, 'enable_events' => true, 'enable_logging' => true]
+);
+
+$router->group([
+    'prefix' => '/tenant/basic',
+    'middleware' => [$tenant1Middleware]
+], function($router) {
+    $router->get('/data', 'TenantController@basicData');
+});
+
+$router->group([
+    'prefix' => '/tenant/enterprise',
+    'middleware' => [$tenant2Middleware]
+], function($router) {
+    $router->get('/data', 'TenantController@enterpriseData');
+    $router->post('/admin-action', 'TenantController@adminAction')->middleware(['admin']);
+});
+```
+
+### Feature-Specific Configurations
+
+```php
+// API Gateway - events disabled for performance, logging enabled for monitoring
+$apiGatewayMiddleware = new AuthMiddleware(
+    providerNames: ['api_key'],
+    options: [
+        'validate_expiration' => true,
+        'enable_events' => false,    // Disable events for high-throughput
+        'enable_logging' => true     // Keep logging for monitoring
+    ]
+);
+
+$router->group([
+    'prefix' => '/gateway',
+    'middleware' => [$apiGatewayMiddleware]
+], function($router) {
+    $router->get('/data', 'GatewayController@getData');
+    $router->post('/webhook', 'GatewayController@webhook');
+});
+
+// WebSocket/SSE endpoints - token expiration disabled (long-lived connections)
+$websocketMiddleware = new AuthMiddleware(
+    providerNames: ['jwt'],
+    options: [
+        'validate_expiration' => false,  // Allow longer-lived connections
+        'enable_events' => true,
+        'enable_logging' => false        // Reduce logging noise
+    ]
+);
+
+$router->get('/api/websocket/connect', 'WebSocketController@connect')
+    ->middleware([$websocketMiddleware]);
+```
+
+### Factory Pattern for Middleware Creation
+
+```php
+class AuthMiddlewareFactory
+{
+    public static function createForEnvironment(string $env): AuthMiddleware
+    {
+        $options = match($env) {
+            'development' => [
+                'validate_expiration' => false,
+                'enable_events' => false,
+                'enable_logging' => true
+            ],
+            'testing' => [
+                'validate_expiration' => false,
+                'enable_events' => false,
+                'enable_logging' => false
+            ],
+            'staging' => [
+                'validate_expiration' => true,
+                'enable_events' => true,
+                'enable_logging' => true
+            ],
+            'production' => [
+                'validate_expiration' => true,
+                'enable_events' => true,
+                'enable_logging' => true
+            ],
+            default => [
+                'validate_expiration' => true,
+                'enable_events' => true,
+                'enable_logging' => true
+            ]
+        };
+
+        return new AuthMiddleware(
+            providerNames: ['jwt', 'api_key'],
+            options: $options
+        );
+    }
+
+    public static function createForTenant(string $tenantType): AuthMiddleware
+    {
+        $providerNames = match($tenantType) {
+            'basic' => ['jwt'],
+            'premium' => ['jwt', 'api_key'],
+            'enterprise' => ['jwt', 'api_key', 'ldap', 'saml'],
+            default => ['jwt']
+        };
+
+        return new AuthMiddleware(
+            providerNames: $providerNames,
+            options: [
+                'validate_expiration' => true,
+                'enable_events' => true,
+                'enable_logging' => true
+            ]
+        );
+    }
+}
+
+// Usage with factory
+$envMiddleware = AuthMiddlewareFactory::createForEnvironment(config('app.env'));
+$router->group(['middleware' => [$envMiddleware]], function($router) {
+    $router->get('/api/user', 'UserController@index');
+});
+```
+
+### Authentication Response Examples
+
+```php
+/*
+ * SUCCESS RESPONSE (authenticated user):
+ * HTTP 200 OK
+ * Request continues to controller...
+ * 
+ * FAILURE RESPONSES:
+ * 
+ * 1. Missing token:
+ * HTTP 401 Unauthorized
+ * {
+ *   "success": false,
+ *   "message": "Authentication required",
+ *   "code": 401,
+ *   "error_code": "UNAUTHORIZED"
+ * }
+ * 
+ * 2. Expired token (refresh available):
+ * HTTP 401 Unauthorized  
+ * {
+ *   "success": false,
+ *   "message": "Access token expired",
+ *   "code": 401,
+ *   "error_code": "TOKEN_EXPIRED",
+ *   "refresh_available": true
+ * }
+ * 
+ * 3. Session expired:
+ * HTTP 401 Unauthorized
+ * {
+ *   "success": false,
+ *   "message": "Session expired. Please log in again",
+ *   "code": 401,
+ *   "error_code": "SESSION_EXPIRED", 
+ *   "refresh_available": false
+ * }
+ * 
+ * 4. Admin access required:
+ * HTTP 403 Forbidden
+ * {
+ *   "success": false,
+ *   "message": "Admin access required",
+ *   "code": 403,
+ *   "error_code": "FORBIDDEN"
+ * }
+ */
+```
+
+### Authentication Event Listeners
+
+```php
+// Listen for authentication events in your application
+Event::listen(HttpAuthSuccessEvent::class, function($event) {
+    // Log successful authentication
+    Log::info('User authenticated', [
+        'user_id' => $event->getMetadata()['user_id'] ?? null,
+        'provider' => $event->getMetadata()['provider'] ?? 'unknown',
+        'path' => $event->getRequest()->getPathInfo()
+    ]);
+});
+
+Event::listen(HttpAuthFailureEvent::class, function($event) {
+    // Track failed authentication attempts
+    Log::warning('Authentication failed', [
+        'reason' => $event->getReason(),
+        'ip' => $event->getRequest()->getClientIp(),
+        'path' => $event->getRequest()->getPathInfo()
+    ]);
+});
+```
+
 ## Conclusion
 
 The Glueful middleware system provides a powerful, flexible foundation for building secure, performant applications. With the native `RouteMiddleware` interface, PSR-15 compatibility, and comprehensive built-in middleware, it handles both simple and complex requirements efficiently.
