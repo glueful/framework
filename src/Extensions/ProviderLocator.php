@@ -18,24 +18,28 @@ final class ProviderLocator
     public static function all(): array
     {
         // Exclusive allow-list mode (highest priority)
-        $only = config('extensions.only');
-        if ($only !== null) {
-            return array_values((array) $only);
+        // Prefer app service providers allow-list if defined; otherwise fall back to extensions.
+        $appOnly = config('serviceproviders.only');
+        if ($appOnly !== null) {
+            return array_values((array) $appOnly);
+        }
+        $extOnly = config('extensions.only');
+        if ($extOnly !== null) {
+            return array_values((array) $extOnly);
         }
 
         $providers = [];
 
-        // 1) enabled (preserve order)
-        foreach ((array) config('extensions.enabled', []) as $cls) {
-            $providers[] = $cls;
-        }
+        // 1) enabled (preserve order) — app providers first, then extensions
+        foreach ((array) config('serviceproviders.enabled', []) as $cls) { $providers[] = $cls; }
+        foreach ((array) config('extensions.enabled', []) as $cls) { $providers[] = $cls; }
 
         // 2) dev_only (preserve order)
         $appEnv = $_ENV['APP_ENV'] ?? (getenv('APP_ENV') !== false ? getenv('APP_ENV') : 'production');
         if ($appEnv !== 'production') {
-            foreach ((array) config('extensions.dev_only', []) as $cls) {
-                $providers[] = $cls;
-            }
+            // 2) dev_only — app providers first, then extensions
+            foreach ((array) config('serviceproviders.dev_only', []) as $cls) { $providers[] = $cls; }
+            foreach ((array) config('extensions.dev_only', []) as $cls) { $providers[] = $cls; }
 
             // 3) local scan (sort by folder name for stability)
             $localPath = config('extensions.local_path');
@@ -56,7 +60,11 @@ final class ProviderLocator
         $providers = array_values(array_unique($providers, SORT_STRING));
 
         // Apply blacklist filter with strict comparison and normalization
-        $disabled = (array) config('extensions.disabled', []);
+        // Union of app-level disabled and extensions-level disabled
+        $disabled = array_merge(
+            (array) config('serviceproviders.disabled', []),
+            (array) config('extensions.disabled', [])
+        );
         $disabled = array_values(array_unique(array_map('strval', $disabled)));
 
         if (count($disabled) > 0) {

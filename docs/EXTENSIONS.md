@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Glueful Extensions System provides a modern, Laravel/Symfony-inspired architecture for extending the framework's functionality. Built on the industry-standard ServiceProvider pattern, it delivers high performance with minimal complexity - just ~400 lines of core code.
+The Glueful Extensions System provides a modern architecture for extending the framework's functionality. Built on the industry-standard ServiceProvider pattern, it delivers high performance with minimal complexity - just ~400 lines of core code.
 
 ## Table of Contents
 
