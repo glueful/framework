@@ -51,7 +51,7 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
 
 ## Suggested Timeline (indicative)
 
-- Phase 1 (Weeks 1–2): [PSR-15 bridge](../PSR15_BRIDGE_PLAN.md), minimal tests, lint/stan, route cache tests. See also: [CI test/benchmark harness](../CI_TEST_BENCHMARK_HARNESS.md).
+- Phase 1 (Weeks 1–2): [PSR-15 bridge](../PSR15_BRIDGE_PLAN.md), minimal tests, lint/stan, route cache tests. See also: [CI test/benchmark harness](../observability/CI_TEST_BENCHMARK_HARNESS.md).
 - Phase 2 (Weeks 3–4): Observability hardening
   - Health endpoints: validate, secure (allowlist/auth if needed), document readiness/liveness usage.
   - Logging processors: confirm standardized fields on all channels; document log shipping.
@@ -279,12 +279,12 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
     }
     ```
 
-- [ ] CI observability gates (Owner: DevEx)
+- [x] CI observability gates (Owner: DevEx)
   - Actions
     - Add smoke tests to assert `/healthz` 200 and key `/ready` checks.
     - Emit benchmark report from the bench script; store as CI artifact.
   - Where
-    - Docs/CI harness: `docs/CI_TEST_BENCHMARK_HARNESS.md` (already contains scaffolds)
+    - Docs/CI harness: `docs/observability/CI_TEST_BENCHMARK_HARNESS.md` (already contains scaffolds)
     - Tests: add once ready under `tests/Core/*` (later implementation).
 
 ### Phase 3 Tasks Checklist (Weeks 5–6)
@@ -311,7 +311,7 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
     ];
     ```
 
-- [ ] Security audit command integration (Owner: Platform)
+- [x] Security audit command integration (Owner: Platform)
   - Actions
     - Use existing security console commands to audit production configs in CI.
     - Fail CI on critical findings; publish report artifact.
@@ -330,7 +330,7 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
         fi
     ```
 
-- [ ] Cache‑backed rate limiters (Owner: Backend)
+- [x] Cache‑backed rate limiters (Owner: Backend)
   - Actions
     - Ensure `security.rate_limiter` defaults are set; verify middleware `'rate_limit'` used where needed.
     - Enable distributed limiter when running multiple workers.
@@ -376,11 +376,11 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
 
 ### Phase 4 Tasks Checklist (Weeks 7–8)
 
-- [ ] Benchmarks & perf CI gates (Owner: DevEx)
+- [x] Benchmarks & perf CI gates (Owner: DevEx)
   - Actions
     - Adopt the bench script; set initial non‑blocking reporting; later enforce thresholds.
   - Where
-    - Bench script: see `docs/CI_TEST_BENCHMARK_HARNESS.md` (tools/bench/bench.php)
+    - Bench script: see `docs/observability/CI_TEST_BENCHMARK_HARNESS.md` (tools/bench/bench.php)
     - CI: `.github/workflows/test.yml`
   - Snippet
     ```yaml
@@ -389,7 +389,7 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
         if [ -f tools/bench/bench.php ]; then
           php tools/bench/bench.php | tee build/logs/bench.txt
         else
-          echo "Bench script missing; see docs/CI_TEST_BENCHMARK_HARNESS.md" | tee build/logs/bench.txt
+          echo "Bench script missing; see docs/observability/CI_TEST_BENCHMARK_HARNESS.md" | tee build/logs/bench.txt
         fi
     ```
     ```yaml
@@ -404,11 +404,11 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
         fi
     ```
 
-- [ ] Docs & cookbook (Owner: Docs)
+- [x] Docs & cookbook (Owner: Docs)
   - Actions
     - Author guides for routing patterns, middleware, DI, error handling, testing, deployment, observability.
   - Where
-    - Docs: `docs/cookbook/` (to be created later)
+    - Docs: `docs/cookbook/`
   - Snippet (structure)
     ```text
     docs/cookbook/
@@ -421,7 +421,7 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
       07-observability.md
     ```
 
-- [ ] Release policy (Owner: Maintainers)
+- [x] Release policy (Owner: Maintainers)
   - Actions
     - Adopt semantic versioning; document deprecation policy; maintain CHANGELOG.
   - Where
@@ -463,7 +463,7 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
 - Tests tree present under `tests/` with subfolders `Unit/`, `Integration/`, `Performance/`, `Feature/`, and a `tests/bootstrap.php` bootstrap.
 - GitHub Actions workflow at `.github/workflows/test.yml` already sets up PHP, installs dependencies, runs syntax/CS checks, executes PHPUnit (with/without coverage), and runs PHPStan.
 - Recommended next steps in Phase 1:
-  - Add/port minimal router and route-cache tests per [CI harness scaffolds](../CI_TEST_BENCHMARK_HARNESS.md).
+  - Add/port minimal router and route-cache tests per [CI harness scaffolds](../observability/CI_TEST_BENCHMARK_HARNESS.md).
   - If desired, add a simple bench script and upload its output as an artifact (see harness doc for example).
 
 ## Sample Usage

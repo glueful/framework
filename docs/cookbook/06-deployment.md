@@ -2,6 +2,25 @@
 
 This comprehensive guide covers deploying Glueful applications across various environments and platforms.
 
+## Quick Start Checklist
+
+Essential checklist and tips for deploying Glueful services:
+
+### ✅ Essential Configuration
+- Configure environment: `.env` with `APP_ENV=production`, DB/cache endpoints
+- Enable a real cache backend (e.g., Redis) in `config/cache.php`
+- Harden security defaults in `config/security.php` (CSP/HSTS, allowlists)
+- Ensure PHP OPcache is enabled; tune memory limits
+- Serve via a production web server (Nginx/Apache) or PHP-FPM
+- Health endpoints: `/healthz` (liveness), `/ready` (readiness + allowlist)
+- Logs: configure paths/rotation; ship to your observability stack
+
+### ⚡ Zero-Downtime Hints
+- Warm up route cache/opcache during deploy
+- Run DB migrations and queue workers with supervision
+
+---
+
 ## Table of Contents
 
 1. [Pre-Deployment Checklist](#pre-deployment-checklist)
@@ -19,7 +38,7 @@ This comprehensive guide covers deploying Glueful applications across various en
 
 ### ✅ Essential Pre-Deployment Tasks
 
-- [ ] **Security hardening complete** (see [SECURITY.md](SECURITY.md))
+- [ ] **Security hardening complete** (see [12-security.md](12-security.md))
 - [ ] **Environment variables configured**
 - [ ] **Database migrations tested**
 - [ ] **SSL certificates obtained**

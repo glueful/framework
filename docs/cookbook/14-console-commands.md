@@ -14,9 +14,12 @@ This comprehensive guide covers Glueful's console system, built on Symfony Conso
 8. [Queue Management](#queue-management)
 9. [Security Commands](#security-commands)
 10. [System Utilities](#system-utilities)
-11. [Code Generation](#code-generation)
-12. [Custom Commands](#custom-commands)
-13. [Best Practices](#best-practices)
+11. [Field Selection Commands](#field-selection-commands)
+12. [Container/DI Commands](#containerdi-commands)
+13. [Configuration Commands](#configuration-commands)
+14. [Code Generation](#code-generation)
+15. [Custom Commands](#custom-commands)
+16. [Best Practices](#best-practices)
 
 ## Overview
 
@@ -48,7 +51,7 @@ The console system is built around several key components:
 ```php
 use Glueful\Console\Application;
 
-$container = app();
+$container = container();
 $app = new Application($container);
 $app->run();
 ```
@@ -78,16 +81,33 @@ class MyCommand extends BaseCommand
 ```
 
 **Enhanced Methods:**
-- `$this->success($message)` - Green success message
-- `$this->error($message)` - Red error message
-- `$this->warning($message)` - Yellow warning message
+
+**Output Methods:**
+- `$this->success($message)` - Green success message with icon
+- `$this->error($message)` - Red error message with icon
+- `$this->warning($message)` - Yellow warning message with icon
 - `$this->info($message)` - Blue info message
-- `$this->note($message)` - Highlighted note
+- `$this->note($message)` - Highlighted note/tip
+- `$this->tip($message)` - Legacy tip method (adds "Tip:" prefix)
+- `$this->line($message)` - Plain text line
+
+**Interactive Methods:**
 - `$this->confirm($question, $default)` - Yes/no confirmation
-- `$this->ask($question, $default)` - Text input
-- `$this->choice($question, $choices, $default)` - Multiple choice
+- `$this->ask($question, $default)` - Text input with optional default
+- `$this->secret($question)` - Hidden input for passwords
+- `$this->choice($question, $choices, $default)` - Multiple choice selection
+
+**Display Methods:**
 - `$this->table($headers, $rows)` - Formatted table display
-- `$this->progressBar($steps, $callback)` - Progress tracking
+- `$this->createProgressBar($max)` - Create progress bar instance
+- `$this->progressBar($steps, $callback)` - Progress bar with callback
+
+**Utility Methods:**
+- `$this->getService($serviceId)` - Resolve service from DI container
+- `$this->getServiceDynamic($serviceId)` - Dynamic service resolution
+- `$this->getContainer()` - Access DI container
+- `$this->isProduction()` - Check if running in production
+- `$this->confirmProduction($operation)` - Force production confirmation
 
 ## Command Categories
 
@@ -343,6 +363,44 @@ php glueful extensions:benchmark
 php glueful extensions:debug
 ```
 
+### Extension Listing and Analysis
+
+```bash
+# List all extensions with detailed information
+php glueful extensions:list
+
+# Show extension summary statistics
+php glueful extensions:summary
+
+# Show dependency information for an extension
+php glueful extensions:why MyExtension
+
+# Show which extensions depend on a specific extension
+php glueful extensions:why MyExtension --reverse
+```
+
+### Extension Cache Management
+
+```bash
+# Manage extension cache
+php glueful extensions:cache
+
+# Clear extension cache
+php glueful extensions:cache --clear
+
+# Rebuild extension cache
+php glueful extensions:cache --rebuild
+
+# Show cache statistics
+php glueful extensions:cache --stats
+
+# Clear all extension-related caches
+php glueful extensions:clear
+
+# Clear specific extension cache
+php glueful extensions:clear MyExtension
+```
+
 ## Queue Management
 
 ### Queue Workers
@@ -479,12 +537,37 @@ php glueful system:check --production
 ### Memory Monitoring
 
 ```bash
-# Monitor memory usage
+# Real-time memory monitoring
 php glueful system:memory
 
-# Advanced memory monitoring with options
+# Monitor with custom interval and duration
+php glueful system:memory --interval=5 --duration=300
+
+# Monitor specific process
+php glueful system:memory --pid=1234
+
+# Set custom thresholds
 php glueful system:memory --warning=128M --critical=256M
+
+# Export monitoring data
+php glueful system:memory --export=memory-report.json
+
+# Different output formats
+php glueful system:memory --format=table
+php glueful system:memory --format=json
+php glueful system:memory --format=csv
+
+# Send alerts via email or webhook
+php glueful system:memory --email=admin@example.com --webhook=https://alerts.example.com
 ```
+
+**Features:**
+- Real-time memory usage monitoring
+- Configurable alert thresholds
+- Multiple output formats
+- Data export capabilities
+- Integration with external monitoring systems
+- Process-specific monitoring
 
 ### Production Commands
 
@@ -497,6 +580,228 @@ php glueful system:production --optimize
 
 # Validate production configuration
 php glueful system:production --validate
+```
+
+### Version Information
+
+```bash
+# Show framework version
+php glueful version
+
+# Show detailed version information
+php glueful version --detailed
+
+# Show all component versions
+php glueful version --components
+
+# Export version information
+php glueful version --format=json
+```
+
+**Displays:**
+- Framework version and build information
+- PHP version and loaded extensions
+- Database version and driver information
+- Cache driver version
+- Dependency versions
+- System environment information
+
+## Field Selection Commands
+
+Glueful provides sophisticated field selection commands for analyzing and optimizing GraphQL-style field selection patterns in REST APIs.
+
+### Field Analysis
+
+```bash
+# Analyze field usage patterns across the application
+php glueful fields:analyze
+
+# Show detailed analysis with optimization suggestions
+php glueful fields:analyze --detailed
+
+# Export analysis to JSON
+php glueful fields:analyze --export=field-analysis.json
+
+# Analyze specific endpoints only
+php glueful fields:analyze --endpoints="/api/users,/api/posts"
+```
+
+**Features:**
+- Field usage frequency analysis
+- Common pattern identification
+- Performance impact assessment  
+- Optimization recommendations
+- Export capabilities for external tools
+
+### Field Validation
+
+```bash
+# Validate field selection configurations
+php glueful fields:validate
+
+# Validate with strict mode (fail on warnings)
+php glueful fields:validate --strict
+
+# Validate specific routes only
+php glueful fields:validate --routes="/api/users/*"
+
+# Show detailed validation results
+php glueful fields:validate --detailed
+```
+
+### Field Performance Testing
+
+```bash
+# Run field selection performance tests
+php glueful fields:performance
+
+# Test with different dataset sizes
+php glueful fields:performance --dataset-size=1000
+
+# Test specific field patterns
+php glueful fields:performance --pattern="user(id,name,posts(title))"
+
+# Export performance metrics
+php glueful fields:performance --export=performance-report.json
+```
+
+### Whitelist Validation
+
+```bash
+# Check field whitelist compliance
+php glueful fields:whitelist-check
+
+# Check specific endpoints
+php glueful fields:whitelist-check --endpoint="/api/users"
+
+# Show non-compliant fields
+php glueful fields:whitelist-check --show-violations
+
+# Export compliance report
+php glueful fields:whitelist-check --export=compliance.json
+```
+
+## Container/DI Commands
+
+Advanced dependency injection container management and optimization commands.
+
+### Container Compilation
+
+```bash
+# Compile container for production optimization
+php glueful di:container:compile
+
+# Compile with debug information
+php glueful di:container:compile --debug
+
+# Force recompilation
+php glueful di:container:compile --force
+
+# Show compilation statistics  
+php glueful di:container:compile --stats
+```
+
+**Features:**
+- Pre-compiles all service definitions
+- Optimizes service resolution paths
+- Validates all service configurations
+- Generates optimized container cache
+- Removes debug information for performance
+
+### Container Debugging
+
+```bash
+# Debug container services and dependencies
+php glueful di:container:debug
+
+# Show specific service information
+php glueful di:container:debug --service="UserService"
+
+# Show circular dependency detection
+php glueful di:container:debug --circular-deps
+
+# Export dependency graph
+php glueful di:container:debug --graph=dependencies.dot
+```
+
+### Container Validation
+
+```bash
+# Validate container configuration
+php glueful di:container:validate
+
+# Validate with strict checking
+php glueful di:container:validate --strict
+
+# Show detailed validation results
+php glueful di:container:validate --detailed
+
+# Check specific service providers
+php glueful di:container:validate --providers="AuthServiceProvider,CacheServiceProvider"
+```
+
+## Configuration Commands
+
+Tools for managing application configuration, IDE support, and documentation generation.
+
+### Generate IDE Support
+
+```bash
+# Generate IDE configuration and JSON schemas
+php glueful config:generate-ide-support
+
+# Generate for specific IDEs
+php glueful config:generate-ide-support --ide=phpstorm
+php glueful config:generate-ide-support --ide=vscode
+
+# Include JSON schemas for validation
+php glueful config:generate-ide-support --schemas
+
+# Custom output directory
+php glueful config:generate-ide-support --output=.ide/
+```
+
+**Generated Files:**
+- PhpStorm configuration files
+- VS Code settings and schemas
+- JSON schemas for configuration validation
+- Autocomplete definitions
+- Code inspection rules
+
+### Generate Documentation
+
+```bash
+# Generate configuration documentation
+php glueful config:generate-docs
+
+# Generate in different formats
+php glueful config:generate-docs --format=markdown
+php glueful config:generate-docs --format=html
+
+# Include examples and defaults
+php glueful config:generate-docs --examples --defaults
+
+# Custom template
+php glueful config:generate-docs --template=custom.twig
+```
+
+### Validate Configuration
+
+```bash
+# Validate all configuration files
+php glueful config:validate
+
+# Validate specific configuration files
+php glueful config:validate --files="app,database,cache"
+
+# Show detailed validation results
+php glueful config:validate --detailed
+
+# Check for unused configuration options
+php glueful config:validate --unused
+
+# Validate against JSON schema
+php glueful config:validate --schema
 ```
 
 ## Code Generation
