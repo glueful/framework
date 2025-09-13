@@ -9,6 +9,7 @@ use Glueful\Bootstrap\ConfigurationLoader;
 use Glueful\Bootstrap\BootProfiler;
 use Glueful\DI\Container;
 use Glueful\DI\LazyServiceRegistry;
+use Glueful\Routing\RouteManifest;
 use Glueful\Cache\CacheTaggingService;
 use Glueful\Cache\CacheInvalidationService;
 use Glueful\Database\ConnectionValidator;
@@ -236,22 +237,8 @@ class Framework
             // Get the Next-Gen Router instance
             $router = $this->container->get(\Glueful\Routing\Router::class);
 
-            // Load framework core routes
-            $frameworkRoutesPath = dirname(__DIR__) . '/routes';
-
-            // Load auth routes (framework core routes)
-            if (file_exists($frameworkRoutesPath . '/auth.php')) {
-                require $frameworkRoutesPath . '/auth.php';
-            }
-
-            if (file_exists($frameworkRoutesPath . '/resource.php')) {
-                require $frameworkRoutesPath . '/resource.php';
-            }
-
-            // Load core application routes if they exist
-            if (file_exists($this->basePath . '/routes/api.php')) {
-                require $this->basePath . '/routes/api.php';
-            }
+            // Load routes using a single manifest to keep sources centralized
+            RouteManifest::load($router);
 
             // Auto-discover controllers with attributes if directory exists
             if (is_dir($this->basePath . '/app/Controllers')) {

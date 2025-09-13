@@ -4,8 +4,7 @@ use Glueful\Routing\Router;
 use Glueful\Controllers\HealthController;
 use Symfony\Component\HttpFoundation\Request;
 
-// Get router instance
-$router = container()->get(Router::class);
+/** @var Router $router Router instance injected by RouteManifest::load() */
 
 // Health check routes - organized by access level
 $router->group(['prefix' => '/health'], function (Router $router) {

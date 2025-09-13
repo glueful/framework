@@ -5,7 +5,7 @@ Quick patterns for testing Glueful apps.
 ## PHPUnit Setup
 
 - Ensure `vendor/bin/phpunit` is installed and `tests/bootstrap.php` exists.
-- CI example: see `.github/workflows/test.yml`.
+- CI example: see `.github/workflows/php-ci.yml` (combined pipeline) or split workflows under `.github/workflows/` if you maintain separate jobs.
 
 ## Router Integration Test (Example)
 

@@ -15,14 +15,10 @@ class RouteManifest
             'framework_routes' => [
                 '/routes/auth.php',
                 '/routes/health.php',
-                '/routes/extensions.php',
-                '/routes/files.php',
-                '/routes/notifications.php',
                 '/routes/resource.php',
             ],
             'core_routes' => [
                 '/routes/api.php',
-                '/routes/admin.php',
             ],
             'generated_at' => time(),
         ];

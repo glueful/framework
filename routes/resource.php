@@ -5,8 +5,7 @@ use Glueful\Controllers\ResourceController;
 use Glueful\Helpers\RequestHelper;
 use Symfony\Component\HttpFoundation\Request;
 
-// Get router instance
-$router = container()->get(Router::class);
+/** @var Router $router Router instance injected by RouteManifest::load() */
 
 // RESTful Resource CRUD Routes
 /**

@@ -33,6 +33,10 @@ The Glueful Framework features a high-performance router designed for enterprise
 
 Routes are defined in the `routes/` directory and loaded automatically by the framework.
 
+Note on context:
+- In route files (e.g., `routes/api.php`), the router instance `$router` is in scope (provided by the framework’s manifest loader), so you can call `$router->get(...)` directly.
+- In other contexts (e.g., bootstrapping/tests), resolve it from the container: `$router = container()->get(Glueful\\Routing\\Router::class);`
+
 ```php
 use Glueful\Routing\Router;
 use Glueful\Http\Response;
@@ -444,55 +448,17 @@ $router->bind('user', function($value) {
 
 ### CORS Configuration
 
-```php
-// Configure CORS in config/cors.php
-return [
-    'allowed_origins' => ['https://app.example.com'],
-    'allowed_methods' => ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    'allowed_headers' => ['Content-Type', 'Authorization', 'X-Requested-With'],
-    'exposed_headers' => ['X-Total-Count', 'Link'],
-    'max_age' => 86400,
-    'supports_credentials' => true,
-];
-
-// Apply CORS middleware
-$router->group(['middleware' => ['cors']], function($router) {
-    // API routes
-});
-```
+- Configure CORS in `config/security.php` under the `cors` key (allowed origins, headers, methods, max age, credentials).
+- The router handles OPTIONS preflight automatically for matched paths and returns the appropriate Allow header.
+- For additional policies, you can add a CORS middleware (PSR‑15 adapter or custom) and apply it via route groups.
 
 ### Route Caching
 
-Routes are automatically cached in production for optimal performance:
+Routes are automatically cached in production. In development, route cache uses a short TTL and auto‑invalidates when route files change (including framework routes). No CLI is required to manage route cache.
 
-```bash
-# Clear route cache during deployment
-php glueful route:clear
+### Not Found / Method Not Allowed
 
-# Warm route cache
-php glueful route:cache
-
-# View cached routes
-php glueful route:list
-```
-
-### Fallback Routes
-
-```php
-// Catch-all for 404 pages
-$router->fallback(function() {
-    return new Response(['error' => 'Not Found'], 404);
-});
-
-// API fallback
-$router->group(['prefix' => '/api'], function($router) {
-    // API routes...
-    
-    $router->fallback(function() {
-        return new JsonResponse(['error' => 'API endpoint not found'], 404);
-    });
-});
-```
+The router standardizes JSON error responses for 404 Not Found and 405 Method Not Allowed (405 responses include an `Allow` header). No explicit fallback route is needed.
 
 ## Performance Optimization
 
@@ -544,10 +510,9 @@ routes/
 ├── admin.php         # Admin routes
 └── webhooks.php      # Webhook endpoints
 
-// Load in bootstrap
-foreach (['api', 'web', 'admin', 'webhooks'] as $file) {
-    require __DIR__ . "/routes/{$file}.php";
-}
+// Framework loads routes via a centralized manifest
+use Glueful\\Routing\\RouteManifest;
+RouteManifest::load($router);
 ```
 
 ### 2. RESTful Conventions
