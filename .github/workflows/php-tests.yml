@@ -1,0 +1,105 @@
+name: PHP Tests
+
+on:
+  pull_request:
+    branches: [ main, dev ]
+  push:
+    branches: [ main, dev ]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual trigger'
+        required: false
+        default: 'Manual run'
+
+jobs:
+  tests:
+    name: PHPUnit (PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: glueful_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s --health-timeout=5s --health-retries=3
+
+    strategy:
+      matrix:
+        php: ['8.2', '8.3']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, intl, zip, pdo_mysql
+          tools: composer:v2
+          ini-values: memory_limit=1G, max_execution_time=0, xdebug.mode=off
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: ${{ runner.os }}-php-${{ matrix.php }}-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-php-
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress
+
+      - name: Setup test environment
+        run: |
+          if [ -f .env.example ]; then
+            cp .env.example .env.testing
+            echo "DB_CONNECTION=mysql" >> .env.testing
+            echo "DB_HOST=127.0.0.1" >> .env.testing
+            echo "DB_PORT=3306" >> .env.testing
+            echo "DB_DATABASE=glueful_test" >> .env.testing
+            echo "DB_USERNAME=root" >> .env.testing
+            echo "DB_PASSWORD=password" >> .env.testing
+          fi
+
+      - name: Run PHPUnit
+        env:
+          XDEBUG_MODE: off
+        run: |
+          if [ -f vendor/bin/phpunit ]; then
+            vendor/bin/phpunit --no-coverage --log-junit build/logs/junit.xml
+          else
+            echo 'PHPUnit not installed - skipping tests'
+          fi
+
+  coverage:
+    name: Coverage (PHP 8.2)
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup PHP (with Xdebug)
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: xdebug
+          tools: composer:v2
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress
+      - name: Run coverage (best-effort)
+        run: |
+          mkdir -p build/logs
+          if [ -f vendor/bin/phpunit ]; then
+            vendor/bin/phpunit --coverage-text --coverage-clover build/logs/clover.xml || echo 'Coverage failed; tests likely passed'
+          fi
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: build/logs/clover.xml
+          if-no-files-found: warn
