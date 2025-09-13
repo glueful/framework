@@ -156,6 +156,10 @@ return [
             'region' => env('S3_REGION', 'us-east-1'),
             'bucket' => env('S3_BUCKET'),
             'endpoint' => env('S3_ENDPOINT'),
+            // Optional access control and URL behavior
+            'acl' => env('S3_ACL', 'private'), // private, public-read, etc.
+            'signed_urls' => env('S3_SIGNED_URLS', true),
+            'signed_ttl' => env('S3_SIGNED_URL_TTL', 3600), // seconds
         ],
     ],
 

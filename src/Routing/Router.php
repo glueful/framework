@@ -8,6 +8,7 @@ use Glueful\DI\Container;
 use Symfony\Component\HttpFoundation\{Request, Response, JsonResponse, StreamedResponse, BinaryFileResponse};
 use Glueful\Routing\Internal\Psr15MiddlewareResolverTrait;
 use Psr\Http\Server\MiddlewareInterface as Psr15Middleware;
+use Glueful\Http\Response as ApiResponse;
 
 class Router
 {
@@ -420,15 +421,20 @@ class Router
         $match = $this->match($request);
 
         if ($match === null) {
-            return new Response('Not Found', 404);
+            // Standardize 404 as JSON error response
+            return ApiResponse::error('Not Found', ApiResponse::HTTP_NOT_FOUND);
         }
 
         // Handle 405 Method Not Allowed
         if ($match['route'] === null && isset($match['allowed_methods'])) {
-            return new Response('Method Not Allowed', 405, [
-                'Allow' => implode(', ', $match['allowed_methods']),
-                'Content-Type' => 'text/plain'
-            ]);
+            // Standardize 405 as JSON error and include Allow header
+            $resp = ApiResponse::error(
+                'Method Not Allowed',
+                ApiResponse::HTTP_METHOD_NOT_ALLOWED,
+                ['allowed_methods' => $match['allowed_methods']]
+            );
+            $resp->headers->set('Allow', implode(', ', $match['allowed_methods']));
+            return $resp;
         }
 
         $route = $match['route'];

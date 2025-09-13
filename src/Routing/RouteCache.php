@@ -87,13 +87,19 @@ class RouteCache
 
     private function routeFilesChanged(int $cacheTime): bool
     {
-        $files = glob(base_path('routes/*.php'));
-        if ($files === false) {
-            $files = [];
-        }
+        // App route files
+        $appGlob = glob(base_path('routes/*.php'));
+        $appFiles = $appGlob !== false ? $appGlob : [];
+
+        // Framework route files (under src/routes)
+        $frameworkRoutesPath = dirname(__DIR__) . '/routes/*.php';
+        $frameworkGlob = glob($frameworkRoutesPath);
+        $frameworkFiles = $frameworkGlob !== false ? $frameworkGlob : [];
+
+        $files = array_merge($appFiles, $frameworkFiles);
 
         foreach ($files as $file) {
-            if (filemtime($file) > $cacheTime) {
+            if (@filemtime($file) > $cacheTime) {
                 return true;
             }
         }
