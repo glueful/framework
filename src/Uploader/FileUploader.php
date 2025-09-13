@@ -22,7 +22,7 @@ final class FileUploader
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     ];
 
-    private const MAX_FILE_SIZE = 10485760; // 10MB
+    private const MAX_FILE_SIZE = 10485760; // 10MB (fallback if not configured)
 
     private StorageInterface $storage;
     private BlobRepository $blobRepository;
@@ -35,7 +35,8 @@ final class FileUploader
         ?FileManager $fileManager = null
     ) {
         $this->fileManager = $fileManager ?? container()->get(FileManager::class);
-        $this->blobRepository = new BlobRepository();
+        // Prefer DI for repository to allow overrides/testing
+        $this->blobRepository = container()->get(BlobRepository::class);
         $driver = $this->storageDriver !== null && $this->storageDriver !== ''
             ? $this->storageDriver
             : config('services.storage.driver');
@@ -50,18 +51,19 @@ final class FileUploader
 
     /**
      * @param array<string, mixed> $getParams
-     * @param array<string, mixed> $fileParams
+     * @param mixed $fileParams $_FILES-like array or Symfony UploadedFile instance
      * @return array<string, mixed>
      */
-    public function handleUpload(string $token, array $getParams, array $fileParams): array
+    public function handleUpload(string $token, array $getParams, mixed $fileParams): array
     {
         try {
             $this->validateRequest($token, $getParams, $fileParams);
 
             $file = $this->processUploadedFile($fileParams, $getParams['key'] ?? null);
-            $filename = $this->generateSecureFilename($file['name']);
+            $mime = $this->detectMime($file['tmp_name']);
+            $filename = $this->generateSecureFilename($file['name'], $mime);
 
-            $this->validateFileContent($file);
+            $this->validateFileContent($file, $mime);
 
             $uploadPath = $this->moveFile($file['tmp_name'], $filename);
 
@@ -86,21 +88,26 @@ final class FileUploader
     }
 
     /**
-     * @param array<string, mixed> $fileParams
+     * Normalize and validate uploaded file input.
+     * Accepts either an $_FILES-like array or a Symfony UploadedFile instance.
+     *
+     * @param mixed $fileParams
      * @return array<string, mixed>
      */
-    private function processUploadedFile(array $fileParams, ?string $key): array
+    private function processUploadedFile(mixed $fileParams, ?string $key): array
     {
-        $file = isset($key) ? ($fileParams[$key] ?? null) : $fileParams;
+        $raw = isset($key) ? ($fileParams[$key] ?? null) : $fileParams;
+        $file = $this->normalizeFileInput($raw);
 
         if (
             !is_array($file) || !isset($file['tmp_name']) || $file['tmp_name'] === ''
-            || !isset($file['error']) || $file['error'] !== UPLOAD_ERR_OK
+            || !isset($file['error']) || (int) $file['error'] !== UPLOAD_ERR_OK
         ) {
             throw new UploadException('Invalid file upload');
         }
 
-        if ($file['size'] > self::MAX_FILE_SIZE) {
+        $maxSize = (int) (config('filesystem.security.max_upload_size', self::MAX_FILE_SIZE));
+        if ($file['size'] > $maxSize) {
             throw new ValidationException('File size exceeds limit');
         }
 
@@ -108,25 +115,81 @@ final class FileUploader
     }
 
     /**
-     * @param array<string, mixed> $file
+     * @param mixed $input
+     * @return array<string, mixed>|null
      */
-    private function validateFileContent(array $file): void
+    private function normalizeFileInput(mixed $input): ?array
     {
-        $mime = mime_content_type($file['tmp_name']);
-        if (!in_array($mime, self::ALLOWED_MIME_TYPES, true)) {
-            throw new ValidationException('Invalid file type');
+        // Symfony UploadedFile support (avoid hard dependency by FQCN check)
+        if ($input instanceof \Symfony\Component\HttpFoundation\File\UploadedFile) {
+            return [
+                'name' => $input->getClientOriginalName(),
+                'type' => $input->getMimeType() ?? 'application/octet-stream',
+                'tmp_name' => $input->getPathname(),
+                'error' => UPLOAD_ERR_OK,
+                'size' => $input->getSize(),
+            ];
         }
 
-        // Additional security checks
-        if ($this->isFileHazardous($file['tmp_name'])) {
+        // Already in expected array shape
+        if (is_array($input)) {
+            if (isset($input['tmp_name']) || isset($input['name']) || isset($input['size'])) {
+                return $input;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<string, mixed> $file
+     */
+    private function validateFileContent(array $file, ?string $detectedMime = null): void
+    {
+        $mime = $detectedMime ?? $this->detectMime($file['tmp_name']);
+
+        // Respect configured allowed extensions when provided
+        $allowedExtensions = config('filesystem.file_manager.allowed_extensions');
+        $originalExt = strtolower((string) pathinfo((string)($file['name'] ?? ''), PATHINFO_EXTENSION));
+
+        if (is_array($allowedExtensions) && $allowedExtensions !== []) {
+            $allowedExtensions = array_map('strtolower', $allowedExtensions);
+            if ($originalExt === '' || !in_array($originalExt, $allowedExtensions, true)) {
+                throw new ValidationException('File extension not allowed');
+            }
+
+            $mimeMap = $this->validMimeMap();
+            if (isset($mimeMap[$originalExt])) {
+                if (!in_array($mime, $mimeMap[$originalExt], true)) {
+                    throw new ValidationException('MIME type does not match file extension');
+                }
+            } else {
+                // Unknown extension mapping: enforce generic allowed MIME list
+                if (!in_array($mime, self::ALLOWED_MIME_TYPES, true)) {
+                    throw new ValidationException('Invalid file type');
+                }
+            }
+        } else {
+            // Fallback: generic allowed MIME list
+            if (!in_array($mime, self::ALLOWED_MIME_TYPES, true)) {
+                throw new ValidationException('Invalid file type');
+            }
+        }
+
+        // Additional security checks (configurable)
+        $scanEnabled = (bool) config('filesystem.security.scan_uploads', true);
+        if ($scanEnabled && $this->isFileHazardous($file['tmp_name'])) {
             throw new ValidationException('File content not allowed');
         }
     }
 
     private function isFileHazardous(string $filepath): bool
     {
-        // Check for PHP code or other potentially harmful content
-        $content = file_get_contents($filepath);
+        // Check for PHP code or other potentially harmful content in first 64KB
+        $content = @file_get_contents($filepath, false, null, 0, 65536);
+        if ($content === false) {
+            $content = '';
+        }
         return (
             str_contains($content, '<?php') ||
             str_contains($content, '<?=') ||
@@ -139,16 +202,19 @@ final class FileUploader
         return $this->storage->store($tempPath, $filename);
     }
 
-    private function generateSecureFilename(string $originalName): string
+    private function generateSecureFilename(string $originalName, ?string $mime = null): string
     {
-        $extension = pathinfo($originalName, PATHINFO_EXTENSION);
-        $sanitized = preg_replace('/[^a-zA-Z0-9-_.]/', '', $extension);
-        return sprintf(
-            '%s_%s.%s',
-            time(),
-            bin2hex(random_bytes(8)),
-            $sanitized
-        );
+        $extension = strtolower((string) pathinfo($originalName, PATHINFO_EXTENSION));
+        $sanitized = preg_replace('/[^a-zA-Z0-9_.-]/', '', $extension);
+
+        // Derive from MIME if extension missing
+        if (($sanitized === '' || $sanitized === null) && $mime !== null) {
+            $inverse = $this->inverseMimeMap();
+            $sanitized = $inverse[$mime] ?? '';
+        }
+
+        $base = sprintf('%s_%s', time(), bin2hex(random_bytes(8)));
+        return $sanitized !== '' ? ($base . '.' . $sanitized) : $base;
     }
 
     /**
@@ -353,5 +419,45 @@ final class FileUploader
         }
 
         return round($size / (1024 ** $power), 2) . ' ' . $units[$power];
+    }
+
+    private function detectMime(string $path): string
+    {
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mt = finfo_file($finfo, $path);
+        $mimeType = is_string($mt) && $mt !== '' ? $mt : 'application/octet-stream';
+        finfo_close($finfo);
+        return $mimeType;
+    }
+
+    /**
+     * @return array<string, array<string>>
+     */
+    private function validMimeMap(): array
+    {
+        return [
+            'jpg' => ['image/jpeg'],
+            'jpeg' => ['image/jpeg'],
+            'png' => ['image/png'],
+            'gif' => ['image/gif'],
+            'pdf' => ['application/pdf'],
+            'doc' => ['application/msword'],
+            'docx' => ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+            'txt' => ['text/plain']
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function inverseMimeMap(): array
+    {
+        $inverse = [];
+        foreach ($this->validMimeMap() as $ext => $mimes) {
+            foreach ($mimes as $m) {
+                $inverse[$m] = $ext;
+            }
+        }
+        return $inverse;
     }
 }

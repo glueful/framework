@@ -70,8 +70,7 @@
     },
     "autoload": {
         "files": [
-            "src/helpers.php",
-            "src/Exceptions/ExceptionHandler.php"
+            "src/helpers.php"
         ],
         "psr-4": {
             "Glueful\\": "src/",

@@ -90,7 +90,13 @@ final class ProviderLocator
     private static function scanLocalExtensions(string $path): array
     {
         $providers = [];
-        $extensionsPath = base_path($path);
+        // Be resilient to test environments that update $GLOBALS['base_path'] mid-run
+        // Prefer explicit global when provided, otherwise use helper resolution.
+        if ($path === '' && isset($GLOBALS['base_path']) && is_string($GLOBALS['base_path'])) {
+            $extensionsPath = rtrim($GLOBALS['base_path'], '/');
+        } else {
+            $extensionsPath = base_path($path);
+        }
 
         if (!is_dir($extensionsPath)) {
             return [];

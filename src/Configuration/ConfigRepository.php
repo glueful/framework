@@ -168,13 +168,11 @@ final class ConfigRepository implements ConfigRepositoryInterface
 
     private function getDefaultCacheDir(): string
     {
-        // Try to get from globals first (set by ContainerBootstrap)
-        $basePath = $GLOBALS['base_path'] ?? dirname(__DIR__);
-        $cacheDir = $basePath . '/storage/cache';
+        // Standardize on framework storage path; avoid src-relative fallbacks
+        $cacheDir = base_path('storage/cache');
 
-        // Ensure cache directory exists
         if (!is_dir($cacheDir)) {
-            mkdir($cacheDir, 0755, true);
+            @mkdir($cacheDir, 0755, true);
         }
 
         return $cacheDir;

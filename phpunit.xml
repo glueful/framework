@@ -20,7 +20,7 @@
     </testsuites>
     <source>
         <include>
-            <directory>./api</directory>
+            <directory>./src</directory>
         </include>
     </source>
     <php>
