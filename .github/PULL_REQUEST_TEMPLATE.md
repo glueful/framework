@@ -47,6 +47,14 @@ Fixes #
 - [ ] I have run `vendor/bin/phpstan` and resolved any static analysis issues
 - [ ] If user-facing behavior changed, I added an entry to `CHANGELOG.md`
 
+### Breaking Change Checklist (if applicable)
+- [ ] Linked RFC/Discussion and received approval
+- [ ] Added `@deprecated` notices with remove-by version (for any bridged APIs)
+- [ ] Provided migration guidance (code/config before → after) in docs
+- [ ] Updated CHANGELOG with a clear “Breaking changes” section
+- [ ] Verified CI (Lint & Style, PHPUnit 8.2, PHPStan) is green
+- [ ] Considered feature flags/aliases/bridges where appropriate
+
 ## Cross-Repository Changes
 <!-- If this PR requires changes in other repositories, list them here -->
 - [ ] glueful/framework (this repository)

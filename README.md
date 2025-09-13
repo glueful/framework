@@ -66,6 +66,8 @@ $app->terminate($request, $response);
   - File Uploads (Local/S3): `docs/cookbook/23-file-uploads.md`
 
 Implementation plans and deep dives live under `docs/implementation_plans/`.
+Roadmap: `ROADMAP.md`.
+Breaking changes process: `BREAKING_CHANGE_PROCESS.md`.
 
 ## Highlights
 

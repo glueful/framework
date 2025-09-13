@@ -13,13 +13,13 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '0.32.3';
+    public const VERSION = '1.0.0';
 
     /** Release code name */
-    public const NAME = 'Migration & RBAC Performance Fixes';
+    public const NAME = 'Framework Split — First Stable';
 
     /** Release date */
-    public const RELEASE_DATE = '2025-08-10';
+    public const RELEASE_DATE = '2025-09-13';
 
     /** Minimum required PHP version */
     public const MIN_PHP_VERSION = '8.2.0';

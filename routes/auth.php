@@ -6,8 +6,7 @@ use Glueful\Http\Response;
 use Glueful\Helpers\Utils;
 use Symfony\Component\HttpFoundation\Request;
 
-// Get router instance
-$router = container()->get(Router::class);
+/** @var Router $router Router instance injected by RouteManifest::load() */
 
 // Auth routes
 $router->group(['prefix' => '/auth'], function (Router $router) {
