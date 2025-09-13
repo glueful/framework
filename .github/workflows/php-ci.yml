@@ -1,4 +1,4 @@
-name: PHP Tests
+name: PHP CI
 
 on:
   pull_request:
@@ -10,13 +10,40 @@ on:
       reason:
         description: 'Reason for manual trigger'
         required: false
-        default: 'Manual run'
+        default: 'Manual run of combined CI'
 
 jobs:
+  lint:
+    name: Lint & Style
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer:v2
+          ini-values: memory_limit=1G, max_execution_time=0
+      - name: Validate composer.json (non-strict then strict)
+        run: |
+          composer validate || true
+          echo '---'
+          composer validate || { echo 'Critical errors in composer.json - please fix them'; exit 1; }
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress
+      - name: PHP syntax check
+        run: find . -name "*.php" -not -path "./vendor/*" -print0 | xargs -0 -n1 php -l
+      - name: Check coding standards (PSR-12)
+        run: |
+          if [ -f vendor/bin/phpcs ]; then
+            vendor/bin/phpcs --standard=PSR12 src
+          else
+            echo 'PHP_CodeSniffer not installed - skipping coding standards check'
+          fi
+
   tests:
     name: PHPUnit (PHP ${{ matrix.php }})
     runs-on: ubuntu-latest
-
     services:
       mysql:
         image: mysql:8.0
@@ -28,14 +55,11 @@ jobs:
         options: >-
           --health-cmd="mysqladmin ping"
           --health-interval=10s --health-timeout=5s --health-retries=3
-
     strategy:
       matrix:
         php: ['8.2', '8.3']
-
     steps:
       - uses: actions/checkout@v4
-
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
@@ -43,7 +67,6 @@ jobs:
           extensions: mbstring, intl, zip, pdo_mysql
           tools: composer:v2
           ini-values: memory_limit=1G, max_execution_time=0, xdebug.mode=off
-
       - name: Cache Composer packages
         uses: actions/cache@v4
         with:
@@ -51,10 +74,8 @@ jobs:
           key: ${{ runner.os }}-php-${{ matrix.php }}-${{ hashFiles('**/composer.lock') }}
           restore-keys: |
             ${{ runner.os }}-php-
-
       - name: Install dependencies
         run: composer install --prefer-dist --no-progress
-
       - name: Setup test environment
         run: |
           if [ -f .env.example ]; then
@@ -66,12 +87,12 @@ jobs:
             echo "DB_USERNAME=root" >> .env.testing
             echo "DB_PASSWORD=password" >> .env.testing
           fi
-
-      - name: Run PHPUnit
+      - name: Run PHPUnit (no coverage)
         env:
           XDEBUG_MODE: off
         run: |
           if [ -f vendor/bin/phpunit ]; then
+            mkdir -p build/logs
             vendor/bin/phpunit --no-coverage --log-junit build/logs/junit.xml
           else
             echo 'PHPUnit not installed - skipping tests'
@@ -103,3 +124,44 @@ jobs:
           name: coverage
           path: build/logs/clover.xml
           if-no-files-found: warn
+
+  static:
+    name: PHPStan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer:v2
+          ini-values: memory_limit=1G
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress
+      - name: Run PHPStan
+        run: |
+          if [ -f vendor/bin/phpstan ]; then
+            vendor/bin/phpstan analyse src --level=6
+          else
+            echo 'PHPStan not installed - skipping static analysis'
+          fi
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer:v2
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress
+      - name: Glueful security audit (production profile)
+        run: |
+          if [ -f vendor/bin/glueful ]; then
+            php vendor/bin/glueful security:check --production || exit 1
+          else
+            echo 'Glueful CLI not installed - skipping security audit'
+          fi
