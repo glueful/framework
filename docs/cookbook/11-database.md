@@ -22,21 +22,25 @@ Glueful's database system provides enterprise-grade features designed for high-p
 
 ### Key Features
 
-- **Connection Pooling**: Multi-engine connection pool management with health monitoring
-- **Query Optimization**: Automatic query analysis and optimization with performance estimates
-- **Advanced Query Builder**: Fluent interface with 100+ methods for complex query construction
-- **Performance Monitoring**: Real-time query analysis, N+1 detection, and performance statistics
-- **Multi-Database Support**: MySQL, PostgreSQL, and SQLite with driver-specific optimizations
-- **Transaction Management**: Nested transactions with savepoints and deadlock handling
-- **Query Caching**: Intelligent result caching with stampede protection
+- **Connection Pooling**: Multi-engine connection pool management with health monitoring and async maintenance
+- **Modular Query Builder**: Orchestrator pattern with 34+ specialized components replacing monolithic design
+- **Advanced Monitoring**: N+1 detection, pattern recognition, execution plan analysis, and profiling
+- **Multi-Database Support**: MySQL, PostgreSQL, and SQLite with driver-specific optimizations and SSL support
+- **Transaction Management**: Nested transactions with savepoints and automatic deadlock retry logic
+- **Query Optimization**: Automatic analysis, pattern recognition, and database-specific optimizations
+- **Migration System**: Complete schema management with batch tracking and checksum verification
+- **Production Features**: Query caching, soft deletes, pagination, connection leak detection
 
 ### Architecture Components
 
-1. **ConnectionPoolManager**: Manages multiple pools for different database engines
-2. **QueryBuilder**: Advanced fluent query construction with optimization
-3. **QueryLogger**: Comprehensive logging with N+1 detection and performance analysis
-4. **QueryOptimizer**: Database-specific query optimization with improvement estimates
-5. **DatabaseInterface**: Unified interface across all database drivers
+1. **ConnectionPoolManager**: Multi-engine pool orchestration with global statistics and performance scoring
+2. **QueryBuilder**: Lightweight orchestrator coordinating modular components via dependency injection
+3. **DevelopmentQueryMonitor**: Real-time N+1 detection and slow query analysis
+4. **QueryProfilerService**: Sampling-based profiling with configurable thresholds
+5. **ExecutionPlanAnalyzer**: EXPLAIN plan analysis with optimization recommendations
+6. **MigrationManager**: Full migration lifecycle with transaction safety and rollback support
+7. **TransactionManager**: Enterprise-grade transaction handling with savepoint management
+8. **Schema Builders**: Complete schema building system with database-agnostic SQL generation
 
 ## Connection Pooling
 
@@ -47,24 +51,30 @@ Glueful's connection pooling system provides efficient connection management wit
 ### Basic Usage
 
 ```php
-use Glueful\Database\ConnectionPoolManager;
+use Glueful\Database\Connection;
 
-// Get pool manager
-$poolManager = container()->get(ConnectionPoolManager::class);
+// Recommended: use the framework connection (pooling is automatic if enabled in config)
+$db = container()->get('database'); // or: $db = new Connection();
 
-// Get connection pool for specific engine
-$mysqlPool = $poolManager->getPool('mysql');
-$pgsqlPool = $poolManager->getPool('pgsql');
+// Fluent query via QueryBuilder
+$results = $db
+    ->table('users')
+    ->select(['*'])
+    ->where(['active' => 1])
+    ->get();
 
-// Acquire connection from pool
-$connection = $mysqlPool->acquire();
-
-// Use connection (auto-released when out of scope)
-$queryBuilder = new QueryBuilder($connection, $driver, $logger);
-$results = $queryBuilder->select('users', ['*'])->where(['active' => 1])->get();
-
-// Manual release (optional - automatic on destruction)
-$mysqlPool->release($connection);
+// Advanced: access the underlying pool (rarely needed)
+// Note: the pool manager is initialized after a Connection is created when pooling is enabled
+$poolManager = Glueful\Database\Connection::getPoolManager();
+if ($poolManager) {
+    $mysqlPool = $poolManager->getPool('mysql');
+    $pooled = $mysqlPool->acquire();
+    try {
+        // Low-level access, e.g., health checks via $pooled->query('SELECT 1')
+    } finally {
+        $mysqlPool->release($pooled);
+    }
+}
 ```
 
 ### Pool Configuration
@@ -73,23 +83,23 @@ $mysqlPool->release($connection);
 // config/database.php
 return [
     'pooling' => [
+        'enabled' => env('DB_POOLING_ENABLED', true),
         'defaults' => [
-            'min_connections' => 5,
-            'max_connections' => 20,
-            'acquire_timeout' => 30,
-            'idle_timeout' => 300,
-            'health_check_interval' => 60,
-            'max_connection_age' => 3600
+            'min_connections' => env('DB_POOL_MIN_CONNECTIONS', 2),
+            'max_connections' => env('DB_POOL_MAX_CONNECTIONS', 10),
+            'idle_timeout' => env('DB_POOL_IDLE_TIMEOUT', 300),
+            'max_lifetime' => env('DB_POOL_MAX_LIFETIME', 3600),
+            'acquisition_timeout' => env('DB_POOL_ACQUIRE_TIMEOUT', 30),
+            'health_check_interval' => env('DB_POOL_HEALTH_CHECK_INTERVAL', 60),
+            'health_check_timeout' => env('DB_POOL_HEALTH_CHECK_TIMEOUT', 5),
+            'max_use_count' => env('DB_POOL_MAX_USE_COUNT', 1000),
+            'retry_attempts' => env('DB_POOL_RETRY_ATTEMPTS', 3),
+            'retry_delay' => env('DB_POOL_RETRY_DELAY', 100),
         ],
         'engines' => [
-            'mysql' => [
-                'max_connections' => 25,
-                'min_connections' => 8
-            ],
-            'pgsql' => [
-                'max_connections' => 15,
-                'min_connections' => 3
-            ]
+            'mysql' => [ 'max_connections' => 20, 'min_connections' => 5 ],
+            'pgsql' => [ 'max_connections' => 15, 'min_connections' => 3 ],
+            'sqlite' => [ 'max_connections' => 1, 'min_connections' => 1 ],
         ]
     ]
 ];
@@ -138,8 +148,10 @@ $health = $poolManager->getHealthStatus();
 
 ```php
 use Glueful\Database\PooledConnection;
+use Glueful\Database\ConfigurableConnectionPool;
 
-// Connection automatically tracks usage
+// Acquire pooled connection after a Connection has initialized pooling
+$pool = Glueful\Database\Connection::getPoolManager()->getPool('mysql');
 $connection = $pool->acquire();
 
 // Get connection statistics
@@ -151,7 +163,9 @@ $stats = $connection->getStats();
     'idle_time' => 5.23,          // seconds since last use
     'use_count' => 47,            // number of times used
     'in_transaction' => false,     // transaction state
-    'is_healthy' => true          // health status
+    'is_healthy' => true,         // health status
+    'peak_memory' => 2048576,     // peak memory usage
+    'queries_executed' => 234     // total queries executed
 ]
 */
 
@@ -160,6 +174,38 @@ $isHealthy = $connection->isHealthy();
 $inTransaction = $connection->isInTransaction();
 $age = $connection->getAge();
 $idleTime = $connection->getIdleTime();
+
+// Async maintenance workers (ReactPHP, Swoole, or fork-based)
+$pool->startMaintenanceWorker('swoole'); // or 'react', 'fork'
+```
+
+## Query Builder Architecture (Modular Design)
+
+### Orchestrator Pattern Implementation
+
+The QueryBuilder uses a modern orchestrator pattern, replacing the monolithic 2,184-line version with a lightweight coordinator that delegates to specialized components:
+
+```php
+use Glueful\Database\QueryBuilder;
+
+// The QueryBuilder is constructed with 14 specialized components:
+// - QueryStateInterface: Manages query state and metadata
+// - WhereClauseInterface: Handles WHERE clause construction
+// - SelectBuilderInterface: Builds SELECT queries
+// - InsertBuilderInterface: Builds INSERT queries
+// - UpdateBuilderInterface: Builds UPDATE queries
+// - DeleteBuilderInterface: Builds DELETE queries
+// - JoinClauseInterface: Handles table joins
+// - QueryModifiersInterface: Manages ORDER BY, GROUP BY, HAVING, LIMIT
+// - TransactionManagerInterface: Handles transactions and savepoints
+// - QueryExecutorInterface: Executes queries
+// - ResultProcessorInterface: Processes results
+// - PaginationBuilderInterface: Handles pagination
+// - SoftDeleteHandlerInterface: Manages soft deletes
+// - QueryValidatorInterface: Validates SQL safety
+
+// All components are injected via DI container
+$queryBuilder = container()->get(QueryBuilder::class);
 ```
 
 ## Query Builder Advanced Features
@@ -168,17 +214,18 @@ $idleTime = $connection->getIdleTime();
 
 ```php
 // Multi-table joins with complex conditions
-$results = $queryBuilder
-    ->select('users', ['users.*', 'profiles.bio', 'roles.name AS role_name'])
-    ->join('profiles', 'profiles.user_id = users.id', 'LEFT')
-    ->join('user_roles', 'user_roles.user_id = users.id', 'INNER')
-    ->join('roles', 'roles.id = user_roles.role_id', 'INNER')
+$results = $db
+    ->table('users')
+    ->select(['users.*', 'profiles.bio', 'roles.name AS role_name'])
+    ->leftJoin('profiles', 'profiles.user_id', '=', 'users.id')
+    ->join('user_roles', 'user_roles.user_id', '=', 'users.id')
+    ->join('roles', 'roles.id', '=', 'user_roles.role_id')
     ->where(['users.active' => 1])
     ->whereIn('roles.name', ['admin', 'moderator'])
-    ->whereGreaterThan('users.created_at', '2024-01-01')
-    ->whereOr(function($q) {
-        $q->whereNull('users.deleted_at')
-          ->orWhereGreaterThan('users.deleted_at', date('Y-m-d H:i:s'));
+    ->where('users.created_at', '>', '2024-01-01')
+    ->orWhere(function ($q) {
+        $q->whereNull('users.deleted_at');
+        $q->orWhere('users.deleted_at', '>', date('Y-m-d H:i:s'));
     })
     ->orderBy(['users.last_login' => 'DESC', 'users.created_at' => 'ASC'])
     ->limit(50)
@@ -188,27 +235,35 @@ $results = $queryBuilder
 ### Advanced Filtering and Search
 
 ```php
-// Multi-column text search with relevance
-$users = $queryBuilder
-    ->select('users', ['*'])
-    ->search(['username', 'email', 'first_name', 'last_name'], 'john smith', 'OR')
+// Multi-column text search (build OR group with LIKE)
+$users = $db
+    ->table('users')
+    ->select(['*'])
+    ->where(function ($q) {
+        $q->whereLike('username', '%john smith%');
+        $q->orWhere('email', 'LIKE', '%john smith%');
+        $q->orWhere('first_name', 'LIKE', '%john smith%');
+        $q->orWhere('last_name', 'LIKE', '%john smith%');
+    })
     ->orderBy(['username' => 'ASC'])
     ->get();
 
 // Advanced filtering with multiple operators
-$orders = $queryBuilder
-    ->select('orders', ['*'])
-    ->advancedWhere([
-        'status' => ['in' => ['pending', 'processing']],
-        'total' => ['between' => [100, 1000]],
-        'created_at' => ['gte' => '2024-01-01'],
-        'customer_email' => ['like' => '%@company.com']
-    ])
+$orders = $db
+    ->table('orders')
+    ->select(['*'])
+    ->where(function ($q) {
+        $q->whereIn('status', ['pending', 'processing']);
+        $q->whereBetween('total', 100, 1000);
+        $q->orWhere('customer_email', 'LIKE', '%@company.com');
+    })
+    ->where('created_at', '>=', '2024-01-01')
     ->get();
 
 // JSON column searching (database-agnostic)
-$logs = $queryBuilder
-    ->select('logs', ['*'])
+$logs = $db
+    ->table('logs')
+    ->select(['*'])
     ->whereJsonContains('metadata', 'login_failed')
     ->whereJsonContains('details', 'active', '$.status')  // MySQL path syntax
     ->get();
@@ -217,31 +272,45 @@ $logs = $queryBuilder
 ### Query Building with Optimization
 
 ```php
-// Enable query optimization with custom threshold
-$optimizedResults = $queryBuilder
-    ->enableOptimization()
-    ->setOptimizationThreshold(15.0)  // 15% improvement required
-    ->select('orders', ['*'])
-    ->join('customers', 'customers.id = orders.customer_id')
-    ->join('products', 'products.id = order_items.product_id')
+use Glueful\Database\Connection;
+use Glueful\Database\QueryOptimizer;
+
+$db = container()->get(Connection::class);
+
+// Enable query optimization and caching
+$optimizedResults = $db->table('orders')
+    ->select(['orders.*', 'customers.name', 'products.title'])
+    ->join('customers', 'customers.id', '=', 'orders.customer_id')
+    ->join('order_items', 'order_items.order_id', '=', 'orders.id')
+    ->join('products', 'products.id', '=', 'order_items.product_id')
     ->where(['orders.status' => 'completed'])
     ->orderBy(['orders.created_at' => 'DESC'])
-    ->optimize()  // Apply optimizations
-    ->cache(3600) // Cache results for 1 hour
+    ->optimize()           // Enable query optimization
+    ->cache(3600)         // Cache results for 1 hour
+    ->withPurpose('Order history with customer and product details')
     ->get();
+
+// Manual optimization with QueryOptimizer
+$optimizer = new QueryOptimizer();
+$optimizer->setConnection($db);
+$optimized = $optimizer->optimizeQuery(
+    "SELECT * FROM orders WHERE status = ? ORDER BY created_at DESC",
+    ['completed']
+);
 ```
 
 ### Raw Expressions and Complex Queries
 
 ```php
 // Using raw expressions for complex calculations
-$salesReport = $queryBuilder
-    ->select('orders', [
+$q = $db->table('orders');
+$salesReport = $q
+    ->select([
         'DATE(created_at) as date',
-        $queryBuilder->raw('COUNT(*) as order_count'),
-        $queryBuilder->raw('SUM(total) as daily_revenue'),
-        $queryBuilder->raw('AVG(total) as avg_order_value'),
-        $queryBuilder->raw('MAX(total) as highest_order')
+        $q->raw('COUNT(*) as order_count'),
+        $q->raw('SUM(total) as daily_revenue'),
+        $q->raw('AVG(total) as avg_order_value'),
+        $q->raw('MAX(total) as highest_order')
     ])
     ->where(['status' => 'completed'])
     ->whereBetween('created_at', $startDate, $endDate)
@@ -259,11 +328,15 @@ $salesReport = $queryBuilder
 $page = $request->get('page', 1);
 $perPage = $request->get('per_page', 20);
 
-$paginatedResults = $queryBuilder
-    ->select('products', ['*'])
-    ->join('categories', 'categories.id = products.category_id')
+$paginatedResults = $db
+    ->table('products')
+    ->select(['*'])
+    ->join('categories', 'categories.id', '=', 'products.category_id')
     ->where(['products.active' => 1])
-    ->search(['products.name', 'products.description'], $searchTerm)
+    ->where(function ($q) use ($searchTerm) {
+        $q->where('products.name', 'LIKE', "%{$searchTerm}%");
+        $q->orWhere('products.description', 'LIKE', "%{$searchTerm}%");
+    })
     ->orderBy(['products.featured' => 'DESC', 'products.created_at' => 'DESC'])
     ->paginate($page, $perPage);
 
@@ -291,7 +364,7 @@ Returns:
 use Glueful\Database\QueryOptimizer;
 
 $optimizer = new QueryOptimizer();
-$optimizer->setConnection($connection);
+$optimizer->setConnection($db);
 
 // Analyze and optimize a complex query
 $result = $optimizer->optimizeQuery(
@@ -354,13 +427,12 @@ $optimized = $pgsqlOptimizer->optimizeQuery($complexQuery, $params);
 ### Manual Optimization Triggers
 
 ```php
-// Apply optimization only if improvement exceeds threshold
-$queryBuilder
-    ->select('orders', ['*'])
-    ->join('customers', 'customers.id = orders.customer_id')
+// Enable optimizer on a specific query
+$db
+    ->table('orders')
+    ->select(['*'])
+    ->join('customers', 'customers.id', '=', 'orders.customer_id')
     ->where(['status' => 'pending'])
-    ->enableOptimization()
-    ->setOptimizationThreshold(20.0)  // Only apply if 20%+ improvement
     ->optimize()
     ->get();
 ```
@@ -417,8 +489,8 @@ $formattedTime = $logger->formatExecutionTime(1250.5); // "1.25 s"
 
 // BAD: N+1 pattern
 foreach ($users as $user) {
-    $profile = $queryBuilder
-        ->select('profiles', ['*'])
+    $profile = $db->table('profiles')
+        ->select(['*'])
         ->where(['user_id' => $user->id])
         ->first();
 }
@@ -429,18 +501,30 @@ foreach ($users as $user) {
 
 // GOOD: Optimized approach
 $userIds = array_column($users, 'id');
-$profiles = $queryBuilder
-    ->select('profiles', ['*'])
+$profiles = $db->table('profiles')
+    ->select(['*'])
     ->whereIn('user_id', $userIds)
     ->get();
+
+// Map profiles to users
+$profilesByUserId = [];
+foreach ($profiles as $profile) {
+    $profilesByUserId[$profile['user_id']] = $profile;
+}
 ```
 
 ### Query Complexity Analysis
 
 ```php
+use Glueful\Database\QueryAnalyzer;
+use Glueful\Database\Tools\QueryPatternRecognizer;
+
 // Queries are automatically analyzed for complexity
+$analyzer = new QueryAnalyzer();
+$patternRecognizer = new QueryPatternRecognizer();
+
 $complexQuery = "
-    SELECT 
+    SELECT
         u.username,
         COUNT(o.id) as order_count,
         SUM(o.total) as total_spent,
@@ -450,7 +534,7 @@ $complexQuery = "
     LEFT JOIN orders o ON o.user_id = u.id
     LEFT JOIN order_items oi ON oi.order_id = o.id
     LEFT JOIN products p ON p.id = oi.product_id
-    WHERE u.active = 1 
+    WHERE u.active = 1
     AND o.created_at > DATE_SUB(NOW(), INTERVAL 1 YEAR)
     GROUP BY u.id, u.username, u.department
     HAVING COUNT(o.id) > 5
@@ -465,6 +549,91 @@ $complexQuery = "
 // - GROUP BY/HAVING (+1 each)
 // - UNION/INTERSECT/EXCEPT (+2 each)
 // Results in complexity score for optimization prioritization
+
+// Pattern recognition for optimization
+$patterns = $patternRecognizer->analyze($complexQuery);
+// Detects: N+1 patterns, missing indexes, inefficient joins, etc.
+```
+
+## Development Monitoring and Profiling
+
+### DevelopmentQueryMonitor
+
+```php
+use Glueful\Database\DevelopmentQueryMonitor;
+
+// Advanced development monitoring with N+1 detection
+$monitor = new DevelopmentQueryMonitor($logger);
+
+// Configure monitoring thresholds
+$monitor->setSlowQueryThreshold(200); // 200ms
+$monitor->setN1DetectionThreshold(5); // 5 similar queries
+$monitor->enableStackTraces();
+$monitor->enableMemoryTracking();
+
+// Monitor analyzes queries in real-time and provides:
+// - N+1 query detection with stack traces
+// - Slow query identification
+// - Memory usage per query
+// - Query pattern analysis
+// - Performance recommendations
+```
+
+### QueryProfilerService
+
+```php
+use Glueful\Database\Tools\QueryProfilerService;
+
+// Sampling-based profiling for production
+$profiler = new QueryProfilerService();
+$profiler->setSamplingRate(0.1); // Profile 10% of queries
+$profiler->setSlowQueryThreshold(100); // 100ms
+
+// Get profiling results
+$profile = $profiler->getProfile();
+/*
+[
+    'total_queries' => 10000,
+    'sampled_queries' => 1000,
+    'slow_queries' => 45,
+    'average_time' => 12.5,
+    'p95_time' => 89.3,
+    'p99_time' => 234.7,
+    'query_patterns' => [...],
+    'recommendations' => [...]
+]
+*/
+```
+
+### ExecutionPlanAnalyzer
+
+```php
+use Glueful\Database\Tools\ExecutionPlanAnalyzer;
+
+// Analyze query execution plans
+$analyzer = new ExecutionPlanAnalyzer($connection);
+$analysis = $analyzer->analyze($query, $params);
+
+/*
+Returns:
+[
+    'execution_plan' => [...],
+    'estimated_rows' => 1250,
+    'estimated_cost' => 324.5,
+    'index_usage' => [
+        'users' => 'PRIMARY',
+        'orders' => 'idx_user_date'
+    ],
+    'warnings' => [
+        'Full table scan on orders table',
+        'Using filesort for ORDER BY'
+    ],
+    'recommendations' => [
+        'Consider adding index on orders.status',
+        'Rewrite query to avoid filesort'
+    ]
+]
+*/
 ```
 
 ## Query Logging and Analytics
@@ -472,15 +641,28 @@ $complexQuery = "
 ### Business Context Logging
 
 ```php
-// Add business context to queries
-$userProfile = $queryBuilder
+use Glueful\Database\Connection;
+
+$db = container()->get(Connection::class);
+
+// Add business context to queries for better debugging
+$userProfile = $db->table('users')
     ->withPurpose('User profile page data loading')
-    ->select('users', ['*'])
-    ->join('profiles', 'profiles.user_id = users.id')
+    ->select(['users.*', 'profiles.bio', 'profiles.avatar_url'])
+    ->join('profiles', 'profiles.user_id', '=', 'users.id')
     ->where(['users.id' => $userId])
     ->first();
 
-// Query will be logged with business context for better debugging
+// Query will be logged with business context
+// Log entry will include: purpose, execution time, SQL, bindings
+
+// Complex query with purpose tracking
+$dashboardData = $db->table('users')
+    ->withPurpose('Admin dashboard user statistics')
+    ->select(['users.status', $db->table('users')->raw('COUNT(*) as count')])
+    ->where('created_at', '>=', date('Y-m-d', strtotime('-30 days')))
+    ->groupBy(['status'])
+    ->get();
 ```
 
 ### Query Log Analysis
@@ -532,23 +714,72 @@ Event::listen(QueryExecutedEvent::class, function($event) {
 
 ## Database Driver System
 
+### SSL/TLS Support
+
+```php
+// config/database.php - SSL configuration for secure connections
+return [
+    'mysql' => [
+        'driver' => 'mysql',
+        'host' => env('DB_HOST'),
+        'ssl' => [
+            'enabled' => env('DB_SSL_ENABLED', false),
+            'ca' => env('DB_SSL_CA_PATH'),
+            'cert' => env('DB_SSL_CERT_PATH'),
+            'key' => env('DB_SSL_KEY_PATH'),
+            'cipher' => env('DB_SSL_CIPHER'),
+            'verify' => env('DB_SSL_VERIFY', true)
+        ]
+    ],
+    'pgsql' => [
+        'driver' => 'pgsql',
+        'sslmode' => env('PGSQL_SSLMODE', 'prefer'), // disable|allow|prefer|require|verify-ca|verify-full
+        'sslcert' => env('PGSQL_SSL_CERT'),
+        'sslkey' => env('PGSQL_SSL_KEY'),
+        'sslrootcert' => env('PGSQL_SSL_ROOT_CERT')
+    ]
+];
+```
+
+## Database Drivers
+
 ### Multi-Database Support
 
 ```php
+use Glueful\Database\Connection;
+use Glueful\Database\Driver\MySQLDriver;
+use Glueful\Database\Driver\PostgreSQLDriver;
+use Glueful\Database\Driver\SQLiteDriver;
+
+$db = container()->get(Connection::class);
+
 // Database-agnostic query building
-$driver = $connection->getDriver(); // MySQLDriver, PostgreSQLDriver, or SQLiteDriver
+$driver = $db->getDriver(); // Returns database-specific driver instance
 
-// Driver-specific identifier wrapping
-$wrappedTable = $driver->wrapIdentifier('users');
-$wrappedColumn = $driver->wrapIdentifier('user_name');
+// Driver-specific identifier wrapping (for reserved words)
+$wrappedTable = $driver->wrapIdentifier('users');     // `users` for MySQL
+$wrappedColumn = $driver->wrapIdentifier('user_name'); // `user_name` for MySQL
 
-// Driver-specific query features
+// Driver-specific features and optimizations
 if ($driver instanceof MySQLDriver) {
     // MySQL-specific features
-    $upsertQuery = $driver->upsert('users', ['username', 'email'], ['last_login']);
+    $sql = "INSERT INTO users (username, email) VALUES (?, ?)
+            ON DUPLICATE KEY UPDATE last_login = NOW()";
+    $db->executeRaw($sql, ['john', 'john@example.com']);
+
 } elseif ($driver instanceof PostgreSQLDriver) {
-    // PostgreSQL-specific features
-    $upsertQuery = $driver->upsert('users', ['username', 'email'], ['last_login']);
+    // PostgreSQL-specific features with RETURNING
+    $sql = "INSERT INTO users (username, email) VALUES (?, ?)
+            ON CONFLICT (username) DO UPDATE SET last_login = NOW()
+            RETURNING id";
+    $result = $db->executeRaw($sql, ['john', 'john@example.com']);
+    $newId = $result[0]['id'] ?? null;
+
+} elseif ($driver instanceof SQLiteDriver) {
+    // SQLite-specific features
+    $sql = "INSERT OR REPLACE INTO users (username, email, last_login)
+            VALUES (?, ?, datetime('now'))";
+    $db->executeRaw($sql, ['john', 'john@example.com']);
 }
 ```
 
@@ -569,6 +800,73 @@ $capabilities = $connection->getCapabilities();
 */
 ```
 
+## Migration System
+
+### Complete Schema Management
+
+```php
+use Glueful\Database\Migrations\MigrationManager;
+use Glueful\Database\Schema\Builders\SchemaBuilder;
+
+// Migration manager with batch tracking and checksum verification
+$migrationManager = container()->get(MigrationManager::class);
+
+// Create a new migration
+$migrationManager->create('create_users_table');
+
+// Migration class example
+class CreateUsersTable implements MigrationInterface
+{
+    public function up(SchemaBuilder $schema): void
+    {
+        $schema->create('users')
+            ->id()
+            ->string('username', 50)->unique()
+            ->string('email', 255)->unique()
+            ->text('bio')->nullable()
+            ->json('preferences')->nullable()
+            ->timestamps()
+            ->softDeletes()
+            ->index(['email', 'username'])
+            ->build();
+    }
+
+    public function down(SchemaBuilder $schema): void
+    {
+        $schema->dropIfExists('users');
+    }
+}
+
+// Run migrations with transaction safety
+$migrationManager->run(); // All migrations in transaction
+$migrationManager->rollback(steps: 2); // Rollback last 2 batches
+$migrationManager->status(); // Check migration status with checksums
+```
+
+### Schema Builder Features
+
+```php
+// Advanced schema building with database-agnostic SQL generation
+$schema = new SchemaBuilder($connection);
+
+// Alter existing table
+$schema->alter('users')
+    ->addColumn('avatar_url', 'string', 500)->nullable()->after('email')
+    ->modifyColumn('bio', 'longtext')
+    ->dropColumn('old_field')
+    ->renameColumn('username', 'user_name')
+    ->addIndex(['created_at', 'status'], 'idx_user_activity')
+    ->addForeignKey('role_id', 'roles', 'id')
+        ->onDelete('cascade')
+        ->onUpdate('restrict')
+    ->build();
+
+// Database-specific SQL generation
+$mysqlGenerator = new MySQLSqlGenerator();
+$postgresGenerator = new PostgreSQLSqlGenerator();
+$sqliteGenerator = new SQLiteSqlGenerator();
+```
+
 ## Advanced Query Patterns
 
 ### Bulk Operations
@@ -581,82 +879,197 @@ $users = [
     // ... 1000+ records
 ];
 
+// Method 1: Using insertBatch for efficient bulk inserts
 $batchSize = 100;
 $totalInserted = 0;
 
 foreach (array_chunk($users, $batchSize) as $batch) {
-    $inserted = $queryBuilder->insertBatch('users', $batch);
+    $inserted = $db->table('users')->insertBatch($batch);
     $totalInserted += $inserted;
 }
 
-// Bulk update with advanced conditions
-$affectedRows = $queryBuilder
-    ->update('users', 
-        ['last_seen' => date('Y-m-d H:i:s')],
-        ['active' => 1, 'created_at <' => date('Y-m-d', strtotime('-30 days'))]
-    );
+// Method 2: Using transactions for consistency with individual inserts
+$totalInserted = $db->table('users')->transaction(function($db) use ($users) {
+    $count = 0;
+    foreach ($users as $user) {
+        $db->table('users')->insert($user);
+        $count++;
+    }
+    return $count;
+});
+
+// Bulk update with conditions
+$affectedRows = $db->table('users')
+    ->where(['active' => 1])
+    ->where('created_at', '<', date('Y-m-d', strtotime('-30 days')))
+    ->update(['last_seen' => date('Y-m-d H:i:s')]);
+
+// Alternative: Raw SQL for better performance on very large updates
+$db->executeRaw(
+    "UPDATE users SET last_seen = ? WHERE active = 1 AND created_at < ?",
+    [date('Y-m-d H:i:s'), date('Y-m-d', strtotime('-30 days'))]
+);
 ```
 
 ### Upsert Operations
 
 ```php
-// MySQL UPSERT (INSERT ... ON DUPLICATE KEY UPDATE)
-$affected = $queryBuilder->upsert(
-    'user_stats',
-    [
-        ['user_id' => 1, 'login_count' => 1, 'last_login' => date('Y-m-d H:i:s')],
-        ['user_id' => 2, 'login_count' => 1, 'last_login' => date('Y-m-d H:i:s')]
-    ],
-    ['login_count', 'last_login'] // columns to update on duplicate
-);
+use Glueful\Database\Connection;
 
-// PostgreSQL UPSERT (INSERT ... ON CONFLICT)
-$affected = $queryBuilder->upsert(
-    'user_stats',
-    [
-        ['user_id' => 1, 'login_count' => 1, 'last_login' => date('Y-m-d H:i:s')]
-    ],
-    ['login_count', 'last_login']
-);
+$db = container()->get(Connection::class);
+
+// Database-agnostic upsert using QueryBuilder
+// Automatically generates the correct SQL for MySQL, PostgreSQL, or SQLite
+$affected = $db->table('user_stats')
+    ->upsert(
+        [
+            'user_id' => 1,
+            'login_count' => 1,
+            'last_login' => date('Y-m-d H:i:s')
+        ],
+        ['login_count', 'last_login'] // Columns to update on duplicate/conflict
+    );
+
+// Batch upsert with multiple records
+$records = [
+    ['user_id' => 1, 'login_count' => 1, 'last_login' => date('Y-m-d H:i:s')],
+    ['user_id' => 2, 'login_count' => 1, 'last_login' => date('Y-m-d H:i:s')],
+    ['user_id' => 3, 'login_count' => 1, 'last_login' => date('Y-m-d H:i:s')]
+];
+
+foreach ($records as $record) {
+    $db->table('user_stats')->upsert(
+        $record,
+        ['login_count', 'last_login']
+    );
+}
+
+// Under the hood, the framework generates appropriate SQL:
+// - MySQL: INSERT ... ON DUPLICATE KEY UPDATE
+// - PostgreSQL: INSERT ... ON CONFLICT DO UPDATE
+// - SQLite: INSERT ... ON CONFLICT DO UPDATE
+
+// For custom upsert logic, you can still use raw SQL
+if ($db->getDriver() instanceof \Glueful\Database\Driver\MySQLDriver) {
+    $db->executeRaw(
+        "INSERT INTO user_stats (user_id, login_count, last_login)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+         login_count = login_count + VALUES(login_count),
+         last_login = VALUES(last_login)",
+        [1, 1, date('Y-m-d H:i:s')]
+    );
+}
 ```
 
 ### Soft Delete Management
 
 ```php
-// Include soft-deleted records
-$allUsers = $queryBuilder
-    ->select('users', ['*'], [], withTrashed: true)
+use Glueful\Database\Connection;
+use Glueful\Database\Features\SoftDeleteHandler;
+
+$db = container()->get(Connection::class);
+
+// Soft delete functionality is built into QueryBuilder
+// By default, delete() performs soft delete if enabled
+
+// Normal delete (soft delete if enabled)
+$deleted = $db->table('users')
+    ->where(['id' => $userId])
+    ->delete(); // Sets deleted_at timestamp
+
+// Include soft-deleted records in queries
+$allUsers = $db->table('users')
+    ->withTrashed() // Include soft-deleted records
+    ->select(['*'])
     ->get();
 
 // Only soft-deleted records
-$deletedUsers = $queryBuilder
-    ->select('users', ['*'])
-    ->whereNotNull('deleted_at')
+$trashedUsers = $db->table('users')
+    ->onlyTrashed() // Only soft-deleted records
+    ->select(['*'])
     ->get();
 
-// Restore soft-deleted records
-$restored = $queryBuilder->restore('users', ['id' => $userId]);
+// Default behavior (exclude soft-deleted records)
+$activeUsers = $db->table('users')
+    ->select(['*'])
+    ->get(); // Automatically excludes soft-deleted
 
-// Hard delete (permanent)
-$deleted = $queryBuilder->delete('users', ['id' => $userId], softDelete: false);
+// Restore soft-deleted records
+$restored = $db->table('users')
+    ->where(['id' => $userId])
+    ->restore(); // Sets deleted_at to null
+
+// Multiple restore with conditions
+$restored = $db->table('users')
+    ->where('deleted_at', '>', date('Y-m-d', strtotime('-30 days')))
+    ->restore(); // Restore recently deleted users
+
+// Force delete (permanent deletion, bypasses soft delete)
+// Note: This uses DeleteBuilder.forceDelete() internally
+$deleted = $db->table('users')
+    ->where(['id' => $userId])
+    ->delete(); // If you need force delete, use raw SQL for now
+
+// Alternative: Direct force delete using raw SQL
+$db->executeRaw('DELETE FROM users WHERE id = ?', [$userId]);
+
+// Configure soft delete column (if different from 'deleted_at')
+// This is typically configured at the application level
+$softDeleteHandler = container()->get(SoftDeleteHandler::class);
+$softDeleteHandler->setSoftDeleteColumn('archived_at');
 ```
 
 ### Window Functions and Analytics
 
 ```php
-// Complex analytics queries with window functions
-$salesAnalytics = $queryBuilder
-    ->select('sales', [
+use Glueful\Database\Connection;
+use Glueful\Database\RawExpression;
+
+$db = container()->get(Connection::class);
+
+// Complex analytics queries with window functions (MySQL 8.0+, PostgreSQL)
+$salesAnalytics = $db->table('sales')
+    ->select([
         'date',
         'amount',
         'region',
-        $queryBuilder->raw('SUM(amount) OVER (PARTITION BY region) as region_total'),
-        $queryBuilder->raw('RANK() OVER (PARTITION BY region ORDER BY amount DESC) as region_rank'),
-        $queryBuilder->raw('LAG(amount, 1) OVER (ORDER BY date) as previous_day_amount'),
-        $queryBuilder->raw('AVG(amount) OVER (ORDER BY date ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) as moving_avg_7_days')
+        $db->table('sales')->raw('SUM(amount) OVER (PARTITION BY region) as region_total'),
+        $db->table('sales')->raw('RANK() OVER (PARTITION BY region ORDER BY amount DESC) as region_rank'),
+        $db->table('sales')->raw('LAG(amount, 1) OVER (ORDER BY date) as previous_day_amount'),
+        $db->table('sales')->raw('AVG(amount) OVER (ORDER BY date ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) as moving_avg_7_days')
     ])
     ->whereBetween('date', $startDate, $endDate)
     ->orderBy(['date' => 'ASC'])
+    ->get();
+
+// Alternative: Using selectRaw for cleaner syntax
+$salesReport = $db->table('sales')
+    ->select(['date', 'amount', 'region'])
+    ->selectRaw('SUM(amount) OVER (PARTITION BY region) as region_total')
+    ->selectRaw('RANK() OVER (PARTITION BY region ORDER BY amount DESC) as region_rank')
+    ->selectRaw('LAG(amount, 1) OVER (ORDER BY date) as previous_day_amount')
+    ->selectRaw('AVG(amount) OVER (ORDER BY date ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) as moving_avg_7_days')
+    ->whereBetween('date', $startDate, $endDate)
+    ->orderBy(['date' => 'ASC'])
+    ->get();
+
+// Running totals and cumulative calculations
+$cumulativeRevenue = $db->table('daily_revenue')
+    ->select(['date', 'revenue'])
+    ->selectRaw('SUM(revenue) OVER (ORDER BY date) as cumulative_revenue')
+    ->selectRaw('AVG(revenue) OVER (ORDER BY date ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) as rolling_30_day_avg')
+    ->where('date', '>=', $startDate)
+    ->orderBy(['date' => 'ASC'])
+    ->get();
+
+// Percentile and distribution analysis
+$performanceAnalysis = $db->table('employee_sales')
+    ->select(['employee_id', 'department', 'total_sales'])
+    ->selectRaw('PERCENT_RANK() OVER (ORDER BY total_sales) as sales_percentile')
+    ->selectRaw('NTILE(4) OVER (ORDER BY total_sales) as quartile')
+    ->selectRaw('DENSE_RANK() OVER (PARTITION BY department ORDER BY total_sales DESC) as dept_rank')
+    ->where('year', '=', date('Y'))
     ->get();
 ```
 
@@ -665,15 +1078,20 @@ $salesAnalytics = $queryBuilder
 ### Nested Transactions with Savepoints
 
 ```php
+use Glueful\Database\Connection;
+use Glueful\Database\Transaction\TransactionManager;
+
+$db = container()->get(Connection::class);
+
 // Automatic deadlock handling with retry
-$result = $queryBuilder->transaction(function($qb) use ($orderData, $inventoryUpdates) {
+$result = $db->table('orders')->transaction(function($db) use ($orderData, $inventoryUpdates) {
     // Create order
-    $orderId = $qb->insert('orders', $orderData);
-    
-    // Create order items in nested transaction
-    $qb->transaction(function($qb) use ($orderId, $orderData) {
+    $orderId = $db->table('orders')->insertGetId($orderData);
+
+    // Create order items in nested transaction (uses savepoints)
+    $db->table('order_items')->transaction(function($db) use ($orderId, $orderData) {
         foreach ($orderData['items'] as $item) {
-            $qb->insert('order_items', [
+            $db->table('order_items')->insert([
                 'order_id' => $orderId,
                 'product_id' => $item['product_id'],
                 'quantity' => $item['quantity'],
@@ -681,17 +1099,38 @@ $result = $queryBuilder->transaction(function($qb) use ($orderData, $inventoryUp
             ]);
         }
     });
-    
-    // Update inventory
+
+    // Update inventory with raw expression
     foreach ($inventoryUpdates as $update) {
-        $qb->update('inventory', 
-            ['quantity' => $qb->raw('quantity - ?', [$update['quantity']])],
-            ['product_id' => $update['product_id']]
-        );
+        $db->table('inventory')
+            ->where(['product_id' => $update['product_id']])
+            ->update([
+                'quantity' => $db->table('inventory')->raw('quantity - ?', [$update['quantity']])
+            ]);
     }
-    
+
     return $orderId;
 });
+
+// Alternative: Using TransactionManager directly for more control
+$transactionManager = container()->get(TransactionManager::class);
+
+$result = $transactionManager->transaction(function() use ($db, $orderData) {
+    $orderId = $db->table('orders')->insertGetId($orderData);
+
+    // Nested transaction with savepoint
+    $transactionManager->transaction(function() use ($db, $orderId, $orderData) {
+        foreach ($orderData['items'] as $item) {
+            $db->table('order_items')->insert([
+                'order_id' => $orderId,
+                'product_id' => $item['product_id'],
+                'quantity' => $item['quantity']
+            ]);
+        }
+    });
+
+    return $orderId;
+}, maxAttempts: 3); // Retry up to 3 times on deadlock
 ```
 
 ### Manual Transaction Control
@@ -738,6 +1177,98 @@ if ($queryBuilder->isUsingPooledConnection()) {
 }
 ```
 
+## Advanced Features
+
+### Query Purpose Tracking
+
+```php
+use Glueful\Database\Features\QueryPurpose;
+
+// Track business purpose for queries
+$queryBuilder->withPurpose('User dashboard data loading')
+    ->select(['*'])
+    ->from('users')
+    ->where(['active' => 1])
+    ->get();
+
+// Purpose is logged for debugging and optimization
+```
+
+### Connection Validation and Health Checks
+
+```php
+use Glueful\Database\ConnectionValidator;
+
+$validator = new ConnectionValidator();
+
+// Validate connection health
+$isHealthy = $validator->validate($connection);
+
+// Get detailed validation results
+$results = $validator->getValidationResults();
+/*
+[
+    'ping_successful' => true,
+    'response_time_ms' => 1.2,
+    'server_version' => '8.0.31',
+    'charset_valid' => true,
+    'timezone_valid' => true,
+    'ssl_enabled' => true
+]
+*/
+```
+
+### Query Hashing and Caching
+
+```php
+use Glueful\Database\QueryHasher;
+use Glueful\Database\QueryCacheService;
+
+$hasher = new QueryHasher();
+$cacheService = new QueryCacheService($cache, $hasher);
+
+// Automatic query result caching
+$results = $queryBuilder
+    ->cache(ttl: 3600, tags: ['users', 'active'])
+    ->select(['*'])
+    ->from('users')
+    ->where(['active' => 1])
+    ->get();
+
+// Cache invalidation by tags
+$cacheService->invalidateTags(['users']);
+```
+
+### Soft Delete Management
+
+```php
+use Glueful\Database\Features\SoftDeleteHandler;
+
+$softDeleteHandler = new SoftDeleteHandler();
+
+// Configure soft delete column
+$softDeleteHandler->setSoftDeleteColumn('deleted_at');
+
+// Query with soft delete awareness
+$activeUsers = $queryBuilder
+    ->withoutTrashed() // Exclude soft deleted
+    ->select(['*'])
+    ->from('users')
+    ->get();
+
+$allUsers = $queryBuilder
+    ->withTrashed() // Include soft deleted
+    ->select(['*'])
+    ->from('users')
+    ->get();
+
+$trashedOnly = $queryBuilder
+    ->onlyTrashed() // Only soft deleted
+    ->select(['*'])
+    ->from('users')
+    ->get();
+```
+
 ## Configuration
 
 ### Database Configuration
@@ -745,44 +1276,95 @@ if ($queryBuilder->isUsingPooledConnection()) {
 ```php
 // config/database.php
 return [
-    'mysql' => [
-        'driver' => 'mysql',
-        'host' => env('DB_HOST', '127.0.0.1'),
-        'port' => env('DB_PORT', 3306),
-        'db' => env('DB_DATABASE'),
-        'user' => env('DB_USERNAME'),
-        'pass' => env('DB_PASSWORD'),
-        'charset' => 'utf8mb4',
-        'strict' => true,
-        
-        // Advanced MySQL options
-        'options' => [
-            PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true,
-            PDO::MYSQL_ATTR_INIT_COMMAND => "SET sql_mode='STRICT_ALL_TABLES'"
+    'default' => env('DB_CONNECTION', 'mysql'),
+
+    // Database role configuration (primary/backup)
+    'roles' => [
+        'primary' => env('DB_PRIMARY', 'mysql'),
+        'backup' => env('DB_BACKUP', 'mysql_replica')
+    ],
+
+    'connections' => [
+        'mysql' => [
+            'driver' => 'mysql',
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', 3306),
+            'db' => env('DB_DATABASE'),
+            'user' => env('DB_USERNAME'),
+            'pass' => env('DB_PASSWORD'),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'strict' => true,
+            'engine' => 'InnoDB',
+
+            // SSL configuration
+            'ssl' => [
+                'enabled' => env('DB_SSL_ENABLED', false),
+                'ca' => env('DB_SSL_CA'),
+                'cert' => env('DB_SSL_CERT'),
+                'key' => env('DB_SSL_KEY')
+            ],
+
+            // Advanced MySQL options
+            'options' => [
+                PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true,
+                PDO::MYSQL_ATTR_INIT_COMMAND => "SET sql_mode='STRICT_ALL_TABLES'",
+                PDO::ATTR_PERSISTENT => env('DB_PERSISTENT', false)
+            ]
+        ],
+
+        'pgsql' => [
+            'driver' => 'pgsql',
+            'host' => env('PGSQL_HOST', '127.0.0.1'),
+            'port' => env('PGSQL_PORT', 5432),
+            'db' => env('PGSQL_DATABASE'),
+            'user' => env('PGSQL_USERNAME'),
+            'pass' => env('PGSQL_PASSWORD'),
+            'sslmode' => env('PGSQL_SSLMODE', 'prefer'),
+            'schema' => env('PGSQL_SCHEMA', 'public'),
+            'charset' => 'utf8',
+            'application_name' => env('APP_NAME', 'glueful')
+        ],
+
+        'sqlite' => [
+            'driver' => 'sqlite',
+            'database' => env('SQLITE_DATABASE', database_path('database.sqlite')),
+            'foreign_key_constraints' => true,
+            'busy_timeout' => 5000,
+            'journal_mode' => 'WAL'
         ]
     ],
-    
-    'pgsql' => [
-        'driver' => 'pgsql',
-        'host' => env('PGSQL_HOST', '127.0.0.1'),
-        'port' => env('PGSQL_PORT', 5432),
-        'db' => env('PGSQL_DATABASE'),
-        'user' => env('PGSQL_USERNAME'),
-        'pass' => env('PGSQL_PASSWORD'),
-        'sslmode' => env('PGSQL_SSLMODE', 'prefer'),
-        'schema' => env('PGSQL_SCHEMA', 'public')
-    ],
-    
+
     // Connection pooling configuration
     'pooling' => [
-        'enabled' => env('DB_POOL_ENABLED', true),
+        'enabled' => env('DB_POOLING_ENABLED', true),
         'defaults' => [
-            'min_connections' => env('DB_POOL_MIN_CONNECTIONS', 5),
-            'max_connections' => env('DB_POOL_MAX_CONNECTIONS', 20),
-            'acquire_timeout' => env('DB_POOL_ACQUIRE_TIMEOUT', 30),
+            'min_connections' => env('DB_POOL_MIN_CONNECTIONS', 2),
+            'max_connections' => env('DB_POOL_MAX_CONNECTIONS', 10),
             'idle_timeout' => env('DB_POOL_IDLE_TIMEOUT', 300),
+            'max_lifetime' => env('DB_POOL_MAX_LIFETIME', 3600),
+            'acquisition_timeout' => env('DB_POOL_ACQUIRE_TIMEOUT', 30),
             'health_check_interval' => env('DB_POOL_HEALTH_CHECK_INTERVAL', 60),
-            'max_connection_age' => env('DB_POOL_MAX_CONNECTION_AGE', 3600)
+            'health_check_timeout' => env('DB_POOL_HEALTH_CHECK_TIMEOUT', 5),
+            'max_use_count' => env('DB_POOL_MAX_USE_COUNT', 1000),
+            'retry_attempts' => env('DB_POOL_RETRY_ATTEMPTS', 3),
+            'retry_delay' => env('DB_POOL_RETRY_DELAY', 100),
+            'enable_async_maintenance' => env('DB_POOL_ASYNC_MAINTENANCE', false),
+            'maintenance_worker' => env('DB_POOL_WORKER', 'fork') // fork|react|swoole
+        ],
+        'engines' => [
+            'mysql' => [
+                'max_connections' => env('MYSQL_POOL_MAX', 20),
+                'min_connections' => env('MYSQL_POOL_MIN', 5)
+            ],
+            'pgsql' => [
+                'max_connections' => env('PGSQL_POOL_MAX', 15),
+                'min_connections' => env('PGSQL_POOL_MIN', 3)
+            ],
+            'sqlite' => [
+                'max_connections' => 1, // SQLite limitation
+                'min_connections' => 1
+            ]
         ]
     ]
 ];
@@ -955,57 +1537,137 @@ class DatabaseMonitoringService
 ### Performance Optimization Best Practices
 
 ```php
-// 1. Use connection pooling in production
-$poolManager = container()->get(ConnectionPoolManager::class);
-$connection = $poolManager->getPool('mysql')->acquire();
+use Glueful\Database\Connection;
+use Glueful\Database\ConnectionPoolManager;
+use Glueful\Database\QueryLogger;
+use Glueful\Database\QueryOptimizer;
+use Glueful\Database\Tools\ExecutionPlanAnalyzer;
 
-// 2. Enable query optimization for complex queries
-$results = $queryBuilder
-    ->enableOptimization()
-    ->setOptimizationThreshold(5.0)  // Lower threshold for production
-    ->select('complex_table', ['*'])
-    ->join('related_table', 'related_table.id = complex_table.related_id')
-    ->where(['status' => 'active'])
-    ->optimize()
-    ->cache(300)  // Cache for 5 minutes
+// 1. Use connection pooling in production (automatic when enabled in config)
+$db = container()->get(Connection::class); // Pooling is automatic if enabled
+
+// Manual pool management (rarely needed)
+$poolManager = container()->get(ConnectionPoolManager::class);
+$pool = $poolManager->getPool('mysql');
+$connection = $pool->acquire();
+try {
+    // Use connection
+} finally {
+    $pool->release($connection);
+}
+
+// 2. Enable query optimization and caching for complex queries
+$results = $db->table('complex_table')
+    ->select(['complex_table.*', 'related_table.name'])
+    ->join('related_table', 'related_table.id', '=', 'complex_table.related_id')
+    ->where(['complex_table.status' => 'active'])
+    ->optimize()           // Enable query optimization
+    ->cache(300)          // Cache results for 5 minutes
+    ->withPurpose('Complex data aggregation')  // Track purpose for monitoring
     ->get();
 
-// 3. Use bulk operations for large datasets
+// 3. Use bulk operations to prevent N+1 queries
 $users = $userService->getActiveUsers();
 $userIds = array_column($users, 'id');
 
-// Instead of N+1 queries
-$profiles = $queryBuilder
-    ->select('profiles', ['*'])
+// Efficient: Single query for all profiles
+$profiles = $db->table('profiles')
+    ->select(['*'])
     ->whereIn('user_id', $userIds)
     ->get();
 
-// 4. Monitor query performance
-$queryLogger = container()->get(QueryLogger::class);
-$queryLogger->configure(enableDebug: false, enableTiming: true);
+// Bulk insert with batching
+$records = [...]; // Large dataset
+$batchSize = 100;
+foreach (array_chunk($records, $batchSize) as $batch) {
+    $db->table('logs')->insertBatch($batch);
+}
 
-// 5. Use appropriate indexes and analyze query plans
-$result = $queryBuilder
+// 4. Monitor and analyze query performance
+$queryLogger = container()->get(QueryLogger::class);
+$queryLogger->configure(
+    enableDebug: false,     // Disable debug in production
+    enableTiming: true,     // Track execution times
+    maxLogSize: 100        // Limit log size
+);
+$queryLogger->configureN1Detection(
+    threshold: 5,          // Detect after 5 similar queries
+    timeWindow: 5          // Within 5 seconds
+);
+
+// 5. Analyze execution plans for optimization
+$analyzer = new ExecutionPlanAnalyzer($db);
+$query = "SELECT u.*, p.* FROM users u
+          JOIN profiles p ON p.user_id = u.id
+          WHERE u.active = 1";
+$analysis = $analyzer->analyze($query, []);
+
+if (!empty($analysis['warnings'])) {
+    // Address performance warnings
+    foreach ($analysis['recommendations'] as $recommendation) {
+        $logger->warning('Query optimization needed: ' . $recommendation);
+    }
+}
+
+// 6. Use transactions for bulk operations
+$db->transaction(function($db) use ($orderData) {
+    $orderId = $db->table('orders')->insertGetId($orderData);
+
+    foreach ($orderData['items'] as $item) {
+        $db->table('order_items')->insert([
+            'order_id' => $orderId,
+            'product_id' => $item['product_id'],
+            'quantity' => $item['quantity']
+        ]);
+    }
+
+    return $orderId;
+});
+
+// 7. Use pagination for large result sets
+$page = $request->get('page', 1);
+$results = $db->table('products')
+    ->select(['*'])
+    ->where(['active' => 1])
+    ->orderBy(['created_at' => 'DESC'])
+    ->paginate($page, perPage: 25);
+
+// 8. Optimize with index hints and query purpose tracking
+$result = $db->table('users')
     ->withPurpose('User dashboard data loading')
-    ->select('users', ['*'])
-    ->join('profiles', 'profiles.user_id = users.id')
-    ->join('user_stats', 'user_stats.user_id = users.id')
+    ->select(['users.*', 'profiles.bio', 'user_stats.login_count'])
+    ->join('profiles', 'profiles.user_id', '=', 'users.id')
+    ->join('user_stats', 'user_stats.user_id', '=', 'users.id')
     ->where(['users.active' => 1])
+    ->whereNotNull('users.last_login')
     ->orderBy(['users.last_login' => 'DESC'])
     ->limit(20)
+    ->enableDebug(false)  // Disable debug in production
     ->get();
 ```
 
 ## Summary
 
-Glueful's advanced database features provide enterprise-grade capabilities for high-performance applications:
+Glueful's advanced database system represents a modern, enterprise-grade implementation that significantly exceeds typical framework capabilities:
 
-- **Connection Pooling**: Efficient connection management with health monitoring and statistics
-- **Query Optimization**: Automatic analysis and optimization with database-specific improvements
-- **Performance Monitoring**: Real-time analysis, N+1 detection, and comprehensive statistics
-- **Advanced Query Builder**: 100+ methods for complex query construction with fluent interface
-- **Multi-Database Support**: MySQL, PostgreSQL, and SQLite with driver-specific optimizations
-- **Transaction Management**: Nested transactions with savepoints and automatic deadlock handling
-- **Production Ready**: Comprehensive monitoring, alerting, and optimization for production environments
+### Architecture Highlights
+- **Modular Design**: Orchestrator pattern with 34+ specialized components replacing monolithic approach
+- **Dependency Injection**: All components properly injected for testability and flexibility
+- **Production Ready**: SSL support, connection leak detection, performance scoring
 
-The system is designed to scale from simple applications to high-traffic, distributed environments while maintaining optimal performance and providing detailed insights into database operations.
+### Key Features
+- **Advanced Connection Pooling**: Multi-engine pools with async maintenance workers (ReactPHP/Swoole/Fork)
+- **Sophisticated Monitoring**: N+1 detection, execution plan analysis, pattern recognition, profiling
+- **Complete Migration System**: Schema management with batch tracking and checksum verification
+- **Enterprise Transactions**: Nested transactions, savepoints, automatic deadlock retry
+- **Query Optimization**: Pattern recognition, database-specific optimizations, caching
+- **Multi-Database Support**: MySQL, PostgreSQL, SQLite with SSL and driver-specific features
+- **Developer Experience**: Purpose tracking, health checks, soft deletes, advanced pagination
+
+### Performance & Reliability
+- **Connection Management**: Health monitoring, leak detection, automatic recycling
+- **Query Analysis**: Real-time profiling, slow query detection, memory tracking
+- **Optimization**: Automatic query optimization, execution plan analysis, result caching
+- **Production Features**: Configurable pooling, SSL/TLS support, comprehensive logging
+
+The implementation provides a sophisticated, production-ready database layer suitable for high-traffic, distributed applications while maintaining excellent developer experience through modular design and comprehensive tooling.
