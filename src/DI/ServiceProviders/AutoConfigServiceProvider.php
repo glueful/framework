@@ -22,7 +22,6 @@ final class AutoConfigServiceProvider implements ServiceProviderInterface
     {
         $this->registerRedis($container);
         $this->registerMailer($container);
-        $this->registerLdap($container);
     }
 
     public function boot(Container $container): void
@@ -181,20 +180,5 @@ final class AutoConfigServiceProvider implements ServiceProviderInterface
 
         // Last resort
         return $transport . '://default';
-    }
-
-    private function registerLdap(ContainerBuilder $container): void
-    {
-        if (!extension_loaded('ldap') || !class_exists(\LdapRecord\Connection::class)) {
-            return;
-        }
-        if (!(bool) config('auth.ldap.enabled', false)) {
-            return;
-        }
-
-        $def = new Definition(\LdapRecord\Connection::class);
-        $def->setArguments([ (array) config('auth.ldap', []) ]);
-        $def->setPublic(true);
-        $container->setDefinition('ldap', $def);
     }
 }

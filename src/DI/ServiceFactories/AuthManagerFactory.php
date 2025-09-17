@@ -7,8 +7,6 @@ namespace Glueful\DI\ServiceFactories;
 use Glueful\Bootstrap\ConfigurationCache;
 use Glueful\Auth\AuthenticationManager;
 use Glueful\Auth\JwtAuthenticationProvider;
-use Glueful\Auth\LdapAuthenticationProvider;
-use Glueful\Auth\SamlAuthenticationProvider;
 use Glueful\Auth\ApiKeyAuthenticationProvider;
 
 class AuthManagerFactory
@@ -25,10 +23,8 @@ class AuthManagerFactory
         foreach ($providers as $provider) {
             match ($provider) {
                 'jwt' => $manager->registerProvider('jwt', new JwtAuthenticationProvider()),
-                'ldap' => $manager->registerProvider('ldap', new LdapAuthenticationProvider()),
-                'saml' => $manager->registerProvider('saml', new SamlAuthenticationProvider()),
                 'apikey' => $manager->registerProvider('apikey', new ApiKeyAuthenticationProvider()),
-                default => null, // Skip unknown providers
+                default => null, // Skip unknown providers (including 'ldap', 'saml' - must be registered by extensions)
             };
         }
 
