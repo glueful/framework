@@ -4,15 +4,12 @@ declare(strict_types=1);
 
 namespace Glueful\DTOs;
 
-use Glueful\Serialization\Attributes\{Groups, SerializedName};
 use Glueful\Validation\Support\Rules as RuleFactory;
 use Glueful\Validation\ValidationException;
 use Glueful\Validation\Rules\{Sanitize, Required, Email as EmailRule};
 
 class EmailDTO
 {
-    #[Groups(['email:read', 'email:write', 'contact:form'])]
-    #[SerializedName('email_address')]
     public string $email = '';
 
     public function __construct(string $email = '')

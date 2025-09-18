@@ -57,7 +57,6 @@ class ContainerBootstrap
         // Only register absolutely essential services that can't be lazy-loaded
         $coreProviders = [
             new ServiceProviders\CoreServiceProvider(),
-            new ServiceProviders\ConfigServiceProvider(),
         ];
 
         foreach ($coreProviders as $provider) {

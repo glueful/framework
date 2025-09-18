@@ -4,15 +4,12 @@ declare(strict_types=1);
 
 namespace Glueful\DTOs;
 
-use Glueful\Serialization\Attributes\{Groups, Ignore};
 use Glueful\Validation\Support\Rules as RuleFactory;
 use Glueful\Validation\ValidationException;
 use Glueful\Validation\Rules\{Sanitize, Required, Length};
 
 class PasswordDTO
 {
-    #[Groups(['password:write'])]
-    #[Ignore]
     public string $password = '';
 
     public function __construct(string $password = '')

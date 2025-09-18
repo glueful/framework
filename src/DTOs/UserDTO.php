@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Glueful\DTOs;
 
-use Glueful\Serialization\Attributes\{Groups, SerializedName, Ignore, DateFormat, MaxDepth};
 use Glueful\Validation\Support\Rules as RuleFactory;
 use Glueful\Validation\ValidationException;
 use Glueful\Validation\Rules\{Sanitize, Required, Email as EmailRule, Length, InArray};
@@ -14,99 +13,36 @@ use Glueful\Validation\Rules\{Sanitize, Required, Email as EmailRule, Length, In
  */
 class UserDTO
 {
-    #[Groups(['user:read', 'user:write', 'user:public'])]
     public string $name;
-
-    #[Groups(['user:read', 'user:write', 'user:private'])]
     public string $email;
-
-    #[Ignore]
     public ?string $password = null;
-
-    #[Groups(['user:read', 'user:write', 'user:public'])]
     public ?string $username = null;
-
-    #[Groups(['user:read', 'admin:read'])]
     public string $status = 'active';
-
-    #[Groups(['user:read', 'admin:read'])]
     public string $role = 'user';
-
-    #[Groups(['user:read', 'user:private'])]
-    #[SerializedName('created_at')]
-    #[DateFormat('Y-m-d H:i:s')]
     public ?\DateTime $createdAt = null;
-
-    #[Groups(['user:read', 'user:private'])]
-    #[SerializedName('updated_at')]
-    #[DateFormat('Y-m-d H:i:s')]
     public ?\DateTime $updatedAt = null;
-
-    #[Groups(['user:read', 'admin:read'])]
-    #[SerializedName('last_login')]
-    #[DateFormat('c')]
     public ?\DateTime $lastLogin = null;
-
-    #[Groups(['user:read', 'user:private'])]
     public ?string $avatar = null;
-
-    #[Groups(['user:read', 'user:private'])]
-    #[SerializedName('phone_number')]
     public ?string $phoneNumber = null;
-
-    #[Groups(['user:read', 'user:private'])]
-    #[SerializedName('date_of_birth')]
-    #[DateFormat('Y-m-d')]
     public ?\DateTime $dateOfBirth = null;
-
-    #[Groups(['user:read', 'user:private'])]
     public ?string $bio = null;
-
-    #[Groups(['user:read', 'user:private'])]
     public ?string $location = null;
-
-    #[Groups(['user:read', 'user:private'])]
     public ?string $website = null;
 
     /** @var array<string, mixed> */
-    #[Groups(['user:read', 'user:private'])]
     public array $preferences = [];
 
     /** @var array<int, string> */
-    #[Groups(['user:read', 'user:private'])]
     public array $permissions = [];
-
-    #[Groups(['admin:read'])]
-    #[SerializedName('internal_notes')]
     public ?string $internalNotes = null;
-
-    #[Groups(['admin:read'])]
-    #[SerializedName('ip_address')]
     public ?string $ipAddress = null;
-
-    #[Groups(['admin:read'])]
-    #[SerializedName('user_agent')]
     public ?string $userAgent = null;
-
-    #[Groups(['user:detailed'])]
-    #[MaxDepth(2)]
     public ?UserDTO $manager = null;
 
     /** @var array<int, UserDTO> */
-    #[Groups(['user:detailed'])]
-    #[MaxDepth(3)]
     public array $subordinates = [];
-
-    #[Groups(['user:read', 'user:private'])]
-    #[SerializedName('is_verified')]
     public bool $isVerified = false;
-
-    #[Groups(['user:read', 'user:private'])]
-    #[SerializedName('is_online')]
     public bool $isOnline = false;
-
-    #[Groups(['user:read', 'user:private'])]
-    #[SerializedName('profile_completed')]
     public bool $profileCompleted = false;
 
     public function __construct()

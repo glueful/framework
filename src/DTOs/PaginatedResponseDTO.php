@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Glueful\DTOs;
 
-use Glueful\Serialization\Attributes\{Groups, SerializedName, DateFormat};
 
 /**
  * Paginated Response DTO
@@ -15,35 +14,17 @@ use Glueful\Serialization\Attributes\{Groups, SerializedName, DateFormat};
 class PaginatedResponseDTO
 {
     /** @var array<int, mixed> */
-    #[Groups(['response', 'pagination'])]
     public array $data = [];
-
-    #[Groups(['response', 'pagination'])]
     public PaginationMetaDTO $pagination;
 
     /** @var array<string, mixed>|null */
-    #[Groups(['response', 'meta'])]
     public ?array $meta = null;
 
     /** @var array<string, string|null>|null */
-    #[Groups(['response', 'links'])]
     public ?array $links = null;
-
-    #[Groups(['response', 'debug'])]
-    #[SerializedName('request_id')]
     public ?string $requestId = null;
-
-    #[Groups(['response', 'debug'])]
-    #[SerializedName('execution_time')]
     public ?float $executionTime = null;
-
-    #[Groups(['response', 'debug'])]
-    #[SerializedName('memory_usage')]
     public ?string $memoryUsage = null;
-
-    #[Groups(['response'])]
-    #[SerializedName('generated_at')]
-    #[DateFormat('c')]
     public \DateTime $generatedAt;
 
     /**

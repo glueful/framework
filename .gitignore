@@ -2,7 +2,7 @@
 .DS_Store
 vendor
 .phpunit.cache/
-src/storage/
 storage/
 :memory:
+composer.lock
 composer.lock

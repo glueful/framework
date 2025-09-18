@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Glueful\DTOs;
 
-use Glueful\Serialization\Attributes\{Groups, SerializedName, DateFormat, Ignore};
 
 /**
  * Error Response DTO
@@ -14,77 +13,35 @@ use Glueful\Serialization\Attributes\{Groups, SerializedName, DateFormat, Ignore
  */
 class ErrorResponseDTO
 {
-    #[Groups(['error', 'public'])]
     public bool $success = false;
-
-    #[Groups(['error', 'public'])]
     public string $error;
-
-    #[Groups(['error', 'public'])]
     public string $message;
-
-    #[Groups(['error', 'public'])]
     public int $code;
-
-    #[Groups(['error', 'detailed'])]
     public ?string $type = null;
 
     /** @var array<string, mixed>|null */
-    #[Groups(['error', 'detailed'])]
     public ?array $details = null;
 
     /** @var array<string, mixed>|null */
-    #[Groups(['error', 'detailed'])]
     public ?array $context = null;
 
     /** @var array<string, mixed>|null */
-    #[Groups(['error', 'validation'])]
     public ?array $validation = null;
-
-    #[Groups(['error', 'debug'])]
     public ?string $file = null;
-
-    #[Groups(['error', 'debug'])]
     public ?int $line = null;
 
     /** @var array<int, array<string, mixed>>|null */
-    #[Groups(['error', 'debug'])]
     public ?array $trace = null;
 
     /** @var array<string, mixed>|null */
-    #[Groups(['error', 'debug'])]
     public ?array $previous = null;
-
-    #[Groups(['error', 'debug'])]
-    #[SerializedName('request_id')]
     public ?string $requestId = null;
-
-    #[Groups(['error', 'debug'])]
-    #[SerializedName('user_id')]
     public ?string $userId = null;
-
-    #[Groups(['error', 'debug'])]
-    #[SerializedName('request_uri')]
     public ?string $requestUri = null;
-
-    #[Groups(['error', 'debug'])]
-    #[SerializedName('request_method')]
     public ?string $requestMethod = null;
-
-    #[Groups(['error', 'debug'])]
-    #[SerializedName('user_agent')]
     public ?string $userAgent = null;
-
-    #[Groups(['error', 'debug'])]
-    #[SerializedName('ip_address')]
     public ?string $ipAddress = null;
-
-    #[Groups(['error', 'public'])]
-    #[SerializedName('timestamp')]
-    #[DateFormat('c')]
     public \DateTime $timestamp;
-
-    #[Ignore] // Never serialize the original exception
     public ?\Throwable $originalException = null;
 
     public function __construct(

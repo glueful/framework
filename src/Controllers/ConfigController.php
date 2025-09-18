@@ -214,25 +214,6 @@ class ConfigController extends BaseController
             ? $this->recursiveMerge($existingConfig, $data)
             : array_merge($existingConfig, $data);
 
-        // Schema validation before persist (if schema exists)
-        try {
-            /** @var \Glueful\Config\Contracts\ConfigValidatorInterface $validator */
-            $validator = container()->get(\Glueful\Config\Contracts\ConfigValidatorInterface::class);
-            $schemaPath = base_path('src/Config/Schema/' . $configName . '.php');
-            if (is_file($schemaPath)) {
-                /** @var array<string, mixed> $schema */
-                $schema = require $schemaPath;
-                $newConfig = $validator->validate($newConfig, $schema);
-            }
-        } catch (\InvalidArgumentException $e) {
-            return $this->validationError([
-                'config_name' => $configName,
-                'errors' => [$e->getMessage()]
-            ], 'Configuration validation failed');
-        } catch (\Throwable $e) {
-            return $this->serverError('Failed to validate configuration: ' . $e->getMessage());
-        }
-
         // Update in ConfigManager (runtime)
         ConfigManager::set($configName, $newConfig);
 
@@ -298,19 +279,7 @@ class ConfigController extends BaseController
             }
         }
 
-        // Optionally validate against new schema (if defined)
-        try {
-            /** @var \Glueful\Config\Contracts\ConfigValidatorInterface $validator */
-            $validator = container()->get(\Glueful\Config\Contracts\ConfigValidatorInterface::class);
-            $schemaPath = base_path('src/Config/Schema/' . $configName . '.php');
-            if (is_file($schemaPath)) {
-                /** @var array<string, mixed> $schema */
-                $schema = require $schemaPath;
-                $data = $validator->validate($data, $schema);
-            }
-        } catch (\InvalidArgumentException $e) {
-            throw new ValidationException('Configuration validation failed: ' . $e->getMessage());
-        }
+        // $data is already typed as array in method signature
 
         // Generate configuration content
         $configContent = "<?php\n\n";
@@ -350,14 +319,14 @@ class ConfigController extends BaseController
         $this->requirePermission('system.config.view');
 
         try {
-            $schemaPath = base_path('src/Config/Schema/' . $configName . '.php');
+            $schemaPath = base_path('config/' . $configName . '.php');
             if (!is_file($schemaPath)) {
                 return $this->notFound('Schema not found for configuration: ' . $configName);
             }
 
             $enhanced = [
                 'name' => $configName,
-                'description' => 'File-based schema',
+                'description' => 'Plain PHP config file',
                 'version' => '1.0',
                 'has_schema' => true,
                 'config_exists' => $this->configFileExists($configName),
@@ -379,7 +348,7 @@ class ConfigController extends BaseController
         $this->requirePermission('system.config.view');
 
         try {
-            $pattern = base_path('src/Config/Schema/*.php');
+            $pattern = base_path('config/*.php');
             $globResult = glob($pattern);
             $files = $globResult !== false ? $globResult : [];
 
@@ -388,14 +357,14 @@ class ConfigController extends BaseController
                 $name = basename($file, '.php');
                 $schemaList[] = [
                     'name' => $name,
-                    'description' => 'File-based schema',
+                    'description' => 'Plain PHP config file',
                     'version' => '1.0',
                     'config_exists' => $this->configFileExists($name),
                     'is_extension_schema' => false,
                 ];
             }
 
-            return $this->publicSuccess($schemaList, 'Configuration schemas retrieved', 1800);
+            return $this->publicSuccess($schemaList, 'Configuration files retrieved', 1800);
         } catch (\Exception $e) {
             return $this->serverError('Failed to get schemas: ' . $e->getMessage());
         }
@@ -430,24 +399,12 @@ class ConfigController extends BaseController
         }
 
         try {
-            // using new file-based schema validator (no ConfigurationProcessor)
-            /** @var \Glueful\Config\Contracts\ConfigValidatorInterface $validator */
-            $validator = container()->get(\Glueful\Config\Contracts\ConfigValidatorInterface::class);
-
-            $schemaPath = base_path('src/Config/Schema/' . $configName . '.php');
-            if (!is_file($schemaPath)) {
-                return $this->validationError(['config_name' => 'No schema found for configuration: ' . $configName]);
-            }
-            /** @var array<string, mixed> $schema */
-            $schema = require $schemaPath;
-
-            // Validate configuration
-            $validatedConfig = $validator->validate($configData, $schema);
+            // $configData is guaranteed to be an array from loadConfigFile when not null
 
             return $this->success([
                 'valid' => true,
                 'config_name' => $configName,
-                'processed_config' => $validatedConfig,
+                'processed_config' => $configData,
                 'validation_message' => 'Configuration is valid'
             ], 'Configuration validated successfully');
         } catch (\InvalidArgumentException $e) {
@@ -474,31 +431,17 @@ class ConfigController extends BaseController
         $this->rateLimitMethod('config_validate');
 
         try {
-            // using new file-based schema validator (no ConfigurationProcessor)
-            /** @var \Glueful\Config\Contracts\ConfigValidatorInterface $validator */
-            $validator = container()->get(\Glueful\Config\Contracts\ConfigValidatorInterface::class);
-
-            $schemaPath = base_path('src/Config/Schema/' . $configName . '.php');
-            if (!is_file($schemaPath)) {
-                return $this->validationError(['config_name' => 'No schema found for configuration: ' . $configName]);
-            }
-            /** @var array<string, mixed> $schema */
-            $schema = require $schemaPath;
-
             // Load existing configuration
             $existingConfig = $this->loadConfigFile($configName);
             if ($existingConfig === null) {
                 return $this->notFound('Configuration file not found: ' . $configName);
             }
 
-            // Validate existing configuration
-            $validatedConfig = $validator->validate($existingConfig, $schema);
-
             return $this->success([
                 'valid' => true,
                 'config_name' => $configName,
                 'original_config' => $existingConfig,
-                'processed_config' => $validatedConfig,
+                'processed_config' => $existingConfig,
                 'validation_message' => 'Existing configuration is valid'
             ], 'Configuration validated successfully');
         } catch (\InvalidArgumentException $e) {

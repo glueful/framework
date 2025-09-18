@@ -123,7 +123,6 @@ class ContainerFactory
         // Get service provider instances from their registration files
         $providerClasses = [
             \Glueful\DI\ServiceProviders\CoreServiceProvider::class,
-            \Glueful\DI\ServiceProviders\ConfigServiceProvider::class,
             \Glueful\DI\ServiceProviders\AutoConfigServiceProvider::class,
             \Glueful\DI\ServiceProviders\HttpPsr15ServiceProvider::class,
 

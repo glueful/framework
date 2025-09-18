@@ -102,10 +102,6 @@ class ConsoleServiceProvider implements ServiceProviderInterface
             \Glueful\Console\Commands\Queue\SchedulerCommand::class,
             // Archive commands
             \Glueful\Console\Commands\Archive\ManageCommand::class,
-            // Configuration commands
-            \Glueful\Console\Commands\Config\ValidateConfigCommand::class,
-            \Glueful\Console\Commands\Config\GenerateDocsCommand::class,
-            \Glueful\Console\Commands\Config\GenerateIDESupportCommand::class,
             // Container management commands
             \Glueful\Console\Commands\Container\ContainerDebugCommand::class,
             \Glueful\Console\Commands\Container\ContainerCompileCommand::class,
