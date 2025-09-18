@@ -157,11 +157,23 @@ class CacheFactory
             mkdir($path, 0755, true);
         }
 
-        // Get file services from container
+        // Build a dedicated StorageManager for the cache directory
+        $storageConfig = [
+            'default' => 'cache',
+            'disks' => [
+                'cache' => [
+                    'driver' => 'local',
+                    'root' => $path,
+                    'visibility' => 'private',
+                ],
+            ],
+        ];
+
         $container = \Glueful\DI\ContainerBootstrap::getContainer();
-        $fileManager = $container->get(\Glueful\Services\FileManager::class);
         $fileFinder = $container->get(\Glueful\Services\FileFinder::class);
 
-        return new \Glueful\Cache\Drivers\FileCacheDriver($path, $fileManager, $fileFinder);
+        $storage = new \Glueful\Storage\StorageManager($storageConfig, new \Glueful\Storage\PathGuard());
+
+        return new \Glueful\Cache\Drivers\FileCacheDriver($path, $storage, $fileFinder, 'cache');
     }
 }

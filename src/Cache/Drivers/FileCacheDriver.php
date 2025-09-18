@@ -9,7 +9,7 @@ use Glueful\Security\SecureSerializer;
 use Psr\SimpleCache\InvalidArgumentException as PSRInvalidArgumentException;
 use Glueful\Exceptions\CacheException;
 use Glueful\Cache\CacheStore;
-use Glueful\Services\FileManager;
+use Glueful\Storage\StorageManager;
 use Glueful\Services\FileFinder;
 
 /**
@@ -29,8 +29,11 @@ class FileCacheDriver implements CacheStore
     /** @var SecureSerializer Secure serialization service */
     private SecureSerializer $serializer;
 
-    /** @var FileManager File operations manager */
-    private FileManager $fileManager;
+    /** @var StorageManager Storage manager for I/O */
+    private StorageManager $storage;
+
+    /** @var string Disk name used for storage */
+    private string $disk = 'cache';
 
     /** @var FileFinder File finder service */
     private FileFinder $fileFinder;
@@ -59,24 +62,29 @@ class FileCacheDriver implements CacheStore
      * Constructor - requires FileManager and FileFinder services
      *
      * @param string $directory Cache directory path
-     * @param FileManager $fileManager File manager service
+     * @param StorageManager $storage Storage manager service
      * @param FileFinder $fileFinder File finder service
      * @throws InvalidArgumentException If directory is invalid
      */
-    public function __construct(string $directory, FileManager $fileManager, FileFinder $fileFinder)
-    {
+    public function __construct(
+        string $directory,
+        StorageManager $storage,
+        FileFinder $fileFinder,
+        string $disk = 'cache'
+    ) {
         $this->directory = rtrim($directory, '/') . '/';
         $this->serializer = SecureSerializer::forCache();
-        $this->fileManager = $fileManager;
+        $this->storage = $storage;
         $this->fileFinder = $fileFinder;
+        $this->disk = $disk;
 
-        // Use FileManager to create directory if needed
-        if (!is_dir($this->directory)) {
-            try {
-                $this->fileManager->createDirectory($this->directory);
-            } catch (\Exception $e) {
-                throw new InvalidArgumentException("Cannot create cache directory: {$this->directory}", 0, $e);
-            }
+        // Ensure cache directory exists (local filesystem)
+        if (
+            !is_dir($this->directory) &&
+            !mkdir($concurrentDirectory = $this->directory, 0755, true) &&
+            !is_dir($concurrentDirectory)
+        ) {
+            throw new InvalidArgumentException("Cannot create cache directory: {$this->directory}");
         }
 
         if (!is_writable($this->directory)) {
@@ -98,6 +106,15 @@ class FileCacheDriver implements CacheStore
             return $this->directory . $dir . '/' . substr($hash, 2) . $extension;
         }
         return $this->directory . $hash . $extension;
+    }
+
+    /** Convert an absolute path under cache root to a disk-relative path */
+    private function toRelative(string $absolutePath): string
+    {
+        if (str_starts_with($absolutePath, $this->directory)) {
+            return ltrim(substr($absolutePath, strlen($this->directory)), '/');
+        }
+        return ltrim($absolutePath, '/');
     }
 
     /** Enable/disable directory sharding (default: disabled) */
@@ -167,7 +184,7 @@ class FileCacheDriver implements CacheStore
         } finally {
             flock($lockFile, LOCK_UN);
             fclose($lockFile);
-            $this->fileManager->remove($lockPath);
+            @unlink($lockPath);
         }
     }
 
@@ -182,8 +199,9 @@ class FileCacheDriver implements CacheStore
     {
         try {
             $serialized = $this->serializer->serialize($data);
-            return $this->fileManager->writeFile($path, $serialized);
-        } catch (\Exception) {
+            $this->storage->disk($this->disk)->write($this->toRelative($path), $serialized);
+            return true;
+        } catch (\Throwable) {
             return false;
         }
     }
@@ -197,13 +215,14 @@ class FileCacheDriver implements CacheStore
     private function loadFromFile(string $path): mixed
     {
         try {
-            if (!$this->fileManager->exists($path)) {
+            $relative = $this->toRelative($path);
+            if (!$this->storage->disk($this->disk)->fileExists($relative)) {
                 return null;
             }
 
-            $data = $this->fileManager->readFile($path);
+            $data = $this->storage->disk($this->disk)->read($relative);
             return $this->serializer->unserialize($data);
-        } catch (\Exception) {
+        } catch (\Throwable) {
             return null;
         }
     }
@@ -222,7 +241,10 @@ class FileCacheDriver implements CacheStore
         $filePath = $this->getFilePath($key);
         $metaPath = $this->getFilePath($key, self::META_EXT);
 
-        if (!$this->fileManager->exists($filePath) || !$this->fileManager->exists($metaPath)) {
+        if (
+            !$this->storage->disk($this->disk)->fileExists($this->toRelative($filePath))
+            || !$this->storage->disk($this->disk)->fileExists($this->toRelative($metaPath))
+        ) {
             return $default;
         }
 
@@ -263,7 +285,10 @@ class FileCacheDriver implements CacheStore
             'ttl' => $seconds ?? 0
         ];
 
-        $isNew = !($this->fileManager->exists($filePath) && $this->fileManager->exists($metaPath));
+        $isNew = !(
+            $this->storage->disk($this->disk)->fileExists($this->toRelative($filePath))
+            && $this->storage->disk($this->disk)->fileExists($this->toRelative($metaPath))
+        );
 
         if (!$this->saveToFile($metaPath, $meta)) {
             return false;
@@ -293,7 +318,10 @@ class FileCacheDriver implements CacheStore
             $metaPath = $this->getFilePath($key, self::META_EXT);
 
             // Check if key already exists (and is not expired)
-            if ($this->fileManager->exists($filePath) && $this->fileManager->exists($metaPath)) {
+            if (
+                $this->storage->disk($this->disk)->fileExists($this->toRelative($filePath))
+                && $this->storage->disk($this->disk)->fileExists($this->toRelative($metaPath))
+            ) {
                 $meta = $this->loadFromFile($metaPath);
                 if (!$this->isExpiredMeta(is_array($meta) ? $meta : null)) {
                     // Key exists and is not expired
@@ -445,7 +473,7 @@ class FileCacheDriver implements CacheStore
     {
         $metaPath = $this->getFilePath($key, self::META_EXT);
 
-        if (!$this->fileManager->exists($metaPath)) {
+        if (!$this->storage->disk($this->disk)->fileExists($this->toRelative($metaPath))) {
             return -2; // Key doesn't exist
         }
 
@@ -475,7 +503,8 @@ class FileCacheDriver implements CacheStore
 
             $success = true;
             foreach ($files as $file) {
-                $success = $success && $this->fileManager->remove($file->getPathname());
+                // Absolute path known here; best-effort deletion
+                $success = $success && @unlink($file->getPathname()) !== false;
             }
 
             return $success;
@@ -515,7 +544,7 @@ class FileCacheDriver implements CacheStore
         }
 
         // Save metadata if it doesn't exist
-        if (!$this->fileManager->exists($metaPath)) {
+        if (!$this->storage->disk($this->disk)->fileExists($this->toRelative($metaPath))) {
             $meta = [
                 'created' => time(),
                 'expires' => 0, // No expiry by default for sets
@@ -541,7 +570,7 @@ class FileCacheDriver implements CacheStore
     {
         $zsetPath = $this->getFilePath($key, self::ZSET_EXT);
 
-        if (!$this->fileManager->exists($zsetPath)) {
+        if (!$this->storage->disk($this->disk)->fileExists($this->toRelative($zsetPath))) {
             return 0;
         }
 
@@ -581,7 +610,7 @@ class FileCacheDriver implements CacheStore
     {
         $zsetPath = $this->getFilePath($key, self::ZSET_EXT);
 
-        if (!$this->fileManager->exists($zsetPath)) {
+        if (!$this->storage->disk($this->disk)->fileExists($this->toRelative($zsetPath))) {
             return 0;
         }
 
@@ -601,7 +630,7 @@ class FileCacheDriver implements CacheStore
     {
         $zsetPath = $this->getFilePath($key, self::ZSET_EXT);
 
-        if (!$this->fileManager->exists($zsetPath)) {
+        if (!$this->storage->disk($this->disk)->fileExists($this->toRelative($zsetPath))) {
             return [];
         }
 
@@ -643,7 +672,7 @@ class FileCacheDriver implements CacheStore
     {
         $metaPath = $this->getFilePath($key, self::META_EXT);
 
-        if (!$this->fileManager->exists($metaPath)) {
+        if (!$this->storage->disk($this->disk)->fileExists($this->toRelative($metaPath))) {
             return false;
         }
 
@@ -671,24 +700,26 @@ class FileCacheDriver implements CacheStore
         $zsetPath = $this->getFilePath($key, self::ZSET_EXT);
 
         $success = true;
-        $existed = $this->fileManager->exists($metaPath) ||
-            $this->fileManager->exists($filePath) ||
-            $this->fileManager->exists($zsetPath);
+        $disk = $this->storage->disk($this->disk);
+        $relMeta = $this->toRelative($metaPath);
+        $relFile = $this->toRelative($filePath);
+        $relZset = $this->toRelative($zsetPath);
+        $existed = $disk->fileExists($relMeta) || $disk->fileExists($relFile) || $disk->fileExists($relZset);
 
-        if ($this->fileManager->exists($filePath)) {
-            $success = $this->fileManager->remove($filePath);
+        if ($disk->fileExists($relFile)) {
+            $disk->delete($relFile);
         }
 
-        if ($this->fileManager->exists($metaPath) && $success) {
-            $success = $this->fileManager->remove($metaPath);
+        if ($disk->fileExists($relMeta)) {
+            $disk->delete($relMeta);
         }
 
-        if ($this->fileManager->exists($zsetPath) && $success) {
-            $success = $this->fileManager->remove($zsetPath);
+        if ($disk->fileExists($relZset)) {
+            $disk->delete($relZset);
         }
 
         if (
-            $success && $existed && $this->statsCacheEnabled &&
+            $existed && $this->statsCacheEnabled &&
             $this->statsTotalKeys !== null
         ) {
             $this->statsTotalKeys--;
@@ -877,7 +908,10 @@ class FileCacheDriver implements CacheStore
         $filePath = $this->getFilePath($key);
         $metaPath = $this->getFilePath($key, self::META_EXT);
 
-        if (!$this->fileManager->exists($filePath) || !$this->fileManager->exists($metaPath)) {
+        if (
+            !$this->storage->disk($this->disk)->fileExists($this->toRelative($filePath))
+            || !$this->storage->disk($this->disk)->fileExists($this->toRelative($metaPath))
+        ) {
             return false;
         }
 

@@ -10,7 +10,8 @@ use Glueful\Exceptions\BusinessLogicException;
 use Glueful\Exceptions\ValidationException;
 use Glueful\Helpers\ValidationHelper;
 use Glueful\Http\Response;
-use Glueful\Services\FileManager;
+use Glueful\Storage\StorageManager;
+use Glueful\Storage\PathGuard;
 use Glueful\Extensions\ExtensionManager;
 
 class ConfigController extends BaseController
@@ -260,23 +261,24 @@ class ConfigController extends BaseController
             throw new ValidationException('Invalid configuration data');
         }
 
-        // Get FileManager service
-        $fileManager = container()->get(FileManager::class);
-
         // Determine config path
         $configPath = config_path();
         $filePath = $configPath . '/' . $configName . '.php';
 
-        // Check if config already exists
-        if ($fileManager->exists($filePath)) {
-            throw new BusinessLogicException("Configuration file '{$configName}' already exists");
+        // Build a local disk rooted at config directory
+        if (!is_dir($configPath)) {
+            @mkdir($configPath, 0755, true);
         }
+        $storage = new StorageManager([
+            'default' => 'config',
+            'disks' => [
+                'config' => ['driver' => 'local', 'root' => $configPath, 'visibility' => 'private'],
+            ],
+        ], new PathGuard());
 
-        // Ensure config directory exists
-        if (!$fileManager->exists($configPath)) {
-            if (!$fileManager->createDirectory($configPath)) {
-                throw new BusinessLogicException('Failed to create config directory');
-            }
+        // Check if config already exists
+        if ($storage->disk('config')->fileExists($configName . '.php')) {
+            throw new BusinessLogicException("Configuration file '{$configName}' already exists");
         }
 
         // $data is already typed as array in method signature
@@ -290,12 +292,8 @@ class ConfigController extends BaseController
         $configContent .= " */\n\n";
         $configContent .= "return " . var_export($data, true) . ";\n";
 
-        // Atomic write via temp file + rename
-        $success = $this->writeAtomic($filePath, $configContent);
-
-        if (!$success) {
-            throw new BusinessLogicException('Failed to write configuration file');
-        }
+        // Write via StorageManager (local disk)
+        $storage->disk('config')->write($configName . '.php', $configContent);
 
         // Set appropriate permissions (readable by web server)
         @chmod($filePath, 0644);

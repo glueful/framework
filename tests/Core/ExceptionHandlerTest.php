@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Tests\Core;
+namespace Glueful\Tests\Core;
 
 use PHPUnit\Framework\TestCase;
 use Glueful\Exceptions\ExceptionHandler;

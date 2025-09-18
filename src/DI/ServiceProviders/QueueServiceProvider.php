@@ -25,12 +25,6 @@ class QueueServiceProvider implements ServiceProviderInterface
 {
     public function register(ContainerBuilder $container): void
     {
-        // Queue configuration services
-        $container->register(ConfigManager::class)
-            ->setPublic(true);
-
-        $container->register(ConfigValidator::class)
-            ->setPublic(true);
 
         // Queue registry and plugin management
         $container->register(DriverRegistry::class)

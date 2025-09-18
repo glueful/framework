@@ -4,7 +4,8 @@ namespace Glueful\Console\Commands\Migrate;
 
 use Glueful\Console\BaseCommand;
 use Glueful\Services\FileFinder;
-use Glueful\Services\FileManager;
+use Glueful\Storage\StorageManager;
+use Glueful\Storage\PathGuard;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputArgument;
@@ -27,7 +28,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 class CreateCommand extends BaseCommand
 {
     private FileFinder $fileFinder;
-    private FileManager $fileManager;
+    private StorageManager $storage;
 
     public function __construct()
     {
@@ -98,25 +99,20 @@ class CreateCommand extends BaseCommand
         $className = $this->formatClassName($migrationName);
         $filePath = $migrationsDir . '/' . $fileName;
 
-        // Ensure directory exists using FileManager
-        if (!$this->fileManager->exists($migrationsDir)) {
-            $this->fileManager->createDirectory($migrationsDir);
+        // Ensure directory exists for local disk root
+        if (!is_dir($migrationsDir)) {
+            @mkdir($migrationsDir, 0755, true);
         }
 
-        // Check if file already exists using FileManager
-        if ($this->fileManager->exists($filePath)) {
+        $disk = $this->makeStorage($migrationsDir);
+        if ($disk->fileExists($fileName)) {
             throw new \Exception("Migration file already exists: {$fileName}");
         }
 
         // Generate migration content
         $content = $this->generateMigrationContent($className, $migrationName);
 
-        // Write file using FileManager
-        $success = $this->fileManager->writeFile($filePath, $content);
-
-        if (!$success) {
-            throw new \Exception('Failed to write migration file');
-        }
+        $disk->write($fileName, $content);
 
         return $filePath;
     }
@@ -129,7 +125,7 @@ class CreateCommand extends BaseCommand
 
     private function getNextMigrationNumber(string $migrationsDir): int
     {
-        if (!$this->fileManager->exists($migrationsDir)) {
+        if (!is_dir($migrationsDir)) {
             return 1;
         }
 
@@ -242,6 +238,22 @@ PHP;
     private function initializeServices(): void
     {
         $this->fileFinder = $this->getService(FileFinder::class);
-        $this->fileManager = $this->getService(FileManager::class);
+        $this->storage = new StorageManager(['default' => 'local', 'disks' => ['local' => ['driver' => 'local', 'root' => base_path()]]], new PathGuard());
+    }
+
+    private function makeStorage(string $root): \League\Flysystem\FilesystemOperator
+    {
+        $cfg = [
+            'default' => 'scaffold',
+            'disks' => [
+                'scaffold' => [
+                    'driver' => 'local',
+                    'root' => $root,
+                    'visibility' => 'private',
+                ],
+            ],
+        ];
+        $sm = new StorageManager($cfg, new PathGuard());
+        return $sm->disk('scaffold');
     }
 }

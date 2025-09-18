@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Tests\Integration;
+namespace Glueful\Tests\Integration;
 
 use PHPUnit\Framework\TestCase;
 

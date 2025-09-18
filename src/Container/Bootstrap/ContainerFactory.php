@@ -68,6 +68,7 @@ final class ContainerFactory
         $classes = [
             \Glueful\Container\Providers\CoreProvider::class,
             \Glueful\Container\Providers\ConsoleProvider::class,
+            \Glueful\Container\Providers\StorageProvider::class,
         ];
 
         if ($classes === []) {

@@ -2,7 +2,8 @@
 .DS_Store
 vendor
 .phpunit.cache/
-storage/
+/storage/
 :memory:
-composer.lock
-composer.lock
+/composer.lock
+/composer.phar
+

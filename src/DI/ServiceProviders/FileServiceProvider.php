@@ -8,14 +8,13 @@ use Glueful\DI\ServiceProviderInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Reference;
 use Glueful\DI\Container;
-use Glueful\Services\FileManager;
 use Glueful\Services\FileFinder;
 
 /**
  * File Service Provider
  *
- * Registers file-related services (FileManager and FileFinder) with the DI container.
- * Configures services with appropriate logging and configuration options.
+ * Registers the FileFinder service with the legacy DI container.
+ * Note: FileManager has been deprecated in favor of StorageManager (Flysystem).
  */
 class FileServiceProvider implements ServiceProviderInterface
 {
@@ -26,20 +25,12 @@ class FileServiceProvider implements ServiceProviderInterface
      */
     public function register(ContainerBuilder $container): void
     {
-        // Register FileManager service
-        $container->register(FileManager::class)
-            ->setFactory([$this, 'createFileManager'])
-            ->setArguments([new Reference('logger'), '%filesystem.file_manager%'])
-            ->setPublic(true);
-
         // Register FileFinder service
         $container->register(FileFinder::class)
             ->setFactory([$this, 'createFileFinder'])
             ->setArguments([new Reference('logger'), '%filesystem.file_finder%'])
             ->setPublic(true);
 
-        // Register aliases for easier access
-        $container->setAlias('file.manager', FileManager::class);
         $container->setAlias('file.finder', FileFinder::class);
     }
 
@@ -67,17 +58,6 @@ class FileServiceProvider implements ServiceProviderInterface
     public function getName(): string
     {
         return 'file';
-    }
-
-    /**
-     * Factory method for creating FileManager
-     *
-     * @param \Psr\Log\LoggerInterface $logger
-     * @param array<string, mixed> $config
-     */
-    public static function createFileManager(\Psr\Log\LoggerInterface $logger, array $config): FileManager
-    {
-        return new FileManager($logger, $config);
     }
 
     /**

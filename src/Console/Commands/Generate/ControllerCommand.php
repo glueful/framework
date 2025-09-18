@@ -5,7 +5,8 @@ namespace Glueful\Console\Commands\Generate;
 use Glueful\Console\BaseCommand;
 use Glueful\Exceptions\BusinessLogicException;
 use Glueful\Services\FileFinder;
-use Glueful\Services\FileManager;
+use Glueful\Storage\StorageManager;
+use Glueful\Storage\PathGuard;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputArgument;
@@ -29,7 +30,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 class ControllerCommand extends BaseCommand
 {
     private FileFinder $fileFinder;
-    private FileManager $fileManager;
+    private StorageManager $storage;
     protected function configure(): void
     {
         $this->setDescription('Generate a REST API controller from template')
@@ -137,13 +138,14 @@ class ControllerCommand extends BaseCommand
         $fileName = $controllerName . '.php';
         $filePath = $controllersDir . '/' . $fileName;
 
-        // Use FileManager for safe directory creation
-        if (!$this->fileManager->exists($controllersDir)) {
-            $this->fileManager->createDirectory($controllersDir);
+        // Ensure directory exists for local disk root
+        if (!is_dir($controllersDir)) {
+            @mkdir($controllersDir, 0755, true);
         }
 
         // Check for existing files using FileFinder
-        if ($this->fileManager->exists($filePath) && !$force) {
+        $disk = $this->makeStorage($controllersDir);
+        if ($disk->fileExists($fileName) && !$force) {
             if (!$this->confirm("Controller file already exists: {$fileName}. Overwrite?", false)) {
                 throw new \Exception('Controller generation cancelled.');
             }
@@ -153,14 +155,7 @@ class ControllerCommand extends BaseCommand
         $content = $this->generateControllerContent($controllerName, $resource, $api);
 
         $this->info('Writing controller file...');
-        $success = $this->fileManager->writeFile($filePath, $content);
-
-        if (!$success) {
-            throw BusinessLogicException::operationNotAllowed(
-                'code_generation',
-                "Failed to write controller file: {$filePath}"
-            );
-        }
+        $disk->write($fileName, $content);
 
         return $filePath;
     }
@@ -707,6 +702,23 @@ PHP;
     private function initializeServices(): void
     {
         $this->fileFinder = $this->getService(FileFinder::class);
-        $this->fileManager = $this->getService(FileManager::class);
+        // StorageManager rooted at base path (created per-operation as needed)
+        $this->storage = new StorageManager(['default' => 'local', 'disks' => ['local' => ['driver' => 'local', 'root' => base_path()]]], new PathGuard());
+    }
+
+    private function makeStorage(string $root): \League\Flysystem\FilesystemOperator
+    {
+        $cfg = [
+            'default' => 'scaffold',
+            'disks' => [
+                'scaffold' => [
+                    'driver' => 'local',
+                    'root' => $root,
+                    'visibility' => 'private',
+                ],
+            ],
+        ];
+        $sm = new StorageManager($cfg, new PathGuard());
+        return $sm->disk('scaffold');
     }
 }
