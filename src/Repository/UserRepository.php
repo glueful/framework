@@ -76,11 +76,11 @@ class UserRepository extends BaseRepository
      */
     public function findByUsername(string $username): ?array
     {
-        // Validate username format
-        $usernameDTO = new UsernameDTO($username);
-        $usernameDTO->username = $username;
-        if (!$this->validator->validate($usernameDTO)) {
-            return $this->validator->errors();
+        // Validate username format using new Validation rules
+        try {
+            UsernameDTO::from(['username' => $username]);
+        } catch (\Glueful\Validation\ValidationException $e) {
+            return $e->errors();
         }
 
         // Use BaseRepository's findBy method
@@ -100,11 +100,11 @@ class UserRepository extends BaseRepository
      */
     public function findByEmail(string $email): ?array
     {
-        // Validate email format
-        $emailDTO = new EmailDTO();
-        $emailDTO->email = $email;
-        if (!$this->validator->validate($emailDTO)) {
-            return $this->validator->errors();
+        // Validate email format using new Validation rules
+        try {
+            EmailDTO::from(['email' => $email]);
+        } catch (\Glueful\Validation\ValidationException $e) {
+            return $e->errors();
         }
 
         // Use BaseRepository's findBy method
@@ -243,18 +243,16 @@ class UserRepository extends BaseRepository
             }
         }
 
-        // Validate username and email
-        $usernameDTO = new UsernameDTO($userData['username']);
-        $usernameDTO->username = $userData['username'];
-
-        $emailDTO = new EmailDTO();
-        $emailDTO->email = $userData['email'];
-
-        if (!$this->validator->validate($usernameDTO)) {
+        // Validate username and email using new Validation rules
+        try {
+            UsernameDTO::from(['username' => $userData['username']]);
+        } catch (\Glueful\Validation\ValidationException $e) {
             throw new \InvalidArgumentException('Invalid username format');
         }
 
-        if (!$this->validator->validate($emailDTO)) {
+        try {
+            EmailDTO::from(['email' => $userData['email']]);
+        } catch (\Glueful\Validation\ValidationException $e) {
             throw new \InvalidArgumentException('Invalid email format');
         }
 
