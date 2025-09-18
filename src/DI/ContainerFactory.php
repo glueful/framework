@@ -6,8 +6,6 @@ namespace Glueful\DI;
 
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Dumper\PhpDumper;
-use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
-use Symfony\Component\Config\FileLocator;
 use Glueful\DI\Passes\TaggedServicePass;
 use Glueful\Extensions\ProviderLocator;
 use Glueful\Extensions\ExtensionServiceCompiler;
@@ -131,7 +129,7 @@ class ContainerFactory
 
             \Glueful\DI\ServiceProviders\VarDumperServiceProvider::class,
             \Glueful\DI\ServiceProviders\ConsoleServiceProvider::class,
-            \Glueful\DI\ServiceProviders\ValidatorServiceProvider::class,
+            \Glueful\DI\ServiceProviders\ValidationServiceProvider::class,
             \Glueful\DI\ServiceProviders\HttpClientServiceProvider::class,
             \Glueful\DI\ServiceProviders\SerializerServiceProvider::class,
             \Glueful\DI\ServiceProviders\FileServiceProvider::class,
@@ -161,11 +159,7 @@ class ContainerFactory
         // Service definitions will be handled by service providers in Phase 4
         // This method is reserved for optional YAML service configurations
 
-        // Load YAML services if they exist (optional supplementary configuration)
-        if (file_exists('config/services.yaml')) {
-            $yamlLoader = new YamlFileLoader($builder, new FileLocator('config/'));
-            $yamlLoader->load('services.yaml');
-        }
+        // YAML services no longer loaded; providers handle registrations
     }
 
     private static function loadExtensionServices(ContainerBuilder $builder): void

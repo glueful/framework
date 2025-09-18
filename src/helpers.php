@@ -62,15 +62,7 @@ if (!function_exists('config')) {
             return \Glueful\Bootstrap\ConfigurationCache::get($key, $default);
         }
 
-        // Fallback to repository if container is ready (legacy support)
-        if (isset($GLOBALS['container'], $GLOBALS['config_repository_ready'])) {
-            try {
-                $repo = $GLOBALS['container']->get(\Glueful\Configuration\ConfigRepositoryInterface::class);
-                return $repo->get($key, $default);
-            } catch (\Throwable) {
-                // Fall back to file loading below
-            }
-        }
+        // Legacy repository fallback removed; use direct file loading
 
         // Final fallback to direct file loading (legacy support)
         static $config = [];

@@ -5,8 +5,7 @@ declare(strict_types=1);
 namespace Glueful\DI\ServiceProviders;
 
 use Symfony\Component\DependencyInjection\ContainerBuilder;
-use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
-use Symfony\Component\Config\FileLocator;
+// Symfony Config loader removed; use plain PHP include for services
 use Glueful\DI\Container;
 
 /**
@@ -28,8 +27,10 @@ abstract class BaseExtensionServiceProvider extends BaseServiceProvider
         // Load extension services configuration
         $servicesFile = $this->extensionPath . '/config/services.php';
         if (file_exists($servicesFile)) {
-            $loader = new PhpFileLoader($container, new FileLocator($this->extensionPath . '/config'));
-            $loader->load('services.php');
+            $loader = require $servicesFile;
+            if (is_callable($loader)) {
+                $loader($container);
+            }
         }
 
         // Register extension-specific services using abstraction methods

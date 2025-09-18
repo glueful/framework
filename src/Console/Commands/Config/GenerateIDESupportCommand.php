@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Glueful\Console\Commands\Config;
 
 use Glueful\Console\BaseCommand;
-use Glueful\Configuration\Tools\IDESupport;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -52,7 +51,6 @@ This command generates IDE support files for better configuration editing experi
      */
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $ideSupport = $this->getService(IDESupport::class);
         $outputDir = rtrim($input->getOption('output'), '/') . '/';
 
         $generatePhpStorm = (bool) $input->getOption('phpstorm');
@@ -87,22 +85,22 @@ This command generates IDE support files for better configuration editing experi
         try {
             // Generate PhpStorm configuration
             if ($generatePhpStorm) {
-                $filesGenerated += $this->generatePhpStormSupport($ideSupport, $outputDir);
+                $filesGenerated += $this->generatePhpStormSupport($outputDir);
             }
 
             // Generate VS Code configuration
             if ($generateVSCode) {
-                $filesGenerated += $this->generateVSCodeSupport($ideSupport, $outputDir);
+                $filesGenerated += $this->generateVSCodeSupport($outputDir);
             }
 
             // Generate JSON schema files
             if ($generateJsonSchemas) {
-                $filesGenerated += $this->generateJsonSchemas($ideSupport, $outputDir);
+                $filesGenerated += $this->generateJsonSchemas($outputDir);
             }
 
             // Generate PhpStorm meta file
             if ($generateMeta) {
-                $filesGenerated += $this->generatePhpStormMeta($ideSupport, $outputDir);
+                $filesGenerated += $this->generatePhpStormMeta($outputDir);
             }
 
             $this->line();
@@ -121,11 +119,13 @@ This command generates IDE support files for better configuration editing experi
     /**
      * Generate PhpStorm support files
      */
-    private function generatePhpStormSupport(IDESupport $ideSupport, string $outputDir): int
+    private function generatePhpStormSupport(string $outputDir): int
     {
         $this->line('Generating PhpStorm configuration...');
 
-        $config = $ideSupport->generatePhpStormConfig();
+        $config = [
+            'schemas' => $this->discoverSchemas(),
+        ];
         $configFile = $outputDir . 'phpstorm-config.json';
 
         file_put_contents($configFile, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
@@ -137,11 +137,13 @@ This command generates IDE support files for better configuration editing experi
     /**
      * Generate VS Code support files
      */
-    private function generateVSCodeSupport(IDESupport $ideSupport, string $outputDir): int
+    private function generateVSCodeSupport(string $outputDir): int
     {
         $this->line('Generating VS Code configuration...');
 
-        $config = $ideSupport->generateVSCodeConfig();
+        $config = [
+            'glueful.config.schemas' => $this->discoverSchemas(),
+        ];
         $configFile = $outputDir . 'vscode-settings.json';
 
         file_put_contents($configFile, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
@@ -153,7 +155,7 @@ This command generates IDE support files for better configuration editing experi
     /**
      * Generate JSON schema files
      */
-    private function generateJsonSchemas(IDESupport $ideSupport, string $outputDir): int
+    private function generateJsonSchemas(string $outputDir): int
     {
         $this->line('Generating JSON schema files...');
 
@@ -162,26 +164,28 @@ This command generates IDE support files for better configuration editing experi
             throw new \RuntimeException("Failed to create schemas directory: {$schemasDir}");
         }
 
-        $schemaFiles = $ideSupport->generateSchemaFiles();
         $count = 0;
-
-        foreach ($schemaFiles as $filename => $content) {
-            file_put_contents($schemasDir . $filename, $content);
+        foreach ($this->discoverSchemas() as $name) {
+            $schema = $this->buildJsonSchema($name);
+            $filename = $name . '.schema.json';
+            file_put_contents(
+                $schemasDir . $filename,
+                json_encode($schema, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
+            );
             $this->line("  ✓ Generated: schemas/{$filename}");
             $count++;
         }
-
         return $count;
     }
 
     /**
      * Generate PhpStorm meta file
      */
-    private function generatePhpStormMeta(IDESupport $ideSupport, string $outputDir): int
+    private function generatePhpStormMeta(string $outputDir): int
     {
         $this->line('Generating PhpStorm meta file...');
 
-        $metaContent = $ideSupport->generatePhpStormMeta();
+        $metaContent = "<?php\n// Glueful config meta (file-based schemas)\n";
         $metaFile = $outputDir . '.phpstorm.meta.php';
 
         file_put_contents($metaFile, $metaContent);
@@ -244,5 +248,67 @@ This command generates IDE support files for better configuration editing experi
         }
 
         return true;
+    }
+
+    /**
+     * Discover schema names under src/Config/Schema
+     * @return string[]
+     */
+    private function discoverSchemas(): array
+    {
+        $files = glob(base_path('src/Config/Schema/*.php'));
+        if ($files === false) {
+            $files = [];
+        }
+        $names = [];
+        foreach ($files as $file) {
+            $names[] = basename($file, '.php');
+        }
+        sort($names);
+        return $names;
+    }
+
+    /**
+     * Build a minimal JSON schema from our array schema
+     * @return array<string, mixed>
+     */
+    private function buildJsonSchema(string $name): array
+    {
+        $schemaFile = base_path('src/Config/Schema/' . $name . '.php');
+        /** @var array<string, mixed> $arr */
+        $arr = is_file($schemaFile) ? (require $schemaFile) : [];
+        $props = [];
+        $required = [];
+        foreach ($arr as $key => $rules) {
+            $type = $rules['type'] ?? 'string';
+            $props[$key] = [
+                'type' => match ($type) {
+                    'integer' => 'integer',
+                    'boolean' => 'boolean',
+                    'array' => 'object',
+                    default => 'string',
+                },
+            ];
+            if (isset($rules['enum'])) {
+                $props[$key]['enum'] = $rules['enum'];
+            }
+            if (isset($rules['min']) && is_int($rules['min'])) {
+                $props[$key]['minimum'] = $rules['min'];
+            }
+            if (isset($rules['max']) && is_int($rules['max'])) {
+                $props[$key]['maximum'] = $rules['max'];
+            }
+            if (isset($rules['required']) && $rules['required'] === true) {
+                $required[] = $key;
+            }
+        }
+        return [
+            '$schema' => 'http://json-schema.org/draft-07/schema#',
+            'title' => $name,
+            'type' => 'object',
+            'properties' => $props,
+            'required' => $required,
+            'additionalProperties' => true,
+        ];
     }
 }

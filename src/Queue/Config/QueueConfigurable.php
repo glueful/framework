@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Queue\Config;
 
 use Glueful\Support\Options\ConfigurableService;
-use Symfony\Component\OptionsResolver\OptionsResolver;
+use Glueful\Support\Options\SimpleOptionsResolver as OptionsResolver;
 
 /**
  * Queue Configuration with OptionsResolver

@@ -12,8 +12,6 @@ use Glueful\Helpers\ValidationHelper;
 use Glueful\Http\Response;
 use Glueful\Services\FileManager;
 use Glueful\Extensions\ExtensionManager;
-use Glueful\Configuration\ConfigurationProcessor;
-use Glueful\Configuration\Exceptions\ConfigurationException;
 
 class ConfigController extends BaseController
 {
@@ -218,12 +216,15 @@ class ConfigController extends BaseController
 
         // Schema validation before persist (if schema exists)
         try {
-            /** @var ConfigurationProcessor $processor */
-            $processor = container()->get(ConfigurationProcessor::class);
-            if ($processor->hasSchema($configName)) {
-                $newConfig = $processor->processConfiguration($configName, $newConfig);
+            /** @var \Glueful\Config\Contracts\ConfigValidatorInterface $validator */
+            $validator = container()->get(\Glueful\Config\Contracts\ConfigValidatorInterface::class);
+            $schemaPath = base_path('src/Config/Schema/' . $configName . '.php');
+            if (is_file($schemaPath)) {
+                /** @var array<string, mixed> $schema */
+                $schema = require $schemaPath;
+                $newConfig = $validator->validate($newConfig, $schema);
             }
-        } catch (ConfigurationException $e) {
+        } catch (\InvalidArgumentException $e) {
             return $this->validationError([
                 'config_name' => $configName,
                 'errors' => [$e->getMessage()]
@@ -297,14 +298,17 @@ class ConfigController extends BaseController
             }
         }
 
-        // Optionally validate against schema (if defined)
+        // Optionally validate against new schema (if defined)
         try {
-            /** @var ConfigurationProcessor $processor */
-            $processor = container()->get(ConfigurationProcessor::class);
-            if ($processor->hasSchema($configName)) {
-                $data = $processor->processConfiguration($configName, $data);
+            /** @var \Glueful\Config\Contracts\ConfigValidatorInterface $validator */
+            $validator = container()->get(\Glueful\Config\Contracts\ConfigValidatorInterface::class);
+            $schemaPath = base_path('src/Config/Schema/' . $configName . '.php');
+            if (is_file($schemaPath)) {
+                /** @var array<string, mixed> $schema */
+                $schema = require $schemaPath;
+                $data = $validator->validate($data, $schema);
             }
-        } catch (ConfigurationException $e) {
+        } catch (\InvalidArgumentException $e) {
             throw new ValidationException('Configuration validation failed: ' . $e->getMessage());
         }
 
@@ -346,30 +350,19 @@ class ConfigController extends BaseController
         $this->requirePermission('system.config.view');
 
         try {
-            $processor = container()->get(ConfigurationProcessor::class);
-            $schemaInfo = $processor->getSchemaInfo($configName);
-
-            if ($schemaInfo === null) {
+            $schemaPath = base_path('src/Config/Schema/' . $configName . '.php');
+            if (!is_file($schemaPath)) {
                 return $this->notFound('Schema not found for configuration: ' . $configName);
             }
 
-            // Add additional schema details
-            $enhanced = $schemaInfo;
-            $enhanced['has_schema'] = true;
-            $enhanced['config_exists'] = $this->configFileExists($configName);
-
-            // Get schema structure if available
-            try {
-                $schema = $processor->getSchema($configName);
-                if ($schema !== null) {
-                    $treeBuilder = $schema->getConfigTreeBuilder();
-                    $tree = $treeBuilder->buildTree();
-                    $enhanced['schema_structure'] = $this->analyzeSchemaStructure($tree);
-                }
-            } catch (\Exception $e) {
-                // Schema structure analysis failed, continue without it
-                $enhanced['schema_structure'] = null;
-            }
+            $enhanced = [
+                'name' => $configName,
+                'description' => 'File-based schema',
+                'version' => '1.0',
+                'has_schema' => true,
+                'config_exists' => $this->configFileExists($configName),
+                'schema_structure' => null,
+            ];
 
             return $this->publicSuccess($enhanced, 'Schema information retrieved', 1800);
         } catch (\Exception $e) {
@@ -386,18 +379,19 @@ class ConfigController extends BaseController
         $this->requirePermission('system.config.view');
 
         try {
-            $processor = container()->get(ConfigurationProcessor::class);
-            $schemas = $processor->getAllSchemas();
+            $pattern = base_path('src/Config/Schema/*.php');
+            $globResult = glob($pattern);
+            $files = $globResult !== false ? $globResult : [];
 
             $schemaList = [];
-            foreach ($schemas as $configName => $schema) {
+            foreach ($files as $file) {
+                $name = basename($file, '.php');
                 $schemaList[] = [
-                    'name' => $configName,
-                    'description' => $schema->getDescription(),
-                    'version' => $schema->getVersion(),
-                    'config_exists' => $this->configFileExists($configName),
-                    'is_extension_schema' => $schema instanceof
-                        \Glueful\Configuration\Extension\ExtensionSchemaInterface
+                    'name' => $name,
+                    'description' => 'File-based schema',
+                    'version' => '1.0',
+                    'config_exists' => $this->configFileExists($name),
+                    'is_extension_schema' => false,
                 ];
             }
 
@@ -436,14 +430,19 @@ class ConfigController extends BaseController
         }
 
         try {
-            $processor = container()->get(ConfigurationProcessor::class);
+            // using new file-based schema validator (no ConfigurationProcessor)
+            /** @var \Glueful\Config\Contracts\ConfigValidatorInterface $validator */
+            $validator = container()->get(\Glueful\Config\Contracts\ConfigValidatorInterface::class);
 
-            if (!$processor->hasSchema($configName)) {
+            $schemaPath = base_path('src/Config/Schema/' . $configName . '.php');
+            if (!is_file($schemaPath)) {
                 return $this->validationError(['config_name' => 'No schema found for configuration: ' . $configName]);
             }
+            /** @var array<string, mixed> $schema */
+            $schema = require $schemaPath;
 
             // Validate configuration
-            $validatedConfig = $processor->processConfiguration($configName, $configData);
+            $validatedConfig = $validator->validate($configData, $schema);
 
             return $this->success([
                 'valid' => true,
@@ -451,7 +450,7 @@ class ConfigController extends BaseController
                 'processed_config' => $validatedConfig,
                 'validation_message' => 'Configuration is valid'
             ], 'Configuration validated successfully');
-        } catch (ConfigurationException $e) {
+        } catch (\InvalidArgumentException $e) {
             return $this->validationError([
                 'valid' => false,
                 'config_name' => $configName,
@@ -475,11 +474,16 @@ class ConfigController extends BaseController
         $this->rateLimitMethod('config_validate');
 
         try {
-            $processor = container()->get(ConfigurationProcessor::class);
+            // using new file-based schema validator (no ConfigurationProcessor)
+            /** @var \Glueful\Config\Contracts\ConfigValidatorInterface $validator */
+            $validator = container()->get(\Glueful\Config\Contracts\ConfigValidatorInterface::class);
 
-            if (!$processor->hasSchema($configName)) {
+            $schemaPath = base_path('src/Config/Schema/' . $configName . '.php');
+            if (!is_file($schemaPath)) {
                 return $this->validationError(['config_name' => 'No schema found for configuration: ' . $configName]);
             }
+            /** @var array<string, mixed> $schema */
+            $schema = require $schemaPath;
 
             // Load existing configuration
             $existingConfig = $this->loadConfigFile($configName);
@@ -488,7 +492,7 @@ class ConfigController extends BaseController
             }
 
             // Validate existing configuration
-            $validatedConfig = $processor->processConfiguration($configName, $existingConfig);
+            $validatedConfig = $validator->validate($existingConfig, $schema);
 
             return $this->success([
                 'valid' => true,
@@ -497,7 +501,7 @@ class ConfigController extends BaseController
                 'processed_config' => $validatedConfig,
                 'validation_message' => 'Existing configuration is valid'
             ], 'Configuration validated successfully');
-        } catch (ConfigurationException $e) {
+        } catch (\InvalidArgumentException $e) {
             return $this->validationError([
                 'valid' => false,
                 'config_name' => $configName,
@@ -1084,61 +1088,5 @@ class ConfigController extends BaseController
         return file_exists($filePath) && is_readable($filePath);
     }
 
-    /**
-     * Analyze schema structure for API response
-     */
-    /**
-     * @param mixed $node
-     * @return array<string, mixed>
-     */
-    private function analyzeSchemaStructure(mixed $node): array
-    {
-        $structure = [
-            'type' => $this->getNodeTypeName($node),
-            'required' => $node->isRequired(),
-            'has_default' => $node->hasDefaultValue()
-        ];
-
-        if ($node->hasDefaultValue()) {
-            $structure['default_value'] = $node->getDefaultValue();
-        }
-
-        if ($node instanceof \Symfony\Component\Config\Definition\EnumNode) {
-            $structure['allowed_values'] = $node->getValues();
-        }
-
-        if ($node instanceof \Symfony\Component\Config\Definition\ArrayNode) {
-            $structure['children'] = [];
-            foreach ($node->getChildren() as $child) {
-                $structure['children'][$child->getName()] = $this->analyzeSchemaStructure($child);
-            }
-        }
-
-        return $structure;
-    }
-
-    /**
-     * Get node type name for schema structure
-     */
-    /**
-     * @param mixed $node
-     */
-    private function getNodeTypeName(mixed $node): string
-    {
-        if ($node instanceof \Symfony\Component\Config\Definition\ArrayNode) {
-            return 'array';
-        } elseif ($node instanceof \Symfony\Component\Config\Definition\BooleanNode) {
-            return 'boolean';
-        } elseif ($node instanceof \Symfony\Component\Config\Definition\IntegerNode) {
-            return 'integer';
-        } elseif ($node instanceof \Symfony\Component\Config\Definition\FloatNode) {
-            return 'float';
-        } elseif ($node instanceof \Symfony\Component\Config\Definition\EnumNode) {
-            return 'enum';
-        } elseif ($node instanceof \Symfony\Component\Config\Definition\ScalarNode) {
-            return 'scalar';
-        }
-
-        return 'unknown';
-    }
+    // Legacy Symfony\Config schema analyzers removed
 }

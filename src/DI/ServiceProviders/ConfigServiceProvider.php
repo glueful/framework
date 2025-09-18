@@ -8,20 +8,9 @@ use Glueful\DI\ServiceProviderInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Reference;
 use Glueful\DI\Container;
-use Symfony\Component\Config\Definition\Processor;
-use Glueful\Configuration\ConfigurationProcessor;
-use Glueful\Configuration\Schema\AppConfiguration;
-use Glueful\Configuration\Schema\DatabaseConfiguration;
-use Glueful\Configuration\Schema\CacheConfiguration;
-use Glueful\Configuration\Schema\QueueConfiguration;
-use Glueful\Configuration\Schema\SessionConfiguration;
-use Glueful\Configuration\Schema\SecurityConfiguration;
-use Glueful\Configuration\Schema\HttpConfiguration;
-use Glueful\Configuration\Extension\ExtensionManifestSchema;
-use Glueful\Configuration\Tools\ConfigurationDumper;
-use Glueful\Configuration\Tools\IDESupport;
-use Glueful\Configuration\ConfigRepositoryInterface;
-use Glueful\Configuration\ConfigRepository;
+use Glueful\Config\Contracts\ConfigValidatorInterface as NewConfigValidatorInterface;
+use Glueful\Config\Validation\ConfigValidator as NewConfigValidator;
+// Legacy Configuration imports removed (file-based schemas are used)
 
 /**
  * Configuration Service Provider
@@ -39,44 +28,8 @@ class ConfigServiceProvider implements ServiceProviderInterface
      */
     public function register(ContainerBuilder $container): void
     {
-        // Register Symfony Config processor
-        $container->register(Processor::class)
-            ->setPublic(true);
-
-        // Register Glueful configuration processor
-        $container->register(ConfigurationProcessor::class)
-            ->setArguments([
-                new Reference(Processor::class),
-                new Reference('logger')
-            ])
-            ->setPublic(true);
-
-        // Register configuration tools
-        $container->register(ConfigurationDumper::class)
-            ->setArguments([new Reference(ConfigurationProcessor::class)])
-            ->setPublic(true);
-
-        $container->register(IDESupport::class)
-            ->setArguments([new Reference(ConfigurationProcessor::class)])
-            ->setPublic(true);
-
-        // Bind ConfigRepositoryInterface to implementation using resolved paths
-        $frameworkPath = $GLOBALS['config_paths']['framework'] ?? (dirname(__DIR__, 3) . '/config');
-        $applicationPath = $GLOBALS['config_paths']['application']
-            ?? (($GLOBALS['base_path'] ?? dirname(__DIR__, 3)) . '/config');
-        $environment = $GLOBALS['app_environment'] ?? env('APP_ENV', 'production');
-
-        $container->register(ConfigRepository::class)
-            ->setArguments([
-                $frameworkPath,
-                $applicationPath,
-                null, // cacheDir - will use default
-                null, // cacheEnabled - will use default based on environment
-                $environment
-            ])
-            ->setPublic(true);
-
-        $container->setAlias(ConfigRepositoryInterface::class, ConfigRepository::class)
+        // Register new lightweight Config validator
+        $container->register(NewConfigValidatorInterface::class, NewConfigValidator::class)
             ->setPublic(true);
     }
 
@@ -85,10 +38,7 @@ class ConfigServiceProvider implements ServiceProviderInterface
      */
     public function boot(Container $container): void
     {
-        $processor = $container->get(ConfigurationProcessor::class);
-
-        // Register built-in configuration schemas
-        $this->registerBuiltInSchemas($processor);
+        // No-op
     }
 
     /**
@@ -112,18 +62,5 @@ class ConfigServiceProvider implements ServiceProviderInterface
     /**
      * Register all built-in configuration schemas
      */
-    private function registerBuiltInSchemas(ConfigurationProcessor $processor): void
-    {
-        // Register core schemas
-        $processor->registerSchema(new AppConfiguration());
-        $processor->registerSchema(new DatabaseConfiguration());
-        $processor->registerSchema(new CacheConfiguration());
-        $processor->registerSchema(new QueueConfiguration());
-        $processor->registerSchema(new SessionConfiguration());
-        $processor->registerSchema(new SecurityConfiguration());
-        $processor->registerSchema(new HttpConfiguration());
-
-        // Register extension schemas
-        $processor->registerSchema(new ExtensionManifestSchema());
-    }
+    private function registerBuiltInSchemas(): void {}
 }

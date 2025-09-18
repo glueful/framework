@@ -5,8 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Console\Commands\Config;
 
 use Glueful\Console\BaseCommand;
-use Glueful\Configuration\ConfigurationProcessor;
-use Glueful\Configuration\Exceptions\ConfigurationException;
+use Glueful\Config\Contracts\ConfigValidatorInterface;
 use Glueful\Helpers\ConfigManager;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputOption;
@@ -50,11 +49,12 @@ This command validates configuration files against their registered schemas.
      */
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $processor = $this->getService(ConfigurationProcessor::class);
+        /** @var \Glueful\Config\Contracts\ConfigValidatorInterface $validator */
+        $validator = $this->getService(\Glueful\Config\Contracts\ConfigValidatorInterface::class);
         $configManager = $this->getService(ConfigManager::class);
 
         if ((bool) $input->getOption('all')) {
-            return $this->validateAllConfigs($processor, $configManager, $input->getOption('verbose'));
+            return $this->validateAllConfigs($validator, $configManager, $input->getOption('verbose'));
         }
 
         $configName = $input->getArgument('config');
@@ -64,38 +64,38 @@ This command validates configuration files against their registered schemas.
             return 1;
         }
 
-        return $this->validateSingleConfig($configName, $processor, $configManager, $input->getOption('verbose'));
+        return $this->validateSingleConfig($configName, $validator, $configManager, $input->getOption('verbose'));
     }
 
     /**
      * Validate all registered configuration schemas
      */
     private function validateAllConfigs(
-        ConfigurationProcessor $processor,
+        \Glueful\Config\Contracts\ConfigValidatorInterface $validator,
         ConfigManager $configManager,
         bool $verbose
     ): int {
         $this->info('Validating all configuration files...');
         $this->line();
-
-        $schemas = $processor->getAllSchemas();
+        $schemas = $this->discoverSchemas();
         $results = [];
         $totalErrors = 0;
 
         $this->progressBar(count($schemas), function ($progressBar) use (
             $schemas,
-            $processor,
+            $validator,
             $configManager,
             &$results,
             &$totalErrors,
             $verbose
         ) {
-            foreach ($schemas as $configName => $schema) {
+            foreach ($schemas as $configName) {
                 $progressBar->setMessage("Validating {$configName}...");
 
                 try {
                     $config = $configManager::get($configName);
-                    $processedConfig = $processor->processConfiguration($configName, $config);
+                    $schema = $this->loadSchema($configName);
+                    $processedConfig = $validator->validate($config, $schema);
 
                     $results[$configName] = [
                         'status' => 'valid',
@@ -106,7 +106,7 @@ This command validates configuration files against their registered schemas.
                     if ($verbose) {
                         $this->line("  ✓ {$configName} - Valid");
                     }
-                } catch (ConfigurationException $e) {
+                } catch (\InvalidArgumentException $e) {
                     $results[$configName] = [
                         'status' => 'invalid',
                         'error' => $e->getMessage(),
@@ -149,13 +149,13 @@ This command validates configuration files against their registered schemas.
      */
     private function validateSingleConfig(
         string $configName,
-        ConfigurationProcessor $processor,
+        \Glueful\Config\Contracts\ConfigValidatorInterface $validator,
         ConfigManager $configManager,
         bool $verbose
     ): int {
-        if (!$processor->hasSchema($configName)) {
-            $this->error("No schema registered for configuration: {$configName}");
-            $this->showAvailableSchemas($processor);
+        if (!$this->schemaExists($configName)) {
+            $this->error("No schema found for configuration: {$configName}");
+            $this->showAvailableSchemas();
             return 1;
         }
 
@@ -163,21 +163,22 @@ This command validates configuration files against their registered schemas.
 
         try {
             $config = $configManager::get($configName);
-            $processedConfig = $processor->processConfiguration($configName, $config);
+            $schema = $this->loadSchema($configName);
+            $processedConfig = $validator->validate($config, $schema);
 
             $this->success("Configuration '{$configName}' is valid!");
 
             if ($verbose) {
-                $this->displayConfigDetails($configName, $processor, $config, $processedConfig);
+                $this->displayConfigDetails($configName, $config, $processedConfig);
             }
 
             return 0;
-        } catch (ConfigurationException $e) {
+        } catch (\InvalidArgumentException $e) {
             $this->error("Configuration '{$configName}' is invalid!");
             $this->line("Error: " . $e->getMessage());
 
             if ($verbose) {
-                $this->displayValidationDetails($configName, $e);
+                $this->displayValidationDetails($configName, $e->getMessage());
             }
 
             return 1;
@@ -253,19 +254,12 @@ This command validates configuration files against their registered schemas.
      */
     private function displayConfigDetails(
         string $configName,
-        ConfigurationProcessor $processor,
         array $originalConfig,
         array $processedConfig
     ): void {
         $this->line();
         $this->info("Configuration Details:");
         $this->line("=====================");
-
-        $schemaInfo = $processor->getSchemaInfo($configName);
-        if ($schemaInfo !== null) {
-            $this->line("Schema: {$schemaInfo['name']} v{$schemaInfo['version']}");
-            $this->line("Description: {$schemaInfo['description']}");
-        }
 
         $this->line();
         $this->line("Original configuration structure:");
@@ -306,18 +300,13 @@ This command validates configuration files against their registered schemas.
     /**
      * Display validation details for errors
      */
-    private function displayValidationDetails(string $configName, ConfigurationException $exception): void
+    private function displayValidationDetails(string $configName, string $message): void
     {
         $this->line();
         $this->error("Validation Details:");
         $this->line("==================");
         $this->line("Configuration: {$configName}");
-        $this->line("Error: " . $exception->getMessage());
-
-        $previous = $exception->getPrevious();
-        if ($previous !== null) {
-            $this->line("Underlying error: " . $previous->getMessage());
-        }
+        $this->line("Error: " . $message);
     }
 
     /**
@@ -335,9 +324,9 @@ This command validates configuration files against their registered schemas.
     /**
      * Show available schemas
      */
-    private function showAvailableSchemas(ConfigurationProcessor $processor): void
+    private function showAvailableSchemas(): void
     {
-        $schemas = $processor->getAllSchemas();
+        $schemas = $this->discoverSchemas();
 
         if ($schemas === []) {
             $this->warning("No configuration schemas are registered.");
@@ -346,8 +335,40 @@ This command validates configuration files against their registered schemas.
 
         $this->line();
         $this->info("Available configurations:");
-        foreach ($schemas as $configName => $schema) {
-            $this->line("  - <comment>{$configName}</comment>: {$schema->getDescription()}");
+        foreach ($schemas as $configName) {
+            $this->line("  - <comment>{$configName}</comment>");
         }
+    }
+
+    /**
+     * Discover schema names from src/Config/Schema directory
+     * @return string[]
+     */
+    private function discoverSchemas(): array
+    {
+        $pattern = base_path('src/Config/Schema/*.php');
+        $globResult = glob($pattern);
+        $files = $globResult !== false ? $globResult : [];
+        $names = [];
+        foreach ($files as $file) {
+            $names[] = basename($file, '.php');
+        }
+        sort($names);
+        return $names;
+    }
+
+    private function schemaExists(string $configName): bool
+    {
+        return is_file(base_path('src/Config/Schema/' . $configName . '.php'));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function loadSchema(string $configName): array
+    {
+        /** @var array<string, mixed> $schema */
+        $schema = require base_path('src/Config/Schema/' . $configName . '.php');
+        return $schema;
     }
 }

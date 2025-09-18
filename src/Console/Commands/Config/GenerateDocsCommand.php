@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Glueful\Console\Commands\Config;
 
 use Glueful\Console\BaseCommand;
-use Glueful\Configuration\Tools\ConfigurationDumper;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -49,12 +48,10 @@ This command generates comprehensive documentation for all registered configurat
      */
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $dumper = $this->getService(ConfigurationDumper::class);
-
-        $format = $input->getOption('format');
-        $outputDir = rtrim($input->getOption('output'), '/') . '/';
-        $includeTemplates = $input->getOption('include-templates');
-        $includeMinimal = $input->getOption('include-minimal');
+        $format = (string)$input->getOption('format');
+        $outputDir = rtrim((string)$input->getOption('output'), '/') . '/';
+        $includeTemplates = (bool)$input->getOption('include-templates');
+        $includeMinimal = (bool)$input->getOption('include-minimal');
 
         // Validate format
         if (!in_array($format, ['yaml', 'xml'], true)) {
@@ -72,22 +69,15 @@ This command generates comprehensive documentation for all registered configurat
         $this->line();
 
         try {
-            $configInfo = $dumper->getAllConfigInfo();
+            $names = $this->discoverSchemas();
 
-            if ($configInfo === []) {
+            if ($names === []) {
                 $this->warning('No configuration schemas found.');
                 return 0;
             }
 
-            $this->generateDocumentationFiles(
-                $dumper,
-                $configInfo,
-                $outputDir,
-                $format,
-                $includeTemplates,
-                $includeMinimal
-            );
-            $this->generateIndexFile($configInfo, $outputDir, $format);
+            $this->generateDocumentationFiles($names, $outputDir, $format, $includeTemplates, $includeMinimal);
+            $this->generateIndexFile($names, $outputDir, $format);
 
             $this->line();
             $this->success('Documentation generated successfully!');
@@ -103,40 +93,38 @@ This command generates comprehensive documentation for all registered configurat
     /**
      * Generate documentation files for all configurations
      *
-     * @param array<string, mixed> $configInfo
+     * @param array<string> $names
      */
     private function generateDocumentationFiles(
-        ConfigurationDumper $dumper,
-        array $configInfo,
+        array $names,
         string $outputDir,
         string $format,
         bool $includeTemplates,
         bool $includeMinimal
     ): void {
-        $totalConfigs = count($configInfo);
+        $totalConfigs = count($names);
 
         $this->progressBar($totalConfigs, function ($progressBar) use (
-            $dumper,
-            $configInfo,
+            $names,
             $outputDir,
             $format,
             $includeTemplates,
             $includeMinimal
         ) {
-            foreach ($configInfo as $configName => $info) {
+            foreach ($names as $configName) {
                 $progressBar->setMessage("Generating docs for {$configName}...");
 
-                // Generate reference documentation
-                $this->generateReferenceFile($dumper, $configName, $outputDir, $format);
+                $schema = $this->loadSchema($configName);
+                $this->generateReferenceFile($configName, $schema, $outputDir, $format);
 
                 // Generate template files if requested
                 if ($includeTemplates) {
-                    $this->generateTemplateFile($info, $configName, $outputDir);
+                    $this->generateTemplateFile($schema, $configName, $outputDir);
                 }
 
                 // Generate minimal config files if requested
                 if ($includeMinimal) {
-                    $this->generateMinimalFile($info, $configName, $outputDir);
+                    $this->generateMinimalFile($schema, $configName, $outputDir);
                 }
 
                 $progressBar->advance();
@@ -146,41 +134,38 @@ This command generates comprehensive documentation for all registered configurat
 
     /**
      * Generate reference documentation file
+     *
+     * @param array<string, mixed> $schema
      */
     private function generateReferenceFile(
-        ConfigurationDumper $dumper,
         string $configName,
+        array $schema,
         string $outputDir,
         string $format
     ): void {
         $filename = "{$outputDir}{$configName}.reference.{$format}";
-
-        if ($format === 'yaml') {
-            $content = $dumper->dumpYamlReference($configName);
-        } else {
-            $content = $dumper->dumpXmlReference($configName);
-        }
-
-        file_put_contents($filename, $content);
+        // Simple dependency-free: emit JSON inside the file for readability
+        $content = json_encode($schema, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        file_put_contents($filename, (string)$content);
         $this->line("  Generated: {$configName}.reference.{$format}");
     }
 
     /**
      * Generate template configuration file
      *
-     * @param array<string, mixed> $info
+     * @param array<string, mixed> $schema
      */
-    private function generateTemplateFile(array $info, string $configName, string $outputDir): void
+    private function generateTemplateFile(array $schema, string $configName, string $outputDir): void
     {
         $filename = "{$outputDir}{$configName}.template.php";
-        $template = $info['template'];
+        $template = $this->schemaToTemplate($schema, false);
 
         $content = "<?php\n\n";
         $content .= "/**\n";
-        $content .= " * {$info['name']} Configuration Template\n";
+        $content .= " * {$configName} Configuration Template\n";
         $content .= " * \n";
-        $content .= " * {$info['description']}\n";
-        $content .= " * Version: {$info['version']}\n";
+        $content .= " * File-based schema\n";
+        $content .= " * Version: 1.0\n";
         $content .= " * \n";
         $content .= " * This file contains all available configuration options with their default values.\n";
         $content .= " * Copy and modify as needed for your application.\n";
@@ -194,19 +179,19 @@ This command generates comprehensive documentation for all registered configurat
     /**
      * Generate minimal configuration file
      *
-     * @param array<string, mixed> $info
+     * @param array<string, mixed> $schema
      */
-    private function generateMinimalFile(array $info, string $configName, string $outputDir): void
+    private function generateMinimalFile(array $schema, string $configName, string $outputDir): void
     {
         $filename = "{$outputDir}{$configName}.minimal.php";
-        $minimal = $info['minimal'];
+        $minimal = $this->schemaToTemplate($schema, true);
 
         $content = "<?php\n\n";
         $content .= "/**\n";
-        $content .= " * {$info['name']} Minimal Configuration\n";
+        $content .= " * {$configName} Minimal Configuration\n";
         $content .= " * \n";
-        $content .= " * {$info['description']}\n";
-        $content .= " * Version: {$info['version']}\n";
+        $content .= " * File-based schema\n";
+        $content .= " * Version: 1.0\n";
         $content .= " * \n";
         $content .= " * This file contains only the required configuration options.\n";
         $content .= " * Use this as a starting point for your configuration.\n";
@@ -220,12 +205,12 @@ This command generates comprehensive documentation for all registered configurat
     /**
      * Generate index/summary file
      *
-     * @param array<string, mixed> $configInfo
+     * @param array<string> $names
      */
-    private function generateIndexFile(array $configInfo, string $outputDir, string $format): void
+    private function generateIndexFile(array $names, string $outputDir, string $format): void
     {
         $indexFile = "{$outputDir}README.md";
-        $content = $this->generateIndexContent($configInfo, $format);
+        $content = $this->generateIndexContent($names, $format);
 
         file_put_contents($indexFile, $content);
         $this->line("Generated index file: README.md");
@@ -234,9 +219,9 @@ This command generates comprehensive documentation for all registered configurat
     /**
      * Generate index content
      *
-     * @param array<string, mixed> $configInfo
+     * @param array<string> $names
      */
-    private function generateIndexContent(array $configInfo, string $format): string
+    private function generateIndexContent(array $names, string $format): string
     {
         $content = "# Configuration Documentation\n\n";
         $content .= "This directory contains configuration schema documentation for Glueful.\n\n";
@@ -247,7 +232,7 @@ This command generates comprehensive documentation for all registered configurat
         $content .= "| Configuration | Description | Version | Files |\n";
         $content .= "|---------------|-------------|---------|-------|\n";
 
-        foreach ($configInfo as $configName => $info) {
+        foreach ($names as $configName) {
             $files = [];
             $files[] = "[Reference](./{$configName}.reference.{$format})";
 
@@ -260,7 +245,7 @@ This command generates comprehensive documentation for all registered configurat
             }
 
             $filesStr = implode(' • ', $files);
-            $content .= "| **{$configName}** | {$info['description']} | {$info['version']} | {$filesStr} |\n";
+            $content .= "| **{$configName}** | File-based schema | 1.0 | {$filesStr} |\n";
         }
 
         $content .= "\n## File Types\n\n";
@@ -338,5 +323,54 @@ This command generates comprehensive documentation for all registered configurat
         }
 
         return true;
+    }
+
+    /**
+     * Discover schema names
+     * @return string[]
+     */
+    private function discoverSchemas(): array
+    {
+        $files = glob(base_path('src/Config/Schema/*.php'));
+        if ($files === false) {
+            $files = [];
+        }
+        $names = [];
+        foreach ($files as $file) {
+            $names[] = basename($file, '.php');
+        }
+        sort($names);
+        return $names;
+    }
+
+    /**
+     * Load array schema
+     * @return array<string, mixed>
+     */
+    private function loadSchema(string $name): array
+    {
+        /** @var array<string, mixed> $schema */
+        $schema = require base_path('src/Config/Schema/' . $name . '.php');
+        return $schema;
+    }
+
+    /**
+     * Convert schema to template array (defaults), or minimal required-only
+     *
+     * @param array<string, mixed> $schema
+     * @return array<string, mixed>
+     */
+    private function schemaToTemplate(array $schema, bool $requiredOnly): array
+    {
+        $out = [];
+        foreach ($schema as $key => $rules) {
+            $isRequired = (bool)($rules['required'] ?? false);
+            if ($requiredOnly && !$isRequired) {
+                continue;
+            }
+            $default = $rules['default'] ?? null;
+            $out[$key] = $default;
+        }
+        return $out;
     }
 }

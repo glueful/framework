@@ -33,7 +33,6 @@
         "psr/http-factory": "^1.1",
         "psr/http-server-middleware": "^1.0",
         "psr/simple-cache": "^3.0",
-        "symfony/config": "^7.3",
         "symfony/console": "^7.3",
         "symfony/dependency-injection": "^7.3",
         "symfony/filesystem": "^7.3",
@@ -43,11 +42,9 @@
         "symfony/lock": "^7.3",
         "symfony/mailer": "^7.3",
         "symfony/mime": "^7.3",
-        "symfony/options-resolver": "^7.3",
         "symfony/process": "^7.3",
         "symfony/psr-http-message-bridge": "^7.3",
         "symfony/serializer": "^7.3",
-        "symfony/validator": "^7.3",
         "vlucas/phpdotenv": "^5.6"
     },
     "require-dev": {
