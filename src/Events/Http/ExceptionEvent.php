@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Http;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 use Symfony\Component\HttpFoundation\Request;
 use Throwable;
 
@@ -110,9 +110,6 @@ class ExceptionEvent extends BaseEvent
     /**
      * Get exception trace
      *
-     * @return array Stack trace
-     */
-    /**
      * @return array<int, array<string, mixed>>
      */
     public function getTrace(): array

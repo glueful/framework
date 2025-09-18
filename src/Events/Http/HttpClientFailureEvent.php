@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Events\Http;
 
 use Glueful\Exceptions\HttpException;
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 /**
  * HTTP Client Failure Event
@@ -34,42 +34,22 @@ class HttpClientFailureEvent extends BaseEvent
         parent::__construct();
     }
 
-    /**
-     * Check if this is a connection failure
-     *
-     * @return bool
-     */
     public function isConnectionFailure(): bool
     {
         return $this->failureReason === 'connection_failed';
     }
 
-    /**
-     * Check if this is a request failure
-     *
-     * @return bool
-     */
     public function isRequestFailure(): bool
     {
         return $this->failureReason === 'request_failed';
     }
 
-    /**
-     * Get the host from the URL
-     *
-     * @return string|null
-     */
     public function getHost(): ?string
     {
         $parsed = parse_url($this->url);
         return $parsed['host'] ?? null;
     }
 
-    /**
-     * Get the scheme from the URL (http/https)
-     *
-     * @return string|null
-     */
     public function getScheme(): ?string
     {
         $parsed = parse_url($this->url);

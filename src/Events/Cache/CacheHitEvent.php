@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Cache;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 /**
  * Cache Hit Event
@@ -31,62 +31,34 @@ class CacheHitEvent extends BaseEvent
         parent::__construct();
     }
 
-    /**
-     * Get cache key
-     *
-     * @return string Cache key
-     */
     public function getKey(): string
     {
         return $this->key;
     }
 
-    /**
-     * Get cached value
-     *
-     * @return mixed Cached value
-     */
     public function getValue(): mixed
     {
         return $this->value;
     }
 
     /**
-     * Get cache tags
-     *
-     * @return array<int, string> Tags
+     * @return array<int, string>
      */
     public function getTags(): array
     {
         return $this->tags;
     }
 
-    /**
-     * Get retrieval time
-     *
-     * @return float Time in seconds
-     */
     public function getRetrievalTime(): float
     {
         return $this->retrievalTime;
     }
 
-    /**
-     * Get value size in bytes (approximate)
-     *
-     * @return int Size in bytes
-     */
     public function getValueSize(): int
     {
         return strlen(serialize($this->value));
     }
 
-    /**
-     * Check if retrieval was slow
-     *
-     * @param float $threshold Threshold in seconds
-     * @return bool True if slow
-     */
     public function isSlow(float $threshold = 0.1): bool
     {
         return $this->retrievalTime > $threshold;

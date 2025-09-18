@@ -9,9 +9,6 @@ namespace Glueful\Events\Traits;
  *
  * Convenience trait that includes the most commonly used event traits.
  * Use this for simple events that need basic functionality.
- *
- * Equivalent to:
- * use Dispatchable, Timestampable, Serializable;
  */
 trait EventHelpers
 {

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Auth;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 /**
  * Session Destroyed Event
@@ -31,58 +31,31 @@ class SessionDestroyedEvent extends BaseEvent
     ) {
         parent::__construct();
 
-        // Set metadata using BaseEvent's setMetadata method
         foreach ($metadata as $key => $value) {
             $this->setMetadata($key, $value);
         }
     }
 
-    /**
-     * Get access token
-     *
-     * @return string Access token
-     */
     public function getAccessToken(): string
     {
         return $this->accessToken;
     }
 
-    /**
-     * Get user UUID
-     *
-     * @return string|null User UUID
-     */
     public function getUserUuid(): ?string
     {
         return $this->userUuid;
     }
 
-    /**
-     * Get destruction reason
-     *
-     * @return string Reason (logout, expired, revoked, etc.)
-     */
     public function getReason(): string
     {
         return $this->reason;
     }
 
-
-    /**
-     * Check if session was destroyed due to expiration
-     *
-     * @return bool True if expired
-     */
     public function isExpired(): bool
     {
         return $this->reason === 'expired';
     }
 
-    /**
-     * Check if session was manually revoked
-     *
-     * @return bool True if revoked
-     */
     public function isRevoked(): bool
     {
         return in_array($this->reason, ['revoked', 'admin_revoked', 'security_revoked'], true);

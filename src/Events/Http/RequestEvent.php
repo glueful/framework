@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Http;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 use Symfony\Component\HttpFoundation\Request;
 
 /**

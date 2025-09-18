@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Cache;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 /**
  * Cache Invalidated Event
@@ -30,16 +30,13 @@ class CacheInvalidatedEvent extends BaseEvent
     ) {
         parent::__construct();
 
-        // Set metadata using BaseEvent's setMetadata method
         foreach ($metadata as $key => $value) {
             $this->setMetadata($key, $value);
         }
     }
 
     /**
-     * Get invalidated keys
-     *
-     * @return array<int, string> Cache keys
+     * @return array<int, string>
      */
     public function getKeys(): array
     {
@@ -47,51 +44,28 @@ class CacheInvalidatedEvent extends BaseEvent
     }
 
     /**
-     * Get invalidated tags
-     *
-     * @return array<int, string> Cache tags
+     * @return array<int, string>
      */
     public function getTags(): array
     {
         return $this->tags;
     }
 
-    /**
-     * Get invalidation reason
-     *
-     * @return string Reason
-     */
     public function getReason(): string
     {
         return $this->reason;
     }
 
-
-    /**
-     * Get total invalidated entries count
-     *
-     * @return int Total count
-     */
     public function getTotalCount(): int
     {
         return count($this->keys) + ($this->getMetadata('tag_count') ?? 0);
     }
 
-    /**
-     * Check if invalidation was automatic
-     *
-     * @return bool True if automatic
-     */
     public function isAutomatic(): bool
     {
         return in_array($this->reason, ['automatic', 'ttl_expired', 'data_changed'], true);
     }
 
-    /**
-     * Check if invalidation was due to data changes
-     *
-     * @return bool True if data-driven
-     */
     public function isDataDriven(): bool
     {
         return $this->reason === 'data_changed';

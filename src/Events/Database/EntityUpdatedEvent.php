@@ -4,155 +4,64 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Database;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 /**
  * Entity Updated Event
  *
- * Dispatched when an entity is updated in the database.
- * Used for cache invalidation, audit logging, and change notifications.
- *
- * @package Glueful\Events\Database
+ * Dispatched when an existing entity is updated in the database.
+ * Used for cache invalidation, audit logging, and notifications.
  */
 class EntityUpdatedEvent extends BaseEvent
 {
     /**
-     * @param mixed $entity The updated entity/data
+     * @param array<string, mixed>|object $entityData The updated entity/data (including ID)
      * @param string $table Database table name
-     * @param array<string, mixed> $changes Changed fields
+     * @param array<string, mixed> $changes Changes that were applied
      * @param array<string, mixed> $metadata Additional metadata
      */
     public function __construct(
-        private readonly mixed $entity,
+        private readonly array|object $entityData,
         private readonly string $table,
         private readonly array $changes = [],
         array $metadata = []
     ) {
         parent::__construct();
 
-        // Set metadata using BaseEvent's setMetadata method
         foreach ($metadata as $key => $value) {
             $this->setMetadata($key, $value);
         }
     }
 
     /**
-     * Get updated entity
-     *
-     * @return mixed Entity data
+     * @return array<string, mixed>|object
      */
-    public function getEntity(): mixed
+    public function getEntity(): array|object
     {
-        return $this->entity;
+        return $this->entityData;
     }
 
-    /**
-     * Get table name
-     *
-     * @return string Table name
-     */
     public function getTable(): string
     {
         return $this->table;
     }
 
     /**
-     * Get changed fields
-     *
-     * @return array<string, mixed> Changed fields
+     * @return array<string, mixed>
      */
     public function getChanges(): array
     {
         return $this->changes;
     }
 
-
-    /**
-     * Get entity ID if available
-     *
-     * @return mixed Entity ID
-     */
     public function getEntityId(): mixed
     {
-        if (is_array($this->entity)) {
-            return $this->entity['id'] ?? $this->entity['uuid'] ?? null;
+        if (is_array($this->entityData)) {
+            return $this->entityData['id'] ?? $this->entityData['uuid'] ?? null;
         }
-
-        if (is_object($this->entity)) {
-            return $this->entity->id ?? $this->entity->uuid ?? null;
+        if (is_object($this->entityData)) {
+            return $this->entityData->id ?? $this->entityData->uuid ?? null;
         }
-
         return null;
-    }
-
-    /**
-     * Check if specific field was changed
-     *
-     * @param string $field Field name
-     * @return bool True if changed
-     */
-    public function hasFieldChanged(string $field): bool
-    {
-        return array_key_exists($field, $this->changes);
-    }
-
-    /**
-     * Get old value for a field
-     *
-     * @param string $field Field name
-     * @return mixed Old value
-     */
-    public function getOldValue(string $field): mixed
-    {
-        return $this->changes[$field]['old'] ?? null;
-    }
-
-    /**
-     * Get new value for a field
-     *
-     * @param string $field Field name
-     * @return mixed New value
-     */
-    public function getNewValue(string $field): mixed
-    {
-        return $this->changes[$field]['new'] ?? null;
-    }
-
-    /**
-     * Get cache tags to invalidate
-     *
-     * @return array Cache tags
-     */
-    /**
-     * @return array<int, string>
-     */
-    public function getCacheTags(): array
-    {
-        $tags = [$this->table];
-
-        $entityId = $this->getEntityId();
-        if ($entityId !== null) {
-            $tags[] = $this->table . ':' . $entityId;
-        }
-
-        return array_merge($tags, $this->getMetadata('cache_tags') ?? []);
-    }
-
-    /**
-     * Check if this is a critical field update
-     *
-     * @return bool True if critical
-     */
-    public function isCriticalUpdate(): bool
-    {
-        $criticalFields = ['status', 'active', 'enabled', 'permissions'];
-
-        foreach ($criticalFields as $field) {
-            if ($this->hasFieldChanged($field)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

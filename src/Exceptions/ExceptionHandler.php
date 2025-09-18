@@ -12,6 +12,8 @@ use Glueful\Events\Http\ExceptionEvent;
 use Psr\Log\LoggerInterface;
 use Glueful\Events\Event;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Glueful\Events\ListenerProvider as PsrListenerProvider;
+use Glueful\Events\EventDispatcher as PsrEventDispatcher;
 
 class ExceptionHandler
 {
@@ -595,10 +597,22 @@ class ExceptionHandler
      */
     public static function setEventDispatcher(?EventDispatcherInterface $eventDispatcher): void
     {
-        // Initialize the Event class with the test dispatcher
-        if ($eventDispatcher !== null) {
-            Event::initialize($eventDispatcher);
+        // Bootstrap the PSR-14 Event facade for tests
+        // Ignore the Symfony dispatcher instance here and use the new system
+        $provider = new PsrListenerProvider();
+        $dispatcher = new PsrEventDispatcher($provider);
+
+        // Pass container when available for lazy listeners
+        $container = null;
+        if (function_exists('container')) {
+            try {
+                $container = container();
+            } catch (\Throwable) {
+                $container = null;
+            }
         }
+
+        Event::bootstrap($dispatcher, $provider, $container);
     }
 
 

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Database;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 /**
  * Entity Created Event
@@ -28,38 +28,21 @@ class EntityCreatedEvent extends BaseEvent
     ) {
         parent::__construct();
 
-        // Set metadata using BaseEvent's setMetadata method
         foreach ($metadata as $key => $value) {
             $this->setMetadata($key, $value);
         }
     }
 
-    /**
-     * Get created entity
-     *
-     * @return mixed Entity data
-     */
     public function getEntity(): mixed
     {
         return $this->entity;
     }
 
-    /**
-     * Get table name
-     *
-     * @return string Table name
-     */
     public function getTable(): string
     {
         return $this->table;
     }
 
-
-    /**
-     * Get entity ID if available
-     *
-     * @return mixed Entity ID
-     */
     public function getEntityId(): mixed
     {
         if (is_array($this->entity)) {
@@ -73,11 +56,6 @@ class EntityCreatedEvent extends BaseEvent
         return null;
     }
 
-    /**
-     * Get cache tags to invalidate
-     *
-     * @return array Cache tags
-     */
     /**
      * @return array<int, string>
      */
@@ -93,11 +71,6 @@ class EntityCreatedEvent extends BaseEvent
         return array_merge($tags, $this->getMetadata('cache_tags') ?? []);
     }
 
-    /**
-     * Check if this is a user-related entity
-     *
-     * @return bool True if user-related
-     */
     public function isUserRelated(): bool
     {
         return in_array($this->table, ['users', 'user_sessions', 'user_preferences'], true);

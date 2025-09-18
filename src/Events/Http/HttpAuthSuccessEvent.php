@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Events\Http;
 
 use Symfony\Component\HttpFoundation\Request;
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 /**
  * Event emitted when HTTP-level authentication succeeds

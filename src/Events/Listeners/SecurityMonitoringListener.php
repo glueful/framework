@@ -22,9 +22,6 @@ class SecurityMonitoringListener
     ) {
     }
 
-    /**
-     * Handle authentication failed events
-     */
     public function onAuthenticationFailed(AuthenticationFailedEvent $event): void
     {
         $this->logger->warning('Authentication failed', [
@@ -36,9 +33,6 @@ class SecurityMonitoringListener
         ]);
     }
 
-    /**
-     * Handle rate limit exceeded events
-     */
     public function onRateLimitExceeded(RateLimitExceededEvent $event): void
     {
         $this->logger->warning('Rate limit exceeded', [
