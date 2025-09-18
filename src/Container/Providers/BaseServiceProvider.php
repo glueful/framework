@@ -27,4 +27,9 @@ abstract class BaseServiceProvider
     {
         $this->tags->add($tagName, $serviceId, $priority);
     }
+
+    protected function alias(string $aliasId, string $targetId): \Glueful\Container\Definition\AliasDefinition
+    {
+        return new \Glueful\Container\Definition\AliasDefinition($aliasId, $targetId);
+    }
 }

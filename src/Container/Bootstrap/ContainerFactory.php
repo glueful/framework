@@ -65,7 +65,10 @@ final class ContainerFactory
     private static function providers(TagCollector $tags): iterable
     {
         /** @var array<class-string<BaseServiceProvider>> $classes */
-        $classes = []; // Add your providers here, e.g. [\Glueful\Container\Providers\ConsoleProvider::class, ...]
+        $classes = [
+            \Glueful\Container\Providers\CoreProvider::class,
+            \Glueful\Container\Providers\ConsoleProvider::class,
+        ];
 
         if ($classes === []) {
             return [];

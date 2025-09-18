@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Container\Compile;
 
-use Glueful\Container\Definition\{DefinitionInterface, ValueDefinition, FactoryDefinition, TaggedIteratorDefinition};
+use Glueful\Container\Definition\{DefinitionInterface, ValueDefinition, FactoryDefinition, TaggedIteratorDefinition, AliasDefinition};
 use Glueful\Container\Autowire\AutowireDefinition;
 
 final class ContainerCompiler
@@ -47,6 +47,11 @@ final class ContainerCompiler
                 $methods[] = $this->emitTaggedIterator($id, $definition, $method);
                 $getCases[] = $this->emitGetCase($id, $method, true);
                 $singletonInits[] = var_export($id, true) . ' => null';
+                continue;
+            }
+
+            if ($definition instanceof AliasDefinition) {
+                $getCases[] = $this->emitAliasCase($id, $definition);
                 continue;
             }
 
@@ -137,9 +142,20 @@ PHP;
 
         // Tagged iterators are shared
         $idExport = var_export($id, true);
-        $build .= "\n\n    private function get_{$method}(): array\n    {\n        return \\$this->singletons[{$idExport}] ??= \\$this->{$method}();\n    }";
+        $build .= "\n\n    private function get_{$method}(): array\n" .
+            "    {\n" .
+            "        return \$this->singletons[{$idExport}] ??= \$this->{$method}();\n" .
+            "    }";
 
         return $build;
+    }
+
+    private function emitAliasCase(string $id, AliasDefinition $def): string
+    {
+        $alias = var_export($id, true);
+        $target = var_export($def->getTarget(), true);
+        // Redirect to the target's get() so it uses target's caching semantics
+        return "            case {$alias}: return \$this->get({$target});";
     }
 
     private function emitCtorArgs(AutowireDefinition $definition): string
@@ -335,17 +351,27 @@ PHP;
     private function buildIntervalSpec(\DateInterval $i): string
     {
         $date = '';
-        if ($i->y) { $date .= $i->y . 'Y'; }
-        if ($i->m) { $date .= $i->m . 'M'; }
-        if ($i->d) { $date .= $i->d . 'D'; }
+        if ($i->y !== 0) {
+            $date .= $i->y . 'Y';
+        }
+        if ($i->m !== 0) {
+            $date .= $i->m . 'M';
+        }
+        if ($i->d !== 0) {
+            $date .= $i->d . 'D';
+        }
 
         $time = '';
-        if ($i->h) { $time .= $i->h . 'H'; }
-        if ($i->i) { $time .= $i->i . 'M'; }
+        if ($i->h !== 0) {
+            $time .= $i->h . 'H';
+        }
+        if ($i->i !== 0) {
+            $time .= $i->i . 'M';
+        }
         // Seconds with fraction if available
         $seconds = $i->s;
-        $fraction = property_exists($i, 'f') ? (float) $i->f : 0.0;
-        if ($seconds || $fraction > 0.0) {
+        $fraction = (float) $i->f;
+        if ($seconds !== 0 || $fraction > 0.0) {
             $sec = $seconds;
             if ($fraction > 0.0) {
                 $sec = rtrim(rtrim(number_format($seconds + $fraction, 6, '.', ''), '0'), '.');
@@ -358,7 +384,7 @@ PHP;
         }
 
         $spec = 'P' . $date . ($time !== '' ? 'T' . $time : '');
-        if ($i->invert) {
+        if ($i->invert === 1) {
             $spec = '-' . $spec;
         }
         return $spec;
