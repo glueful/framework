@@ -10,6 +10,7 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 - Versioning: Semantic Versioning. 1.x is the stable baseline after the repo split.
 - Cadence: Patches as needed; minors roughly every 4–8 weeks; majors only for clearly communicated breaking changes.
 - Deprecations: Soft‑deprecate in N, remove no earlier than N+2 minors with warnings and migration notes.
+- Pre‑public phase: minors may include breaking changes when called out in the CHANGELOG (codename releases like “Aurora”).
 
 ## Themes for 1.x
 - Stability & performance: keep startup and dispatch budgets; expand compiled artifacts (routes, container) and caching.
@@ -24,12 +25,22 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 - Early adopter feedback: fix edge cases (route cache, config, DI compile), small performance wins.
 - Cookbook completeness passes (migrations, auth patterns, deployment notes).
 
-### 1.1 (Minor)
+### 1.1.0 — Aurora (Internal)
+- Core overhauls: custom DI container (replacing Symfony DI); PSR‑14 event dispatcher.
+- Storage: migration to Flysystem with updated configuration model.
+- Config & Validation: array‑schema configuration and rules‑based validation system.
+- Cleanup: removal of LDAP/SAML auth and legacy config/serialization modules.
+- Docs: database and storage guides refreshed.
+
+### 1.1.x (Patches)
+- BC polish and migration notes for Aurora changes.
+- Storage config mapping helpers and deprecation notices where feasible.
+- Minor DI container optimizations and diagnostics.
+
+### 1.2 (Minor)
 - Router: content negotiation helpers; ETag/conditional middleware patterns.
 - DI: container dump optimizations; service map/codegen helpers.
 - Config: DSN parsing utilities (DB, Redis), environment validation helpers.
-
-### 1.2 (Minor)
 - Observability: OpenTelemetry exporter; span decorators; sampling controls.
 - Security: CSP builder configuration + presets; refined admin/allow‑lists.
 
