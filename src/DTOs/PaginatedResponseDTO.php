@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Glueful\DTOs;
 
-
 /**
  * Paginated Response DTO
  *

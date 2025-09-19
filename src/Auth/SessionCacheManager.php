@@ -646,9 +646,8 @@ class SessionCacheManager
             if (function_exists('container')) {
                 try {
                     $container = container();
-                    $symfony = $container->getSymfonyContainer();
-                    if ($symfony->has('rbac.repository.user_permission')) {
-                        $userPermRepo = $symfony->get('rbac.repository.user_permission');
+                    if ($container->has('rbac.repository.user_permission')) {
+                        $userPermRepo = $container->get('rbac.repository.user_permission');
                         if (method_exists($userPermRepo, 'getUserPermissions')) {
                             return $userPermRepo->getUserPermissions($userUuid);
                         }
@@ -684,9 +683,8 @@ class SessionCacheManager
             if (function_exists('container')) {
                 try {
                     $container = container();
-                    $symfony = $container->getSymfonyContainer();
-                    if ($symfony->has('rbac.role_service')) {
-                        $roleService = $symfony->get('rbac.role_service');
+                    if ($container->has('rbac.role_service')) {
+                        $roleService = $container->get('rbac.role_service');
                         if (method_exists($roleService, 'getUserRoles')) {
                             $result = $roleService->getUserRoles($userUuid);
                             // Only return if we got a valid result, otherwise continue to fallbacks
@@ -705,9 +703,8 @@ class SessionCacheManager
             if (function_exists('container')) {
                 try {
                     $container = container();
-                    $symfony = $container->getSymfonyContainer();
-                    if ($symfony->has('rbac.repository.user_role')) {
-                        $userRoleRepo = $symfony->get('rbac.repository.user_role');
+                    if ($container->has('rbac.repository.user_role')) {
+                        $userRoleRepo = $container->get('rbac.repository.user_role');
                         if (method_exists($userRoleRepo, 'getUserRoles')) {
                             return $userRoleRepo->getUserRoles($userUuid);
                         }

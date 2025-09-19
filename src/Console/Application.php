@@ -4,7 +4,7 @@ namespace Glueful\Console;
 
 use Symfony\Component\Console\Application as BaseApplication;
 use Symfony\Component\Console\Command\Command;
-use Glueful\DI\Container;
+use Psr\Container\ContainerInterface;
 use Glueful\Support\Version;
 
 /**
@@ -21,8 +21,8 @@ use Glueful\Support\Version;
  */
 class Application extends BaseApplication
 {
-    /** @var Container DI Container */
-    protected Container $container;
+    /** @var ContainerInterface DI Container */
+    protected ContainerInterface $container;
 
     /** @var array<string> List of command classes */
     protected array $commands = [
@@ -87,6 +87,7 @@ class Application extends BaseApplication
         \Glueful\Console\Commands\Container\ContainerDebugCommand::class,
         \Glueful\Console\Commands\Container\ContainerCompileCommand::class,
         \Glueful\Console\Commands\Container\ContainerValidateCommand::class,
+        \Glueful\Console\Commands\Container\LazyStatusCommand::class,
         // Field analysis commands
         \Glueful\Console\Commands\Fields\AnalyzeCommand::class,
         \Glueful\Console\Commands\Fields\ValidateCommand::class,
@@ -103,10 +104,10 @@ class Application extends BaseApplication
      * - Registers available commands
      * - Sets up enhanced help system
      *
-     * @param Container $container DI Container instance
+     * @param ContainerInterface $container DI Container instance
      * @param string $version Application version
      */
-    public function __construct(Container $container, ?string $version = null)
+    public function __construct(ContainerInterface $container, ?string $version = null)
     {
         parent::__construct('Glueful CLI', $version ?? Version::getVersion());
 
@@ -171,9 +172,9 @@ class Application extends BaseApplication
      * - Enables dependency injection
      * - Maintains container lifecycle
      *
-     * @return Container
+     * @return ContainerInterface
      */
-    public function getContainer(): Container
+    public function getContainer(): ContainerInterface
     {
         return $this->container;
     }

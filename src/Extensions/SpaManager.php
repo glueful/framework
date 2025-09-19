@@ -9,7 +9,7 @@ use Psr\Log\NullLogger;
 use Glueful\Helpers\StaticFileDetector;
 use Glueful\Extensions\ServiceProvider;
 use Glueful\Auth\AuthenticationService;
-use Glueful\DI\Container;
+use Psr\Container\ContainerInterface;
 use Glueful\Routing\Middleware\CSRFMiddleware;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -25,7 +25,7 @@ class SpaManager
     protected array $spaApps = [];
     protected LoggerInterface $logger;
     protected StaticFileDetector $staticFileDetector;
-    protected ?Container $container = null;
+    protected ?ContainerInterface $container = null;
     protected ?AuthenticationService $authService = null;
     protected ?CSRFMiddleware $csrfMiddleware = null;
 
@@ -35,7 +35,7 @@ class SpaManager
     public function __construct(
         ?LoggerInterface $logger = null,
         ?StaticFileDetector $staticFileDetector = null,
-        ?Container $container = null
+        ?ContainerInterface $container = null
     ) {
         $this->logger = $logger ?? new NullLogger();
         $this->staticFileDetector = $staticFileDetector ?? new StaticFileDetector();

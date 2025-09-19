@@ -8,7 +8,7 @@ use Glueful\Auth\PasswordHasher;
 use Glueful\Services\HealthService;
 use Glueful\Database\Connection;
 use Glueful\Helpers\Utils;
-use Glueful\DI\Container;
+use Psr\Container\ContainerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -31,7 +31,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 )]
 class InstallCommand extends BaseCommand
 {
-    protected Container $installContainer;
+    protected ContainerInterface $installContainer;
 
     public function __construct()
     {

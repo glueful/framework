@@ -169,8 +169,8 @@ class CacheFactory
             ],
         ];
 
-        $container = \Glueful\DI\ContainerBootstrap::getContainer();
-        $fileFinder = $container->get(\Glueful\Services\FileFinder::class);
+        // Use global PSR-11 container helper
+        $fileFinder = container()->get(\Glueful\Services\FileFinder::class);
 
         $storage = new \Glueful\Storage\StorageManager($storageConfig, new \Glueful\Storage\PathGuard());
 

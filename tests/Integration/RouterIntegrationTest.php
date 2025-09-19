@@ -7,23 +7,31 @@ namespace Glueful\Tests\Integration;
 use PHPUnit\Framework\TestCase;
 use Glueful\Routing\Router;
 use Glueful\Routing\AttributeRouteLoader;
-use Glueful\DI\Container;
+use Psr\Container\ContainerInterface;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\DependencyInjection\ContainerBuilder;
 
 class RouterIntegrationTest extends TestCase
 {
     private Router $router;
-    private Container $container;
+    private ContainerInterface $container;
     private string $tempCacheDir;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        // Setup real container with Symfony ContainerBuilder
-        $symfonyContainer = new ContainerBuilder();
-        $this->container = new Container($symfonyContainer);
+        // Minimal PSR-11 test container
+        $this->container = new class implements ContainerInterface {
+            /** @var array<string,mixed> */
+            private array $services = [];
+            public function has(string $id): bool { return array_key_exists($id, $this->services); }
+            public function get(string $id): mixed {
+                if ($this->has($id)) { return $this->services[$id]; }
+                if (class_exists($id)) { return $this->services[$id] = new $id(); }
+                throw new class("Service '".$id."' not found") extends \RuntimeException implements \Psr\Container\NotFoundExceptionInterface {};
+            }
+            public function set(string $id, mixed $service): void { $this->services[$id] = $service; }
+        };
 
         // Setup temp cache directory
         $this->tempCacheDir = sys_get_temp_dir() . '/router_test_' . uniqid();

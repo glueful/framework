@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace Glueful\Container\Compile;
 
-use Glueful\Container\Definition\{DefinitionInterface, ValueDefinition, FactoryDefinition, TaggedIteratorDefinition, AliasDefinition};
+use Glueful\Container\Definition\DefinitionInterface;
+use Glueful\Container\Definition\ValueDefinition;
+use Glueful\Container\Definition\FactoryDefinition;
+use Glueful\Container\Definition\TaggedIteratorDefinition;
+use Glueful\Container\Definition\AliasDefinition;
 use Glueful\Container\Autowire\AutowireDefinition;
 
 final class ContainerCompiler

@@ -6,16 +6,16 @@ namespace Glueful\Tests\Unit\Routing;
 
 use PHPUnit\Framework\TestCase;
 use Glueful\Routing\Router;
-use Glueful\DI\Container;
+use Psr\Container\ContainerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\JsonResponse;
-use Symfony\Component\DependencyInjection\ContainerBuilder;
+ 
 
 class RouterTest extends TestCase
 {
     private Router $router;
-    private Container $container;
+    private ContainerInterface $container;
 
     protected function setUp(): void
     {
@@ -25,9 +25,18 @@ class RouterTest extends TestCase
         $cache = new \Glueful\Routing\RouteCache();
         $cache->clear();
 
-        // Setup real container with Symfony ContainerBuilder
-        $symfonyContainer = new ContainerBuilder();
-        $this->container = new Container($symfonyContainer);
+        // Minimal PSR-11 test container
+        $this->container = new class implements ContainerInterface {
+            /** @var array<string,mixed> */
+            private array $services = [];
+            public function has(string $id): bool { return array_key_exists($id, $this->services); }
+            public function get(string $id): mixed {
+                if ($this->has($id)) { return $this->services[$id]; }
+                if (class_exists($id)) { return $this->services[$id] = new $id(); }
+                throw new class("Service '".$id."' not found") extends \RuntimeException implements \Psr\Container\NotFoundExceptionInterface {};
+            }
+            public function set(string $id, mixed $service): void { $this->services[$id] = $service; }
+        };
         $this->router = new Router($this->container);
     }
 
@@ -247,6 +256,7 @@ class RouterTest extends TestCase
         $controllerClass = TestController::class;
 
         // Register the test controller in the container
+        // @phpstan-ignore-next-line - test container provides set()
         $this->container->set($controllerClass, new TestController());
 
         $this->router->get('/test', [$controllerClass, 'index']);

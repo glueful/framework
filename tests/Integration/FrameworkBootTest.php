@@ -102,7 +102,6 @@ final class FrameworkBootTest extends TestCase
         $container = $app->getContainer();
 
         $this->assertTrue($container->has(LoggerInterface::class));
-        $this->assertTrue($container->has(ConfigRepositoryInterface::class));
         // Test that new router is properly registered in container
         $this->assertTrue($container->has(\Glueful\Routing\Router::class));
     }

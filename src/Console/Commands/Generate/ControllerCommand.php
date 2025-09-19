@@ -703,7 +703,15 @@ PHP;
     {
         $this->fileFinder = $this->getService(FileFinder::class);
         // StorageManager rooted at base path (created per-operation as needed)
-        $this->storage = new StorageManager(['default' => 'local', 'disks' => ['local' => ['driver' => 'local', 'root' => base_path()]]], new PathGuard());
+        $this->storage = new StorageManager([
+            'default' => 'local',
+            'disks' => [
+                'local' => [
+                    'driver' => 'local',
+                    'root' => base_path()
+                ]
+            ]
+        ], new PathGuard());
     }
 
     private function makeStorage(string $root): \League\Flysystem\FilesystemOperator

@@ -10,7 +10,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Psr\Log\LoggerInterface;
-use Glueful\DI\Container;
+use Psr\Container\ContainerInterface;
 
 /**
  * Emergency Lockdown Middleware for Next-Gen Router
@@ -57,8 +57,8 @@ class LockdownMiddleware implements RouteMiddleware
     /** @var LoggerInterface Logger instance */
     private LoggerInterface $logger;
 
-    /** @var Container|null DI Container */
-    private ?Container $container;
+    /** @var ContainerInterface|null DI Container */
+    private ?ContainerInterface $container;
 
     /** @var string Current environment */
     private string $environment;
@@ -70,11 +70,11 @@ class LockdownMiddleware implements RouteMiddleware
      * Create lockdown middleware
      *
      * @param LoggerInterface|null $logger Logger instance
-     * @param Container|null $container DI Container instance
+     * @param ContainerInterface|null $container DI Container instance
      */
     public function __construct(
         ?LoggerInterface $logger = null,
-        ?Container $container = null
+        ?ContainerInterface $container = null
     ) {
         $this->container = $container ?? $this->getDefaultContainer();
         $this->logger = $logger ?? $this->getLogger();
@@ -885,13 +885,14 @@ HTML;
     /**
      * Get default container safely
      *
-     * @return Container|null Container instance
+     * @return ContainerInterface|null Container instance
      */
-    private function getDefaultContainer(): ?Container
+    private function getDefaultContainer(): ?ContainerInterface
     {
         if (function_exists('container')) {
             try {
-                return container();
+                $c = container();
+                return $c;
             } catch (\Exception) {
                 return null;
             }
@@ -899,7 +900,8 @@ HTML;
 
         if (function_exists('app')) {
             try {
-                return app();
+                $a = app();
+                return $a instanceof ContainerInterface ? $a : null;
             } catch (\Exception) {
                 return null;
             }

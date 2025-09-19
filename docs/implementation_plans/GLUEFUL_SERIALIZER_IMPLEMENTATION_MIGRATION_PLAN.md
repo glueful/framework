@@ -197,7 +197,7 @@ Glueful additions: `fields` / `expand.*`, `serialize_if`, `money_format` (e.g., 
 ## Service Wiring
 
 ```php
-// src/DI/ServiceProviders/SerializerServiceProvider.php
+// src/Container/Providers/SerializerProvider.php
 public function register(ContainerBuilder $c): void
 {
     $c->register(MetadataRepository::class)->setPublic(true);

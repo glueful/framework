@@ -1042,7 +1042,7 @@ This migration positions Glueful as a truly independent, high-performance framew
 
 ### 2. Service Registration Wire-up
 ```php
-// src/DI/ServiceProviders/EventServiceProvider.php
+// src/Container/Providers/EventProvider.php
 public function register(ContainerBuilder $container): void
 {
     // Core PSR-14 stack

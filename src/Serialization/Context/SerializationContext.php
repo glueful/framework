@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Glueful\Serialization\Context;
@@ -8,7 +9,9 @@ final class SerializationContext
     /** @var string[] */
     private array $groups = [];
 
-    private function __construct() {}
+    private function __construct()
+    {
+    }
 
     public static function create(): self
     {
@@ -32,4 +35,3 @@ final class SerializationContext
         return $this->groups;
     }
 }
-

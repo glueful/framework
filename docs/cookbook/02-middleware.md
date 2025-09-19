@@ -93,7 +93,7 @@ The framework includes enterprise-grade middleware components with comprehensive
 - `field_selection`: GraphQL-style field selection for REST APIs
 - `admin_permission`: Admin privilege checking with role-based access
 
-Aliases are registered in `src/DI/ServiceProviders/CoreServiceProvider.php`.
+Aliases are registered in `src/Container/Providers/CoreProvider.php`.
 
 ### Authentication Middleware (`auth`)
 

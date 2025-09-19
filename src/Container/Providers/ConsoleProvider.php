@@ -77,6 +77,7 @@ final class ConsoleProvider extends BaseServiceProvider
             \Glueful\Console\Commands\Container\ContainerDebugCommand::class,
             \Glueful\Console\Commands\Container\ContainerCompileCommand::class,
             \Glueful\Console\Commands\Container\ContainerValidateCommand::class,
+            \Glueful\Console\Commands\Container\LazyStatusCommand::class,
             // Field analysis commands
             \Glueful\Console\Commands\Fields\AnalyzeCommand::class,
             \Glueful\Console\Commands\Fields\ValidateCommand::class,

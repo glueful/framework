@@ -238,12 +238,12 @@ if (!function_exists('container')) {
     /**
      * Get the DI container instance
      *
-     * Returns the Symfony DI container instance using ContainerBootstrap.
-     * This provides access to all registered services and parameters.
+     * Returns the global PSR-11 container instance once Framework bootstrap completes.
+     * This provides access to all registered services.
      *
-     * @return \Glueful\DI\Container Container instance
+     * @return \Psr\Container\ContainerInterface Container instance
      */
-    function container(): \Glueful\DI\Container
+    function container(): \Psr\Container\ContainerInterface
     {
         // Simply return the global container - don't try to initialize
         $container = $GLOBALS['container'] ?? null;
@@ -252,7 +252,12 @@ if (!function_exists('container')) {
             throw new \RuntimeException('DI container not initialized. Framework bootstrap must run first.');
         }
 
-        return $container;
+        // Prefer PSR-11 containers;
+        if ($container instanceof \Psr\Container\ContainerInterface) {
+            return $container;
+        }
+
+        throw new \RuntimeException('DI container is not PSR-11 compatible.');
     }
 }
 
@@ -340,7 +345,35 @@ if (!function_exists('parameter')) {
             throw new \RuntimeException('DI container not initialized.');
         }
 
-        return $container->getParameter($name);
+        // Legacy Symfony-style parameter API if available
+        if (is_object($container) && method_exists($container, 'getParameter')) {
+            try {
+                /** @var mixed $val */
+                $val = $container->getParameter($name);
+                return $val;
+            } catch (\Throwable) {
+                // fall through to other sources
+            }
+        }
+
+        // Prefer ParamBag service if present (new container)
+        try {
+            if ($container instanceof \Psr\Container\ContainerInterface && $container->has('param.bag')) {
+                $bag = $container->get('param.bag');
+                if ($bag instanceof \Glueful\Container\Support\ParamBag) {
+                    return $bag->get($name);
+                }
+            }
+        } catch (\Throwable) {
+            // ignore
+        }
+
+        // Fallback: use config() helper if available
+        if (function_exists('config')) {
+            return config($name);
+        }
+
+        throw new \RuntimeException("Parameter '{$name}' not found");
     }
 }
 
@@ -508,15 +541,6 @@ if (!function_exists('base_path')) {
             // Priority 1: Explicit global set by bootstrap
             if (isset($GLOBALS['base_path'])) {
                 $basePath = $GLOBALS['base_path'];
-            } elseif (isset($GLOBALS['container'])) {
-                try {
-                    $container = $GLOBALS['container'];
-                    if ($container->hasParameter('app.base_path')) {
-                        $basePath = $container->getParameter('app.base_path');
-                    }
-                } catch (\Throwable) {
-                    // Ignore and use fallback
-                }
             }
 
             // Priority 3: Intelligent path detection
@@ -569,15 +593,6 @@ if (!function_exists('config_path')) {
             // Priority 1: Explicit global set by bootstrap
             if (isset($GLOBALS['config_paths']['application'])) {
                 $appConfigPath = $GLOBALS['config_paths']['application'];
-            } elseif (isset($GLOBALS['container'])) {
-                try {
-                    $container = $GLOBALS['container'];
-                    if ($container->hasParameter('app.config_path')) {
-                        $appConfigPath = $container->getParameter('app.config_path');
-                    }
-                } catch (\Throwable) {
-                    // Ignore and use fallback
-                }
             }
 
             // Priority 3: Derive from base_path

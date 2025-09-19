@@ -7,7 +7,7 @@ namespace Glueful\Http\Middleware;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\JsonResponse;
-use Glueful\DI\Container;
+use Psr\Container\ContainerInterface;
 use Glueful\Events\Http\RequestEvent;
 use Glueful\Events\Http\ResponseEvent;
 use Glueful\Events\Http\ExceptionEvent;
@@ -28,17 +28,17 @@ class MiddlewareDispatcher implements RequestHandlerInterface
     /** @var callable The final request handler to use if no middleware produces a response */
     private $fallbackHandler;
 
-    /** @var Container|null DI Container */
-    private ?Container $container;
+    /** @var ContainerInterface|null DI Container */
+    private ?ContainerInterface $container;
 
 
     /**
      * Create a new middleware dispatcher
      *
      * @param callable|null $fallbackHandler The fallback handler to use at the end of the middleware stack
-     * @param Container|null $container DI Container instance
+     * @param ContainerInterface|null $container DI Container instance
      */
-    public function __construct(?callable $fallbackHandler = null, ?Container $container = null)
+    public function __construct(?callable $fallbackHandler = null, ?ContainerInterface $container = null)
     {
         $this->container = $container ?? $this->getDefaultContainer();
 
@@ -244,14 +244,15 @@ class MiddlewareDispatcher implements RequestHandlerInterface
     /**
      * Get default container safely
      *
-     * @return Container|null
+     * @return ContainerInterface|null
      */
-    private function getDefaultContainer(): ?Container
+    private function getDefaultContainer(): ?ContainerInterface
     {
         // Check if app() function exists (available when bootstrap is loaded)
         if (function_exists('container')) {
             try {
-                return container();
+                $c = container();
+                return $c;
             } catch (\Exception) {
                 // Fall back to null if container is not available
                 return null;

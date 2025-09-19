@@ -16,7 +16,7 @@ final class PathResolutionTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        \Glueful\DI\ContainerBootstrap::reset();
+        // Legacy DI bootstrap removed; nothing to reset
 
         // Reset path function static caches
         $this->resetPathCaches();
@@ -41,7 +41,7 @@ final class PathResolutionTest extends TestCase
 
     protected function tearDown(): void
     {
-        \Glueful\DI\ContainerBootstrap::reset();
+        // Legacy DI bootstrap removed; nothing to reset
 
         // Reset path function static caches
         $this->resetPathCaches();

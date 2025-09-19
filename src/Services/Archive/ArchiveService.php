@@ -17,7 +17,6 @@ use Glueful\Services\Archive\DTOs\ArchiveFile;
 use Glueful\Helpers\Utils;
 use Glueful\Exceptions\DatabaseException;
 use Glueful\Exceptions\BusinessLogicException;
- 
 use Glueful\Storage\StorageManager;
 use Glueful\Storage\PathGuard;
 
@@ -35,7 +34,7 @@ class ArchiveService implements ArchiveServiceInterface
     private ?string $encryptionKey;
     /** @var array<string, mixed> */
     private array $config;
-    
+
     private StorageManager $storage;
     private string $disk = 'archive';
 
@@ -65,7 +64,11 @@ class ArchiveService implements ArchiveServiceInterface
         $this->encryptionKey = $this->config['encryption_key'];
 
         // Ensure archive directory exists as local root for the disk
-        if (!is_dir($this->archiveBasePath) && !mkdir($concurrentDirectory = $this->archiveBasePath, 0755, true) && !is_dir($concurrentDirectory)) {
+        if (
+            !is_dir($this->archiveBasePath) &&
+            !mkdir($concurrentDirectory = $this->archiveBasePath, 0755, true) &&
+            !is_dir($concurrentDirectory)
+        ) {
             throw new \RuntimeException('Cannot create archive directory: ' . $this->archiveBasePath);
         }
 

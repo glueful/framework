@@ -18,8 +18,10 @@ This comprehensive guide covers Glueful's console system, built on Symfony Conso
 12. [Container/DI Commands](#containerdi-commands)
 13. [Configuration Commands](#configuration-commands)
 14. [Code Generation](#code-generation)
-15. [Custom Commands](#custom-commands)
-16. [Best Practices](#best-practices)
+15. [Notifications](#notifications)
+16. [Installation](#installation)
+17. [Custom Commands](#custom-commands)
+18. [Best Practices](#best-practices)
 
 ## Overview
 
@@ -740,6 +742,24 @@ php glueful di:container:validate --detailed
 php glueful di:container:validate --providers="AuthServiceProvider,CacheServiceProvider"
 ```
 
+### Lazy Services
+
+Inspect and optionally warm lazy service groups.
+
+```bash
+# Show configured lazy IDs
+php glueful di:lazy:status
+
+# Warm background services now
+php glueful di:lazy:status --warm-background
+
+# Warm request-time services now
+php glueful di:lazy:status --warm-request
+
+# Output as JSON
+php glueful di:lazy:status --format=json
+```
+
 ## Configuration Commands
 
 Tools for managing application configuration, IDE support, and documentation generation.
@@ -847,6 +867,36 @@ php glueful generate:api-docs
 
 # Custom database and table
 php glueful generate:api-definitions --database=mydb --table=users
+```
+
+### Event Scaffolding
+
+Create event and listener classes.
+
+```bash
+# Create a new event class
+php glueful event:create UserRegistered
+
+# Create a new event listener class
+php glueful event:listener SendWelcomeEmail
+```
+
+## Notifications
+
+### Process Notification Retries
+
+```bash
+# Process queued notification retries
+php glueful notifications:process-retries
+```
+
+## Installation
+
+### Interactive Installer
+
+```bash
+# Run the installation wizard for a new project
+php glueful install
 ```
 
 ## Custom Commands

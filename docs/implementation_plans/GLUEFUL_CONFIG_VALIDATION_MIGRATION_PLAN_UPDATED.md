@@ -472,7 +472,7 @@ $container->set(\Glueful\Config\DTO\QueueConfig::class, $dto);
 ## Service Provider Wiring
 
 ```php
-// src/DI/ServiceProviders/ConfigServiceProvider.php
+// src/Container/Providers/ConfigProvider.php
 public function register($c): void
 {
     $c->register(\Glueful\Config\Contracts\ConfigValidatorInterface::class, \Glueful\Config\Validation\ConfigValidator::class)
@@ -482,7 +482,7 @@ public function register($c): void
     // e.g., QueueConfig bound in bootstrap/config.php
 }
 
-// src/DI/ServiceProviders/ValidationServiceProvider.php
+// src/Container/Providers/ValidationProvider.php
 public function register($c): void
 {
     $c->register(\Glueful\Validation\Contracts\ValidatorInterface::class, \Glueful\Validation\Validator::class)

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Glueful\Validation;
@@ -12,5 +13,8 @@ final class ValidationException extends \RuntimeException
     }
 
     /** @return array<string, string[]> */
-    public function errors(): array { return $this->errors; }
+    public function errors(): array
+    {
+        return $this->errors;
+    }
 }

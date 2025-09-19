@@ -17,12 +17,160 @@ final class CoreProvider extends BaseServiceProvider
     {
         $defs = [];
 
-        // Logger service (Monolog)
+        // Logger service (Monolog) with StandardLogProcessor parity
         $defs['logger'] = new FactoryDefinition('logger', function (): \Psr\Log\LoggerInterface {
-            $logger = new \Monolog\Logger('app');
-            $level = \Monolog\Level::Info;
-            $handler = new \Monolog\Handler\StreamHandler('php://stdout', $level);
+            // Framework logging can be toggled via config
+            $config = function_exists('config') ? (array) config('logging.framework', []) : [];
+            $enabled = $config['enabled'] ?? true;
+            if ($enabled !== true) {
+                return new \Psr\Log\NullLogger();
+            }
+
+            if ((string) (\function_exists('env') ? env('APP_ENV', '') : ($_ENV['APP_ENV'] ?? '')) === 'testing') {
+                return new \Psr\Log\NullLogger();
+            }
+
+            $channel = is_string($config['channel'] ?? null) ? $config['channel'] : 'framework';
+            $logger = new \Monolog\Logger($channel);
+
+            // Level from config/debug
+            $levelName = (string) ($config['level'] ?? 'info');
+            if (\function_exists('env') && (bool) env('APP_DEBUG', false)) {
+                $levelName = 'debug';
+            }
+            $level = \Monolog\Logger::toMonologLevel($levelName);
+
+            // Write to file path if configured, else stdout
+            $channelConfig = function_exists('config') ? (array) config('logging.channels.framework', []) : [];
+            $path = is_string($channelConfig['path'] ?? null)
+                ? $channelConfig['path']
+                : (function_exists('base_path')
+                    ? base_path('storage/logs/framework-' . date('Y-m-d') . '.log')
+                    : 'php://stdout');
+            $handler = new \Monolog\Handler\StreamHandler($path, $level);
             $logger->pushHandler($handler);
+
+            // Attach StandardLogProcessor with env + version and robust user resolver
+            try {
+                $env = (string) (
+                    (function_exists('config') ? config('app.env', null) : null)
+                    ?? ($_ENV['APP_ENV'] ?? 'production')
+                );
+                $version = '1.0.0';
+                if (class_exists('Composer\\InstalledVersions')) {
+                    try {
+                        $maybe = \Composer\InstalledVersions::getPrettyVersion('glueful/framework');
+                        if (is_string($maybe) && $maybe !== '') {
+                            $version = $maybe;
+                        } else {
+                            $version = (string) (
+                                (function_exists('config') ? config('app.version_full', null) : null)
+                                ?? '1.0.0'
+                            );
+                        }
+                    } catch (\Throwable) {
+                        $version = (string) (
+                            (function_exists('config') ? config('app.version_full', null) : null)
+                            ?? '1.0.0'
+                        );
+                    }
+                }
+
+                $userIdResolver = function (): ?string {
+                    try {
+                        // Priority: Request attribute user via global container
+                        if (isset($GLOBALS['container'])) {
+                            $c = $GLOBALS['container'];
+                            if ($c->has('request')) {
+                                $req = $c->get('request');
+                                if (is_object($req) && method_exists($req, 'get')) {
+                                    // Symfony Request: attributes bag
+                                    if (property_exists($req, 'attributes') && $req->attributes->has('user')) {
+                                        $user = $req->attributes->get('user');
+                                        if (is_object($user)) {
+                                            foreach (['getId','id','getUuid','uuid'] as $m) {
+                                                if (method_exists($user, $m)) {
+                                                    /** @phpstan-ignore-next-line */
+                                                    $id = $user->{$m}();
+                                                    if (is_scalar($id)) {
+                                                        return (string) $id;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // AuthenticationService current user if available
+                        if (function_exists('has_service') && has_service(\Glueful\Auth\AuthenticationService::class)) {
+                            $auth = app(\Glueful\Auth\AuthenticationService::class);
+                            if (method_exists($auth, 'getCurrentUser')) {
+                                $u = $auth->getCurrentUser();
+                                if ($u && method_exists($u, 'getId')) {
+                                    $id = $u->getId();
+                                    return is_scalar($id) ? (string) $id : null;
+                                }
+                            }
+                        }
+
+                        // JWT header if present
+                        if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
+                            $authHeader = (string) $_SERVER['HTTP_AUTHORIZATION'];
+                            if (str_starts_with($authHeader, 'Bearer ')) {
+                                $token = substr($authHeader, 7);
+                                if (function_exists('has_service') && has_service(\Glueful\Auth\TokenManager::class)) {
+                                    $tm = app(\Glueful\Auth\TokenManager::class);
+                                    if (method_exists($tm, 'validateToken')) {
+                                        $payload = $tm->validateToken($token);
+                                        if (is_array($payload)) {
+                                            if (isset($payload['sub'])) {
+                                                return (string) $payload['sub'];
+                                            }
+                                            if (isset($payload['user_id'])) {
+                                                return (string) $payload['user_id'];
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Session fallback
+                        if (isset($_SESSION['user_uuid']) && is_string($_SESSION['user_uuid'])) {
+                            return $_SESSION['user_uuid'];
+                        }
+                        if (isset($_SESSION['user_id']) && is_scalar($_SESSION['user_id'])) {
+                            return (string) $_SESSION['user_id'];
+                        }
+
+                        // Laravel-style helper if present
+                        if (function_exists('auth')) {
+                            /** @var callable():object|null $f */
+                            $f = 'auth';
+                            $guard = $f();
+                            if (
+                                is_object($guard) &&
+                                method_exists($guard, 'check') &&
+                                method_exists($guard, 'id') &&
+                                $guard->check()
+                            ) {
+                                $id = $guard->id();
+                                return is_scalar($id) ? (string) $id : null;
+                            }
+                        }
+                    } catch (\Throwable) {
+                        // ignore resolver errors
+                    }
+                    return null;
+                };
+
+                $logger->pushProcessor(new \Glueful\Logging\StandardLogProcessor($env, $version, $userIdResolver));
+            } catch (\Throwable) {
+                // processor is optional
+            }
+
             return $logger;
         });
 
@@ -40,16 +188,26 @@ final class CoreProvider extends BaseServiceProvider
 
         // Tag cache store so consumers can get a tagged iterator if needed
         $this->tag('cache.store', 'cache.pool', 0);
+        // Initial lazy warmup tags for heavy services
+        $this->tag('cache.store', 'lazy.background', 0);
 
         // Alias for CacheStore class name resolution
         $defs[\Glueful\Cache\CacheStore::class] = new AliasDefinition(\Glueful\Cache\CacheStore::class, 'cache.store');
 
-        // Database services (transitional factory for connection)
+        // Database services (neutral factory for connection)
         $defs['database'] = new FactoryDefinition(
             'database',
             /** @return \Glueful\Database\Connection|\Glueful\Database\PooledConnection */
-            fn() => \Glueful\DI\ServiceFactories\DatabaseFactory::create()
+            function () {
+                if (class_exists('\Glueful\Database\Connection')) {
+                    $config = (array) (function_exists('config') ? config('database', []) : []);
+                    return new \Glueful\Database\Connection($config);
+                }
+                throw new \RuntimeException('Database connection factory not configured');
+            }
         );
+        // Tag database for background warmup
+        $this->tag('database', 'lazy.background', 0);
 
         // QueryBuilder and SchemaBuilder via database
         $defs[\Glueful\Database\QueryBuilder::class] = new FactoryDefinition(
@@ -169,6 +327,80 @@ final class CoreProvider extends BaseServiceProvider
             fn(\Psr\Container\ContainerInterface $c) =>
                 $c->get(\Glueful\Routing\Middleware\FieldSelectionMiddleware::class)
         );
+
+        // ===== Router and HTTP middleware parity =====
+
+        // Router + supporting services
+        $defs[\Glueful\Routing\RouteCache::class] = $this->autowire(\Glueful\Routing\RouteCache::class);
+        $defs[\Glueful\Routing\RouteCompiler::class] = $this->autowire(\Glueful\Routing\RouteCompiler::class);
+        $defs[\Glueful\Routing\Router::class] = new FactoryDefinition(
+            \Glueful\Routing\Router::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Routing\Router($c)
+        );
+        $defs[\Glueful\Routing\AttributeRouteLoader::class] = new FactoryDefinition(
+            \Glueful\Routing\AttributeRouteLoader::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Routing\AttributeRouteLoader(
+                $c->get(\Glueful\Routing\Router::class)
+            )
+        );
+
+        // Tracer default binding (Noop)
+        $defs[\Glueful\Observability\Tracing\NoopTracer::class] =
+            $this->autowire(\Glueful\Observability\Tracing\NoopTracer::class);
+        $defs[\Glueful\Observability\Tracing\TracerInterface::class] =
+            new AliasDefinition(
+                \Glueful\Observability\Tracing\TracerInterface::class,
+                \Glueful\Observability\Tracing\NoopTracer::class
+            );
+
+        // Middleware registrations (autowire with sensible defaults)
+        $defs[\Glueful\Routing\Middleware\AuthMiddleware::class] =
+            $this->autowire(\Glueful\Routing\Middleware\AuthMiddleware::class);
+        $defs[\Glueful\Routing\Middleware\RateLimiterMiddleware::class] =
+            $this->autowire(\Glueful\Routing\Middleware\RateLimiterMiddleware::class);
+        $defs[\Glueful\Routing\Middleware\CSRFMiddleware::class] =
+            $this->autowire(\Glueful\Routing\Middleware\CSRFMiddleware::class);
+        $defs[\Glueful\Routing\Middleware\SecurityHeadersMiddleware::class] =
+            $this->autowire(\Glueful\Routing\Middleware\SecurityHeadersMiddleware::class);
+        $defs[\Glueful\Routing\Middleware\AllowIpMiddleware::class] =
+            $this->autowire(\Glueful\Routing\Middleware\AllowIpMiddleware::class);
+        $defs[\Glueful\Routing\Middleware\AdminPermissionMiddleware::class] =
+            $this->autowire(\Glueful\Routing\Middleware\AdminPermissionMiddleware::class);
+        $defs[\Glueful\Routing\Middleware\RequestResponseLoggingMiddleware::class] =
+            $this->autowire(\Glueful\Routing\Middleware\RequestResponseLoggingMiddleware::class);
+        $defs[\Glueful\Routing\Middleware\TracingMiddleware::class] =
+            $this->autowire(\Glueful\Routing\Middleware\TracingMiddleware::class);
+        $defs[\Glueful\Routing\Middleware\MetricsMiddleware::class] =
+            $this->autowire(\Glueful\Routing\Middleware\MetricsMiddleware::class);
+        $defs[\Glueful\Routing\Middleware\LockdownMiddleware::class] =
+            $this->autowire(\Glueful\Routing\Middleware\LockdownMiddleware::class);
+
+        // String alias convenience (parity with DI aliases)
+        $defs['auth'] = new AliasDefinition(
+            'auth',
+            \Glueful\Routing\Middleware\AuthMiddleware::class
+        );
+        $defs['rate_limit'] = new AliasDefinition(
+            'rate_limit',
+            \Glueful\Routing\Middleware\RateLimiterMiddleware::class
+        );
+        $defs['csrf'] = new AliasDefinition(
+            'csrf',
+            \Glueful\Routing\Middleware\CSRFMiddleware::class
+        );
+        $defs['security_headers'] = new AliasDefinition(
+            'security_headers',
+            \Glueful\Routing\Middleware\SecurityHeadersMiddleware::class
+        );
+        $defs['admin'] = new AliasDefinition('admin', \Glueful\Routing\Middleware\AdminPermissionMiddleware::class);
+        $defs['request_logging'] = new AliasDefinition(
+            'request_logging',
+            \Glueful\Routing\Middleware\RequestResponseLoggingMiddleware::class
+        );
+        $defs['lockdown'] = new AliasDefinition('lockdown', \Glueful\Routing\Middleware\LockdownMiddleware::class);
+        $defs['allow_ip'] = new AliasDefinition('allow_ip', \Glueful\Routing\Middleware\AllowIpMiddleware::class);
+        $defs['metrics'] = new AliasDefinition('metrics', \Glueful\Routing\Middleware\MetricsMiddleware::class);
+        $defs['tracing'] = new AliasDefinition('tracing', \Glueful\Routing\Middleware\TracingMiddleware::class);
 
         return $defs;
     }

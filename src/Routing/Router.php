@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Routing;
 
-use Glueful\DI\Container;
+use Psr\Container\ContainerInterface;
 use Symfony\Component\HttpFoundation\{Request, Response, JsonResponse, StreamedResponse, BinaryFileResponse};
 use Glueful\Routing\Internal\Psr15MiddlewareResolverTrait;
 use Psr\Http\Server\MiddlewareInterface as Psr15Middleware;
@@ -31,10 +31,10 @@ class Router
     /** @var array<string, \ReflectionFunction|\ReflectionMethod> */
     private array $reflectionCache = [];  // Cache reflection results
     private ?RouteCache $cache = null;
-    private Container $container;
+    private ContainerInterface $container;
     private ?AttributeRouteLoader $attributeLoader = null;
 
-    public function __construct(Container $container)
+    public function __construct(ContainerInterface $container)
     {
         $this->container = $container;
         $this->cache = new RouteCache();

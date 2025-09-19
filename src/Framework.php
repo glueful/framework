@@ -7,8 +7,9 @@ namespace Glueful;
 use Glueful\Bootstrap\ConfigurationCache;
 use Glueful\Bootstrap\ConfigurationLoader;
 use Glueful\Bootstrap\BootProfiler;
-use Glueful\DI\Container;
-use Glueful\DI\LazyServiceRegistry;
+use Psr\Container\ContainerInterface;
+use Glueful\Container\Support\LazyInitializer;
+use Glueful\Container\Bootstrap\ContainerFactory;
 use Glueful\Routing\RouteManifest;
 use Glueful\Cache\CacheTaggingService;
 use Glueful\Cache\CacheInvalidationService;
@@ -28,11 +29,11 @@ class Framework
     private string $basePath;
     private string $configPath;
     private string $environment;
-    private ?Container $container = null;
+    private ?ContainerInterface $container = null;
     private ?Application $application = null;
     private bool $booted = false;
     private bool $strictMode = true;
-    private ?LazyServiceRegistry $lazyRegistry = null;
+    private ?LazyInitializer $lazyInitializer = null;
 
     public function __construct(string $basePath)
     {
@@ -185,16 +186,26 @@ class Framework
      */
     private function buildContainer(): void
     {
-        // Initialize Dependency Injection Container
-        $this->container = \Glueful\DI\ContainerBootstrap::initialize(
-            $this->basePath,
-            $this->configPath,
-            $this->environment
-        );
+        // Build new PSR-11 container. Use compiled container in production when not debugging.
+        $debug = (bool) (env('APP_DEBUG', $_ENV['APP_DEBUG'] ?? false));
+        $prod = ($this->environment === 'production') && ($debug === false);
+
+        $this->container = ContainerFactory::create($prod);
 
         // Make container globally available
         $GLOBALS['container'] = $this->container;
         $GLOBALS['framework_bootstrapped'] = true;
+
+        // Bootstrap Event facade if available (PSR-14)
+        try {
+            /** @var \Psr\EventDispatcher\EventDispatcherInterface $dispatcher */
+            $dispatcher = $this->container->get(\Psr\EventDispatcher\EventDispatcherInterface::class);
+            /** @var \Glueful\Events\ListenerProvider $provider */
+            $provider = $this->container->get(\Glueful\Events\ListenerProvider::class);
+            \Glueful\Events\Event::bootstrap($dispatcher, $provider, $this->container);
+        } catch (\Throwable) {
+            // Events are optional; ignore if not available
+        }
     }
 
     /**
@@ -262,16 +273,16 @@ class Framework
      */
     private function registerLazyServices(): void
     {
-        $this->lazyRegistry = new LazyServiceRegistry($this->container);
-
-        // LAZY: Heavy services (load on first access)
-        $this->lazyRegistry->lazy('cache.store', \Glueful\DI\ServiceFactories\CacheStoreFactory::class);
-        $this->lazyRegistry->lazy('database', \Glueful\DI\ServiceFactories\DatabaseFactory::class);
-        $this->lazyRegistry->lazy('auth.manager', \Glueful\DI\ServiceFactories\AuthManagerFactory::class);
-        $this->lazyRegistry->lazy('security.manager', \Glueful\DI\ServiceFactories\SecurityManagerFactory::class);
-
-        // Store registry in global for background initialization
-        $GLOBALS['lazy_service_registry'] = $this->lazyRegistry;
+        try {
+            if ($this->container !== null) {
+                /** @var LazyInitializer $li */
+                $li = $this->container->get(LazyInitializer::class);
+                $this->lazyInitializer = $li;
+                $GLOBALS['lazy_initializer'] = $li; // optional debug access
+            }
+        } catch (\Throwable) {
+            // Best-effort; lazy warming is optional
+        }
     }
 
     /**
@@ -395,15 +406,8 @@ class Framework
             $logger = $this->container->get(LoggerInterface::class);
             $info = [
                 'env' => $this->environment,
-                'compiled' => \Glueful\DI\ContainerFactory::hasCompiledContainer(),
+                'compiled' => ($this->environment === 'production') && !(bool) env('APP_DEBUG', false),
             ];
-            if ($info['compiled']) {
-                // Derive current compiled file path
-                $ref = new \ReflectionClass(\Glueful\DI\ContainerFactory::class);
-                $m = $ref->getMethod('getCompiledContainerPath');
-                $m->setAccessible(true);
-                $info['file'] = $m->invoke(null);
-            }
             $logger->info('DI container initialized', ['container' => $info]);
         } catch (\Throwable) {
             // Best-effort logging only
@@ -431,8 +435,8 @@ class Framework
     private function runBackgroundTasks(): void
     {
         try {
-            if ($this->lazyRegistry !== null) {
-                $this->lazyRegistry->initializeBackground();
+            if ($this->lazyInitializer !== null) {
+                $this->lazyInitializer->initializeBackground();
             }
         } catch (\Throwable $e) {
             // Log but don't fail the application
@@ -456,13 +460,16 @@ class Framework
             }
         }
 
+        // Prefer configured version if available
         try {
-            if ($this->container !== null && $this->container->hasParameter('app.version_full')) {
-                $v = $this->container->getParameter('app.version_full');
-                return is_string($v) ? $v : '1.0.0';
+            if (function_exists('config')) {
+                $v = config('app.version_full', null);
+                if (is_string($v) && $v !== '') {
+                    return $v;
+                }
             }
         } catch (\Throwable) {
-            // fallback
+            // ignore and fallback
         }
 
         return '1.0.0';
@@ -496,7 +503,7 @@ class Framework
         return $this;
     }
 
-    public function getContainer(): ?Container
+    public function getContainer(): ?ContainerInterface
     {
         return $this->container;
     }

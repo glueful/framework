@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace Glueful\Console\Commands\Container;
 
 use Glueful\Console\BaseCommand;
-use Glueful\DI\ContainerFactory;
+use Glueful\Container\Bootstrap\ContainerFactory;
+use Glueful\Container\Compile\ContainerCompiler;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -14,7 +15,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 /**
  * Container Compile Command
  *
- * Compiles the DI container for production optimization:
+ * Compiles the Glueful container for production optimization:
  * - Pre-compiles all service definitions
  * - Optimizes service resolution paths
  * - Validates all service configurations
@@ -26,13 +27,13 @@ use Symfony\Component\Console\Output\OutputInterface;
  */
 #[AsCommand(
     name: 'di:container:compile',
-    description: 'Compile the DI container for production optimization'
+    description: 'Compile the Glueful container for production optimization'
 )]
 class ContainerCompileCommand extends BaseCommand
 {
     protected function configure(): void
     {
-        $this->setDescription('Compile the DI container for production optimization')
+        $this->setDescription('Compile the Glueful container for production optimization')
              ->setHelp($this->getDetailedHelp())
              ->addOption(
                  'output-dir',
@@ -76,7 +77,6 @@ class ContainerCompileCommand extends BaseCommand
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $outputDir = (string) $input->getOption('output-dir');
-        $debug = (bool) $input->getOption('debug');
         $validate = (bool) $input->getOption('validate');
         $optimize = (bool) $input->getOption('optimize');
         $force = (bool) $input->getOption('force');
@@ -101,7 +101,7 @@ class ContainerCompileCommand extends BaseCommand
             $this->prepareOutputDirectory($outputDir);
 
             // Compile container
-            $compileTime = $this->compileContainer($outputDir, $debug, $optimize);
+            $compileTime = $this->compileContainer($outputDir);
 
             // Warm up if requested
             if ($warmup === true) {
@@ -148,13 +148,12 @@ class ContainerCompileCommand extends BaseCommand
 
         $cacheTime = filemtime($cacheFile);
 
-        // Check if any service provider files are newer than cache
-        $serviceProviderDir = dirname(__DIR__, 4) . '/DI/ServiceProviders';
-        if (is_dir($serviceProviderDir)) {
+        // Consider the container stale if any core container files are newer
+        $containerDir = dirname(__DIR__, 3) . '/Container';
+        if (is_dir($containerDir)) {
             $iterator = new \RecursiveIteratorIterator(
-                new \RecursiveDirectoryIterator($serviceProviderDir)
+                new \RecursiveDirectoryIterator($containerDir)
             );
-
             foreach ($iterator as $file) {
                 if ($file->isFile() && $file->getExtension() === 'php') {
                     if ($file->getMTime() > $cacheTime) {
@@ -186,7 +185,7 @@ class ContainerCompileCommand extends BaseCommand
         $this->line('✓ Output directory prepared');
     }
 
-    private function compileContainer(string $outputDir, bool $debug, bool $optimize): float
+    private function compileContainer(string $outputDir): float
     {
         $startTime = microtime(true);
 
@@ -198,26 +197,38 @@ class ContainerCompileCommand extends BaseCommand
         $progressBar->start();
 
         try {
-            // Step 1: Build container
+            // Step 1: Build container definitions
             $progressBar->setMessage('Building container definition...');
-            $container = ContainerFactory::create(true); // Production mode
+            // Build a dev container to extract definitions for compilation
+            $runtime = ContainerFactory::create(false);
+            // Extract definitions via reflection from runtime container
+            $ref = new \ReflectionClass($runtime);
+            $prop = $ref->getProperty('definitions');
+            $prop->setAccessible(true);
+            /** @var array<string, \Glueful\Container\Definition\DefinitionInterface> $definitions */
+            $definitions = (array) $prop->getValue($runtime);
+
+            // Compile into a PHP class
+            $compiler = new ContainerCompiler();
+            $namespace = 'Glueful\\Container\\Compiled';
+            $className = 'CompiledContainer';
+            $code = $compiler->compile($definitions, $className, $namespace);
+            $this->writeCompiledFile($outputDir, $className, $code);
             $progressBar->advance();
 
             // Step 2: Apply optimizations
             $progressBar->setMessage('Applying optimizations...');
-            if ($optimize) {
-                $this->applyOptimizations($container);
-            }
+            // ContainerCompiler already emits efficient code; hook reserved for future passes
             $progressBar->advance();
 
             // Step 3: Validate compiled container
             $progressBar->setMessage('Validating compiled container...');
-            $this->validateCompiledContainer($container);
+            $this->validateCompiledFile($outputDir, $namespace . '\\' . $className);
             $progressBar->advance();
 
             // Step 4: Dump compiled container
             $progressBar->setMessage('Dumping compiled container...');
-            $this->dumpCompiledContainer($container, $outputDir, $debug);
+            // Already dumped by writeCompiledFile
             $progressBar->advance();
 
             // Step 5: Finalize
@@ -236,86 +247,29 @@ class ContainerCompileCommand extends BaseCommand
         }
     }
 
-    private function applyOptimizations(mixed $container): void
+    private function writeCompiledFile(string $outputDir, string $className, string $code): void
     {
-        // Apply various optimizations to the container
-        $this->line('  • Inlining small services');
-        $this->line('  • Removing debug information');
-        $this->line('  • Optimizing service resolution');
-
-        // In a real implementation, these would be actual optimization passes
-        // that modify the $container parameter
+        $file = rtrim($outputDir, '/') . '/' . $className . '.php';
+        if (file_put_contents($file, $code) === false) {
+            throw new \RuntimeException('Failed to write compiled container to: ' . $file);
+        }
+        $this->line("  • Container dumped to: {$file}");
     }
 
-    private function validateCompiledContainer(mixed $container): void
+    private function validateCompiledFile(string $outputDir, string $fqcn): void
     {
-        // Validate that the compiled container works correctly
-        $this->line('  • Checking service definitions');
-        $this->line('  • Validating dependencies');
-        $this->line('  • Testing service instantiation');
-
-        // In a real implementation, we would validate the $container parameter
-    }
-
-    private function dumpCompiledContainer(mixed $container, string $outputDir, bool $debug): void
-    {
-        // Generate the compiled container PHP file from the container definition
-        $containerClass = 'CompiledContainer';
-        $containerFile = $outputDir . '/' . $containerClass . '.php';
-
-        $containerCode = $this->generateContainerCode($containerClass, $debug);
-
-        if (file_put_contents($containerFile, $containerCode) === false) {
-            throw new \RuntimeException("Failed to write compiled container to: {$containerFile}");
+        $file = $outputDir . '/CompiledContainer.php';
+        if (!file_exists($file)) {
+            throw new \RuntimeException('Compiled file not found: ' . $file);
         }
 
-        $this->line("  • Container dumped to: {$containerFile}");
+        require_once $file;
+        if (!class_exists($fqcn)) {
+            throw new \RuntimeException('Compiled class not found: ' . $fqcn);
+        }
 
-        // In a real implementation, we would use the $container parameter
-        // to generate optimized service definitions
-    }
-
-    private function generateContainerCode(string $className, bool $debug): string
-    {
-        $timestamp = date('Y-m-d H:i:s');
-        $debugInfo = $debug ? '// Debug mode enabled' : '// Optimized for production';
-
-        return <<<PHP
-<?php
-
-// Compiled container generated on {$timestamp}
-{$debugInfo}
-
-declare(strict_types=1);
-
-use Symfony\Component\DependencyInjection\Container;
-use Symfony\Component\DependencyInjection\ContainerInterface;
-
-class {$className} extends Container
-{
-    public function __construct()
-    {
-        parent::__construct();
-        \$this->compile();
-    }
-
-    protected function compile(): void
-    {
-        // Compiled service definitions would go here
-        // This is a simplified version
-    }
-
-    // Optimized service getters would be generated here
-    // For example:
-    // protected function getTokenStorageService(): TokenStorageService
-    // {
-    //     return \$this->services['TokenStorageService'] ??= new TokenStorageService(
-    //         \$this->getDatabaseService(),
-    //         \$this->getCacheService()
-    //     );
-    // }
-}
-PHP;
+        // Try instantiating to ensure no immediate failures
+        new $fqcn();
     }
 
     private function finalizeCompilation(string $outputDir): void
@@ -341,19 +295,19 @@ PHP;
         // Load and test the compiled container
         try {
             $containerFile = $outputDir . '/CompiledContainer.php';
-            if (file_exists($containerFile)) {
-                require_once $containerFile;
-
-                // Check if the class exists before instantiating
-                if (class_exists('CompiledContainer')) {
-                    $className = 'CompiledContainer';
-                    $compiledContainer = new $className();
-                    $this->line('✓ Compiled container loaded successfully');
-                } else {
-                    $this->warning('CompiledContainer class not found in generated file');
-                }
-            } else {
+            if (!file_exists($containerFile)) {
                 $this->warning('Compiled container file not found');
+                return;
+            }
+
+            require_once $containerFile;
+
+            $className = '\\Glueful\\Container\\Compiled\\CompiledContainer';
+            if (class_exists($className)) {
+                new $className();
+                $this->line('✓ Compiled container loaded successfully');
+            } else {
+                $this->warning('Compiled class Glueful\\Container\\Compiled\\CompiledContainer not found');
             }
         } catch (\Exception $e) {
             $this->warning('Container warmup failed: ' . $e->getMessage());
@@ -399,7 +353,7 @@ PHP;
         return <<<HELP
 Container Compile Command
 
-This command compiles the DI container for production optimization, significantly
+This command compiles the Glueful container for production optimization, significantly
 improving application startup time and reducing memory usage.
 
 Usage Examples:

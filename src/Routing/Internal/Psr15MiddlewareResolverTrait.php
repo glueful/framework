@@ -13,7 +13,7 @@ use Symfony\Component\HttpFoundation\Response;
  * Mixin/trait to be used by Router or MiddlewareResolver component.
  * Detects PSR-15 middleware services and wraps them.
  *
- * @property \Glueful\DI\Container $container
+ * @property \Psr\Container\ContainerInterface $container
  */
 trait Psr15MiddlewareResolverTrait
 {

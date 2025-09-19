@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Glueful\Serialization;
@@ -9,10 +10,14 @@ final class Serializer
 {
     public function normalize(mixed $data, ?SerializationContext $context = null): mixed
     {
-        if ($data === null) return null;
+        if ($data === null) {
+            return null;
+        }
 
         // Scalars
-        if (is_scalar($data)) return $data;
+        if (is_scalar($data)) {
+            return $data;
+        }
 
         // DateTime
         if ($data instanceof \DateTimeInterface) {
@@ -54,4 +59,3 @@ final class Serializer
         return $data;
     }
 }
-
