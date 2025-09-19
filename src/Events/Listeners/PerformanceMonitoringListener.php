@@ -22,9 +22,6 @@ class PerformanceMonitoringListener
     ) {
     }
 
-    /**
-     * Handle slow query events
-     */
     public function onQueryExecuted(QueryExecutedEvent $event): void
     {
         if ($event->isSlow(1.0)) { // 1 second threshold
@@ -37,9 +34,6 @@ class PerformanceMonitoringListener
         }
     }
 
-    /**
-     * Handle slow cache retrieval events
-     */
     public function onCacheHit(CacheHitEvent $event): void
     {
         if ($event->isSlow(0.1)) { // 100ms threshold

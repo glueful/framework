@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Http;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -161,9 +161,6 @@ class ResponseEvent extends BaseEvent
     /**
      * Get controller/action information
      *
-     * @return array|null Controller and action info
-     */
-    /**
      * @return array<string, mixed>|null
      */
     public function getControllerInfo(): ?array

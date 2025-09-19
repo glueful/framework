@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Auth;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 /**
  * Session Created Event
@@ -29,79 +29,47 @@ class SessionCreatedEvent extends BaseEvent
     ) {
         parent::__construct();
 
-        // Set metadata using BaseEvent's setMetadata method
         foreach ($metadata as $key => $value) {
             $this->setMetadata($key, $value);
         }
     }
 
     /**
-     * Get session data
-     *
-     * @return array<string, mixed> Session data
+     * @return array<string, mixed>
      */
     public function getSessionData(): array
     {
         return $this->sessionData;
     }
 
-    /**
-     * Get user UUID from session
-     *
-     * @return string|null User UUID
-     */
     public function getUserUuid(): ?string
     {
         return $this->sessionData['uuid'] ?? null;
     }
 
-    /**
-     * Get username from session
-     *
-     * @return string|null Username
-     */
     public function getUsername(): ?string
     {
         return $this->sessionData['username'] ?? null;
     }
 
     /**
-     * Get tokens
-     *
-     * @return array<string, string> Tokens array
+     * @return array<string, string>
      */
     public function getTokens(): array
     {
         return $this->tokens;
     }
 
-    /**
-     * Get access token
-     *
-     * @return string|null Access token
-     */
     public function getAccessToken(): ?string
     {
         return $this->tokens['access_token'] ?? null;
     }
 
-    /**
-     * Get refresh token
-     *
-     * @return string|null Refresh token
-     */
     public function getRefreshToken(): ?string
     {
         return $this->tokens['refresh_token'] ?? null;
     }
 
-    /**
-     * Get specific metadata value
-     *
-     * @param string $key Metadata key
-     * @param mixed $default Default value
-     * @return mixed Metadata value
-     */
     public function getMetadataValue(string $key, mixed $default = null): mixed
     {
         return $this->getMetadata($key) ?? $default;

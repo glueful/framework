@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Console\Commands\Container;
 
 use Glueful\Console\BaseCommand;
-use Glueful\DI\ContainerFactory;
+use Glueful\Container\Bootstrap\ContainerFactory;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -14,7 +14,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 /**
  * Container Validate Command
  *
- * Validates the DI container configuration and service definitions:
+ * Validates the Glueful container configuration and service definitions:
  * - Checks all service definitions for errors
  * - Validates service dependencies and circular references
  * - Tests service instantiation without side effects
@@ -26,13 +26,13 @@ use Symfony\Component\Console\Output\OutputInterface;
  */
 #[AsCommand(
     name: 'di:container:validate',
-    description: 'Validate DI container configuration and service definitions'
+    description: 'Validate container configuration and service definitions'
 )]
 class ContainerValidateCommand extends BaseCommand
 {
     protected function configure(): void
     {
-        $this->setDescription('Validate DI container configuration and service definitions')
+        $this->setDescription('Validate container configuration and service definitions')
              ->setHelp($this->getDetailedHelp())
              ->addOption(
                  'service',
@@ -447,7 +447,8 @@ class ContainerValidateCommand extends BaseCommand
         $interfaceChecks = [
             'Glueful\\Database\\DatabaseInterface' => 'Glueful\\Database\\Database',
             'Glueful\\Cache\\CacheInterface' => 'Glueful\\Cache\\CacheStore',
-            'Glueful\\DI\\ServiceProviderInterface' => 'Service providers'
+            // Keep reference label for providers without tying to legacy DI interface
+            'Glueful\\Container\\Providers\\BaseServiceProvider' => 'Service providers'
         ];
 
         foreach ($interfaceChecks as $interface => $expectedImpl) {
@@ -478,7 +479,7 @@ class ContainerValidateCommand extends BaseCommand
         $status = 'success';
 
         try {
-            $providersDir = dirname(__DIR__, 4) . '/DI/ServiceProviders';
+            $providersDir = dirname(__DIR__, 4) . '/Container/Providers';
 
             if (!is_dir($providersDir)) {
                 $issues[] = 'Service providers directory not found';
@@ -491,21 +492,19 @@ class ContainerValidateCommand extends BaseCommand
                 ];
             }
 
-            $providers = glob($providersDir . '/*ServiceProvider.php');
+            $providers = glob($providersDir . '/*Provider.php');
             $validProviders = 0;
 
             foreach ($providers as $providerFile) {
                 $className = basename($providerFile, '.php');
-                $fullClassName = "Glueful\\DI\\ServiceProviders\\{$className}";
+                $fullClassName = "Glueful\\Container\\Providers\\{$className}";
 
                 if (class_exists($fullClassName)) {
                     $validProviders++;
 
-                    // Check if it implements ServiceProviderInterface
-                    $interfaces = class_implements($fullClassName);
-                    $interfacesList = $interfaces !== false ? $interfaces : [];
-                    if (!in_array('Glueful\\DI\\ServiceProviderInterface', $interfacesList, true)) {
-                        $issues[] = "Provider {$className} doesn't implement ServiceProviderInterface";
+                    // Check if it extends BaseServiceProvider
+                    if (!is_subclass_of($fullClassName, 'Glueful\\Container\\Providers\\BaseServiceProvider')) {
+                        $issues[] = "Provider {$className} doesn't extend BaseServiceProvider";
                         $status = 'warning';
                     }
                 } else {
@@ -671,7 +670,7 @@ class ContainerValidateCommand extends BaseCommand
         return <<<HELP
 Container Validate Command
 
-This command validates the DI container configuration and service definitions
+This command validates the container configuration and service definitions
 to catch configuration errors early and ensure proper dependency injection.
 
 Usage Examples:

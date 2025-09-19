@@ -8,7 +8,7 @@ use PHPUnit\Framework\TestCase;
 use Glueful\Routing\Router;
 use Glueful\Routing\AttributeRouteLoader;
 use Glueful\Routing\Attributes\{Controller, Get, Post, Put, Delete, Middleware, Route};
-use Glueful\DI\Container;
+use Psr\Container\ContainerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\JsonResponse;
 
@@ -16,12 +16,23 @@ class AttributeRouteLoaderTest extends TestCase
 {
     private Router $router;
     private AttributeRouteLoader $loader;
-    private Container $container;
+    private ContainerInterface $container;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->container = $this->createMock(Container::class);
+        // Minimal PSR-11 test container
+        $this->container = new class implements ContainerInterface {
+            /** @var array<string,mixed> */
+            private array $services = [];
+            public function has(string $id): bool { return array_key_exists($id, $this->services) || class_exists($id); }
+            public function get(string $id): mixed {
+                if (array_key_exists($id, $this->services)) { return $this->services[$id]; }
+                if (class_exists($id)) { return $this->services[$id] = new $id(); }
+                throw new class("Service '".$id."' not found") extends \RuntimeException implements \Psr\Container\NotFoundExceptionInterface {};
+            }
+            public function set(string $id, mixed $service): void { $this->services[$id] = $service; }
+        };
         $this->router = new Router($this->container);
         $this->loader = new AttributeRouteLoader($this->router);
     }

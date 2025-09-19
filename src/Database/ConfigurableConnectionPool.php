@@ -6,7 +6,7 @@ namespace Glueful\Database;
 
 use Glueful\Support\Options\ConfigurableService;
 use Glueful\Database\Driver\DatabaseDriver;
-use Symfony\Component\OptionsResolver\OptionsResolver;
+use Glueful\Support\Options\SimpleOptionsResolver as OptionsResolver;
 
 /**
  * Configurable Connection Pool

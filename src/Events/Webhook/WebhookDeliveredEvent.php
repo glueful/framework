@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Webhook;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 /**
  * Webhook Delivered Event
@@ -26,17 +26,11 @@ class WebhookDeliveredEvent extends BaseEvent
         parent::__construct();
     }
 
-    /**
-     * Get the webhook endpoint URL
-     */
     public function getUrl(): string
     {
         return $this->url;
     }
 
-    /**
-     * Get the webhook payload
-     */
     /**
      * @return array<string, mixed>
      */
@@ -45,34 +39,21 @@ class WebhookDeliveredEvent extends BaseEvent
         return $this->payload;
     }
 
-    /**
-     * Get the HTTP status code returned
-     */
     public function getStatusCode(): int
     {
         return $this->statusCode;
     }
-
-    /**
-     * Get the delivery duration in milliseconds
-     */
     public function getDurationMs(): float
     {
         return $this->durationMs;
     }
 
-    /**
-     * Get the host from the webhook URL
-     */
     public function getHost(): ?string
     {
         $parsed = parse_url($this->url);
         return $parsed['host'] ?? null;
     }
 
-    /**
-     * Get the payload size in bytes
-     */
     public function getPayloadSize(): int
     {
         return strlen(json_encode($this->payload));

@@ -10,10 +10,9 @@ use Glueful\Exceptions\BusinessLogicException;
 use Glueful\Exceptions\ValidationException;
 use Glueful\Helpers\ValidationHelper;
 use Glueful\Http\Response;
-use Glueful\Services\FileManager;
+use Glueful\Storage\StorageManager;
+use Glueful\Storage\PathGuard;
 use Glueful\Extensions\ExtensionManager;
-use Glueful\Configuration\ConfigurationProcessor;
-use Glueful\Configuration\Exceptions\ConfigurationException;
 
 class ConfigController extends BaseController
 {
@@ -216,22 +215,6 @@ class ConfigController extends BaseController
             ? $this->recursiveMerge($existingConfig, $data)
             : array_merge($existingConfig, $data);
 
-        // Schema validation before persist (if schema exists)
-        try {
-            /** @var ConfigurationProcessor $processor */
-            $processor = container()->get(ConfigurationProcessor::class);
-            if ($processor->hasSchema($configName)) {
-                $newConfig = $processor->processConfiguration($configName, $newConfig);
-            }
-        } catch (ConfigurationException $e) {
-            return $this->validationError([
-                'config_name' => $configName,
-                'errors' => [$e->getMessage()]
-            ], 'Configuration validation failed');
-        } catch (\Throwable $e) {
-            return $this->serverError('Failed to validate configuration: ' . $e->getMessage());
-        }
-
         // Update in ConfigManager (runtime)
         ConfigManager::set($configName, $newConfig);
 
@@ -278,35 +261,27 @@ class ConfigController extends BaseController
             throw new ValidationException('Invalid configuration data');
         }
 
-        // Get FileManager service
-        $fileManager = container()->get(FileManager::class);
-
         // Determine config path
         $configPath = config_path();
         $filePath = $configPath . '/' . $configName . '.php';
 
+        // Build a local disk rooted at config directory
+        if (!is_dir($configPath)) {
+            @mkdir($configPath, 0755, true);
+        }
+        $storage = new StorageManager([
+            'default' => 'config',
+            'disks' => [
+                'config' => ['driver' => 'local', 'root' => $configPath, 'visibility' => 'private'],
+            ],
+        ], new PathGuard());
+
         // Check if config already exists
-        if ($fileManager->exists($filePath)) {
+        if ($storage->disk('config')->fileExists($configName . '.php')) {
             throw new BusinessLogicException("Configuration file '{$configName}' already exists");
         }
 
-        // Ensure config directory exists
-        if (!$fileManager->exists($configPath)) {
-            if (!$fileManager->createDirectory($configPath)) {
-                throw new BusinessLogicException('Failed to create config directory');
-            }
-        }
-
-        // Optionally validate against schema (if defined)
-        try {
-            /** @var ConfigurationProcessor $processor */
-            $processor = container()->get(ConfigurationProcessor::class);
-            if ($processor->hasSchema($configName)) {
-                $data = $processor->processConfiguration($configName, $data);
-            }
-        } catch (ConfigurationException $e) {
-            throw new ValidationException('Configuration validation failed: ' . $e->getMessage());
-        }
+        // $data is already typed as array in method signature
 
         // Generate configuration content
         $configContent = "<?php\n\n";
@@ -317,12 +292,8 @@ class ConfigController extends BaseController
         $configContent .= " */\n\n";
         $configContent .= "return " . var_export($data, true) . ";\n";
 
-        // Atomic write via temp file + rename
-        $success = $this->writeAtomic($filePath, $configContent);
-
-        if (!$success) {
-            throw new BusinessLogicException('Failed to write configuration file');
-        }
+        // Write via StorageManager (local disk)
+        $storage->disk('config')->write($configName . '.php', $configContent);
 
         // Set appropriate permissions (readable by web server)
         @chmod($filePath, 0644);
@@ -346,30 +317,19 @@ class ConfigController extends BaseController
         $this->requirePermission('system.config.view');
 
         try {
-            $processor = container()->get(ConfigurationProcessor::class);
-            $schemaInfo = $processor->getSchemaInfo($configName);
-
-            if ($schemaInfo === null) {
+            $schemaPath = base_path('config/' . $configName . '.php');
+            if (!is_file($schemaPath)) {
                 return $this->notFound('Schema not found for configuration: ' . $configName);
             }
 
-            // Add additional schema details
-            $enhanced = $schemaInfo;
-            $enhanced['has_schema'] = true;
-            $enhanced['config_exists'] = $this->configFileExists($configName);
-
-            // Get schema structure if available
-            try {
-                $schema = $processor->getSchema($configName);
-                if ($schema !== null) {
-                    $treeBuilder = $schema->getConfigTreeBuilder();
-                    $tree = $treeBuilder->buildTree();
-                    $enhanced['schema_structure'] = $this->analyzeSchemaStructure($tree);
-                }
-            } catch (\Exception $e) {
-                // Schema structure analysis failed, continue without it
-                $enhanced['schema_structure'] = null;
-            }
+            $enhanced = [
+                'name' => $configName,
+                'description' => 'Plain PHP config file',
+                'version' => '1.0',
+                'has_schema' => true,
+                'config_exists' => $this->configFileExists($configName),
+                'schema_structure' => null,
+            ];
 
             return $this->publicSuccess($enhanced, 'Schema information retrieved', 1800);
         } catch (\Exception $e) {
@@ -386,22 +346,23 @@ class ConfigController extends BaseController
         $this->requirePermission('system.config.view');
 
         try {
-            $processor = container()->get(ConfigurationProcessor::class);
-            $schemas = $processor->getAllSchemas();
+            $pattern = base_path('config/*.php');
+            $globResult = glob($pattern);
+            $files = $globResult !== false ? $globResult : [];
 
             $schemaList = [];
-            foreach ($schemas as $configName => $schema) {
+            foreach ($files as $file) {
+                $name = basename($file, '.php');
                 $schemaList[] = [
-                    'name' => $configName,
-                    'description' => $schema->getDescription(),
-                    'version' => $schema->getVersion(),
-                    'config_exists' => $this->configFileExists($configName),
-                    'is_extension_schema' => $schema instanceof
-                        \Glueful\Configuration\Extension\ExtensionSchemaInterface
+                    'name' => $name,
+                    'description' => 'Plain PHP config file',
+                    'version' => '1.0',
+                    'config_exists' => $this->configFileExists($name),
+                    'is_extension_schema' => false,
                 ];
             }
 
-            return $this->publicSuccess($schemaList, 'Configuration schemas retrieved', 1800);
+            return $this->publicSuccess($schemaList, 'Configuration files retrieved', 1800);
         } catch (\Exception $e) {
             return $this->serverError('Failed to get schemas: ' . $e->getMessage());
         }
@@ -436,22 +397,15 @@ class ConfigController extends BaseController
         }
 
         try {
-            $processor = container()->get(ConfigurationProcessor::class);
-
-            if (!$processor->hasSchema($configName)) {
-                return $this->validationError(['config_name' => 'No schema found for configuration: ' . $configName]);
-            }
-
-            // Validate configuration
-            $validatedConfig = $processor->processConfiguration($configName, $configData);
+            // $configData is guaranteed to be an array from loadConfigFile when not null
 
             return $this->success([
                 'valid' => true,
                 'config_name' => $configName,
-                'processed_config' => $validatedConfig,
+                'processed_config' => $configData,
                 'validation_message' => 'Configuration is valid'
             ], 'Configuration validated successfully');
-        } catch (ConfigurationException $e) {
+        } catch (\InvalidArgumentException $e) {
             return $this->validationError([
                 'valid' => false,
                 'config_name' => $configName,
@@ -475,29 +429,20 @@ class ConfigController extends BaseController
         $this->rateLimitMethod('config_validate');
 
         try {
-            $processor = container()->get(ConfigurationProcessor::class);
-
-            if (!$processor->hasSchema($configName)) {
-                return $this->validationError(['config_name' => 'No schema found for configuration: ' . $configName]);
-            }
-
             // Load existing configuration
             $existingConfig = $this->loadConfigFile($configName);
             if ($existingConfig === null) {
                 return $this->notFound('Configuration file not found: ' . $configName);
             }
 
-            // Validate existing configuration
-            $validatedConfig = $processor->processConfiguration($configName, $existingConfig);
-
             return $this->success([
                 'valid' => true,
                 'config_name' => $configName,
                 'original_config' => $existingConfig,
-                'processed_config' => $validatedConfig,
+                'processed_config' => $existingConfig,
                 'validation_message' => 'Existing configuration is valid'
             ], 'Configuration validated successfully');
-        } catch (ConfigurationException $e) {
+        } catch (\InvalidArgumentException $e) {
             return $this->validationError([
                 'valid' => false,
                 'config_name' => $configName,
@@ -1084,61 +1029,5 @@ class ConfigController extends BaseController
         return file_exists($filePath) && is_readable($filePath);
     }
 
-    /**
-     * Analyze schema structure for API response
-     */
-    /**
-     * @param mixed $node
-     * @return array<string, mixed>
-     */
-    private function analyzeSchemaStructure(mixed $node): array
-    {
-        $structure = [
-            'type' => $this->getNodeTypeName($node),
-            'required' => $node->isRequired(),
-            'has_default' => $node->hasDefaultValue()
-        ];
-
-        if ($node->hasDefaultValue()) {
-            $structure['default_value'] = $node->getDefaultValue();
-        }
-
-        if ($node instanceof \Symfony\Component\Config\Definition\EnumNode) {
-            $structure['allowed_values'] = $node->getValues();
-        }
-
-        if ($node instanceof \Symfony\Component\Config\Definition\ArrayNode) {
-            $structure['children'] = [];
-            foreach ($node->getChildren() as $child) {
-                $structure['children'][$child->getName()] = $this->analyzeSchemaStructure($child);
-            }
-        }
-
-        return $structure;
-    }
-
-    /**
-     * Get node type name for schema structure
-     */
-    /**
-     * @param mixed $node
-     */
-    private function getNodeTypeName(mixed $node): string
-    {
-        if ($node instanceof \Symfony\Component\Config\Definition\ArrayNode) {
-            return 'array';
-        } elseif ($node instanceof \Symfony\Component\Config\Definition\BooleanNode) {
-            return 'boolean';
-        } elseif ($node instanceof \Symfony\Component\Config\Definition\IntegerNode) {
-            return 'integer';
-        } elseif ($node instanceof \Symfony\Component\Config\Definition\FloatNode) {
-            return 'float';
-        } elseif ($node instanceof \Symfony\Component\Config\Definition\EnumNode) {
-            return 'enum';
-        } elseif ($node instanceof \Symfony\Component\Config\Definition\ScalarNode) {
-            return 'scalar';
-        }
-
-        return 'unknown';
-    }
+    // Legacy Symfony\Config schema analyzers removed
 }

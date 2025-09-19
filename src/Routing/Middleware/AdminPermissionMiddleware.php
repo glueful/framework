@@ -19,7 +19,7 @@ use Glueful\Events\Security\AdminAccessEvent;
 use Glueful\Events\Security\AdminSecurityViolationEvent;
 use Glueful\Events\Event;
 use Psr\Log\LoggerInterface;
-use Glueful\DI\Container;
+use Psr\Container\ContainerInterface;
 
 /**
  * Admin Permission Middleware for Next-Gen Router
@@ -172,8 +172,8 @@ class AdminPermissionMiddleware implements RouteMiddleware
     /** @var LoggerInterface|null Logger instance */
     private ?LoggerInterface $logger;
 
-    /** @var Container|null DI Container */
-    private ?Container $container;
+    /** @var ContainerInterface|null DI Container */
+    private ?ContainerInterface $container;
 
     /** @var string Current environment */
     private string $environment;
@@ -195,7 +195,7 @@ class AdminPermissionMiddleware implements RouteMiddleware
      * @param PermissionManager|null $permissionManager Permission manager instance
      * @param UserRepository|null $userRepository User repository instance
      * @param LoggerInterface|null $logger Logger instance
-     * @param Container|null $container DI Container instance
+     * @param ContainerInterface|null $container DI Container instance
      */
     public function __construct(
         string $adminPermission = self::DEFAULT_ADMIN_PERMISSION,
@@ -212,7 +212,7 @@ class AdminPermissionMiddleware implements RouteMiddleware
         ?PermissionManager $permissionManager = null,
         ?UserRepository $userRepository = null,
         ?LoggerInterface $logger = null,
-        ?Container $container = null
+        ?ContainerInterface $container = null
     ) {
         $this->adminPermission = $adminPermission;
         $this->resource = $resource;
@@ -1198,13 +1198,14 @@ class AdminPermissionMiddleware implements RouteMiddleware
     /**
      * Get default container safely
      *
-     * @return Container|null Default container
+     * @return ContainerInterface|null Default container
      */
-    private function getDefaultContainer(): ?Container
+    private function getDefaultContainer(): ?ContainerInterface
     {
         if (function_exists('container')) {
             try {
-                return container();
+                $c = container();
+                return $c;
             } catch (\Exception) {
                 return null;
             }
@@ -1212,7 +1213,8 @@ class AdminPermissionMiddleware implements RouteMiddleware
 
         if (function_exists('app')) {
             try {
-                return app();
+                $a = app();
+                return $a instanceof ContainerInterface ? $a : null;
             } catch (\Exception) {
                 return null;
             }

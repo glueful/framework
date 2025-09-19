@@ -16,8 +16,7 @@ class ExtensionServiceCompilerTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->container = new ContainerBuilder();
-        $this->compiler = new ExtensionServiceCompiler($this->container);
+        $this->markTestSkipped('Legacy DI/Symfony ContainerBuilder-based compiler removed.');
     }
 
     public function testRegisterSimpleService(): void

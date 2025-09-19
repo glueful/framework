@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Cache;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 /**
  * Cache Miss Event
@@ -29,57 +29,34 @@ class CacheMissEvent extends BaseEvent
         parent::__construct();
     }
 
-    /**
-     * Get cache key
-     *
-     * @return string Cache key
-     */
     public function getKey(): string
     {
         return $this->key;
     }
 
     /**
-     * Get expected tags
-     *
-     * @return array<int, string> Tags
+     * @return array<int, string>
      */
     public function getTags(): array
     {
         return $this->tags;
     }
 
-    /**
-     * Get value loader callback
-     *
-     * @return mixed Value loader
-     */
     public function getValueLoader(): mixed
     {
         return $this->valueLoader;
     }
 
-    /**
-     * Check if value loader is available
-     *
-     * @return bool True if loader available
-     */
     public function hasValueLoader(): bool
     {
         return $this->valueLoader !== null && is_callable($this->valueLoader);
     }
 
-    /**
-     * Load the value using the callback
-     *
-     * @return mixed Loaded value
-     */
     public function loadValue(): mixed
     {
         if (!$this->hasValueLoader()) {
             throw new \RuntimeException('No value loader available');
         }
-
         return call_user_func($this->valueLoader);
     }
 }

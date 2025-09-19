@@ -127,7 +127,10 @@ class BootProfiler
         try {
             if (isset($GLOBALS['container'])) {
                 $container = $GLOBALS['container'];
-                if ($container instanceof \Glueful\DI\Container && $container->has(\Psr\Log\LoggerInterface::class)) {
+                if (
+                    $container instanceof \Glueful\Container\Container
+                    && $container->has(\Psr\Log\LoggerInterface::class)
+                ) {
                     $logger = $container->get(\Psr\Log\LoggerInterface::class);
                     if ($logger instanceof \Psr\Log\LoggerInterface) {
                         match ($level) {

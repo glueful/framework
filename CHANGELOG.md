@@ -4,6 +4,40 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.1.0] - 2025-09-19 — Aurora
+
+Aurora (internal, pre-public) release. This version intentionally includes breaking changes as we finalize core abstractions ahead of public availability. See Changed/Removed for details and migration notes.
+
+### Added
+- Alias support for services and improved provider bootstrapping.
+- Core and Console service providers for out-of-the-box wiring.
+
+### Changed
+- Dependency Injection: replaced Symfony DI with a lightweight, custom container optimized for Glueful.
+- Events: migrated to PSR-14 with a custom dispatcher implementation.
+- Storage: migrated to Flysystem; updated configuration structure and options.
+- Configuration: refactored to array-based schemas for clarity and compile-time validation.
+- Validation: moved to a rules-based system with clearer composition.
+- Composer dependencies refreshed to latest compatible versions.
+
+Breaking changes:
+- DI container swap may affect service definitions, compiler passes, and container-aware utilities.
+- Event system changes require updating listener/subscriber registration to PSR-14.
+- Storage configuration keys and adapters changed to Flysystem-based configuration.
+- Config and validation refactors may require updating custom rules, schemas, and boot code.
+
+### Removed
+- Legacy LDAP/SAML authentication integration.
+- Queue configuration management classes.
+- Custom config and serialization modules superseded by the new configuration approach.
+- Symfony DI usage and related integration points.
+
+### Fixed
+- Documentation updates and cleanup in the database and storage guides.
+
+### Security
+- No security-specific changes in this release.
+
 ## [1.0.0] - 2025-09-13
 
 First stable release of the split Glueful Framework package (formerly part of glueful/glueful). This version establishes the framework runtime as a standalone library and sets a clear baseline for future 1.x releases.

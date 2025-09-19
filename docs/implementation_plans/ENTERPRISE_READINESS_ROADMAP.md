@@ -104,7 +104,7 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
     - Framework logger now always pushes `StandardLogProcessor` with environment, framework version, and user id resolver.
     - `StandardLogProcessor` enriches logs with `request_id` (from helper/header), `user_id`, env, version, timestamp, memory, pid.
   - Where
-    - Framework: `src/DI/ServiceProviders/CoreServiceProvider.php` (method `createLogger`)
+    - Framework: `src/Container/Providers/CoreProvider.php` (method `createLogger`)
     - Processor: `src/Logging/StandardLogProcessor.php`
   - Notes
     - Application-specific channels can also push the same processor to unify fields across app logs.
@@ -116,7 +116,7 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
     - Registered DI service and alias `'metrics'` for easy route group usage.
   - Where
     - Middleware: `src/Routing/Middleware/MetricsMiddleware.php`
-    - DI registration/alias: `src/DI/ServiceProviders/CoreServiceProvider.php` (service + `'metrics'` alias)
+    - Container registration/alias: `src/Container/Providers/CoreProvider.php` (service + `'metrics'` alias)
   - Example usage
     ```php
     // routes/resource.php
@@ -153,7 +153,7 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
     - No‑op (core): `src/Observability/Tracing/{NoopTracer.php, NoopSpanBuilder.php, NoopSpan.php}`
     - Middleware (core): `src/Routing/Middleware/TracingMiddleware.php` depends only on contracts; alias `'tracing'` recommended.
     - Adapters (extensions): `src/Observability/Tracing/Adapters/{OtelTracerAdapter.php, DatadogTracerAdapter.php, NewRelicTracerAdapter.php}` (new)
-    - Service provider (extension): `src/DI/ServiceProviders/TracingServiceProvider.php` (binds adapter)
+    - Service provider (extension): `src/Container/Providers/TracingServiceProvider.php` (binds adapter)
     - Config (core): `config/observability.php` (select driver + options)
   - Notes
     - Default DI binding (TracerInterface → NoopTracer) and container alias `'tracing'` → TracingMiddleware should be added in CoreServiceProvider (if not already) so the middleware can be enabled via routes without extra wiring.
@@ -337,7 +337,7 @@ Goal: harden Glueful for enterprise-grade production workloads across reliabilit
     - Add integration tests to validate limiter behavior and headers.
   - Where
     - Config: `config/security.php` / `config/app.php`
-    - Middleware alias: registered in `src/DI/ServiceProviders/CoreServiceProvider.php` as `'rate_limit'`
+    - Middleware alias: registered in `src/Container/Providers/CoreProvider.php` as `'rate_limit'`
     - Implementation: `src/Security/RateLimiter.php`, `src/Security/AdaptiveRateLimiter.php`, `src/Security/RateLimiterDistributor.php`
   - Snippets
     ```php

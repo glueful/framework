@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Support\Options;
 
-use Symfony\Component\OptionsResolver\OptionsResolver;
+use Glueful\Support\Options\SimpleOptionsResolver as OptionsResolver;
 
 /**
  * Configurable Interface

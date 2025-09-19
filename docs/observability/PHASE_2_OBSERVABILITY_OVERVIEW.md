@@ -85,7 +85,7 @@ return [
 
 ### Service Provider Integration
 
-**File**: `src/DI/ServiceProviders/CoreServiceProvider.php` (✅ **Implemented**)
+**File**: `src/Container/Providers/CoreProvider.php` (✅ **Implemented**)
 ```php
 // Enhanced user resolution with multiple authentication sources
 $userIdResolver = function (): ?string {
@@ -530,7 +530,7 @@ final class TracingMiddleware implements \Glueful\Routing\RouteMiddleware
 
 ### TracingServiceProvider
 
-**File**: `src/DI/ServiceProviders/TracingServiceProvider.php`
+**File**: `src/Container/Providers/TracingServiceProvider.php`
 ```php
 <?php
 

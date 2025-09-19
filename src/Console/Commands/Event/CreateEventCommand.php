@@ -4,7 +4,8 @@ namespace Glueful\Console\Commands\Event;
 
 use Glueful\Console\BaseCommand;
 use Glueful\Services\FileFinder;
-use Glueful\Services\FileManager;
+use Glueful\Storage\StorageManager;
+use Glueful\Storage\PathGuard;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputArgument;
@@ -28,7 +29,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 class CreateEventCommand extends BaseCommand
 {
     private FileFinder $fileFinder;
-    private FileManager $fileManager;
+    private StorageManager $storage;
 
     protected function configure(): void
     {
@@ -106,7 +107,12 @@ class CreateEventCommand extends BaseCommand
     private function initializeServices(): void
     {
         $this->fileFinder = new FileFinder();
-        $this->fileManager = new FileManager();
+        $this->storage = new StorageManager([
+            'default' => 'local',
+            'disks' => [
+                'local' => ['driver' => 'local', 'root' => base_path(), 'visibility' => 'private'],
+            ],
+        ], new PathGuard());
     }
 
     /**
@@ -184,7 +190,7 @@ class CreateEventCommand extends BaseCommand
      */
     private function eventExists(string $path): bool
     {
-        return $this->fileManager->exists($path);
+        return file_exists($path);
     }
 
     /**
@@ -195,19 +201,18 @@ class CreateEventCommand extends BaseCommand
      */
     private function createEvent(array $eventInfo): string
     {
-        // Create directory if it doesn't exist using FileManager
-        if (!$this->fileManager->exists($eventInfo['directory'])) {
-            if (!$this->fileManager->createDirectory($eventInfo['directory'], 0755)) {
+        // Ensure target directory exists
+        if (!is_dir($eventInfo['directory'])) {
+            if (!@mkdir($eventInfo['directory'], 0755, true) && !is_dir($eventInfo['directory'])) {
                 throw new \RuntimeException('Failed to create directory: ' . $eventInfo['directory']);
             }
         }
 
         $content = $this->generateEventContent($eventInfo);
 
-        // Write file using FileManager for safe operations
-        if (!$this->fileManager->writeFile($eventInfo['path'], $content)) {
-            throw new \RuntimeException('Failed to write event file: ' . $eventInfo['path']);
-        }
+        // Write file via local disk rooted at directory
+        $disk = $this->makeDisk($eventInfo['directory']);
+        $disk->write(basename($eventInfo['path']), $content);
 
         return $eventInfo['path'];
     }
@@ -253,5 +258,21 @@ class {$className}
     ) {}
 }
 PHP;
+    }
+
+    private function makeDisk(string $root): \League\Flysystem\FilesystemOperator
+    {
+        $cfg = [
+            'default' => 'scaffold',
+            'disks' => [
+                'scaffold' => [
+                    'driver' => 'local',
+                    'root' => $root,
+                    'visibility' => 'private',
+                ],
+            ],
+        ];
+        $sm = new StorageManager($cfg, new PathGuard());
+        return $sm->disk('scaffold');
     }
 }

@@ -5,7 +5,8 @@ namespace Glueful\Console\Commands\Generate;
 use Glueful\Console\BaseCommand;
 use Glueful\Support\Documentation\ApiDefinitionGenerator;
 use Glueful\Services\FileFinder;
-use Glueful\Services\FileManager;
+use Glueful\Storage\StorageManager;
+use Glueful\Storage\PathGuard;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -34,7 +35,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 class ApiDefinitionsCommand extends BaseCommand
 {
     private ?FileFinder $fileFinder = null;
-    private ?FileManager $fileManager = null;
+    private ?StorageManager $storage = null;
 
     protected function configure(): void
     {
@@ -214,16 +215,25 @@ class ApiDefinitionsCommand extends BaseCommand
     }
 
     /**
-     * Get FileManager service instance
+     * Get StorageManager service instance
      *
-     * @return FileManager
+     * @return StorageManager
      */
-    private function getFileManager(): FileManager
+    private function getStorage(): StorageManager
     {
-        if ($this->fileManager === null) {
-            $this->fileManager = $this->getService(FileManager::class);
+        if ($this->storage === null) {
+            $config = [
+                'default' => 'local',
+                'disks' => [
+                    'local' => [
+                        'driver' => 'local',
+                        'root' => base_path()
+                    ]
+                ]
+            ];
+            $this->storage = new StorageManager($config, new PathGuard());
         }
-        return $this->fileManager;
+        return $this->storage;
     }
 
     /**
@@ -236,19 +246,18 @@ class ApiDefinitionsCommand extends BaseCommand
      */
     private function cleanDefinitionDirectories(): void
     {
-        $fileManager = $this->getFileManager();
+        $storage = $this->getStorage();
         $fileFinder = $this->getFileFinder();
 
         // Temporarily disable file extension restrictions for directory removal
-        $originalAllowedExtensions = $fileManager->getConfig('allowed_extensions');
-        $fileManager->setConfig('allowed_extensions', null);
+        // N/A for StorageManager (no extension restrictions)
 
         try {
             $jsonDefinitionsPath = config('app.paths.database_json_definitions');
             $apiDocDefinitionsPath = config('app.paths.api_docs') . 'json-definitions';
 
             // Clean api-json-definitions directory (just .json files)
-            if ($fileManager->exists($jsonDefinitionsPath)) {
+            if (is_dir($jsonDefinitionsPath)) {
                 $this->info("Cleaning JSON definitions from: {$jsonDefinitionsPath}");
 
                 $finder = $fileFinder->createFinder();
@@ -256,7 +265,7 @@ class ApiDefinitionsCommand extends BaseCommand
 
                 $count = 0;
                 foreach ($jsonFiles as $file) {
-                    $fileManager->remove($file->getPathname());
+                    @unlink($file->getPathname());
                     $count++;
                 }
 
@@ -264,7 +273,7 @@ class ApiDefinitionsCommand extends BaseCommand
             }
 
             // Clean json-definitions directory (including subdirectories)
-            if ($fileManager->exists($apiDocDefinitionsPath)) {
+            if (is_dir($apiDocDefinitionsPath)) {
                 $this->info("Cleaning API doc definitions from: {$apiDocDefinitionsPath}");
 
                 // First, find and remove all subdirectories
@@ -273,7 +282,8 @@ class ApiDefinitionsCommand extends BaseCommand
 
                 $dirCount = 0;
                 foreach ($directories as $directory) {
-                    $fileManager->remove($directory->getPathname());
+                    // Best-effort directory removal
+                    @rmdir($directory->getPathname());
                     $dirCount++;
                 }
 
@@ -283,7 +293,7 @@ class ApiDefinitionsCommand extends BaseCommand
 
                 $fileCount = 0;
                 foreach ($jsonFiles as $file) {
-                    $fileManager->remove($file->getPathname());
+                    @unlink($file->getPathname());
                     $fileCount++;
                 }
 
@@ -292,8 +302,7 @@ class ApiDefinitionsCommand extends BaseCommand
 
             $this->success('Definition directories cleaned successfully!');
         } finally {
-            // Restore original file extension restrictions
-            $fileManager->setConfig('allowed_extensions', $originalAllowedExtensions);
+            // no-op
         }
     }
 }

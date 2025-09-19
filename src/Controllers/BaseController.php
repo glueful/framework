@@ -99,7 +99,12 @@ abstract class BaseController
         $this->repositoryFactory = $repositoryFactory ?? new RepositoryFactory();
 
         // Initialize serializer
-        $this->serializer = $serializer ?? container()->get(Serializer::class);
+        $this->serializer = $serializer ?? (
+            class_exists(Serializer::class)
+                ? new Serializer()
+                : new \Glueful\Serialization\Serializer()
+        );
+        \Glueful\Http\Response::setSerializer($this->serializer);
 
         // Set request - use provided request or get from container
         $this->request = $request ?? container()->get(Request::class);

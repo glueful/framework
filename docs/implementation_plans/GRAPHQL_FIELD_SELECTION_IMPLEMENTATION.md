@@ -594,7 +594,7 @@ GET /users/123?fields=*&expand=posts.title,posts.comments.text
 
 ### 1. Service Provider Registration
 
-Add to `src/DI/ServiceProviders/CoreServiceProvider.php`:
+Add to `src/Container/Providers/CoreProvider.php`:
 
 ```php
 use Glueful\Support\FieldSelection\{FieldSelector, Projector};

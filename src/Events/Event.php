@@ -4,209 +4,84 @@ declare(strict_types=1);
 
 namespace Glueful\Events;
 
-use Symfony\Component\EventDispatcher\EventDispatcherInterface as SymfonyEventDispatcherInterface;
-use Symfony\Contracts\EventDispatcher\Event as SymfonyEvent;
-use Psr\Log\LoggerInterface;
+use Psr\Container\ContainerInterface;
+use Psr\EventDispatcher\EventDispatcherInterface;
 
-/**
- * Glueful Event Manager
- *
- * Provides a simple, unified API for event dispatching and listening
- * Wraps Symfony's EventDispatcher with framework-specific functionality
- *
- * Usage:
- * Event::dispatch(new MyEvent($data));
- * Event::listen(MyEvent::class, $listener);
- */
-class Event
+final class Event
 {
-    private static ?SymfonyEventDispatcherInterface $dispatcher = null;
-    private static ?LoggerInterface $logger = null;
-    private static bool $logEvents = false;
+    private static ?EventDispatcherInterface $dispatcher = null;
+    private static ?ListenerProvider $provider = null;
+    private static ?ContainerInterface $container = null;
 
     /**
-     * Initialize the event system
-     *
-     * @param SymfonyEventDispatcherInterface $dispatcher Symfony event dispatcher
-     * @param LoggerInterface|null $logger Optional logger for event debugging
-     * @param bool $logEvents Whether to log dispatched events
+     * Bootstrap the facade with core services (tests or custom bootstraps can call this).
      */
-    public static function initialize(
-        SymfonyEventDispatcherInterface $dispatcher,
-        ?LoggerInterface $logger = null,
-        bool $logEvents = false
+    public static function bootstrap(
+        EventDispatcherInterface $dispatcher,
+        ListenerProvider $provider,
+        ?ContainerInterface $container = null
     ): void {
         self::$dispatcher = $dispatcher;
-        self::$logger = $logger;
-        self::$logEvents = $logEvents;
+        self::$provider = $provider;
+        self::$container = $container;
+    }
+
+    public static function dispatch(object $event): object
+    {
+        self::ensureBootstrapped();
+        return self::$dispatcher->dispatch($event);
     }
 
     /**
-     * Dispatch an event
-     *
-     * @param object $event The event to dispatch (can be any object)
-     * @param string|null $eventName Optional event name (auto-detected if not provided)
-     * @return object The dispatched event
+     * Register a listener.
+     * $listener can be:
+     *  - callable
+     *  - string '@serviceId' or '@serviceId:method' (lazy, via container)
      */
-    public static function dispatch(object $event, ?string $eventName = null): object
+    public static function listen(string $eventClass, callable|string $listener, int $priority = 0): void
     {
-        if (self::$dispatcher === null) {
-            self::initializeFromContainer();
-        }
-
-        // If no dispatcher is available, silently return the event without dispatching
-        if (self::$dispatcher === null) {
-            return $event;
-        }
-
-        $eventName = $eventName ?? get_class($event);
-
-        // Optional event logging for debugging
-        if (self::$logEvents && self::$logger !== null) {
-            self::$logger->debug('Event dispatched', [
-                'type' => 'event',
-                'event_name' => $eventName,
-                'event_class' => get_class($event),
-                'timestamp' => date('c')
-            ]);
-        }
-
-        if ($event instanceof BaseEvent) {
-        // Add any framework-specific handling here
-            if (self::$logEvents && self::$logger !== null) {
-                self::$logger->debug('Glueful event dispatched', [
-                'event_id' => $event->getEventId(),
-                'event_name' => $event->getName(),
-                'timestamp' => $event->getTimestamp()
-                ]);
+        self::ensureBootstrapped();
+        if (is_string($listener) && str_starts_with($listener, '@')) {
+            if (self::$container === null) {
+                throw new \LogicException("Event::listen called with service reference but no container is set.");
             }
-        }
-
-        // If the event is already a Symfony event, dispatch directly
-        if ($event instanceof SymfonyEvent) {
-            return self::$dispatcher->dispatch($event, $eventName);
-        }
-
-        // For plain PHP objects, wrap them in a Symfony event
-        $wrappedEvent = new class ($event) extends SymfonyEvent {
-            public function __construct(public readonly object $payload)
-            {
-            }
-        };
-
-        self::$dispatcher->dispatch($wrappedEvent, $eventName);
-
-        // Return the original event object
-        return $event;
-    }
-
-    /**
-     * Listen for an event
-     *
-     * @param string $eventName The event name or class to listen for
-     * @param callable $listener The listener callable
-     * @param int $priority The listener priority (higher = earlier execution)
-     */
-    public static function listen(string $eventName, callable $listener, int $priority = 0): void
-    {
-        if (self::$dispatcher === null) {
-            self::initializeFromContainer();
-        }
-
-        self::$dispatcher->addListener($eventName, $listener, $priority);
-    }
-
-    /**
-     * Stop listening for an event
-     *
-     * @param string $eventName The event name
-     * @param callable $listener The listener to remove
-     */
-    public static function forget(string $eventName, callable $listener): void
-    {
-        if (self::$dispatcher === null) {
+            $lazy = new ContainerListener($listener, self::$container);
+            self::$provider->addListener($eventClass, $lazy, $priority);
             return;
         }
-
-        self::$dispatcher->removeListener($eventName, $listener);
+        self::$provider->addListener($eventClass, $listener, $priority);
     }
 
     /**
-     * Get all listeners for an event
-     *
-     * @param string|null $eventName The event name (null for all listeners)
-     * @return array The listeners
+     * Subscribe a subscriber class with static getSubscribedEvents map.
      */
-    /**
-     * @return array<string, array<callable>>
-     */
-    public static function getListeners(?string $eventName = null): array
+    public static function subscribe(string $subscriberClass): void
     {
-        if (self::$dispatcher === null) {
-            return [];
-        }
-
-        return self::$dispatcher->getListeners($eventName);
+        self::ensureBootstrapped();
+        $registrar = new SubscriberRegistrar(self::$provider, self::$container);
+        $registrar->add($subscriberClass);
     }
 
     /**
-     * Check if an event has listeners
-     *
-     * @param string $eventName The event name
-     * @return bool True if the event has listeners
+     * @return array<int, callable> materialized listeners for the given class
      */
-    public static function hasListeners(?string $eventName = null): bool
+    public static function getListeners(string $eventClass): array
     {
-        if (self::$dispatcher === null) {
-            return false;
-        }
-
-        return self::$dispatcher->hasListeners($eventName);
+        self::ensureBootstrapped();
+        return self::$provider->getListenersForType($eventClass);
     }
 
-    /**
-     * Enable or disable event logging
-     *
-     * @param bool $enabled Whether to log events
-     */
-    public static function setLogging(bool $enabled): void
+    public static function hasListeners(string $eventClass): bool
     {
-        self::$logEvents = $enabled;
+        return count(self::getListeners($eventClass)) > 0;
     }
 
-    /**
-     * Get the underlying Symfony dispatcher (for advanced use cases)
-     *
-     * @return SymfonyEventDispatcherInterface|null
-     */
-    public static function getDispatcher(): ?SymfonyEventDispatcherInterface
+    private static function ensureBootstrapped(): void
     {
-        return self::$dispatcher;
-    }
-
-    /**
-     * Initialize from DI container if not already initialized
-     */
-    private static function initializeFromContainer(): void
-    {
-        if (!function_exists('container')) {
-            return;
-        }
-
-        try {
-            $container = container();
-
-            if ($container->has(SymfonyEventDispatcherInterface::class)) {
-                self::$dispatcher = $container->get(SymfonyEventDispatcherInterface::class);
-            }
-
-            if ($container->has(LoggerInterface::class)) {
-                self::$logger = $container->get(LoggerInterface::class);
-            }
-        } catch (\Throwable) {
-            // Silently fail when container is not available (e.g., in tests)
-            // This prevents event dispatching from breaking the application
-            return;
+        if (self::$dispatcher === null || self::$provider === null) {
+            throw new \LogicException(
+                'Event facade not bootstrapped. Call Event::bootstrap(...) during application boot.'
+            );
         }
     }
 }

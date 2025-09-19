@@ -5,14 +5,12 @@ declare(strict_types=1);
 namespace Glueful\Console\Commands\Container;
 
 use Glueful\Console\BaseCommand;
-use Glueful\DI\Container;
+use Psr\Container\ContainerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\DependencyInjection\Exception\ServiceNotFoundException;
-use Throwable;
 
 /**
  * Container Debug Command
@@ -106,8 +104,6 @@ class ContainerDebugCommand extends BaseCommand
         $showArguments = (bool) $input->getOption('show-arguments');
 
         try {
-            $container = $this->getContainer();
-
             if ($service !== null) {
                 return $this->debugSpecificService($service, $showArguments, $format);
             }
@@ -129,7 +125,7 @@ class ContainerDebugCommand extends BaseCommand
             }
 
             if ($showGraph === true) {
-                return $this->showDependencyGraph($format);
+                return $this->showDependencyGraph();
             }
 
             // Default: show container overview
@@ -145,8 +141,6 @@ class ContainerDebugCommand extends BaseCommand
      * @param bool $showArguments
      * @param string $format
      * @return int
-     * @throws ServiceNotFoundException
-     * @throws Throwable
      */
     private function debugSpecificService(string $serviceId, bool $showArguments, string $format): int
     {
@@ -178,7 +172,7 @@ class ContainerDebugCommand extends BaseCommand
         $services = [];
 
         // Get service IDs from the container
-        $serviceIds = $this->getServiceIds($container, $showPrivate);
+        $serviceIds = $this->getServiceIds();
 
         foreach ($serviceIds as $serviceId) {
             try {
@@ -300,7 +294,7 @@ class ContainerDebugCommand extends BaseCommand
         return self::SUCCESS;
     }
 
-    private function showDependencyGraph(string $format): int
+    private function showDependencyGraph(): int
     {
         $this->info('Service Dependency Graph:');
         $this->line('');
@@ -333,7 +327,7 @@ class ContainerDebugCommand extends BaseCommand
             'service_count' => $this->getServiceCount($container),
             'environment' => config('app.env', 'unknown'),
             'debug_mode' => config('app.debug', false),
-            'compiled' => $this->isContainerCompiled($container)
+            'compiled' => $this->isContainerCompiled()
         ];
 
         if ($format === 'json') {
@@ -388,7 +382,7 @@ class ContainerDebugCommand extends BaseCommand
     /**
      * @return array<string>
      */
-    private function getServiceIds(Container $container, bool $showPrivate): array
+    private function getServiceIds(): array
     {
         // This is a simplified version - in a real implementation we'd need
         // access to the ContainerBuilder to get all service IDs
@@ -402,12 +396,12 @@ class ContainerDebugCommand extends BaseCommand
         ];
     }
 
-    private function getServiceCount(Container $container): int
+    private function getServiceCount(ContainerInterface $container): int
     {
-        return count($this->getServiceIds($container, true));
+        return count($this->getServiceIds());
     }
 
-    private function isContainerCompiled(Container $container): bool
+    private function isContainerCompiled(): bool
     {
         // Check if container is compiled (simplified check)
         return !(bool) config('app.debug', false);

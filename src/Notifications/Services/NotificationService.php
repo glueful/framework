@@ -16,7 +16,7 @@ use InvalidArgumentException;
 use Glueful\Logging\LogManager;
 use Glueful\Support\Options\ConfigurableInterface;
 use Glueful\Support\Options\ConfigurableTrait;
-use Symfony\Component\OptionsResolver\OptionsResolver;
+use Glueful\Support\Options\SimpleOptionsResolver as OptionsResolver;
 
 /**
  * Notification Service

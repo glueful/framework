@@ -10,7 +10,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Glueful\Auth\AuthBootstrap;
 use Glueful\Auth\AuthenticationManager;
 use Glueful\Auth\TokenManager;
-use Glueful\DI\Container;
+use Psr\Container\ContainerInterface;
 use Glueful\Exceptions\AuthenticationException;
 use Glueful\Events\Http\HttpAuthFailureEvent;
 use Glueful\Events\Http\HttpAuthSuccessEvent;
@@ -32,7 +32,7 @@ use Psr\Log\LoggerInterface;
 class AuthMiddleware implements RouteMiddleware
 {
     private AuthenticationManager $authManager;
-    private ?Container $container;
+    private ?ContainerInterface $container;
     private ?LoggerInterface $logger = null;
     /** @var array<string> */
     private array $providerNames = [];
@@ -44,13 +44,13 @@ class AuthMiddleware implements RouteMiddleware
      * Create authentication middleware with enterprise features
      *
      * @param AuthenticationManager|null $authManager Custom auth manager
-     * @param Container|null $container DI container for services
+     * @param ContainerInterface|null $container DI container for services
      * @param array<string> $providerNames Authentication providers to use
      * @param array<string, mixed> $options Additional options
      */
     public function __construct(
         ?AuthenticationManager $authManager = null,
-        ?Container $container = null,
+        ?ContainerInterface $container = null,
         array $providerNames = [],
         array $options = []
     ) {
@@ -513,12 +513,13 @@ class AuthMiddleware implements RouteMiddleware
     /**
      * Get default container safely
      */
-    private function getDefaultContainer(): ?Container
+    private function getDefaultContainer(): ?ContainerInterface
     {
         // Check if container() function exists
         if (function_exists('container')) {
             try {
-                return container();
+                $c = container();
+                return $c;
             } catch (\Exception) {
                 return null;
             }
@@ -528,12 +529,12 @@ class AuthMiddleware implements RouteMiddleware
         if (function_exists('app')) {
             try {
                 $app = app();
-                if ($app instanceof Container) {
+                if ($app instanceof ContainerInterface) {
                     return $app;
                 }
                 if (is_object($app) && method_exists($app, 'getContainer')) {
                     $container = $app->getContainer();
-                    return $container instanceof Container ? $container : null;
+                    return $container instanceof ContainerInterface ? $container : null;
                 }
             } catch (\Exception) {
                 return null;

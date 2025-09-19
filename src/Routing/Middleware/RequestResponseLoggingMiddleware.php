@@ -8,7 +8,7 @@ use Glueful\Routing\RouteMiddleware;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Psr\Log\LoggerInterface;
-use Glueful\DI\Container;
+use Psr\Container\ContainerInterface;
 
 /**
  * Request/Response Logging Middleware for Next-Gen Router
@@ -120,8 +120,8 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
     /** @var LoggerInterface Logger instance */
     private LoggerInterface $logger;
 
-    /** @var Container|null DI Container */
-    private ?Container $container;
+    /** @var ContainerInterface|null DI Container */
+    private ?ContainerInterface $container;
 
     /** @var string Current environment */
     private string $environment;
@@ -146,7 +146,7 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
      * @param int $bodySizeLimit Body size limit for logging in bytes
      * @param bool $anonymizeIps Whether to anonymize IP addresses
      * @param LoggerInterface|null $logger Logger instance
-     * @param Container|null $container DI Container instance
+     * @param ContainerInterface|null $container DI Container instance
      */
     public function __construct(
         string $logMode = 'both',
@@ -157,7 +157,7 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
         int $bodySizeLimit = self::DEFAULT_BODY_SIZE_LIMIT,
         bool $anonymizeIps = false,
         ?LoggerInterface $logger = null,
-        ?Container $container = null
+        ?ContainerInterface $container = null
     ) {
         $this->logMode = $logMode;
         $this->logHeaders = $logHeaders;
@@ -639,11 +639,12 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
     /**
      * Get default container safely
      */
-    private function getDefaultContainer(): ?Container
+    private function getDefaultContainer(): ?\Psr\Container\ContainerInterface
     {
         if (function_exists('container')) {
             try {
-                return container();
+                $c = container();
+                return $c;
             } catch (\Exception) {
                 return null;
             }
@@ -651,7 +652,8 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
 
         if (function_exists('app')) {
             try {
-                return app();
+                $a = app();
+                return $a instanceof \Psr\Container\ContainerInterface ? $a : null;
             } catch (\Exception) {
                 return null;
             }

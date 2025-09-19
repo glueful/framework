@@ -2665,7 +2665,7 @@ $this->lazyRegistry->lazy('router', \Glueful\DI\ServiceFactories\RouterFactory::
 // No additional registration needed - just ensure CoreServiceProvider is loaded
 ```
 
-**Current Routing Services in `src/DI/ServiceProviders/CoreServiceProvider.php`:**
+**Current Routing Services in `src/Container/Providers/CoreProvider.php`:**
 ```php
 // Next-Gen Router services (already implemented)
 $container->register(\Glueful\Routing\Router::class)

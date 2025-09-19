@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Glueful\DTOs;
 
-use Glueful\Serialization\Attributes\{Groups, SerializedName, DateFormat, MaxDepth};
-
 /**
  * User Response Model
  *
@@ -14,128 +12,43 @@ use Glueful\Serialization\Attributes\{Groups, SerializedName, DateFormat, MaxDep
  */
 class UserResponseModel
 {
-    #[Groups(['public', 'authenticated', 'detailed'])]
     public string $id;
-
-    #[Groups(['public', 'authenticated', 'detailed'])]
     public string $name;
-
-    #[Groups(['public', 'authenticated', 'detailed'])]
     public ?string $username = null;
-
-    #[Groups(['authenticated', 'detailed'])]
     public string $email;
-
-    #[Groups(['public', 'authenticated', 'detailed'])]
     public string $status;
-
-    #[Groups(['authenticated', 'detailed'])]
     public string $role;
-
-    #[Groups(['public', 'authenticated', 'detailed'])]
-    #[SerializedName('created_at')]
-    #[DateFormat('c')] // ISO 8601 format
     public \DateTime $createdAt;
-
-    #[Groups(['authenticated', 'detailed'])]
-    #[SerializedName('updated_at')]
-    #[DateFormat('c')]
     public \DateTime $updatedAt;
-
-    #[Groups(['authenticated', 'detailed'])]
-    #[SerializedName('last_login')]
-    #[DateFormat('c')]
     public ?\DateTime $lastLogin = null;
-
-    #[Groups(['public', 'authenticated', 'detailed'])]
     public ?string $avatar = null;
-
-    #[Groups(['public', 'authenticated', 'detailed'])]
     public ?string $bio = null;
-
-    #[Groups(['public', 'authenticated', 'detailed'])]
     public ?string $location = null;
-
-    #[Groups(['public', 'authenticated', 'detailed'])]
     public ?string $website = null;
-
-    #[Groups(['authenticated', 'detailed'])]
-    #[SerializedName('phone_number')]
     public ?string $phoneNumber = null;
-
-    #[Groups(['authenticated', 'detailed'])]
-    #[SerializedName('date_of_birth')]
-    #[DateFormat('Y-m-d')]
     public ?\DateTime $dateOfBirth = null;
 
     /** @var array<string, mixed> */
-    #[Groups(['detailed'])]
     public array $preferences = [];
 
     /** @var array<int, string> */
-    #[Groups(['detailed'])]
     public array $permissions = [];
-
-    #[Groups(['public', 'authenticated', 'detailed'])]
-    #[SerializedName('is_verified')]
     public bool $isVerified = false;
-
-    #[Groups(['public', 'authenticated', 'detailed'])]
-    #[SerializedName('is_online')]
     public bool $isOnline = false;
-
-    #[Groups(['authenticated', 'detailed'])]
-    #[SerializedName('profile_completed')]
     public bool $profileCompleted = false;
-
-    #[Groups(['detailed'])]
-    #[MaxDepth(2)]
     public ?UserResponseModel $manager = null;
 
     /** @var array<int, UserResponseModel> */
-    #[Groups(['detailed'])]
-    #[MaxDepth(1)]
     public array $subordinates = [];
-
-    #[Groups(['detailed'])]
-    #[SerializedName('member_since')]
-    #[DateFormat('Y-m-d')]
     public \DateTime $memberSince;
-
-    #[Groups(['detailed'])]
-    #[SerializedName('total_posts')]
     public int $totalPosts = 0;
-
-    #[Groups(['detailed'])]
-    #[SerializedName('total_comments')]
     public int $totalComments = 0;
-
-    #[Groups(['detailed'])]
-    #[SerializedName('reputation_score')]
     public int $reputationScore = 0;
-
-    #[Groups(['admin'])]
-    #[SerializedName('internal_id')]
     public ?string $internalId = null;
-
-    #[Groups(['admin'])]
-    #[SerializedName('internal_notes')]
     public ?string $internalNotes = null;
-
-    #[Groups(['admin'])]
-    #[SerializedName('ip_address')]
     public ?string $ipAddress = null;
-
-    #[Groups(['admin'])]
-    #[SerializedName('user_agent')]
     public ?string $userAgent = null;
-
-    #[Groups(['admin'])]
-    #[SerializedName('login_attempts')]
     public int $loginAttempts = 0;
-
-    #[Groups(['admin'])]
-    #[SerializedName('last_ip')]
     public ?string $lastIp = null;
 
     public function __construct()

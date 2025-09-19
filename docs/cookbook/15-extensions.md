@@ -126,7 +126,9 @@ class MyExtensionServiceProvider extends ServiceProvider
             MyService::class => [
                 'class' => MyService::class,
                 'shared' => true,
-                'arguments' => ['@db']
+                'arguments' => ['@db'],
+                // Optional: add tag hints for lazy warmup, etc.
+                'tags' => [['name' => 'lazy.background', 'priority' => 5]],
             ]
         ];
     }
@@ -172,6 +174,11 @@ class MyExtensionServiceProvider extends ServiceProvider
         }
     }
 }
+
+> See also:
+> - docs/implementation_plans/EXTENSIONS_CONTAINER_INTEGRATION.md (new container + extensions overview)
+> - docs/implementation_plans/SERVICES_LOADER.md (DSL schema and ServicesLoader interface)
+
 ```
 
 ### Available Helper Methods

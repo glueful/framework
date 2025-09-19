@@ -8,7 +8,6 @@ use Glueful\Services\Archive\ArchiveServiceInterface;
 use Glueful\Services\Archive\DTOs\ArchiveSearchQuery;
 use Glueful\Services\Archive\ArchiveHealthChecker;
 use Glueful\Services\FileFinder;
-use Glueful\Services\FileManager;
 use Glueful\Exceptions\BusinessLogicException;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -38,7 +37,6 @@ class ManageCommand extends BaseCommand
 {
     private ArchiveServiceInterface $archiveService;
     private FileFinder $fileFinder;
-    private FileManager $fileManager;
     private LoggerInterface $logger;
 
     public function __construct()
@@ -186,7 +184,6 @@ class ManageCommand extends BaseCommand
         try {
             $this->archiveService = $this->getService(ArchiveServiceInterface::class);
             $this->fileFinder = $this->getService(FileFinder::class);
-            $this->fileManager = $this->getService(FileManager::class);
             $this->logger = $this->getService(LoggerInterface::class);
         } catch (\Exception $e) {
             throw new BusinessLogicException(
@@ -473,7 +470,7 @@ class ManageCommand extends BaseCommand
 
             if (!(bool) $dryRun) {
                 foreach ($oldFiles as $file) {
-                    $this->fileManager->remove($file->getPathname());
+                    @unlink($file->getPathname());
                     $this->io->text("Removed: " . $file->getFilename());
                 }
             }
@@ -632,8 +629,8 @@ class ManageCommand extends BaseCommand
         // Check available disk space
         $storagePath = base_path('storage/archives');
         $archiveDir = config('archive.storage_path', $storagePath);
-        if (!$this->fileManager->exists($archiveDir)) {
-            $this->fileManager->createDirectory($archiveDir);
+        if (!is_dir($archiveDir)) {
+            @mkdir($archiveDir, 0755, true);
         }
 
         $freeSpace = disk_free_space($archiveDir);

@@ -11,7 +11,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Glueful\Security\RandomStringGenerator;
 use Glueful\Cache\CacheStore;
 use Glueful\Exceptions\SecurityException;
-use Glueful\DI\Container;
+use Psr\Container\ContainerInterface;
 use Glueful\Events\Security\CSRFViolationEvent;
 use Glueful\Events\Event;
 use Psr\Log\LoggerInterface;
@@ -125,8 +125,8 @@ class CSRFMiddleware implements RouteMiddleware
     /** @var LoggerInterface|null Logger instance */
     private ?LoggerInterface $logger;
 
-    /** @var Container|null DI Container */
-    private ?Container $container;
+    /** @var ContainerInterface|null DI Container */
+    private ?ContainerInterface $container;
 
     /** @var array<string> Allowed origins for Origin validation */
     private array $allowedOrigins;
@@ -145,7 +145,7 @@ class CSRFMiddleware implements RouteMiddleware
      * @param bool $autoRotateTokens Whether to auto-rotate tokens after validation
      * @param bool $useStatelessTokens Whether to use stateless tokens for APIs
      * @param array<string> $allowedOrigins Allowed origins for Origin validation
-     * @param Container|null $container DI Container instance
+     * @param ContainerInterface|null $container DI Container instance
      * @param CacheStore<string>|null $cache Cache instance
      * @param LoggerInterface|null $logger Logger instance
      */
@@ -158,7 +158,7 @@ class CSRFMiddleware implements RouteMiddleware
         bool $autoRotateTokens = false,
         bool $useStatelessTokens = false,
         array $allowedOrigins = [],
-        ?Container $container = null,
+        ?ContainerInterface $container = null,
         ?CacheStore $cache = null,
         ?LoggerInterface $logger = null
     ) {
@@ -969,14 +969,13 @@ class CSRFMiddleware implements RouteMiddleware
 
     /**
      * Get default container safely
-     *
-     * @return Container|null
      */
-    private function getDefaultContainer(): ?Container
+    private function getDefaultContainer(): ?\Psr\Container\ContainerInterface
     {
         if (function_exists('container')) {
             try {
-                return container();
+                $c = container();
+                return $c;
             } catch (\Exception) {
                 return null;
             }
@@ -984,7 +983,8 @@ class CSRFMiddleware implements RouteMiddleware
 
         if (function_exists('app')) {
             try {
-                return app();
+                $a = app();
+                return $a instanceof \Psr\Container\ContainerInterface ? $a : null;
             } catch (\Exception) {
                 return null;
             }

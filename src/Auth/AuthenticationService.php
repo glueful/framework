@@ -6,7 +6,6 @@ namespace Glueful\Auth;
 
 use Glueful\Repository\UserRepository;
 use Glueful\DTOs\{PasswordDTO};
-use Glueful\Validation\Validator;
 use Symfony\Component\HttpFoundation\Request;
 use Glueful\Auth\Interfaces\TokenStorageInterface;
 
@@ -28,7 +27,6 @@ use Glueful\Auth\Interfaces\TokenStorageInterface;
 class AuthenticationService
 {
     private UserRepository $userRepository;
-    private Validator $validator;
     private PasswordHasher $passwordHasher;
     private AuthenticationManager $authManager;
     private TokenStorageInterface $tokenStorage;
@@ -54,7 +52,6 @@ class AuthenticationService
      * @param TokenStorageInterface|null $tokenStorage Token storage implementation for JWT handling
      * @param SessionCacheManager|null $sessionCacheManager Session management and caching service
      * @param UserRepository|null $userRepository User data repository for authentication
-     * @param Validator|null $validator Input validation service for credentials
      * @param PasswordHasher|null $passwordHasher Password hashing and verification service
      * @throws \RuntimeException If authentication system initialization fails
      * @throws \InvalidArgumentException If any provided dependency has incorrect interface
@@ -63,13 +60,11 @@ class AuthenticationService
         ?TokenStorageInterface $tokenStorage = null,
         ?SessionCacheManager $sessionCacheManager = null,
         ?UserRepository $userRepository = null,
-        ?Validator $validator = null,
         ?PasswordHasher $passwordHasher = null
     ) {
         $this->tokenStorage = $tokenStorage ?? new TokenStorageService();
         $this->sessionCacheManager = $sessionCacheManager ?? container()->get(SessionCacheManager::class);
         $this->userRepository = $userRepository ?? new UserRepository();
-        $this->validator = $validator ?? container()->get(Validator::class);
         $this->passwordHasher = $passwordHasher ?? new PasswordHasher();
 
         // Ensure authentication system is initialized
@@ -139,11 +134,10 @@ class AuthenticationService
             return null;
         }
 
-        // Validate password
-        $passwordDTO = new PasswordDTO();
-        $passwordDTO->password = $credentials['password'];
-
-        if ($this->validator->validate($passwordDTO) === false) {
+        // Validate password with new Validation rules
+        try {
+            PasswordDTO::from(['password' => $credentials['password'] ?? '']);
+        } catch (\Glueful\Validation\ValidationException $e) {
             return null;
         }
 
@@ -381,11 +375,10 @@ class AuthenticationService
      */
     public function updatePassword(string $identifier, string $password, ?string $identifierType = null): bool
     {
-        // Validate password
-        $passwordDTO = new PasswordDTO();
-        $passwordDTO->password = $password;
-
-        if ($this->validator->validate($passwordDTO) === false) {
+        // Validate password using new Validation rules
+        try {
+            PasswordDTO::from(['password' => $password]);
+        } catch (\Glueful\Validation\ValidationException $e) {
             return false;
         }
 

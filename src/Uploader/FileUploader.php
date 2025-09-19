@@ -6,10 +6,11 @@ namespace Glueful\Uploader;
 
 use Glueful\Repository\BlobRepository;
 use Glueful\Helpers\Utils;
-use Glueful\Uploader\Storage\{StorageInterface, S3Storage, LocalStorage};
+use Glueful\Uploader\Storage\{StorageInterface, FlysystemStorage};
 use Glueful\Uploader\UploadException;
 use Glueful\Uploader\ValidationException;
-use Glueful\Services\FileManager;
+use Glueful\Storage\StorageManager;
+use Glueful\Storage\Support\UrlGenerator;
 
 final class FileUploader
 {
@@ -26,27 +27,48 @@ final class FileUploader
 
     private StorageInterface $storage;
     private BlobRepository $blobRepository;
-    private FileManager $fileManager;
 
     public function __construct(
         private readonly string $uploadsDirectory = '',
         private readonly string $cdnBaseUrl = '',
-        private readonly ?string $storageDriver = null,
-        ?FileManager $fileManager = null
+        private readonly ?string $storageDriver = null
     ) {
-        $this->fileManager = $fileManager ?? container()->get(FileManager::class);
         // Prefer DI for repository to allow overrides/testing
         $this->blobRepository = container()->get(BlobRepository::class);
-        $driver = $this->storageDriver !== null && $this->storageDriver !== ''
+        // Resolve shared storage services from the container
+        $diskName = $this->storageDriver !== null && $this->storageDriver !== ''
             ? $this->storageDriver
-            : config('services.storage.driver');
-        $this->storage = match ($driver) {
-            's3' => new S3Storage(),
-            default => new LocalStorage(
-                $this->uploadsDirectory !== '' ? $this->uploadsDirectory : (string) config('app.paths.uploads'),
-                $this->cdnBaseUrl !== '' ? $this->cdnBaseUrl : (string) config('app.paths.cdn')
-            )
-        };
+            : (string) (config('storage.default') ?? 'uploads');
+
+        try {
+            /** @var StorageManager $storageManager */
+            $storageManager = app(StorageManager::class);
+            /** @var UrlGenerator $urlGenerator */
+            $urlGenerator = app(UrlGenerator::class);
+            $this->storage = new FlysystemStorage($storageManager, $urlGenerator, $diskName);
+        } catch (\Throwable) {
+            // Fallback: build from config if container not ready
+            $storageConfig = (array) config('storage');
+            if (isset($storageConfig['disks'][$diskName]) && is_array($storageConfig['disks'][$diskName])) {
+                $diskCfg = $storageConfig['disks'][$diskName];
+                if (($diskCfg['driver'] ?? null) === 'local') {
+                    if ($this->uploadsDirectory !== '') {
+                        $storageConfig['disks'][$diskName]['root'] = $this->uploadsDirectory;
+                    }
+                    if ($this->cdnBaseUrl !== '') {
+                        $storageConfig['disks'][$diskName]['base_url'] = $this->cdnBaseUrl;
+                    }
+                } elseif (($diskCfg['driver'] ?? null) === 's3') {
+                    if ($this->cdnBaseUrl !== '') {
+                        $storageConfig['disks'][$diskName]['cdn_base_url'] = $this->cdnBaseUrl;
+                    }
+                }
+            }
+
+            $storageManager = new \Glueful\Storage\StorageManager($storageConfig, new \Glueful\Storage\PathGuard());
+            $urlGenerator = new \Glueful\Storage\Support\UrlGenerator($storageConfig, new \Glueful\Storage\PathGuard());
+            $this->storage = new FlysystemStorage($storageManager, $urlGenerator, $diskName);
+        }
     }
 
     /**
@@ -259,14 +281,14 @@ final class FileUploader
                 throw new ValidationException('Invalid base64 string');
             }
 
-            if (!$this->fileManager->writeFile($tempFile, $data)) {
+            if (@file_put_contents($tempFile, $data) === false) {
                 throw new UploadException('Failed to save temporary file');
             }
 
             return $tempFile;
         } catch (\Exception $e) {
-            if ($this->fileManager->exists($tempFile)) {
-                $this->fileManager->remove($tempFile);
+            if (file_exists($tempFile)) {
+                @unlink($tempFile);
             }
             throw new UploadException('Base64 processing failed: ' . $e->getMessage());
         }
@@ -283,7 +305,7 @@ final class FileUploader
      */
     public function getDirectoryStats(string $directory): array
     {
-        if (!$this->fileManager->exists($directory)) {
+        if (!is_dir($directory)) {
             return [
                 'exists' => false,
                 'total_files' => 0,
@@ -344,7 +366,7 @@ final class FileUploader
 
         foreach ($files as $file) {
             $size = $file->getSize();
-            if ($this->fileManager->remove($file->getPathname())) {
+            if (@unlink($file->getPathname())) {
                 $deleted++;
                 $totalSize += $size;
             }

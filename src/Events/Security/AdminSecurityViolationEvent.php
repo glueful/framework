@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Events\Security;
 
 use Symfony\Component\HttpFoundation\Request;
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 /**
  * Admin Security Violation Event

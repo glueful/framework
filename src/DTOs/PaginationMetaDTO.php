@@ -4,38 +4,17 @@ declare(strict_types=1);
 
 namespace Glueful\DTOs;
 
-use Glueful\Serialization\Attributes\{Groups, SerializedName};
-
 /**
  * Pagination Metadata DTO
  */
 class PaginationMetaDTO
 {
-    #[Groups(['response', 'pagination'])]
-    #[SerializedName('current_page')]
     public int $currentPage;
-
-    #[Groups(['response', 'pagination'])]
-    #[SerializedName('per_page')]
     public int $perPage;
-
-    #[Groups(['response', 'pagination'])]
     public int $total;
-
-    #[Groups(['response', 'pagination'])]
-    #[SerializedName('total_pages')]
     public int $totalPages;
-
-    #[Groups(['response', 'pagination'])]
-    #[SerializedName('has_more_pages')]
     public bool $hasMorePages;
-
-    #[Groups(['response', 'pagination'])]
-    #[SerializedName('from')]
     public int $from;
-
-    #[Groups(['response', 'pagination'])]
-    #[SerializedName('to')]
     public int $to;
 
     public function __construct(

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful;
 
-use Glueful\DI\Container;
+use Psr\Container\ContainerInterface;
 use Glueful\Routing\Router;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -16,10 +16,10 @@ use Symfony\Component\HttpFoundation\Response as HttpResponse;
  */
 class Application
 {
-    private Container $container;
+    private ContainerInterface $container;
     private LoggerInterface $logger;
 
-    public function __construct(Container $container)
+    public function __construct(ContainerInterface $container)
     {
         $this->container = $container;
         $this->logger = $container->get(LoggerInterface::class);
@@ -69,7 +69,7 @@ class Application
     /**
      * Get the DI container
      */
-    public function getContainer(): Container
+    public function getContainer(): ContainerInterface
     {
         return $this->container;
     }

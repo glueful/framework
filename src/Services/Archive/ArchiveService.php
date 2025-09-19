@@ -17,7 +17,8 @@ use Glueful\Services\Archive\DTOs\ArchiveFile;
 use Glueful\Helpers\Utils;
 use Glueful\Exceptions\DatabaseException;
 use Glueful\Exceptions\BusinessLogicException;
-use Glueful\Services\FileManager;
+use Glueful\Storage\StorageManager;
+use Glueful\Storage\PathGuard;
 
 /**
  * Archive Service Implementation
@@ -33,7 +34,9 @@ class ArchiveService implements ArchiveServiceInterface
     private ?string $encryptionKey;
     /** @var array<string, mixed> */
     private array $config;
-    private FileManager $fileManager;
+
+    private StorageManager $storage;
+    private string $disk = 'archive';
 
     private Connection $db;
 
@@ -44,13 +47,11 @@ class ArchiveService implements ArchiveServiceInterface
         ?Connection $connection = null,
         private ?SchemaBuilderInterface $schemaManager = null,
         private ?RandomStringGenerator $randomGenerator = null,
-        array $config = [],
-        ?FileManager $fileManager = null
+        array $config = []
     ) {
         $this->db = $connection ?? new Connection();
         $this->schemaManager = $this->schemaManager ?? $this->db->getSchemaBuilder();
         $this->randomGenerator = $this->randomGenerator ?? new RandomStringGenerator();
-        $this->fileManager = $fileManager ?? container()->get(FileManager::class);
         $this->config = array_merge([
             'storage_path' => config('archive.storage.path'),
             'encryption_key' => $_ENV['ARCHIVE_ENCRYPTION_KEY'] ?? null,
@@ -62,10 +63,27 @@ class ArchiveService implements ArchiveServiceInterface
         $this->archiveBasePath = $this->config['storage_path'];
         $this->encryptionKey = $this->config['encryption_key'];
 
-        // Ensure archive directory exists using FileManager
-        if (!$this->fileManager->exists($this->archiveBasePath)) {
-            $this->fileManager->createDirectory($this->archiveBasePath);
+        // Ensure archive directory exists as local root for the disk
+        if (
+            !is_dir($this->archiveBasePath) &&
+            !mkdir($concurrentDirectory = $this->archiveBasePath, 0755, true) &&
+            !is_dir($concurrentDirectory)
+        ) {
+            throw new \RuntimeException('Cannot create archive directory: ' . $this->archiveBasePath);
         }
+
+        // Dedicated local disk rooted at archive path
+        $storageConfig = [
+            'default' => $this->disk,
+            'disks' => [
+                $this->disk => [
+                    'driver' => 'local',
+                    'root' => $this->archiveBasePath,
+                    'visibility' => 'private',
+                ],
+            ],
+        ];
+        $this->storage = new StorageManager($storageConfig, new PathGuard());
     }
 
     public function archiveTable(string $table, \DateTime $cutoffDate): ArchiveResult
@@ -179,6 +197,15 @@ class ArchiveService implements ArchiveServiceInterface
         return new ExportResult($data, $recordCount, $metadata);
     }
 
+    private function toRelativePath(string $absolute): string
+    {
+        $base = rtrim($this->archiveBasePath, '/');
+        if (str_starts_with($absolute, $base . '/')) {
+            return substr($absolute, strlen($base) + 1);
+        }
+        return ltrim($absolute, '/');
+    }
+
     private function compressAndEncrypt(ExportResult $exportResult): ArchiveFile
     {
         $filename = sprintf(
@@ -225,16 +252,9 @@ class ArchiveService implements ArchiveServiceInterface
             $finalData = $compressedData;
         }
 
-        // 4. Write to file
-        $bytesWritten = file_put_contents($filepath, $finalData);
-        if ($bytesWritten === false) {
-            throw new \Exception('Failed to write archive file: ' . $filepath);
-        }
-
-        $fileSize = filesize($filepath);
-        if ($fileSize === false) {
-            throw new \Exception('Failed to get file size for: ' . $filepath);
-        }
+        // 4. Write to file via StorageManager
+        $this->storage->disk($this->disk)->write($filename, $finalData);
+        $fileSize = strlen($finalData);
 
         return new ArchiveFile(
             $filepath,
@@ -606,8 +626,11 @@ class ArchiveService implements ArchiveServiceInterface
     {
         try {
             $archive = $this->getArchiveRecord($archiveUuid);
-            if ($archive !== null && file_exists($archive['file_path'])) {
-                unlink($archive['file_path']);
+            if ($archive !== null) {
+                $relative = $this->toRelativePath((string) $archive['file_path']);
+                if ($this->storage->disk($this->disk)->fileExists($relative)) {
+                    $this->storage->disk($this->disk)->delete($relative);
+                }
             }
 
             $this->db->table('archive_registry')
@@ -692,8 +715,9 @@ class ArchiveService implements ArchiveServiceInterface
                 );
             }
 
-            // Check if file exists
-            if (!file_exists($archive['file_path'])) {
+            // Check if file exists (relative to archive disk)
+            $relative = $this->toRelativePath((string) $archive['file_path']);
+            if (!$this->storage->disk($this->disk)->fileExists($relative)) {
                 throw BusinessLogicException::operationNotAllowed(
                     'archive_restore',
                     "Archive file not found: {$archive['file_path']}"
@@ -701,13 +725,7 @@ class ArchiveService implements ArchiveServiceInterface
             }
 
             // Read the archive file
-            $fileData = file_get_contents($archive['file_path']);
-            if ($fileData === false) {
-                throw DatabaseException::queryFailed(
-                    'READ',
-                    "Failed to read archive file: {$archive['file_path']}"
-                );
-            }
+            $fileData = $this->storage->disk($this->disk)->read($relative);
 
             // Verify checksum if configured
             if ((bool)($this->config['verify_checksums'] ?? false)) {
