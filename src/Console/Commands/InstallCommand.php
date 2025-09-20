@@ -4,10 +4,7 @@ namespace Glueful\Console\Commands;
 
 use Glueful\Console\BaseCommand;
 use Glueful\Security\RandomStringGenerator;
-use Glueful\Auth\PasswordHasher;
 use Glueful\Services\HealthService;
-use Glueful\Database\Connection;
-use Glueful\Helpers\Utils;
 use Psr\Container\ContainerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Input\InputInterface;
@@ -62,12 +59,6 @@ class InstallCommand extends BaseCommand
                  'Skip security key generation'
              )
              ->addOption(
-                 'skip-admin',
-                 null,
-                 InputOption::VALUE_NONE,
-                 'Skip admin user creation'
-             )
-             ->addOption(
                  'skip-cache',
                  null,
                  InputOption::VALUE_NONE,
@@ -91,7 +82,6 @@ class InstallCommand extends BaseCommand
     {
         $skipDatabase = (bool) $input->getOption('skip-database') || (bool) $input->getOption('skip-db');
         $skipKeys = $input->getOption('skip-keys');
-        $skipAdmin = $input->getOption('skip-admin');
         $skipCache = $input->getOption('skip-cache');
         $force = $input->getOption('force');
         $quiet = $input->getOption('quiet');
@@ -107,35 +97,14 @@ class InstallCommand extends BaseCommand
             $this->runInstallationSteps(
                 $skipDatabase,
                 $skipKeys,
-                $skipAdmin,
                 $skipCache,
                 $force,
                 $quiet
             );
 
-            // Restore extensions after successful installation
-            $this->restoreExtensionsJson();
-
-            // Run migrations again to include extension migrations
-            $this->runExtensionMigrations();
-
             $this->showCompletionMessage();
             return self::SUCCESS;
         } catch (\RuntimeException $e) {
-            // Handle user input validation errors differently
-            if ($e->getCode() === 400) {
-                $this->warning('');
-                $this->warning('⚠ Admin user creation error: ' . $e->getMessage());
-                $this->line('');
-                $this->info('Your installation is ready, but admin user was not created.');
-                $this->line('');
-                $this->line('Options:');
-                $this->line('1. Run "php glueful install --skip-database --skip-keys --skip-cache"' .
-                           ' to retry admin creation');
-                $this->line('2. Start using Glueful without an admin user and create users via your API');
-                $this->line('');
-                return self::INVALID;
-            }
             // For other runtime exceptions, treat as installation failure
             $this->error('Installation failed: ' . $e->getMessage());
             $this->displayTroubleshootingInfo();
@@ -150,12 +119,11 @@ class InstallCommand extends BaseCommand
     private function runInstallationSteps(
         bool $skipDatabase,
         bool $skipKeys,
-        bool $skipAdmin,
         bool $skipCache,
         bool $force,
         bool $quiet
     ): void {
-        $steps = $this->getInstallationSteps($skipDatabase, $skipKeys, $skipAdmin, $skipCache);
+        $steps = $this->getInstallationSteps($skipDatabase, $skipKeys, $skipCache);
         $progressBar = $this->createProgressBar(count($steps));
 
         foreach ($steps as $step) {
@@ -174,7 +142,7 @@ class InstallCommand extends BaseCommand
     /**
      * @return array<int, array{number: int, description: string, callback: array{0: InstallCommand, 1: string}}>
      */
-    private function getInstallationSteps(bool $skipDatabase, bool $skipKeys, bool $skipAdmin, bool $skipCache): array
+    private function getInstallationSteps(bool $skipDatabase, bool $skipKeys, bool $skipCache): array
     {
         $steps = [
             [
@@ -210,20 +178,6 @@ class InstallCommand extends BaseCommand
 
         $steps[] = [
             'number' => count($steps) + 1,
-            'description' => 'Generate API definitions',
-            'callback' => [$this, 'generateApiDefinitions']
-        ];
-
-        if (!$skipAdmin) {
-            $steps[] = [
-                'number' => count($steps) + 1,
-                'description' => 'Create admin user',
-                'callback' => [$this, 'createAdminUser']
-            ];
-        }
-
-        $steps[] = [
-            'number' => count($steps) + 1,
             'description' => 'Final validation',
             'callback' => [$this, 'performFinalValidation']
         ];
@@ -249,7 +203,7 @@ class InstallCommand extends BaseCommand
         $this->line('');
         $this->line('Required environment variables:');
         $this->line('• Database: DB_DRIVER, DB_HOST, DB_DATABASE, DB_USERNAME, DB_PASSWORD');
-        $this->line('• Admin User: ADMIN_USERNAME, ADMIN_EMAIL, ADMIN_PASSWORD');
+        $this->line('');
         $this->line('• Security: TOKEN_SALT, JWT_KEY (generated if missing)');
         $this->line('');
 
@@ -288,8 +242,6 @@ class InstallCommand extends BaseCommand
 
     private function generateSecurityKeys(bool $force, bool $quiet): void
     {
-        $generator = new RandomStringGenerator();
-
         // Generate APP_KEY if not exists, is placeholder, or force
         $appKey = config('app.key');
         $isAppKeyPlaceholder = in_array($appKey, [
@@ -304,7 +256,7 @@ class InstallCommand extends BaseCommand
             $this->updateEnvFile('APP_KEY', $newAppKey);
             $this->line('✓ Generated APP_KEY');
         } else {
-            $this->line('• APP_KEY already exists (use --force to regenerate)');
+            $this->line('• APP_KEY already exists (use --force to regenerate if needed)');
         }
 
         // Generate TOKEN_SALT if not exists, is placeholder, or force
@@ -321,7 +273,7 @@ class InstallCommand extends BaseCommand
             $this->updateEnvFile('TOKEN_SALT', $newTokenSalt);
             $this->line('✓ Generated TOKEN_SALT');
         } else {
-            $this->line('• TOKEN_SALT already exists (use --force to regenerate)');
+            $this->line('• TOKEN_SALT already exists (use --force to regenerate if needed)');
         }
 
         // Generate JWT_KEY if not exists, is placeholder, or force
@@ -338,7 +290,7 @@ class InstallCommand extends BaseCommand
             $this->updateEnvFile('JWT_KEY', $newJwtKey);
             $this->line('✓ Generated JWT_KEY');
         } else {
-            $this->line('• JWT_KEY already exists (use --force to regenerate)');
+            $this->line('• JWT_KEY already exists (use --force to regenerate if needed)');
         }
     }
 
@@ -364,7 +316,6 @@ class InstallCommand extends BaseCommand
 
         // Test database connection
         try {
-            $healthService = $this->installContainer->get(HealthService::class);
             $dbHealth = HealthService::checkDatabase();
 
             if ($dbHealth['status'] !== 'ok') {
@@ -429,177 +380,6 @@ class InstallCommand extends BaseCommand
         }
     }
 
-    private function generateApiDefinitions(bool $force, bool $quiet): void
-    {
-        $this->line('Generating API definitions...');
-        try {
-            $command = $this->getApplication()->find('generate:api-definitions');
-            $arguments = new ArrayInput([]);
-            $returnCode = $command->run($arguments, $this->output);
-
-            if ($returnCode === 0) {
-                $this->line('✓ API definitions generated');
-            } else {
-                throw new \Exception('API definitions generation failed');
-            }
-        } catch (\Exception $e) {
-            if (!$quiet) {
-                $this->warning('Failed to generate API definitions: ' . $e->getMessage());
-                $this->line('• You can run "php glueful generate:api-definitions" manually later');
-            }
-            // Don't fail the entire installation for API definitions
-        }
-    }
-
-    private function createAdminUser(bool $force, bool $quiet): void
-    {
-        if ($quiet) {
-            // Use environment variables in quiet mode
-            $username = $_ENV['ADMIN_USERNAME'] ?? getenv('ADMIN_USERNAME');
-            $email = $_ENV['ADMIN_EMAIL'] ?? getenv('ADMIN_EMAIL');
-            $password = $_ENV['ADMIN_PASSWORD'] ?? getenv('ADMIN_PASSWORD');
-
-            if (
-                ($username === false || $username === '') ||
-                ($email === false || $email === '') ||
-                ($password === false || $password === '')
-            ) {
-                throw new \Exception(
-                    'Missing required environment variables: ADMIN_USERNAME, ADMIN_EMAIL, ADMIN_PASSWORD'
-                );
-            }
-
-            $this->line('Creating admin user from environment variables...');
-        } else {
-            // Interactive mode
-            $this->line('');
-            $this->info('Admin User Setup:');
-
-            $username = $this->ask('Admin username', 'admin');
-            $email = $this->ask('Admin email', 'admin@example.com');
-
-            $password = $this->secret('Admin password');
-            $confirmPassword = $this->secret('Confirm password');
-
-            // Validate password
-            if ($password === '' || strlen($password) === 0) {
-                throw new \RuntimeException('Password cannot be empty', 400);
-            }
-
-            if (strlen($password) < 8) {
-                throw new \RuntimeException('Password must be at least 8 characters long', 400);
-            }
-
-            if ($password !== $confirmPassword) {
-                throw new \RuntimeException('Passwords do not match', 400);
-            }
-        }
-
-        // Create admin user using direct query builder like in RBAC migrations
-        try {
-            $db = new Connection();
-
-            // Check if user already exists (like UserRepository validation)
-            $existingUser = $db->table('users')
-                ->select(['uuid'])
-                ->where('email', $email)
-                ->orWhere('username', $username)
-                ->get();
-
-            if (count($existingUser) > 0) {
-                throw new \Exception("User with email '{$email}' or username '{$username}' already exists");
-            }
-
-            // Generate UUID and hash password using PasswordHasher
-            $userUuid = Utils::generateNanoID();
-            $passwordHasher = new PasswordHasher();
-            $hashedPassword = $passwordHasher->hash($password);
-
-            $userData = [
-                'uuid' => $userUuid,
-                'username' => $username,
-                'email' => $email,
-                'password' => $hashedPassword,
-                'status' => 'active',
-                'email_verified_at' => date('Y-m-d H:i:s'), // Pre-verify admin user
-                'created_at' => date('Y-m-d H:i:s'),
-            ];
-
-            // Insert the admin user
-            $userId = $db->table('users')->insert($userData);
-
-            // Assign superuser role using PermissionManager
-            try {
-                $manager = \Glueful\Permissions\PermissionManager::getInstance();
-                if ($manager->hasActiveProvider()) {
-                    $success = $manager->assignRole($userUuid, 'superuser');
-                    if ($success) {
-                        $this->line('✓ Admin user created successfully with superuser privileges');
-                    } else {
-                        $this->line('✓ Admin user created successfully (superuser role assignment failed)');
-                    }
-                } else {
-                    $this->line('✓ Admin user created successfully (no permission provider active)');
-                }
-            } catch (\Exception) {
-                // Permission system might not be available or enabled
-                $this->line('✓ Admin user created successfully (permission system not available)');
-            }
-
-            // Clean up environment variables in quiet mode for security
-            if ($quiet) {
-                $this->cleanupAdminEnvironmentVariables();
-            }
-        } catch (\Exception $e) {
-            throw new \Exception('Failed to create admin user: ' . $e->getMessage());
-        }
-    }
-
-    private function cleanupAdminEnvironmentVariables(): void
-    {
-        // Remove admin credentials from environment for security
-        unset($_ENV['ADMIN_USERNAME'], $_ENV['ADMIN_EMAIL'], $_ENV['ADMIN_PASSWORD']);
-
-        // Also remove from putenv if they were set that way
-        putenv('ADMIN_USERNAME');
-        putenv('ADMIN_EMAIL');
-        putenv('ADMIN_PASSWORD');
-
-        $this->line('✓ Admin environment variables cleaned up for security');
-    }
-
-    private function restoreExtensionsJson(): void
-    {
-        $extensionsJsonPath = base_path('extensions/extensions.json');
-        $backupPath = $extensionsJsonPath . '.backup';
-
-        if (file_exists($backupPath)) {
-            copy($backupPath, $extensionsJsonPath);
-            unlink($backupPath);
-            $this->line('✓ Extensions configuration restored');
-        }
-    }
-
-    private function runExtensionMigrations(): void
-    {
-        $this->line('Running extension migrations...');
-        try {
-            $command = $this->getApplication()->find('migrate:run');
-            $arguments = new ArrayInput([]);
-            $returnCode = $command->run($arguments, $this->output);
-
-            if ($returnCode === 0) {
-                $this->line('✓ Extension migrations completed');
-            } else {
-                throw new \Exception('Extension migration command failed');
-            }
-        } catch (\Exception $e) {
-            // Don't fail the entire installation if extension migrations fail
-            $this->warning('Failed to run extension migrations: ' . $e->getMessage());
-            $this->line('• You can run "php glueful migrate:run" manually to complete extension setup');
-        }
-    }
-
     private function performFinalValidation(bool $force, bool $quiet): void
     {
         $this->line('Performing final system validation...');
@@ -635,13 +415,10 @@ class InstallCommand extends BaseCommand
         $this->success('🎉 Glueful installation completed successfully!');
         $this->line('');
 
-        $docsUrl = config('app.urls.docs');
-
         $this->info('Your Glueful installation is ready. Next steps:');
         $this->line('1. Start the development server: php glueful serve');
         $this->line('2. Visit your application in a web browser');
-        $this->line('3. Review the API documentation: ' . $docsUrl);
-        $this->line('4. Begin building your application!');
+        $this->line('3. Begin building your application!');
         $this->line('');
 
         $this->line('Database Configuration:');
@@ -658,9 +435,7 @@ class InstallCommand extends BaseCommand
         $this->table(['Component', 'Status'], [
             ['Database', '✓ Connected and migrated'],
             ['Security Keys', '✓ Generated'],
-            ['Cache System', '✓ Initialized'],
-            ['API Definitions', '✓ Generated'],
-            ['Admin User', '✓ Created'],
+            ['Cache System', '✓ Initialized']
         ]);
     }
 
@@ -676,13 +451,10 @@ Steps performed:
   2. Security key generation (TOKEN_SALT, JWT_KEY)
   3. Database connection testing and migrations
   4. Cache system initialization
-  5. API definitions generation
-  6. Interactive admin user creation
-  7. Final configuration validation
+  5. Final configuration validation
 
 Examples:
   glueful install                           # Full interactive setup
-  glueful install --skip-admin              # Setup without admin user
   glueful install --force --quiet           # Force reinstall using environment variables
   glueful install --skip-database           # Skip database setup
   glueful install --skip-db                 # Skip database setup (alias)
@@ -836,7 +608,6 @@ HELP;
 
     private function checkDatabaseHealth(): void
     {
-        $healthService = $this->installContainer->get(HealthService::class);
         $dbHealth = HealthService::checkDatabase();
 
         if ($dbHealth['status'] !== 'ok') {
