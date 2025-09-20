@@ -25,6 +25,12 @@ use Glueful\Models\User;
  */
 class RequestUserContext
 {
+/** @var \Glueful\Permissions\Gate|null */
+    private ?\Glueful\Permissions\Gate $gate = null;
+
+/** @var array<string,mixed> */
+    private array $permissionsConfig = [];
+
     /**
      * @phpstan-type AuthSessionUser array{
      *   uuid?: string,
@@ -80,11 +86,11 @@ class RequestUserContext
     {
         $this->requestId = $requestId;
         $this->requestMetadata = [
-            'ip_address' => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
-            'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
-            'request_uri' => $_SERVER['REQUEST_URI'] ?? 'unknown',
-            'request_method' => $_SERVER['REQUEST_METHOD'] ?? 'GET',
-            'timestamp' => time()
+        'ip_address' => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+        'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
+        'request_uri' => $_SERVER['REQUEST_URI'] ?? 'unknown',
+        'request_method' => $_SERVER['REQUEST_METHOD'] ?? 'GET',
+        'timestamp' => time()
         ];
     }
 
@@ -124,9 +130,9 @@ class RequestUserContext
             if ($this->token !== null) {
                 // Get optimized session data with context-aware caching
                 $context = [
-                    'request_id' => $this->requestId,
-                    'ip_address' => $this->requestMetadata['ip_address'],
-                    'user_agent' => $this->requestMetadata['user_agent']
+                'request_id' => $this->requestId,
+                'ip_address' => $this->requestMetadata['ip_address'],
+                'user_agent' => $this->requestMetadata['user_agent']
                 ];
                 $sessionCacheManager = app(SessionCacheManager::class);
                 $this->sessionData = $sessionCacheManager->getOptimizedSession($this->token, $context);
@@ -443,22 +449,36 @@ class RequestUserContext
      */
     private function hasRoleBasedPermission(string $permission, string $resource, array $context): bool
     {
-        // Acknowledge unused parameters for future enhancement
-        unset($permission, $resource, $context);
-
-        $userRoles = $this->getUserRoles();
-        if (count($userRoles) === 0) {
-            return false;
+        // Ensure gate present (fallback lazy init with defaults)
+        if ($this->gate === null) {
+            $strategy = $this->permissionsConfig['strategy'] ?? 'affirmative';
+            $allowOverride = (bool)($this->permissionsConfig['allow_deny_override'] ?? false);
+            $this->gate = new \Glueful\Permissions\Gate($strategy, $allowOverride);
         }
 
-        // For simple implementation, check if user has admin role
-        if (in_array('admin', $userRoles, true) || in_array('administrator', $userRoles, true)) {
-            return true;
+        $identity = $this->buildUserIdentity();
+
+        // Prepare Gate Context from available request attributes / provided context
+        $tenantId   = $context['tenant_id']   ?? ($this->requestMetadata['tenant_id'] ?? null);
+        $routeParams = $context['route_params'] ?? ($this->requestMetadata['route_params'] ?? []);
+        $jwtClaims  = $context['jwt_claims']  ?? [];
+        $extra      = $context['extra']       ?? [];
+        if (isset($context['ownerId'])) {
+            $extra['ownerId'] = $context['ownerId'];
         }
 
-        // Additional role-based logic can be added here
-        // This could integrate with RBAC provider for complex role hierarchies
-        return false;
+        $gateCtx = new \Glueful\Permissions\Context(
+            tenantId: is_string($tenantId) ? $tenantId : null,
+            routeParams: is_array($routeParams) ? $routeParams : [],
+            jwtClaims: is_array($jwtClaims) ? $jwtClaims : [],
+            extra: is_array($extra) ? $extra : []
+        );
+
+        // Resource object (if any) can be passed via context
+        $resourceObj = $context['resource_obj'] ?? null;
+
+        $decision = $this->gate->decide($identity, $permission, $resourceObj, $gateCtx);
+        return $decision === \Glueful\Permissions\Vote::GRANT;
     }
 
     /**
@@ -481,11 +501,11 @@ class RequestUserContext
         $user = $this->getUser();
         error_log("Generating audit context for user: " . json_encode($user));
         return array_merge($this->requestMetadata, [
-            'user_uuid' => $user?->uuid,
-            'session_id' => $this->sessionData['session_id'] ?? null,
-            'request_id' => $this->requestId,
-            'is_authenticated' => $this->isAuthenticated(),
-            'is_admin' => $this->isAdmin()
+        'user_uuid' => $user?->uuid,
+        'session_id' => $this->sessionData['session_id'] ?? null,
+        'request_id' => $this->requestId,
+        'is_authenticated' => $this->isAuthenticated(),
+        'is_admin' => $this->isAdmin()
         ]);
     }
 
@@ -528,9 +548,9 @@ class RequestUserContext
         // Pre-load common capabilities from session data
         // Note: permissions and roles are nested in the user object
         $capabilities = [
-            'user_roles' => $this->sessionData['user']['roles'] ?? [],
-            'user_permissions' => $this->sessionData['user']['permissions'] ?? [],
-            'permission_hash' => $this->sessionData['user']['permission_hash'] ?? null
+        'user_roles' => $this->sessionData['user']['roles'] ?? [],
+        'user_permissions' => $this->sessionData['user']['permissions'] ?? [],
+        'permission_hash' => $this->sessionData['user']['permission_hash'] ?? null
         ];
 
         $this->userCapabilities = array_merge($this->userCapabilities, $capabilities);
@@ -555,16 +575,16 @@ class RequestUserContext
 
             // Map JWT payload to User model fields
             return [
-                'uuid' => $jwtPayload['uuid'],
-                'id' => $jwtPayload['id'] ?? $jwtPayload['uuid'],
-                'username' => $jwtPayload['username'],
-                'email' => $jwtPayload['email'],
-                'email_verified' => ($jwtPayload['email_verified_at'] ?? null) !== null,
-                'locale' => 'en-US', // Default locale
-                'name' => isset($jwtPayload['profile'])
-                    ? trim(($jwtPayload['profile']['first_name'] ?? '') . ' ' .
-                            ($jwtPayload['profile']['last_name'] ?? ''))
-                    : null,
+            'uuid' => $jwtPayload['uuid'],
+            'id' => $jwtPayload['id'] ?? $jwtPayload['uuid'],
+            'username' => $jwtPayload['username'],
+            'email' => $jwtPayload['email'],
+            'email_verified' => ($jwtPayload['email_verified_at'] ?? null) !== null,
+            'locale' => 'en-US', // Default locale
+            'name' => isset($jwtPayload['profile'])
+                ? trim(($jwtPayload['profile']['first_name'] ?? '') . ' ' .
+                        ($jwtPayload['profile']['last_name'] ?? ''))
+                : null,
                 'given_name' => $jwtPayload['profile']['first_name'] ?? null,
                 'family_name' => $jwtPayload['profile']['last_name'] ?? null,
                 'picture' => $jwtPayload['profile']['photo_url'] ?? null,
@@ -668,13 +688,13 @@ class RequestUserContext
     public function getCacheStats(): array
     {
         return [
-            'permission_cache_size' => count($this->permissionCache),
-            'capabilities_cache_size' => count($this->userCapabilities),
-            'auth_attempted' => $this->authAttempted,
-            'is_authenticated' => $this->isAuthenticated,
-            'has_user' => $this->user !== null,
-            'has_session' => $this->sessionData !== null,
-            'request_id' => $this->requestId
+        'permission_cache_size' => count($this->permissionCache),
+        'capabilities_cache_size' => count($this->userCapabilities),
+        'auth_attempted' => $this->authAttempted,
+        'is_authenticated' => $this->isAuthenticated,
+        'has_user' => $this->user !== null,
+        'has_session' => $this->sessionData !== null,
+        'request_id' => $this->requestId
         ];
     }
 
@@ -698,5 +718,33 @@ class RequestUserContext
             $stats = $this->getCacheStats();
             error_log("RequestUserContext stats: " . json_encode($stats));
         }
+    }
+
+
+/** Inject the Gate (recommended via container) */
+    public function setGate(\Glueful\Permissions\Gate $gate): void
+    {
+        $this->gate = $gate;
+    }
+
+/**
+     * Inject permissions config (array from config/permissions.php)
+     * @param array<string, mixed> $config
+     */
+    public function setPermissionsConfig(array $config): void
+    {
+        $this->permissionsConfig = $config;
+    }
+
+/** Build a lightweight UserIdentity from current request/session */
+    private function buildUserIdentity(): \Glueful\Auth\UserIdentity
+    {
+        $uuid = $this->getUserUuid() ?? 'anonymous';
+        $roles = $this->getUserRoles();
+        $scopes = []; // add when you expose scopes in this context
+        $attrs = [
+        'permissions' => $this->getUserPermissions(),
+        ];
+        return new \Glueful\Auth\UserIdentity($uuid, $roles, $scopes, $attrs);
     }
 }

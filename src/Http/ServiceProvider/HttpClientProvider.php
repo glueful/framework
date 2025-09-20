@@ -2,9 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Glueful\Container\Providers;
+namespace Glueful\Http\ServiceProvider;
 
-use Glueful\Container\Definition\{DefinitionInterface, FactoryDefinition, AliasDefinition};
+use Glueful\Container\Definition\{DefinitionInterface, FactoryDefinition};
+use Glueful\Container\Providers\BaseServiceProvider;
 
 final class HttpClientProvider extends BaseServiceProvider
 {

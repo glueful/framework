@@ -2,9 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Glueful\Container\Providers;
+namespace Glueful\Serialization\ServiceProvider;
 
 use Glueful\Container\Definition\DefinitionInterface;
+use Glueful\Container\Providers\BaseServiceProvider;
 
 final class SerializerProvider extends BaseServiceProvider
 {

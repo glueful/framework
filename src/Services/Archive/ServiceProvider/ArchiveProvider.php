@@ -2,9 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Glueful\Container\Providers;
+namespace Glueful\Services\Archive\ServiceProvider;
 
 use Glueful\Container\Definition\{DefinitionInterface, FactoryDefinition, AliasDefinition};
+use Glueful\Container\Providers\BaseServiceProvider;
 
 final class ArchiveProvider extends BaseServiceProvider
 {

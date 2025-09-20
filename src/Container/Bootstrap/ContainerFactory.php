@@ -107,15 +107,15 @@ final class ContainerFactory
         ];
         $classes = array_merge($classes, [
             \Glueful\Container\Providers\RequestProvider::class,
-            \Glueful\Container\Providers\ValidationProvider::class,
-            \Glueful\Container\Providers\SerializerProvider::class,
-            \Glueful\Container\Providers\HttpClientProvider::class,
+            \Glueful\Validation\ServiceProvider\ValidationProvider::class,
+            \Glueful\Serialization\ServiceProvider\SerializerProvider::class,
+            \Glueful\Http\ServiceProvider\HttpClientProvider::class,
             \Glueful\Container\Providers\RepositoryProvider::class,
-            \Glueful\Container\Providers\EventProvider::class,
+            \Glueful\Events\ServiceProvider\EventProvider::class,
             \Glueful\Container\Providers\ExtensionProvider::class,
-            \Glueful\Container\Providers\QueueProvider::class,
+            \Glueful\Queue\ServiceProvider\QueueProvider::class,
             \Glueful\Container\Providers\LockProvider::class,
-            \Glueful\Container\Providers\ArchiveProvider::class,
+            \Glueful\Services\Archive\ServiceProvider\ArchiveProvider::class,
             \Glueful\Container\Providers\FileProvider::class,
             \Glueful\Container\Providers\SpaProvider::class,
             \Glueful\Container\Providers\HttpPsr15Provider::class,
@@ -123,6 +123,9 @@ final class ContainerFactory
             \Glueful\Container\Providers\ImageProvider::class,
             \Glueful\Container\Providers\ControllerProvider::class,
             \Glueful\Container\Providers\LazyProvider::class,
+            \Glueful\Security\ServiceProvider\SecurityProvider::class,
+            \Glueful\Permissions\ServiceProvider\PermissionsProvider::class,
+            \Glueful\Permissions\ServiceProvider\GateProvider::class,
         ]);
 
         if ($classes === []) {
