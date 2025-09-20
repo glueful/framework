@@ -45,6 +45,15 @@ class PermissionManager implements PermissionManagerInterface
     /** @var \Glueful\Auth\SessionCacheManager|null Session cache manager instance */
     private ?\Glueful\Auth\SessionCacheManager $sessionCacheManager = null;
 
+
+/** @var \Glueful\Permissions\Gate|null */
+    private ?\Glueful\Permissions\Gate $gate = null;
+/** @var array<string,mixed> */
+    private array $permissionsConfig = [];
+/** @var \Glueful\Http\RequestUserContext|null */
+    private ?\Glueful\Http\RequestUserContext $requestUserContext = null;
+
+
     /**
      * Set the active permission provider
      *
@@ -103,44 +112,116 @@ class PermissionManager implements PermissionManagerInterface
      * @return bool True if user has permission, false otherwise
      * @throws ProviderNotFoundException If no provider is registered
      */
+
     public function can(string $userUuid, string $permission, string $resource, array $context = []): bool
     {
-        if (self::$activeProvider === null) {
-            throw new ProviderNotFoundException("No permission provider is registered");
+        $mode = $this->permissionsConfig['provider_mode'] ?? 'replace';
+
+        // If provider exists and mode is 'replace', short-circuit to provider
+        if (self::$activeProvider !== null && $mode === 'replace') {
+            try {
+                $startTime = microtime(true);
+                $result = self::$activeProvider->can($userUuid, $permission, $resource, $context);
+                $endTime = microtime(true);
+                if (self::$debugMode) {
+                    self::$debugInfo[] = [
+                        'action' => 'permission_check',
+                        'via' => 'provider',
+                        'user' => $userUuid,
+                        'permission' => $permission,
+                        'resource' => $resource,
+                        'context' => $context,
+                        'result' => $result,
+                        'duration_ms' => ($endTime - $startTime) * 1000,
+                        'timestamp' => time()
+                    ];
+                }
+                return $result;
+            } catch (\Exception $e) {
+                if (self::$debugMode) {
+                    self::$debugInfo[] = [
+                        'action' => 'permission_check_error',
+                        'via' => 'provider',
+                        'user' => $userUuid,
+                        'permission' => $permission,
+                        'resource' => $resource,
+                        'context' => $context,
+                        'error' => $e->getMessage(),
+                        'timestamp' => time()
+                    ];
+                }
+                throw new PermissionException("Permission check failed: " . $e->getMessage(), 0, $e);
+            }
         }
 
-        try {
-            $startTime = microtime(true);
-            $result = self::$activeProvider->can($userUuid, $permission, $resource, $context);
-            $endTime = microtime(true);
-
-            if (self::$debugMode) {
-                self::$debugInfo[] = [
-                    'action' => 'permission_check',
-                    'user' => $userUuid,
-                    'permission' => $permission,
-                    'resource' => $resource,
-                    'context' => $context,
-                    'result' => $result,
-                    'duration' => $endTime - $startTime,
-                    'timestamp' => time()
-                ];
-            }
-
-            return $result;
-        } catch (\Exception $e) {
-            if (self::$debugMode) {
-                self::$debugInfo[] = [
-                    'action' => 'permission_check_error',
-                    'user' => $userUuid,
-                    'permission' => $permission,
-                    'resource' => $resource,
-                    'error' => $e->getMessage(),
-                    'timestamp' => time()
-                ];
-            }
-            throw new PermissionException("Permission check failed: " . $e->getMessage(), 0, $e);
+        // Otherwise, evaluate via Gate (gate-only or combine mode)
+        if ($this->gate === null) {
+            // Lazy gate init with defaults if not injected
+            $strategy = $this->permissionsConfig['strategy'] ?? 'affirmative';
+            $allowOverride = (bool)($this->permissionsConfig['allow_deny_override'] ?? false);
+            $this->gate = new \Glueful\Permissions\Gate($strategy, $allowOverride);
         }
+
+        // Build UserIdentity via RequestUserContext if available
+        $roles = $context['roles'] ?? [];
+        $scopes = $context['scopes'] ?? [];
+        $attrs = $context['attributes'] ?? [];
+
+        if ($this->requestUserContext !== null) {
+            $roles = $this->requestUserContext->getUserRoles();
+            // No dedicated scopes method; prefer JWT claim if provided by caller
+            $attrs['permissions'] = $this->requestUserContext->getUserPermissions();
+        }
+
+        $identity = new \Glueful\Auth\UserIdentity($userUuid, $roles, $scopes, $attrs);
+
+        // Prepare Context (JWT/route/tenant if present in $context)
+        $gateCtx = new \Glueful\Permissions\Context(
+            tenantId: $context['tenant_id'] ?? null,
+            routeParams: $context['route_params'] ?? [],
+            jwtClaims: $context['jwt_claims'] ?? [],
+            extra: $context['extra'] ?? []
+        );
+
+        // Provider decide hook for 'combine' mode (provider true=GRANT, false=ABSTAIN)
+        $providerDecide = null;
+        if (self::$activeProvider !== null && $mode === 'combine') {
+            $providerDecide = function () use ($userUuid, $permission, $resource, $context) {
+                try {
+                    return self::$activeProvider->can($userUuid, $permission, $resource, $context)
+                        ? \Glueful\Permissions\Vote::GRANT
+                        : \Glueful\Permissions\Vote::ABSTAIN;
+                } catch (\Throwable) {
+                    return \Glueful\Permissions\Vote::ABSTAIN;
+                }
+            };
+        }
+
+        $startTime = microtime(true);
+        $decision = $this->gate->decide(
+            $identity,
+            $permission,
+            $context['resource_obj'] ?? null,
+            $gateCtx,
+            $providerDecide
+        );
+        $endTime = microtime(true);
+
+        if (self::$debugMode) {
+            self::$debugInfo[] = [
+                'action' => 'permission_check',
+                'via' => ($mode === 'combine' && self::$activeProvider !== null) ? 'provider+gate' : 'gate',
+                'user' => $userUuid,
+                'permission' => $permission,
+                'resource' => $resource,
+                'context' => $context,
+                'result' => $decision,
+                'duration_ms' => ($endTime - $startTime) * 1000,
+                'timestamp' => time()
+            ];
+        }
+
+        return $decision === \Glueful\Permissions\Vote::GRANT;
     }
 
     /**
@@ -350,11 +431,11 @@ class PermissionManager implements PermissionManagerInterface
     /**
      * Check if the permission system is available
      *
-     * @return bool True if permission system is available
+     * @return bool True if permission system is available (either provider or Gate is registered)
      */
     public function isAvailable(): bool
     {
-        return self::$activeProvider !== null;
+        return self::$activeProvider !== null || $this->gate !== null;
     }
 
     /**
@@ -645,5 +726,26 @@ class PermissionManager implements PermissionManagerInterface
             $instance = new self($sessionCacheManager);
         }
         return $instance;
+    }
+
+    /** Inject Gate instance (optional if you bind via container) */
+    public function setGate(\Glueful\Permissions\Gate $gate): void
+    {
+        $this->gate = $gate;
+    }
+
+    /**
+     * Inject permissions config array (from config/permissions.php)
+     * @param array<string, mixed> $config
+     */
+    public function setPermissionsConfig(array $config): void
+    {
+        $this->permissionsConfig = $config;
+    }
+
+    /** Inject RequestUserContext to resolve current user identity */
+    public function setRequestUserContext(\Glueful\Http\RequestUserContext $ctx): void
+    {
+        $this->requestUserContext = $ctx;
     }
 }

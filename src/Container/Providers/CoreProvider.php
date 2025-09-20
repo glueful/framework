@@ -247,14 +247,92 @@ final class CoreProvider extends BaseServiceProvider
         );
 
         // Permission services
+
+        // Gate service with voters
+        $defs[\Glueful\Permissions\Gate::class] = new FactoryDefinition(
+            \Glueful\Permissions\Gate::class,
+            function (\Psr\Container\ContainerInterface $c): \Glueful\Permissions\Gate {
+                $config = function_exists('config') ? (array) config('permissions', []) : [];
+
+                $gate = new \Glueful\Permissions\Gate(
+                    $config['strategy'] ?? 'affirmative',
+                    (bool) ($config['allow_deny_override'] ?? false)
+                );
+
+                // 1. Register super role voter if configured
+                if (isset($config['super_roles']) && count($config['super_roles']) > 0) {
+                    $gate->registerVoter(new \Glueful\Permissions\Voters\SuperRoleVoter($config['super_roles']));
+                }
+
+                // 2. Register policy voter to connect PolicyRegistry
+                if ($c->has(\Glueful\Permissions\PolicyRegistry::class)) {
+                    $gate->registerVoter(new \Glueful\Permissions\Voters\PolicyVoter(
+                        $c->get(\Glueful\Permissions\PolicyRegistry::class)
+                    ));
+                }
+
+                // 3. Register role voter with configured roles
+                $gate->registerVoter(new \Glueful\Permissions\Voters\RoleVoter($config['roles'] ?? []));
+
+                // 4. Register scope voter
+                $gate->registerVoter(new \Glueful\Permissions\Voters\ScopeVoter());
+
+                // 5. Register ownership voter
+                $gate->registerVoter(new \Glueful\Permissions\Voters\OwnershipVoter());
+
+                return $gate;
+            }
+        );
+
+        // Policy registry service
+        $defs[\Glueful\Permissions\PolicyRegistry::class] = new FactoryDefinition(
+            \Glueful\Permissions\PolicyRegistry::class,
+            function (\Psr\Container\ContainerInterface $c): \Glueful\Permissions\PolicyRegistry {
+                $config = function_exists('config') ? (array) config('permissions', []) : [];
+                return new \Glueful\Permissions\PolicyRegistry($config['policies'] ?? []);
+            }
+        );
+
         $defs['permission.manager'] = new FactoryDefinition(
             'permission.manager',
-            fn(\Psr\Container\ContainerInterface $c) => \Glueful\Permissions\PermissionManager::getInstance(
-                $c->get(\Glueful\Auth\SessionCacheManager::class)
-            )
+            function (\Psr\Container\ContainerInterface $c) {
+                $manager = \Glueful\Permissions\PermissionManager::getInstance(
+                    $c->get(\Glueful\Auth\SessionCacheManager::class)
+                );
+
+                // Inject Gate if available
+                if ($c->has(\Glueful\Permissions\Gate::class)) {
+                    $manager->setGate($c->get(\Glueful\Permissions\Gate::class));
+                }
+
+                // Inject permissions config
+                $config = function_exists('config') ? (array) config('permissions', []) : [];
+                $manager->setPermissionsConfig($config);
+
+                return $manager;
+            }
         );
         $defs[\Glueful\Permissions\PermissionCache::class] =
             $this->autowire(\Glueful\Permissions\PermissionCache::class);
+
+        // RequestUserContext service
+        $defs[\Glueful\Http\RequestUserContext::class] = new FactoryDefinition(
+            \Glueful\Http\RequestUserContext::class,
+            function (\Psr\Container\ContainerInterface $c) {
+                $context = \Glueful\Http\RequestUserContext::getInstance();
+
+                // Inject Gate if available
+                if ($c->has(\Glueful\Permissions\Gate::class)) {
+                    $context->setGate($c->get(\Glueful\Permissions\Gate::class));
+                }
+
+                // Inject permissions config
+                $config = function_exists('config') ? (array) config('permissions', []) : [];
+                $context->setPermissionsConfig($config);
+
+                return $context;
+            }
+        );
 
         // Session services
         $defs[\Glueful\Auth\SessionCacheManager::class] = $this->autowire(\Glueful\Auth\SessionCacheManager::class);
@@ -375,6 +453,23 @@ final class CoreProvider extends BaseServiceProvider
         $defs[\Glueful\Routing\Middleware\LockdownMiddleware::class] =
             $this->autowire(\Glueful\Routing\Middleware\LockdownMiddleware::class);
 
+        // Gate-based permission middleware
+        $defs[\Glueful\Permissions\Middleware\GateAttributeMiddleware::class] = new FactoryDefinition(
+            \Glueful\Permissions\Middleware\GateAttributeMiddleware::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Permissions\Middleware\GateAttributeMiddleware(
+                $c->get(\Glueful\Permissions\Gate::class)
+            )
+        );
+
+        // Auth-to-request attributes middleware
+        $defs[\Glueful\Permissions\Middleware\AuthToRequestAttributesMiddleware::class] = new FactoryDefinition(
+            \Glueful\Permissions\Middleware\AuthToRequestAttributesMiddleware::class,
+            fn(\Psr\Container\ContainerInterface $c) =>
+                new \Glueful\Permissions\Middleware\AuthToRequestAttributesMiddleware(
+                    $c->get(\Glueful\Http\RequestUserContext::class)
+                )
+        );
+
         // String alias convenience (parity with DI aliases)
         $defs['auth'] = new AliasDefinition(
             'auth',
@@ -401,6 +496,14 @@ final class CoreProvider extends BaseServiceProvider
         $defs['allow_ip'] = new AliasDefinition('allow_ip', \Glueful\Routing\Middleware\AllowIpMiddleware::class);
         $defs['metrics'] = new AliasDefinition('metrics', \Glueful\Routing\Middleware\MetricsMiddleware::class);
         $defs['tracing'] = new AliasDefinition('tracing', \Glueful\Routing\Middleware\TracingMiddleware::class);
+        $defs['gate_permissions'] = new AliasDefinition(
+            'gate_permissions',
+            \Glueful\Permissions\Middleware\GateAttributeMiddleware::class
+        );
+        $defs['auth_to_request'] = new AliasDefinition(
+            'auth_to_request',
+            \Glueful\Permissions\Middleware\AuthToRequestAttributesMiddleware::class
+        );
 
         return $defs;
     }

@@ -140,6 +140,9 @@ class AuthMiddleware implements RouteMiddleware
             $request->attributes->set('user', $user);
             $request->attributes->set('auth_provider', $user['auth_provider'] ?? 'unknown');
 
+            // Auto-enrich request with auth attributes
+            $this->autoEnrichRequest($request);
+
             // Log successful authentication
             $this->logAuthSuccess($user, $request, $requestId, $token);
             $this->dispatchAuthSuccessEvent($request, $user, $token);
@@ -609,5 +612,37 @@ class AuthMiddleware implements RouteMiddleware
             'code' => 401,
             'error_code' => 'INVALID_TOKEN'
         ], 401);
+    }
+
+    /**
+     * Automatically enrich request with auth attributes
+     *
+     * This method safely attempts to call AuthToRequestAttributesMiddleware's
+     * enrichRequest method to add authentication data as request attributes.
+     * Fails gracefully if the service is not available.
+     */
+    private function autoEnrichRequest(Request $request): void
+    {
+        if ($this->container === null) {
+            return;
+        }
+
+        try {
+            $middlewareClass = '\\Glueful\\Permissions\\Middleware\\AuthToRequestAttributesMiddleware';
+            if ($this->container->has($middlewareClass)) {
+                $enricher = $this->container->get($middlewareClass);
+                if (is_object($enricher) && method_exists($enricher, 'enrichRequest')) {
+                    $enricher->enrichRequest($request);
+                }
+            }
+        } catch (\Throwable $e) {
+            // Log error but continue - auth attribute enrichment is optional
+            if ($this->logger !== null) {
+                $this->logger->debug('Failed to auto-enrich request with auth attributes', [
+                    'error' => $e->getMessage(),
+                    'path' => $request->getPathInfo()
+                ]);
+            }
+        }
     }
 }

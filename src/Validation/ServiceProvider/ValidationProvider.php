@@ -2,9 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Glueful\Container\Providers;
+namespace Glueful\Validation\ServiceProvider;
 
 use Glueful\Container\Definition\DefinitionInterface;
+use Glueful\Container\Providers\BaseServiceProvider;
 
 final class ValidationProvider extends BaseServiceProvider
 {

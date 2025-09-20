@@ -21,34 +21,35 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
-### 1.0.1 – 1.0.3 (Patches)
-- Early adopter feedback: fix edge cases (route cache, config, DI compile), small performance wins.
-- Cookbook completeness passes (migrations, auth patterns, deployment notes).
-
-### 1.1.0 — Aurora (Internal)
+### 1.0.0 — Aurora (Released 2025-09-20)
+- **First stable release** of the split Glueful Framework package with comprehensive features.
+- **Comprehensive permissions and authorization system**.
 - Core overhauls: custom DI container (replacing Symfony DI); PSR‑14 event dispatcher.
 - Storage: migration to Flysystem with updated configuration model.
 - Config & Validation: array‑schema configuration and rules‑based validation system.
+- Next‑Gen Router with fast static/dynamic matching and attribute route loader.
+- Alias support for services and improved provider bootstrapping.
+- Security enhancements with expanded CLI commands and hardened endpoints.
 - Cleanup: removal of LDAP/SAML auth and legacy config/serialization modules.
-- Docs: database and storage guides refreshed.
+- Docs: database and storage guides refreshed; comprehensive cookbook.
 
-### 1.1.x (Patches)
-- BC polish and migration notes for Aurora changes.
-- Storage config mapping helpers and deprecation notices where feasible.
-- Minor DI container optimizations and diagnostics.
+### 1.0.1 – 1.0.3 (Patches)
+- Early adopter feedback: fix edge cases (route cache, config, DI compile), small performance wins.
+- Aurora release polish and community feedback integration.
+- Cookbook completeness passes (migrations, auth patterns, deployment notes).
 
-### 1.2 (Minor)
+### 1.1 (Minor)
 - Router: content negotiation helpers; ETag/conditional middleware patterns.
 - DI: container dump optimizations; service map/codegen helpers.
 - Config: DSN parsing utilities (DB, Redis), environment validation helpers.
 - Observability: OpenTelemetry exporter; span decorators; sampling controls.
 - Security: CSP builder configuration + presets; refined admin/allow‑lists.
 
-### 1.3 (Minor)
+### 1.2 (Minor)
 - Extensions: composer/manifest diagnostics; optional signing/verification hooks.
 - Caching: distributed strategy knobs; stampede/lock improvements.
 
-### 1.4 (Minor)
+### 1.3 (Minor)
 - Queue/workers: improved autoscaling rules; per‑queue budgets; graceful drain; health endpoints.
 
 ### 2.0 (Major; tentative)
