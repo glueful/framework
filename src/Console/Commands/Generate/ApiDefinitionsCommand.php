@@ -195,7 +195,7 @@ class ApiDefinitionsCommand extends BaseCommand
         $this->line('1. Review generated swagger.json and API definition files');
         $this->line('2. Customize route annotations as needed for your API');
 
-        $docsUrl = config('app.paths.api_docs_url');
+        $docsUrl = config('app.urls.docs');
 
         $this->line("3. Visit the API documentation with api explorer at {$docsUrl}");
         $this->line('4. Test your API endpoints');
