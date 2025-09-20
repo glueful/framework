@@ -10,7 +10,7 @@ return [
             'root' => config('app.paths.uploads'),
             'visibility' => 'private',
             // Used by UrlGenerator for public URLs
-            'base_url' => config('app.paths.cdn'),
+            'base_url' => config('app.urls.cdn'),
         ],
 
         // Optional S3-compatible disk

@@ -300,7 +300,7 @@ class CommentsDocGenerator
             ],
             'servers' => [
                 [
-                    'url' => rtrim(config('app.paths.api_base_url'), '/') . '/' . config('app.api_version'),
+                    'url' => rtrim(config('app.urls.api'), '/') . '/' . config('app.api_version'),
                     'description' => 'API Server ' . config('app.api_version')
                 ]
             ],
@@ -975,7 +975,7 @@ class CommentsDocGenerator
             ],
             'servers' => [
                 [
-                    'url' => rtrim(config('app.paths.api_base_url'), '/') . '/' . config('app.api_version'),
+                    'url' => rtrim(config('app.urls.api'), '/') . '/' . config('app.api_version'),
                     'description' => 'API Server ' . config('app.api_version')
                 ]
             ],

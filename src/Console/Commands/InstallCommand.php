@@ -635,7 +635,7 @@ class InstallCommand extends BaseCommand
         $this->success('🎉 Glueful installation completed successfully!');
         $this->line('');
 
-        $docsUrl = config('app.paths.api_docs_url');
+        $docsUrl = config('app.urls.docs');
 
         $this->info('Your Glueful installation is ready. Next steps:');
         $this->line('1. Start the development server: php glueful serve');

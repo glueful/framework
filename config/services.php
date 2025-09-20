@@ -146,26 +146,4 @@ return [
         'debug' => env('MAIL_DEBUG', false),
         'log_channel' => env('MAIL_LOG_CHANNEL', 'mail'),
     ],
-
-    // Extensions Configuration
-    'extensions' => [
-        'paths' => [
-            'extensions_dir' => dirname(__DIR__) . '/extensions',
-            'cache_dir' => dirname(__DIR__) . '/storage/cache/extensions'
-        ],
-        'defaults' => [
-            'enabled' => ['EmailNotification'],
-        ],
-        'security' => [
-            'allow_remote_installation' => env('ALLOW_REMOTE_EXTENSIONS', false),
-            'verify_signatures' => env('VERIFY_EXTENSION_SIGNATURES', true),
-        ],
-        'config_file' => dirname(__DIR__) . '/extensions/extensions.json',
-        'environments' => [
-            'local' => 'development',
-            'dev' => 'development',
-            'staging' => 'staging',
-            'prod' => 'production',
-        ]
-    ],
 ];

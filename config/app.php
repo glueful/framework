@@ -39,15 +39,11 @@ return [
         'default' => env('API_VERSION', 'v1'),
     ],
 
-    // Application Paths
+    // Application Paths (filesystem only)
     'paths' => [
         'base' => base_path(),
         'api_base_directory' => base_path('api'),
         'api_docs' => base_path('docs'),
-        'api_docs_url' => env('BASE_URL', 'http://localhost') . '/api/' . env('API_VERSION', 'v1') . '/docs/',
-        'cdn' => env('BASE_URL', 'http://localhost') . '/storage/cdn/',
-        'domain' => env('BASE_URL', 'http://localhost'),
-        'api_base_url' => env('API_BASE_URL', 'http://localhost/api/') . env('API_VERSION', 'v1'),
         'uploads' => base_path('storage/cdn'),
         'logs' => base_path('storage/logs'),
         'cache' => base_path('storage/cache'),
@@ -59,6 +55,17 @@ return [
         'migrations' => base_path('database/migrations'),
         'app_events' => base_path('app/Events'),
         'app_listeners' => base_path('app/Events/Listeners'),
+    ],
+
+    // Application URLs (web addresses grouped here)
+    'urls' => [
+        'base' => env('BASE_URL', 'http://localhost'),
+        'cdn' => rtrim(env('BASE_URL', 'http://localhost'), '/') . '/storage/cdn/',
+        'api' => rtrim(
+            env('API_BASE_URL', rtrim(env('BASE_URL', 'http://localhost'), '/') . '/api/'),
+            '/'
+        ) . '/' . env('API_VERSION', 'v1'),
+        'docs' => rtrim(env('BASE_URL', 'http://localhost'), '/') . '/api/' . env('API_VERSION', 'v1') . '/docs/',
     ],
 
     // Pagination Settings

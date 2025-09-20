@@ -33,7 +33,7 @@ return [
             'driver' => 'local',
             'root' => config('app.paths.uploads'),
             'visibility' => 'private', // 'private' or 'public'
-            'base_url' => config('app.paths.cdn'), // Public URL base
+            'base_url' => config('app.urls.cdn'), // Public URL base
         ],
 
         // In-memory filesystem (great for testing)

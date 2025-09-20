@@ -15,7 +15,7 @@ This guide shows how to accept uploads securely, store them locally or on S3, an
 
 ### Local paths
 - Upload root: `config('app.paths.uploads')`
-- CDN base URL: `config('app.paths.cdn')`
+- CDN base URL: `config('app.urls.cdn')`
 
 ### File limits and validation
 - Max size: `config('filesystem.security.max_upload_size')`
