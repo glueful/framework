@@ -33,19 +33,19 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 - Cleanup: removal of LDAP/SAML auth and legacy config/serialization modules.
 - Docs: database and storage guides refreshed; comprehensive cookbook.
 
-### 1.0.1 – 1.0.3 (Patches)
-- Early adopter feedback: fix edge cases (route cache, config, DI compile), small performance wins.
-- Aurora release polish and community feedback integration.
-- Cookbook completeness passes (migrations, auth patterns, deployment notes).
+### 1.1.0 — Polaris (Released 2025-09-22)
+- **Testing infrastructure**: TestCase base class for application testing with framework state reset support.
+- **Event system enhancements**: Comprehensive documentation covering all framework events with complete examples.
+- **Event abstraction layer**: BaseEvent class providing PSR-14 compliant abstraction with enhanced features.
+- **Documentation improvements**: Complete event listener registration patterns and best practices.
+- Guides navigation and testing utilities for robust application development.
 
-### 1.1 (Minor)
+### 1.2 (Minor)
 - Router: content negotiation helpers; ETag/conditional middleware patterns.
 - DI: container dump optimizations; service map/codegen helpers.
 - Config: DSN parsing utilities (DB, Redis), environment validation helpers.
 - Observability: OpenTelemetry exporter; span decorators; sampling controls.
 - Security: CSP builder configuration + presets; refined admin/allow‑lists.
-
-### 1.2 (Minor)
 - Extensions: composer/manifest diagnostics; optional signing/verification hooks.
 - Caching: distributed strategy knobs; stampede/lock improvements.
 

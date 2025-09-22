@@ -4,6 +4,24 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.1.0] - 2025-09-22 — Polaris
+
+Polaris release — introduces comprehensive testing infrastructure and enhanced documentation to guide framework development. Like the North Star that guides navigation, this release provides developers with the tools and knowledge to build robust applications with confidence.
+
+### Added
+- Testing utilities with `TestCase` base class for application testing
+- Comprehensive event system documentation covering all framework events
+- Support for framework state reset in testing environments
+- Complete event listener registration patterns and best practices
+- Event system abstraction layer with `BaseEvent` class
+
+### Updated
+- Enhanced event system documentation with complete examples and best practices
+- Improved testing infrastructure for better framework integration
+
+### Changed
+- Event system now provides clear abstraction layer over PSR-14 implementation
+
 ## [1.0.0] - 2025-09-20 — Aurora
 
 Aurora release — the first stable release of the split Glueful Framework package (formerly part of glueful/glueful). This version establishes the framework runtime as a standalone library with comprehensive features and sets a clear baseline for future 1.x releases.
