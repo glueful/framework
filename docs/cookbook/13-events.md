@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Glueful framework provides a comprehensive event system built on Symfony EventDispatcher, enabling decoupled communication between framework components and application code. The system clearly separates framework infrastructure concerns from application business logic through well-defined event boundaries.
+The Glueful framework provides a comprehensive event system built on PSR-14 (Event Dispatcher), enabling decoupled communication between framework components and application code. The system clearly separates framework infrastructure concerns from application business logic through well-defined event boundaries.
 
 ## Table of Contents
 
@@ -52,32 +52,36 @@ The Glueful framework provides a comprehensive event system built on Symfony Eve
 
 ## Event System Abstraction Layer
 
-Glueful provides a complete abstraction layer over the underlying event system (Symfony EventDispatcher) to ensure framework consistency and future-proofing.
+Glueful provides a complete abstraction layer over the underlying event system (PSR-14 EventDispatcher) to ensure framework consistency and future-proofing.
 
 ### BaseEvent Class
 
-All Glueful events extend the `BaseEvent` class instead of directly extending Symfony's Event class:
+All Glueful events extend the `BaseEvent` class which implements PSR-14's `StoppableEventInterface`:
 
 ```php
 <?php
 
-namespace Glueful\Events;
+namespace Glueful\Events\Contracts;
 
-use Symfony\Contracts\EventDispatcher\Event as SymfonyEvent;
+use Psr\EventDispatcher\StoppableEventInterface;
 
-abstract class BaseEvent extends SymfonyEvent
+abstract class BaseEvent implements StoppableEventInterface
 {
+    private bool $stopped = false;
     private array $metadata = [];
     private float $timestamp;
-    private ?string $eventId = null;
-    
+    private string $eventId;
+
     public function __construct()
     {
-        parent::__construct();
         $this->timestamp = microtime(true);
         $this->eventId = uniqid('evt_', true);
     }
-    
+
+    // PSR-14 StoppableEventInterface
+    public function stopPropagation(): void { $this->stopped = true; }
+    public function isPropagationStopped(): bool { return $this->stopped; }
+
     // Framework-specific functionality
     public function setMetadata(string $key, mixed $value): void { /* ... */ }
     public function getMetadata(?string $key = null): mixed { /* ... */ }
@@ -89,15 +93,16 @@ abstract class BaseEvent extends SymfonyEvent
 
 ### Benefits of the Abstraction Layer
 
-1. **Framework Features**: All events automatically get event IDs, timestamps, and metadata support
-2. **Enhanced Logging**: BaseEvent instances receive special logging treatment in `Event::dispatch()`
-3. **Future-Proof**: Can change underlying implementation without breaking user code
-4. **Consistency**: Aligns with Glueful's philosophy of hiding implementation details
-5. **Extensibility**: Easy to add new framework-wide features to all events
+1. **PSR-14 Compliance**: Full compatibility with PSR-14 EventDispatcher standard
+2. **Framework Features**: All events automatically get event IDs, timestamps, and metadata support
+3. **Event Propagation Control**: Built-in support for stopping event propagation
+4. **Future-Proof**: Can change underlying implementation without breaking user code
+5. **Consistency**: Aligns with Glueful's philosophy of hiding implementation details
+6. **Extensibility**: Easy to add new framework-wide features to all events
 
 ### Creating Custom Events
 
-When creating custom events, always extend BaseEvent instead of Symfony's Event:
+When creating custom events, always extend BaseEvent:
 
 ```php
 <?php
@@ -106,7 +111,7 @@ declare(strict_types=1);
 
 namespace App\Events;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 class OrderShippedEvent extends BaseEvent
 {
@@ -125,7 +130,7 @@ class OrderShippedEvent extends BaseEvent
 
 ### Enhanced Event Dispatching
 
-BaseEvent instances receive enhanced logging automatically:
+Events are dispatched using the PSR-14 compliant Event facade:
 
 ```php
 use Glueful\Events\Event;
@@ -133,11 +138,34 @@ use Glueful\Events\Event;
 $event = new OrderShippedEvent('123', 'TRACK456');
 Event::dispatch($event);
 
-// Automatically logs:
+// Framework automatically tracks:
 // - Event ID: evt_64f1a2b3c4d5e
-// - Event Name: App\Events\OrderShippedEvent  
+// - Event Name: App\Events\OrderShippedEvent
 // - Timestamp: 1693234567.123
 // - Any custom metadata
+// - Propagation control (if event is stopped)
+```
+
+### Event Facade API
+
+The Event facade provides these methods:
+
+```php
+use Glueful\Events\Event;
+
+// Dispatch an event
+$result = Event::dispatch($event);
+
+// Register listeners with optional priority
+Event::listen(UserLoginEvent::class, $callable, $priority = 0);
+Event::listen(UserLoginEvent::class, '@service:method', 10);
+
+// Register subscriber classes
+Event::subscribe(UserEventSubscriber::class);
+
+// Check for listeners
+$hasListeners = Event::hasListeners(UserLoginEvent::class);
+$listeners = Event::getListeners(UserLoginEvent::class);
 ```
 
 ## Framework vs Application Boundaries
@@ -230,7 +258,7 @@ Event::listen(RateLimitExceededEvent::class, function($event) {
 ```php
 namespace Glueful\Events\Auth;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 class UserAuthenticatedEvent extends BaseEvent
 {
@@ -274,7 +302,7 @@ Event::listen(UserAuthenticatedEvent::class, function(UserAuthenticatedEvent $ev
 ```php
 namespace Glueful\Events\Auth;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 class AuthenticationFailedEvent extends BaseEvent
 {
@@ -312,7 +340,7 @@ class AuthenticationFailedEvent extends BaseEvent
 ```php
 namespace Glueful\Events\Auth;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 class SessionCreatedEvent extends BaseEvent
 {
@@ -345,7 +373,7 @@ class SessionCreatedEvent extends BaseEvent
 ```php
 namespace Glueful\Events\Auth;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 class SessionDestroyedEvent extends BaseEvent
 {
@@ -379,7 +407,7 @@ class SessionDestroyedEvent extends BaseEvent
 ```php
 namespace Glueful\Events\Security;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 class RateLimitExceededEvent extends BaseEvent
 {
@@ -437,7 +465,7 @@ Event::listen(RateLimitExceededEvent::class, function(RateLimitExceededEvent $ev
 ```php
 namespace Glueful\Events\Security;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 class CSRFViolationEvent extends BaseEvent
 {
@@ -468,7 +496,7 @@ class CSRFViolationEvent extends BaseEvent
 ```php
 namespace Glueful\Events\Security;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 class SuspiciousActivityDetectedEvent extends BaseEvent
 {
@@ -503,7 +531,7 @@ class SuspiciousActivityDetectedEvent extends BaseEvent
 ```php
 namespace Glueful\Events\Analytics;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 class SessionActivityEvent extends BaseEvent
 {
@@ -564,7 +592,7 @@ Event::listen(SessionActivityEvent::class, function(SessionActivityEvent $event)
 ```php
 namespace Glueful\Events\Analytics;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 class SessionPatternEvent extends BaseEvent
 {
@@ -593,7 +621,7 @@ class SessionPatternEvent extends BaseEvent
 ```php
 namespace Glueful\Events\Http;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 class RequestReceivedEvent extends BaseEvent
 {
@@ -628,7 +656,7 @@ class RequestReceivedEvent extends BaseEvent
 ```php
 namespace Glueful\Events\Http;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 class ResponseSentEvent extends BaseEvent
 {
@@ -666,7 +694,7 @@ class ResponseSentEvent extends BaseEvent
 ```php
 namespace Glueful\Events\Database;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 class QueryExecutedEvent extends BaseEvent
 {
@@ -744,7 +772,7 @@ Event::listen(QueryExecutedEvent::class, function(QueryExecutedEvent $event) {
 ```php
 namespace Glueful\Events\Database;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 class EntityLifecycleEvent extends BaseEvent
 {
@@ -789,7 +817,7 @@ class EntityLifecycleEvent extends BaseEvent
 ```php
 namespace Glueful\Events\Cache;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 class CacheOperationEvent extends BaseEvent
 {
@@ -1149,7 +1177,7 @@ declare(strict_types=1);
 
 namespace App\Events;
 
-use Glueful\Events\BaseEvent;
+use Glueful\Events\Contracts\BaseEvent;
 
 class OrderShippedEvent extends BaseEvent
 {
@@ -1279,31 +1307,22 @@ class ShippingAnalyticsService
 ```php
 namespace Glueful\Extensions\MyExtension;
 
-use Glueful\Core\Extension\BaseExtension;
+use Glueful\Extensions\BaseExtension;
 use Glueful\Events\Event;
+use Glueful\Events\EventSubscriberInterface;
 
 class Extension extends BaseExtension
 {
-    public function boot(Container $container): void
+    public function boot(): void
     {
-        // Register event listeners
-        $this->registerEventListeners($container);
-    }
-    
-    protected function registerEventListeners(Container $container): void
-    {
-        // Register listeners with priority using Glueful's Event facade
-        Event::listen(UserAuthenticatedEvent::class, [$this, 'onUserAuthenticated'], 10);
+        // Register event subscriber
+        Event::subscribe(ExtensionEventSubscriber::class);
+
+        // Or register individual listeners
+        Event::listen(UserAuthenticatedEvent::class, '@extension_analytics:trackLogin', 10);
         Event::listen(QueryExecutedEvent::class, [$this, 'onQueryExecuted'], 5);
-        Event::listen(RateLimitExceededEvent::class, [$this, 'onRateLimitExceeded'], 100);
     }
-    
-    public function onUserAuthenticated(UserAuthenticatedEvent $event): void
-    {
-        // Extension-specific logic
-        $this->trackUserLogin($event);
-    }
-    
+
     public function onQueryExecuted(QueryExecutedEvent $event): void
     {
         // Extension-specific database monitoring
@@ -1311,11 +1330,26 @@ class Extension extends BaseExtension
             $this->alertSlowQuery($event);
         }
     }
-    
+}
+
+class ExtensionEventSubscriber implements EventSubscriberInterface
+{
+    public static function getSubscribedEvents(): array
+    {
+        return [
+            UserAuthenticatedEvent::class => 'onUserAuthenticated',
+            RateLimitExceededEvent::class => ['onRateLimitExceeded', 100]
+        ];
+    }
+
+    public function onUserAuthenticated(UserAuthenticatedEvent $event): void
+    {
+        // Extension-specific logic
+    }
+
     public function onRateLimitExceeded(RateLimitExceededEvent $event): void
     {
         // Extension-specific rate limit handling
-        $this->handleRateLimitViolation($event);
     }
 }
 ```
@@ -1334,10 +1368,18 @@ class SimpleAuthListener
 {
     public function register(): void
     {
-        // Register a single listener
-        Event::listen(UserAuthenticatedEvent::class, [$this, 'handleLogin']);
+        // Register a single listener with priority
+        Event::listen(UserAuthenticatedEvent::class, [$this, 'handleLogin'], 10);
+
+        // Register using container service reference (lazy loading)
+        Event::listen(UserAuthenticatedEvent::class, '@analytics_service:trackLogin', 5);
+
+        // Register a closure
+        Event::listen(UserAuthenticatedEvent::class, function(UserAuthenticatedEvent $event) {
+            // Handle event inline
+        });
     }
-    
+
     public function handleLogin(UserAuthenticatedEvent $event): void
     {
         // Handle the authentication event
@@ -1350,10 +1392,10 @@ class SimpleAuthListener
 ```php
 namespace Glueful\Extensions\MyExtension;
 
-use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+use Glueful\Events\EventSubscriberInterface;
 use Glueful\Events\Auth\UserAuthenticatedEvent;
 use Glueful\Events\Database\QueryExecutedEvent;
-use Glueful\Events\Security\RateLimitExceededEvent;
+use Glueful\Events\Auth\RateLimitExceededEvent;
 
 class MyEventSubscriber implements EventSubscriberInterface
 {
@@ -1395,11 +1437,20 @@ class MyEventSubscriber implements EventSubscriberInterface
 }
 ```
 
+#### Registering Subscribers
+
+```php
+use Glueful\Events\Event;
+
+// Register the subscriber
+Event::subscribe(MyEventSubscriber::class);
+```
+
 **Note:** The Event Subscriber pattern (using `EventSubscriberInterface`) is preferred when:
 - A single class needs to handle multiple events
 - You want to define all event mappings in one place
 - You need different priorities for different handlers
-- Following the pattern used by framework listeners (like `CacheInvalidationListener`)
+- Following the pattern used by framework listeners
 
 ## Performance Monitoring
 
