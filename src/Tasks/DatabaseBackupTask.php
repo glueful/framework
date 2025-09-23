@@ -1,11 +1,11 @@
 <?php
 
-namespace Glueful\Cron;
+namespace Glueful\Tasks;
 
 use Glueful\Database\Connection;
 use Glueful\Helpers\ConfigManager;
 
-class DatabaseBackup
+class DatabaseBackupTask
 {
     /** @var array{backup_created: bool, backup_file: string, backup_size: int, old_backups_deleted: int, errors: string[]} */
     private array $stats = [

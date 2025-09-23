@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Glueful\Cron;
+namespace Glueful\Tasks;
 
 use Glueful\Logging\LogManager;
 use Glueful\Notifications\Services\NotificationRetryService;
@@ -19,7 +19,7 @@ use Glueful\Repository\NotificationRepository;
  *
  * @package Glueful\Cron
  */
-class NotificationRetryProcessor
+class NotificationRetryTask
 {
     /**
      * @var NotificationRetryService Notification retry service

@@ -40,7 +40,15 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 - **Documentation improvements**: Complete event listener registration patterns and best practices.
 - Guides navigation and testing utilities for robust application development.
 
-### 1.2 (Minor)
+### 1.2.0 — Vega (Released 2025-09-23)
+- **Tasks/Jobs Architecture**: Complete separation of business logic (Tasks) from queue execution (Jobs).
+- **Task Management System**: Comprehensive task classes for cache maintenance, database backup, log cleanup, notification retry, and session cleanup.
+- **Enhanced Console Commands**: New `cache:maintenance` command and improved console application structure.
+- **Testing Infrastructure**: Complete integration test coverage with enhanced container management and reliability.
+- **Code Quality**: Fixed PHP CodeSniffer violations and improved test state management.
+- **Migration**: Removed legacy `src/Cron/` classes in favor of the new architecture.
+
+### 1.3 (Minor)
 - Router: content negotiation helpers; ETag/conditional middleware patterns.
 - DI: container dump optimizations; service map/codegen helpers.
 - Config: DSN parsing utilities (DB, Redis), environment validation helpers.
@@ -49,7 +57,7 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 - Extensions: composer/manifest diagnostics; optional signing/verification hooks.
 - Caching: distributed strategy knobs; stampede/lock improvements.
 
-### 1.3 (Minor)
+### 1.4 (Minor)
 - Queue/workers: improved autoscaling rules; per‑queue budgets; graceful drain; health endpoints.
 
 ### 2.0 (Major; tentative)

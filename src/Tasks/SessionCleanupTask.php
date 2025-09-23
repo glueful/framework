@@ -1,13 +1,13 @@
 <?php
 
-namespace Glueful\Cron;
+namespace Glueful\Tasks;
 
 use Glueful\Database\Connection;
 
 // @schedule:  0 0 * * *
 // This job runs Daily at midnight
 
-class SessionCleaner
+class SessionCleanupTask
 {
     /** @var array{expired_access: int, expired_refresh: int, old_revoked: int, errors: string[]} */
     private array $stats = [

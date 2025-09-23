@@ -4,6 +4,47 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.2.0] - 2025-09-23 — Vega
+
+Vega release — introduces robust task management architecture and enhanced testing reliability. Named after one of the brightest stars in the night sky, this release brings enhanced reliability and clarity to task execution and framework testing infrastructure.
+
+### Added
+- **Tasks/Jobs Architecture**: Complete separation of business logic (Tasks) from queue execution (Jobs)
+  - New `src/Tasks/` directory with business logic classes
+  - New `src/Queue/Jobs/` wrappers for reliable queue integration
+  - Support for both direct execution and queued processing
+- **Task Management System**:
+  - `CacheMaintenanceTask` - Comprehensive cache maintenance operations
+  - `DatabaseBackupTask` - Database backup with configurable retention
+  - `LogCleanupTask` - Log file cleanup with retention policies
+  - `NotificationRetryTask` - Notification retry processing
+  - `SessionCleanupTask` - Session cleanup and maintenance
+- **Queue Job Wrappers**:
+  - `CacheMaintenanceJob`, `DatabaseBackupJob`, `LogCleanupJob`, `NotificationRetryJob`, `SessionCleanupJob`
+  - Reliable job execution with failure handling and logging
+- **Enhanced Console Commands**:
+  - New `cache:maintenance` command with improved options
+  - Updated console application structure and service provider registration
+- **Comprehensive Testing Suite**:
+  - Complete integration test coverage for all Tasks and Jobs
+  - Enhanced test bootstrap with proper DI container management
+  - Fixed test interference issues and container state management
+
+### Changed
+- **Architecture Migration**: Migrated from `src/Cron/` to `src/Tasks/` + `src/Queue/Jobs/` pattern
+- **Service Registration**: Tasks and Jobs now properly registered in DI container via `TasksProvider`
+- **Testing Infrastructure**: Enhanced test bootstrap for better reliability and container management
+
+### Removed
+- **Legacy Cron Classes**: Removed all classes from `src/Cron/` directory
+  - `CacheMaintenance.php`, `DatabaseBackup.php`, `LogCleaner.php`
+  - `NotificationRetryProcessor.php`, `SessionCleaner.php`
+
+### Fixed
+- **Test Infrastructure**: Resolved integration test failures and DI container initialization issues
+- **Code Quality**: Fixed PHP CodeSniffer violations across test files and bootstrap
+- **Container Management**: Fixed test state interference between unit and integration tests
+
 ## [1.1.0] - 2025-09-22 — Polaris
 
 Polaris release — introduces comprehensive testing infrastructure and enhanced documentation to guide framework development. Like the North Star that guides navigation, this release provides developers with the tools and knowledge to build robust applications with confidence.
