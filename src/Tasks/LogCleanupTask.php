@@ -1,10 +1,10 @@
 <?php
 
-namespace Glueful\Cron;
+namespace Glueful\Tasks;
 
 use Glueful\Database\Connection;
 
-class LogCleaner
+class LogCleanupTask
 {
     /** @var array{deleted_files: int, deleted_db_logs: int, bytes_freed: int, errors: string[]} */
     private array $stats = [

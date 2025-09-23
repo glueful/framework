@@ -43,6 +43,7 @@ class Application extends BaseApplication
         \Glueful\Console\Commands\Cache\TtlCommand::class,
         \Glueful\Console\Commands\Cache\ExpireCommand::class,
         \Glueful\Console\Commands\Cache\PurgeCommand::class,
+        \Glueful\Console\Commands\Cache\MaintenanceCommand::class,
         // Database commands
         \Glueful\Console\Commands\Database\StatusCommand::class,
         \Glueful\Console\Commands\Database\ResetCommand::class,

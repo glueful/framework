@@ -12,11 +12,14 @@ final class PathResolutionTest extends TestCase
 {
     private string $tmpBase = '';
     private string $tmpConfig = '';
+    private mixed $originalContainer = null;
 
     protected function setUp(): void
     {
         parent::setUp();
-        // Legacy DI bootstrap removed; nothing to reset
+
+        // Save the original container before clearing
+        $this->originalContainer = $GLOBALS['container'] ?? null;
 
         // Reset path function static caches
         $this->resetPathCaches();
@@ -48,6 +51,12 @@ final class PathResolutionTest extends TestCase
 
         // Clear any globals we set
         unset($GLOBALS['base_path'], $GLOBALS['config_paths'], $GLOBALS['container']);
+
+        // Restore the original container if it existed
+        if ($this->originalContainer !== null) {
+            $GLOBALS['container'] = $this->originalContainer;
+        }
+
         $this->removeDir($this->tmpBase);
         $this->removeDir($this->tmpConfig);
         parent::tearDown();
@@ -88,7 +97,7 @@ final class PathResolutionTest extends TestCase
 
     private function resetPathCaches(): void
     {
-        // Clear globals that path functions check
+        // Clear globals that path functions check (but save container first)
         unset($GLOBALS['base_path'], $GLOBALS['config_paths'], $GLOBALS['container']);
 
         // Reset static variables in path functions

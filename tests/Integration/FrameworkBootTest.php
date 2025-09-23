@@ -14,10 +14,14 @@ final class FrameworkBootTest extends TestCase
 {
     private string $testAppPath;
     private string $testConfigPath;
+    private mixed $originalContainer = null;
 
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Save the original container before framework boot
+        $this->originalContainer = $GLOBALS['container'] ?? null;
 
         // Clear any cached configuration from previous tests
         \Glueful\Bootstrap\ConfigurationCache::clear();
@@ -57,6 +61,12 @@ final class FrameworkBootTest extends TestCase
         if (is_dir($this->testAppPath)) {
             $this->recursiveRemoveDirectory($this->testAppPath);
         }
+
+        // Restore the original container after framework tests
+        if ($this->originalContainer !== null) {
+            $GLOBALS['container'] = $this->originalContainer;
+        }
+
         parent::tearDown();
     }
 

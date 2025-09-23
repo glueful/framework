@@ -283,6 +283,149 @@ $drivers = $queueManager->getAvailableDrivers();
 
 ## Job System
 
+### Tasks vs Jobs Architecture
+
+Starting with Glueful 1.2.0, the framework implements a clear separation between business logic (Tasks) and queue execution (Jobs):
+
+- **Tasks** (`src/Tasks/`): Contains pure business logic that can be executed directly or queued
+- **Jobs** (`src/Queue/Jobs/`): Lightweight wrappers that handle queue-specific concerns like retries, logging, and error handling
+
+This architecture provides several benefits:
+- **Testability**: Business logic can be tested independently of queue infrastructure
+- **Flexibility**: Tasks can be executed directly without queuing when needed
+- **Maintainability**: Clear separation of concerns between business logic and execution context
+- **Reliability**: Queue-specific error handling and retry logic is centralized in Job classes
+
+#### Example: Cache Maintenance
+
+```php
+// Task: Pure business logic
+use Glueful\Tasks\CacheMaintenanceTask;
+
+class CacheMaintenanceTask
+{
+    public function handle(array $options = []): array
+    {
+        $operation = $options['operation'] ?? 'clearExpiredKeys';
+        $verbose = $options['verbose'] ?? false;
+
+        return match ($operation) {
+            'clearExpiredKeys' => $this->clearExpiredKeys($verbose),
+            'optimizeCache' => $this->optimizeCache($verbose),
+            'fullCleanup' => $this->fullCleanup($options),
+            default => throw new \InvalidArgumentException("Unknown operation: {$operation}")
+        };
+    }
+
+    private function clearExpiredKeys(bool $verbose): array
+    {
+        // Business logic for clearing expired cache keys
+        $cleared = 0;
+        // ... implementation
+        return ['operation' => 'clearExpiredKeys', 'cleared' => $cleared];
+    }
+}
+
+// Job: Queue wrapper with error handling
+use Glueful\Queue\Jobs\CacheMaintenanceJob;
+use Glueful\Queue\Job;
+
+class CacheMaintenanceJob extends Job
+{
+    public function handle(): void
+    {
+        $data = $this->getData();
+        $operation = $data['operation'] ?? 'clearExpiredKeys';
+        $options = $data['options'] ?? [];
+
+        try {
+            $task = new CacheMaintenanceTask();
+            $result = $task->handle($options);
+
+            // Log successful completion
+            app(LogManager::class)->info('Cache maintenance completed successfully', [
+                'operation' => $operation,
+                'result' => $result,
+                'job_uuid' => $this->getUuid()
+            ]);
+
+        } catch (\Exception $e) {
+            app(LogManager::class)->error('Cache maintenance failed', [
+                'operation' => $operation,
+                'error' => $e->getMessage(),
+                'job_uuid' => $this->getUuid()
+            ]);
+            throw $e;
+        }
+    }
+
+    public function failed(\Exception $exception): void
+    {
+        $data = $this->getData();
+        $operation = $data['operation'] ?? 'clearExpiredKeys';
+        $options = $data['options'] ?? [];
+
+        app(LogManager::class)->error('Cache maintenance job failed', [
+            'operation' => $operation,
+            'options' => $options,
+            'error' => $exception->getMessage()
+        ]);
+    }
+}
+```
+
+#### Using Tasks and Jobs
+
+```php
+// Direct execution (testing, CLI commands)
+$task = new CacheMaintenanceTask();
+$result = $task->handle(['operation' => 'clearExpiredKeys', 'verbose' => true]);
+
+// Queued execution
+$queueManager = app(QueueManager::class);
+$jobId = $queueManager->push(CacheMaintenanceJob::class, [
+    'operation' => 'clearExpiredKeys',
+    'options' => ['verbose' => true]
+], 'maintenance');
+
+// Scheduled execution
+$jobId = $queueManager->later(3600, CacheMaintenanceJob::class, [
+    'operation' => 'optimizeCache',
+    'options' => ['retention_days' => 30]
+], 'maintenance');
+```
+
+#### Available Framework Tasks
+
+The framework includes several built-in tasks for common maintenance operations:
+
+```php
+// Cache maintenance
+use Glueful\Tasks\CacheMaintenanceTask;
+$task = new CacheMaintenanceTask();
+$result = $task->handle(['operation' => 'fullCleanup', 'retention_days' => 30]);
+
+// Database backup
+use Glueful\Tasks\DatabaseBackupTask;
+$task = new DatabaseBackupTask();
+$result = $task->handle(['retention_days' => 7, 'compress' => true]);
+
+// Log cleanup
+use Glueful\Tasks\LogCleanupTask;
+$task = new LogCleanupTask();
+$result = $task->handle(['retention_days' => 14, 'cleanup_type' => 'filesystem']);
+
+// Session cleanup
+use Glueful\Tasks\SessionCleanupTask;
+$task = new SessionCleanupTask();
+$result = $task->handle(['max_lifetime' => 1440]); // 24 hours
+
+// Notification retry processing
+use Glueful\Tasks\NotificationRetryTask;
+$task = new NotificationRetryTask();
+$result = $task->handle(['max_retries' => 3, 'retry_delay' => 300]);
+```
+
 ### Creating Job Classes
 
 ```php
@@ -1036,6 +1179,18 @@ class QueuePerformanceAnalyzer
 ```
 
 ## CLI Commands
+
+### Task-Specific Commands
+
+```bash
+# Cache maintenance commands
+php glueful cache:maintenance --operation=clearExpiredKeys --verbose
+php glueful cache:maintenance --operation=optimizeCache
+php glueful cache:maintenance --operation=fullCleanup --retention-days=30
+
+# These commands can execute directly or queue the operation
+php glueful cache:maintenance --operation=clearExpiredKeys --queue
+```
 
 ### Basic Queue Commands
 

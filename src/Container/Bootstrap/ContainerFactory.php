@@ -126,6 +126,7 @@ final class ContainerFactory
             \Glueful\Security\ServiceProvider\SecurityProvider::class,
             \Glueful\Permissions\ServiceProvider\PermissionsProvider::class,
             \Glueful\Permissions\ServiceProvider\GateProvider::class,
+            \Glueful\Tasks\ServiceProvider\TasksProvider::class,
         ]);
 
         if ($classes === []) {

@@ -1,11 +1,11 @@
 <?php
 
-namespace Glueful\Cron;
+namespace Glueful\Tasks;
 
 use Glueful\Cache\CacheFactory;
 use Glueful\Cache\CacheStore;
 
-class CacheMaintenance
+class CacheMaintenanceTask
 {
     /** @var array{cache_cleared: bool, expired_keys_removed: int, cache_size_before: int, cache_size_after: int, errors: string[]} */
     private array $stats = [
