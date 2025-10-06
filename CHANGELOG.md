@@ -4,6 +4,19 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.3.0] - 2025-10-06 — Deneb
+
+Deneb release — refines the HTTP client with first‑class, configurable retries via Symfony’s retry system, improving resilience and clarity for API integrations.
+
+### Added
+- HTTP client retry support using Symfony `RetryableHttpClient` with `GenericRetryStrategy`.
+- `Client::withRetry(array $config)` to wrap any configured client with retries.
+- `ApiClientBuilder` retry configuration via `retries(...)`, `buildWithRetries()`, and `getRetryConfig()`.
+- Sensible defaults and presets in builders (e.g., payments/external service) for common retry scenarios.
+
+### Changed
+- Refactored client retry behavior to Symfony’s strategy-based approach (status codes, backoff, jitter, max retries), replacing custom retry handling for a more robust and testable implementation.
+
 ## [1.2.0] - 2025-09-23 — Vega
 
 Vega release — introduces robust task management architecture and enhanced testing reliability. Named after one of the brightest stars in the night sky, this release brings enhanced reliability and clarity to task execution and framework testing infrastructure.

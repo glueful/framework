@@ -85,7 +85,6 @@
         "phpcs": "vendor/bin/phpcs",
         "phpcbf": "vendor/bin/phpcbf",
         "format": "@phpcbf",
-        "phpstan:di": "PHPSTAN_DISABLE_PARALLEL=1 vendor/bin/phpstan analyse src/DI --level=8 --no-progress",
         "phpstan:db": "PHPSTAN_DISABLE_PARALLEL=1 vendor/bin/phpstan analyse src/Database --level=8 --no-progress",
         "phpstan:http": "PHPSTAN_DISABLE_PARALLEL=1 vendor/bin/phpstan analyse src/Http --level=7 --no-progress",
         "phpstan:cache": "PHPSTAN_DISABLE_PARALLEL=1 vendor/bin/phpstan analyse -c phpstan.cache-strict.neon --no-progress",

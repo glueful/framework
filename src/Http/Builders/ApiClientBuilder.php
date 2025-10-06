@@ -6,7 +6,6 @@ namespace Glueful\Http\Builders;
 
 use Glueful\Http\Client;
 use Glueful\Http\Authentication\AuthenticationMethods;
-use Glueful\Http\Middleware\RetryMiddleware;
 
 /**
  * API Client Builder
@@ -186,13 +185,12 @@ class ApiClientBuilder
     }
 
     /**
-     * Enable retry mechanism
-     * Note: Retry functionality requires using RetryMiddleware.create() after building the client
+     * Enable retry mechanism (applied in buildWithRetries)
      * @param array<string, mixed> $config
      */
     public function retries(int $maxRetries, array $config = []): self
     {
-        // Store retry configuration for later use with RetryMiddleware
+        // Store retry configuration to be applied in buildWithRetries
         $this->options['_retry_config'] = array_merge([
             'max_retries' => $maxRetries,
             'delay_ms' => 1000,
@@ -292,16 +290,16 @@ class ApiClientBuilder
     }
 
     /**
-     * Build the configured HTTP client with retry middleware
+     * Build the configured HTTP client and enable retries if configured
      */
     public function buildWithRetries(): Client
     {
         $client = $this->build();
 
         if (isset($this->options['_retry_config'])) {
-            // Note: This would require access to the underlying Symfony client
-            // For now, return the regular client with a note about manual retry setup
+            return $client->withRetry($this->options['_retry_config']);
         }
+
         return $client;
     }
 
