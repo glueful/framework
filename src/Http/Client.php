@@ -6,6 +6,8 @@ namespace Glueful\Http;
 
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
+use Symfony\Component\HttpClient\Retry\GenericRetryStrategy;
+use Symfony\Component\HttpClient\RetryableHttpClient;
 use Glueful\Http\Response\Response;
 use Glueful\Http\Exceptions\HttpClientException;
 use Glueful\Events\Http\HttpClientFailureEvent;
@@ -140,6 +142,46 @@ class Client
     {
         $scopedClient = $this->httpClient->withOptions($defaultOptions);
         return new self($scopedClient, $this->logger);
+    }
+
+    /**
+     * Expose the underlying Symfony HttpClient for composition.
+     */
+    public function getHttpClient(): HttpClientInterface
+    {
+        return $this->httpClient;
+    }
+
+    /**
+     * Return a new Client instance using a provided HttpClientInterface, preserving the logger.
+     */
+    public function withHttpClient(HttpClientInterface $httpClient): self
+    {
+        return new self($httpClient, $this->logger);
+    }
+
+    /**
+     * Return a new Client instance wrapped with Symfony's RetryableHttpClient.
+     *
+     * @param array<string, mixed> $config
+     */
+    public function withRetry(array $config): self
+    {
+        $strategy = new GenericRetryStrategy(
+            statusCodes: $config['status_codes'] ?? [423, 425, 429, 500, 502, 503, 504, 507, 510],
+            delayMs: $config['delay_ms'] ?? 1000,
+            multiplier: $config['multiplier'] ?? 2.0,
+            maxDelayMs: $config['max_delay_ms'] ?? 30000,
+            jitter: $config['jitter'] ?? 0.1
+        );
+
+        $retrying = new RetryableHttpClient(
+            $this->httpClient,
+            $strategy,
+            maxRetries: $config['max_retries'] ?? 3
+        );
+
+        return new self($retrying, $this->logger);
     }
 
     /**

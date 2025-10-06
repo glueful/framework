@@ -52,4 +52,3 @@ return [
         // App\Legacy\OldProvider::class,
     ],
 ];
-
