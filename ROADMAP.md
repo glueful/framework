@@ -48,7 +48,13 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 - **Code Quality**: Fixed PHP CodeSniffer violations and improved test state management.
 - **Migration**: Removed legacy `src/Cron/` classes in favor of the new architecture.
 
-### 1.3 (Minor)
+### 1.3.0 — Deneb (Released 2025-10-06)
+- HTTP: Strategy‑based retry support using Symfony `RetryableHttpClient` and `GenericRetryStrategy`.
+- API Client Builder: `retries(...)`, `buildWithRetries()`, and `getRetryConfig()` for fluent retry configuration.
+- Presets: sensible retry defaults for payments and external service integrations.
+- Notes: No breaking changes; improves resilience and clarity for outbound HTTP.
+
+### 1.4 (Minor)
 - Router: content negotiation helpers; ETag/conditional middleware patterns.
 - DI: container dump optimizations; service map/codegen helpers.
 - Config: DSN parsing utilities (DB, Redis), environment validation helpers.
@@ -57,7 +63,7 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 - Extensions: composer/manifest diagnostics; optional signing/verification hooks.
 - Caching: distributed strategy knobs; stampede/lock improvements.
 
-### 1.4 (Minor)
+### 1.5 (Minor)
 - Queue/workers: improved autoscaling rules; per‑queue budgets; graceful drain; health endpoints.
 
 ### 2.0 (Major; tentative)
