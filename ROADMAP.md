@@ -54,6 +54,10 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 - Presets: sensible retry defaults for payments and external service integrations.
 - Notes: No breaking changes; improves resilience and clarity for outbound HTTP.
 
+### 1.3.1 — Altair (Released 2025-10-10)
+- Console: `install` command runs truly non‑interactive in CI when `--quiet`, `--no-interaction`, or `--force` are provided (skips env confirmation prompt).
+- DX: clean PHPStan signal by removing redundant `method_exists()` check on `InputInterface::isInteractive()`.
+
 ### 1.4 (Minor)
 - Router: content negotiation helpers; ETag/conditional middleware patterns.
 - DI: container dump optimizations; service map/codegen helpers.
