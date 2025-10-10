@@ -4,6 +4,19 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.3.1] - 2025-10-10 — Altair
+
+Altair patch — improves CI/automation ergonomics for initial installs and cleans up static analysis.
+
+### Changed
+- Console: `install` command is now truly non-interactive when any of these flags are present: `--quiet`, `--no-interaction`, or `--force`.
+  - Skips the confirmation prompt about environment variables in these modes, enabling fully unattended setup in CI/CD.
+  - Keeps informative output; for silent runs use Symfony’s global `-q` as usual.
+
+### Fixed
+- Console: removed redundant `method_exists()` guard around `InputInterface::isInteractive()` to satisfy PHPStan (the method is guaranteed by the interface).
+- Minor DX polish in the install flow messaging.
+
 ## [1.3.0] - 2025-10-06 — Deneb
 
 Deneb release — refines the HTTP client with first‑class, configurable retries via Symfony’s retry system, improving resilience and clarity for API integrations.

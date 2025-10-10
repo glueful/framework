@@ -207,7 +207,15 @@ class InstallCommand extends BaseCommand
         $this->line('• Security: TOKEN_SALT, JWT_KEY (generated if missing)');
         $this->line('');
 
-        if (!$this->confirm('Have you set all required environment variables?', false)) {
+        // In quiet/non-interactive/force modes, skip confirmation to support CI and scripted installs
+        $isQuiet = (bool) ($this->input->getOption('quiet') ?? false);
+        $isForced = (bool) ($this->input->getOption('force') ?? false);
+        $isNonInteractive = !$this->input->isInteractive();
+        if ($isQuiet || $isForced || $isNonInteractive) {
+            return; // assume caller ensured env is set or wants generation where applicable
+        }
+
+        if (!$this->confirm('Have you set all required environment variables?', true)) {
             throw new \Exception('Installation cancelled. Please set required environment variables and try again.');
         }
     }
