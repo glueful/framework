@@ -66,6 +66,13 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 - Removals: TokenStorageService and TokenStorageInterface removed after migration; deprecated paths eliminated.
 - Analytics: Store‑first listing with fallbacks; reduced cache‑shape coupling.
 
+### 1.4.1 — Rigel (Patch) (Released 2025-10-11)
+- Install UX: SQLite‑first install flow; other engines are skipped during install and can be configured post‑install.
+- Non‑interactive defaults: `migrate:run` invoked with `--force` (and `--no-interaction`/`--quiet` when install runs with `--quiet`).
+- Cache clear: `cache:clear` during install runs with `--force` and respects quiet mode flags to avoid prompts.
+- Health checks: database connection probe removed from install (SQLite does not require a network connection; migrations surface real issues).
+- DX: removed redundant comparison that triggered a PHPStan strict‑comparison warning.
+
 ### 1.5 (Minor)
 - Router: content negotiation helpers; ETag/conditional middleware patterns.
 - DI: container dump optimizations; service map/codegen helpers.
