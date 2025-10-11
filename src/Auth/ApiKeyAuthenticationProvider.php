@@ -7,7 +7,8 @@ namespace Glueful\Auth;
 use Symfony\Component\HttpFoundation\Request;
 use Glueful\Repository\UserRepository;
 use Glueful\Auth\Interfaces\AuthenticationProviderInterface;
-use Glueful\Permissions\Helpers\PermissionHelper;
+
+// PermissionHelper no longer directly used; admin check delegates to manager
 
 /**
  * API Key Authentication Provider
@@ -93,32 +94,15 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
      */
     public function isAdmin(array $userData): bool
     {
-        $user = $userData['user'] ?? $userData;
-
-        // Fallback to is_admin flag if no UUID available
-        if (!isset($user['uuid'])) {
+        // Delegate to the central AuthenticationManager to avoid duplication
+        try {
+            $manager = AuthBootstrap::getManager();
+            return $manager->isAdmin($userData);
+        } catch (\Throwable) {
+            // Conservative fallback to original heuristic
+            $user = $userData['user'] ?? $userData;
             return (bool)($user['is_admin'] ?? false);
         }
-
-        // Check if permission system is available
-        if (!PermissionHelper::isAvailable()) {
-            // Fall back to is_admin flag
-            return (bool)($user['is_admin'] ?? false);
-        }
-
-        // Check if user has admin access using PermissionHelper
-        $hasAdminAccess = PermissionHelper::canAccessAdmin(
-            $user['uuid'],
-            ['auth_check' => true, 'provider' => 'apikey']
-        );
-
-        // If permission check fails, fall back to is_admin flag as safety net
-        if ($hasAdminAccess === false && (bool)($user['is_admin'] ?? false)) {
-            error_log("Admin permission check failed for user {$user['uuid']}, falling back to is_admin flag");
-            return true;
-        }
-
-        return $hasAdminAccess;
     }
 
     /**

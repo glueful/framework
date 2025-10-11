@@ -733,13 +733,16 @@ class AdminPermissionMiddleware implements RouteMiddleware
     private function getUserUuidFromToken(string $token): ?string
     {
         try {
-            // Try token storage service first
-            if (class_exists('\Glueful\Auth\TokenStorageService')) {
-                $tokenStorage = new \Glueful\Auth\TokenStorageService();
-                $sessionData = $tokenStorage->getSessionByAccessToken($token);
+            // Try unified SessionStore first
+            try {
+                /** @var \Glueful\Auth\Interfaces\SessionStoreInterface $store */
+                $store = container()->get(\Glueful\Auth\Interfaces\SessionStoreInterface::class);
+                $sessionData = $store->getByAccessToken($token);
                 if ($sessionData !== null && isset($sessionData['user_uuid'])) {
                     return $sessionData['user_uuid'];
                 }
+            } catch (\Throwable) {
+                // ignore and fallback
             }
 
             // Try authentication service

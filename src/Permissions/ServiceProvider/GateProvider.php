@@ -95,39 +95,4 @@ final class GateProvider extends BaseServiceProvider
 
         return $defs;
     }
-
-    /**
-     * Legacy method for backward compatibility
-     * @deprecated Use defs() method instead
-     * @param array<string, mixed> $configPermissions
-     * @return array<string, callable>
-     */
-    public static function bindings(array $configPermissions): array
-    {
-        return [
-            Gate::class => function ($c) use ($configPermissions) {
-                $gate = new Gate(
-                    $configPermissions['strategy'] ?? 'affirmative',
-                    (bool)($configPermissions['allow_deny_override'] ?? false)
-                );
-                // 1. SuperRoleVoter
-                if (isset($configPermissions['super_roles']) && count($configPermissions['super_roles']) > 0) {
-                    $gate->registerVoter(new SuperRoleVoter($configPermissions['super_roles']));
-                }
-                // 2. PolicyVoter
-                $policyRegistry = new PolicyRegistry($configPermissions['policies'] ?? []);
-                $gate->registerVoter(new \Glueful\Permissions\Voters\PolicyVoter($policyRegistry));
-                // 3. RoleVoter
-                $gate->registerVoter(new RoleVoter($configPermissions['roles'] ?? []));
-                // 4. ScopeVoter
-                $gate->registerVoter(new ScopeVoter());
-                // 5. OwnershipVoter
-                $gate->registerVoter(new OwnershipVoter());
-                return $gate;
-            },
-            PolicyRegistry::class => function ($c) use ($configPermissions) {
-                return new PolicyRegistry($configPermissions['policies'] ?? []);
-            },
-        ];
-    }
 }

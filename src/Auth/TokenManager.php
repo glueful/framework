@@ -8,6 +8,8 @@ use Glueful\Database\Connection;
 use Glueful\Helpers\Utils;
 use Glueful\Http\RequestContext;
 use Glueful\Auth\Interfaces\AuthenticationProviderInterface;
+use Glueful\Auth\Interfaces\SessionStoreInterface;
+use Glueful\Auth\Utils\SessionStoreResolver;
 
 /**
  * Token Management System
@@ -64,6 +66,20 @@ class TokenManager
     private static function getSessionCacheManager(): SessionCacheManager
     {
         return app(SessionCacheManager::class);
+    }
+
+    /**
+     * Resolve the session store via container with a safe fallback
+     */
+    private static function getSessionStore(): SessionStoreInterface
+    {
+        try {
+            /** @var SessionStoreInterface $store */
+            $store = container()->get(SessionStoreInterface::class);
+            return $store;
+        } catch (\Throwable) {
+            return new SessionStore();
+        }
     }
 
     /**
@@ -279,20 +295,17 @@ class TokenManager
 
         // Default to standard JWT token generation for backward compatibility
         if ($tokens === null) {
-            // Get remember_me status from the session to determine token lifetime
+            // Get remember_me and provider to determine token lifetime via SessionStore
             $db = self::getDb();
             $sessionResult = $db->table('auth_sessions')
-                ->select(['remember_me'])
+                ->select(['remember_me', 'provider'])
                 ->where(['refresh_token' => $refreshToken])
                 ->get();
             $rememberMe = (bool)($sessionResult[0]['remember_me'] ?? false);
-            // Set appropriate token lifetime based on remember_me
-            $accessTokenLifetime = $rememberMe
-                ? (int)config('session.remember_expiration', 30 * 24 * 3600)  // 30 days
-                : (int)config('session.access_token_lifetime', 3600);         // 1 hour
-            $refreshTokenLifetime = $rememberMe
-                ? (int)config('session.remember_expiration', 60 * 24 * 3600)  // 60 days for refresh
-                : (int)config('session.refresh_token_lifetime', 7 * 24 * 3600); // 7 days
+            $providerName = (string)($sessionResult[0]['provider'] ?? 'jwt');
+            $store = self::getSessionStore();
+            $accessTokenLifetime = $store->getAccessTtl($providerName, $rememberMe);
+            $refreshTokenLifetime = $store->getRefreshTtl($providerName, $rememberMe);
             $tokens = self::generateTokenPair($sessionData, $accessTokenLifetime, $refreshTokenLifetime);
         }
 
@@ -450,15 +463,12 @@ class TokenManager
         // Normalize user data to ensure consistent structure
         $user = self::normalizeUserData($user, $provider);
 
-        // Adjust token lifetime based on remember-me preference
+        // Adjust token lifetime using canonical policy in SessionStore
         $rememberMe = (bool)($user['remember_me'] ?? false);
-        $accessTokenLifetime = $rememberMe
-            ? (int)config('session.remember_expiration', 30 * 24 * 3600) // 30 days
-            : (int)config('session.access_token_lifetime', 3600);          // 1 hour
-
-        $refreshTokenLifetime = $rememberMe
-            ? (int)config('session.remember_expiration', 60 * 24 * 3600) // 60 days
-            : (int)config('session.refresh_token_lifetime', 7 * 24 * 3600); // 7 days
+        $providerName = $provider ?? 'jwt';
+        $store = self::getSessionStore();
+        $accessTokenLifetime = $store->getAccessTtl($providerName, $rememberMe);
+        $refreshTokenLifetime = $store->getRefreshTtl($providerName, $rememberMe);
 
         // Use authentication provider if specified and available
         $authManager = self::getAuthManager();
@@ -475,14 +485,18 @@ class TokenManager
             $tokens = self::generateTokenPair($user, $accessTokenLifetime, $refreshTokenLifetime);
         }
 
-        // Store session using TokenStorageService for unified database/cache management
+        // Store session using SessionStore for unified database/cache management
         $user['refresh_token'] = $tokens['refresh_token'];
         $user['session_id'] = Utils::generateNanoID(); // Generate session ID once
         $user['provider'] = $provider ?? 'jwt';
         $user['remember_me'] = $user['remember_me'] ?? false;
 
-        $tokenStorage = new TokenStorageService();
-        $tokenStorage->storeSession($user, $tokens);
+        self::getSessionStore()->create(
+            $user,
+            $tokens,
+            $user['provider'],
+            (bool)$user['remember_me']
+        );
 
         // Also store in cache for quick lookup
         $sessionCacheManager = self::getSessionCacheManager();
@@ -668,23 +682,9 @@ class TokenManager
      */
     private static function getAuthManager(): ?AuthenticationManager
     {
-        // Check if the AuthenticationService class exists and has a static getInstance method
-        if (class_exists('\\Glueful\\Auth\\AuthenticationService')) {
-            try {
-                $authService = call_user_func(['\\Glueful\\Auth\\AuthenticationService', 'getInstance']);
-                if ($authService !== null && method_exists($authService, 'getAuthManager')) {
-                    return $authService->getAuthManager();
-                }
-            } catch (\Throwable) {
-                // Silently fail and return null
-            }
-        }
-
-        // Try direct instantiation of AuthenticationManager if the service is not available
         try {
-            return new AuthenticationManager();
+            return AuthBootstrap::getManager();
         } catch (\Throwable) {
-            // Silently fail
             return null;
         }
     }

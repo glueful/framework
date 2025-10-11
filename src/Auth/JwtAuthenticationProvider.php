@@ -6,7 +6,7 @@ namespace Glueful\Auth;
 
 use Symfony\Component\HttpFoundation\Request;
 use Glueful\Auth\Interfaces\AuthenticationProviderInterface;
-use Glueful\Permissions\Helpers\PermissionHelper;
+use Glueful\Auth\Traits\ResolvesSessionStore;
 
 /**
  * JWT Authentication Provider
@@ -14,11 +14,13 @@ use Glueful\Permissions\Helpers\PermissionHelper;
  * Implements authentication using JWT tokens and the existing
  * authentication infrastructure in the Glueful framework.
  *
- * This provider leverages the TokenManager and TokenStorageService
+ * This provider leverages the TokenManager and SessionStore
  * while providing a standardized interface for authentication.
  */
 class JwtAuthenticationProvider implements AuthenticationProviderInterface
 {
+    use ResolvesSessionStore;
+
     /** @var string|null Last authentication error message */
     private ?string $lastError = null;
 
@@ -31,16 +33,16 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
         $clientIp = $request->getClientIp();
 
         try {
-            // Extract token from Authorization header
-            $token = $this->extractTokenFromRequest($request);
-            if ($token === '') {
+            // Extract token using centralized extractor
+            $token = TokenManager::extractTokenFromRequest();
+            if ($token === null || $token === '') {
                 $this->lastError = 'No authentication token provided';
                 return null;
             }
 
-            // Validate token and get session data using TokenStorageService
-            $tokenStorage = new TokenStorageService();
-            $sessionData = $tokenStorage->getSessionByAccessToken($token);
+            // Validate token and get session data using SessionStore via DI
+            $sessionStore = $this->getSessionStore();
+            $sessionData = $sessionStore->getByAccessToken($token);
             if ($sessionData === null) {
                 $this->lastError = 'Invalid or expired authentication token';
                 return null;
@@ -75,32 +77,15 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
      */
     public function isAdmin(array $userData): bool
     {
-        $user = $userData['user'] ?? $userData;
-
-        // Fallback to is_admin flag if no UUID available
-        if (!isset($user['uuid'])) {
+        // Delegate to the central AuthenticationManager to avoid duplication
+        try {
+            $manager = AuthBootstrap::getManager();
+            return $manager->isAdmin($userData);
+        } catch (\Throwable) {
+            // Conservative fallback to original heuristic
+            $user = $userData['user'] ?? $userData;
             return (bool)($user['is_admin'] ?? false);
         }
-
-        // Check if permission system is available
-        if (!PermissionHelper::isAvailable()) {
-            // Fall back to is_admin flag
-            return (bool)($user['is_admin'] ?? false);
-        }
-
-        // Check if user has admin access using PermissionHelper
-        $hasAdminAccess = PermissionHelper::canAccessAdmin(
-            $user['uuid'],
-            ['auth_check' => true, 'provider' => 'jwt']
-        );
-
-        // If permission check fails, fall back to is_admin flag as safety net
-        if ($hasAdminAccess === false && (bool)($user['is_admin'] ?? false)) {
-            error_log("Admin permission check failed for user {$user['uuid']}, falling back to is_admin flag");
-            return true;
-        }
-
-        return $hasAdminAccess;
     }
 
     /**
@@ -109,28 +94,6 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
     public function getError(): ?string
     {
         return $this->lastError;
-    }
-
-    /**
-     * Extract JWT token from request
-     *
-     * @param Request $request The HTTP request
-     * @return string|null The token or null if not found
-     */
-    private function extractTokenFromRequest(Request $request): ?string
-    {
-        $authHeader = $request->headers->get('Authorization');
-
-        if ($authHeader === null || $authHeader === '') {
-            return null;
-        }
-
-        // Remove 'Bearer ' prefix if present
-        if (strpos($authHeader, 'Bearer ') === 0) {
-            return substr($authHeader, 7);
-        }
-
-        return $authHeader;
     }
 
     /**

@@ -288,10 +288,15 @@ class RateLimiterMiddleware implements RouteMiddleware
             // Remove 'Bearer ' prefix if present
             $token = str_replace('Bearer ', '', $token);
 
-            // Try to get user from session using TokenStorageService
-            $tokenStorage = new \Glueful\Auth\TokenStorageService();
-            $session = $tokenStorage->getSessionByAccessToken($token);
-            return $session['uuid'] ?? null;
+            // Try to get user from session using SessionStore
+            try {
+                /** @var \Glueful\Auth\Interfaces\SessionStoreInterface $store */
+                $store = container()->get(\Glueful\Auth\Interfaces\SessionStoreInterface::class);
+                $session = $store->getByAccessToken($token);
+            } catch (\Throwable) {
+                $session = null;
+            }
+            return is_array($session) ? ($session['uuid'] ?? null) : null;
         }
 
         return null;
