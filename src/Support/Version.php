@@ -13,13 +13,13 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.3.1';
+    public const VERSION = '1.4.10';
 
     /** Release code name */
-    public const NAME = 'Altair';
+    public const NAME = 'Rigel';
 
     /** Release date */
-    public const RELEASE_DATE = '2025-10-10';
+    public const RELEASE_DATE = '2025-10-11';
 
     /** Minimum required PHP version */
     public const MIN_PHP_VERSION = '8.2.0';

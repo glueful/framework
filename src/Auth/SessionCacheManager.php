@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Glueful\Auth;
 
 use Glueful\Cache\CacheStore;
-use Glueful\Auth\TokenStorageService;
 use Glueful\Interfaces\Permission\PermissionProviderInterface;
 use Glueful\Interfaces\Permission\RbacPermissionProviderInterface;
 use Glueful\Queue\QueueManager;
@@ -40,6 +39,8 @@ use Glueful\Queue\QueueManager;
  */
 class SessionCacheManager
 {
+    use \Glueful\Auth\Traits\ResolvesSessionStore;
+
     private const SESSION_PREFIX = 'session:';
     private const PROVIDER_INDEX_PREFIX = 'provider:';
     private const PERMISSION_CACHE_PREFIX = 'user_permissions:';
@@ -305,9 +306,9 @@ class SessionCacheManager
      */
     public function getSession(string $token, ?string $provider = null): ?array
     {
-        // Use TokenStorageService to get session data directly
-        $tokenStorage = new TokenStorageService();
-        $sessionData = $tokenStorage->getSessionByAccessToken($token);
+        // Use SessionStore to get session data directly
+        $sessionStore = $this->getSessionStore();
+        $sessionData = $sessionStore->getByAccessToken($token);
         if ($sessionData === null) {
             return null;
         }
@@ -418,9 +419,9 @@ class SessionCacheManager
      */
     public function destroySession(string $token, ?string $provider = null): bool
     {
-        // Use TokenStorageService to revoke the session
-        $tokenStorage = new TokenStorageService();
-        $sessionData = $tokenStorage->getSessionByAccessToken($token);
+        // Use SessionStore to fetch the session
+        $sessionStore = $this->getSessionStore();
+        $sessionData = $sessionStore->getByAccessToken($token);
 
         if ($sessionData === null) {
             return false;
@@ -431,8 +432,8 @@ class SessionCacheManager
             return false;
         }
 
-        // Revoke session in TokenStorageService
-        $revoked = $tokenStorage->revokeSession($token);
+        // Revoke session via SessionStore
+        $revoked = $sessionStore->revoke($token);
 
         // Clean up cache entries if we have session ID
         if ($revoked && isset($sessionData['uuid'])) {
@@ -459,26 +460,27 @@ class SessionCacheManager
         string $newToken,
         ?string $provider = null
     ): bool {
-        // Use TokenStorageService to update session tokens
-        $tokenStorage = new TokenStorageService();
+        // Use SessionStore to update session tokens
+        $sessionStore = $this->getSessionStore();
 
         // Get current session data
-        $currentSession = $tokenStorage->getSessionByAccessToken($oldToken);
+        $currentSession = $sessionStore->getByAccessToken($oldToken);
         if ($currentSession === null) {
             return false;
         }
 
         $sessionProvider = $provider ?? ($currentSession['provider'] ?? 'jwt');
 
-        // Prepare new tokens array
+        // Prepare new tokens array, compute TTL via SessionStore policy
+        $store = $this->getSessionStore();
         $newTokens = [
             'access_token' => $newToken,
             'refresh_token' => $currentSession['refresh_token'], // Keep existing refresh token
-            'expires_in' => $this->getProviderTtl($sessionProvider)
+            'expires_in' => $store->getAccessTtl($sessionProvider)
         ];
 
-        // Update session tokens in TokenStorageService
-        $success = $tokenStorage->updateSessionTokens($currentSession['refresh_token'], $newTokens);
+        // Update session tokens via SessionStore
+        $success = $sessionStore->updateTokens($currentSession['refresh_token'], $newTokens);
 
         if ($success) {
             // Update cache session data
@@ -487,7 +489,7 @@ class SessionCacheManager
                 'last_activity' => time()
             ]);
 
-            $ttl = $this->getProviderTtl($sessionProvider);
+            $ttl = $store->getAccessTtl($sessionProvider);
             $this->cache->set(
                 self::SESSION_PREFIX . $currentSession['uuid'],
                 $cacheSession,
@@ -878,9 +880,9 @@ class SessionCacheManager
             $session['user']['permission_hash'] = hash('xxh3', json_encode(array_merge($permissions, $roles)));
             $session['permissions_loaded_at'] = time();
 
-            // Get session data from TokenStorageService to find session ID
-            $tokenStorage = new TokenStorageService();
-            $sessionData = $tokenStorage->getSessionByAccessToken($token);
+            // Get session data from SessionStore to find session ID
+            $sessionStore = $this->getSessionStore();
+            $sessionData = $sessionStore->getByAccessToken($token);
             if ($sessionData !== null) {
                 $ttl = $this->getProviderTtl($session['provider'] ?? 'jwt');
                 $success = $this->cache->set(self::SESSION_PREFIX . $sessionData['uuid'], $session, $ttl);
@@ -945,6 +947,16 @@ class SessionCacheManager
     private function findUserSessions(string $userUuid): array
     {
         try {
+            // Prefer SessionStore listByUser to avoid cache-shape coupling
+            try {
+                $store = container()->get(SessionStore::class);
+                $fromStore = $store->listByUser($userUuid);
+                if (is_array($fromStore) && $fromStore !== []) {
+                    return $fromStore;
+                }
+            } catch (\Throwable) {
+                // ignore and fallback to cache-indexed approach
+            }
             // Get session IDs from user index
             $indexKey = self::USER_SESSION_INDEX_PREFIX . $userUuid;
             $sessionIds = $this->cache->get($indexKey) ?? [];
@@ -1097,8 +1109,8 @@ class SessionCacheManager
                 $session['permissions_loaded_at'] = time();
 
                 // Store updated session
-                $tokenStorage = new TokenStorageService();
-                $sessionData = $tokenStorage->getSessionByAccessToken($token);
+                $sessionStore = $this->getSessionStore();
+                $sessionData = $sessionStore->getByAccessToken($token);
                 if ($sessionData !== null) {
                     $ttl = $this->getProviderTtl($session['provider'] ?? 'jwt');
                     $this->cache->set(self::SESSION_PREFIX . $sessionData['uuid'], $session, $ttl);

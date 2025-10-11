@@ -443,7 +443,7 @@ if (!function_exists('get_service_ids')) {
         // For Symfony Container, we need to get service IDs differently
         // This is a simplified implementation
         return [
-            'Glueful\\Auth\\TokenStorageService',
+            'Glueful\\Auth\\Interfaces\\SessionStoreInterface',
             'Glueful\\Repository\\UserRepository',
             'Glueful\\Extensions\\ExtensionManager',
             'Glueful\\Cache\\CacheStore',

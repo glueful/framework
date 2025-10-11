@@ -605,9 +605,10 @@ class PermissionManager implements PermissionManagerInterface
     private function getUserUuidFromToken(string $token): ?string
     {
         try {
-            // Try to get session from TokenStorageService
-            $tokenStorage = new \Glueful\Auth\TokenStorageService();
-            $sessionData = $tokenStorage->getSessionByAccessToken($token);
+            // Try to get session from SessionStore
+            /** @var \Glueful\Auth\Interfaces\SessionStoreInterface $store */
+            $store = container()->get(\Glueful\Auth\Interfaces\SessionStoreInterface::class);
+            $sessionData = $store->getByAccessToken($token);
             if ($sessionData !== null && isset($sessionData['user_uuid'])) {
                 return $sessionData['user_uuid'];
             }

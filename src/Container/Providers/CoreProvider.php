@@ -342,23 +342,12 @@ final class CoreProvider extends BaseServiceProvider
         $defs[\Glueful\Auth\AuthenticationService::class] = new FactoryDefinition(
             \Glueful\Auth\AuthenticationService::class,
             fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Auth\AuthenticationService(
-                null,
+                $c->get(\Glueful\Auth\Interfaces\SessionStoreInterface::class),
                 $c->get(\Glueful\Auth\SessionCacheManager::class)
             )
         );
 
-        // Token storage
-        $defs[\Glueful\Auth\TokenStorageService::class] = new FactoryDefinition(
-            \Glueful\Auth\TokenStorageService::class,
-            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Auth\TokenStorageService(
-                $c->get('cache.store'),
-                $c->get('database'),
-                null,
-                true
-            )
-        );
-
-        // Performance
+                // Performance
         $defs[\Glueful\Performance\MemoryManager::class] = $this->autowire(\Glueful\Performance\MemoryManager::class);
 
         // Core services

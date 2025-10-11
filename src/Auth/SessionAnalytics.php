@@ -685,8 +685,36 @@ class SessionAnalytics
      */
     private function getAllActiveSessions(): array
     {
-        // Get all active sessions using the SessionQueryBuilder
-        return $this->sessionCacheManager->sessionQuery()->get();
+        // Prefer SessionStoreInterface for decoupled reads
+        try {
+            /** @var \Glueful\Auth\Interfaces\SessionStoreInterface $store */
+            $store = container()->get(\Glueful\Auth\Interfaces\SessionStoreInterface::class);
+
+            $providers = ['jwt', 'apikey', 'oauth', 'saml'];
+            $all = [];
+            foreach ($providers as $p) {
+                $all = array_merge($all, $store->listByProvider($p));
+            }
+
+            // Fallback if store returns nothing
+            if ($all === []) {
+                return $this->sessionCacheManager->sessionQuery()->get();
+            }
+
+            // Ensure unique by session id if present
+            $unique = [];
+            foreach ($all as $s) {
+                if (isset($s['id'])) {
+                    $unique[$s['id']] = $s;
+                } else {
+                    $unique[] = $s;
+                }
+            }
+            return array_values($unique);
+        } catch (\Throwable) {
+            // Fallback to cache-backed query if store not available in this context
+            return $this->sessionCacheManager->sessionQuery()->get();
+        }
     }
 
     /**

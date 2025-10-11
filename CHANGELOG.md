@@ -4,6 +4,33 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.4.0] - 2025-10-11 — Rigel
+
+Rigel release — consolidates session management behind a single, testable API and removes legacy token storage. This refactor simplifies dependency wiring, unifies TTL policy, and improves cache‑key safety for tokens.
+
+### Added
+- SessionStoreInterface and default SessionStore implementation as the canonical session API (create/update/revoke/lookup/health).
+- TTL helpers on the store: `getAccessTtl()` and `getRefreshTtl()` with provider + remember‑me support.
+- SessionStoreResolver utility and ResolvesSessionStore trait to consistently resolve the store via DI with a safe fallback.
+- End‑to‑end smoke script for local validation: `tools/test_session_refactor.php` (temporary; remove as needed).
+
+### Changed
+- TokenManager now defers TTL policy to SessionStore and persists sessions via the store. Static resolver unified through SessionStoreResolver.
+- JwtAuthenticationProvider and SessionCacheManager resolve the store via the new trait; reduced ad‑hoc instantiation.
+- SessionAnalytics prefers the store for listing sessions (falls back to cache query when needed).
+- Cache keys for sessions now use safe prefixes and hashed tokens:
+  - `session_data_<uuid>`, `session_token_<sha256(token)>`, `session_refresh_<sha256(token)>`.
+- JWTService cleaned up; in‑memory invalidation removed; DB‑backed revocation relied upon.
+
+### Removed
+- Legacy TokenStorageService and TokenStorageInterface (all usages migrated to SessionStore).
+- Deprecated code paths and comments tied to the legacy storage/invalidation.
+
+### Fixed
+- Base64URL decoding uses URL‑safe decode paths in session flows.
+- Cache key sanitization for tokens prevents invalid‑character failures across cache backends.
+
+
 ## [1.3.1] - 2025-10-10 — Altair
 
 Altair patch — improves CI/automation ergonomics for initial installs and cleans up static analysis.

@@ -375,8 +375,8 @@ class ContainerValidateCommand extends BaseCommand
 
         // Simplified circular dependency check
         $dependencies = [
-            'AuthController' => ['TokenStorageService', 'UserRepository'],
-            'TokenStorageService' => ['DatabaseInterface', 'CacheStore'],
+            'AuthController' => ['SessionStoreInterface', 'UserRepository'],
+            'SessionStoreInterface' => ['DatabaseInterface', 'CacheStore'],
             'UserRepository' => ['DatabaseInterface'],
             'ExtensionManager' => ['ExtensionLoader', 'ExtensionConfig']
         ];
@@ -630,7 +630,7 @@ class ContainerValidateCommand extends BaseCommand
     {
         // Return a list of core services to validate
         return [
-            'Glueful\\Auth\\TokenStorageService',
+            'Glueful\\Auth\\Interfaces\\SessionStoreInterface',
             'Glueful\\Repository\\UserRepository',
             'Glueful\\Extensions\\ExtensionManager',
             'Glueful\\Cache\\CacheStore',

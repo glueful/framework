@@ -49,7 +49,12 @@ class AuthController
     public function __construct()
     {
         $this->verifier = new EmailVerification();
-        $this->authService = new AuthenticationService();
+        try {
+            $this->authService = container()->get(AuthenticationService::class);
+        } catch (\Throwable) {
+            // Fallback to direct construction (will self-resolve dependencies)
+            $this->authService = new AuthenticationService();
+        }
 
         // Initialize the authentication system
         AuthBootstrap::initialize();
@@ -301,9 +306,14 @@ class AuthController
             throw new ValidationException('No token provided');
         }
 
-        // Get session to extract user UUID
-        $tokenStorage = new \Glueful\Auth\TokenStorageService();
-        $session = $tokenStorage->getSessionByAccessToken($token);
+        // Get session to extract user UUID via SessionStore
+        try {
+            /** @var \Glueful\Auth\Interfaces\SessionStoreInterface $store */
+            $store = container()->get(\Glueful\Auth\Interfaces\SessionStoreInterface::class);
+            $session = $store->getByAccessToken($token);
+        } catch (\Throwable) {
+            $session = null;
+        }
         if ($session === null || !isset($session['user']['uuid'])) {
             throw new AuthenticationException('Invalid session');
         }

@@ -111,6 +111,7 @@ final class ContainerFactory
             \Glueful\Serialization\ServiceProvider\SerializerProvider::class,
             \Glueful\Http\ServiceProvider\HttpClientProvider::class,
             \Glueful\Container\Providers\RepositoryProvider::class,
+            \Glueful\Container\Providers\AuthProvider::class,
             \Glueful\Events\ServiceProvider\EventProvider::class,
             \Glueful\Container\Providers\ExtensionProvider::class,
             \Glueful\Queue\ServiceProvider\QueueProvider::class,

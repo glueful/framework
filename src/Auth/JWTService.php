@@ -18,9 +18,6 @@ class JWTService
     /** @var string Default hashing algorithm */
     private static string $algorithm = 'HS256';
 
-    /** @var array<string, int> Storage for invalidated tokens (token => timestamp) */
-    private static array $invalidatedTokens = [];
-
     /**
      * Initialize JWT service
      *
@@ -52,9 +49,10 @@ class JWTService
     {
         self::initialize();
 
+        // Lock to HS256 to match signing logic
         $header = [
             'typ' => 'JWT',
-            'alg' => config('session.jwt_algorithm') ?? self::$algorithm
+            'alg' => self::$algorithm
         ];
 
         $payload['iat'] = time();  // Issued at
@@ -77,24 +75,6 @@ class JWTService
     }
 
     /**
-     * Invalidate JWT token
-     *
-     * Adds token to invalidation list if it's valid.
-     *
-     * @param string $token JWT token to invalidate
-     * @return bool True if token was invalidated
-     */
-    public static function invalidate(string $token): bool
-    {
-        if (!self::verify($token)) {
-            return false;
-        }
-
-        self::$invalidatedTokens[$token] = time();
-        return true;
-    }
-
-    /**
      * Decode JWT token
      *
      * Verifies and decodes JWT token into payload data.
@@ -106,10 +86,7 @@ class JWTService
     {
         self::initialize();
 
-        // Check if token is invalidated
-        if (isset(self::$invalidatedTokens[$token])) {
-            return null;
-        }
+        // Revocation is enforced via DB-backed checks outside this class
 
         $parts = explode('.', $token);
         if (count($parts) !== 3) {

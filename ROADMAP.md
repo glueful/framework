@@ -58,7 +58,15 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 - Console: `install` command runs truly non‑interactive in CI when `--quiet`, `--no-interaction`, or `--force` are provided (skips env confirmation prompt).
 - DX: clean PHPStan signal by removing redundant `method_exists()` check on `InputInterface::isInteractive()`.
 
-### 1.4 (Minor)
+### 1.4.0 — Rigel (Released 2025-10-11)
+- Sessions: Introduce SessionStoreInterface and default SessionStore for a unified, testable session lifecycle (create/update/revoke/lookup/health).
+- TTL Policy: Canonical TTL helpers on the store (provider + remember‑me aware); TokenManager defers TTLs to the store.
+- DI & Resolver: Add SessionStoreResolver and ResolvesSessionStore trait; providers and managers consistently resolve the store via DI.
+- Caching: Safe cache keys for token mappings (hashed tokens; sanitized prefixes) to avoid backend key restrictions.
+- Removals: TokenStorageService and TokenStorageInterface removed after migration; deprecated paths eliminated.
+- Analytics: Store‑first listing with fallbacks; reduced cache‑shape coupling.
+
+### 1.5 (Minor)
 - Router: content negotiation helpers; ETag/conditional middleware patterns.
 - DI: container dump optimizations; service map/codegen helpers.
 - Config: DSN parsing utilities (DB, Redis), environment validation helpers.
@@ -67,7 +75,7 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 - Extensions: composer/manifest diagnostics; optional signing/verification hooks.
 - Caching: distributed strategy knobs; stampede/lock improvements.
 
-### 1.5 (Minor)
+### 1.6 (Minor)
 - Queue/workers: improved autoscaling rules; per‑queue budgets; graceful drain; health endpoints.
 
 ### 2.0 (Major; tentative)

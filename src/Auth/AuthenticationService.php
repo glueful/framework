@@ -7,7 +7,8 @@ namespace Glueful\Auth;
 use Glueful\Repository\UserRepository;
 use Glueful\DTOs\{PasswordDTO};
 use Symfony\Component\HttpFoundation\Request;
-use Glueful\Auth\Interfaces\TokenStorageInterface;
+use Glueful\Auth\Interfaces\SessionStoreInterface;
+use Glueful\Auth\Traits\ResolvesSessionStore;
 
 /**
  * Authentication Service
@@ -26,10 +27,12 @@ use Glueful\Auth\Interfaces\TokenStorageInterface;
  */
 class AuthenticationService
 {
+    use ResolvesSessionStore;
+
     private UserRepository $userRepository;
     private PasswordHasher $passwordHasher;
     private AuthenticationManager $authManager;
-    private TokenStorageInterface $tokenStorage;
+    private SessionStoreInterface $sessionStore;
     private SessionCacheManager $sessionCacheManager;
 
     /**
@@ -43,13 +46,13 @@ class AuthenticationService
      * the authentication manager for multi-provider support (LDAP, SAML, OAuth2, etc.).
      *
      * **Dependency Resolution:**
-     * - TokenStorage: Handles JWT token persistence and validation
+     * - SessionStore: Unified session persistence and validation (DB + cache)
      * - SessionCacheManager: Manages user session data and caching
      * - UserRepository: Provides user data access and persistence
      * - Validator: Validates input credentials and authentication data
      * - PasswordHasher: Handles secure password hashing and verification
      *
-     * @param TokenStorageInterface|null $tokenStorage Token storage implementation for JWT handling
+     * @param SessionStoreInterface|null $sessionStore Unified session store for JWT handling
      * @param SessionCacheManager|null $sessionCacheManager Session management and caching service
      * @param UserRepository|null $userRepository User data repository for authentication
      * @param PasswordHasher|null $passwordHasher Password hashing and verification service
@@ -57,12 +60,13 @@ class AuthenticationService
      * @throws \InvalidArgumentException If any provided dependency has incorrect interface
      */
     public function __construct(
-        ?TokenStorageInterface $tokenStorage = null,
+        ?SessionStoreInterface $sessionStore = null,
         ?SessionCacheManager $sessionCacheManager = null,
         ?UserRepository $userRepository = null,
         ?PasswordHasher $passwordHasher = null
     ) {
-        $this->tokenStorage = $tokenStorage ?? new TokenStorageService();
+        // Resolve SessionStore via trait helper (container with fallback)
+        $this->sessionStore = $sessionStore ?? $this->getSessionStore();
         $this->sessionCacheManager = $sessionCacheManager ?? container()->get(SessionCacheManager::class);
         $this->userRepository = $userRepository ?? new UserRepository();
         $this->passwordHasher = $passwordHasher ?? new PasswordHasher();
@@ -250,24 +254,8 @@ class AuthenticationService
      */
     public static function extractTokenFromRequest(?Request $request = null): ?string
     {
-        // If no request is provided, use TokenManager directly
-        if ($request === null) {
-            return TokenManager::extractTokenFromRequest();
-        }
-
-        // Extract token from Authorization header
-        $authHeader = $request->headers->get('Authorization');
-
-        if ($authHeader === null || $authHeader === '') {
-            return null;
-        }
-
-        // Remove 'Bearer ' prefix if present
-        if (strpos($authHeader, 'Bearer ') === 0) {
-            return substr($authHeader, 7);
-        }
-
-        return $authHeader;
+        // Delegate to the centralized extractor to avoid divergence
+        return TokenManager::extractTokenFromRequest();
     }
 
     /**
@@ -460,9 +448,8 @@ class AuthenticationService
             return null;
         }
 
-        // Update session with new tokens using TokenStorageService
-        // This ensures both database and cache are updated atomically
-        $success = $this->tokenStorage->updateSessionTokens($refreshToken, $tokens);
+        // Update session with new tokens using SessionStore (atomic DB + cache update)
+        $success = $this->sessionStore->updateTokens($refreshToken, $tokens);
 
         if ($success === false) {
             return null;
