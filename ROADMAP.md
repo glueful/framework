@@ -73,6 +73,10 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 - Health checks: database connection probe removed from install (SQLite does not require a network connection; migrations surface real issues).
 - DX: removed redundant comparison that triggered a PHPStan strict‑comparison warning.
 
+### 1.4.2 — Rigel (Patch) (Released 2025-10-11)
+- Dev ergonomics: fix PSR‑4 autoloading for tests by aligning test namespaces with `Glueful\Tests\…` to remove Composer warnings.
+- Documentation: synced release notes to reflect 1.4.1 install flow improvements; no runtime behavior changes.
+
 ### 1.5 (Minor)
 - Router: content negotiation helpers; ETag/conditional middleware patterns.
 - DI: container dump optimizations; service map/codegen helpers.

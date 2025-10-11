@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Tests\Unit\Permissions;
+namespace Glueful\Tests\Unit\Permissions;
 
 use PHPUnit\Framework\TestCase;
 use Glueful\Permissions\Middleware\GateAttributeMiddleware;
@@ -61,11 +61,16 @@ class AttributeMiddlewareTest extends TestCase
                 return new \Glueful\Permissions\Vote(\Glueful\Permissions\Vote::GRANT);
             }
 
-            public function supports(string $permission, mixed $resource, \Glueful\Permissions\Context $ctx): bool {
+            public function supports(
+                string $permission,
+                mixed $resource,
+                \Glueful\Permissions\Context $ctx
+            ): bool {
                 return true;
             }
 
-            public function priority(): int {
+            public function priority(): int
+            {
                 return 0;
             }
         });
@@ -88,12 +93,4 @@ class AttributeMiddlewareTest extends TestCase
     }
 }
 
-#[RequiresRole('admin')]
-class TestControllerWithAttributes
-{
-    #[RequiresPermission('posts.create')]
-    public function store(): void
-    {
-        // Test method
-    }
-}
+// Controller moved to its own PSR-4 compliant file under tests/Unit/Permissions/TestControllerWithAttributes.php
