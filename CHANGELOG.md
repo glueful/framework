@@ -4,6 +4,27 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.4.1] - 2025-10-11 — Rigel (patch)
+
+Installation flow hardening and SQLite-first defaults. Improves non-interactive installs and avoids fragile checks during initial setup.
+
+### Added
+- Post-install guidance on switching databases and running migrations after install.
+- Quiet/non-interactive support propagated to install sub-commands:
+  - `migrate:run` and `cache:clear` honor `--no-interaction` and `--quiet` in install `--quiet` mode.
+
+### Changed
+- InstallCommand runs migrations with `--force` by default (equivalent to `-f`).
+- Install process is SQLite-only; other engines are skipped during install and can be configured afterwards.
+- `cache:clear` during install now passes `--force` (and non-interactive flags when quiet) to avoid confirmation prompts.
+
+### Removed
+- Database connection health check during install (SQLite does not require a network connection and migrations surface real issues).
+
+### Fixed
+- Eliminated redundant sqlite comparison that triggered a phpstan strict-comparison warning.
+- `php glueful install --quiet` no longer prompts interactively when clearing cache or running migrations.
+
 ## [1.4.0] - 2025-10-11 — Rigel
 
 Rigel release — consolidates session management behind a single, testable API and removes legacy token storage. This refactor simplifies dependency wiring, unifies TTL policy, and improves cache‑key safety for tokens.

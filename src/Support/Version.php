@@ -13,10 +13,10 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.4.10';
+    public const VERSION = '1.4.1';
 
     /** Release code name */
-    public const NAME = 'Rigel';
+    public const NAME = 'Rigel (patch)';
 
     /** Release date */
     public const RELEASE_DATE = '2025-10-11';
