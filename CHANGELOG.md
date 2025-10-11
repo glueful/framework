@@ -4,6 +4,18 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.4.2] - 2025-10-11 — Rigel (patch)
+
+Dev-only tidy-ups and documentation sync. No runtime changes.
+
+### Fixed
+- PSR-4 autoloading for tests: corrected namespace in `tests/Unit/Permissions/AttributeMiddlewareTest.php` to `Glueful\Tests\...`, removing Composer warnings during autoload generation.
+
+### Documentation
+- Updated ROADMAP and site release notes to reflect the 1.4.1 install flow improvements and guidance.
+
+---
+
 ## [1.4.1] - 2025-10-11 — Rigel (patch)
 
 Installation flow hardening and SQLite-first defaults. Improves non-interactive installs and avoids fragile checks during initial setup.
