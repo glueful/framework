@@ -399,7 +399,11 @@ class SessionStore implements SessionStoreInterface
             // Try hashed refresh key first, then legacy key
             $cachedData = null;
             $hashedKey = 'session_refresh_' . $this->hashToken($sessionIdOrToken);
-            try { $cachedData = $this->cache->get($hashedKey); } catch (\Throwable) { /* ignore */ }
+            try {
+                $cachedData = $this->cache->get($hashedKey);
+            } catch (\Throwable) {
+                // ignore
+            }
             if ($cachedData === null) {
                 try {
                     $legacyKey = CacheHelper::sessionKey($sessionIdOrToken, 'refresh');
@@ -497,10 +501,12 @@ class SessionStore implements SessionStoreInterface
         $maxTtl = max($this->cacheDefaultTtl, $refreshTtl);
         $this->cache?->set($canonicalKey, $sessionJson, $maxTtl);
         if ($accessToken !== null) {
-            $this->cache?->set("session_token_" . $this->hashToken($accessToken), $canonicalKey, $this->cacheDefaultTtl);
+            $tokenKey = "session_token_" . $this->hashToken($accessToken);
+            $this->cache?->set($tokenKey, $canonicalKey, $this->cacheDefaultTtl);
         }
         if ($refreshToken !== null) {
-            $this->cache?->set("session_refresh_" . $this->hashToken($refreshToken), $canonicalKey, $refreshTtl);
+            $refreshKey = "session_refresh_" . $this->hashToken($refreshToken);
+            $this->cache?->set($refreshKey, $canonicalKey, $refreshTtl);
         }
     }
 
