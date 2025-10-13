@@ -53,6 +53,7 @@ final class ConsoleProvider extends BaseServiceProvider
             \Glueful\Console\Commands\Extensions\CacheCommand::class,
             \Glueful\Console\Commands\Extensions\ClearCommand::class,
             \Glueful\Console\Commands\Extensions\WhyCommand::class,
+            \Glueful\Console\Commands\Extensions\DiagnoseCommand::class,
             // System commands
             \Glueful\Console\Commands\InstallCommand::class,
             \Glueful\Console\Commands\System\CheckCommand::class,
@@ -79,6 +80,7 @@ final class ConsoleProvider extends BaseServiceProvider
             \Glueful\Console\Commands\Container\ContainerCompileCommand::class,
             \Glueful\Console\Commands\Container\ContainerValidateCommand::class,
             \Glueful\Console\Commands\Container\LazyStatusCommand::class,
+            \Glueful\Console\Commands\Container\ContainerMapCommand::class,
             // Field analysis commands
             \Glueful\Console\Commands\Fields\AnalyzeCommand::class,
             \Glueful\Console\Commands\Fields\ValidateCommand::class,

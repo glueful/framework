@@ -48,26 +48,17 @@ $app->terminate($request, $response);
 
 ## Getting Started
 
-- Start with the Cookbook index: `docs/cookbook/README.md` — short, task‑oriented guides.
-- New to Glueful? Begin with Routing and Middleware:
-  - `docs/cookbook/01-routing.md`
-  - `docs/cookbook/02-middleware.md`
+- Getting started guide: https://glueful.com/getting-started
+- New to Glueful? Begin with:
+  - Routing: https://glueful.com/essentials/routing
 - Prefer a pre‑scaffolded app? Use the API skeleton (see below).
 
 ## Documentation
 
-- Cookbook index: `docs/cookbook/README.md`
-  - Routing: `docs/cookbook/01-routing.md`
-  - Middleware: `docs/cookbook/02-middleware.md`
-  - DI & Services: `docs/cookbook/03-di-and-services.md`
-  - Caching: `docs/cookbook/08-caching.md`
-  - Queues & Jobs: `docs/cookbook/09-queues-and-jobs.md`
-  - Logging: `docs/cookbook/07-logging.md`
-  - File Uploads (Local/S3): `docs/cookbook/23-file-uploads.md`
-
-Implementation plans and deep dives live under `docs/implementation_plans/`.
-Roadmap: `ROADMAP.md`.
-Breaking changes process: `BREAKING_CHANGE_PROCESS.md`.
+- Official docs website: https://glueful.com (mirror: https://glueful.dev)
+- Changelog: `CHANGELOG.md`
+- Roadmap: `ROADMAP.md`
+- Breaking changes process: `BREAKING_CHANGE_PROCESS.md`
 
 ## Highlights
 
@@ -83,7 +74,15 @@ Breaking changes process: `BREAKING_CHANGE_PROCESS.md`.
 
 For a ready‑to‑run project scaffold, use the API skeleton and follow its README. It wires this framework, public entrypoints, config, and examples:
 
-- glueful/api-skeleton (coming soon or see organization repos)
+- Packagist: https://packagist.org/packages/glueful/api-skeleton
+
+Quick start:
+
+```bash
+composer create-project glueful/api-skeleton my-app
+cd my-app
+php glueful serve
+```
 
 ## Contributing
 

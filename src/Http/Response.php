@@ -8,6 +8,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Glueful\Constants\ErrorCodes;
 use Glueful\Serialization\Serializer;
 use Glueful\Serialization\Context\SerializationContext;
+use DateTimeInterface;
 
 /**
  * Modern API Response Handler using Symfony JsonResponse
@@ -318,6 +319,15 @@ class Response extends JsonResponse
     public function withETag(string $etag): self
     {
         $this->headers->set('ETag', '"' . $etag . '"');
+        return $this;
+    }
+
+    /**
+     * Add Last-Modified header for conditional requests
+     */
+    public function withLastModified(DateTimeInterface $lastModified): self
+    {
+        $this->headers->set('Last-Modified', gmdate('D, d M Y H:i:s', $lastModified->getTimestamp()) . ' GMT');
         return $this;
     }
 

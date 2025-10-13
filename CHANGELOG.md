@@ -4,6 +4,27 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.6.0] - 2025-10-13 — Sirius
+
+Minor features and DX improvements.
+
+### Added
+- DI/Compile: emit `services.json` manifest during container compile at
+  `storage/cache/container/services.json` containing `shared`, `tags`, `provider`, `type`, and `alias_of`.
+- CLI: `di:container:map` now prefers the compiled `services.json` in production to avoid reflection.
+- Runtime: `ContainerFactory` prefers a precompiled container class in production when available.
+- Router: `ConditionalCacheMiddleware` for ETag/If-None-Match and Last-Modified/If-Modified-Since 304 handling.
+- HTTP: `Response::withLastModified(DateTimeInterface)` helper.
+- Config: `Glueful\Config\DsnParser` with `parseDbDsn()` and `parseRedisDsn()` utilities.
+- CLI: `config:dsn:validate` to validate Database/Redis DSNs from flags or environment.
+- Docs: `docs/roadmap-1.6-status.md` tracking 1.6 implementation status.
+
+### Changed
+- `di:container:compile` writes both the compiled container PHP and the `services.json` manifest.
+
+### Fixed
+- Removed redundant string casts flagged by PHPStan in container boot/loader paths.
+
 ## [1.5.0] - 2025-10-13 — Orion
 
 Notification system wiring improvements and safer email verification flow.

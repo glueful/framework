@@ -20,6 +20,19 @@ use Glueful\Cache\EdgeCacheService;
 trait ResponseCachingTrait
 {
     /**
+     * Negotiate response content type from the Accept header.
+     *
+     * @param array<int,string> $supported
+     */
+    protected function negotiateContentType(array $supported = ['application/json']): string
+    {
+        try {
+            return \Glueful\Http\ContentNegotiator::negotiate($this->request, $supported);
+        } catch (\Throwable) {
+            return $supported[0];
+        }
+    }
+    /**
      * Get cache store instance
      *
      * @return CacheStore<mixed>
@@ -214,8 +227,10 @@ trait ResponseCachingTrait
         // Cache the data
         $this->cacheResponse($cacheKey, fn() => $data, $ttl, $tags);
 
-        // Create response
+        // Create response and apply negotiated Content-Type
         $response = Response::success($data);
+        $contentType = $this->negotiateContentType(['application/json', 'text/plain']);
+        header('Content-Type: ' . $contentType);
 
         // Add cache headers
         header('ETag: ' . $etag);

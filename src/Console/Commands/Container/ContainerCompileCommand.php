@@ -7,6 +7,7 @@ namespace Glueful\Console\Commands\Container;
 use Glueful\Console\BaseCommand;
 use Glueful\Container\Bootstrap\ContainerFactory;
 use Glueful\Container\Compile\ContainerCompiler;
+use Glueful\Container\Loader\DefaultServicesLoader;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -214,6 +215,9 @@ class ContainerCompileCommand extends BaseCommand
             $className = 'CompiledContainer';
             $code = $compiler->compile($definitions, $className, $namespace);
             $this->writeCompiledFile($outputDir, $className, $code);
+            // Also emit a services.json manifest for tooling in production environments
+            $servicesIndex = $compiler->buildServicesIndex($definitions, DefaultServicesLoader::getProviderMap());
+            $this->writeServicesManifest($outputDir, $servicesIndex);
             $progressBar->advance();
 
             // Step 2: Apply optimizations
@@ -254,6 +258,19 @@ class ContainerCompileCommand extends BaseCommand
             throw new \RuntimeException('Failed to write compiled container to: ' . $file);
         }
         $this->line("  • Container dumped to: {$file}");
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $index
+     */
+    private function writeServicesManifest(string $outputDir, array $index): void
+    {
+        $file = rtrim($outputDir, '/') . '/services.json';
+        $json = json_encode($index, JSON_PRETTY_PRINT);
+        if (!is_string($json) || file_put_contents($file, $json) === false) {
+            throw new \RuntimeException('Failed to write services manifest to: ' . $file);
+        }
+        $this->line("  • Services manifest dumped to: {$file}");
     }
 
     private function validateCompiledFile(string $outputDir, string $fqcn): void

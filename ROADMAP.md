@@ -84,14 +84,12 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 - Diagnostics: soft logging when email channel is unavailable or when no channels succeeded (verification/password reset).
 - Config: align retry configuration source to `email-notification.retry`.
 
-### 1.6 (Minor)
+### 1.6.0 — Sirius (Released 2025-10-13)
 - Router: content negotiation helpers; ETag/conditional middleware patterns.
-- DI: container dump optimizations; service map/codegen helpers.
-- Config: DSN parsing utilities (DB, Redis), environment validation helpers.
-- Observability: OpenTelemetry exporter; span decorators; sampling controls.
+- DI: compiled container optimizations; `services.json` manifest + map/codegen helpers.
+- Config: DSN parsing utilities (DB, Redis) and environment validation helpers.
 - Security: CSP builder configuration + presets; refined admin/allow‑lists.
-- Extensions: composer/manifest diagnostics; optional signing/verification hooks.
-- Caching: distributed strategy knobs; stampede/lock improvements.
+- Extensions: OpenTelemetry exporter planned as optional extension (not core).
 
 ### 1.7 (Minor)
 - Queue/workers: improved autoscaling rules; per‑queue budgets; graceful drain; health endpoints.

@@ -9,6 +9,19 @@ use Glueful\Container\Autowire\AutowireDefinition;
 
 final class DefaultServicesLoader implements ServicesLoader
 {
+    /** @var array<string, string> */
+    private static array $providerMap = [];
+
+    /**
+     * Return a map of service id => provider class for the most recent loads.
+     * This is best-effort and only populated for DSL-provided services.
+     * @return array<string, string>
+     */
+    public static function getProviderMap(): array
+    {
+        return self::$providerMap;
+    }
+
     /** @inheritDoc */
     public function load(array $dsl, ?string $providerClass = null, bool $prod = false): array
     {
@@ -42,6 +55,9 @@ final class DefaultServicesLoader implements ServicesLoader
                     );
                 }
                 $out[$id] = new AutowireDefinition($id, $class, shared: (bool)($spec['shared'] ?? true));
+                if (is_string($providerClass) && $providerClass !== '') {
+                    self::$providerMap[$id] = $providerClass;
+                }
                 $this->collectAliases($id, $spec, $out);
                 continue;
             }
@@ -55,6 +71,9 @@ final class DefaultServicesLoader implements ServicesLoader
                 $callable = $this->normalizeFactory($spec['factory'], $providerClass, $id);
                 $factory = $this->wrapFactoryCallable($callable);
                 $out[$id] = new FactoryDefinition($id, $factory, (bool)($spec['shared'] ?? true));
+                if (is_string($providerClass) && $providerClass !== '') {
+                    self::$providerMap[$id] = $providerClass;
+                }
                 $this->collectAliases($id, $spec, $out);
                 continue;
             }
@@ -75,6 +94,9 @@ final class DefaultServicesLoader implements ServicesLoader
                 return new $class(...$resolved);
             };
             $out[$id] = new FactoryDefinition($id, $factory, (bool)($spec['shared'] ?? true));
+            if (is_string($providerClass) && $providerClass !== '') {
+                self::$providerMap[$id] = $providerClass;
+            }
             $this->collectAliases($id, $spec, $out);
         }
         return $out;
@@ -181,6 +203,10 @@ final class DefaultServicesLoader implements ServicesLoader
                 continue;
             }
             $out[$alias] = new AliasDefinition($alias, $id);
+            // Alias inherits provider attribution
+            if (isset(self::$providerMap[$id])) {
+                self::$providerMap[$alias] = self::$providerMap[$id];
+            }
         }
     }
 

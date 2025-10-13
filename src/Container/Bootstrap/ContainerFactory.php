@@ -55,6 +55,14 @@ final class ContainerFactory
                 $php = $compiler->compile($normalized, 'CompiledContainer', 'Glueful\\Container\\Compiled');
                 $cacheFile = sys_get_temp_dir() . '/glueful_compiled_container.php';
                 file_put_contents($cacheFile, $php);
+                // Emit a simple services map artifact alongside compiled container
+                $map = [];
+                foreach ($normalized as $id => $def) {
+                    $type = is_object($def) ? get_class($def) : gettype($def);
+                    $alias = $def instanceof \Glueful\Container\Definition\AliasDefinition ? $def->getTarget() : '';
+                    $map[] = ['id' => (string) $id, 'type' => $type, 'alias_of' => $alias];
+                }
+                file_put_contents(sys_get_temp_dir() . '/glueful_services_map.json', json_encode($map));
                 require_once $cacheFile;
 
                 $compiledClass = '\\Glueful\\Container\\Compiled\\CompiledContainer';

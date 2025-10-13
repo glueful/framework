@@ -706,7 +706,62 @@ class HealthController extends BaseController
      */
     private function getQueueHealth(): array
     {
-        return [];
+        try {
+            $queueManager = container()->get(\Glueful\Queue\QueueManager::class);
+            $workerMonitor = container()->get(\Glueful\Queue\Monitoring\WorkerMonitor::class);
+
+            // Aggregate queue stats (all queues)
+            $stats = $queueManager->getStats();
+
+            // Active workers snapshot
+            $activeWorkers = $workerMonitor->getActiveWorkers();
+
+            // Simple readiness signals
+            $pending = (int) ($stats['pending'] ?? 0);
+            $failed = (int) ($stats['failed'] ?? 0);
+            $reserved = (int) ($stats['reserved'] ?? 0);
+            $totalWorkers = count($activeWorkers);
+
+            $healthy = true;
+            $issues = [];
+            if ($totalWorkers === 0 && $pending > 0) {
+                $healthy = false;
+                $issues[] = 'no_active_workers_with_pending_jobs';
+            }
+            if ($failed > 0 && $failed > ($stats['total'] ?? $failed)) {
+                $healthy = false;
+                $issues[] = 'failed_job_spike_detected';
+            }
+
+            return [
+                'status' => $healthy ? 'healthy' : 'degraded',
+                'queues' => $stats,
+                'workers' => [
+                    'active' => $totalWorkers,
+                    'details' => $activeWorkers,
+                ],
+                'reserved' => $reserved,
+                'issues' => $issues,
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'status' => 'error',
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Public queue health endpoint.
+     */
+    public function queue(): Response
+    {
+        $this->rateLimit('health_queue', 20, 60);
+        $data = $this->getQueueHealth();
+        if (($data['status'] ?? 'healthy') === 'error') {
+            return Response::error('Queue health check failed', Response::HTTP_SERVICE_UNAVAILABLE, $data);
+        }
+        return $this->privateCached(Response::success($data, 'Queue health'), 30);
     }
     /**
      * @return array<string, mixed>
