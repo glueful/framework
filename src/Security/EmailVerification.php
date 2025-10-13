@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Glueful\Security;
 
 use Glueful\Cache\CacheStore;
-use Glueful\Extensions\ExtensionManager;
 use Glueful\Http\RequestContext;
 use Glueful\Notifications\Contracts\Notifiable;
 use Glueful\Notifications\Services\NotificationService;
@@ -70,11 +69,24 @@ class EmailVerification
             );
         }
 
-        // Create the channel manager
-        $channelManager = new \Glueful\Notifications\Services\ChannelManager();
-
-        // Create the notification dispatcher
-        $dispatcher = new \Glueful\Notifications\Services\NotificationDispatcher($channelManager);
+        // Prefer DI-provided dispatcher/channel manager; fall back to ad-hoc instances
+        $dispatcher = null;
+        $channelManager = null;
+        try {
+            $c = container();
+            if ($c->has(\Glueful\Notifications\Services\NotificationDispatcher::class)) {
+                /** @var \Glueful\Notifications\Services\NotificationDispatcher $diDispatcher */
+                $diDispatcher = $c->get(\Glueful\Notifications\Services\NotificationDispatcher::class);
+                $dispatcher = $diDispatcher;
+                $channelManager = $diDispatcher->getChannelManager();
+            }
+        } catch (\Throwable $e) {
+            // Container not available yet; continue with fallback
+        }
+        if ($dispatcher === null || $channelManager === null) {
+            $channelManager = new \Glueful\Notifications\Services\ChannelManager();
+            $dispatcher = new \Glueful\Notifications\Services\NotificationDispatcher($channelManager);
+        }
 
         // Initialize EmailNotificationProvider if extension is available
         if (class_exists('\Glueful\Extensions\EmailNotification\EmailNotificationProvider')) {
@@ -84,9 +96,28 @@ class EmailVerification
             if (method_exists($this->emailProvider, 'initialize')) {
                 $this->emailProvider->initialize();
             }
-            // Register the email provider with the channel manager directly
-            if (method_exists($this->emailProvider, 'register')) {
-                $this->emailProvider->register($channelManager);
+            // If using DI, provider/channel likely registered during extension boot.
+            // Only register manually in fallback mode.
+            $usingDi = false;
+            try {
+                $c = container();
+                $usingDi = $c->has(\Glueful\Notifications\Services\NotificationDispatcher::class);
+            } catch (\Throwable $e) {
+                $usingDi = false;
+            }
+            if ($usingDi === false) {
+                if (method_exists($this->emailProvider, 'register')) {
+                    $this->emailProvider->register($channelManager);
+                }
+            }
+            // Ensure provider hooks (before/after send) are active
+            if (method_exists($dispatcher, 'getExtension') && method_exists($dispatcher, 'registerExtension')) {
+                $name = method_exists($this->emailProvider, 'getExtensionName')
+                    ? $this->emailProvider->getExtensionName()
+                    : 'email_notification';
+                if ($dispatcher->getExtension($name) === null) {
+                    $dispatcher->registerExtension($this->emailProvider);
+                }
             }
         }
 
@@ -117,18 +148,6 @@ class EmailVerification
     public function sendVerificationEmail(string $email, string $otp): array
     {
         try {
-            // Check if EmailNotification extension is enabled
-            $extensionManager = container()->get(ExtensionManager::class);
-            if (!$extensionManager->isEnabled('EmailNotification')) {
-                error_log("EmailNotification extension is not enabled");
-                return [
-                    'success' => false,
-                    'message' => 'Email notifications are not configured in the system. ' .
-                        'Please contact the administrator.',
-                    'error_code' => 'email_extension_disabled'
-                ];
-            }
-
             // Store OTP in Redis before sending email
             $hashedOTP = OTP::hashOTP($otp);
             $stored = $this->storeOTP($email, $hashedOTP);
@@ -194,6 +213,26 @@ class EmailVerification
                 ],
                 ['channels' => ['email']]
             );
+
+            // Soft diagnostics: log if email channel is not available
+            $channelsInfo = $result['channels'] ?? [];
+            if (isset($channelsInfo['email'])) {
+                $emailStatus = $channelsInfo['email']['status'] ?? '';
+                $reason = $channelsInfo['email']['reason'] ?? '';
+                $isChannelUnavailable = in_array(
+                    $reason,
+                    ['channel_not_found', 'channel_unavailable'],
+                    true
+                );
+                if ($emailStatus !== 'success' && $isChannelUnavailable) {
+                    $msg = 'EmailVerification: email channel not available: ' . $reason;
+                    error_log($msg);
+                }
+            } elseif (($result['status'] ?? '') === 'failed' && (int)($result['sent_count'] ?? 0) === 0) {
+                error_log(
+                    'EmailVerification: notification failed; no channels succeeded for email verification'
+                );
+            }
 
             // Parse the result using the NotificationResultParser
             $parsedResult = \Glueful\Notifications\Utils\NotificationResultParser::parseEmailResult(
@@ -405,17 +444,6 @@ class EmailVerification
             $requestContext = RequestContext::fromGlobals();
             $verifier = new self($requestContext, CacheHelper::createCacheInstance());
 
-            // Check if EmailNotification extension is enabled
-            $extensionManager = container()->get(ExtensionManager::class);
-            if (!$extensionManager->isEnabled('EmailNotification')) {
-                error_log("EmailNotification extension is not enabled for password reset");
-                return [
-                    'success' => false,
-                    'message' => 'Password reset via email is not available. Please contact the administrator.',
-                    'error_code' => 'email_extension_disabled'
-                ];
-            }
-
             if (!$verifier->isValidEmail($email)) {
                 return [
                     'success' => false,
@@ -507,6 +535,27 @@ class EmailVerification
                 ],
                 ['channels' => ['email']]
             );
+
+            // Soft diagnostics: log if email channel is not available
+            $channelsInfo = $result['channels'] ?? [];
+            if (isset($channelsInfo['email'])) {
+                $emailStatus = $channelsInfo['email']['status'] ?? '';
+                $reason = $channelsInfo['email']['reason'] ?? '';
+                $isChannelUnavailable = in_array(
+                    $reason,
+                    ['channel_not_found', 'channel_unavailable'],
+                    true
+                );
+                if ($emailStatus !== 'success' && $isChannelUnavailable) {
+                    $msg = 'EmailVerification: email channel not available'
+                        . ' (password reset): ' . $reason;
+                    error_log($msg);
+                }
+            } elseif (($result['status'] ?? '') === 'failed' && (int)($result['sent_count'] ?? 0) === 0) {
+                error_log(
+                    'EmailVerification: notification failed; no channels succeeded for password reset'
+                );
+            }
 
             // Use the NotificationResultParser to handle the result
             $parsedResult = \Glueful\Notifications\Utils\NotificationResultParser::parseEmailResult(

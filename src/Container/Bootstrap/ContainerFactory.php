@@ -112,6 +112,7 @@ final class ContainerFactory
             \Glueful\Http\ServiceProvider\HttpClientProvider::class,
             \Glueful\Container\Providers\RepositoryProvider::class,
             \Glueful\Container\Providers\AuthProvider::class,
+            \Glueful\Container\Providers\NotificationsProvider::class,
             \Glueful\Events\ServiceProvider\EventProvider::class,
             \Glueful\Container\Providers\ExtensionProvider::class,
             \Glueful\Queue\ServiceProvider\QueueProvider::class,

@@ -13,13 +13,13 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.4.2';
+    public const VERSION = '1.5.0';
 
     /** Release code name */
-    public const NAME = 'Rigel (patch)';
+    public const NAME = 'Orion';
 
     /** Release date */
-    public const RELEASE_DATE = '2025-10-11';
+    public const RELEASE_DATE = '2025-10-13';
 
     /** Minimum required PHP version */
     public const MIN_PHP_VERSION = '8.2.0';

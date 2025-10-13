@@ -77,7 +77,14 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 - Dev ergonomics: fix PSR‑4 autoloading for tests by aligning test namespaces with `Glueful\Tests\…` to remove Composer warnings.
 - Documentation: synced release notes to reflect 1.4.1 install flow improvements; no runtime behavior changes.
 
-### 1.5 (Minor)
+### 1.5.0 — Orion (Released 2025-10-13)
+- Notifications: introduce shared DI provider for `ChannelManager` and `NotificationDispatcher` (NotificationsProvider).
+- Email flows: EmailVerification and queue job SendNotification use DI‑first dispatcher/channel resolution with safe fallbacks.
+- Safety: remove hard `ExtensionManager` prechecks in email verification/password reset; rely on dispatcher/channel availability.
+- Diagnostics: soft logging when email channel is unavailable or when no channels succeeded (verification/password reset).
+- Config: align retry configuration source to `email-notification.retry`.
+
+### 1.6 (Minor)
 - Router: content negotiation helpers; ETag/conditional middleware patterns.
 - DI: container dump optimizations; service map/codegen helpers.
 - Config: DSN parsing utilities (DB, Redis), environment validation helpers.
@@ -86,7 +93,7 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 - Extensions: composer/manifest diagnostics; optional signing/verification hooks.
 - Caching: distributed strategy knobs; stampede/lock improvements.
 
-### 1.6 (Minor)
+### 1.7 (Minor)
 - Queue/workers: improved autoscaling rules; per‑queue budgets; graceful drain; health endpoints.
 
 ### 2.0 (Major; tentative)
