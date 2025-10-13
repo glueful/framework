@@ -437,6 +437,8 @@ final class CoreProvider extends BaseServiceProvider
             $this->autowire(\Glueful\Routing\Middleware\RequestResponseLoggingMiddleware::class);
         $defs[\Glueful\Routing\Middleware\TracingMiddleware::class] =
             $this->autowire(\Glueful\Routing\Middleware\TracingMiddleware::class);
+        $defs[\Glueful\Routing\Middleware\ConditionalCacheMiddleware::class] =
+            $this->autowire(\Glueful\Routing\Middleware\ConditionalCacheMiddleware::class);
         $defs[\Glueful\Routing\Middleware\MetricsMiddleware::class] =
             $this->autowire(\Glueful\Routing\Middleware\MetricsMiddleware::class);
         $defs[\Glueful\Routing\Middleware\LockdownMiddleware::class] =
@@ -485,6 +487,10 @@ final class CoreProvider extends BaseServiceProvider
         $defs['allow_ip'] = new AliasDefinition('allow_ip', \Glueful\Routing\Middleware\AllowIpMiddleware::class);
         $defs['metrics'] = new AliasDefinition('metrics', \Glueful\Routing\Middleware\MetricsMiddleware::class);
         $defs['tracing'] = new AliasDefinition('tracing', \Glueful\Routing\Middleware\TracingMiddleware::class);
+        $defs['conditional_cache'] = new AliasDefinition(
+            'conditional_cache',
+            \Glueful\Routing\Middleware\ConditionalCacheMiddleware::class
+        );
         $defs['gate_permissions'] = new AliasDefinition(
             'gate_permissions',
             \Glueful\Permissions\Middleware\GateAttributeMiddleware::class

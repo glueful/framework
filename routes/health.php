@@ -228,6 +228,24 @@ $router->group(['prefix' => '/health'], function (Router $router) {
         $healthController = container()->get(HealthController::class);
         return $healthController->responseApi();
     })->middleware(['auth', 'rate_limit:15,60']); // Authenticated, 15 requests per minute
+
+    /**
+     * @route GET /health/queue
+     * @summary Queue Health
+     * @description Get queue sizes, worker activity, and simple readiness signals
+     * @tag Health
+     * @response 200 application/json "Queue health status" {
+     *   status:string="healthy|degraded|error",
+     *   queues:object="Aggregated queue stats (pending, delayed, reserved, failed)",
+     *   workers:{active:integer, details:array},
+     *   reserved:integer,
+     *   issues:array
+     * }
+     */
+    $router->get('/queue', function (Request $request) {
+        $controller = container()->get(HealthController::class);
+        return $controller->queue();
+    })->middleware('rate_limit:20,60');
 });
 
 /**

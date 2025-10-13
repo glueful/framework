@@ -87,6 +87,52 @@ final class ContainerCompiler
         );
     }
 
+    /**
+     * Build a lightweight services index for tooling.
+     * Produces an associative array keyed by service id with fields we can infer:
+     *  - shared: bool
+     *  - tags:  list<string>
+     *  - provider: string|null (only when provided by DSL loader)
+     *  - type: definition class for diagnostics
+     *  - alias_of: when the id is an alias, the target id
+     *
+     * @param array<string, DefinitionInterface> $definitions
+     * @param array<string, string> $providerMap service id => provider class
+     * @return array<string, array<string, mixed>>
+     */
+    public function buildServicesIndex(array $definitions, array $providerMap = []): array
+    {
+        // First pass: collect tag relations (serviceId => [tagName,...]) via tagged iterator defs
+        $serviceTags = [];
+        foreach ($definitions as $id => $definition) {
+            if ($definition instanceof \Glueful\Container\Definition\TaggedIteratorDefinition) {
+                foreach ($definition->getTagged() as $entry) {
+                    $sid = (string) $entry['service'];
+                    $serviceTags[$sid] = $serviceTags[$sid] ?? [];
+                    $serviceTags[$sid][] = (string) $id; // $id is the tag name
+                }
+            }
+        }
+
+        $index = [];
+        foreach ($definitions as $id => $definition) {
+            $row = [
+                'shared' => (bool) $definition->isShared(),
+                'tags' => array_values($serviceTags[$id] ?? []),
+                'provider' => $providerMap[$id] ?? null,
+                'type' => get_class($definition),
+            ];
+
+            if ($definition instanceof \Glueful\Container\Definition\AliasDefinition) {
+                $row['alias_of'] = $definition->getTarget();
+            }
+
+            $index[(string) $id] = $row;
+        }
+
+        return $index;
+    }
+
     private function emitValue(string $id, ValueDefinition $def, string $method): string
     {
         $value = $this->exportValue($def->getValue());
