@@ -146,7 +146,8 @@ class ProcessRetriesCommand extends BaseCommand
         $this->retryService = new NotificationRetryService(
             $this->logger,
             null, // Use default NotificationRepository
-            config('extensions.EmailNotification.retry') ?? []
+            // Align with extension config namespace used by EmailNotification
+            config('emailnotification.retry') ?? []
         );
     }
 

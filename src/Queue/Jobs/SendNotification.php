@@ -263,18 +263,52 @@ class SendNotification extends Job
      */
     private function getNotificationService(): \Glueful\Notifications\Services\NotificationService
     {
-        // Create the channel manager
-        $channelManager = new \Glueful\Notifications\Services\ChannelManager();
-
-        // Create the notification dispatcher
-        $dispatcher = new \Glueful\Notifications\Services\NotificationDispatcher($channelManager);
+        // Prefer DI-provided dispatcher/channel manager; fall back to ad-hoc instances
+        $channelManager = null;
+        $dispatcher = null;
+        try {
+            $c = container();
+            if ($c->has(\Glueful\Notifications\Services\NotificationDispatcher::class)) {
+                /** @var \Glueful\Notifications\Services\NotificationDispatcher $diDispatcher */
+                $diDispatcher = $c->get(\Glueful\Notifications\Services\NotificationDispatcher::class);
+                $dispatcher = $diDispatcher;
+                $channelManager = $diDispatcher->getChannelManager();
+            }
+        } catch (\Throwable $e) {
+            // Container not available; continue with fallback
+        }
+        if ($dispatcher === null || $channelManager === null) {
+            $channelManager = new \Glueful\Notifications\Services\ChannelManager();
+            $dispatcher = new \Glueful\Notifications\Services\NotificationDispatcher($channelManager);
+        }
 
         // Initialize EmailNotificationProvider if available
-        $emailProviderClass = '\\Glueful\\Extensions\\EmailNotification\\EmailNotificationProvider';
+        $emailProviderClass = '\Glueful\Extensions\EmailNotification\EmailNotificationProvider';
         if (class_exists($emailProviderClass)) {
             $emailProvider = new $emailProviderClass();
             $emailProvider->initialize();
-            $emailProvider->register($channelManager);
+
+            // Only register channel manually when not using DI-driven boot wiring
+            $usingDi = false;
+            try {
+                $c = container();
+                $usingDi = $c->has(\Glueful\Notifications\Services\NotificationDispatcher::class);
+            } catch (\Throwable $e) {
+                $usingDi = false;
+            }
+            if ($usingDi === false && method_exists($emailProvider, 'register')) {
+                $emailProvider->register($channelManager);
+            }
+
+            // Ensure hooks are registered once
+            if (method_exists($dispatcher, 'getExtension') && method_exists($dispatcher, 'registerExtension')) {
+                $name = method_exists($emailProvider, 'getExtensionName')
+                    ? $emailProvider->getExtensionName()
+                    : 'email_notification';
+                if ($dispatcher->getExtension($name) === null) {
+                    $dispatcher->registerExtension($emailProvider);
+                }
+            }
         }
 
         // Initialize NotificationService with required dispatcher and repository

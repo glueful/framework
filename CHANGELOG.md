@@ -4,6 +4,34 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.5.0] - 2025-10-13 — Orion
+
+Notification system wiring improvements and safer email verification flow.
+
+### Added
+- DI provider for notifications: `Glueful\Container\Providers\NotificationsProvider` registers
+  `ChannelManager` and `NotificationDispatcher` as shared services.
+
+### Changed
+- EmailVerification and SendNotification now prefer DI-resolved `NotificationDispatcher`/`ChannelManager`
+  with a safe fallback when DI isn’t available. This enables extensions to self‑register channels/hooks
+  during boot without ad‑hoc construction.
+- Removed hard dependency on `ExtensionManager` checks in email verification and password reset flows.
+  Channel availability and configuration are determined at send time via the dispatcher.
+- Soft diagnostics: added non‑blocking logs when the email channel is unavailable or no channels succeeded
+  for email verification/password reset.
+- Retry command now reads retry settings from `email-notification.retry` to align with the extension’s
+  configuration namespace.
+
+### Fixed
+- Resolved namespace and escaping issues in SendNotification; addressed static analysis warnings and
+  long‑line formatting in EmailVerification diagnostics.
+
+### Developer Notes
+- If an Email Notification extension is installed and enabled, it will be able to register its email
+  channel and hooks against the shared dispatcher during boot. Existing fallback paths remain for
+  environments without DI.
+
 ## [1.4.2] - 2025-10-11 — Rigel (patch)
 
 Dev-only tidy-ups and documentation sync. No runtime changes.
