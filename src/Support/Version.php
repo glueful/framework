@@ -13,10 +13,10 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.6.1';
+    public const VERSION = '1.6.2';
 
     /** Release code name */
-    public const NAME = 'Arcturus';
+    public const NAME = 'Capella';
 
     /** Release date */
     public const RELEASE_DATE = '2025-10-14';
