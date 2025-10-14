@@ -4,6 +4,14 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.6.1] - 2025-10-14 — Arcturus
+
+JWT RS256 signing support.
+
+### Added
+- Auth/JWT: RS256 signing support via `JWTService::signRS256(array $claims, string $privateKey)`
+  for generating JWTs using an RSA private key. Requires the `openssl` extension.
+
 ## [1.6.0] - 2025-10-13 — Sirius
 
 Minor features and DX improvements.

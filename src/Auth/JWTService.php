@@ -220,4 +220,39 @@ class JWTService
         $payload = self::decode($token);
         return $payload === null || (isset($payload['exp']) && $payload['exp'] < time());
     }
+
+    /**
+     * Sign claims with RS256 (private key) and return a JWT.
+     * Does not verify key validity beyond OpenSSL parsing.
+     *
+     * @param array<string, mixed> $claims
+     * @throws \RuntimeException on signing failure
+     */
+    public static function signRS256(array $claims, string $privateKey): string
+    {
+        if (!extension_loaded('openssl')) {
+            throw new \RuntimeException('OpenSSL extension required for RS256 signing');
+        }
+
+        $header = ['typ' => 'JWT', 'alg' => 'RS256'];
+
+        $headerEncoded = self::base64UrlEncode((string) json_encode($header, JSON_UNESCAPED_SLASHES));
+        $payloadEncoded = self::base64UrlEncode((string) json_encode($claims, JSON_UNESCAPED_SLASHES));
+
+        $signingInput = $headerEncoded . '.' . $payloadEncoded;
+
+        $key = openssl_pkey_get_private($privateKey);
+        if ($key === false) {
+            throw new \RuntimeException('Invalid private key for RS256 signing');
+        }
+
+        $signature = '';
+        $ok = openssl_sign($signingInput, $signature, $key, OPENSSL_ALGO_SHA256);
+        if (!$ok) {
+            throw new \RuntimeException('Failed to sign JWT with RS256');
+        }
+
+        $signatureEncoded = self::base64UrlEncode($signature);
+        return $headerEncoded . '.' . $payloadEncoded . '.' . $signatureEncoded;
+    }
 }
