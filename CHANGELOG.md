@@ -4,6 +4,23 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.6.2] - 2025-10-14 — Capella
+
+Template configuration responsibility moved to the Email Notification extension.
+
+### Changed
+- Mail/Templates: The primary templates directory is now controlled by the Email Notification
+  extension configuration. The framework no longer sets a default `services.mail.templates.path`.
+  Applications can still provide this key in their own config if desired; otherwise the extension’s
+  `templates.extension_path` (and its internal default) will be used.
+- Mail/Templates: `services.mail.templates.custom_paths`, caching, layout, mappings, and global
+  variables remain supported at the framework level.
+
+### Migration Notes
+- If you previously relied on the framework’s default `templates.path`, set your preferred primary
+  directory via the extension config (`email-notification.templates.extension_path`) or add your own
+  `services.mail.templates.path` in application config.
+
 ## [1.6.1] - 2025-10-14 — Arcturus
 
 JWT RS256 signing support.

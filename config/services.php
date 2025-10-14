@@ -105,9 +105,6 @@ return [
         ],
 
         'templates' => [
-            // Primary template directory (extension's templates by default)
-            'path' => env('MAIL_TEMPLATES_PATH', dirname(__DIR__) . '/extensions/EmailNotification/src/Templates/html'),
-
             // Additional custom template directories (checked in order)
             'custom_paths' => [
                 // Framework's mail templates (if any)
