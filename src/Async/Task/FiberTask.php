@@ -9,6 +9,22 @@ use Glueful\Async\Instrumentation\Metrics;
 use Glueful\Async\Instrumentation\NullMetrics;
 use Glueful\Async\Internal\SleepOp;
 
+/**
+ * Fiber-based task implementation.
+ *
+ * FiberTask wraps a callable in a PHP fiber, allowing it to cooperatively suspend
+ * and resume execution. Tasks can be run standalone via getResult() or managed by
+ * a scheduler for concurrent execution.
+ *
+ * Usage patterns:
+ * - Standalone: $result = $task->getResult() - drives task to completion
+ * - Scheduled: $scheduler->all([$task1, $task2]) - concurrent execution
+ * - Step-by-step: $scheduler calls step() repeatedly for cooperative multitasking
+ *
+ * Suspension operations:
+ * - SleepOp: Cooperative sleep with optional cancellation
+ * - ReadOp/WriteOp: I/O operations (require scheduler)
+ */
 final class FiberTask implements Task
 {
     private \Closure $closure;
@@ -41,9 +57,31 @@ final class FiberTask implements Task
         return $this->executed;
     }
 
+    /**
+     * Gets the result of the task, driving it to completion if necessary.
+     *
+     * This method can be used for simple await($task) use cases when a task
+     * is not being managed by an external scheduler. It runs a standalone loop
+     * that drives the fiber to completion, handling suspension operations.
+     *
+     * Supported operations:
+     * - SleepOp: Blocks using usleep() for the specified duration
+     * - Cancellation: Checked early and consistently for all operations
+     *
+     * Unsupported operations (require scheduler):
+     * - ReadOp: Throws RuntimeException - requires I/O multiplexing
+     * - WriteOp: Throws RuntimeException - requires I/O multiplexing
+     *
+     * For concurrent tasks or I/O operations, use FiberScheduler->all() or race()
+     * instead of calling getResult() directly.
+     *
+     * @return mixed The task result
+     * @throws \Throwable Any exception thrown by the task or cancellation
+     * @throws \RuntimeException If I/O operations are used without a scheduler
+     */
     public function getResult(): mixed
     {
-        // Drive to completion cooperatively, handling SleepOp when not scheduled externally.
+        // Return cached result if already executed
         if ($this->executed) {
             if ($this->error !== null) {
                 throw $this->error;
@@ -51,11 +89,14 @@ final class FiberTask implements Task
             return $this->result;
         }
 
+        // Drive task to completion using standalone loop
         $taskName = $this->name ?? $this->inferName();
         $started = false;
+
         try {
             /** @phpstan-ignore-next-line */
             while (!$this->executed) {
+                // Start fiber on first iteration
                 if ($this->fiber === null) {
                     $this->metrics->taskStarted($taskName);
                     $started = true;
@@ -65,32 +106,27 @@ final class FiberTask implements Task
                     });
                     $suspend = $this->fiber->start();
                 } else {
+                    // Resume fiber from last suspension point
                     $suspend = $this->fiber->resume(null);
                 }
 
+                // Check if fiber completed
                 if ($this->fiber->isTerminated()) {
                     $this->result = $this->fiber->getReturn();
                     $this->executed = true;
                     break;
                 }
 
-                if ($suspend instanceof SleepOp) {
-                    if ($suspend->token !== null && $suspend->token->isCancelled()) {
-                        $suspend->token->throwIfCancelled();
-                    }
-                    $now = microtime(true);
-                    $timeout = max(0.0, $suspend->wakeAt - $now);
-                    if ($timeout > 0) {
-                        usleep((int) ($timeout * 1_000_000));
-                    }
-                    continue;
-                }
-                // Unknown suspend value: continue immediately
+                // Handle suspension (cancellation checked first, then sleep/I/O)
+                $this->handleSuspension($suspend);
             }
+
+            // Record successful completion
             if ($started) {
                 $this->metrics->taskCompleted($taskName);
             }
         } catch (\Throwable $e) {
+            // Record error and mark as executed
             $this->error = $e;
             if ($started) {
                 $this->metrics->taskFailed($taskName, $e);
@@ -104,7 +140,25 @@ final class FiberTask implements Task
         return $this->result;
     }
 
-    /** Execute one step and return suspend value or null when done. */
+    /**
+     * Executes one step of the task and returns the suspension operation.
+     *
+     * This method is used by schedulers to cooperatively execute tasks step-by-step.
+     * Each call either starts the fiber (first call) or resumes it from its last
+     * suspension point.
+     *
+     * The scheduler uses the returned suspension operation to determine how to
+     * wait for the task:
+     * - SleepOp: Add to timer queue
+     * - ReadOp: Wait for stream to become readable
+     * - WriteOp: Wait for stream to become writable
+     * - null: Task completed
+     *
+     * Note: Unlike getResult(), this method does NOT handle suspension operations.
+     * The caller (scheduler) is responsible for managing I/O, timers, and cancellation.
+     *
+     * @return mixed The suspension operation, or null if task is completed
+     */
     public function step(): mixed
     {
         if ($this->executed) {
@@ -151,5 +205,77 @@ final class FiberTask implements Task
             return 'fiber@' . $file . ':' . $line;
         }
         return 'fiber-task';
+    }
+
+    /**
+     * Checks if the suspension operation has been cancelled.
+     *
+     * This method provides a centralized, visible cancellation check for all
+     * suspension operations that support cancellation tokens.
+     *
+     * @param mixed $suspend The suspension operation to check
+     * @return void
+     * @throws \Exception If the operation has been cancelled
+     */
+    private function checkCancellation(mixed $suspend): void
+    {
+        // Check all suspension types that support cancellation
+        if ($suspend instanceof SleepOp ||
+            $suspend instanceof \Glueful\Async\Internal\ReadOp ||
+            $suspend instanceof \Glueful\Async\Internal\WriteOp) {
+            if ($suspend->token !== null && $suspend->token->isCancelled()) {
+                $suspend->token->throwIfCancelled();
+            }
+        }
+    }
+
+    /**
+     * Handles a sleep operation by blocking for the specified duration.
+     *
+     * @param SleepOp $op The sleep operation to handle
+     * @return void
+     */
+    private function handleSleep(SleepOp $op): void
+    {
+        $now = microtime(true);
+        $timeout = max(0.0, $op->wakeAt - $now);
+        if ($timeout > 0) {
+            usleep((int) ($timeout * 1_000_000));
+        }
+    }
+
+    /**
+     * Centralized handler for all suspension operations.
+     *
+     * This method provides clear, consistent handling of all suspension types:
+     * 1. Checks for cancellation first (visible and early)
+     * 2. Routes to appropriate handler based on operation type
+     * 3. Provides helpful error messages for unsupported operations
+     *
+     * @param mixed $suspend The suspension operation to handle
+     * @return void
+     * @throws \RuntimeException If I/O operations are used without a scheduler
+     * @throws \Exception If the operation has been cancelled
+     */
+    private function handleSuspension(mixed $suspend): void
+    {
+        // Early cancellation check - highly visible and consistent across all operation types
+        $this->checkCancellation($suspend);
+
+        // Route to appropriate handler based on suspension type
+        if ($suspend instanceof SleepOp) {
+            $this->handleSleep($suspend);
+        } elseif ($suspend instanceof \Glueful\Async\Internal\ReadOp) {
+            throw new \RuntimeException(
+                'ReadOp requires a scheduler for I/O multiplexing. ' .
+                'Use await() with FiberScheduler->all() or race() instead of calling getResult() directly.'
+            );
+        } elseif ($suspend instanceof \Glueful\Async\Internal\WriteOp) {
+            throw new \RuntimeException(
+                'WriteOp requires a scheduler for I/O multiplexing. ' .
+                'Use await() with FiberScheduler->all() or race() instead of calling getResult() directly.'
+            );
+        }
+        // Unknown suspend types fall through and are ignored (will resume immediately)
     }
 }
