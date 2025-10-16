@@ -703,3 +703,205 @@ if (!function_exists('response')) {
         return new \Glueful\Http\Response($content, $status, $headers);
     }
 }
+
+// ============================================================================
+// Async/Await Helper Functions
+// ============================================================================
+
+if (!function_exists('scheduler')) {
+    /**
+     * Get the async scheduler instance from the current request or container
+     *
+     * Retrieves the FiberScheduler instance for spawning and coordinating async tasks.
+     * Attempts to get scheduler from:
+     * 1. Current request attributes (if in HTTP request context)
+     * 2. DI container (if scheduler service registered)
+     * 3. Creates new FiberScheduler instance as fallback
+     *
+     * @param \Symfony\Component\HttpFoundation\Request|null $request Optional request to extract scheduler from
+     * @return \Glueful\Async\Contracts\Scheduler Scheduler instance
+     */
+    function scheduler(?\Symfony\Component\HttpFoundation\Request $request = null): \Glueful\Async\Contracts\Scheduler
+    {
+        // Try to get from request attributes first
+        if ($request !== null) {
+            $scheduler = $request->attributes->get(\Glueful\Async\Middleware\AsyncMiddleware::ATTR_SCHEDULER);
+            if ($scheduler instanceof \Glueful\Async\Contracts\Scheduler) {
+                return $scheduler;
+            }
+        }
+
+        // Try to get from DI container
+        try {
+            if (has_service(\Glueful\Async\Contracts\Scheduler::class)) {
+                return app(\Glueful\Async\Contracts\Scheduler::class);
+            }
+        } catch (\Throwable) {
+            // Container not available or scheduler not registered
+        }
+
+        // Fallback: create new FiberScheduler instance
+        return new \Glueful\Async\FiberScheduler();
+    }
+}
+
+if (!function_exists('async')) {
+    /**
+     * Spawn an async task using the scheduler
+     *
+     * Convenience function to spawn async tasks without explicitly getting the scheduler.
+     * Creates a fiber-based task that runs concurrently with other tasks.
+     *
+     * Example:
+     * ```php
+     * $task1 = async(fn() => fetchUser(1));
+     * $task2 = async(fn() => fetchUser(2));
+     * $results = await_all([$task1, $task2]);
+     * ```
+     *
+     * @param callable $fn Async function to execute
+     * @param \Glueful\Async\Contracts\CancellationToken|null $token Optional cancellation token
+     * @param \Symfony\Component\HttpFoundation\Request|null $request Optional request to extract scheduler from
+     * @return \Glueful\Async\Contracts\Task Spawned task instance
+     */
+    function async(
+        callable $fn,
+        ?\Glueful\Async\Contracts\CancellationToken $token = null,
+        ?\Symfony\Component\HttpFoundation\Request $request = null
+    ): \Glueful\Async\Contracts\Task {
+        return scheduler($request)->spawn($fn, $token);
+    }
+}
+
+if (!function_exists('await')) {
+    /**
+     * Wait for a task to complete and return its result
+     *
+     * Blocks until the task completes and returns the result.
+     * Throws exception if task failed.
+     *
+     * Example:
+     * ```php
+     * $task = async(fn() => fetchUser(1));
+     * $user = await($task);
+     * ```
+     *
+     * @param \Glueful\Async\Contracts\Task $task Task to wait for
+     * @return mixed Task result
+     * @throws \Throwable If task failed
+     */
+    function await(\Glueful\Async\Contracts\Task $task): mixed
+    {
+        return $task->getResult();
+    }
+}
+
+if (!function_exists('await_all')) {
+    /**
+     * Wait for all tasks to complete and return their results
+     *
+     * Blocks until all tasks complete. Returns array of results preserving keys.
+     * If any task fails, waits for all to complete then throws the first exception.
+     *
+     * Example:
+     * ```php
+     * $tasks = [
+     *     async(fn() => fetchUser(1)),
+     *     async(fn() => fetchUser(2)),
+     *     async(fn() => fetchUser(3)),
+     * ];
+     * $users = await_all($tasks);
+     * ```
+     *
+     * @param array<int|string, \Glueful\Async\Contracts\Task> $tasks Tasks to wait for
+     * @param \Symfony\Component\HttpFoundation\Request|null $request Optional request to extract scheduler from
+     * @return array<int|string, mixed> Array of results
+     * @throws \Throwable If any task failed
+     */
+    function await_all(array $tasks, ?\Symfony\Component\HttpFoundation\Request $request = null): array
+    {
+        return scheduler($request)->all($tasks);
+    }
+}
+
+if (!function_exists('await_race')) {
+    /**
+     * Wait for the first task to complete and return its result
+     *
+     * Blocks until at least one task completes. Returns the result of the first
+     * completed task. Other tasks continue running in the background.
+     *
+     * Example:
+     * ```php
+     * $tasks = [
+     *     async(fn() => fetchFromPrimaryDb()),
+     *     async(fn() => fetchFromSecondaryDb()),
+     *     async(fn() => fetchFromCache()),
+     * ];
+     * $result = await_race($tasks); // Returns fastest result
+     * ```
+     *
+     * @param array<int|string, \Glueful\Async\Contracts\Task> $tasks Tasks to race
+     * @param \Symfony\Component\HttpFoundation\Request|null $request Optional request to extract scheduler from
+     * @return mixed Result of first completed task
+     * @throws \Throwable If all tasks failed
+     */
+    function await_race(array $tasks, ?\Symfony\Component\HttpFoundation\Request $request = null): mixed
+    {
+        return scheduler($request)->race($tasks);
+    }
+}
+
+if (!function_exists('async_sleep')) {
+    /**
+     * Async sleep that yields control to other tasks
+     *
+     * Suspends the current task for the specified duration without blocking
+     * the entire event loop. Other tasks can continue executing.
+     *
+     * Example:
+     * ```php
+     * async(function() {
+     *     echo "Starting...\n";
+     *     async_sleep(1.0); // Sleep for 1 second
+     *     echo "Done!\n";
+     * });
+     * ```
+     *
+     * @param float $seconds Number of seconds to sleep
+     * @param \Glueful\Async\Contracts\CancellationToken|null $token Optional cancellation token
+     * @param \Symfony\Component\HttpFoundation\Request|null $request Optional request to extract scheduler from
+     * @return void
+     */
+    function async_sleep(
+        float $seconds,
+        ?\Glueful\Async\Contracts\CancellationToken $token = null,
+        ?\Symfony\Component\HttpFoundation\Request $request = null
+    ): void {
+        scheduler($request)->sleep($seconds, $token);
+    }
+}
+
+if (!function_exists('cancellation_token')) {
+    /**
+     * Create a new cancellation token
+     *
+     * Creates a mutable cancellation token that can be passed to async operations
+     * to enable cooperative cancellation.
+     *
+     * Example:
+     * ```php
+     * $token = cancellation_token();
+     * $task = async(fn() => longRunningOperation($token), $token);
+     *
+     * // Later, cancel the operation
+     * $token->cancel();
+     * ```
+     *
+     * @return \Glueful\Async\SimpleCancellationToken Cancellation token
+     */
+    function cancellation_token(): \Glueful\Async\SimpleCancellationToken
+    {
+        return new \Glueful\Async\SimpleCancellationToken();
+    }
+}

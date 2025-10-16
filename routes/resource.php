@@ -40,7 +40,14 @@ $router->get('/{resource}', function (Request $request) {
     $params = ['resource' => $segments[0]];
     $queryParams = $request->query->all();
     return $resourceController->get($params, $queryParams);
-})->middleware(['auth', 'rate_limit:100,60']); // 100 requests per minute for reads
+})
+    ->setFieldsConfig([
+        'strict' => false,
+        'maxDepth' => 6,
+        'maxFields' => 200,
+        'maxItems' => 1000,
+    ])
+    ->middleware(['auth', 'field_selection', 'rate_limit:100,60']); // 100 requests per minute for reads
 
 /**
  * @route GET /{resource}/{uuid}
@@ -62,7 +69,14 @@ $router->get('/{resource}/{uuid}', function (Request $request) {
     $params = ['resource' => $segments[0], 'uuid' => $segments[1]];
     $queryParams = $request->query->all();
     return $resourceController->getSingle($params, $queryParams);
-})->middleware(['auth', 'rate_limit:200,60']); // Higher limit for single resource reads
+})
+    ->setFieldsConfig([
+        'strict' => false,
+        'maxDepth' => 6,
+        'maxFields' => 200,
+        'maxItems' => 1000,
+    ])
+    ->middleware(['auth', 'field_selection', 'rate_limit:200,60']); // Higher limit for single resource reads
 
 /**
  * @route POST /{resource}
