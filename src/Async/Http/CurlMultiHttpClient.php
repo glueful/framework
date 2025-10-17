@@ -79,7 +79,7 @@ use Psr\Http\Message\RequestInterface;
  * I/O multiplexing, consider using stream-based async HTTP clients with
  * stream_select() integration.
  */
-final class CurlMultiHttpClient implements HttpClient
+final class CurlMultiHttpClient implements HttpClient, \Glueful\Async\Contracts\Http\HttpStreamingClient
 {
     /**
      * Creates an async HTTP client with optional metrics collection.
@@ -90,8 +90,13 @@ final class CurlMultiHttpClient implements HttpClient
      *                                   to make progress (default 0.01s = 10ms). Lower values
      *                                   improve responsiveness at the cost of higher CPU.
      */
-    public function __construct(private ?Metrics $metrics = null, private float $pollIntervalSeconds = 0.01)
-    {
+    public function __construct(
+        private ?Metrics $metrics = null,
+        private float $pollIntervalSeconds = 0.01,
+        private int $maxRetries = 0,
+        private float $retryDelaySeconds = 0.0,
+        /** @var array<int,int> */ private array $retryOnStatus = []
+    ) {
         $this->metrics = $this->metrics ?? new NullMetrics();
         // Ensure a sane, positive poll interval
         if ($this->pollIntervalSeconds <= 0) {
@@ -134,44 +139,101 @@ final class CurlMultiHttpClient implements HttpClient
             $ch = null;
 
             try {
-                // Step 2: Initialize curl_multi for non-blocking execution
-                $multi = curl_multi_init();
-                $ch = $this->buildHandle($request, $timeout);
-                curl_multi_add_handle($multi, $ch);
+                $attempt = 0;
+                while (true) {
+                    // Step 2: Initialize curl_multi for non-blocking execution
+                    $multi = curl_multi_init();
+                    $ch = $this->buildHandle($request, $timeout);
+                    // Enable header capture for parsing
+                    curl_setopt($ch, CURLOPT_HEADER, true);
+                    curl_multi_add_handle($multi, $ch);
 
-                // Step 3: Poll curl_multi until request completes
-                // This is the cooperative async magic: we yield control while waiting
-                do {
-                    $status = curl_multi_exec($multi, $running);
-                    if ($running) {
-                        // Request still in progress - yield for configured interval
-                        // Scheduler will resume us after delay, allowing other tasks to run
-                        $token?->throwIfCancelled();
-                        \Fiber::suspend(new SleepOp(microtime(true) + $this->pollIntervalSeconds));
+                    // Step 3: Poll curl_multi until request completes
+                    // This is the cooperative async magic: we yield control while waiting
+                    do {
+                        $status = curl_multi_exec($multi, $running);
+                        if ($running) {
+                            // Request still in progress - yield for configured interval
+                            // Scheduler will resume us after delay, allowing other tasks to run
+                            $token?->throwIfCancelled();
+                            \Fiber::suspend(new SleepOp(microtime(true) + $this->pollIntervalSeconds, $token));
+                        }
+                    } while ($running && $status === CURLM_OK);
+
+                    // Step 4: Extract response data and clean up curl resources
+                    $raw = curl_multi_getcontent($ch);
+                    $err = curl_error($ch);
+                    $info = curl_getinfo($ch);
+                    curl_multi_remove_handle($multi, $ch);
+                    curl_close($ch);
+                    $ch = null;
+                    curl_multi_close($multi);
+                    $multi = null;
+
+                    // Step 5: Decide on retry and build response
+                    $statusCode = (int)($info['http_code'] ?? 0);
+                    $shouldRetry = false;
+                    if ($err !== '' || $statusCode === 0) {
+                        $shouldRetry = ($attempt < $this->maxRetries);
+                    } elseif ($this->retryOnStatus !== [] && in_array($statusCode, $this->retryOnStatus, true)) {
+                        $shouldRetry = ($attempt < $this->maxRetries);
                     }
-                } while ($running && $status === CURLM_OK);
+                    if ($shouldRetry) {
+                        $attempt++;
+                        if ($this->retryDelaySeconds > 0) {
+                            \Fiber::suspend(new SleepOp(microtime(true) + $this->retryDelaySeconds, $token));
+                        }
+                        continue; // retry the request
+                    }
 
-                // Step 4: Extract response data and clean up curl resources
-                $raw = curl_multi_getcontent($ch);
-                $err = curl_error($ch);
-                $info = curl_getinfo($ch);
-                curl_multi_remove_handle($multi, $ch);
-                curl_close($ch);
-                $ch = null;
-                curl_multi_close($multi);
-                $multi = null;
+                    if ($err !== '' || $statusCode === 0) {
+                        throw new \RuntimeException('curl error: ' . $err);
+                    }
 
-                // Step 5: Check for curl errors and build response
-                if ($err !== '') {
-                    throw new \RuntimeException('curl error: ' . $err);
+                    // Parse headers if present to build response
+                    $headers = [];
+                    if (isset($info['header_size']) && (int)$info['header_size'] > 0) {
+                        $headerSize = (int)$info['header_size'];
+                        $headerBlob = substr($raw, 0, $headerSize);
+                        $bodyPart = substr($raw, $headerSize);
+                        // In case of redirects, header blob may contain multiple sections
+                        $sections = preg_split('/(?:\r\n){2}/', trim($headerBlob));
+                        $last = $sections !== false && $sections !== [] ? end($sections) : '';
+                        if (is_string($last) && $last !== '') {
+                            $lines = preg_split('/\r\n/', $last);
+                            if ($lines === false) {
+                                $lines = [];
+                            }
+                            foreach ($lines as $line) {
+                                if ($line === '' || str_starts_with($line, 'HTTP/')) {
+                                    continue;
+                                }
+                                $pos = strpos($line, ':');
+                                if ($pos === false) {
+                                    continue;
+                                }
+                                $name = trim(substr($line, 0, $pos));
+                                $value = trim(substr($line, $pos + 1));
+                                if (isset($headers[$name])) {
+                                    $existing = $headers[$name];
+                                    $headers[$name] = is_array($existing)
+                                        ? array_merge($existing, [$value])
+                                        : [$existing, $value];
+                                } else {
+                                    $headers[$name] = $value;
+                                }
+                            }
+                        }
+                        $response = new Response($statusCode, $headers, $bodyPart);
+                    } else {
+                        $response = $this->buildResponse($raw, $statusCode);
+                    }
+
+                    // Step 6: Record successful completion with duration
+                    $dur = (microtime(true) - $start) * 1000.0;
+                    $metrics->httpRequestCompleted($request, $statusCode, $dur);
+                    return $response;
                 }
-                $statusCode = (int)($info['http_code'] ?? 200);
-                $response = $this->buildResponse($raw, $statusCode);
-
-                // Step 6: Record successful completion with duration
-                $dur = (microtime(true) - $start) * 1000.0;
-                $metrics->httpRequestCompleted($request, $statusCode, $dur);
-                return $response;
             } catch (\Throwable $e) {
                 // Record failure with duration before re-throwing
                 $dur = (microtime(true) - $start) * 1000.0;
@@ -339,5 +401,127 @@ final class CurlMultiHttpClient implements HttpClient
     private function buildResponse(string $body, int $status): Response
     {
         return new Response($status, [], $body);
+    }
+
+    /**
+     * Streaming variant: invokes callback with body chunks as they arrive.
+     */
+    public function sendAsyncStream(
+        RequestInterface $request,
+        callable $onChunk,
+        ?Timeout $timeout = null,
+        ?\Glueful\Async\Contracts\CancellationToken $token = null
+    ): Task {
+        $metrics = $this->metrics;
+        return new FiberTask(function () use ($request, $timeout, $metrics, $token, $onChunk) {
+            $metrics->httpRequestStarted($request);
+            $start = microtime(true);
+            $multi = null;
+            $ch = null;
+            $body = '';
+            try {
+                $attempt = 0;
+                while (true) {
+                    $multi = curl_multi_init();
+                    $ch = $this->buildHandle($request, $timeout);
+                    // Enable headers, and install write callback for streaming
+                    curl_setopt($ch, CURLOPT_HEADER, true);
+                    curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($resource, string $data) use (&$body, $onChunk) {
+                        $onChunk($data);
+                        $body .= $data;
+                        return strlen($data);
+                    });
+                    curl_multi_add_handle($multi, $ch);
+
+                    do {
+                        $status = curl_multi_exec($multi, $running);
+                        if ($running) {
+                            $token?->throwIfCancelled();
+                            \Fiber::suspend(new SleepOp(microtime(true) + $this->pollIntervalSeconds, $token));
+                        }
+                    } while ($running && $status === CURLM_OK);
+
+                    $err = curl_error($ch);
+                    $info = curl_getinfo($ch);
+                    curl_multi_remove_handle($multi, $ch);
+                    curl_close($ch);
+                    $ch = null;
+                    curl_multi_close($multi);
+                    $multi = null;
+
+                    $statusCode = (int)($info['http_code'] ?? 0);
+                    $shouldRetry = false;
+                    if ($err !== '' || $statusCode === 0) {
+                        $shouldRetry = ($attempt < $this->maxRetries);
+                    } elseif ($this->retryOnStatus !== [] && in_array($statusCode, $this->retryOnStatus, true)) {
+                        $shouldRetry = ($attempt < $this->maxRetries);
+                    }
+                    if ($shouldRetry) {
+                        $attempt++;
+                        if ($this->retryDelaySeconds > 0) {
+                            \Fiber::suspend(new SleepOp(microtime(true) + $this->retryDelaySeconds, $token));
+                        }
+                        $body = '';
+                        continue;
+                    }
+                    if ($err !== '' || $statusCode === 0) {
+                        throw new \RuntimeException('curl error: ' . $err);
+                    }
+
+                    // Separate headers from body in accumulated $body
+                    $headers = [];
+                    $finalBody = $body;
+                    if (isset($info['header_size']) && (int)$info['header_size'] > 0) {
+                        $headerSize = (int)$info['header_size'];
+                        $headerBlob = substr($body, 0, $headerSize);
+                        $finalBody = substr($body, $headerSize);
+                        $sections = preg_split('/(?:\r\n){2}/', trim($headerBlob));
+                        $last = $sections !== false && $sections !== [] ? end($sections) : '';
+                        if (is_string($last) && $last !== '') {
+                            $lines = preg_split('/\r\n/', $last);
+                            if ($lines === false) {
+                                $lines = [];
+                            }
+                            foreach ($lines as $line) {
+                                if ($line === '' || str_starts_with($line, 'HTTP/')) {
+                                    continue;
+                                }
+                                $pos = strpos($line, ':');
+                                if ($pos === false) {
+                                    continue;
+                                }
+                                $name = trim(substr($line, 0, $pos));
+                                $value = trim(substr($line, $pos + 1));
+                                if (isset($headers[$name])) {
+                                    $existing = $headers[$name];
+                                    $headers[$name] = is_array($existing)
+                                        ? array_merge($existing, [$value])
+                                        : [$existing, $value];
+                                } else {
+                                    $headers[$name] = $value;
+                                }
+                            }
+                        }
+                    }
+
+                    $dur = (microtime(true) - $start) * 1000.0;
+                    $metrics->httpRequestCompleted($request, $statusCode, $dur);
+                    return new Response($statusCode, $headers, $finalBody);
+                }
+            } catch (\Throwable $e) {
+                $dur = (microtime(true) - $start) * 1000.0;
+                $metrics->httpRequestFailed($request, $e, $dur);
+                if ($multi !== null && $ch !== null) {
+                    @curl_multi_remove_handle($multi, $ch);
+                }
+                if ($ch !== null) {
+                    @curl_close($ch);
+                }
+                if ($multi !== null) {
+                    @curl_multi_close($multi);
+                }
+                throw $e;
+            }
+        }, $this->metrics, 'http-stream:' . $request->getMethod() . ' ' . (string)$request->getUri(), $token);
     }
 }

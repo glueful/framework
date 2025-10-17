@@ -347,9 +347,16 @@ final class FiberScheduler implements Scheduler
         $this->processWaiters($writeWaiters, $w, $now, $ready);
 
         // Process timers - enqueue tasks whose scheduled wake time has arrived
+        // or whose cancellation has been requested (stronger cancellation semantics)
         $newTimers = [];
         foreach ($timers as $tm) {
             [$wakeAt, $k3, $t3, $tok3] = $tm;
+
+            // If cancelled, wake immediately to allow the task to handle cancellation
+            if ($tok3 !== null && $tok3->isCancelled()) {
+                $ready->enqueue([$k3, $t3]);
+                continue;
+            }
 
             if ($now >= $wakeAt) {
                 // Timer has expired - enqueue task for execution
