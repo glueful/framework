@@ -53,4 +53,26 @@ final class Timeout
     public function __construct(public float $seconds)
     {
     }
+
+    /**
+     * Create a Timeout from seconds.
+     *
+     * @param float $seconds Seconds (sub-second supported)
+     * @return self
+     */
+    public static function fromSeconds(float $seconds): self
+    {
+        return new self($seconds);
+    }
+
+    /**
+     * Create a Timeout from milliseconds.
+     *
+     * @param int $millis Milliseconds
+     * @return self
+     */
+    public static function fromMillis(int $millis): self
+    {
+        return new self($millis / 1000.0);
+    }
 }

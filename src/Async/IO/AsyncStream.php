@@ -194,4 +194,121 @@ final class AsyncStream
 
         return $written;
     }
+
+    /**
+     * Reads a single line (ending with \n) from the stream.
+     * The returned string includes the trailing newline if present.
+     * If EOF is reached before a newline, returns the accumulated data.
+     *
+     * @param Timeout|null $timeout Optional timeout for the entire operation
+     * @param CancellationToken|null $token Optional cancellation token
+     * @return string
+     */
+    public function readLine(?Timeout $timeout = null, ?CancellationToken $token = null): string
+    {
+        $deadline = $timeout !== null ? (microtime(true) + max(0.0, $timeout->seconds)) : null;
+        $buf = '';
+        while (true) {
+            // Check for newline already read
+            $pos = strpos($buf, "\n");
+            if ($pos !== false) {
+                return substr($buf, 0, $pos + 1);
+            }
+
+            // Cancellation/timeout checks
+            if ($token !== null && $token->isCancelled()) {
+                $token->throwIfCancelled();
+            }
+            if ($deadline !== null && microtime(true) >= $deadline) {
+                throw new \RuntimeException('async readLine timeout');
+            }
+
+            // If EOF, return whatever we have
+            if (feof($this->stream)) {
+                return $buf;
+            }
+
+            // Read next chunk (use a moderate chunk size)
+            $remaining = $deadline !== null ? max(0.0, $deadline - microtime(true)) : null;
+            $chunkTimeout = $remaining !== null ? new Timeout($remaining) : null;
+            $buf .= $this->read(1024, $chunkTimeout, $token);
+        }
+    }
+
+    /**
+     * Reads the entire stream until EOF.
+     * Be careful: without a timeout, this may block if the stream never closes.
+     *
+     * @param Timeout|null $timeout Optional timeout for the entire operation
+     * @param CancellationToken|null $token Optional cancellation token
+     * @return string Full contents until EOF
+     */
+    public function readAll(?Timeout $timeout = null, ?CancellationToken $token = null): string
+    {
+        $deadline = $timeout !== null ? (microtime(true) + max(0.0, $timeout->seconds)) : null;
+        $data = '';
+        while (!feof($this->stream)) {
+            if ($token !== null && $token->isCancelled()) {
+                $token->throwIfCancelled();
+            }
+            if ($deadline !== null && microtime(true) >= $deadline) {
+                throw new \RuntimeException('async readAll timeout');
+            }
+
+            $remaining = $deadline !== null ? max(0.0, $deadline - microtime(true)) : null;
+            $chunkTimeout = $remaining !== null ? new Timeout($remaining) : null;
+            $chunk = $this->read(8192, $chunkTimeout, $token);
+            if ($chunk === '') {
+                // read() returns empty string only on EOF; exit loop
+                break;
+            }
+            $data .= $chunk;
+        }
+        return $data;
+    }
+
+    /**
+     * Reads exactly $length bytes unless EOF is reached sooner.
+     * Throws on timeout.
+     *
+     * @param int $length Number of bytes to read
+     * @param Timeout|null $timeout Optional timeout for the entire operation
+     * @param CancellationToken|null $token Optional cancellation token
+     * @return string
+     */
+    public function readExactly(int $length, ?Timeout $timeout = null, ?CancellationToken $token = null): string
+    {
+        $deadline = $timeout !== null ? (microtime(true) + max(0.0, $timeout->seconds)) : null;
+        $data = '';
+        while (strlen($data) < $length) {
+            if ($token !== null && $token->isCancelled()) {
+                $token->throwIfCancelled();
+            }
+            if ($deadline !== null && microtime(true) >= $deadline) {
+                throw new \RuntimeException('async readExactly timeout');
+            }
+            if (feof($this->stream)) {
+                // Return what we have (could be shorter than requested)
+                return $data;
+            }
+            $remaining = $deadline !== null ? max(0.0, $deadline - microtime(true)) : null;
+            $chunkTimeout = $remaining !== null ? new Timeout($remaining) : null;
+            $data .= $this->read($length - strlen($data), $chunkTimeout, $token);
+        }
+        return $data;
+    }
+
+    /**
+     * Writes a line (data + trailing \n) to the stream.
+     * Returns total bytes written.
+     *
+     * @param string $line Line without trailing newline (it will be added)
+     * @param Timeout|null $timeout Optional timeout
+     * @param CancellationToken|null $token Optional cancellation
+     * @return int
+     */
+    public function writeLine(string $line, ?Timeout $timeout = null, ?CancellationToken $token = null): int
+    {
+        return $this->write($line . "\n", $timeout, $token);
+    }
 }
