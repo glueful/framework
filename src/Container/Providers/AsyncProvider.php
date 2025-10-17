@@ -12,6 +12,7 @@ use Glueful\Async\Http\CurlMultiHttpClient;
 use Glueful\Async\Instrumentation\Metrics;
 use Glueful\Async\Instrumentation\NullMetrics;
 use Glueful\Async\FiberScheduler;
+use Glueful\Helpers\ConfigManager;
 
 final class AsyncProvider extends BaseServiceProvider
 {
@@ -30,7 +31,9 @@ final class AsyncProvider extends BaseServiceProvider
             Scheduler::class,
             /** @return Scheduler */
             function ($c) {
-                return new FiberScheduler($c->get(Metrics::class));
+                $maxConc = (int) (ConfigManager::get('async.scheduler.max_concurrent_tasks', 0));
+                $maxExec = (float) (ConfigManager::get('async.scheduler.max_task_execution_seconds', 0.0));
+                return new FiberScheduler($c->get(Metrics::class), $maxConc, $maxExec);
             }
         );
 
@@ -39,7 +42,19 @@ final class AsyncProvider extends BaseServiceProvider
             HttpClient::class,
             /** @return HttpClient */
             function ($c) {
-                return new CurlMultiHttpClient($c->get(Metrics::class));
+                $poll = (float) (ConfigManager::get('async.http.poll_interval_seconds', 0.01));
+                $retries = (int) (ConfigManager::get('async.http.max_retries', 0));
+                $retryDelay = (float) (ConfigManager::get('async.http.retry_delay_seconds', 0.0));
+                $retryOn = ConfigManager::get('async.http.retry_on_status', [429, 500, 502, 503, 504]);
+                $maxConc = (int) (ConfigManager::get('async.http.max_concurrent', 0));
+                return new CurlMultiHttpClient(
+                    $c->get(Metrics::class),
+                    $poll,
+                    $retries,
+                    $retryDelay,
+                    is_array($retryOn) ? array_values(array_map('intval', $retryOn)) : [],
+                    $maxConc
+                );
             }
         );
 

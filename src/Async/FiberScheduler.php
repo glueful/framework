@@ -10,6 +10,8 @@ use Glueful\Async\Contracts\CancellationToken;
 use Glueful\Async\Task\FiberTask;
 use Glueful\Async\Instrumentation\Metrics;
 use Glueful\Async\Instrumentation\NullMetrics;
+use Glueful\Async\Exceptions\ResourceLimitException;
+use Glueful\Async\Exceptions\TimeoutException;
 
 /**
  * Fiber-based cooperative task scheduler.
@@ -29,22 +31,38 @@ use Glueful\Async\Instrumentation\NullMetrics;
  */
 final class FiberScheduler implements Scheduler
 {
+    private int $maxConcurrentTasks = 0;
+    private float $maxTaskExecutionSeconds = 0.0;
+    private int $currentSpawned = 0;
+    /** @var \SplObjectStorage<\Glueful\Async\Task\FiberTask, float> */
+    private \SplObjectStorage $startTimes;
+    /** @var \SplObjectStorage<\Glueful\Async\Task\FiberTask, bool> */
+    private \SplObjectStorage $ownedTasks;
     /**
      * Creates a new fiber scheduler.
      *
      * @param Metrics|null $metrics Optional metrics collector for performance monitoring.
      *                              Defaults to NullMetrics if not provided.
+     * @param int $maxConcurrentTasks Maximum number of concurrent tasks (0 = unlimited)
+     * @param float $maxTaskExecutionSeconds Maximum execution time per task (0 = unlimited)
      */
-    public function __construct(private ?Metrics $metrics = null)
-    {
+    public function __construct(
+        private ?Metrics $metrics = null,
+        int $maxConcurrentTasks = 0,
+        float $maxTaskExecutionSeconds = 0.0
+    ) {
         $this->metrics = $this->metrics ?? new NullMetrics();
+        $this->maxConcurrentTasks = max(0, $maxConcurrentTasks);
+        $this->maxTaskExecutionSeconds = max(0.0, $maxTaskExecutionSeconds);
+        $this->startTimes = new \SplObjectStorage();
+        $this->ownedTasks = new \SplObjectStorage();
     }
 
     /**
      * Spawns a new task from a callable.
      *
      * The callable will be executed as a fiber task, allowing it to cooperatively
-     * yield control back to the scheduler when waiting for I/O or timers.
+     * yield control back to the scheduler when waiting for I/O or timers
      *
      * @param callable $fn The function to execute as a task
      * @param CancellationToken|null $token Optional cancellation token for the task
@@ -52,7 +70,13 @@ final class FiberScheduler implements Scheduler
      */
     public function spawn(callable $fn, ?CancellationToken $token = null): Task
     {
-        return new FiberTask($fn, $this->metrics, null, $token);
+        if ($this->maxConcurrentTasks > 0 && $this->currentSpawned >= $this->maxConcurrentTasks) {
+            throw new ResourceLimitException('Max concurrent tasks exceeded');
+        }
+        $task = new FiberTask($fn, $this->metrics, null, $token);
+        $this->currentSpawned++;
+        $this->ownedTasks->attach($task, true);
+        return $task;
     }
 
     /**
@@ -99,13 +123,31 @@ final class FiberScheduler implements Scheduler
             if (!$ready->isEmpty()) {
                 // Execute next ready task
                 [$k, $task] = $ready->dequeue();
+                if ($task instanceof \Glueful\Async\Task\FiberTask && !isset($this->startTimes[$task])) {
+                    $this->startTimes[$task] = microtime(true);
+                }
                 $suspend = $task->step();
 
                 // Check if task completed during this step
                 if ($task->isCompleted()) {
                     $results[$k] = $task->getResult();
+                    if ($task instanceof \Glueful\Async\Task\FiberTask) {
+                        unset($this->startTimes[$task]);
+                        if (isset($this->ownedTasks[$task])) {
+                            $this->currentSpawned = max(0, $this->currentSpawned - 1);
+                            $this->ownedTasks->detach($task);
+                        }
+                    }
                     unset($pending[$k]);
                     continue;
+                }
+
+                // Enforce per-task execution time limit
+                if ($this->maxTaskExecutionSeconds > 0 && $task instanceof \Glueful\Async\Task\FiberTask) {
+                    $startedAt = $this->startTimes[$task] ?? microtime(true);
+                    if ((microtime(true) - $startedAt) > $this->maxTaskExecutionSeconds) {
+                        throw new TimeoutException('Task execution time limit exceeded');
+                    }
                 }
 
                 // Task suspended - classify the suspension reason
@@ -185,10 +227,20 @@ final class FiberScheduler implements Scheduler
                 // Execute next ready task
                 [$k, $task] = $ready->dequeue();
                 try {
+                    if ($task instanceof \Glueful\Async\Task\FiberTask && !isset($this->startTimes[$task])) {
+                        $this->startTimes[$task] = microtime(true);
+                    }
                     $suspend = $task->step();
 
                     // Check if task completed - if so, return immediately (race winner!)
                     if ($task->isCompleted()) {
+                        if ($task instanceof \Glueful\Async\Task\FiberTask) {
+                            unset($this->startTimes[$task]);
+                            if (isset($this->ownedTasks[$task])) {
+                                $this->currentSpawned = max(0, $this->currentSpawned - 1);
+                                $this->ownedTasks->detach($task);
+                            }
+                        }
                         return $task->getResult();
                     }
 
@@ -209,6 +261,13 @@ final class FiberScheduler implements Scheduler
                 } catch (\Throwable $e) {
                     // Task failed - track error and remove from pending
                     $firstError ??= $e;
+                    if ($task instanceof \Glueful\Async\Task\FiberTask) {
+                        unset($this->startTimes[$task]);
+                        if (isset($this->ownedTasks[$task])) {
+                            $this->currentSpawned = max(0, $this->currentSpawned - 1);
+                            $this->ownedTasks->detach($task);
+                        }
+                    }
                     unset($pending[$k]);
                 }
             } else {

@@ -882,6 +882,51 @@ if (!function_exists('async_sleep')) {
     }
 }
 
+if (!function_exists('async_sleep_default')) {
+    /**
+     * Sleep for the configured scheduler poll interval.
+     *
+     * Reads `async.scheduler.poll_interval_seconds` from config and sleeps cooperatively.
+     * Falls back to 0.01s when config is unavailable.
+     */
+    function async_sleep_default(
+        ?\Glueful\Async\Contracts\CancellationToken $token = null,
+        ?\Symfony\Component\HttpFoundation\Request $request = null
+    ): void {
+        $seconds = 0.01;
+        try {
+            $seconds = (float) \Glueful\Helpers\ConfigManager::get('async.scheduler.poll_interval_seconds', 0.01);
+        } catch (\Throwable) {
+        }
+        scheduler($request)->sleep($seconds, $token);
+    }
+}
+
+if (!function_exists('async_stream')) {
+    /**
+     * Create an async stream, optionally buffered using configured defaults.
+     *
+     * @param resource $stream Underlying PHP stream
+     * @param bool $buffered Whether to use BufferedAsyncStream (default true)
+     * @param int|null $bufferSize Optional override; falls back to config value
+     * @return \Glueful\Async\IO\AsyncStream
+     */
+    function async_stream($stream, bool $buffered = true, ?int $bufferSize = null): \Glueful\Async\IO\AsyncStream
+    {
+        if (!$buffered) {
+            return new \Glueful\Async\IO\AsyncStream($stream);
+        }
+        if ($bufferSize === null) {
+            try {
+                $bufferSize = (int) \Glueful\Helpers\ConfigManager::get('async.streams.buffer_size', 8192);
+            } catch (\Throwable) {
+                $bufferSize = 8192;
+            }
+        }
+        return new \Glueful\Async\IO\BufferedAsyncStream($stream, max(1, (int)$bufferSize));
+    }
+}
+
 if (!function_exists('cancellation_token')) {
     /**
      * Create a new cancellation token

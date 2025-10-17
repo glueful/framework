@@ -85,7 +85,7 @@ final class SimpleCancellationToken implements CancellationToken
     public function throwIfCancelled(): void
     {
         if ($this->cancelled) {
-            throw new \RuntimeException('Operation cancelled');
+            throw new \Glueful\Async\Exceptions\CancelledException('Operation cancelled');
         }
     }
 }

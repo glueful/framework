@@ -22,9 +22,8 @@ final class SchedulerTimerCancellationTest extends TestCase
         // Cancel immediately
         $token->cancel();
 
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(\Glueful\Async\Exceptions\CancelledException::class);
         $this->expectExceptionMessage('Operation cancelled');
         $scheduler->all([$task]);
     }
 }
-

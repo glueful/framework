@@ -95,7 +95,8 @@ final class CurlMultiHttpClient implements HttpClient, \Glueful\Async\Contracts\
         private float $pollIntervalSeconds = 0.01,
         private int $maxRetries = 0,
         private float $retryDelaySeconds = 0.0,
-        /** @var array<int,int> */ private array $retryOnStatus = []
+        /** @var array<int,int> */ private array $retryOnStatus = [],
+        private int $maxConcurrent = 0
     ) {
         $this->metrics = $this->metrics ?? new NullMetrics();
         // Ensure a sane, positive poll interval
@@ -141,17 +142,28 @@ final class CurlMultiHttpClient implements HttpClient, \Glueful\Async\Contracts\
             try {
                 $attempt = 0;
                 while (true) {
-                    // Step 2: Initialize curl_multi for non-blocking execution
-                    $multi = curl_multi_init();
+                    // Step 2: Initialize or reuse shared curl_multi for non-blocking execution
+                    static $sharedMulti = null;
+                    static $activeHandles = 0;
+                    if ($sharedMulti === null) {
+                        $sharedMulti = curl_multi_init();
+                    }
+                    if ($this->maxConcurrent > 0) {
+                        while ($activeHandles >= $this->maxConcurrent) {
+                            $token?->throwIfCancelled();
+                            \Fiber::suspend(new SleepOp(microtime(true) + $this->pollIntervalSeconds, $token));
+                        }
+                    }
                     $ch = $this->buildHandle($request, $timeout);
                     // Enable header capture for parsing
                     curl_setopt($ch, CURLOPT_HEADER, true);
-                    curl_multi_add_handle($multi, $ch);
+                    curl_multi_add_handle($sharedMulti, $ch);
+                    $activeHandles++;
 
                     // Step 3: Poll curl_multi until request completes
                     // This is the cooperative async magic: we yield control while waiting
                     do {
-                        $status = curl_multi_exec($multi, $running);
+                        $status = curl_multi_exec($sharedMulti, $running);
                         if ($running) {
                             // Request still in progress - yield for configured interval
                             // Scheduler will resume us after delay, allowing other tasks to run
@@ -164,11 +176,10 @@ final class CurlMultiHttpClient implements HttpClient, \Glueful\Async\Contracts\
                     $raw = curl_multi_getcontent($ch);
                     $err = curl_error($ch);
                     $info = curl_getinfo($ch);
-                    curl_multi_remove_handle($multi, $ch);
+                    curl_multi_remove_handle($sharedMulti, $ch);
                     curl_close($ch);
                     $ch = null;
-                    curl_multi_close($multi);
-                    $multi = null;
+                    $activeHandles = max(0, $activeHandles - 1);
 
                     // Step 5: Decide on retry and build response
                     $statusCode = (int)($info['http_code'] ?? 0);
@@ -187,7 +198,7 @@ final class CurlMultiHttpClient implements HttpClient, \Glueful\Async\Contracts\
                     }
 
                     if ($err !== '' || $statusCode === 0) {
-                        throw new \RuntimeException('curl error: ' . $err);
+                        throw new \Glueful\Async\Exceptions\HttpException('curl error: ' . $err);
                     }
 
                     // Parse headers if present to build response
@@ -238,15 +249,15 @@ final class CurlMultiHttpClient implements HttpClient, \Glueful\Async\Contracts\
                 // Record failure with duration before re-throwing
                 $dur = (microtime(true) - $start) * 1000.0;
                 $metrics->httpRequestFailed($request, $e, $dur);
-                // Cleanup curl handles on error/cancellation
-                if ($multi !== null && $ch !== null) {
-                    @curl_multi_remove_handle($multi, $ch);
+                // Cleanup curl handles on error/cancellation (shared multi best effort)
+                if (isset($sharedMulti) && $ch !== null) {
+                    @curl_multi_remove_handle($sharedMulti, $ch);
                 }
                 if ($ch !== null) {
                     @curl_close($ch);
                 }
-                if ($multi !== null) {
-                    @curl_multi_close($multi);
+                if (isset($activeHandles)) {
+                    $activeHandles = max(0, $activeHandles - 1);
                 }
                 throw $e;
             }

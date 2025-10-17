@@ -99,9 +99,9 @@ final class AsyncStream
      * @param Timeout|null $timeout Optional timeout for the entire operation
      * @param CancellationToken|null $token Optional cancellation token
      * @return string The data read (may be shorter than $length if EOF reached)
-     * @throws \RuntimeException If timeout expires
+     * @throws \Glueful\Async\Exceptions\TimeoutException If timeout expires
      * @throws \Exception If operation is cancelled
-     */
+    */
     public function read(int $length, ?Timeout $timeout = null, ?CancellationToken $token = null): string
     {
         // Calculate absolute deadline from timeout
@@ -129,7 +129,7 @@ final class AsyncStream
 
             // Check for timeout
             if ($deadline !== null && microtime(true) >= $deadline) {
-                throw new \RuntimeException('async read timeout');
+                throw new \Glueful\Async\Exceptions\TimeoutException('async read timeout');
             }
 
             // Data not ready - suspend fiber until stream is readable
@@ -159,9 +159,9 @@ final class AsyncStream
      * @param Timeout|null $timeout Optional timeout for the entire operation
      * @param CancellationToken|null $token Optional cancellation token
      * @return int Total number of bytes written (always equals strlen($buffer) on success)
-     * @throws \RuntimeException If timeout expires
+     * @throws \Glueful\Async\Exceptions\TimeoutException If timeout expires
      * @throws \Exception If operation is cancelled
-     */
+    */
     public function write(string $buffer, ?Timeout $timeout = null, ?CancellationToken $token = null): int
     {
         // Calculate absolute deadline from timeout
@@ -185,7 +185,7 @@ final class AsyncStream
 
             // Check for timeout
             if ($deadline !== null && microtime(true) >= $deadline) {
-                throw new \RuntimeException('async write timeout');
+                throw new \Glueful\Async\Exceptions\TimeoutException('async write timeout');
             }
 
             // Stream not ready - suspend fiber until stream is writable
@@ -220,7 +220,7 @@ final class AsyncStream
                 $token->throwIfCancelled();
             }
             if ($deadline !== null && microtime(true) >= $deadline) {
-                throw new \RuntimeException('async readLine timeout');
+                throw new \Glueful\Async\Exceptions\TimeoutException('async readLine timeout');
             }
 
             // If EOF, return whatever we have
@@ -252,7 +252,7 @@ final class AsyncStream
                 $token->throwIfCancelled();
             }
             if ($deadline !== null && microtime(true) >= $deadline) {
-                throw new \RuntimeException('async readAll timeout');
+                throw new \Glueful\Async\Exceptions\TimeoutException('async readAll timeout');
             }
 
             $remaining = $deadline !== null ? max(0.0, $deadline - microtime(true)) : null;
@@ -285,7 +285,7 @@ final class AsyncStream
                 $token->throwIfCancelled();
             }
             if ($deadline !== null && microtime(true) >= $deadline) {
-                throw new \RuntimeException('async readExactly timeout');
+                throw new \Glueful\Async\Exceptions\TimeoutException('async readExactly timeout');
             }
             if (feof($this->stream)) {
                 // Return what we have (could be shorter than requested)
