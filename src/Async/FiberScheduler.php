@@ -52,7 +52,7 @@ final class FiberScheduler implements Scheduler
      */
     public function spawn(callable $fn, ?CancellationToken $token = null): Task
     {
-        return new FiberTask($fn, $this->metrics);
+        return new FiberTask($fn, $this->metrics, null, $token);
     }
 
     /**

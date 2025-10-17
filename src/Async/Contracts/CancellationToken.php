@@ -87,6 +87,17 @@ namespace Glueful\Async\Contracts;
 interface CancellationToken
 {
     /**
+     * Requests cooperative cancellation for operations observing this token.
+     *
+     * Implementations should set an internal cancelled flag. Operations using
+     * this token are expected to check the token and stop or throw promptly.
+     * Calling this multiple times must be safe and idempotent.
+     *
+     * @return void
+     */
+    public function cancel(): void;
+
+    /**
      * Checks if cancellation has been requested.
      *
      * Returns true if cancel() has been called on this token. The task should

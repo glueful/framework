@@ -86,10 +86,17 @@ final class CurlMultiHttpClient implements HttpClient
      *
      * @param Metrics|null $metrics Metrics collector for observability.
      *                              Defaults to NullMetrics (no-op).
+     * @param float $pollIntervalSeconds Polling interval used while waiting for curl_multi
+     *                                   to make progress (default 0.01s = 10ms). Lower values
+     *                                   improve responsiveness at the cost of higher CPU.
      */
-    public function __construct(private ?Metrics $metrics = null)
+    public function __construct(private ?Metrics $metrics = null, private float $pollIntervalSeconds = 0.01)
     {
         $this->metrics = $this->metrics ?? new NullMetrics();
+        // Ensure a sane, positive poll interval
+        if ($this->pollIntervalSeconds <= 0) {
+            $this->pollIntervalSeconds = 0.001; // 1ms minimum
+        }
     }
 
     /**
@@ -108,17 +115,23 @@ final class CurlMultiHttpClient implements HttpClient
      *
      * @param RequestInterface $request PSR-7 HTTP request to send
      * @param Timeout|null $timeout Optional timeout for request (both connect and total)
+     * @param \Glueful\Async\Contracts\CancellationToken|null $token Optional cancellation token
      * @return Task A FiberTask that resolves to a PSR-7 Response
      *
      * @throws \RuntimeException If curl encounters an error during execution
      */
-    public function sendAsync(RequestInterface $request, ?Timeout $timeout = null): Task
-    {
+    public function sendAsync(
+        RequestInterface $request,
+        ?Timeout $timeout = null,
+        ?\Glueful\Async\Contracts\CancellationToken $token = null
+    ): Task {
         $metrics = $this->metrics;
-        return new FiberTask(function () use ($request, $timeout, $metrics) {
+        return new FiberTask(function () use ($request, $timeout, $metrics, $token) {
             // Step 1: Record request start for metrics/observability
             $metrics->httpRequestStarted($request);
             $start = microtime(true);
+            $multi = null;
+            $ch = null;
 
             try {
                 // Step 2: Initialize curl_multi for non-blocking execution
@@ -131,9 +144,10 @@ final class CurlMultiHttpClient implements HttpClient
                 do {
                     $status = curl_multi_exec($multi, $running);
                     if ($running) {
-                        // Request still in progress - yield for 10ms
+                        // Request still in progress - yield for configured interval
                         // Scheduler will resume us after delay, allowing other tasks to run
-                        \Fiber::suspend(new SleepOp(microtime(true) + 0.01));
+                        $token?->throwIfCancelled();
+                        \Fiber::suspend(new SleepOp(microtime(true) + $this->pollIntervalSeconds));
                     }
                 } while ($running && $status === CURLM_OK);
 
@@ -143,7 +157,9 @@ final class CurlMultiHttpClient implements HttpClient
                 $info = curl_getinfo($ch);
                 curl_multi_remove_handle($multi, $ch);
                 curl_close($ch);
+                $ch = null;
                 curl_multi_close($multi);
+                $multi = null;
 
                 // Step 5: Check for curl errors and build response
                 if ($err !== '') {
@@ -160,9 +176,19 @@ final class CurlMultiHttpClient implements HttpClient
                 // Record failure with duration before re-throwing
                 $dur = (microtime(true) - $start) * 1000.0;
                 $metrics->httpRequestFailed($request, $e, $dur);
+                // Cleanup curl handles on error/cancellation
+                if ($multi !== null && $ch !== null) {
+                    @curl_multi_remove_handle($multi, $ch);
+                }
+                if ($ch !== null) {
+                    @curl_close($ch);
+                }
+                if ($multi !== null) {
+                    @curl_multi_close($multi);
+                }
                 throw $e;
             }
-        }, $this->metrics, 'http:' . $request->getMethod() . ' ' . (string)$request->getUri());
+        }, $this->metrics, 'http:' . $request->getMethod() . ' ' . (string)$request->getUri(), $token);
     }
 
     /**
@@ -186,13 +212,17 @@ final class CurlMultiHttpClient implements HttpClient
      *
      * @param array<int, RequestInterface> $requests Array of PSR-7 HTTP requests
      * @param Timeout|null $timeout Optional timeout applied to all requests
+     * @param \Glueful\Async\Contracts\CancellationToken|null $token Cancellation token
      * @return array<int, Task> Array of FiberTasks (same keys as input array)
      */
-    public function poolAsync(array $requests, ?Timeout $timeout = null): array
-    {
+    public function poolAsync(
+        array $requests,
+        ?Timeout $timeout = null,
+        ?\Glueful\Async\Contracts\CancellationToken $token = null
+    ): array {
         $tasks = [];
         foreach ($requests as $i => $req) {
-            $tasks[$i] = $this->sendAsync($req, $timeout);
+            $tasks[$i] = $this->sendAsync($req, $timeout, $token);
         }
         return $tasks;
     }

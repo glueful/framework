@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Async\Task;
 
 use Glueful\Async\Contracts\Task;
+use Glueful\Async\Contracts\CancellationToken;
 use Glueful\Async\Instrumentation\Metrics;
 use Glueful\Async\Instrumentation\NullMetrics;
 use Glueful\Async\Internal\SleepOp;
@@ -36,12 +37,14 @@ final class FiberTask implements Task
     private ?\Throwable $error = null;
     private Metrics $metrics;
     private ?string $name;
+    private ?CancellationToken $token = null;
 
-    public function __construct(callable $fn, ?Metrics $metrics = null, ?string $name = null)
+    public function __construct(callable $fn, ?Metrics $metrics = null, ?string $name = null, ?CancellationToken $token = null)
     {
         $this->closure = \Closure::fromCallable($fn);
         $this->metrics = $metrics ?? new NullMetrics();
         $this->name = $name;
+        $this->token = $token;
     }
 
     public function isRunning(): bool
@@ -96,6 +99,8 @@ final class FiberTask implements Task
         try {
             /** @phpstan-ignore-next-line */
             while (!$this->executed) {
+                // Respect cooperative cancellation before each step
+                $this->token?->throwIfCancelled();
                 // Start fiber on first iteration
                 if ($this->fiber === null) {
                     $this->metrics->taskStarted($taskName);
@@ -165,6 +170,8 @@ final class FiberTask implements Task
             return null;
         }
         try {
+            // Respect cooperative cancellation before running/resuming
+            $this->token?->throwIfCancelled();
             if ($this->fiber === null) {
                 $this->metrics->taskStarted($this->name ?? $this->inferName());
                 $fn = $this->closure;
@@ -192,7 +199,8 @@ final class FiberTask implements Task
 
     public function cancel(): void
     {
-        // No cooperative cancellation mechanism wired yet
+        // Signal cooperative cancellation if a token is associated
+        $this->token?->cancel();
     }
 
     private function inferName(): string

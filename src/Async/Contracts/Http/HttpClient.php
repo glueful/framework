@@ -6,6 +6,7 @@ namespace Glueful\Async\Contracts\Http;
 
 use Glueful\Async\Contracts\Task;
 use Glueful\Async\Contracts\Timeout;
+use Glueful\Async\Contracts\CancellationToken;
 use Psr\Http\Message\RequestInterface;
 
 /**
@@ -111,9 +112,10 @@ interface HttpClient
      *
      * @param RequestInterface $request PSR-7 HTTP request to send
      * @param Timeout|null $timeout Optional timeout for the request (connect + total)
+     * @param CancellationToken|null $token Optional cooperative cancellation token
      * @return Task A task that resolves to a PSR-7 Response
      */
-    public function sendAsync(RequestInterface $request, ?Timeout $timeout = null): Task;
+    public function sendAsync(RequestInterface $request, ?Timeout $timeout = null, ?CancellationToken $token = null): Task;
 
     /**
      * Creates a pool of concurrent async HTTP requests.
@@ -145,7 +147,8 @@ interface HttpClient
      *
      * @param array<int, RequestInterface> $requests Array of PSR-7 HTTP requests
      * @param Timeout|null $timeout Optional timeout applied to all requests
+     * @param CancellationToken|null $token Optional cancellation token applied to all requests
      * @return array<int, Task> Array of tasks (same keys as input)
      */
-    public function poolAsync(array $requests, ?Timeout $timeout = null): array;
+    public function poolAsync(array $requests, ?Timeout $timeout = null, ?CancellationToken $token = null): array;
 }
