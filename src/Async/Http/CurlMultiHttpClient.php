@@ -205,8 +205,16 @@ final class CurlMultiHttpClient implements HttpClient, HttpStreamingClient
 
                     // Step 5: Decide on retry and build response
                     $statusCode = (int)($info['http_code'] ?? 0);
+                    $scheme = strtolower((string) $request->getUri()->getScheme());
+                    if ($statusCode === 0 && $err === '' && $scheme === 'file') {
+                        $statusCode = 200;
+                    }
+                    $scheme = strtolower((string) $request->getUri()->getScheme());
+                    if ($statusCode === 0 && $err === '' && $scheme === 'file') {
+                        $statusCode = 200;
+                    }
                     $shouldRetry = false;
-                    if ($err !== '' || $statusCode === 0) {
+                    if ($err !== '') {
                         $shouldRetry = ($attempt < $this->maxRetries);
                     } elseif ($this->retryOnStatus !== [] && in_array($statusCode, $this->retryOnStatus, true)) {
                         $shouldRetry = ($attempt < $this->maxRetries);
@@ -219,7 +227,7 @@ final class CurlMultiHttpClient implements HttpClient, HttpStreamingClient
                         continue; // retry the request
                     }
 
-                    if ($err !== '' || $statusCode === 0) {
+                    if ($err !== '') {
                         throw new \Glueful\Async\Exceptions\HttpException('curl error: ' . $err);
                     }
 
@@ -381,6 +389,13 @@ final class CurlMultiHttpClient implements HttpClient, HttpStreamingClient
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);  // Follow redirects
         curl_setopt($ch, CURLOPT_HEADER, false);         // Don't include headers in body
 
+        // Allow file protocol when used explicitly
+        $scheme = strtolower($request->getUri()->getScheme());
+        if ($scheme === 'file' && \defined('CURLPROTO_FILE')) {
+            @curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_FILE);
+            @curl_setopt($ch, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_FILE);
+        }
+
         // Configure HTTP method and request body
         $method = strtoupper($request->getMethod());
         if ($method !== 'GET') {
@@ -538,8 +553,13 @@ final class CurlMultiHttpClient implements HttpClient, HttpStreamingClient
                     unset(self::$registry[$id]);
 
                     $statusCode = (int)($info['http_code'] ?? 0);
+                    // Normalize file scheme where http_code may be 0 on success
+                    $scheme = strtolower((string) $request->getUri()->getScheme());
+                    if ($statusCode === 0 && $err === '' && $scheme === 'file') {
+                        $statusCode = 200;
+                    }
                     $shouldRetry = false;
-                    if ($err !== '' || $statusCode === 0) {
+                    if ($err !== '') {
                         $shouldRetry = ($attempt < $this->maxRetries);
                     } elseif ($this->retryOnStatus !== [] && in_array($statusCode, $this->retryOnStatus, true)) {
                         $shouldRetry = ($attempt < $this->maxRetries);
@@ -552,7 +572,7 @@ final class CurlMultiHttpClient implements HttpClient, HttpStreamingClient
                         $body = '';
                         continue;
                     }
-                    if ($err !== '' || $statusCode === 0) {
+                    if ($err !== '') {
                         throw new \Glueful\Async\Exceptions\HttpException('curl error: ' . $err);
                     }
 

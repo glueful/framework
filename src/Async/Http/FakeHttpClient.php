@@ -39,8 +39,7 @@ final class FakeHttpClient implements HttpClient
         RequestInterface $request,
         ?Timeout $timeout = null,
         ?\Glueful\Async\Contracts\CancellationToken $token = null
-    ): Task
-    {
+    ): Task {
         $this->record($request);
         return $this->resolve($request);
     }
@@ -52,8 +51,7 @@ final class FakeHttpClient implements HttpClient
         array $requests,
         ?Timeout $timeout = null,
         ?\Glueful\Async\Contracts\CancellationToken $token = null
-    ): array
-    {
+    ): array {
         $tasks = [];
         foreach ($requests as $i => $req) {
             $this->record($req);

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Container\Providers;
 
 use Glueful\Container\Definition\{DefinitionInterface, FactoryDefinition};
+use Glueful\Container\Definition\AliasDefinition;
 use Glueful\Container\Autowire\AutowireDefinition;
 use Glueful\Async\Contracts\Http\HttpClient;
 use Glueful\Async\Contracts\Scheduler;
@@ -35,6 +36,14 @@ final class AsyncProvider extends BaseServiceProvider
                 $maxExec = (float) (ConfigManager::get('async.scheduler.max_task_execution_seconds', 0.0));
                 return new FiberScheduler($c->get(Metrics::class), $maxConc, $maxExec);
             }
+        );
+
+        // Async middleware registration and string alias for router usage
+        $defs[\Glueful\Async\Middleware\AsyncMiddleware::class] =
+            $this->autowire(\Glueful\Async\Middleware\AsyncMiddleware::class);
+        $defs['async'] = new AliasDefinition(
+            'async',
+            \Glueful\Async\Middleware\AsyncMiddleware::class
         );
 
         // HttpClient with Metrics injection
