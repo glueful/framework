@@ -159,4 +159,37 @@ final class LoggerMetrics implements Metrics
             'exception' => $e
         ] + $context);
     }
+
+    public function fiberSuspended(string $taskName, string $operation): void
+    {
+        $this->logger->info('async.fiber.suspended', ['name' => $taskName, 'op' => $operation]);
+    }
+
+    public function fiberResumed(string $taskName, float $waitMs = 0.0): void
+    {
+        $this->logger->info('async.fiber.resumed', ['name' => $taskName, 'wait_ms' => $waitMs]);
+    }
+
+    public function queueDepth(int $ready, int $waiting, int $sleeping): void
+    {
+        $this->logger->info('async.scheduler.queue_depth', [
+            'ready' => $ready,
+            'waiting' => $waiting,
+            'sleeping' => $sleeping,
+        ]);
+    }
+
+    public function taskCancelled(string $taskName, string $reason = ''): void
+    {
+        $this->logger->info('async.task.cancelled', ['name' => $taskName, 'reason' => $reason]);
+    }
+
+    public function resourceLimit(string $limitType, int $current, int $max): void
+    {
+        $this->logger->warning('async.resource.limit', [
+            'type' => $limitType,
+            'current' => $current,
+            'max' => $max,
+        ]);
+    }
 }

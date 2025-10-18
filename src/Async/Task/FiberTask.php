@@ -200,6 +200,7 @@ final class FiberTask implements Task
     public function cancel(): void
     {
         // Signal cooperative cancellation if a token is associated
+        $this->metrics->taskCancelled($this->name ?? $this->inferName(), 'manual');
         $this->token?->cancel();
     }
 

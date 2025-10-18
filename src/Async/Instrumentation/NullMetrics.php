@@ -128,4 +128,29 @@ final class NullMetrics implements Metrics
     ): void {
         // No-op: metrics disabled
     }
+
+    public function fiberSuspended(string $taskName, string $operation): void
+    {
+        // No-op
+    }
+
+    public function fiberResumed(string $taskName, float $waitMs = 0.0): void
+    {
+        // No-op
+    }
+
+    public function queueDepth(int $ready, int $waiting, int $sleeping): void
+    {
+        // No-op
+    }
+
+    public function taskCancelled(string $taskName, string $reason = ''): void
+    {
+        // No-op
+    }
+
+    public function resourceLimit(string $limitType, int $current, int $max): void
+    {
+        // No-op
+    }
 }

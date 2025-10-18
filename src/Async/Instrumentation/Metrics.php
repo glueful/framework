@@ -120,4 +120,51 @@ interface Metrics
         float $durationMs,
         array $context = []
     ): void;
+
+    /**
+     * Records that a fiber suspended on an operation (sleep/read/write).
+     *
+     * @param string $taskName
+     * @param string $operation One of: sleep|read|write|other
+     * @return void
+     */
+    public function fiberSuspended(string $taskName, string $operation): void;
+
+    /**
+     * Records that a fiber resumed after waiting.
+     *
+     * @param string $taskName
+     * @param float $waitMs Optional wait estimate in milliseconds
+     * @return void
+     */
+    public function fiberResumed(string $taskName, float $waitMs = 0.0): void;
+
+    /**
+     * Records scheduler queue depth snapshot.
+     *
+     * @param int $ready Number of ready tasks
+     * @param int $waiting Number of waiting I/O tasks
+     * @param int $sleeping Number of sleeping timers
+     * @return void
+     */
+    public function queueDepth(int $ready, int $waiting, int $sleeping): void;
+
+    /**
+     * Records that a task cancellation has been requested or executed.
+     *
+     * @param string $taskName
+     * @param string $reason Free-text reason (e.g., manual, timeout)
+     * @return void
+     */
+    public function taskCancelled(string $taskName, string $reason = ''): void;
+
+    /**
+     * Records that a resource limit has been hit or approached.
+     *
+     * @param string $limitType E.g., tasks, memory, fds
+     * @param int $current Current value
+     * @param int $max Configured max
+     * @return void
+     */
+    public function resourceLimit(string $limitType, int $current, int $max): void;
 }

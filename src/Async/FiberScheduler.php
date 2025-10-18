@@ -114,7 +114,17 @@ final class FiberScheduler implements Scheduler
         }
 
         // Waiting queues for suspended tasks
-        $timers = [];                    // Tasks waiting on sleep/timers
+        $timers = new class extends \SplMinHeap
+        {
+            /**
+             * @param mixed $a
+             * @param mixed $b
+             */
+            protected function compare($a, $b): int
+            {
+                return $a[0] <=> $b[0];
+            }
+        };                    // Min-heap of [wakeAt, key, task, token]
         $readWaiters = [];              // Tasks waiting on read I/O
         $writeWaiters = [];             // Tasks waiting on write I/O
 
@@ -153,12 +163,15 @@ final class FiberScheduler implements Scheduler
                 // Task suspended - classify the suspension reason
                 if ($suspend instanceof \Glueful\Async\Internal\SleepOp) {
                     // Task is sleeping until a specific time
-                    $timers[] = [$suspend->wakeAt, $k, $task, $suspend->token];
+                    $this->metrics->fiberSuspended(get_class($task), 'sleep');
+                    $timers->insert([$suspend->wakeAt, $k, $task, $suspend->token]);
                 } elseif ($suspend instanceof \Glueful\Async\Internal\ReadOp) {
                     // Task is waiting for stream to become readable
+                    $this->metrics->fiberSuspended(get_class($task), 'read');
                     $readWaiters[] = [$suspend->stream, $k, $task, $suspend->deadline, $suspend->token];
                 } elseif ($suspend instanceof \Glueful\Async\Internal\WriteOp) {
                     // Task is waiting for stream to become writable
+                    $this->metrics->fiberSuspended(get_class($task), 'write');
                     $writeWaiters[] = [$suspend->stream, $k, $task, $suspend->deadline, $suspend->token];
                 } else {
                     // Unknown suspension type - re-queue immediately
@@ -166,10 +179,15 @@ final class FiberScheduler implements Scheduler
                 }
             } else {
                 // No ready tasks - wait for I/O readiness or timer expiration
+                $this->metrics->queueDepth(
+                    $ready->count(),
+                    count($readWaiters) + count($writeWaiters),
+                    $timers->count()
+                );
                 $this->waitForIoOrTimers($ready, $timers, $readWaiters, $writeWaiters);
 
                 // If no tasks were enqueued and no waiters remain, break the loop
-                if ($ready->isEmpty() && $timers === [] && $readWaiters === [] && $writeWaiters === []) {
+                if ($ready->isEmpty() && $timers->count() === 0 && $readWaiters === [] && $writeWaiters === []) {
                     break;
                 }
             }
@@ -200,7 +218,17 @@ final class FiberScheduler implements Scheduler
         // Task execution queues and state tracking
         $ready = new \SplQueue();        // Tasks ready to execute next step
         $pending = [];                   // Tasks still pending completion
-        $timers = [];                    // Tasks waiting on sleep/timers
+        $timers = new class extends \SplMinHeap
+        {
+            /**
+             * @param mixed $a
+             * @param mixed $b
+             */
+            protected function compare($a, $b): int
+            {
+                return $a[0] <=> $b[0];
+            }
+        };
         $readWaiters = [];              // Tasks waiting on read I/O
         $writeWaiters = [];             // Tasks waiting on write I/O
         $firstError = null;             // Track first error encountered
@@ -247,12 +275,15 @@ final class FiberScheduler implements Scheduler
                     // Task suspended - classify the suspension reason
                     if ($suspend instanceof \Glueful\Async\Internal\SleepOp) {
                         // Task is sleeping until a specific time
-                        $timers[] = [$suspend->wakeAt, $k, $task, $suspend->token];
+                        $this->metrics->fiberSuspended(get_class($task), 'sleep');
+                        $timers->insert([$suspend->wakeAt, $k, $task, $suspend->token]);
                     } elseif ($suspend instanceof \Glueful\Async\Internal\ReadOp) {
                         // Task is waiting for stream to become readable
+                        $this->metrics->fiberSuspended(get_class($task), 'read');
                         $readWaiters[] = [$suspend->stream, $k, $task, $suspend->deadline, $suspend->token];
                     } elseif ($suspend instanceof \Glueful\Async\Internal\WriteOp) {
                         // Task is waiting for stream to become writable
+                        $this->metrics->fiberSuspended(get_class($task), 'write');
                         $writeWaiters[] = [$suspend->stream, $k, $task, $suspend->deadline, $suspend->token];
                     } else {
                         // Unknown suspension type - re-queue immediately
@@ -275,7 +306,7 @@ final class FiberScheduler implements Scheduler
                 $this->waitForIoOrTimers($ready, $timers, $readWaiters, $writeWaiters);
 
                 // If no tasks were enqueued and no waiters remain, break the loop
-                if ($ready->isEmpty() && $timers === [] && $readWaiters === [] && $writeWaiters === []) {
+                if ($ready->isEmpty() && $timers->count() === 0 && $readWaiters === [] && $writeWaiters === []) {
                     break;
                 }
             }
@@ -330,14 +361,15 @@ final class FiberScheduler implements Scheduler
      * have been enqueued to the ready queue.
      *
      * @param \SplQueue<array{0: mixed, 1: FiberTask}> $ready
-     * @param array<int, array{0: float, 1: mixed, 2: FiberTask, 3: ?CancellationToken}> &$timers
+     * @param \SplMinHeap<array{0: float, 1: mixed, 2: FiberTask, 3: ?CancellationToken}> $timers
+     *                     Min-heap entries: [wakeAt, key, task, token]
      * @param array<int, array{0: resource, 1: mixed, 2: FiberTask, 3: ?float, 4: ?CancellationToken}> &$readWaiters
      * @param array<int, array{0: resource, 1: mixed, 2: FiberTask, 3: ?float, 4: ?CancellationToken}> &$writeWaiters
      * @return void
      */
     private function waitForIoOrTimers(
         \SplQueue $ready,
-        array &$timers,
+        \SplMinHeap $timers,
         array &$readWaiters,
         array &$writeWaiters
     ): void {
@@ -346,9 +378,9 @@ final class FiberScheduler implements Scheduler
         $nextAt = null;
 
         // Check timers for earliest wake time
-        if ($timers !== []) {
-            usort($timers, static fn($a, $b) => $a[0] <=> $b[0]);
-            $nextAt = $timers[0][0];
+        if (!$timers->isEmpty()) {
+            $top = $timers->top();
+            $nextAt = $top[0];
         }
 
         // Check read operations for earliest deadline
@@ -406,26 +438,15 @@ final class FiberScheduler implements Scheduler
         $this->processWaiters($writeWaiters, $w, $now, $ready);
 
         // Process timers - enqueue tasks whose scheduled wake time has arrived
-        // or whose cancellation has been requested (stronger cancellation semantics)
-        $newTimers = [];
-        foreach ($timers as $tm) {
-            [$wakeAt, $k3, $t3, $tok3] = $tm;
-
-            // If cancelled, wake immediately to allow the task to handle cancellation
-            if ($tok3 !== null && $tok3->isCancelled()) {
-                $ready->enqueue([$k3, $t3]);
-                continue;
+        while (!$timers->isEmpty()) {
+            $top = $timers->top();
+            if ($now < $top[0]) {
+                break;
             }
-
-            if ($now >= $wakeAt) {
-                // Timer has expired - enqueue task for execution
-                $ready->enqueue([$k3, $t3]);
-            } else {
-                // Timer still pending - keep in the timer queue
-                $newTimers[] = $tm;
-            }
+            [$wakeAt, $k3, $t3, $tok3] = $timers->extract();
+            $this->metrics->fiberResumed(get_class($t3), max(0.0, ($now - $wakeAt)) * 1000.0);
+            $ready->enqueue([$k3, $t3]);
         }
-        $timers = $newTimers;
     }
 
     /**
@@ -463,6 +484,10 @@ final class FiberScheduler implements Scheduler
 
             if ($isReady || $isTimeout || $isCancelled) {
                 // Stream is ready, timed out, or cancelled - enqueue for execution
+                $this->metrics->fiberResumed(get_class($task), 0.0);
+                if ($isCancelled) {
+                    $this->metrics->taskCancelled(get_class($task), 'token');
+                }
                 $ready->enqueue([$k, $task]);
             } else {
                 // Still waiting - keep in the waiter queue
