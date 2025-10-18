@@ -12,6 +12,7 @@ use Glueful\Async\Instrumentation\Metrics;
 use Glueful\Async\Instrumentation\NullMetrics;
 use Glueful\Async\Exceptions\ResourceLimitException;
 use Glueful\Async\Exceptions\TimeoutException;
+use Glueful\Helpers\ConfigManager;
 
 /**
  * Fiber-based cooperative task scheduler.
@@ -34,6 +35,8 @@ final class FiberScheduler implements Scheduler
     private int $maxConcurrentTasks = 0;
     private float $maxTaskExecutionSeconds = 0.0;
     private int $currentSpawned = 0;
+    private int $maxMemoryBytes = 0;
+    private int $maxOpenFileDescriptors = 0;
     /** @var \SplObjectStorage<\Glueful\Async\Task\FiberTask, float> */
     private \SplObjectStorage $startTimes;
     /** @var \SplObjectStorage<\Glueful\Async\Task\FiberTask, bool> */
@@ -56,6 +59,17 @@ final class FiberScheduler implements Scheduler
         $this->maxTaskExecutionSeconds = max(0.0, $maxTaskExecutionSeconds);
         $this->startTimes = new \SplObjectStorage();
         $this->ownedTasks = new \SplObjectStorage();
+
+        // Optional resource limits from configuration
+        try {
+            $memMb = (int) (ConfigManager::get('async.limits.max_memory_mb', 0));
+            $this->maxMemoryBytes = $memMb > 0 ? $memMb * 1024 * 1024 : 0;
+            $this->maxOpenFileDescriptors = (int) (ConfigManager::get('async.limits.max_open_file_descriptors', 0));
+        } catch (\Throwable) {
+            // Config not available; keep defaults (no limit)
+            $this->maxMemoryBytes = 0;
+            $this->maxOpenFileDescriptors = 0;
+        }
     }
 
     /**
@@ -130,6 +144,9 @@ final class FiberScheduler implements Scheduler
 
         // Main event loop: continue until all tasks complete
         while ($pending !== []) {
+            // Check resource limits each loop iteration
+            $this->enforceResourceLimits($readWaiters, $writeWaiters);
+
             if (!$ready->isEmpty()) {
                 // Execute next ready task
                 [$k, $task] = $ready->dequeue();
@@ -184,6 +201,8 @@ final class FiberScheduler implements Scheduler
                     count($readWaiters) + count($writeWaiters),
                     $timers->count()
                 );
+                // Also enforce resource limits before blocking
+                $this->enforceResourceLimits($readWaiters, $writeWaiters);
                 $this->waitForIoOrTimers($ready, $timers, $readWaiters, $writeWaiters);
 
                 // If no tasks were enqueued and no waiters remain, break the loop
@@ -194,6 +213,49 @@ final class FiberScheduler implements Scheduler
         }
 
         return $results;
+    }
+
+    /**
+     * Enforce configured memory and file descriptor limits.
+     * Emits metrics when limits are exceeded and throws ResourceLimitException.
+     *
+     * @param array<int, array{0: resource, 1: mixed, 2: FiberTask, 3: ?float, 4: ?CancellationToken}> $readWaiters
+     * @param array<int, array{0: resource, 1: mixed, 2: FiberTask, 3: ?float, 4: ?CancellationToken}> $writeWaiters
+     */
+    private function enforceResourceLimits(array $readWaiters, array $writeWaiters): void
+    {
+        // Memory limit
+        if ($this->maxMemoryBytes > 0) {
+            $currentBytes = @memory_get_usage(true);
+            if ($currentBytes >= $this->maxMemoryBytes) {
+                $this->metrics->resourceLimit(
+                    'memory',
+                    (int) floor($currentBytes / (1024 * 1024)),
+                    (int) floor($this->maxMemoryBytes / (1024 * 1024))
+                );
+                throw new ResourceLimitException('Async memory limit exceeded');
+            }
+        }
+
+        // File descriptor limit (best-effort)
+        if ($this->maxOpenFileDescriptors > 0) {
+            $fdCount = null;
+            if (function_exists('get_resources')) {
+                try {
+                    $fdCount = count(@get_resources('stream'));
+                } catch (\Throwable) {
+                    $fdCount = null;
+                }
+            }
+            // Fallback: approximate using active I/O waiters
+            if ($fdCount === null) {
+                $fdCount = count($readWaiters) + count($writeWaiters);
+            }
+            if ($fdCount >= $this->maxOpenFileDescriptors) {
+                $this->metrics->resourceLimit('fds', $fdCount, $this->maxOpenFileDescriptors);
+                throw new ResourceLimitException('Async file descriptor limit exceeded');
+            }
+        }
     }
 
     /**
