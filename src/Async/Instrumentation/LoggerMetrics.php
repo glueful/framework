@@ -160,16 +160,52 @@ final class LoggerMetrics implements Metrics
         ] + $context);
     }
 
+    /**
+     * Logs fiber suspension event at INFO level.
+     *
+     * Emits: async.fiber.suspended with task name, operation type, and context
+     *
+     * Use this to track fiber context switches and identify suspension patterns.
+     *
+     * @param string $taskName Task name
+     * @param string $operation Operation type (sleep|read|write|other)
+     * @return void
+     */
     public function fiberSuspended(string $taskName, string $operation): void
     {
         $this->logger->info('async.fiber.suspended', ['name' => $taskName, 'op' => $operation]);
     }
 
+    /**
+     * Logs fiber resume event at INFO level.
+     *
+     * Emits: async.fiber.resumed with task name, wait duration, and context
+     *
+     * Use this with fiberSuspended() to track suspension/resume cycles and
+     * measure wait times for async operations.
+     *
+     * @param string $taskName Task name
+     * @param float $waitMs Wait duration in milliseconds
+     * @return void
+     */
     public function fiberResumed(string $taskName, float $waitMs = 0.0): void
     {
         $this->logger->info('async.fiber.resumed', ['name' => $taskName, 'wait_ms' => $waitMs]);
     }
 
+    /**
+     * Logs scheduler queue depth snapshot at INFO level.
+     *
+     * Emits: async.scheduler.queue_depth with ready, waiting, and sleeping counts
+     *
+     * Use this to monitor scheduler load, identify bottlenecks, and track
+     * concurrency patterns over time.
+     *
+     * @param int $ready Number of ready tasks
+     * @param int $waiting Number of tasks waiting on I/O
+     * @param int $sleeping Number of tasks sleeping on timers
+     * @return void
+     */
     public function queueDepth(int $ready, int $waiting, int $sleeping): void
     {
         $this->logger->info('async.scheduler.queue_depth', [
@@ -179,11 +215,37 @@ final class LoggerMetrics implements Metrics
         ]);
     }
 
+    /**
+     * Logs task cancellation event at INFO level.
+     *
+     * Emits: async.task.cancelled with task name, reason, and context
+     *
+     * Use this to track which tasks are being cancelled and why. Frequent
+     * cancellations may indicate timeout issues or user-initiated aborts.
+     *
+     * @param string $taskName Task name
+     * @param string $reason Cancellation reason (manual, timeout, etc.)
+     * @return void
+     */
     public function taskCancelled(string $taskName, string $reason = ''): void
     {
         $this->logger->info('async.task.cancelled', ['name' => $taskName, 'reason' => $reason]);
     }
 
+    /**
+     * Logs resource limit event at WARNING level.
+     *
+     * Emits: async.resource.limit with limit type, current usage, and maximum
+     *
+     * Use this to detect resource exhaustion before it causes failures. The
+     * WARNING level indicates this deserves attention, as the system is
+     * approaching or exceeding configured limits.
+     *
+     * @param string $limitType Resource type (tasks, memory, fds, etc.)
+     * @param int $current Current resource usage
+     * @param int $max Maximum configured limit
+     * @return void
+     */
     public function resourceLimit(string $limitType, int $current, int $max): void
     {
         $this->logger->warning('async.resource.limit', [

@@ -39,8 +39,12 @@ final class FiberTask implements Task
     private ?string $name;
     private ?CancellationToken $token = null;
 
-    public function __construct(callable $fn, ?Metrics $metrics = null, ?string $name = null, ?CancellationToken $token = null)
-    {
+    public function __construct(
+        callable $fn,
+        ?Metrics $metrics = null,
+        ?string $name = null,
+        ?CancellationToken $token = null
+    ) {
         $this->closure = \Closure::fromCallable($fn);
         $this->metrics = $metrics ?? new NullMetrics();
         $this->name = $name;
@@ -229,9 +233,11 @@ final class FiberTask implements Task
     private function checkCancellation(mixed $suspend): void
     {
         // Check all suspension types that support cancellation
-        if ($suspend instanceof SleepOp ||
+        if (
+            $suspend instanceof SleepOp ||
             $suspend instanceof \Glueful\Async\Internal\ReadOp ||
-            $suspend instanceof \Glueful\Async\Internal\WriteOp) {
+            $suspend instanceof \Glueful\Async\Internal\WriteOp
+        ) {
             if ($suspend->token !== null && $suspend->token->isCancelled()) {
                 $suspend->token->throwIfCancelled();
             }

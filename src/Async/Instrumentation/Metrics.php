@@ -122,48 +122,142 @@ interface Metrics
     ): void;
 
     /**
-     * Records that a fiber suspended on an operation (sleep/read/write).
+     * Records that a fiber suspended execution on an operation.
      *
-     * @param string $taskName
-     * @param string $operation One of: sleep|read|write|other
+     * Called when a fiber yields control while waiting for an operation to complete.
+     * Use this to track fiber context switches, identify blocking operations, and
+     * measure scheduler efficiency.
+     *
+     * Operation types:
+     * - sleep: Fiber suspended on sleep/delay operation
+     * - read: Fiber waiting for stream/socket to become readable
+     * - write: Fiber waiting for stream/socket to become writable
+     * - other: Custom or unknown suspension operation
+     *
+     * Example usage:
+     * ```php
+     * // Track how often tasks suspend and on what operations
+     * $metrics->fiberSuspended('http:GET /api/users', 'sleep');
+     * ```
+     *
+     * @param string $taskName Name of the task/fiber being suspended
+     * @param string $operation Type of operation: sleep|read|write|other
      * @return void
      */
     public function fiberSuspended(string $taskName, string $operation): void;
 
     /**
-     * Records that a fiber resumed after waiting.
+     * Records that a fiber resumed execution after suspension.
      *
-     * @param string $taskName
-     * @param float $waitMs Optional wait estimate in milliseconds
+     * Called when a fiber resumes after being suspended on an operation. Use this
+     * with fiberSuspended() to calculate suspension duration and track resume patterns.
+     *
+     * The wait time indicates how long the fiber was suspended before resuming.
+     * This can help identify:
+     * - Long waits indicating slow operations
+     * - Short waits indicating efficient polling
+     * - Patterns in suspension/resume cycles
+     *
+     * Example usage:
+     * ```php
+     * // Track resume with wait duration
+     * $metrics->fiberResumed('http:GET /api/users', 10.5); // Waited 10.5ms
+     * ```
+     *
+     * @param string $taskName Name of the task/fiber being resumed
+     * @param float $waitMs Estimated wait duration in milliseconds (0.0 if unknown)
      * @return void
      */
     public function fiberResumed(string $taskName, float $waitMs = 0.0): void;
 
     /**
-     * Records scheduler queue depth snapshot.
+     * Records a snapshot of the scheduler's queue depth.
      *
-     * @param int $ready Number of ready tasks
-     * @param int $waiting Number of waiting I/O tasks
-     * @param int $sleeping Number of sleeping timers
+     * Called periodically by the scheduler to report queue sizes. Use this to:
+     * - Monitor scheduler load and task concurrency
+     * - Identify queue saturation and bottlenecks
+     * - Detect resource starvation patterns
+     * - Measure scheduler efficiency
+     *
+     * Queue categories:
+     * - ready: Tasks ready to execute immediately (in run queue)
+     * - waiting: Tasks blocked on I/O operations (streams, sockets)
+     * - sleeping: Tasks suspended on timers (sleep, delay, timeout)
+     *
+     * High ready count may indicate CPU saturation. High waiting/sleeping counts
+     * may indicate I/O-bound or timer-heavy workloads.
+     *
+     * Example usage:
+     * ```php
+     * // Scheduler reports queue state every N iterations
+     * $metrics->queueDepth(ready: 5, waiting: 10, sleeping: 3);
+     * ```
+     *
+     * @param int $ready Number of ready tasks in the run queue
+     * @param int $waiting Number of tasks waiting on I/O operations
+     * @param int $sleeping Number of tasks suspended on timers
      * @return void
      */
     public function queueDepth(int $ready, int $waiting, int $sleeping): void;
 
     /**
-     * Records that a task cancellation has been requested or executed.
+     * Records that a task cancellation was requested or executed.
      *
-     * @param string $taskName
-     * @param string $reason Free-text reason (e.g., manual, timeout)
+     * Called when a task is cancelled either manually or automatically (timeout,
+     * resource limit, parent cancellation). Use this to track cancellation patterns
+     * and identify tasks that are frequently cancelled.
+     *
+     * Cancellation reasons help categorize why tasks are being cancelled:
+     * - "manual": Explicitly cancelled by user code
+     * - "timeout": Cancelled due to timeout/deadline
+     * - "parent": Cancelled because parent task was cancelled
+     * - "resource_limit": Cancelled due to resource constraints
+     * - Custom reasons from application code
+     *
+     * Example usage:
+     * ```php
+     * // Track manual cancellation
+     * $metrics->taskCancelled('http:GET /api/slow', 'manual');
+     *
+     * // Track timeout cancellation
+     * $metrics->taskCancelled('db:query', 'timeout');
+     * ```
+     *
+     * @param string $taskName Name of the task being cancelled
+     * @param string $reason Free-text reason for cancellation (empty if unknown)
      * @return void
      */
     public function taskCancelled(string $taskName, string $reason = ''): void;
 
     /**
-     * Records that a resource limit has been hit or approached.
+     * Records that a resource limit has been reached or approached.
      *
-     * @param string $limitType E.g., tasks, memory, fds
-     * @param int $current Current value
-     * @param int $max Configured max
+     * Called when the scheduler or async system approaches or exceeds a configured
+     * resource limit. Use this to detect resource exhaustion, trigger alerts, and
+     * prevent system degradation.
+     *
+     * Common limit types:
+     * - "tasks": Maximum concurrent tasks limit
+     * - "memory": Memory usage limit in bytes
+     * - "fds": File descriptor limit
+     * - "connections": Connection pool limit
+     * - Custom limits from application code
+     *
+     * When current >= max, the limit has been reached or exceeded.
+     * Implementations may want to alert at threshold percentages (e.g., 80%, 90%).
+     *
+     * Example usage:
+     * ```php
+     * // Task limit approaching
+     * $metrics->resourceLimit('tasks', current: 95, max: 100);
+     *
+     * // Memory limit exceeded
+     * $metrics->resourceLimit('memory', current: 1100, max: 1024);
+     * ```
+     *
+     * @param string $limitType Type of resource being limited
+     * @param int $current Current resource usage
+     * @param int $max Maximum allowed resource usage
      * @return void
      */
     public function resourceLimit(string $limitType, int $current, int $max): void;

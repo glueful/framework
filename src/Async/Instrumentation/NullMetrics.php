@@ -129,28 +129,65 @@ final class NullMetrics implements Metrics
         // No-op: metrics disabled
     }
 
+    /**
+     * No-op: fiber suspension event is discarded.
+     *
+     * @param string $taskName Task name (ignored)
+     * @param string $operation Operation type (ignored)
+     * @return void
+     */
     public function fiberSuspended(string $taskName, string $operation): void
     {
-        // No-op
+        // No-op: metrics disabled
     }
 
+    /**
+     * No-op: fiber resume event is discarded.
+     *
+     * @param string $taskName Task name (ignored)
+     * @param float $waitMs Wait duration (ignored)
+     * @return void
+     */
     public function fiberResumed(string $taskName, float $waitMs = 0.0): void
     {
-        // No-op
+        // No-op: metrics disabled
     }
 
+    /**
+     * No-op: queue depth snapshot is discarded.
+     *
+     * @param int $ready Ready tasks count (ignored)
+     * @param int $waiting Waiting tasks count (ignored)
+     * @param int $sleeping Sleeping tasks count (ignored)
+     * @return void
+     */
     public function queueDepth(int $ready, int $waiting, int $sleeping): void
     {
-        // No-op
+        // No-op: metrics disabled
     }
 
+    /**
+     * No-op: task cancellation event is discarded.
+     *
+     * @param string $taskName Task name (ignored)
+     * @param string $reason Cancellation reason (ignored)
+     * @return void
+     */
     public function taskCancelled(string $taskName, string $reason = ''): void
     {
-        // No-op
+        // No-op: metrics disabled
     }
 
+    /**
+     * No-op: resource limit event is discarded.
+     *
+     * @param string $limitType Resource type (ignored)
+     * @param int $current Current usage (ignored)
+     * @param int $max Maximum limit (ignored)
+     * @return void
+     */
     public function resourceLimit(string $limitType, int $current, int $max): void
     {
-        // No-op
+        // No-op: metrics disabled
     }
 }

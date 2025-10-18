@@ -15,22 +15,106 @@ use Glueful\Async\Instrumentation\NullMetrics;
  * operations. Unlike FiberTask, it executes the callable immediately and completely
  * when getResult() is called, without any cooperative suspension.
  *
- * Use cases:
- * - Simple synchronous operations that don't need cooperative multitasking
- * - CPU-bound tasks without I/O operations
- * - Wrapping existing blocking code in the Task interface
- * - Testing or simple async patterns
+ * Key characteristics:
+ * - **Synchronous execution**: Blocks until completion (no yielding)
+ * - **Lower overhead**: No fiber allocation or context switching
+ * - **One-time execution**: Callable runs once, result is cached
+ * - **Metrics support**: Optional instrumentation for performance monitoring
+ * - **Task interface**: Provides Task compatibility for polymorphic usage
+ * - **Exception caching**: Errors are caught and re-thrown on subsequent calls
  *
  * Key differences from FiberTask:
- * - No cooperative suspension (no sleep, I/O operations)
- * - Executes synchronously and blocks until complete
- * - Lower overhead (no fiber creation)
- * - Cannot be scheduled step-by-step
+ * - **No cooperative suspension**: Cannot sleep, do async I/O, or yield
+ * - **Synchronous blocking**: Executes completely before returning
+ * - **Lower overhead**: No fiber creation or scheduling overhead
+ * - **No step-by-step scheduling**: Cannot be paused and resumed
+ * - **Immediate execution**: Runs on first getResult() call
  *
- * Example:
+ * When to use ClosureTask:
+ * - **CPU-bound operations**: Pure computation without I/O
+ * - **Quick synchronous work**: Operations that complete in microseconds
+ * - **No async dependencies**: Code that doesn't call async functions
+ * - **Existing sync code**: Wrapping legacy blocking code in Task interface
+ * - **Lower overhead needed**: When fiber overhead is unacceptable
+ *
+ * When to use FiberTask instead:
+ * - **I/O operations**: Database queries, HTTP requests, file I/O
+ * - **Long-running work**: Operations that take seconds or more
+ * - **Cooperative concurrency**: When you want to yield to other tasks
+ * - **Async dependencies**: Calling other async functions or tasks
+ *
+ * Performance considerations:
+ * - **Overhead**: ~100 bytes (vs ~2KB for FiberTask with fiber)
+ * - **Execution**: Direct function call (vs fiber context switch)
+ * - **Metrics**: Optional instrumentation adds minimal overhead
+ * - **Caching**: Result cached after first execution
+ *
+ * Usage examples:
  * ```php
- * $task = new ClosureTask(fn() => heavyComputation());
- * $result = $task->getResult(); // Blocks until computation completes
+ * // Basic synchronous computation
+ * $task = new ClosureTask(fn() => md5(file_get_contents('data.txt')));
+ * $hash = $task->getResult();  // Blocks until complete
+ *
+ * // CPU-bound calculation
+ * $task = new ClosureTask(function() {
+ *     $result = 0;
+ *     for ($i = 0; $i < 1000000; $i++) {
+ *         $result += $i;
+ *     }
+ *     return $result;
+ * });
+ *
+ * // With metrics (for profiling)
+ * $metrics = new LoggerMetrics($logger);
+ * $task = new ClosureTask(
+ *     fn() => expensiveComputation(),
+ *     $metrics,
+ *     'expensive-computation'
+ * );
+ * $result = $task->getResult();
+ * // Logs: "async.task.started" and "async.task.completed"
+ *
+ * // Result caching behavior
+ * $task = new ClosureTask(fn() => rand());
+ * $first = $task->getResult();   // Executes callable, e.g., returns 42
+ * $second = $task->getResult();  // Returns cached value: 42
+ * assert($first === $second);    // Always true
+ *
+ * // Error handling
+ * $task = new ClosureTask(fn() => throw new \Exception('error'));
+ * try {
+ *     $task->getResult();  // Throws on first call
+ * } catch (\Exception $e) {
+ *     echo $e->getMessage();  // "error"
+ * }
+ * // Exception is cached and re-thrown on subsequent calls
+ * try {
+ *     $task->getResult();  // Throws same exception again
+ * } catch (\Exception $e) {
+ *     assert($e->getMessage() === 'error');
+ * }
+ *
+ * // Wrapping existing sync code in Task interface
+ * class LegacyService {
+ *     public function processAsync(array $data): Task {
+ *         return new ClosureTask(fn() => $this->processSync($data));
+ *     }
+ * }
+ * ```
+ *
+ * NOT suitable for:
+ * ```php
+ * // BAD: Async I/O (use FiberTask instead)
+ * $bad = new ClosureTask(fn() => $asyncStream->read(1024));
+ * // This will fail - read() expects to be in a fiber!
+ *
+ * // BAD: Long-running work without yielding
+ * $bad = new ClosureTask(function() {
+ *     while (true) {  // Infinite loop blocks forever
+ *         doWork();
+ *     }
+ * });
+ * // This blocks the entire process!
  * ```
  */
 final class ClosureTask implements Task

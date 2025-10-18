@@ -82,9 +82,29 @@ use Glueful\Async\Contracts\Http\HttpStreamingClient;
  */
 final class CurlMultiHttpClient implements HttpClient, HttpStreamingClient
 {
-    /** @var \CurlMultiHandle|null */
-    private static $sharedMulti = null;
     /**
+     * Shared curl_multi handle used by all instances.
+     *
+     * Using a single shared handle allows multiple HTTP requests across different
+     * client instances to be multiplexed together, improving efficiency and reducing
+     * resource usage. The handle is initialized lazily on first use.
+     *
+     * @var \CurlMultiHandle|null
+     */
+    private static $sharedMulti = null;
+
+    /**
+     * Registry tracking active curl handles and their completion state.
+     *
+     * Maps curl handle IDs (integers) to their state information:
+     * - done: Whether the request has completed
+     * - handle: The curl handle (null after cleanup)
+     * - raw: Raw response data including headers and body
+     * - err: Error message if request failed
+     * - info: Metadata from curl_getinfo()
+     *
+     * Entries are added when requests start and removed after completion.
+     *
      * @var array<int, array{
      *   done: bool,
      *   handle: \CurlHandle|null,
@@ -94,7 +114,25 @@ final class CurlMultiHttpClient implements HttpClient, HttpStreamingClient
      * }>
      */
     private static array $registry = [];
+
+    /**
+     * Guard flag preventing concurrent curl_multi_exec() calls.
+     *
+     * Ensures only one fiber pumps the multi handle at a time to avoid
+     * race conditions and undefined behavior from concurrent curl operations.
+     *
+     * @var bool
+     */
     private static bool $pumping = false;
+
+    /**
+     * Count of currently active curl handles in the shared multi handle.
+     *
+     * Used for concurrency limiting when maxConcurrent is set. Incremented
+     * when handles are added, decremented when they complete or are removed.
+     *
+     * @var int
+     */
     private static int $activeHandles = 0;
     /**
      * Creates an async HTTP client with optional metrics collection.
@@ -203,58 +241,74 @@ final class CurlMultiHttpClient implements HttpClient, HttpStreamingClient
                     $info = is_array($entry['info'] ?? []) ? $entry['info'] : [];
                     unset(self::$registry[$id]);
 
-                    // Step 5: Decide on retry and build response
+                    // Step 5: Extract status code and normalize for file:// URLs
                     $statusCode = (int)($info['http_code'] ?? 0);
+                    // file:// protocol may not set http_code, normalize to 200 if no error
                     $scheme = strtolower((string) $request->getUri()->getScheme());
                     if ($statusCode === 0 && $err === '' && $scheme === 'file') {
                         $statusCode = 200;
                     }
-                    $scheme = strtolower((string) $request->getUri()->getScheme());
-                    if ($statusCode === 0 && $err === '' && $scheme === 'file') {
-                        $statusCode = 200;
-                    }
+
+                    // Step 6: Determine if retry is needed based on error or status code
                     $shouldRetry = false;
+                    // Retry on curl errors (network, timeout, DNS failures, etc.)
                     if ($err !== '') {
                         $shouldRetry = ($attempt < $this->maxRetries);
                     } elseif ($this->retryOnStatus !== [] && in_array($statusCode, $this->retryOnStatus, true)) {
                         $shouldRetry = ($attempt < $this->maxRetries);
                     }
+
+                    // Execute retry with optional delay
                     if ($shouldRetry) {
                         $attempt++;
                         if ($this->retryDelaySeconds > 0) {
                             \Fiber::suspend(new SleepOp(microtime(true) + $this->retryDelaySeconds, $token));
                         }
-                        continue; // retry the request
+                        continue; // Restart the request loop
                     }
 
+                    // Throw exception if request failed and retries exhausted
                     if ($err !== '') {
                         throw new \Glueful\Async\Exceptions\HttpException('curl error: ' . $err);
                     }
 
-                    // Parse headers if present to build response
+                    // Step 7: Parse HTTP headers from raw response
                     $headers = [];
                     if (isset($info['header_size']) && (int)$info['header_size'] > 0) {
                         $headerSize = (int)$info['header_size'];
+                        // Split raw response into headers and body
                         $headerBlob = substr($raw, 0, $headerSize);
                         $bodyPart = substr($raw, $headerSize);
-                        // In case of redirects, header blob may contain multiple sections
+
+                        // Handle redirects: header blob may contain multiple HTTP responses
+                        // Split on double CRLF (blank line between responses)
                         $sections = preg_split('/(?:\r\n){2}/', trim($headerBlob));
+                        // Use only the last section (final response after redirects)
                         $last = $sections !== false && $sections !== [] ? end($sections) : '';
+
                         if (is_string($last) && $last !== '') {
+                            // Parse individual header lines
                             $lines = preg_split('/\r\n/', $last);
                             if ($lines === false) {
                                 $lines = [];
                             }
+
                             foreach ($lines as $line) {
+                                // Skip empty lines and HTTP status line
                                 if ($line === '' || str_starts_with($line, 'HTTP/')) {
                                     continue;
                                 }
+
+                                // Parse "Header-Name: value" format
                                 $pos = strpos($line, ':');
                                 if ($pos === false) {
-                                    continue;
+                                    continue; // Malformed header, skip
                                 }
+
                                 $name = trim(substr($line, 0, $pos));
                                 $value = trim(substr($line, $pos + 1));
+
+                                // Handle multi-value headers (e.g., Set-Cookie)
                                 if (isset($headers[$name])) {
                                     $existing = $headers[$name];
                                     $headers[$name] = is_array($existing)
@@ -267,10 +321,11 @@ final class CurlMultiHttpClient implements HttpClient, HttpStreamingClient
                         }
                         $response = new Response($statusCode, $headers, $bodyPart);
                     } else {
+                        // No headers available, use simple response builder
                         $response = $this->buildResponse($raw, $statusCode);
                     }
 
-                    // Step 6: Record successful completion with duration
+                    // Step 8: Record successful completion with duration
                     $dur = (microtime(true) - $start) * 1000.0;
                     $metrics->httpRequestCompleted($request, $statusCode, $dur);
                     return $response;
@@ -498,7 +553,37 @@ final class CurlMultiHttpClient implements HttpClient, HttpStreamingClient
     }
 
     /**
-     * Streaming variant: invokes callback with body chunks as they arrive.
+     * Sends an HTTP request asynchronously with streaming body support.
+     *
+     * Similar to sendAsync(), but invokes a callback with response body chunks
+     * as they arrive from the network. This allows processing large responses
+     * incrementally without buffering the entire body in memory.
+     *
+     * The callback is invoked multiple times as data arrives:
+     * - Each invocation receives a chunk of the response body
+     * - Chunks arrive in order as received from the network
+     * - Headers are still buffered and parsed normally
+     * - Final response includes headers and full body
+     *
+     * Example:
+     * ```php
+     * $bytesReceived = 0;
+     * $task = $client->sendAsyncStream(
+     *     $request,
+     *     function(string $chunk) use (&$bytesReceived) {
+     *         $bytesReceived += strlen($chunk);
+     *         echo "Received " . strlen($chunk) . " bytes\n";
+     *         // Process chunk (e.g., write to file, parse JSON stream)
+     *     }
+     * );
+     * $response = $scheduler->all([$task])[0];
+     * ```
+     *
+     * @param RequestInterface $request PSR-7 HTTP request to send
+     * @param callable $onChunk Callback invoked with each body chunk: function(string $chunk): void
+     * @param Timeout|null $timeout Optional timeout for request (both connect and total)
+     * @param \Glueful\Async\Contracts\CancellationToken|null $token Optional cancellation token
+     * @return Task A FiberTask that resolves to a PSR-7 Response with complete body
      */
     public function sendAsyncStream(
         RequestInterface $request,

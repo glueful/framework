@@ -14,19 +14,62 @@ use Glueful\Async\Contracts\Task;
  * This is useful for implementing async interfaces when values are computed synchronously
  * or are already cached.
  *
- * Use cases:
- * - Returning cached/memoized values through async APIs
- * - Testing async code with pre-computed values
- * - Mixing synchronous and asynchronous code paths
- * - Short-circuiting async operations when result is already known
+ * Key characteristics:
+ * - **Zero overhead**: No fiber creation, no suspension, no execution
+ * - **Immediate completion**: isCompleted() always returns true
+ * - **Type-safe**: Can wrap any PHP value (scalars, objects, arrays, null, etc.)
+ * - **Interface compliance**: Satisfies Task interface for polymorphic code
+ * - **Immutable**: Value is set at construction and never changes
  *
- * Example:
+ * Use cases:
+ * - **Cached values**: Returning cached/memoized values through async APIs
+ * - **Testing**: Providing pre-computed values for async code tests
+ * - **Conditional async**: Mixing synchronous and asynchronous code paths
+ * - **Short-circuiting**: Skipping async execution when result is already known
+ * - **Default values**: Providing fallback values in async operations
+ * - **API consistency**: Maintaining async API signature even for sync operations
+ *
+ * Performance benefits:
+ * - No fiber allocation (saves memory)
+ * - No scheduler overhead (no suspensions)
+ * - Immediate value retrieval (no await delay)
+ * - Suitable for hot code paths with cached values
+ *
+ * Usage examples:
  * ```php
- * // Return cached value in async API
- * if ($cached = $cache->get($key)) {
- *     return new CompletedTask($cached);
+ * // Cache-aside pattern
+ * public function getUserAsync(int $id): Task
+ * {
+ *     // Check cache first
+ *     if ($cached = $this->cache->get("user:$id")) {
+ *         return new CompletedTask($cached);  // Immediate return
+ *     }
+ *
+ *     // Cache miss - fetch from database asynchronously
+ *     return new FiberTask(fn() => $this->db->fetchUser($id));
  * }
- * return new FiberTask(fn() => $this->fetchFromDatabase($key));
+ *
+ * // Testing async code with mock data
+ * $mockTask = new CompletedTask(['id' => 1, 'name' => 'Test User']);
+ * $result = $service->processUser($mockTask);
+ *
+ * // Conditional async execution
+ * public function fetchDataAsync(bool $useAsync): Task
+ * {
+ *     if (!$useAsync) {
+ *         $data = $this->fetchDataSync();  // Synchronous fetch
+ *         return new CompletedTask($data);  // Wrap for consistency
+ *     }
+ *     return new FiberTask(fn() => $this->fetchDataAsync());
+ * }
+ *
+ * // Multiple tasks with some pre-computed
+ * $tasks = [
+ *     new CompletedTask('immediate'),           // Already known
+ *     new FiberTask(fn() => slowOperation()),   // Needs execution
+ *     new CompletedTask($cachedValue),          // From cache
+ * ];
+ * $results = $scheduler->all($tasks);
  * ```
  *
  * This is the async equivalent of Promise.resolve() in JavaScript.

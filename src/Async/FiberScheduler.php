@@ -42,12 +42,80 @@ final class FiberScheduler implements Scheduler
     /** @var \SplObjectStorage<\Glueful\Async\Task\FiberTask, bool> */
     private \SplObjectStorage $ownedTasks;
     /**
-     * Creates a new fiber scheduler.
+     * Creates a new fiber scheduler with optional resource limits and metrics.
+     *
+     * The scheduler manages cooperative multitasking using PHP fibers, allowing
+     * concurrent execution of tasks with I/O operations, timers, and cancellation.
+     * Resource limits help prevent runaway tasks from consuming excessive resources.
+     *
+     * Configuration sources (in order of precedence):
+     * 1. Constructor parameters (maxConcurrentTasks, maxTaskExecutionSeconds)
+     * 2. Configuration file settings (async.limits.max_memory_mb, async.limits.max_open_file_descriptors)
+     * 3. Defaults (no limits)
+     *
+     * Resource limits enforced:
+     * - **Max concurrent tasks**: Limits number of spawned tasks (prevents task explosion)
+     * - **Max task execution time**: Per-task timeout to prevent infinite loops
+     * - **Max memory usage**: Total memory limit for async operations (from config)
+     * - **Max file descriptors**: Limit on open streams/sockets (from config)
+     *
+     * Metrics collection:
+     * - Task lifecycle events (started, completed, failed, cancelled)
+     * - Fiber suspension/resumption with timing data
+     * - Queue depths for ready, waiting, and timer queues
+     * - Resource limit violations
      *
      * @param Metrics|null $metrics Optional metrics collector for performance monitoring.
-     *                              Defaults to NullMetrics if not provided.
-     * @param int $maxConcurrentTasks Maximum number of concurrent tasks (0 = unlimited)
-     * @param float $maxTaskExecutionSeconds Maximum execution time per task (0 = unlimited)
+     *                              Defaults to NullMetrics (no-op) if not provided.
+     *                              Use LoggerMetrics for PSR-3 logging integration.
+     * @param int $maxConcurrentTasks Maximum number of concurrent spawned tasks (0 = unlimited).
+     *                                When limit is reached, spawn() throws ResourceLimitException.
+     *                                Recommended: 100-1000 for typical applications.
+     * @param float $maxTaskExecutionSeconds Maximum execution time per task in seconds (0 = unlimited).
+     *                                        Prevents infinite loops and runaway tasks.
+     *                                        Recommended: 30-300 seconds for typical tasks.
+     *
+     * Examples:
+     * ```php
+     * // Example 1: Basic scheduler with no limits
+     * $scheduler = new FiberScheduler();
+     * $task = $scheduler->spawn(fn() => performWork());
+     * $result = $scheduler->all([$task]);
+     *
+     * // Example 2: Scheduler with metrics logging
+     * $metrics = new LoggerMetrics($logger);
+     * $scheduler = new FiberScheduler($metrics);
+     * // Logs task.started, task.completed, fiber.suspended, fiber.resumed events
+     *
+     * // Example 3: Production scheduler with resource limits
+     * $scheduler = new FiberScheduler(
+     *     metrics: new LoggerMetrics($logger),
+     *     maxConcurrentTasks: 500,           // Max 500 concurrent tasks
+     *     maxTaskExecutionSeconds: 60.0      // Each task max 60 seconds
+     * );
+     *
+     * // Example 4: Memory and FD limits from config
+     * // In config/async.php:
+     * // 'limits' => [
+     * //     'max_memory_mb' => 512,              // 512 MB total memory limit
+     * //     'max_open_file_descriptors' => 1000, // Max 1000 open streams
+     * // ]
+     * $scheduler = new FiberScheduler($metrics, 100, 30.0);
+     * // Enforces constructor limits + config limits
+     *
+     * // Example 5: Handling resource limit exceptions
+     * $scheduler = new FiberScheduler(maxConcurrentTasks: 10);
+     * try {
+     *     for ($i = 0; $i < 100; $i++) {
+     *         $tasks[] = $scheduler->spawn(fn() => doWork($i));
+     *     }
+     * } catch (ResourceLimitException $e) {
+     *     // Only 10 tasks can be spawned at once
+     *     logger()->warning('Task limit reached', ['limit' => 10]);
+     * }
+     * ```
+     *
+     * @throws \Throwable If config loading fails (error is caught and defaults are used)
      */
     public function __construct(
         private ?Metrics $metrics = null,
@@ -73,14 +141,125 @@ final class FiberScheduler implements Scheduler
     }
 
     /**
-     * Spawns a new task from a callable.
+     * Spawns a new fiber task from a callable for concurrent execution.
      *
-     * The callable will be executed as a fiber task, allowing it to cooperatively
-     * yield control back to the scheduler when waiting for I/O or timers
+     * The `spawn()` method creates a new FiberTask that wraps the callable and registers
+     * it with the scheduler for concurrent execution. The task can cooperatively yield
+     * control during I/O operations, sleeps, or when explicitly suspending, allowing
+     * other tasks to make progress while waiting.
      *
-     * @param callable $fn The function to execute as a task
-     * @param CancellationToken|null $token Optional cancellation token for the task
-     * @return Task The created task instance
+     * Task execution model:
+     * - Tasks don't execute immediately when spawned
+     * - Execution begins when you call all(), race(), or the task's getResult()
+     * - Tasks can suspend via sleep(), stream reads/writes, or Fiber::suspend()
+     * - Scheduler multiplexes tasks using an event loop with stream_select()
+     *
+     * Resource limit enforcement:
+     * - If maxConcurrentTasks is set, spawn() throws when limit is exceeded
+     * - Limit is checked against currently-active spawned tasks (not all tasks)
+     * - Completed tasks don't count toward the limit
+     * - Use try-catch to handle ResourceLimitException
+     *
+     * Cancellation:
+     * - Pass a CancellationToken to enable cooperative cancellation
+     * - Task must check token periodically (token->isCancelled())
+     * - Or use token->throwIfCancelled() to interrupt immediately
+     * - Cancellation is cooperative - tasks must check the token
+     *
+     * @param callable $fn The function to execute as a task. Receives no parameters.
+     *                     Can return any value, throw exceptions, or suspend cooperatively.
+     *                     Typical signature: `fn(): mixed`
+     * @param CancellationToken|null $token Optional cancellation token for cooperative cancellation.
+     *                                      Pass SimpleCancellationToken to enable cancellation.
+     *                                      Task can check $token->isCancelled() or $token->throwIfCancelled().
+     * @return Task The created FiberTask instance. Does not start execution until
+     *              the task is awaited via all(), race(), or getResult().
+     * @throws ResourceLimitException If maxConcurrentTasks limit is exceeded
+     *
+     * Examples:
+     * ```php
+     * // Example 1: Basic task spawning
+     * $scheduler = new FiberScheduler();
+     * $task1 = $scheduler->spawn(fn() => performWork());
+     * $task2 = $scheduler->spawn(fn() => performMoreWork());
+     * [$result1, $result2] = $scheduler->all([$task1, $task2]);
+     *
+     * // Example 2: Task with cooperative I/O
+     * $scheduler = new FiberScheduler();
+     * $task = $scheduler->spawn(function() use ($stream) {
+     *     // These operations suspend the fiber, allowing other tasks to run
+     *     $data = $stream->read(1024);  // Suspends on read
+     *     $stream->write("Response");   // Suspends on write
+     *     return processData($data);
+     * });
+     * $result = $task->getResult();  // Runs event loop until task completes
+     *
+     * // Example 3: Task with sleep (cooperative delay)
+     * $scheduler = new FiberScheduler();
+     * $task = $scheduler->spawn(function() use ($scheduler) {
+     *     echo "Starting...\n";
+     *     $scheduler->sleep(2.0);  // Yields for 2 seconds
+     *     echo "Completed!\n";
+     *     return "done";
+     * });
+     * $result = $scheduler->all([$task]);
+     *
+     * // Example 4: Cancellable task
+     * $scheduler = new FiberScheduler();
+     * $token = new SimpleCancellationToken();
+     * $task = $scheduler->spawn(function() use ($token) {
+     *     $count = 0;
+     *     while (!$token->isCancelled()) {
+     *         $count++;
+     *         performWork();
+     *     }
+     *     return $count;
+     * }, $token);
+     *
+     * // Later, cancel the task
+     * $token->cancel();
+     * $result = $task->getResult();  // Returns early with partial count
+     *
+     * // Example 5: Handling resource limits
+     * $scheduler = new FiberScheduler(maxConcurrentTasks: 5);
+     * $tasks = [];
+     * try {
+     *     for ($i = 0; $i < 10; $i++) {
+     *         $tasks[] = $scheduler->spawn(fn() => doWork($i));
+     *     }
+     * } catch (ResourceLimitException $e) {
+     *     // Limit reached at 5 tasks
+     *     logger()->warning('Too many concurrent tasks');
+     * }
+     *
+     * // Example 6: Multiple spawned tasks with different lifetimes
+     * $scheduler = new FiberScheduler();
+     * $quickTask = $scheduler->spawn(fn() => "quick");
+     * $slowTask = $scheduler->spawn(function() use ($scheduler) {
+     *     $scheduler->sleep(5.0);
+     *     return "slow";
+     * });
+     *
+     * // Race them - quickTask wins
+     * $result = $scheduler->race([$quickTask, $slowTask]);
+     * echo $result;  // "quick"
+     *
+     * // Example 7: Task with async HTTP
+     * $scheduler = new FiberScheduler();
+     * $httpClient = new CurlMultiHttpClient();
+     * $task = $scheduler->spawn(function() use ($httpClient) {
+     *     $response = $httpClient->sendAsync($request)->getResult();
+     *     return json_decode($response->getBody(), true);
+     * });
+     * $data = $task->getResult();
+     * ```
+     *
+     * Best practices:
+     * - Use spawn() for I/O-bound operations that benefit from concurrency
+     * - Don't spawn CPU-bound tasks without yielding - they block other tasks
+     * - Pass CancellationToken for long-running or user-initiated operations
+     * - Set maxConcurrentTasks to prevent resource exhaustion
+     * - Handle ResourceLimitException when spawning dynamically
      */
     public function spawn(callable $fn, ?CancellationToken $token = null): Task
     {

@@ -115,7 +115,11 @@ interface HttpClient
      * @param CancellationToken|null $token Optional cooperative cancellation token
      * @return Task A task that resolves to a PSR-7 Response
      */
-    public function sendAsync(RequestInterface $request, ?Timeout $timeout = null, ?CancellationToken $token = null): Task;
+    public function sendAsync(
+        RequestInterface $request,
+        ?Timeout $timeout = null,
+        ?CancellationToken $token = null
+    ): Task;
 
     /**
      * Creates a pool of concurrent async HTTP requests.
