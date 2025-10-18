@@ -91,7 +91,17 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 - Security: CSP builder configuration + presets; refined admin/allow‑lists.
 - Extensions: OpenTelemetry exporter planned as optional extension (not core).
 
-### 1.7 (Minor)
+### 1.7.0 — Procyon (Released 2025-10-18)
+- Async/Concurrency: Introduce fiber‑based scheduler with `spawn`, `all`, `race`, `sleep`.
+- Async HTTP: `CurlMultiHttpClient` with cooperative polling, streaming, pooling, and retry knobs.
+- Async I/O: `AsyncStream` and `BufferedAsyncStream` for non‑blocking reads/writes and convenience helpers.
+- Cancellation: Cooperative `CancellationToken` across scheduler, I/O, and HTTP.
+- Promise: Lightweight chainable wrapper for Tasks with `then/catch/finally`, `all/race`.
+- Metrics: Expanded instrumentation hooks (suspend/resume, queue depth, resource‑limit signals).
+- Config & DI: Central `config/async.php`; `AsyncProvider` wires `Scheduler`, `HttpClient`, and metrics; `AsyncMiddleware` alias `async`.
+- Notes: Defaults are backward‑compatible; resource limits off unless configured.
+
+### 1.8 (Minor)
 - Queue/workers: improved autoscaling rules; per‑queue budgets; graceful drain; health endpoints.
 
 ### 2.0 (Major; tentative)
