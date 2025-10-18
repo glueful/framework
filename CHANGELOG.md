@@ -4,6 +4,39 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.7.0] - 2025-10-18 — Procyon
+
+Major async/concurrency subsystem. Introduces a fiber-based scheduler, async HTTP client with streaming, buffered I/O, cooperative cancellation, metrics instrumentation, and a Promise-style wrapper for ergonomic chaining. Includes centralized async configuration and DI wiring.
+
+### Added
+- Async/Concurrency: Fiber-based `Glueful\Async\FiberScheduler` with `spawn`, `all`, `race`, and `sleep` semantics.
+- Tasks: `FiberTask`, `ClosureTask`, `CompletedTask`, `FailedTask`, `DelayedTask`, `RepeatingTask`, `TimeoutTask`.
+- Helpers: `scheduler()`, `async()`, `await()`, `await_all()`, `await_race()`, `async_sleep()`, `async_sleep_default()`, `async_stream()`, `cancellation_token()`.
+- Async I/O: `Glueful\Async\IO\AsyncStream` and `BufferedAsyncStream` with line/whole-read helpers and buffered reads/writes.
+- Async HTTP: `Glueful\Async\Http\CurlMultiHttpClient` with cooperative polling, pooling via `poolAsync()`, and streaming via `HttpStreamingClient::sendAsyncStream()`; `FakeHttpClient` for testing.
+- Promise: `Glueful\Async\Promise` wrapper providing `then/catch/finally` and `all/race` composition over Tasks.
+- Cancellation: `SimpleCancellationToken` and cooperative propagation across scheduler, I/O, and HTTP.
+- Instrumentation: Expanded `Metrics` interface and implementations (`LoggerMetrics`, `NullMetrics`) with fiber/task events (suspend/resume, queue depth, cancellation, resource limits).
+- Config: New `config/async.php` with `scheduler`, `http`, `streams`, and `limits` settings.
+- DI: `AsyncProvider` wires `Metrics`, `Scheduler`, `HttpClient`, and registers `AsyncMiddleware` (alias `"async"`).
+
+### Changed
+- Scheduler: Resource limit enforcement (max concurrent tasks, per-task execution time, optional memory and file-descriptor caps); timer handling via min-heap; richer metrics hooks.
+- HTTP: Refactored `CurlMultiHttpClient` to use a shared `curl_multi` pump and optional `max_concurrent` cap; retry knobs exposed via config.
+
+### Fixed
+- Cancellation and timeouts are honored during sleeps and I/O waits across scheduler and async streams.
+
+### Documentation
+- High-level async docs added to the site (API reference and troubleshooting); extensive PHPDoc across async packages.
+
+### Tests
+- New unit/integration coverage for async scheduler, HTTP client, streaming, timers, and helpers (see `tests/Unit/Async/*`, `tests/Integration/Async/*`).
+
+### Migration Notes
+- New `config/async.php`. Defaults are backward-compatible (limits disabled when set to 0). No changes required unless opting into limits or tuning.
+- To use async within routes, add `AsyncMiddleware` (alias `async`) or use the helpers (`async()`, `await_all()`, etc.).
+
 ## [1.6.2] - 2025-10-14 — Capella
 
 Template configuration responsibility moved to the Email Notification extension.
