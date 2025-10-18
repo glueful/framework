@@ -13,6 +13,7 @@ use Glueful\Async\Instrumentation\Metrics;
 use Glueful\Async\Instrumentation\NullMetrics;
 use Nyholm\Psr7\Response;
 use Psr\Http\Message\RequestInterface;
+use Glueful\Async\Contracts\Http\HttpStreamingClient;
 
 /**
  * Asynchronous HTTP client using curl_multi for non-blocking requests.
@@ -79,8 +80,22 @@ use Psr\Http\Message\RequestInterface;
  * I/O multiplexing, consider using stream-based async HTTP clients with
  * stream_select() integration.
  */
-final class CurlMultiHttpClient implements HttpClient, \Glueful\Async\Contracts\Http\HttpStreamingClient
+final class CurlMultiHttpClient implements HttpClient, HttpStreamingClient
 {
+    /** @var \CurlMultiHandle|null */
+    private static $sharedMulti = null;
+    /**
+     * @var array<int, array{
+     *   done: bool,
+     *   handle: \CurlHandle|null,
+     *   raw: string|null,
+     *   err: string|null,
+     *   info: array<string,mixed>|null
+     * }>
+     */
+    private static array $registry = [];
+    private static bool $pumping = false;
+    private static int $activeHandles = 0;
     /**
      * Creates an async HTTP client with optional metrics collection.
      *
@@ -141,12 +156,14 @@ final class CurlMultiHttpClient implements HttpClient, \Glueful\Async\Contracts\
 
             try {
                 $attempt = 0;
+                // Retry loop with break conditions inside (return on success, continue on retry)
+                /** @phpstan-ignore-next-line (loop has explicit return/continue break conditions) */
                 while (true) {
                     // Step 2: Initialize or reuse shared curl_multi for non-blocking execution
                     static $sharedMulti = null;
                     static $activeHandles = 0;
-                    if ($sharedMulti === null) {
-                        $sharedMulti = curl_multi_init();
+                    if (self::$sharedMulti === null) {
+                        self::$sharedMulti = curl_multi_init();
                     }
                     if ($this->maxConcurrent > 0) {
                         while ($activeHandles >= $this->maxConcurrent) {
@@ -157,29 +174,34 @@ final class CurlMultiHttpClient implements HttpClient, \Glueful\Async\Contracts\
                     $ch = $this->buildHandle($request, $timeout);
                     // Enable header capture for parsing
                     curl_setopt($ch, CURLOPT_HEADER, true);
-                    curl_multi_add_handle($sharedMulti, $ch);
-                    $activeHandles++;
+                    $id = (int) $ch;
+                    self::$registry[$id] = [
+                        'done' => false,
+                        'raw' => null,
+                        'err' => null,
+                        'info' => null,
+                        'handle' => $ch
+                    ];
+                    curl_multi_add_handle(self::$sharedMulti, $ch);
+                    self::$activeHandles++;
 
-                    // Step 3: Poll curl_multi until request completes
-                    // This is the cooperative async magic: we yield control while waiting
-                    do {
-                        $status = curl_multi_exec($sharedMulti, $running);
-                        if ($running) {
-                            // Request still in progress - yield for configured interval
-                            // Scheduler will resume us after delay, allowing other tasks to run
-                            $token?->throwIfCancelled();
-                            \Fiber::suspend(new SleepOp(microtime(true) + $this->pollIntervalSeconds, $token));
-                        }
-                    } while ($running && $status === CURLM_OK);
+                    // Step 3: Pump cooperatively until this handle completes
+                    // Note: pumpOnce() modifies registry[$id]['done'] when complete
+                    /** @phpstan-ignore-next-line (loop terminates when pumpOnce sets done=true) */
+                    while (!self::$registry[$id]['done']) {
+                        $this->pumpOnce($token);
+                        $token?->throwIfCancelled();
+                        \Fiber::suspend(new SleepOp(microtime(true) + $this->pollIntervalSeconds, $token));
+                    }
 
-                    // Step 4: Extract response data and clean up curl resources
-                    $raw = curl_multi_getcontent($ch);
-                    $err = curl_error($ch);
-                    $info = curl_getinfo($ch);
-                    curl_multi_remove_handle($sharedMulti, $ch);
-                    curl_close($ch);
-                    $ch = null;
-                    $activeHandles = max(0, $activeHandles - 1);
+                    // Step 4: Extract response data and clean up registry
+                    // @phpstan-ignore-next-line (reachable - loop exits when pumpOnce sets done=true)
+                    $entry = self::$registry[$id] ?? ['raw' => '', 'err' => '', 'info' => []];
+                    $raw = $entry['raw'] ?? '';
+                    $err = $entry['err'] ?? '';
+                    /** @var array<string,mixed> $info */
+                    $info = is_array($entry['info'] ?? []) ? $entry['info'] : [];
+                    unset(self::$registry[$id]);
 
                     // Step 5: Decide on retry and build response
                     $statusCode = (int)($info['http_code'] ?? 0);
@@ -250,14 +272,9 @@ final class CurlMultiHttpClient implements HttpClient, \Glueful\Async\Contracts\
                 $dur = (microtime(true) - $start) * 1000.0;
                 $metrics->httpRequestFailed($request, $e, $dur);
                 // Cleanup curl handles on error/cancellation (shared multi best effort)
-                if (isset($sharedMulti) && $ch !== null) {
-                    @curl_multi_remove_handle($sharedMulti, $ch);
-                }
                 if ($ch !== null) {
+                    @curl_multi_remove_handle(self::$sharedMulti, $ch);
                     @curl_close($ch);
-                }
-                if (isset($activeHandles)) {
-                    $activeHandles = max(0, $activeHandles - 1);
                 }
                 throw $e;
             }
@@ -415,6 +432,57 @@ final class CurlMultiHttpClient implements HttpClient, \Glueful\Async\Contracts\
     }
 
     /**
+     * Progress the shared curl_multi once and harvest completions into the registry.
+     * Uses a static, per-class guard to ensure only one fiber pumps at a time.
+     *
+     * @param \Glueful\Async\Contracts\CancellationToken|null $token
+     * @return void
+     */
+    private function pumpOnce(?\Glueful\Async\Contracts\CancellationToken $token = null): void
+    {
+        if (self::$sharedMulti === null) {
+            return;
+        }
+        if (self::$pumping) {
+            return;
+        }
+        self::$pumping = true;
+        try {
+            @curl_multi_exec(self::$sharedMulti, $running);
+            while (true) {
+                $i = @curl_multi_info_read(self::$sharedMulti, $rem);
+                if ($i === false) {
+                    break;
+                }
+                if (!isset($i['handle'])) {
+                    continue;
+                }
+                $ch = $i['handle'];
+                $id = (int) $ch;
+                // curl_multi_getcontent returns string|false|null
+                $raw = @curl_multi_getcontent($ch) ?? '';
+                // curl_error always returns string
+                $err = @curl_error($ch);
+                /** @var array<string,mixed> $info */
+                $info = @curl_getinfo($ch);
+                $info = (is_array($info)) ? $info : [];
+                @curl_multi_remove_handle(self::$sharedMulti, $ch);
+                @curl_close($ch);
+                self::$activeHandles = max(0, self::$activeHandles - 1);
+                if (isset(self::$registry[$id])) {
+                    self::$registry[$id]['raw'] = $raw;
+                    self::$registry[$id]['err'] = $err;
+                    self::$registry[$id]['info'] = $info;
+                    self::$registry[$id]['done'] = true;
+                    self::$registry[$id]['handle'] = null;
+                }
+            }
+        } finally {
+            self::$pumping = false;
+        }
+    }
+
+    /**
      * Streaming variant: invokes callback with body chunks as they arrive.
      */
     public function sendAsyncStream(
@@ -427,13 +495,16 @@ final class CurlMultiHttpClient implements HttpClient, \Glueful\Async\Contracts\
         return new FiberTask(function () use ($request, $timeout, $metrics, $token, $onChunk) {
             $metrics->httpRequestStarted($request);
             $start = microtime(true);
-            $multi = null;
             $ch = null;
             $body = '';
             try {
                 $attempt = 0;
+                // Retry loop with break conditions inside (return on success, continue on retry)
+                /** @phpstan-ignore-next-line (loop has explicit return/continue break conditions) */
                 while (true) {
-                    $multi = curl_multi_init();
+                    if (self::$sharedMulti === null) {
+                        self::$sharedMulti = curl_multi_init();
+                    }
                     $ch = $this->buildHandle($request, $timeout);
                     // Enable headers, and install write callback for streaming
                     curl_setopt($ch, CURLOPT_HEADER, true);
@@ -442,23 +513,29 @@ final class CurlMultiHttpClient implements HttpClient, \Glueful\Async\Contracts\
                         $body .= $data;
                         return strlen($data);
                     });
-                    curl_multi_add_handle($multi, $ch);
+                    $id = (int) $ch;
+                    self::$registry[$id] = [
+                        'done' => false,
+                        'raw' => null,
+                        'err' => null,
+                        'info' => null,
+                        'handle' => $ch
+                    ];
+                    curl_multi_add_handle(self::$sharedMulti, $ch);
 
-                    do {
-                        $status = curl_multi_exec($multi, $running);
-                        if ($running) {
-                            $token?->throwIfCancelled();
-                            \Fiber::suspend(new SleepOp(microtime(true) + $this->pollIntervalSeconds, $token));
-                        }
-                    } while ($running && $status === CURLM_OK);
+                    // Note: pumpOnce() modifies registry[$id]['done'] when complete
+                    /** @phpstan-ignore-next-line (loop terminates when pumpOnce sets done=true) */
+                    while (!self::$registry[$id]['done']) {
+                        $this->pumpOnce($token);
+                        $token?->throwIfCancelled();
+                        \Fiber::suspend(new SleepOp(microtime(true) + $this->pollIntervalSeconds, $token));
+                    }
 
-                    $err = curl_error($ch);
-                    $info = curl_getinfo($ch);
-                    curl_multi_remove_handle($multi, $ch);
-                    curl_close($ch);
-                    $ch = null;
-                    curl_multi_close($multi);
-                    $multi = null;
+                    // @phpstan-ignore-next-line (reachable - loop exits when pumpOnce sets done=true)
+                    $err = (string) (self::$registry[$id]['err'] ?? '');
+                    /** @var array<string,mixed> $info */
+                    $info = (array) (self::$registry[$id]['info'] ?? []);
+                    unset(self::$registry[$id]);
 
                     $statusCode = (int)($info['http_code'] ?? 0);
                     $shouldRetry = false;
@@ -476,7 +553,7 @@ final class CurlMultiHttpClient implements HttpClient, \Glueful\Async\Contracts\
                         continue;
                     }
                     if ($err !== '' || $statusCode === 0) {
-                        throw new \RuntimeException('curl error: ' . $err);
+                        throw new \Glueful\Async\Exceptions\HttpException('curl error: ' . $err);
                     }
 
                     // Separate headers from body in accumulated $body
@@ -522,14 +599,9 @@ final class CurlMultiHttpClient implements HttpClient, \Glueful\Async\Contracts\
             } catch (\Throwable $e) {
                 $dur = (microtime(true) - $start) * 1000.0;
                 $metrics->httpRequestFailed($request, $e, $dur);
-                if ($multi !== null && $ch !== null) {
-                    @curl_multi_remove_handle($multi, $ch);
-                }
                 if ($ch !== null) {
+                    @curl_multi_remove_handle(self::$sharedMulti, $ch);
                     @curl_close($ch);
-                }
-                if ($multi !== null) {
-                    @curl_multi_close($multi);
                 }
                 throw $e;
             }
