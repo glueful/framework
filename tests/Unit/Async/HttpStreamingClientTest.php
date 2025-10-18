@@ -27,9 +27,12 @@ final class HttpStreamingClientTest extends TestCase
         [$response] = $scheduler->all([$task]);
         $this->assertSame(200, $response->getStatusCode());
         $this->assertSame(str_repeat('A', 1024) . str_repeat('B', 1024), (string)$response->getBody());
+        // Ensure no header lines leak into body across environments (e.g., file:// with pseudo-headers)
+        $this->assertStringNotContainsString('Content-Length:', (string)$response->getBody());
+        $this->assertStringNotContainsString('Last-Modified:', (string)$response->getBody());
+        $this->assertStringNotContainsString('Accept-Ranges:', (string)$response->getBody());
         $this->assertNotEmpty($chunks);
 
         @unlink($tmp);
     }
 }
-

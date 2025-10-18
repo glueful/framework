@@ -274,56 +274,25 @@ final class CurlMultiHttpClient implements HttpClient, HttpStreamingClient
 
                     // Step 7: Parse HTTP headers from raw response
                     $headers = [];
-                    if (isset($info['header_size']) && (int)$info['header_size'] > 0) {
-                        $headerSize = (int)$info['header_size'];
-                        // Split raw response into headers and body
+                    $bodyPart = $raw;
+                    $headerSize = (int)($info['header_size'] ?? 0);
+                    if ($headerSize > 0) {
                         $headerBlob = substr($raw, 0, $headerSize);
                         $bodyPart = substr($raw, $headerSize);
-
-                        // Handle redirects: header blob may contain multiple HTTP responses
-                        // Split on double CRLF (blank line between responses)
-                        $sections = preg_split('/(?:\r\n){2}/', trim($headerBlob));
-                        // Use only the last section (final response after redirects)
-                        $last = $sections !== false && $sections !== [] ? end($sections) : '';
-
-                        if (is_string($last) && $last !== '') {
-                            // Parse individual header lines
-                            $lines = preg_split('/\r\n/', $last);
-                            if ($lines === false) {
-                                $lines = [];
-                            }
-
-                            foreach ($lines as $line) {
-                                // Skip empty lines and HTTP status line
-                                if ($line === '' || str_starts_with($line, 'HTTP/')) {
-                                    continue;
-                                }
-
-                                // Parse "Header-Name: value" format
-                                $pos = strpos($line, ':');
-                                if ($pos === false) {
-                                    continue; // Malformed header, skip
-                                }
-
-                                $name = trim(substr($line, 0, $pos));
-                                $value = trim(substr($line, $pos + 1));
-
-                                // Handle multi-value headers (e.g., Set-Cookie)
-                                if (isset($headers[$name])) {
-                                    $existing = $headers[$name];
-                                    $headers[$name] = is_array($existing)
-                                        ? array_merge($existing, [$value])
-                                        : [$existing, $value];
-                                } else {
-                                    $headers[$name] = $value;
-                                }
-                            }
-                        }
-                        $response = new Response($statusCode, $headers, $bodyPart);
+                        $this->parseHeadersInto($headerBlob, $headers);
                     } else {
-                        // No headers available, use simple response builder
-                        $response = $this->buildResponse($raw, $statusCode);
+                        // Fallback for environments (e.g., file://) where header_size may be 0
+                        // but pseudo-headers are present in the response
+                        $scheme = strtolower((string) $request->getUri()->getScheme());
+                        $pos = strpos($raw, "\r\n\r\n");
+                        if ($pos !== false && ($scheme === 'http' || $scheme === 'https' || $scheme === 'file')) {
+                            $headerBlob = substr($raw, 0, $pos);
+                            $bodyPart = substr($raw, $pos + 4);
+                            $this->parseHeadersInto($headerBlob, $headers);
+                        }
                     }
+
+                    $response = new Response($statusCode, $headers, $bodyPart);
 
                     // Step 8: Record successful completion with duration
                     $dur = (microtime(true) - $start) * 1000.0;
@@ -664,36 +633,18 @@ final class CurlMultiHttpClient implements HttpClient, HttpStreamingClient
                     // Separate headers from body in accumulated $body
                     $headers = [];
                     $finalBody = $body;
-                    if (isset($info['header_size']) && (int)$info['header_size'] > 0) {
-                        $headerSize = (int)$info['header_size'];
+                    $headerSize = (int)($info['header_size'] ?? 0);
+                    if ($headerSize > 0) {
                         $headerBlob = substr($body, 0, $headerSize);
                         $finalBody = substr($body, $headerSize);
-                        $sections = preg_split('/(?:\r\n){2}/', trim($headerBlob));
-                        $last = $sections !== false && $sections !== [] ? end($sections) : '';
-                        if (is_string($last) && $last !== '') {
-                            $lines = preg_split('/\r\n/', $last);
-                            if ($lines === false) {
-                                $lines = [];
-                            }
-                            foreach ($lines as $line) {
-                                if ($line === '' || str_starts_with($line, 'HTTP/')) {
-                                    continue;
-                                }
-                                $pos = strpos($line, ':');
-                                if ($pos === false) {
-                                    continue;
-                                }
-                                $name = trim(substr($line, 0, $pos));
-                                $value = trim(substr($line, $pos + 1));
-                                if (isset($headers[$name])) {
-                                    $existing = $headers[$name];
-                                    $headers[$name] = is_array($existing)
-                                        ? array_merge($existing, [$value])
-                                        : [$existing, $value];
-                                } else {
-                                    $headers[$name] = $value;
-                                }
-                            }
+                        $this->parseHeadersInto($headerBlob, $headers);
+                    } else {
+                        $scheme = strtolower((string) $request->getUri()->getScheme());
+                        $pos = strpos($body, "\r\n\r\n");
+                        if ($pos !== false && ($scheme === 'http' || $scheme === 'https' || $scheme === 'file')) {
+                            $headerBlob = substr($body, 0, $pos);
+                            $finalBody = substr($body, $pos + 4);
+                            $this->parseHeadersInto($headerBlob, $headers);
                         }
                     }
 
@@ -711,5 +662,44 @@ final class CurlMultiHttpClient implements HttpClient, HttpStreamingClient
                 throw $e;
             }
         }, $this->metrics, 'http-stream:' . $request->getMethod() . ' ' . (string)$request->getUri(), $token);
+    }
+
+    /**
+     * Parse header blob into an associative array (last section wins for redirects).
+     *
+     * @param string $headerBlob Raw header data (may include multiple sections)
+     * @param array<string, string|array<int,string>> $headers Output header map
+     * @return void
+     */
+    private function parseHeadersInto(string $headerBlob, array &$headers): void
+    {
+        $sections = preg_split('/(?:\r\n){2}/', trim($headerBlob));
+        $last = $sections !== false && $sections !== [] ? end($sections) : '';
+        if (!is_string($last) || $last === '') {
+            return;
+        }
+        $lines = preg_split('/\r\n/', $last);
+        if ($lines === false) {
+            return;
+        }
+        foreach ($lines as $line) {
+            if ($line === '' || str_starts_with($line, 'HTTP/')) {
+                continue;
+            }
+            $pos = strpos($line, ':');
+            if ($pos === false) {
+                continue;
+            }
+            $name = trim(substr($line, 0, $pos));
+            $value = trim(substr($line, $pos + 1));
+            if (isset($headers[$name])) {
+                $existing = $headers[$name];
+                $headers[$name] = is_array($existing)
+                    ? array_merge($existing, [$value])
+                    : [$existing, $value];
+            } else {
+                $headers[$name] = $value;
+            }
+        }
     }
 }

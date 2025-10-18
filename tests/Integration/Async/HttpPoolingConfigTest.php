@@ -31,9 +31,15 @@ final class HttpPoolingConfigTest extends TestCase
         $this->assertSame(200, $r2->getStatusCode());
         $this->assertSame('FILE_A', (string) $r1->getBody());
         $this->assertSame('FILE_B', (string) $r2->getBody());
+        // Ensure no header lines leak into body for file:// protocol
+        $this->assertStringNotContainsString('Content-Length:', (string)$r1->getBody());
+        $this->assertStringNotContainsString('Last-Modified:', (string)$r1->getBody());
+        $this->assertStringNotContainsString('Accept-Ranges:', (string)$r1->getBody());
+        $this->assertStringNotContainsString('Content-Length:', (string)$r2->getBody());
+        $this->assertStringNotContainsString('Last-Modified:', (string)$r2->getBody());
+        $this->assertStringNotContainsString('Accept-Ranges:', (string)$r2->getBody());
 
         @unlink($tmp1);
         @unlink($tmp2);
     }
 }
-
