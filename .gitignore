@@ -7,3 +7,7 @@ vendor
 /composer.lock
 /composer.phar
 
+# --- IDE / Editor ---
+/.idea/
+/.vscode/
+/*.code-workspace
