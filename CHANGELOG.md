@@ -4,6 +4,20 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.7.3] - 2025-10-21 — Pollux
+
+Patch release fixing QueryBuilder 2‑argument where/orWhere handling and further improving dev‑server log clarity.
+
+### Fixed
+- Database/QueryBuilder: Normalize 2‑argument `where($column, $value)` and `orWhere($column, $value)` to
+  use the `=` operator internally. This resolves a `TypeError` where non‑string values (e.g., integers)
+  were interpreted as the operator and passed to `WhereClause::add()`.
+  - Improves portability for boolean filters across PostgreSQL/MySQL/SQLite.
+
+### Improved
+- CLI: `serve` command further refines classification of PHP built‑in server access/lifecycle lines written to STDERR
+  (e.g., “Accepted”, “Closed without sending a request”, “[200]: GET /…”) as normal output, while preserving real errors.
+
 ## [1.7.2] - 2025-10-21 — Antares
 
 Patch release improving route loading resilience and dev-server log clarity.

@@ -159,7 +159,15 @@ class QueryBuilder implements QueryBuilderInterface
                 $this->whereClause->add($key, '=', $val);
             }
         } else {
-            // Pass all parameters to whereClause, including callables
+            // Normalize 2-argument form: where('id', 5) => where('id', '=', 5)
+            if (
+                $value === null && !is_callable($column)
+                && $operator !== null && !is_string($operator)
+            ) {
+                $value = $operator;
+                $operator = '=';
+            }
+            // Pass parameters to whereClause (callables supported by implementation)
             $this->whereClause->add($column, $operator, $value);
         }
         return $this;
@@ -179,6 +187,14 @@ class QueryBuilder implements QueryBuilderInterface
                 $this->whereClause->orWhere($key, '=', $val);
             }
         } else {
+            // Normalize 2-argument form: orWhere('id', 5) => orWhere('id', '=', 5)
+            if (
+                $value === null && !is_callable($column)
+                && $operator !== null && !is_string($operator)
+            ) {
+                $value = $operator;
+                $operator = '=';
+            }
             $this->whereClause->orWhere($column, $operator, $value);
         }
         return $this;
