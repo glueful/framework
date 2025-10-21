@@ -170,12 +170,22 @@ class ServeCommand extends BaseCommand
             // Run the server
             $process->run(function ($type, $buffer) {
                 // Output server logs in real-time
+                $line = rtrim($buffer);
+                if ($line === '') {
+                    return;
+                }
                 if (Process::ERR === $type) {
-                    $this->error(rtrim($buffer));
+                    // The PHP built-in server writes all access and lifecycle logs to STDERR.
+                    // Re-classify known server log lines as normal output to avoid false [ERROR] noise.
+                    if ($this->isPhpServerLogLine($line)) {
+                        $this->line($line);
+                        return;
+                    }
+                    $this->error($line);
                 } else {
-                    // Filter out PHP built-in server startup message
-                    if (!str_contains($buffer, 'Development Server')) {
-                        $this->line(rtrim($buffer));
+                    // Filter out PHP built-in server startup message on STDOUT
+                    if (!str_contains($line, 'Development Server')) {
+                        $this->line($line);
                     }
                 }
             });
@@ -198,5 +208,24 @@ class ServeCommand extends BaseCommand
                 exit(0);
             });
         }
+    }
+
+    private function isPhpServerLogLine(string $line): bool
+    {
+        // Matches built-in server log formats like:
+        // [Tue Oct 21 05:20:14 2025] [::1]:56643 Accepted
+        // [Tue Oct 21 05:20:14 2025] [::1]:56643 [200]: GET /status
+        // [Tue Oct 21 05:20:14 2025] [::1]:56642 Closed without sending a request
+        $pattern = '/^\[[A-Z][a-z]{2}\s+[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\d{4}\]'
+            . '\s+\[(?:\:\:1|127\.0\.0\.1)\]:\d+\s+/';
+
+        if (preg_match($pattern, $line) === 1) {
+            return true;
+        }
+        // Also treat the generic startup banner as non-error
+        if (str_contains($line, 'Development Server')) {
+            return true;
+        }
+        return false;
     }
 }

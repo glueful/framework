@@ -4,6 +4,18 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.7.2] - 2025-10-21 — Antares
+
+Patch release improving route loading resilience and dev-server log clarity.
+
+### Fixed
+- Extensions: `ServiceProvider::loadRoutesFrom()` is now idempotent and exception-safe.
+  - Prevents duplicate route registration if the same routes file is loaded more than once.
+  - Catches exceptions from route files; logs and continues in production, rethrows in non‑production for fast feedback.
+
+### Improved
+- CLI: `serve` command log handling reclassifies PHP built‑in server access/startup lines from STDERR as normal output, reducing false `[ERROR]` noise while preserving real error reporting.
+
 ## [1.7.1] - 2025-10-21 — Canopus
 
 Patch release addressing extension discovery/boot sequencing so extensions reliably load at runtime.

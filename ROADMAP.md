@@ -106,6 +106,10 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 - Migrations: Extension migrations registered via `loadMigrationsFrom()` are now visible to `migrate:status`/`migrate:run`.
 - CLI: `extensions:why` and `extensions:list` reflect the final provider list after boot, improving diagnostics.
 
+### 1.7.2 — Antares (Released 2025-10-21)
+- Extensions: `ServiceProvider::loadRoutesFrom()` made idempotent and exception‑safe to avoid duplicate route registration and to keep boot resilient in production.
+- CLI: `serve` command reclassifies PHP built‑in server access/startup lines as normal output to reduce false error noise.
+
 ### 1.8 (Minor)
 - Queue/workers: improved autoscaling rules; per‑queue budgets; graceful drain; health endpoints.
 
