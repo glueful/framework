@@ -347,7 +347,8 @@ class Framework
         try {
             $extensions = $this->container->get(\Glueful\Extensions\ExtensionManager::class);
 
-            // Boot (routes, views, etc.) - discovery already happens in service provider
+            // Discover providers before boot so runtime list is populated
+            $extensions->discover();
             $extensions->boot();
         } catch (\Throwable $e) {
             error_log("Extensions initialization failed: " . $e->getMessage());
