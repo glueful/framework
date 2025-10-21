@@ -110,6 +110,10 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 - Extensions: `ServiceProvider::loadRoutesFrom()` made idempotent and exception‑safe to avoid duplicate route registration and to keep boot resilient in production.
 - CLI: `serve` command reclassifies PHP built‑in server access/startup lines as normal output to reduce false error noise.
 
+### 1.7.3 — Pollux (Released 2025-10-21)
+- Database: QueryBuilder normalizes 2‑argument `where($column, $value)` / `orWhere($column, $value)` to `=` operator, fixing a `TypeError` and improving portability of boolean/int filters across PostgreSQL/MySQL/SQLite.
+- DX: Further cleanup of dev‑server STDERR log classification; access/lifecycle lines are treated as info while preserving real error visibility.
+
 ### 1.8 (Minor)
 - Queue/workers: improved autoscaling rules; per‑queue budgets; graceful drain; health endpoints.
 

@@ -13,10 +13,10 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.7.2';
+    public const VERSION = '1.7.3';
 
     /** Release code name */
-    public const NAME = 'Antares';
+    public const NAME = 'Pollux';
 
     /** Release date */
     public const RELEASE_DATE = '2025-10-21';
