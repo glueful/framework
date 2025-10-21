@@ -101,6 +101,11 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 - Config & DI: Central `config/async.php`; `AsyncProvider` wires `Scheduler`, `HttpClient`, and metrics; `AsyncMiddleware` alias `async`.
 - Notes: Defaults are backward‑compatible; resource limits off unless configured.
 
+### 1.7.1 — Canopus (Released 2025-10-21)
+- Extensions: Call `ExtensionManager::discover()` before `::boot()` during framework initialization to ensure providers are instantiated and booted at runtime.
+- Migrations: Extension migrations registered via `loadMigrationsFrom()` are now visible to `migrate:status`/`migrate:run`.
+- CLI: `extensions:why` and `extensions:list` reflect the final provider list after boot, improving diagnostics.
+
 ### 1.8 (Minor)
 - Queue/workers: improved autoscaling rules; per‑queue budgets; graceful drain; health endpoints.
 

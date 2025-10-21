@@ -13,13 +13,13 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.7.0';
+    public const VERSION = '1.7.1';
 
     /** Release code name */
-    public const NAME = 'Procyon';
+    public const NAME = 'Canopus';
 
     /** Release date */
-    public const RELEASE_DATE = '2025-10-18';
+    public const RELEASE_DATE = '2025-10-21';
 
     /** Minimum required PHP version */
     public const MIN_PHP_VERSION = '8.2.0';

@@ -4,6 +4,23 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.7.1] - 2025-10-21 — Canopus
+
+Patch release addressing extension discovery/boot sequencing so extensions reliably load at runtime.
+
+### Fixed
+- Extensions: Call `ExtensionManager::discover()` before `::boot()` during framework initialization
+  (`src/Framework.php`). This resolves a bug where enabled extensions appeared as
+  “EXCLUDED from final provider list” and their `boot()` never ran.
+- Migrations: Extension migrations registered via `loadMigrationsFrom()` are now properly discovered
+  by `migrate:status`/`migrate:run` once providers are discovered at boot.
+- CLI: `extensions:why`/`extensions:list` now reflect included providers after boot, improving
+  diagnostics when extensions are enabled via config or Composer discovery.
+
+### Impact
+- Applications that previously saw “No pending migrations found” for extension migrations should now
+  see those migrations once the provider is enabled. No config changes are required.
+
 ## [1.7.0] - 2025-10-18 — Procyon
 
 Major async/concurrency subsystem. Introduces a fiber-based scheduler, async HTTP client with streaming, buffered I/O, cooperative cancellation, metrics instrumentation, and a Promise-style wrapper for ergonomic chaining. Includes centralized async configuration and DI wiring.
