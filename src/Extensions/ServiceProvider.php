@@ -49,13 +49,37 @@ abstract class ServiceProvider
     /** Load routes from a file; file will use $router from the container. */
     protected function loadRoutesFrom(string $path): void
     {
-        if (!is_file($path) || !$this->app->has(Router::class)) {
+        // Router must exist to register routes
+        if (!$this->app->has(Router::class)) {
             return;
         }
-        // Expose $router to the included file scope for route definitions
-        /** @var Router $router */
-        $router = $this->app->get(Router::class);
-        require $path;
+
+        // Resolve realpath and ensure file exists
+        $real = realpath($path);
+        if ($real === false || !is_file($real)) {
+            return;
+        }
+
+        // Idempotency: avoid loading the same routes file more than once
+        static $loaded = [];
+        if (isset($loaded[$real])) {
+            return;
+        }
+
+        try {
+            // Expose $router to the included file scope for route definitions
+            /** @var Router $router */
+            $router = $this->app->get(Router::class);
+            require $real; // executes the routes file
+            $loaded[$real] = true;
+        } catch (\Throwable $e) {
+            // Log and continue in production; rethrow in non‑production for fast feedback
+            error_log('[Extensions] Failed to load routes from ' . $real . ': ' . $e->getMessage());
+            $env = (string) ($_ENV['APP_ENV'] ?? (getenv('APP_ENV') !== false ? getenv('APP_ENV') : 'production'));
+            if ($env !== 'production') {
+                throw $e;
+            }
+        }
     }
 
     /** Register migrations directory. */
