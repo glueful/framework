@@ -138,6 +138,14 @@ class AuthenticationService
             return null;
         }
 
+        // Enforce allowed login statuses (default: ['active'])
+        $allowedStatuses = (array) config('security.auth.allowed_login_statuses', ['active']);
+        $userStatus = (string) ($user['status'] ?? '');
+        if ($allowedStatuses !== [] && !in_array($userStatus, $allowedStatuses, true)) {
+            // Fail silently to avoid account enumeration
+            return null;
+        }
+
         // Validate password with new Validation rules
         try {
             PasswordDTO::from(['password' => $credentials['password'] ?? '']);
@@ -536,6 +544,13 @@ class AuthenticationService
         $user = $this->userRepository->findByUuid($userUuid);
 
         if ($user === null || $user === []) {
+            return null;
+        }
+
+        // Enforce allowed statuses for token refresh as well
+        $allowedStatuses = (array) config('security.auth.allowed_login_statuses', ['active']);
+        $userStatus = (string) ($user['status'] ?? '');
+        if ($allowedStatuses !== [] && !in_array($userStatus, $allowedStatuses, true)) {
             return null;
         }
 
