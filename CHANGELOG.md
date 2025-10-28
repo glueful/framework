@@ -4,6 +4,20 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.7.4] - 2025-10-28 — Arcturus
+
+Patch release adding a minimal, configurable account‑status gate to authentication and new docs for writing migrations that create views/functions.
+
+### Added
+- Auth: Optional status policy in `AuthenticationService::authenticate()` and refresh‑token flow. Users must have a status in `security.auth.allowed_login_statuses` (default: `['active']`) to log in or refresh.
+
+### Changed
+- Config: Introduced `security.auth.allowed_login_statuses` under `config/security.php` and read it in authentication flows. This centralizes auth policy under security.
+
+### Notes
+- Behavior is secure by default and silent on failure (prevents account enumeration). Override the allowed statuses in your app’s `config/security.php` as needed.
+- If you previously added an `auth.allowed_login_statuses` key during development, move it to `security.auth.allowed_login_statuses`.
+
 ## [1.7.3] - 2025-10-21 — Pollux
 
 Patch release fixing QueryBuilder 2‑argument where/orWhere handling and further improving dev‑server log clarity.

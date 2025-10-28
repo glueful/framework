@@ -21,6 +21,9 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.7.4 — Arcturus (Released 2025-10-28)
+- Authentication: Minimal, configurable account‑status gate enforced in core login and refresh flows via `security.auth.allowed_login_statuses` (default `['active']`). Silent failure to avoid account enumeration; policy is intentionally lean to let apps extend.
+
 ### 1.0.0 — Aurora (Released 2025-09-20)
 - **First stable release** of the split Glueful Framework package with comprehensive features.
 - **Comprehensive permissions and authorization system**.

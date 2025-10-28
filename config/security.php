@@ -8,6 +8,13 @@
  */
 
 return [
+    // Authentication policy
+    'auth' => [
+        // Statuses that are permitted to authenticate/login.
+        // Adjust as needed (e.g., include 'verified', 'onboarding').
+        'allowed_login_statuses' => ['active'],
+    ],
+
     // Security level definitions
     'levels' => [
         'flexible' => 1,    // Basic token validation only
