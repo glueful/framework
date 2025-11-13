@@ -4,6 +4,27 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.8.0] - 2025-11-13 — Spica
+
+Feature release adding first-class session and login response events, enabling safe enrichment of cached session payloads and login responses without modifying framework code.
+
+### Added
+- Events/Auth:
+  - `SessionCachedEvent`: Dispatched after a session is written to cache (and DB). Listeners can augment the cached payload (e.g., `user.organization`) or warm related caches. Implemented at `src/Auth/SessionCacheManager.php` after successful `cache->set` in `storeSession()`.
+  - `LoginResponseBuildingEvent`: Dispatched just before returning the login JSON. Provides a mutable response map so apps can extend the payload (e.g., `context.organization`).
+  - `LoginResponseBuiltEvent`: Dispatched after the login response is finalized for metrics/analytics.
+- Controllers/Auth:
+  - `AuthController::login()`: Pre-return response enrichment hook wired using the new login response events.
+
+### Changed
+- Docs:
+  - `docs/SESSION_EVENTS_PROPOSAL.md` updated to reflect final implementation (paths under `src/...`), setter-based mutation (no PHP by-ref promotion), dispatch locations, and a concrete listener example.
+
+### Notes
+- Backward compatible: No behavior change unless listeners are registered.
+- Performance: Events are synchronous; heavy listeners should offload to queues.
+- Guidance: Prefer adding app-specific data under a `context.*` key to avoid collisions with reserved fields.
+
 ## [1.7.4] - 2025-10-28 — Arcturus
 
 Patch release adding a minimal, configurable account‑status gate to authentication and new docs for writing migrations that create views/functions.
