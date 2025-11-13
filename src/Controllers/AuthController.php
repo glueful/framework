@@ -12,6 +12,9 @@ use Glueful\Auth\AuthBootstrap;
 use Glueful\Exceptions\AuthenticationException;
 use Glueful\Exceptions\ValidationException;
 use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
+use Glueful\Events\Event;
+use Glueful\Events\Auth\LoginResponseBuildingEvent;
+use Glueful\Events\Auth\LoginResponseBuiltEvent;
 
 /**
  * Authentication Controller
@@ -156,7 +159,24 @@ class AuthController
             }
         }
 
-        return Response::success($result, 'Login successful');
+        // Allow listeners to enrich/shape the login response before returning
+        $data = $result;
+        $tokens = [
+            'access_token' => $result['access_token'] ?? null,
+            'refresh_token' => $result['refresh_token'] ?? null,
+            'expires_in' => $result['expires_in'] ?? null,
+            'token_type' => $result['token_type'] ?? 'Bearer',
+        ];
+        $user = $result['user'] ?? [];
+        try {
+            Event::dispatch(new LoginResponseBuildingEvent($tokens, $user, $data));
+            Event::dispatch(new LoginResponseBuiltEvent($data));
+        } catch (\Throwable $e) {
+            // Do not fail login if event listeners throw
+            error_log('Login response events failed: ' . $e->getMessage());
+        }
+
+        return Response::success($data, 'Login successful');
     }
 
     /**
