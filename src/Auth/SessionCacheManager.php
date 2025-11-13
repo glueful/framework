@@ -8,6 +8,8 @@ use Glueful\Cache\CacheStore;
 use Glueful\Interfaces\Permission\PermissionProviderInterface;
 use Glueful\Interfaces\Permission\RbacPermissionProviderInterface;
 use Glueful\Queue\QueueManager;
+use Glueful\Events\Event;
+use Glueful\Events\Auth\SessionCachedEvent;
 
 /**
  * Session Cache Management System
@@ -187,6 +189,20 @@ class SessionCacheManager
             }
 
             // Skip audit logging here - session creation is already logged in TokenManager
+
+            // Dispatch post-cache event with a mutable payload snapshot. If listeners
+            // modify the payload, persist changes back to cache with the same TTL.
+            try {
+                $event = new SessionCachedEvent($token, $sessionId, $provider ?? 'jwt', $sessionData);
+                Event::dispatch($event);
+                $updated = $event->getPayload();
+                if ($updated !== $sessionData) {
+                    $this->cache->set(self::SESSION_PREFIX . $sessionId, $updated, $sessionTtl);
+                }
+            } catch (\Throwable $e) {
+                // Do not break session creation if event dispatch fails
+                error_log('SessionCachedEvent dispatch failed: ' . $e->getMessage());
+            }
 
             return true;
         }

@@ -21,6 +21,13 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.8.0 — Spica (Released 2025-11-13)
+- Events (Auth): First-class hooks to enrich session cache and login responses
+  - `SessionCachedEvent` dispatched after cache write in `SessionCacheManager::storeSession()`
+  - `LoginResponseBuildingEvent` and `LoginResponseBuiltEvent` around `AuthController::login()` return
+- DX: Documented event usage with setter-based mutation (no by-ref), paths under `src/...`, and listener examples in `docs/SESSION_EVENTS_PROPOSAL.md`
+- Guidance: Encourage app data under `context.*` to avoid field collisions; events are synchronous so heavy work should be queued
+
 ### 1.7.4 — Arcturus (Released 2025-10-28)
 - Authentication: Minimal, configurable account‑status gate enforced in core login and refresh flows via `security.auth.allowed_login_statuses` (default `['active']`). Silent failure to avoid account enumeration; policy is intentionally lean to let apps extend.
 
