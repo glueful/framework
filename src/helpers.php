@@ -906,16 +906,29 @@ if (!function_exists('async_stream')) {
     /**
      * Create an async stream, optionally buffered using configured defaults.
      *
-     * @param resource $stream Underlying PHP stream
+     * @param resource|\Glueful\Async\IO\AsyncStream|\Glueful\Async\IO\BufferedAsyncStream $stream
+     *        Underlying stream or existing async stream wrapper
      * @param bool $buffered Whether to use BufferedAsyncStream (default true)
      * @param int|null $bufferSize Optional override; falls back to config value
-     * @return \Glueful\Async\IO\AsyncStream
+     * @return \Glueful\Async\IO\AsyncStream|\Glueful\Async\IO\BufferedAsyncStream
      */
-    function async_stream($stream, bool $buffered = true, ?int $bufferSize = null): \Glueful\Async\IO\AsyncStream
-    {
-        if (!$buffered) {
-            return new \Glueful\Async\IO\AsyncStream($stream);
+    function async_stream(
+        $stream,
+        bool $buffered = true,
+        ?int $bufferSize = null
+    ): \Glueful\Async\IO\AsyncStream|\Glueful\Async\IO\BufferedAsyncStream {
+        if ($stream instanceof \Glueful\Async\IO\BufferedAsyncStream) {
+            $stream = $stream->getStream();
         }
+
+        if (!$stream instanceof \Glueful\Async\IO\AsyncStream) {
+            $stream = new \Glueful\Async\IO\AsyncStream($stream);
+        }
+
+        if (!$buffered) {
+            return $stream;
+        }
+
         if ($bufferSize === null) {
             try {
                 $bufferSize = (int) \Glueful\Helpers\ConfigManager::get('async.streams.buffer_size', 8192);

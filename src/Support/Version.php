@@ -13,13 +13,13 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.8.0';
+    public const VERSION = '1.8.1';
 
     /** Release code name */
-    public const NAME = 'Spica';
+    public const NAME = 'Vega';
 
     /** Release date */
-    public const RELEASE_DATE = '2025-11-13';
+    public const RELEASE_DATE = '2025-11-23';
 
     /** Minimum required PHP version */
     public const MIN_PHP_VERSION = '8.2.0';

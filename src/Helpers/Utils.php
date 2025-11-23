@@ -387,6 +387,7 @@ class Utils
      * @param bool $requireSpecialChars Require special characters
      * @param bool $requireNumbers Require numbers
      * @param bool $requireUppercase Require uppercase letters
+     * @param bool $requireLowercase Require lowercase letters
      * @return array{valid: bool, errors: array<string>} Validation result with 'valid' boolean and 'errors' array
      */
     public static function validatePassword(
@@ -394,7 +395,8 @@ class Utils
         int $minLength = 8,
         bool $requireSpecialChars = false,
         bool $requireNumbers = false,
-        bool $requireUppercase = false
+        bool $requireUppercase = false,
+        bool $requireLowercase = false
     ): array {
         $errors = [];
 
@@ -408,6 +410,10 @@ class Utils
 
         if ($requireUppercase && !preg_match('/[A-Z]/', $password)) {
             $errors[] = "Password must contain at least one uppercase letter";
+        }
+
+        if ($requireLowercase && !preg_match('/[a-z]/', $password)) {
+            $errors[] = "Password must contain at least one lowercase letter";
         }
 
         if ($requireSpecialChars && !preg_match('/[^a-zA-Z\d]/', $password)) {

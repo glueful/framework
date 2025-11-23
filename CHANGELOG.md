@@ -4,6 +4,16 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.8.1] - 2025-11-23 — Vega
+
+Small patch release tightening password policy options and improving async stream helper ergonomics for buffered I/O callers.
+
+### Added
+- Helpers/Security: `Utils::validatePassword()` gained a `$requireLowercase` flag so applications can explicitly enforce mixed-case passwords alongside numbers, symbols, and uppercase requirements.
+
+### Fixed
+- Async/IO: `async_stream()` now accepts raw resources, `AsyncStream`, or `BufferedAsyncStream` instances and normalizes them before wrapping. This ensures buffered streams always reference a canonical async transport, respects configured buffer sizes, and keeps static analysis annotations accurate.
+
 ## [1.8.0] - 2025-11-13 — Spica
 
 Feature release adding first-class session and login response events, enabling safe enrichment of cached session payloads and login responses without modifying framework code.

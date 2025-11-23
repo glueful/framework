@@ -21,6 +21,10 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.8.1 — Vega (Released 2025-11-23)
+- Security: Extend `Utils::validatePassword()` so policies can require lowercase characters alongside existing uppercase, numeric, and special-character toggles.
+- Async I/O: Harden `async_stream()` helper to accept already-wrapped `AsyncStream`/`BufferedAsyncStream` instances or raw resources, always normalizing to a canonical async transport before applying buffered wrappers and config defaults. This fixes static analysis complaints around BufferedAsyncStream return types.
+
 ### 1.8.0 — Spica (Released 2025-11-13)
 - Events (Auth): First-class hooks to enrich session cache and login responses
   - `SessionCachedEvent` dispatched after cache write in `SessionCacheManager::storeSession()`
