@@ -22,7 +22,7 @@ final class Version
     public const RELEASE_DATE = '2025-11-23';
 
     /** Minimum required PHP version */
-    public const MIN_PHP_VERSION = '8.2.0';
+    public const MIN_PHP_VERSION = '8.3.0';
 
     /**
      * Get complete version information

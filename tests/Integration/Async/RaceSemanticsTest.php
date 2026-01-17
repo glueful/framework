@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace Glueful\Tests\Integration\Async;
+
 use Glueful\Async\FiberScheduler;
 use PHPUnit\Framework\TestCase;
 
@@ -22,4 +24,3 @@ final class RaceSemanticsTest extends TestCase
         $this->assertSame('fast', $winner);
     }
 }
-

@@ -489,7 +489,7 @@ HELP;
     private function validatePhpRequirements(): void
     {
         $phpVersion = PHP_VERSION;
-        $requiredVersion = '8.2.0';
+        $requiredVersion = '8.3.0';
 
         if (version_compare($phpVersion, $requiredVersion, '<')) {
             throw new \Exception("PHP {$requiredVersion} or higher is required. Current version: {$phpVersion}");
@@ -696,7 +696,7 @@ HELP;
         $this->line('');
 
         $this->line('Common issues:');
-        $this->line('• Check PHP version (8.2+ required): php -v');
+        $this->line('• Check PHP version (8.3+ required): php -v');
         $this->line('• Check required extensions: php -m');
         $this->line('• Verify database connection settings in .env');
         $this->line('• Ensure storage/ and database/ directories are writable');

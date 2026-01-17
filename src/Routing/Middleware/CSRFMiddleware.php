@@ -440,7 +440,7 @@ class CSRFMiddleware implements RouteMiddleware
         // Validate double-submit cookie if enabled
         if ($isValid && $useDoubleSubmit) {
             $cookieToken = $request->cookies->get(self::CSRF_COOKIE);
-            if (!$cookieToken || !hash_equals($expectedToken, $cookieToken)) {
+            if ($cookieToken === null || $cookieToken === '' || !hash_equals($expectedToken, $cookieToken)) {
                 $this->logger?->debug('CSRF validation failed: double-submit cookie mismatch');
                 $isValid = false;
             }

@@ -4,7 +4,7 @@ High‑performance PHP API framework components for building secure, scalable ba
 
 ## Requirements
 
-- PHP 8.2+
+- PHP 8.3+
 - Composer 2+
 
 ## Installation

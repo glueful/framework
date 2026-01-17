@@ -207,7 +207,7 @@ class ProcessManager
         }
     }
 
-    public function getWorkerCount(string $queue = null): int
+    public function getWorkerCount(?string $queue = null): int
     {
         if ($queue === null) {
             return count($this->workers);
