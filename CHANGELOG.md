@@ -4,6 +4,28 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.9.0] - 2026-01-17 — Betelgeuse
+
+Minor release raising the minimum PHP version to 8.3 and addressing compatibility with Symfony Console 7.3.
+
+### Breaking Changes
+- **PHP**: Minimum required PHP version is now 8.3 (up from 8.2). Update your environment before upgrading.
+
+### Fixed
+- **Console**: Renamed `Application::addCommand(string)` to `Application::registerCommandClass(string)` to resolve method signature conflict with Symfony Console 7.3's new `addCommand(Command|callable)` method.
+- **Routing**: `RouteManifest::load()` now prevents double-loading routes during framework initialization, eliminating "Route already defined" warnings in CLI commands.
+- **Security**: Fixed PHPStan strict boolean check in `CSRFMiddleware` for cookie token validation.
+- **Tests**: Added missing PSR-4 namespace declarations to async test files (`AsyncStreamHelpersTest`, `SchedulerTimerCancellationTest`, `HttpStreamingClientTest`, `HttpPoolingConfigTest`, `RaceSemanticsTest`).
+
+### Changed
+- **CI**: Test matrix now targets PHP 8.3 and 8.4 (dropped PHP 8.2 support).
+- **Routing**: Added `RouteManifest::reset()` and `RouteManifest::isLoaded()` helper methods for testing scenarios.
+
+### Upgrade Guide
+1. Ensure your environment runs PHP 8.3 or higher.
+2. If you called `$app->addCommand(MyCommand::class)` directly, rename to `$app->registerCommandClass(MyCommand::class)`.
+3. Run `composer update` to refresh dependencies.
+
 ## [1.8.1] - 2025-11-23 — Vega
 
 Small patch release tightening password policy options and improving async stream helper ergonomics for buffered I/O callers.
