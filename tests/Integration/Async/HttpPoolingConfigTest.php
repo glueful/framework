@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace Glueful\Tests\Integration\Async;
+
 use Glueful\Async\FiberScheduler;
 use Glueful\Async\Http\CurlMultiHttpClient;
 use Nyholm\Psr7\Request;

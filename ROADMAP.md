@@ -21,6 +21,13 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.9.0 — Betelgeuse (Released 2026-01-17)
+- **Breaking**: Minimum PHP version raised to 8.3 (from 8.2). CI now tests PHP 8.3 and 8.4.
+- Console: Renamed `Application::addCommand(string)` to `Application::registerCommandClass(string)` to resolve Symfony Console 7.3 compatibility.
+- Routing: `RouteManifest::load()` now prevents double‑loading routes, eliminating duplicate route warnings in CLI commands.
+- Security: Fixed PHPStan strict boolean check in `CSRFMiddleware` for cookie token validation.
+- Tests: Added missing PSR‑4 namespace declarations to async test files.
+
 ### 1.8.1 — Vega (Released 2025-11-23)
 - Security: Extend `Utils::validatePassword()` so policies can require lowercase characters alongside existing uppercase, numeric, and special-character toggles.
 - Async I/O: Harden `async_stream()` helper to accept already-wrapped `AsyncStream`/`BufferedAsyncStream` instances or raw resources, always normalizing to a canonical async transport before applying buffered wrappers and config defaults. This fixes static analysis complaints around BufferedAsyncStream return types.
@@ -145,9 +152,9 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 - Proposals: open a Discussion or RFC issue outlining goals, scope, risks, and acceptance criteria.
 - For potentially breaking changes, follow `BREAKING_CHANGE_PROCESS.md`.
 - CI required checks (for PR merge):
-  - “PHP CI / Lint & Style”
-  - “PHP CI / PHPUnit (PHP 8.2)” (and PHP 8.3 optional)
-  - “PHP CI / PHPStan”
-  - “PHP CI / Security Audit” (optional)
+  - "PHP CI / Lint & Style"
+  - "PHP CI / PHPUnit (PHP 8.3)" (and PHP 8.4 optional)
+  - "PHP CI / PHPStan"
+  - "PHP CI / Security Audit" (optional)
 
 This document is intentionally concise; detailed designs will be tracked per issue/RFC.

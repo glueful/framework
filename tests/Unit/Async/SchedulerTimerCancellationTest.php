@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace Glueful\Tests\Unit\Async;
+
 use Glueful\Async\FiberScheduler;
 use Glueful\Async\SimpleCancellationToken;
 use PHPUnit\Framework\TestCase;

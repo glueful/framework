@@ -135,7 +135,7 @@ class Application extends BaseApplication
             // @phpstan-ignore-next-line Command classes are validated to be proper Command instances
             $command = $this->container->get($commandClass);
             if ($command instanceof Command) {
-                $this->add($command);
+                $this->addCommand($command);
             }
         }
 
@@ -181,9 +181,9 @@ class Application extends BaseApplication
     }
 
     /**
-     * Add Command Class
+     * Register Command Class
      *
-     * Registers a new command:
+     * Registers a new command by class name:
      * - Validates command class
      * - Resolves via DI container
      * - Adds to command registry
@@ -192,7 +192,7 @@ class Application extends BaseApplication
      * @param string $commandClass Command class name
      * @return void
      */
-    public function addCommand(string $commandClass): void
+    public function registerCommandClass(string $commandClass): void
     {
         if (!in_array($commandClass, $this->commands, true)) {
             $this->commands[] = $commandClass;
@@ -201,7 +201,7 @@ class Application extends BaseApplication
             // @phpstan-ignore-next-line Command classes are validated to be proper Command instances
             $command = $this->container->get($commandClass);
             if ($command instanceof Command) {
-                $this->add($command);
+                $this->addCommand($command);
             }
         }
     }

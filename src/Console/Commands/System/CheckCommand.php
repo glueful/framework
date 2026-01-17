@@ -103,7 +103,7 @@ class CheckCommand extends BaseCommand
      */
     private function checkPhpVersion(): array
     {
-        $required = '8.2.0';
+        $required = '8.3.0';
         $current = PHP_VERSION;
         $passed = version_compare($current, $required, '>=');
 

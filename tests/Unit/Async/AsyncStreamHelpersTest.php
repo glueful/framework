@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace Glueful\Tests\Unit\Async;
+
 use Glueful\Async\FiberScheduler;
 use Glueful\Async\IO\AsyncStream;
 use Glueful\Async\Contracts\Timeout;
@@ -43,4 +45,3 @@ final class AsyncStreamHelpersTest extends TestCase
         $this->assertSame('abcd', $data);
     }
 }
-

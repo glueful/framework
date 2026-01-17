@@ -6,6 +6,7 @@ namespace Glueful\Routing;
 
 class RouteManifest
 {
+    private static bool $loaded = false;
     /**
      * @return array{framework_routes: array<string>, core_routes: array<string>, generated_at: int}
      */
@@ -26,7 +27,12 @@ class RouteManifest
 
     public static function load(Router $router): void
     {
-        // Router parameter reserved for future use
+        // Prevent double-loading routes
+        if (self::$loaded) {
+            return;
+        }
+        self::$loaded = true;
+
         $manifest = self::generate();
 
         // Load framework routes first (from framework directory)
@@ -44,5 +50,21 @@ class RouteManifest
                 require base_path($file);
             }
         }
+    }
+
+    /**
+     * Reset the loaded state (for testing purposes)
+     */
+    public static function reset(): void
+    {
+        self::$loaded = false;
+    }
+
+    /**
+     * Check if routes have been loaded
+     */
+    public static function isLoaded(): bool
+    {
+        return self::$loaded;
     }
 }
