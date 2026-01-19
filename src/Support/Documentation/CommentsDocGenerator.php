@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Glueful\Support\Documentation;
 
 use ReflectionClass;
-use ReflectionMethod;
 use Glueful\Extensions\ExtensionManager;
 use Glueful\Services\FileFinder;
+use phpDocumentor\Reflection\DocBlockFactory;
+use phpDocumentor\Reflection\DocBlockFactoryInterface;
+use phpDocumentor\Reflection\DocBlock;
 
 /**
  * Comments Documentation Generator
@@ -19,8 +21,8 @@ use Glueful\Services\FileFinder;
  */
 class CommentsDocGenerator
 {
-    /** @var string Base path to extensions directory */
-    private string $extensionsPath;
+    /** @var string|null Base path for local extensions (fallback for reflection failures) */
+    private ?string $localExtensionsPath;
 
     /** @var string Base path to routes directory */
     private string $routesPath;
@@ -37,27 +39,126 @@ class CommentsDocGenerator
     /** @var ExtensionManager Extensions manager for checking enabled extensions */
     private ExtensionManager $extensionsManager;
 
+    /** @var array<string, array{mtime: int, data: array<string, mixed>}> File parse cache */
+    private array $parseCache = [];
+
+    /** @var DocBlockFactoryInterface Doc block parser factory */
+    private DocBlockFactoryInterface $docBlockFactory;
+
     /**
      * Constructor
      *
-     * @param string|null $extensionsPath Custom path to extensions directory
+     * @param string|null $localExtensionsPath Custom path for local extensions (fallback)
      * @param string|null $outputPath Custom output path for extension documentation
      * @param string|null $routesPath Custom path to routes directory
      * @param string|null $routesOutputPath Custom output path for routes documentation
      * @param ExtensionManager|null $extensionsManager Extensions manager instance
      */
     public function __construct(
-        ?string $extensionsPath = null,
+        ?string $localExtensionsPath = null,
         ?string $outputPath = null,
         ?string $routesPath = null,
         ?string $routesOutputPath = null,
         ?ExtensionManager $extensionsManager = null
     ) {
-        $this->extensionsPath = $extensionsPath ?? config(('app.paths.project_extensions'));
-        $this->outputPath = $outputPath ?? base_path('docs/json-definitions/extensions');
-        $this->routesPath = $routesPath ?? base_path('routes');
-        $this->routesOutputPath = $routesOutputPath ?? base_path('docs/json-definitions/routes');
+        // Local extensions path is optional - only used as fallback when reflection fails
+        $this->localExtensionsPath = $localExtensionsPath ?? config('app.paths.project_extensions');
+        $this->outputPath = $outputPath ?? config('documentation.paths.extension_definitions');
+        $this->routesPath = $routesPath ?? config('documentation.sources.routes');
+        $this->routesOutputPath = $routesOutputPath ?? config('documentation.paths.route_definitions');
         $this->extensionsManager = $extensionsManager ?? container()->get(ExtensionManager::class);
+        $this->docBlockFactory = DocBlockFactory::createInstance();
+    }
+
+    /**
+     * Find matching closing brace/bracket in a string
+     *
+     * Handles nested braces and quoted strings properly.
+     *
+     * @param string $str String to search in
+     * @param int $startPos Position of opening brace (or position to start searching from)
+     * @param string $open Opening character (default '{')
+     * @param string $close Closing character (default '}')
+     * @return int Position of matching closing brace, or -1 if not found
+     */
+    private function findMatchingBrace(string $str, int $startPos, string $open = '{', string $close = '}'): int
+    {
+        $count = 0;
+        $inQuotes = false;
+        $length = strlen($str);
+
+        for ($i = $startPos; $i < $length; $i++) {
+            $char = $str[$i];
+
+            if ($char === '"' && ($i === 0 || $str[$i - 1] !== '\\')) {
+                $inQuotes = !$inQuotes;
+            } elseif (!$inQuotes) {
+                if ($char === $open) {
+                    $count++;
+                } elseif ($char === $close) {
+                    $count--;
+                    if ($count === 0) {
+                        return $i;
+                    }
+                }
+            }
+        }
+
+        return -1;
+    }
+
+    /**
+     * Get cached parse result for a file
+     *
+     * Returns cached data if file hasn't been modified since last parse.
+     *
+     * @param string $file File path
+     * @return array<string, mixed>|null Cached data or null if not cached/stale
+     */
+    private function getCachedParse(string $file): ?array
+    {
+        if (!file_exists($file)) {
+            return null;
+        }
+
+        $mtime = filemtime($file);
+        if ($mtime === false) {
+            return null;
+        }
+
+        $cacheKey = $file;
+        if (isset($this->parseCache[$cacheKey]) && $this->parseCache[$cacheKey]['mtime'] === $mtime) {
+            return $this->parseCache[$cacheKey]['data'];
+        }
+
+        return null;
+    }
+
+    /**
+     * Store parse result in cache
+     *
+     * @param string $file File path
+     * @param array<string, mixed> $data Parsed data to cache
+     */
+    private function setCachedParse(string $file, array $data): void
+    {
+        $mtime = filemtime($file);
+        if ($mtime === false) {
+            return;
+        }
+
+        $this->parseCache[$file] = [
+            'mtime' => $mtime,
+            'data' => $data
+        ];
+    }
+
+    /**
+     * Clear the parse cache
+     */
+    public function clearCache(): void
+    {
+        $this->parseCache = [];
     }
 
     /**
@@ -106,25 +207,36 @@ class CommentsDocGenerator
      */
     private function findExtensionRoutesFile(string $providerClass, string $extensionName): ?string
     {
-        // Try to determine extension path from provider class
         try {
             $reflection = new \ReflectionClass($providerClass);
             $providerFile = $reflection->getFileName();
 
-            if ($providerFile) {
-                $extensionDir = dirname($providerFile);
+            if ($providerFile === false) {
+                return null;
+            }
 
-                // Look for routes in common locations
+            // Find the package root by looking for composer.json
+            $packageRoot = $this->findPackageRoot(dirname($providerFile));
+            if ($packageRoot !== null) {
+                // Common route file locations (in order of preference)
                 $routesPaths = [
-                    $extensionDir . '/../routes/' . $extensionName . '.php',
-                    $extensionDir . '/../routes/routes.php',
-                    $extensionDir . '/../routes/api.php',
-                    $extensionDir . '/routes.php',
+                    // Routes in src directory (e.g., aegis/src/routes.php)
+                    $packageRoot . '/src/routes.php',
+                    // Routes in package root (e.g., payvia/routes.php)
+                    $packageRoot . '/routes.php',
+                    // Named routes file
+                    $packageRoot . '/routes/' . strtolower($extensionName) . '.php',
+                    // Generic routes directory
+                    $packageRoot . '/routes/routes.php',
+                    $packageRoot . '/routes/api.php',
                 ];
 
                 foreach ($routesPaths as $path) {
                     if (file_exists($path)) {
-                        return $path;
+                        $realPath = realpath($path);
+                        if ($realPath !== false) {
+                            return $realPath;
+                        }
                     }
                 }
             }
@@ -132,12 +244,13 @@ class CommentsDocGenerator
             // Provider class not found, skip
         }
 
-        // Fallback: try the extensions directory if available
-        if (isset($this->extensionsPath) && is_dir($this->extensionsPath)) {
+        // Fallback: try local extensions directory if available (for local dev)
+        if ($this->localExtensionsPath !== null && is_dir($this->localExtensionsPath)) {
             $fallbackPaths = [
-                $this->extensionsPath . '/' . $extensionName . '/routes/' . $extensionName . '.php',
-                $this->extensionsPath . '/' . $extensionName . '/routes/routes.php',
-                $this->extensionsPath . '/' . $extensionName . '/src/routes.php',
+                $this->localExtensionsPath . '/' . $extensionName . '/src/routes.php',
+                $this->localExtensionsPath . '/' . $extensionName . '/routes.php',
+                $this->localExtensionsPath . '/' . $extensionName . '/routes/' . $extensionName . '.php',
+                $this->localExtensionsPath . '/' . $extensionName . '/routes/routes.php',
             ];
 
             foreach ($fallbackPaths as $path) {
@@ -145,6 +258,33 @@ class CommentsDocGenerator
                     return $path;
                 }
             }
+        }
+
+        return null;
+    }
+
+    /**
+     * Find the package root directory by looking for composer.json
+     *
+     * @param string $startDir Directory to start searching from
+     * @param int $maxDepth Maximum directory levels to traverse up
+     * @return string|null Package root path or null if not found
+     */
+    private function findPackageRoot(string $startDir, int $maxDepth = 5): ?string
+    {
+        $dir = $startDir;
+
+        for ($i = 0; $i < $maxDepth; $i++) {
+            if (file_exists($dir . '/composer.json')) {
+                return $dir;
+            }
+
+            $parent = dirname($dir);
+            if ($parent === $dir) {
+                // Reached filesystem root
+                break;
+            }
+            $dir = $parent;
         }
 
         return null;
@@ -356,10 +496,19 @@ class CommentsDocGenerator
     /**
      * Parse route file to extract documentation from doc comments
      *
+     * Uses caching to avoid re-parsing unchanged files.
+     *
      * @param string $routeFile Path to routes file
      */
     private function parseRouteDocComments(string $routeFile): void
     {
+        // Check cache first
+        $cached = $this->getCachedParse($routeFile);
+        if ($cached !== null) {
+            $this->routeData = $cached;
+            return;
+        }
+
         $this->routeData = [];
 
         // Get file content
@@ -370,71 +519,175 @@ class CommentsDocGenerator
 
         // Parse doc comment-based documentation
         $this->parseDocCommentBasedDocs($routeFile);
+
+        // Cache the parsed data
+        $this->setCachedParse($routeFile, $this->routeData);
     }
 
     /**
      * Parse doc comment-based documentation
+     *
+     * Uses PHP tokenizer and phpDocumentor library for robust parsing.
      *
      * @param string $routeFile Path to the routes file
      * @return bool True if any doc comment-based documentation was found
      */
     private function parseDocCommentBasedDocs(string $routeFile): bool
     {
-        // Get file content
         $content = file_get_contents($routeFile);
         if (!$content) {
             return false;
         }
 
         $foundDocComments = false;
+        $docComments = $this->extractDocCommentsFromFile($content);
 
-        // Look for doc comments with @route annotation
-        $pattern = '/\/\*\*\s*([^*]|\*[^\/])*@route\s+([A-Z]+)\s+([^\s\*]+)([^*]|\*[^\/])*\*\//';
-        if (preg_match_all($pattern, $content, $commentMatches)) {
-            foreach ($commentMatches[0] as $index => $docComment) {
-                // Extract route information
-                $httpMethod = strtolower($commentMatches[2][$index]);
-                $routePath = $commentMatches[3][$index];
-
-                // Extract basic info
-                $summary = $this->extractDocTag($docComment, '@summary');
-                $description = $this->extractDocTag($docComment, '@description');
-                $tag = $this->extractDocTag($docComment, '@tag');
-                $requiresAuth = strtolower($this->extractDocTag($docComment, '@requiresAuth')) === 'true';
-
-                // Extract responses using simplified syntax
-                $responses = $this->extractSimplifiedResponses($docComment);
-
-                // Extract request body using simplified syntax
-                $requestBody = $this->extractSimplifiedRequestBody($docComment);
-
-                // Extract parameters
-                $pathParams = $this->extractSimplifiedParameters($docComment);
-
-                // If no explicit parameters were defined but path contains parameters,
-                // extract them from the path
-                if ($pathParams === [] && strpos($routePath, '{') !== false) {
-                    $pathParams = $this->extractPathParameters($routePath);
-                }
-
-                // Add to route data
-                $this->routeData[] = [
-                    'method' => strtoupper($httpMethod),
-                    'path' => $routePath,
-                    'summary' => $summary,
-                    'description' => $description,
-                    'tag' => $tag !== '' ? $tag : $this->deriveTagFromPath($routePath),
-                    'requiresAuth' => $requiresAuth,
-                    'responses' => $responses,
-                    'requestBody' => $requestBody,
-                    'pathParams' => $pathParams
-                ];
-
+        foreach ($docComments as $docComment) {
+            $routeInfo = $this->parseRouteDocBlock($docComment);
+            if ($routeInfo !== null) {
+                $this->routeData[] = $routeInfo;
                 $foundDocComments = true;
             }
         }
 
         return $foundDocComments;
+    }
+
+    /**
+     * Extract all doc comments from file content using PHP tokenizer
+     *
+     * @param string $content File content
+     * @return array<string> Array of doc comment strings
+     */
+    private function extractDocCommentsFromFile(string $content): array
+    {
+        $docComments = [];
+        $tokens = token_get_all($content);
+
+        foreach ($tokens as $token) {
+            if (is_array($token) && $token[0] === T_DOC_COMMENT) {
+                $docComments[] = $token[1];
+            }
+        }
+
+        return $docComments;
+    }
+
+    /**
+     * Parse a doc block for route documentation
+     *
+     * @param string $docComment Raw doc comment string
+     * @return array<string, mixed>|null Parsed route data or null if not a route doc
+     */
+    private function parseRouteDocBlock(string $docComment): ?array
+    {
+        try {
+            $docBlock = $this->docBlockFactory->create($docComment);
+        } catch (\Exception $e) {
+            // Fall back to regex if doc block parsing fails
+            return $this->parseRouteDocBlockFallback($docComment);
+        }
+
+        // Check for @route tag
+        $routeTags = $docBlock->getTagsByName('route');
+        if ($routeTags === []) {
+            return null;
+        }
+
+        // Parse route tag: "METHOD /path"
+        $routeTag = (string) $routeTags[0];
+        if (!preg_match('/^([A-Z]+)\s+(.+)$/', trim($routeTag), $routeMatch)) {
+            return null;
+        }
+
+        $httpMethod = $routeMatch[1];
+        $routePath = trim($routeMatch[2]);
+
+        // Extract tags using the library
+        $summary = $this->getDocBlockTagValue($docBlock, 'summary');
+        $description = $this->getDocBlockTagValue($docBlock, 'description');
+        $tag = $this->getDocBlockTagValue($docBlock, 'tag');
+        $requiresAuth = strtolower($this->getDocBlockTagValue($docBlock, 'requiresAuth')) === 'true';
+
+        // For complex tags, fall back to original extraction methods
+        $responses = $this->extractSimplifiedResponses($docComment);
+        $requestBody = $this->extractSimplifiedRequestBody($docComment);
+        $pathParams = $this->extractSimplifiedParameters($docComment);
+
+        // Extract path parameters if not explicitly defined
+        if ($pathParams === [] && strpos($routePath, '{') !== false) {
+            $pathParams = $this->extractPathParameters($routePath);
+        }
+
+        return [
+            'method' => strtoupper($httpMethod),
+            'path' => $routePath,
+            'summary' => $summary !== '' ? $summary : $docBlock->getSummary(),
+            'description' => $description !== '' ? $description : $docBlock->getDescription()->render(),
+            'tag' => $tag !== '' ? $tag : $this->deriveTagFromPath($routePath),
+            'requiresAuth' => $requiresAuth,
+            'responses' => $responses,
+            'requestBody' => $requestBody,
+            'pathParams' => $pathParams
+        ];
+    }
+
+    /**
+     * Get value from a doc block tag
+     *
+     * @param DocBlock $docBlock Parsed doc block
+     * @param string $tagName Tag name (without @)
+     * @return string Tag value or empty string
+     */
+    private function getDocBlockTagValue(DocBlock $docBlock, string $tagName): string
+    {
+        $tags = $docBlock->getTagsByName($tagName);
+        if ($tags === []) {
+            return '';
+        }
+        return trim((string) $tags[0]);
+    }
+
+    /**
+     * Fallback parser for malformed doc blocks
+     *
+     * @param string $docComment Raw doc comment
+     * @return array<string, mixed>|null Parsed route data or null
+     */
+    private function parseRouteDocBlockFallback(string $docComment): ?array
+    {
+        // Check for @route annotation using regex
+        if (!preg_match('/@route\s+([A-Z]+)\s+([^\s\*]+)/', $docComment, $routeMatch)) {
+            return null;
+        }
+
+        $httpMethod = $routeMatch[1];
+        $routePath = $routeMatch[2];
+
+        $summary = $this->extractDocTag($docComment, '@summary');
+        $description = $this->extractDocTag($docComment, '@description');
+        $tag = $this->extractDocTag($docComment, '@tag');
+        $requiresAuth = strtolower($this->extractDocTag($docComment, '@requiresAuth')) === 'true';
+
+        $responses = $this->extractSimplifiedResponses($docComment);
+        $requestBody = $this->extractSimplifiedRequestBody($docComment);
+        $pathParams = $this->extractSimplifiedParameters($docComment);
+
+        if ($pathParams === [] && strpos($routePath, '{') !== false) {
+            $pathParams = $this->extractPathParameters($routePath);
+        }
+
+        return [
+            'method' => strtoupper($httpMethod),
+            'path' => $routePath,
+            'summary' => $summary,
+            'description' => $description,
+            'tag' => $tag !== '' ? $tag : $this->deriveTagFromPath($routePath),
+            'requiresAuth' => $requiresAuth,
+            'responses' => $responses,
+            'requestBody' => $requestBody,
+            'pathParams' => $pathParams
+        ];
     }
 
     /**
@@ -660,37 +913,11 @@ class CommentsDocGenerator
             // Check for array with object definition first (field:array=[{...}])
             if (preg_match('/^(\w+):array=\[/', $part, $arrayMatch)) {
                 $name = $arrayMatch[1];
-                $arrayStartPos = strpos($part, '[') + 1;
+                $bracketStartPos = strpos($part, '[');
+                $arrayEndPos = $this->findMatchingBrace($part, $bracketStartPos, '[', ']');
 
-                // Find the matching closing bracket using proper bracket counting
-                $bracketCount = 0;
-                $braceCount = 0;
-                $inQuotes = false;
-                $arrayEndPos = -1;
-
-                for ($i = $arrayStartPos; $i < strlen($part); $i++) {
-                    $char = $part[$i];
-
-                    if ($char === '"' && ($i === $arrayStartPos || $part[$i - 1] !== '\\')) {
-                        $inQuotes = !$inQuotes;
-                    } elseif (!$inQuotes) {
-                        if ($char === '[') {
-                            $bracketCount++;
-                        } elseif ($char === ']') {
-                            if ($bracketCount === 0) {
-                                $arrayEndPos = $i;
-                                break;
-                            }
-                            $bracketCount--;
-                        } elseif ($char === '{') {
-                            $braceCount++;
-                        } elseif ($char === '}') {
-                            $braceCount--;
-                        }
-                    }
-                }
-
-                if ($arrayEndPos > $arrayStartPos) {
+                if ($arrayEndPos > $bracketStartPos) {
+                    $arrayStartPos = $bracketStartPos + 1;
                     $arrayContent = substr($part, $arrayStartPos, $arrayEndPos - $arrayStartPos);
 
                     // Remove outer braces if present and parse the object content
@@ -708,33 +935,10 @@ class CommentsDocGenerator
                 }
             } elseif (preg_match('/(\w+):\{/', $part)) {
                 // Check for nested object (field:{...})
-                // Need to find the matching closing brace
                 $colonPos = strpos($part, ':');
                 $name = substr($part, 0, $colonPos);
                 $openBracePos = strpos($part, '{', $colonPos);
-
-                // Count braces to find the matching closing brace
-                $braceCount = 0;
-                $inQuotes = false;
-                $closeBracePos = -1;
-
-                for ($i = $openBracePos; $i < strlen($part); $i++) {
-                    $char = $part[$i];
-
-                    if ($char === '"' && ($i === 0 || $part[$i - 1] !== '\\')) {
-                        $inQuotes = !$inQuotes;
-                    } elseif (!$inQuotes) {
-                        if ($char === '{') {
-                            $braceCount++;
-                        } elseif ($char === '}') {
-                            $braceCount--;
-                            if ($braceCount === 0) {
-                                $closeBracePos = $i;
-                                break;
-                            }
-                        }
-                    }
-                }
+                $closeBracePos = $this->findMatchingBrace($part, $openBracePos);
 
                 if ($closeBracePos > $openBracePos) {
                     // Extract just the content between the braces

@@ -32,11 +32,13 @@ class DocGenerator
     {
         $jsonContent = file_get_contents($filename);
         if (!$jsonContent) {
+            error_log("DocGenerator: Could not read table definition file: $filename");
             return;
         }
 
         $definition = json_decode($jsonContent, true);
         if ($definition === null || $definition === false) {
+            error_log("DocGenerator: Invalid JSON in table definition file: $filename");
             return;
         }
 
@@ -59,11 +61,18 @@ class DocGenerator
     {
         $jsonContent = file_get_contents($filename);
         if (!$jsonContent) {
+            error_log("DocGenerator: Could not read custom API definition file: $filename");
             return;
         }
 
         $definition = json_decode($jsonContent, true);
-        if ($definition === null || $definition === false || !isset($definition['doc'])) {
+        if ($definition === null || $definition === false) {
+            error_log("DocGenerator: Invalid JSON in custom API definition file: $filename");
+            return;
+        }
+
+        if (!isset($definition['doc'])) {
+            error_log("DocGenerator: Missing 'doc' key in custom API definition file: $filename");
             return;
         }
 
@@ -82,7 +91,7 @@ class DocGenerator
     public function generateFromExtensions(?string $extensionsPath = null): void
     {
         if ($extensionsPath === null) {
-            $extensionsPath = base_path('docs/json-definitions/extensions');
+            $extensionsPath = config('documentation.paths.extension_definitions');
         }
 
         if (!is_dir($extensionsPath)) {
@@ -106,48 +115,12 @@ class DocGenerator
     /**
      * Merge extension OpenAPI definition into main documentation
      *
-     * Processes an extension's OpenAPI definition file and merges
-     * its components into the main API documentation.
-     *
      * @param string $filePath Path to extension definition file
      * @param string $extName Extension name
      */
     private function mergeExtensionDefinition(string $filePath, string $extName): void
     {
-        $jsonContent = file_get_contents($filePath);
-        if (!$jsonContent) {
-            error_log("Could not read extension definition file: $filePath");
-            return;
-        }
-
-        $definition = json_decode($jsonContent, true);
-        if ($definition === null || $definition === false) {
-            error_log("Invalid JSON in extension definition file: $filePath");
-            return;
-        }
-
-        // Merge paths
-        if (isset($definition['paths']) && is_array($definition['paths'])) {
-            foreach ($definition['paths'] as $path => $methods) {
-                // No longer add extension name to tags for better organization
-                $this->paths[$path] = $methods;
-            }
-        }
-
-        // Merge schemas
-        if (isset($definition['components']['schemas']) && is_array($definition['components']['schemas'])) {
-            foreach ($definition['components']['schemas'] as $name => $schema) {
-                $this->schemas[$extName . $name] = $schema;
-            }
-        }
-
-        // Merge tags
-        if (isset($definition['tags']) && is_array($definition['tags'])) {
-            foreach ($definition['tags'] as $tag) {
-                // No longer add prefixes to tag names
-                $this->extensionTags[] = $tag;
-            }
-        }
+        $this->mergeDefinition($filePath, $extName, 'extension');
     }
 
     /**
@@ -160,7 +133,7 @@ class DocGenerator
     public function generateFromRoutes(?string $routesPath = null): void
     {
         if ($routesPath === null) {
-            $routesPath = base_path('docs/json-definitions/routes');
+            $routesPath = config('documentation.paths.route_definitions');
         }
 
         if (!is_dir($routesPath)) {
@@ -180,30 +153,40 @@ class DocGenerator
     /**
      * Merge route OpenAPI definition into main documentation
      *
-     * Processes a route's OpenAPI definition file and merges
-     * its components into the main API documentation.
-     *
      * @param string $filePath Path to route definition file
      * @param string $routeName Route file name
      */
     private function mergeRouteDefinition(string $filePath, string $routeName): void
     {
+        $this->mergeDefinition($filePath, "Route$routeName", 'route');
+    }
+
+    /**
+     * Merge OpenAPI definition into main documentation
+     *
+     * Shared method for merging extension and route definitions.
+     *
+     * @param string $filePath Path to definition file
+     * @param string $schemaPrefix Prefix for schema names
+     * @param string $type Definition type for error messages ('extension' or 'route')
+     */
+    private function mergeDefinition(string $filePath, string $schemaPrefix, string $type): void
+    {
         $jsonContent = file_get_contents($filePath);
         if (!$jsonContent) {
-            error_log("Could not read route definition file: $filePath");
+            error_log("DocGenerator: Could not read $type definition file: $filePath");
             return;
         }
 
         $definition = json_decode($jsonContent, true);
         if ($definition === null || $definition === false) {
-            error_log("Invalid JSON in route definition file: $filePath");
+            error_log("DocGenerator: Invalid JSON in $type definition file: $filePath");
             return;
         }
 
         // Merge paths
         if (isset($definition['paths']) && is_array($definition['paths'])) {
             foreach ($definition['paths'] as $path => $methods) {
-                // No longer add prefixes to tag names for better organization
                 $this->paths[$path] = $methods;
             }
         }
@@ -211,14 +194,13 @@ class DocGenerator
         // Merge schemas
         if (isset($definition['components']['schemas']) && is_array($definition['components']['schemas'])) {
             foreach ($definition['components']['schemas'] as $name => $schema) {
-                $this->schemas["Route$routeName$name"] = $schema;
+                $this->schemas[$schemaPrefix . $name] = $schema;
             }
         }
 
         // Merge tags
         if (isset($definition['tags']) && is_array($definition['tags'])) {
             foreach ($definition['tags'] as $tag) {
-                // No longer add prefixes to tag names
                 $this->extensionTags[] = $tag;
             }
         }
@@ -234,18 +216,14 @@ class DocGenerator
     public function getSwaggerJson(): string
     {
         $swagger = [
-            'openapi' => '3.0.0',
-            'info' => [
-                'title' => config('app.name'),
-                'version' => config('app.version_full'),
-                'description' => 'Auto-generated API documentation',
-            ],
-            'servers' => [
+            'openapi' => config('documentation.openapi_version', '3.0.0'),
+            'info' => $this->buildInfoSection(),
+            'servers' => config('documentation.servers', [
                 [
-                    'url' => rtrim(config('app.urls.api'), '/'),
-                    'description' => 'API Server ' . config('app.api_version')
+                    'url' => rtrim(config('app.urls.api', ''), '/'),
+                    'description' => 'API Server'
                 ]
-            ],
+            ]),
             'components' => [
                 'securitySchemes' => [
                     'BearerAuth' => [
@@ -262,6 +240,38 @@ class DocGenerator
         ];
 
         return json_encode($swagger, JSON_PRETTY_PRINT);
+    }
+
+    /**
+     * Build the info section of the OpenAPI specification
+     *
+     * @return array<string, mixed> Info section data
+     */
+    private function buildInfoSection(): array
+    {
+        $info = [
+            'title' => config('documentation.info.title', config('app.name', 'API Documentation')),
+            'version' => config('documentation.info.version', config('app.version_full', '1.0.0')),
+            'description' => config('documentation.info.description', 'Auto-generated API documentation'),
+        ];
+
+        // Add contact info if provided
+        $contact = config('documentation.info.contact', []);
+        $contactName = $contact['name'] ?? '';
+        $contactEmail = $contact['email'] ?? '';
+        $contactUrl = $contact['url'] ?? '';
+        if ($contactName !== '' || $contactEmail !== '' || $contactUrl !== '') {
+            $info['contact'] = array_filter($contact, fn($v) => $v !== '');
+        }
+
+        // Add license info if provided
+        $license = config('documentation.info.license', []);
+        $licenseName = $license['name'] ?? '';
+        if ($licenseName !== '') {
+            $info['license'] = array_filter($license, fn($v) => $v !== '');
+        }
+
+        return $info;
     }
 
     /**

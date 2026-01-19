@@ -41,7 +41,7 @@ final class ConsoleProvider extends BaseServiceProvider
             \Glueful\Console\Commands\Database\ProfileCommand::class,
             // Generate commands
             \Glueful\Console\Commands\Generate\ControllerCommand::class,
-            \Glueful\Console\Commands\Generate\ApiDefinitionsCommand::class,
+            \Glueful\Console\Commands\Generate\OpenApiDocsCommand::class,
             \Glueful\Console\Commands\Generate\KeyCommand::class,
             // Extensions commands
             \Glueful\Console\Commands\Extensions\InfoCommand::class,
