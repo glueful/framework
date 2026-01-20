@@ -21,8 +21,17 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.9.2 — Deneb (Released 2026-01-20)
+- Documentation: New `ResourceRouteExpander` class that automatically expands `{resource}` routes to table-specific endpoints with full database schemas.
+- Documentation: OpenAPI 3.1.0 support with JSON Schema draft 2020-12 alignment (nullable type arrays, SPDX license identifiers, jsonSchemaDialect).
+- Documentation: Default OpenAPI version changed to 3.1.0; output file renamed from `swagger.json` to `openapi.json`.
+- Documentation: Scalar UI improvements with `hideClientButton` and `showDeveloperTools` configuration options.
+- Documentation: Tags in sidebar now sorted alphabetically; resource tags renamed to "Table - {name}".
+- Database: Fixed `SchemaBuilder::getTableColumns()` returning empty arrays due to incorrect `array_is_list()` check.
+- Removed: `TableDefinitionGenerator` class - resource routes now expand directly from database schemas.
+
 ### 1.9.1 — Castor (Released 2026-01-19)
-- Documentation: Major refactor of OpenAPI documentation system with new `OpenApiGenerator`, `TableDefinitionGenerator`, and `DocumentationUIGenerator` classes.
+- Documentation: Major refactor of OpenAPI documentation system with new `OpenApiGenerator` and `DocumentationUIGenerator` classes.
 - Documentation: New `--ui` option for `generate:openapi` command supporting Scalar, Swagger UI, and Redoc.
 - Documentation: New `config/documentation.php` centralizing all documentation settings.
 - Documentation: `CommentsDocGenerator` now uses `phpDocumentor/ReflectionDocBlock` for robust PHPDoc parsing.
