@@ -21,6 +21,16 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.9.1 — Castor (Released 2026-01-19)
+- Documentation: Major refactor of OpenAPI documentation system with new `OpenApiGenerator`, `TableDefinitionGenerator`, and `DocumentationUIGenerator` classes.
+- Documentation: New `--ui` option for `generate:openapi` command supporting Scalar, Swagger UI, and Redoc.
+- Documentation: New `config/documentation.php` centralizing all documentation settings.
+- Documentation: `CommentsDocGenerator` now uses `phpDocumentor/ReflectionDocBlock` for robust PHPDoc parsing.
+- Documentation: Extension route discovery now uses `ExtensionManager::getProviders()` for Composer-installed packages.
+- Validation: New `Numeric` and `Regex` validation rules.
+- Dependencies: Updated Symfony packages to ^7.4; added `phpdocumentor/reflection-docblock`.
+- Console: Fixed `Application` to use `add()` instead of undefined `addCommand()` for Symfony Console compatibility.
+
 ### 1.9.0 — Betelgeuse (Released 2026-01-17)
 - **Breaking**: Minimum PHP version raised to 8.3 (from 8.2). CI now tests PHP 8.3 and 8.4.
 - Console: Renamed `Application::addCommand(string)` to `Application::registerCommandClass(string)` to resolve Symfony Console 7.3 compatibility.
