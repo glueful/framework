@@ -4,6 +4,38 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.9.1] - 2026-01-19 — Castor
+
+Patch release with a major refactor of the OpenAPI documentation system, adding interactive UI generation and improved PHPDoc parsing.
+
+### Added
+- **Documentation**: New `DocumentationUIGenerator` class for generating interactive API documentation HTML pages supporting:
+  - Scalar (default) - Modern, beautiful API documentation
+  - Swagger UI - Classic OpenAPI documentation interface
+  - Redoc - Clean, responsive three-panel design
+- **Documentation**: New `--ui` option for `generate:openapi` command to generate documentation UI alongside swagger.json.
+- **Documentation**: New `config/documentation.php` centralizing all documentation settings including paths, API info, servers, security schemes, and UI configuration.
+- **Documentation**: New `OpenApiGenerator` class orchestrating the full documentation pipeline with lazy-loaded dependencies.
+- **Documentation**: New `TableDefinitionGenerator` class for generating JSON definitions from database tables.
+- **Validation**: New `Numeric` rule for validating numeric values with optional range, integer-only, and positive-only constraints.
+- **Validation**: New `Regex` rule for validating values against regular expression patterns.
+
+### Changed
+- **Documentation**: Renamed `ApiDefinitionsCommand` to `OpenApiDocsCommand` with enhanced options and better UX.
+- **Documentation**: `CommentsDocGenerator` now uses `phpDocumentor/ReflectionDocBlock` for robust PHPDoc parsing instead of regex patterns.
+- **Documentation**: `CommentsDocGenerator` now discovers extension routes via `ExtensionManager::getProviders()` for Composer-installed extensions.
+- **Documentation**: `CommentsDocGenerator` now caches parsed route files based on file modification time.
+- **Documentation**: `DocGenerator` extracted shared `mergeDefinition()` method from duplicate extension/route merge logic.
+- **Documentation**: OpenAPI version is now configurable via `config('documentation.openapi_version')`.
+- **Dependencies**: Updated Symfony packages from `^7.3` to `^7.4`.
+- **Dependencies**: Added `phpdocumentor/reflection-docblock: ^6.0` for PHPDoc parsing.
+
+### Removed
+- **Documentation**: Removed `ApiDefinitionGenerator` class (replaced by `TableDefinitionGenerator` and `OpenApiGenerator`).
+
+### Fixed
+- **Console**: Fixed `Application` to use `add()` instead of undefined `addCommand()` method for Symfony Console 7.x compatibility.
+
 ## [1.9.0] - 2026-01-17 — Betelgeuse
 
 Minor release raising the minimum PHP version to 8.3 and addressing compatibility with Symfony Console 7.3.

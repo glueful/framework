@@ -3,17 +3,18 @@
 namespace Glueful\Console\Commands\Generate;
 
 use Glueful\Console\BaseCommand;
-use Glueful\Support\Documentation\ApiDefinitionGenerator;
+use Glueful\Support\Documentation\DocumentationUIGenerator;
+use Glueful\Support\Documentation\OpenApiGenerator;
+use Glueful\Support\Documentation\TableDefinitionGenerator;
 use Glueful\Services\FileFinder;
-use Glueful\Storage\StorageManager;
-use Glueful\Storage\PathGuard;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * Generate API Documentation Command
+ * Generate OpenAPI Documentation Command
+ *
  * Generates comprehensive OpenAPI/Swagger documentation including:
  * - Database-driven CRUD API definitions from schema analysis
  * - Route-based API definitions from OpenAPI annotations
@@ -26,21 +27,21 @@ use Symfony\Component\Console\Output\OutputInterface;
  * - Detailed validation with helpful error messages
  * - Enhanced output formatting with tables
  * - Better error handling and recovery
+ *
  * @package Glueful\Console\Commands\Generate
  */
 #[AsCommand(
-    name: 'generate:api-definitions',
-    description: 'Generate complete OpenAPI/Swagger documentation from database schema and route annotations'
+    name: 'generate:openapi',
+    description: 'Generate OpenAPI/Swagger documentation from database schema and route annotations'
 )]
-class ApiDefinitionsCommand extends BaseCommand
+class OpenApiDocsCommand extends BaseCommand
 {
     private ?FileFinder $fileFinder = null;
-    private ?StorageManager $storage = null;
 
     protected function configure(): void
     {
         $this->setDescription(
-            'Generate complete OpenAPI/Swagger documentation from database schema and route annotations'
+            'Generate OpenAPI/Swagger documentation from database schema and route annotations'
         )
              ->setHelp(
                  'This command generates comprehensive API documentation including:\n' .
@@ -49,7 +50,7 @@ class ApiDefinitionsCommand extends BaseCommand
                  '• Complete swagger.json specification for API documentation\n' .
                  '• Individual JSON definition files for each endpoint\n\n' .
                  'The generated documentation can be used with API documentation tools like ' .
-                 'RapiDoc, Swagger UI, or Redoc.'
+                 'RapiDoc, Swagger UI, Redoc, or Scalar.'
              )
              ->addOption(
                  'database',
@@ -74,6 +75,13 @@ class ApiDefinitionsCommand extends BaseCommand
                  'c',
                  InputOption::VALUE_NONE,
                  'Clean all existing JSON definitions before generating new ones'
+             )
+             ->addOption(
+                 'ui',
+                 'u',
+                 InputOption::VALUE_OPTIONAL,
+                 'Generate interactive documentation UI (scalar, swagger-ui, redoc)',
+                 false
              );
     }
 
@@ -83,6 +91,7 @@ class ApiDefinitionsCommand extends BaseCommand
         $table = $input->getOption('table');
         $force = $input->getOption('force');
         $clean = $input->getOption('clean');
+        $ui = $input->getOption('ui');
 
         // Validate table option requires database
         if (($table !== null && $table !== '') && !($database !== null && $database !== '')) {
@@ -98,32 +107,46 @@ class ApiDefinitionsCommand extends BaseCommand
                 $this->line(''); // Add blank line for visual separation
             }
 
-            $this->info('Initializing API Definition Generator...');
-            $generator = new ApiDefinitionGenerator(true);
+            $this->info('Initializing OpenAPI Documentation Generator...');
+            $tableGenerator = new TableDefinitionGenerator();
+            $generator = new OpenApiGenerator($tableGenerator, null, null, null, true);
 
             // Display generation scope
-            $this->displayGenerationScope($database, $table, $force);
+            $this->displayGenerationScope($database, $table, $force, $ui);
 
             // Confirm if not forced and potentially destructive
             if (!(bool)$force && !$this->confirmGeneration($database, $table)) {
-                $this->info('API documentation generation cancelled.');
+                $this->info('OpenAPI documentation generation cancelled.');
                 return self::SUCCESS;
             }
 
             // Perform generation with progress indication
-            $this->generateDefinitions($generator, $database, $table, $force);
+            $this->generateDocumentation($generator, $tableGenerator, $database, $table, $force);
 
-            $this->success('API documentation generated successfully!');
-            $this->displayGenerationResults($database, $table);
+            // Generate documentation UI if requested
+            if ($ui !== false) {
+                $this->generateDocumentationUI($ui);
+            }
+
+            $this->success('OpenAPI documentation generated successfully!');
+            $this->displayGenerationResults($database, $table, $ui);
 
             return self::SUCCESS;
         } catch (\Exception $e) {
-            $this->error('Failed to generate API documentation: ' . $e->getMessage());
+            $this->error('Failed to generate OpenAPI documentation: ' . $e->getMessage());
             return self::FAILURE;
         }
     }
 
-    private function displayGenerationScope(?string $database, ?string $table, bool $force): void
+    /**
+     * Display the generation scope table
+     *
+     * @param string|null $database
+     * @param string|null $table
+     * @param bool $force
+     * @param string|false|null $ui
+     */
+    private function displayGenerationScope(?string $database, ?string $table, bool $force, $ui): void
     {
         $this->info('Generation Scope:');
 
@@ -139,56 +162,104 @@ class ApiDefinitionsCommand extends BaseCommand
         $scope[] = ['Force Overwrite', $force ? 'Yes' : 'No'];
         $scope[] = ['Clean Before Generate', (bool)$this->input->getOption('clean') ? 'Yes' : 'No'];
 
+        // UI generation info
+        if ($ui !== false) {
+            $uiType = is_string($ui) && $ui !== '' ? $ui : config('documentation.ui.default', 'scalar');
+            $scope[] = ['Generate UI', "Yes ({$uiType})"];
+        } else {
+            $scope[] = ['Generate UI', 'No'];
+        }
+
         $this->table(['Property', 'Value'], $scope);
     }
 
     private function confirmGeneration(?string $database, ?string $table): bool
     {
         if (($database !== null && $database !== '') && ($table !== null && $table !== '')) {
-            return $this->confirm("Generate API definitions for table '{$table}' in database '{$database}'?", true);
+            return $this->confirm("Generate OpenAPI docs for table '{$table}' in database '{$database}'?", true);
         } elseif ($database !== null && $database !== '') {
-            return $this->confirm("Generate API definitions for all tables in database '{$database}'?", true);
+            return $this->confirm("Generate OpenAPI docs for all tables in database '{$database}'?", true);
         } else {
-            return $this->confirm('Generate API definitions for all databases and tables?', false);
+            return $this->confirm('Generate OpenAPI docs for all databases and tables?', false);
         }
     }
 
-    private function generateDefinitions(
-        ApiDefinitionGenerator $generator,
+    private function generateDocumentation(
+        OpenApiGenerator $generator,
+        TableDefinitionGenerator $tableGenerator,
         ?string $database,
         ?string $table,
         bool $force
     ): void {
-        $this->info('Generating API documentation...');
+        $this->info('Generating OpenAPI documentation...');
 
+        // Generate table definitions first
         if (($database !== null && $database !== '') && ($table !== null && $table !== '')) {
             $this->line("Processing table: {$table}");
-            $generator->generate($database, $table, $force);
+            $tableGenerator->generateForTable($table, $database);
         } elseif ($database !== null && $database !== '') {
             $this->line("Processing database: {$database}");
-            $generator->generate($database, null, $force);
+            $tableGenerator->generateAll($database);
         } else {
             $this->line('Processing all databases...');
-            $generator->generate(null, null, $force);
+            $tableGenerator->generateAll();
+        }
+
+        // Generate OpenAPI specification
+        $this->line('Generating OpenAPI specification...');
+        $generator->generateOpenApiSpec($force);
+    }
+
+    /**
+     * Generate the documentation UI HTML file
+     *
+     * @param string|null $ui UI type or null for default
+     */
+    private function generateDocumentationUI($ui): void
+    {
+        $uiType = is_string($ui) && $ui !== '' ? $ui : config('documentation.ui.default', 'scalar');
+
+        $this->line('');
+        $this->info("Generating documentation UI ({$uiType})...");
+
+        try {
+            $uiGenerator = new DocumentationUIGenerator();
+            $outputPath = $uiGenerator->generate($uiType);
+            $this->line("Generated UI: {$outputPath}");
+        } catch (\InvalidArgumentException $e) {
+            $this->error($e->getMessage());
+            $this->tip('Supported UIs: ' . implode(', ', DocumentationUIGenerator::getSupportedUIs()));
         }
     }
 
-    private function displayGenerationResults(?string $database, ?string $table): void
+    /**
+     * Display the generation results
+     *
+     * @param string|null $database
+     * @param string|null $table
+     * @param string|false|null $ui
+     */
+    private function displayGenerationResults(?string $database, ?string $table, $ui = false): void
     {
         $this->line('');
         $this->info('Generation completed successfully!');
 
         if (($database !== null && $database !== '') && ($table !== null && $table !== '')) {
-            $this->line("✓ Generated API documentation for table: {$table}");
+            $this->line("Generated OpenAPI documentation for table: {$table}");
         } elseif ($database !== null && $database !== '') {
-            $this->line("✓ Generated API documentation for database: {$database}");
+            $this->line("Generated OpenAPI documentation for database: {$database}");
         } else {
-            $this->line('✓ Generated API documentation for all databases');
+            $this->line('Generated OpenAPI documentation for all databases');
         }
 
-        $this->line('✓ Processed route-based API annotations');
-        $this->line('✓ Created individual endpoint definitions');
-        $this->line('✓ Generated swagger.json specification');
+        $this->line('Processed route-based API annotations');
+        $this->line('Created individual endpoint definitions');
+        $this->line('Generated swagger.json specification');
+
+        if ($ui !== false) {
+            $uiType = is_string($ui) && $ui !== '' ? $ui : config('documentation.ui.default', 'scalar');
+            $this->line("Generated {$uiType} documentation UI");
+        }
 
         $this->line('');
         $this->info('Next steps:');
@@ -197,7 +268,7 @@ class ApiDefinitionsCommand extends BaseCommand
 
         $docsUrl = config('app.urls.docs');
 
-        $this->line("3. Visit the API documentation with api explorer at {$docsUrl}");
+        $this->line("3. Visit the API documentation at {$docsUrl}");
         $this->line('4. Test your API endpoints');
     }
 
@@ -215,28 +286,6 @@ class ApiDefinitionsCommand extends BaseCommand
     }
 
     /**
-     * Get StorageManager service instance
-     *
-     * @return StorageManager
-     */
-    private function getStorage(): StorageManager
-    {
-        if ($this->storage === null) {
-            $config = [
-                'default' => 'local',
-                'disks' => [
-                    'local' => [
-                        'driver' => 'local',
-                        'root' => base_path()
-                    ]
-                ]
-            ];
-            $this->storage = new StorageManager($config, new PathGuard());
-        }
-        return $this->storage;
-    }
-
-    /**
      * Clean all JSON definition directories
      *
      * Removes all JSON files from both api-json-definitions and json-definitions
@@ -246,15 +295,11 @@ class ApiDefinitionsCommand extends BaseCommand
      */
     private function cleanDefinitionDirectories(): void
     {
-        $storage = $this->getStorage();
         $fileFinder = $this->getFileFinder();
 
-        // Temporarily disable file extension restrictions for directory removal
-        // N/A for StorageManager (no extension restrictions)
-
         try {
-            $jsonDefinitionsPath = config('app.paths.database_json_definitions');
-            $apiDocDefinitionsPath = config('app.paths.api_docs') . 'json-definitions';
+            $jsonDefinitionsPath = config('documentation.paths.database_definitions');
+            $apiDocDefinitionsPath = config('documentation.paths.output') . '/json-definitions';
 
             // Clean api-json-definitions directory (just .json files)
             if (is_dir($jsonDefinitionsPath)) {
