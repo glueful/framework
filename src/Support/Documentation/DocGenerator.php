@@ -9,6 +9,7 @@ namespace Glueful\Support\Documentation;
  *
  * Generates OpenAPI/Swagger documentation from JSON definition files.
  * Handles both table definitions and custom API endpoint documentation.
+ * Supports both OpenAPI 3.0.x and 3.1.0 specifications.
  */
 class DocGenerator
 {
@@ -20,6 +21,71 @@ class DocGenerator
 
     /** @var array<string, mixed> Extension tags storage */
     private array $extensionTags = [];
+
+    /** @var ResourceRouteExpander|null Resource route expander for {resource} expansion */
+    private ?ResourceRouteExpander $resourceExpander = null;
+
+    /** @var string OpenAPI version to use */
+    private string $openApiVersion;
+
+    /**
+     * Constructor
+     *
+     * @param string|null $openApiVersion OpenAPI version to use (defaults to config value)
+     */
+    public function __construct(?string $openApiVersion = null)
+    {
+        $this->openApiVersion = $openApiVersion ?? config('documentation.openapi_version', '3.1.0');
+    }
+
+    /**
+     * Check if using OpenAPI 3.1.x
+     *
+     * @return bool True if using 3.1.x
+     */
+    private function isOpenApi31(): bool
+    {
+        return version_compare($this->openApiVersion, '3.1.0', '>=');
+    }
+
+    /**
+     * Create a nullable type definition based on OpenAPI version
+     *
+     * In OpenAPI 3.0.x: { "type": "string", "nullable": true }
+     * In OpenAPI 3.1.0: { "type": ["string", "null"] }
+     *
+     * @param string $type The base type
+     * @param bool $nullable Whether the type is nullable
+     * @return array<string, mixed> Type definition
+     */
+    private function createTypeDefinition(string $type, bool $nullable = false): array
+    {
+        if ($nullable && $this->isOpenApi31()) {
+            return ['type' => [$type, 'null']];
+        }
+
+        $definition = ['type' => $type];
+        if ($nullable) {
+            $definition['nullable'] = true;
+        }
+
+        return $definition;
+    }
+
+    /**
+     * Create a nullable type definition with format based on OpenAPI version
+     *
+     * @param string $type The base type
+     * @param string $format The format
+     * @param bool $nullable Whether the type is nullable
+     * @return array<string, mixed> Type definition
+     */
+    private function createTypeWithFormat(string $type, string $format, bool $nullable = false): array
+    {
+        $definition = $this->createTypeDefinition($type, $nullable);
+        $definition['format'] = $format;
+        return $definition;
+    }
 
     /**
      * Generate documentation from table definition
@@ -162,6 +228,328 @@ class DocGenerator
     }
 
     /**
+     * Generate expanded resource routes documentation
+     *
+     * Takes routes with {resource} placeholder and expands them to
+     * table-specific endpoints with full schema documentation.
+     *
+     * @param ResourceRouteExpander $expander Resource route expander instance
+     */
+    public function generateResourceRoutes(ResourceRouteExpander $expander): void
+    {
+        $this->resourceExpander = $expander;
+        $tables = $expander->getTableSchemas();
+
+        foreach ($tables as $tableName => $schema) {
+            $this->addResourceEndpoints($tableName, $schema);
+            $this->addResourceSchema($tableName, $schema);
+        }
+    }
+
+    /**
+     * Add resource CRUD endpoints for a table
+     *
+     * @param string $tableName Table name
+     * @param array<string, mixed> $schema Table schema
+     */
+    private function addResourceEndpoints(string $tableName, array $schema): void
+    {
+        $basePath = "/{$tableName}";
+        $isReadOnly = ($schema['x-access-mode'] ?? 'read-write') === 'read-only';
+        $tag = "Table - {$tableName}";
+
+        // GET /{table} - List resources
+        $this->paths[$basePath]['get'] = [
+            'tags' => [$tag],
+            'summary' => "List {$tableName}",
+            'description' => "Retrieves a paginated list of {$tableName} records",
+            'operationId' => "list" . ucfirst($tableName),
+            'security' => [['BearerAuth' => []]],
+            'parameters' => [
+                [
+                    'name' => 'page',
+                    'in' => 'query',
+                    'description' => 'Page number for pagination',
+                    'schema' => ['type' => 'integer', 'default' => 1]
+                ],
+                [
+                    'name' => 'limit',
+                    'in' => 'query',
+                    'description' => 'Number of items per page (max 100)',
+                    'schema' => ['type' => 'integer', 'default' => 20, 'maximum' => 100]
+                ],
+                [
+                    'name' => 'sort',
+                    'in' => 'query',
+                    'description' => 'Field to sort by',
+                    'schema' => ['type' => 'string']
+                ],
+                [
+                    'name' => 'order',
+                    'in' => 'query',
+                    'description' => 'Sort order',
+                    'schema' => ['type' => 'string', 'enum' => ['asc', 'desc'], 'default' => 'asc']
+                ],
+                [
+                    'name' => 'fields',
+                    'in' => 'query',
+                    'description' => 'Comma-separated list of fields to return',
+                    'schema' => ['type' => 'string']
+                ],
+                [
+                    'name' => 'expand',
+                    'in' => 'query',
+                    'description' => 'Related resources to expand',
+                    'schema' => ['type' => 'string']
+                ]
+            ],
+            'responses' => [
+                '200' => [
+                    'description' => "{$tableName} retrieved successfully",
+                    'content' => [
+                        'application/json' => [
+                            'schema' => [
+                                'type' => 'object',
+                                'properties' => [
+                                    'success' => ['type' => 'boolean', 'example' => true],
+                                    'message' => ['type' => 'string'],
+                                    'data' => [
+                                        'type' => 'array',
+                                        'items' => ['$ref' => "#/components/schemas/{$tableName}"]
+                                    ],
+                                    'pagination' => ['$ref' => '#/components/schemas/PaginationMeta']
+                                ]
+                            ]
+                        ]
+                    ]
+                ],
+                '403' => ['description' => 'Insufficient permissions'],
+                '404' => ['description' => 'Resource not found']
+            ]
+        ];
+
+        // GET /{table}/{uuid} - Get single resource
+        $this->paths[$basePath . '/{uuid}']['get'] = [
+            'tags' => [$tag],
+            'summary' => "Get {$tableName} by UUID",
+            'description' => "Retrieves a single {$tableName} record by its UUID",
+            'operationId' => "get" . ucfirst($tableName),
+            'security' => [['BearerAuth' => []]],
+            'parameters' => [
+                [
+                    'name' => 'uuid',
+                    'in' => 'path',
+                    'required' => true,
+                    'description' => 'Resource UUID',
+                    'schema' => ['type' => 'string', 'format' => 'uuid']
+                ],
+                [
+                    'name' => 'fields',
+                    'in' => 'query',
+                    'description' => 'Comma-separated list of fields to return',
+                    'schema' => ['type' => 'string']
+                ],
+                [
+                    'name' => 'expand',
+                    'in' => 'query',
+                    'description' => 'Related resources to expand',
+                    'schema' => ['type' => 'string']
+                ]
+            ],
+            'responses' => [
+                '200' => [
+                    'description' => "{$tableName} retrieved successfully",
+                    'content' => [
+                        'application/json' => [
+                            'schema' => [
+                                'type' => 'object',
+                                'properties' => [
+                                    'success' => ['type' => 'boolean', 'example' => true],
+                                    'message' => ['type' => 'string'],
+                                    'data' => ['$ref' => "#/components/schemas/{$tableName}"]
+                                ]
+                            ]
+                        ]
+                    ]
+                ],
+                '403' => ['description' => 'Insufficient permissions'],
+                '404' => ['description' => 'Resource not found']
+            ]
+        ];
+
+        // Skip write operations for read-only tables (views)
+        if ($isReadOnly) {
+            return;
+        }
+
+        // POST /{table} - Create resource
+        $this->paths[$basePath]['post'] = [
+            'tags' => [$tag],
+            'summary' => "Create {$tableName}",
+            'description' => "Creates a new {$tableName} record",
+            'operationId' => "create" . ucfirst($tableName),
+            'security' => [['BearerAuth' => []]],
+            'requestBody' => [
+                'required' => true,
+                'content' => [
+                    'application/json' => [
+                        'schema' => ['$ref' => "#/components/schemas/{$tableName}Input"]
+                    ]
+                ]
+            ],
+            'responses' => [
+                '201' => [
+                    'description' => "{$tableName} created successfully",
+                    'content' => [
+                        'application/json' => [
+                            'schema' => [
+                                'type' => 'object',
+                                'properties' => [
+                                    'success' => ['type' => 'boolean', 'example' => true],
+                                    'message' => ['type' => 'string'],
+                                    'data' => ['$ref' => "#/components/schemas/{$tableName}"]
+                                ]
+                            ]
+                        ]
+                    ]
+                ],
+                '400' => ['description' => 'Invalid input data'],
+                '403' => ['description' => 'Insufficient permissions']
+            ]
+        ];
+
+        // PUT /{table}/{uuid} - Update resource
+        $this->paths[$basePath . '/{uuid}']['put'] = [
+            'tags' => [$tag],
+            'summary' => "Update {$tableName}",
+            'description' => "Updates an existing {$tableName} record",
+            'operationId' => "update" . ucfirst($tableName),
+            'security' => [['BearerAuth' => []]],
+            'parameters' => [
+                [
+                    'name' => 'uuid',
+                    'in' => 'path',
+                    'required' => true,
+                    'description' => 'Resource UUID to update',
+                    'schema' => ['type' => 'string', 'format' => 'uuid']
+                ]
+            ],
+            'requestBody' => [
+                'required' => true,
+                'content' => [
+                    'application/json' => [
+                        'schema' => ['$ref' => "#/components/schemas/{$tableName}Input"]
+                    ]
+                ]
+            ],
+            'responses' => [
+                '200' => [
+                    'description' => "{$tableName} updated successfully",
+                    'content' => [
+                        'application/json' => [
+                            'schema' => [
+                                'type' => 'object',
+                                'properties' => [
+                                    'success' => ['type' => 'boolean', 'example' => true],
+                                    'message' => ['type' => 'string'],
+                                    'data' => ['$ref' => "#/components/schemas/{$tableName}"]
+                                ]
+                            ]
+                        ]
+                    ]
+                ],
+                '400' => ['description' => 'Invalid input data'],
+                '403' => ['description' => 'Insufficient permissions'],
+                '404' => ['description' => 'Resource not found']
+            ]
+        ];
+
+        // DELETE /{table}/{uuid} - Delete resource
+        $this->paths[$basePath . '/{uuid}']['delete'] = [
+            'tags' => [$tag],
+            'summary' => "Delete {$tableName}",
+            'description' => "Deletes a {$tableName} record",
+            'operationId' => "delete" . ucfirst($tableName),
+            'security' => [['BearerAuth' => []]],
+            'parameters' => [
+                [
+                    'name' => 'uuid',
+                    'in' => 'path',
+                    'required' => true,
+                    'description' => 'Resource UUID to delete',
+                    'schema' => ['type' => 'string', 'format' => 'uuid']
+                ]
+            ],
+            'responses' => [
+                '200' => [
+                    'description' => "{$tableName} deleted successfully",
+                    'content' => [
+                        'application/json' => [
+                            'schema' => [
+                                'type' => 'object',
+                                'properties' => [
+                                    'success' => ['type' => 'boolean', 'example' => true],
+                                    'message' => ['type' => 'string']
+                                ]
+                            ]
+                        ]
+                    ]
+                ],
+                '403' => ['description' => 'Insufficient permissions'],
+                '404' => ['description' => 'Resource not found']
+            ]
+        ];
+    }
+
+    /**
+     * Add resource schema from table definition
+     *
+     * Creates both read (full) and input (writable) schemas.
+     *
+     * @param string $tableName Table name
+     * @param array<string, mixed> $schema Table schema from expander
+     */
+    private function addResourceSchema(string $tableName, array $schema): void
+    {
+        // Full schema for read operations
+        $this->schemas[$tableName] = [
+            'type' => 'object',
+            'description' => "Schema for {$tableName}",
+            'properties' => $schema['properties'] ?? [],
+        ];
+
+        if (isset($schema['required']) && count($schema['required']) > 0) {
+            $this->schemas[$tableName]['required'] = $schema['required'];
+        }
+
+        // Input schema for create/update (excludes auto-generated fields)
+        $inputProperties = [];
+        $inputRequired = [];
+        $autoFields = ['id', 'uuid', 'created_at', 'updated_at', 'deleted_at'];
+
+        foreach ($schema['properties'] ?? [] as $fieldName => $fieldSchema) {
+            if (!in_array($fieldName, $autoFields, true)) {
+                $inputProperties[$fieldName] = $fieldSchema;
+
+                // Add to required if it was required in original schema
+                if (in_array($fieldName, $schema['required'] ?? [], true)) {
+                    $inputRequired[] = $fieldName;
+                }
+            }
+        }
+
+        $this->schemas[$tableName . 'Input'] = [
+            'type' => 'object',
+            'description' => "Input schema for creating/updating {$tableName}",
+            'properties' => $inputProperties,
+        ];
+
+        if (count($inputRequired) > 0) {
+            $this->schemas[$tableName . 'Input']['required'] = $inputRequired;
+        }
+    }
+
+    /**
      * Merge OpenAPI definition into main documentation
      *
      * Shared method for merging extension and route definitions.
@@ -216,7 +604,7 @@ class DocGenerator
     public function getSwaggerJson(): string
     {
         $swagger = [
-            'openapi' => config('documentation.openapi_version', '3.0.0'),
+            'openapi' => $this->openApiVersion,
             'info' => $this->buildInfoSection(),
             'servers' => config('documentation.servers', [
                 [
@@ -233,13 +621,79 @@ class DocGenerator
                         'description' => 'JWT Authorization header using the Bearer scheme'
                     ]
                 ],
-                'schemas' => array_merge($this->getDefaultSchemas(), $this->schemas)
+                'schemas' => $this->transformSchemas(
+                    array_merge($this->getDefaultSchemas(), $this->schemas)
+                )
             ],
             'paths' => $this->paths,
             'tags' => $this->generateTags()
         ];
 
+        // Add JSON Schema dialect for OpenAPI 3.1
+        if ($this->isOpenApi31()) {
+            $swagger['jsonSchemaDialect'] = 'https://json-schema.org/draft/2020-12/schema';
+        }
+
         return json_encode($swagger, JSON_PRETTY_PRINT);
+    }
+
+    /**
+     * Transform schemas based on OpenAPI version
+     *
+     * Converts nullable syntax between 3.0.x and 3.1.0 formats.
+     *
+     * @param array<string, mixed> $schemas Schemas to transform
+     * @return array<string, mixed> Transformed schemas
+     */
+    private function transformSchemas(array $schemas): array
+    {
+        if (!$this->isOpenApi31()) {
+            return $schemas;
+        }
+
+        return array_map([$this, 'transformSchema'], $schemas);
+    }
+
+    /**
+     * Transform a single schema for OpenAPI 3.1 compatibility
+     *
+     * @param array<string, mixed> $schema Schema to transform
+     * @return array<string, mixed> Transformed schema
+     */
+    private function transformSchema(array $schema): array
+    {
+        // Handle nullable property - convert to type array for 3.1
+        if (isset($schema['nullable']) && $schema['nullable'] === true && isset($schema['type'])) {
+            $type = $schema['type'];
+            if (is_string($type)) {
+                $schema['type'] = [$type, 'null'];
+            }
+            unset($schema['nullable']);
+        }
+
+        // Recursively transform nested properties
+        if (isset($schema['properties']) && is_array($schema['properties'])) {
+            $schema['properties'] = array_map([$this, 'transformSchema'], $schema['properties']);
+        }
+
+        // Transform items for array types
+        if (isset($schema['items']) && is_array($schema['items'])) {
+            $schema['items'] = $this->transformSchema($schema['items']);
+        }
+
+        // Transform allOf, anyOf, oneOf
+        foreach (['allOf', 'anyOf', 'oneOf'] as $keyword) {
+            if (isset($schema[$keyword]) && is_array($schema[$keyword])) {
+                $schema[$keyword] = array_map([$this, 'transformSchema'], $schema[$keyword]);
+            }
+        }
+
+        // Transform additionalProperties if it's a schema
+        if (isset($schema['additionalProperties']) && is_array($schema['additionalProperties'])) {
+            $schema['additionalProperties'] = $this->transformSchema($schema['additionalProperties']);
+        }
+
+        return $schema;
     }
 
     /**
@@ -268,7 +722,17 @@ class DocGenerator
         $license = config('documentation.info.license', []);
         $licenseName = $license['name'] ?? '';
         if ($licenseName !== '') {
-            $info['license'] = array_filter($license, fn($v) => $v !== '');
+            $licenseInfo = array_filter($license, fn($v) => $v !== '');
+
+            // OpenAPI 3.1 supports SPDX identifier for licenses
+            if ($this->isOpenApi31()) {
+                $identifier = $license['identifier'] ?? '';
+                if ($identifier !== '') {
+                    $licenseInfo['identifier'] = $identifier;
+                }
+            }
+
+            $info['license'] = $licenseInfo;
         }
 
         return $info;
@@ -1297,12 +1761,10 @@ class DocGenerator
                         'type' => 'object',
                         'description' => 'Notification payload'
                     ],
-                    'read_at' => [
-                        'type' => 'string',
-                        'format' => 'date-time',
-                        'nullable' => true,
-                        'description' => 'When notification was read'
-                    ],
+                    'read_at' => array_merge(
+                        $this->createTypeWithFormat('string', 'date-time', true),
+                        ['description' => 'When notification was read']
+                    ),
                     'created_at' => [
                         'type' => 'string',
                         'format' => 'date-time',
@@ -1400,6 +1862,11 @@ class DocGenerator
         }
 
         // Merge extension tags with auto-generated tags
-        return array_values(array_merge($tags, $this->extensionTags));
+        $allTags = array_merge($tags, $this->extensionTags);
+
+        // Sort tags alphabetically by name
+        usort($allTags, fn($a, $b) => strcasecmp($a['name'], $b['name']));
+
+        return $allTags;
     }
 }

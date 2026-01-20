@@ -4,6 +4,32 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.9.2] - 2026-01-20 — Deneb
+
+Patch release with OpenAPI 3.1 support, automatic resource route expansion from database schemas, and documentation UI improvements.
+
+### Added
+- **Documentation**: New `ResourceRouteExpander` class that automatically expands `{resource}` routes to table-specific endpoints with full database schemas.
+- **Documentation**: OpenAPI 3.1.0 support with proper JSON Schema draft 2020-12 alignment:
+  - Nullable types use array syntax (`type: ["string", "null"]`)
+  - License supports SPDX `identifier` field
+  - `jsonSchemaDialect` declaration included
+- **Documentation**: Scalar UI configuration options: `hide_client_button`, `show_developer_tools`.
+- **Documentation**: Tags in documentation sidebar are now sorted alphabetically.
+
+### Changed
+- **Documentation**: Default OpenAPI version changed from 3.0.0 to 3.1.0.
+- **Documentation**: Renamed output file from `swagger.json` to `openapi.json` (modern naming convention).
+- **Documentation**: Resource route tags renamed from "Resources - {table}" to "Table - {table}" for clarity.
+- **Documentation**: Config key `paths.swagger` renamed to `paths.openapi`.
+
+### Removed
+- **Documentation**: Removed `TableDefinitionGenerator` class - resource routes now expand directly from database schemas without intermediate JSON files.
+- **Documentation**: Removed `--database` and `--table` options from `generate:openapi` command (no longer needed).
+
+### Fixed
+- **Database**: Fixed `SchemaBuilder::getTableColumns()` returning empty arrays due to incorrect `array_is_list()` check on associative column data.
+
 ## [1.9.1] - 2026-01-19 — Castor
 
 Patch release with a major refactor of the OpenAPI documentation system, adding interactive UI generation and improved PHPDoc parsing.
@@ -13,10 +39,9 @@ Patch release with a major refactor of the OpenAPI documentation system, adding 
   - Scalar (default) - Modern, beautiful API documentation
   - Swagger UI - Classic OpenAPI documentation interface
   - Redoc - Clean, responsive three-panel design
-- **Documentation**: New `--ui` option for `generate:openapi` command to generate documentation UI alongside swagger.json.
+- **Documentation**: New `--ui` option for `generate:openapi` command to generate documentation UI alongside openapi.json.
 - **Documentation**: New `config/documentation.php` centralizing all documentation settings including paths, API info, servers, security schemes, and UI configuration.
 - **Documentation**: New `OpenApiGenerator` class orchestrating the full documentation pipeline with lazy-loaded dependencies.
-- **Documentation**: New `TableDefinitionGenerator` class for generating JSON definitions from database tables.
 - **Validation**: New `Numeric` rule for validating numeric values with optional range, integer-only, and positive-only constraints.
 - **Validation**: New `Regex` rule for validating values against regular expression patterns.
 
@@ -31,7 +56,7 @@ Patch release with a major refactor of the OpenAPI documentation system, adding 
 - **Dependencies**: Added `phpdocumentor/reflection-docblock: ^6.0` for PHPDoc parsing.
 
 ### Removed
-- **Documentation**: Removed `ApiDefinitionGenerator` class (replaced by `TableDefinitionGenerator` and `OpenApiGenerator`).
+- **Documentation**: Removed `ApiDefinitionGenerator` class (replaced by `OpenApiGenerator`).
 
 ### Fixed
 - **Console**: Fixed `Application` to use `add()` instead of undefined `addCommand()` method for Symfony Console 7.x compatibility.

@@ -11,15 +11,15 @@ use Glueful\Services\FileFinder;
  * OpenAPI Generator
  *
  * Orchestrates the full API documentation generation pipeline.
- * Coordinates TableDefinitionGenerator, DocGenerator, and CommentsDocGenerator
+ * Coordinates ResourceRouteExpander, DocGenerator, and CommentsDocGenerator
  * to produce a complete OpenAPI/Swagger specification.
  */
 class OpenApiGenerator
 {
-    private TableDefinitionGenerator $tableGenerator;
     private DocGenerator $docGenerator;
     private CommentsDocGenerator $commentsGenerator;
     private FileFinder $fileFinder;
+    private ResourceRouteExpander $resourceExpander;
 
     private bool $runFromConsole;
 
@@ -29,60 +29,54 @@ class OpenApiGenerator
     /**
      * Constructor
      *
-     * @param TableDefinitionGenerator|null $tableGenerator Table definition generator
      * @param DocGenerator|null $docGenerator OpenAPI assembler
      * @param CommentsDocGenerator|null $commentsGenerator Route documentation generator
      * @param FileFinder|null $fileFinder File finder service
      * @param bool $runFromConsole Force console mode
+     * @param ResourceRouteExpander|null $resourceExpander Resource route expander
      */
     public function __construct(
-        ?TableDefinitionGenerator $tableGenerator = null,
         ?DocGenerator $docGenerator = null,
         ?CommentsDocGenerator $commentsGenerator = null,
         ?FileFinder $fileFinder = null,
-        bool $runFromConsole = false
+        bool $runFromConsole = false,
+        ?ResourceRouteExpander $resourceExpander = null
     ) {
-        $this->tableGenerator = $tableGenerator ?? new TableDefinitionGenerator();
         $this->docGenerator = $docGenerator ?? new DocGenerator();
         $this->commentsGenerator = $commentsGenerator ?? new CommentsDocGenerator();
         $this->fileFinder = $fileFinder ?? container()->get(FileFinder::class);
         $this->runFromConsole = $runFromConsole || $this->isConsole();
+        $this->resourceExpander = $resourceExpander ?? new ResourceRouteExpander();
     }
 
     /**
      * Generate complete API documentation
      *
      * Runs the full pipeline:
-     * 1. Generate table definitions
+     * 1. Expand resource routes with table schemas
      * 2. Process custom API docs
-     * 3. Process table definitions
-     * 4. Generate extension documentation
-     * 5. Generate route documentation
-     * 6. Assemble and write swagger.json
+     * 3. Generate extension documentation
+     * 4. Generate route documentation (non-resource routes)
+     * 5. Assemble and write openapi.json
      *
      * @param bool $force Force regeneration of all files
-     * @param string|null $database Specific database to process
-     * @return string Path to generated swagger.json
+     * @return string Path to generated openapi.json
      */
-    public function generate(bool $force = false, ?string $database = null): string
+    public function generate(bool $force = false): string
     {
         $this->log("Starting API documentation generation...");
 
-        // Step 1: Generate table definitions
-        $this->log("Generating table definitions...");
-        $tableFiles = $this->tableGenerator->generateAll($database);
-        $this->log("Generated " . count($tableFiles) . " table definition(s)");
+        // Step 1: Expand {resource} routes to table-specific endpoints
+        $this->log("Expanding resource routes with table schemas...");
+        $this->expandResourceRoutes();
 
         // Step 2: Process custom API doc definitions
         $this->processCustomApiDocs();
 
-        // Step 3: Process table definitions into OpenAPI spec
-        $this->processTableDefinitions();
-
-        // Step 4 & 5: Generate and process extension/route documentation
+        // Step 3 & 4: Generate and process extension/route documentation
         $this->processExtensionAndRouteDocs($force);
 
-        // Step 6: Write final swagger.json
+        // Step 5: Write final openapi.json
         $outputPath = $this->writeSwaggerJson();
 
         $this->log("API documentation generated successfully at: $outputPath");
@@ -91,19 +85,34 @@ class OpenApiGenerator
     }
 
     /**
-     * Generate only the OpenAPI spec (without regenerating table definitions)
+     * Expand resource routes with table schemas
      *
-     * Useful when table definitions are already up-to-date.
+     * Expands {resource} routes directly to table-specific endpoints with full schemas.
+     */
+    private function expandResourceRoutes(): void
+    {
+        $tables = $this->resourceExpander->getTableNames();
+        $this->log("Found " . count($tables) . " table(s) for resource expansion");
+
+        $this->docGenerator->generateResourceRoutes($this->resourceExpander);
+
+        foreach ($tables as $table) {
+            $this->log("  - {$table}");
+        }
+    }
+
+    /**
+     * Generate only the OpenAPI spec
      *
      * @param bool $force Force regeneration of extension/route docs
-     * @return string Path to generated swagger.json
+     * @return string Path to generated openapi.json
      */
     public function generateOpenApiSpec(bool $force = false): string
     {
         $this->log("Generating OpenAPI specification...");
 
+        $this->expandResourceRoutes();
         $this->processCustomApiDocs();
-        $this->processTableDefinitions();
         $this->processExtensionAndRouteDocs($force);
 
         return $this->writeSwaggerJson();
@@ -141,31 +150,6 @@ class OpenApiGenerator
                 $this->log("Processed custom API doc: " . $file->getFilename());
             } catch (\Exception $e) {
                 $this->log("Error processing doc definition {$file->getPathname()}: " . $e->getMessage());
-            }
-        }
-    }
-
-    /**
-     * Process table definition files into OpenAPI spec
-     */
-    private function processTableDefinitions(): void
-    {
-        $definitionsPath = config('documentation.paths.database_definitions');
-
-        $finder = $this->fileFinder->createFinder();
-        $definitionFiles = $finder->files()->in($definitionsPath)->name('*.json');
-
-        foreach ($definitionFiles as $file) {
-            $parts = explode('.', basename($file->getFilename()));
-            if (count($parts) !== 3) {
-                continue; // Skip if not in format: dbname.tablename.json
-            }
-
-            try {
-                $this->docGenerator->generateFromJson($file->getPathname());
-                $this->log("Processed table definition: " . $file->getFilename());
-            } catch (\Exception $e) {
-                $this->log("Error processing table definition {$file->getPathname()}: " . $e->getMessage());
             }
         }
     }
@@ -329,7 +313,18 @@ class OpenApiGenerator
      */
     private function forceGenerateRouteDocs(): void
     {
-        $routeFiles = $this->fileFinder->findRouteFiles([config('documentation.sources.routes')]);
+        $routePaths = [config('documentation.sources.routes')];
+
+        // Include framework routes if enabled
+        if ((bool) config('documentation.sources.include_framework_routes', true)) {
+            $frameworkRoutes = $this->resolveFrameworkRoutesPath();
+            if ($frameworkRoutes !== null && is_dir($frameworkRoutes)) {
+                $routePaths[] = $frameworkRoutes;
+                $this->log("Including framework routes from: $frameworkRoutes");
+            }
+        }
+
+        $routeFiles = $this->fileFinder->findRouteFiles($routePaths);
 
         foreach ($routeFiles as $routeFileObj) {
             $routeFile = $routeFileObj->getPathname();
@@ -342,14 +337,52 @@ class OpenApiGenerator
     }
 
     /**
-     * Write final swagger.json file
+     * Resolve the framework routes path
+     *
+     * Checks for framework routes in:
+     * 1. Config override (documentation.sources.framework_routes)
+     * 2. Local development symlink (vendor/glueful/framework)
+     * 3. Installed package (vendor/glueful/framework)
+     *
+     * @return string|null Path to framework routes directory or null if not found
+     */
+    private function resolveFrameworkRoutesPath(): ?string
+    {
+        // Check config override first
+        $configPath = config('documentation.sources.framework_routes');
+        if (is_string($configPath) && $configPath !== '' && is_dir($configPath)) {
+            return $configPath;
+        }
+
+        // Check if running from within the framework itself
+        $frameworkSrcDir = dirname(__DIR__, 3); // Go up from src/Support/Documentation to framework root
+        $frameworkRoutesDir = $frameworkSrcDir . '/routes';
+        if (is_dir($frameworkRoutesDir) && file_exists($frameworkSrcDir . '/composer.json')) {
+            // Verify this is actually the framework by checking composer.json
+            $composerJson = @file_get_contents($frameworkSrcDir . '/composer.json');
+            if ($composerJson !== false && str_contains($composerJson, '"glueful/framework"')) {
+                return $frameworkRoutesDir;
+            }
+        }
+
+        // Check vendor directory
+        $vendorFramework = base_path('vendor/glueful/framework/routes');
+        if (is_dir($vendorFramework)) {
+            return $vendorFramework;
+        }
+
+        return null;
+    }
+
+    /**
+     * Write final openapi.json file
      *
      * @return string Path to generated file
      */
     private function writeSwaggerJson(): string
     {
         $swaggerJson = $this->docGenerator->getSwaggerJson();
-        $outputPath = config('documentation.paths.swagger');
+        $outputPath = config('documentation.paths.openapi');
 
         $this->ensureDirectory(dirname($outputPath));
 
@@ -419,16 +452,6 @@ class OpenApiGenerator
     }
 
     /**
-     * Get the underlying TableDefinitionGenerator instance
-     *
-     * @return TableDefinitionGenerator
-     */
-    public function getTableGenerator(): TableDefinitionGenerator
-    {
-        return $this->tableGenerator;
-    }
-
-    /**
      * Get the underlying CommentsDocGenerator instance
      *
      * @return CommentsDocGenerator
@@ -436,5 +459,15 @@ class OpenApiGenerator
     public function getCommentsGenerator(): CommentsDocGenerator
     {
         return $this->commentsGenerator;
+    }
+
+    /**
+     * Get the underlying ResourceRouteExpander instance
+     *
+     * @return ResourceRouteExpander
+     */
+    public function getResourceExpander(): ResourceRouteExpander
+    {
+        return $this->resourceExpander;
     }
 }

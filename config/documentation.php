@@ -4,7 +4,7 @@
  * Documentation Generation Configuration
  *
  * Centralizes all settings for OpenAPI/Swagger documentation generation.
- * Used by TableDefinitionGenerator, DocGenerator, CommentsDocGenerator, and OpenApiGenerator.
+ * Used by ResourceRouteExpander, DocGenerator, CommentsDocGenerator, and OpenApiGenerator.
  */
 
 return [
@@ -27,8 +27,14 @@ return [
     | The OpenAPI specification version to use for generated documentation.
     | Supported: "3.0.0", "3.0.3", "3.1.0"
     |
+    | Key differences in 3.1.0:
+    | - Uses JSON Schema draft 2020-12 (full alignment)
+    | - Nullable types use array syntax: type: ["string", "null"]
+    | - License supports SPDX identifier field
+    | - $ref can have sibling keywords
+    |
     */
-    'openapi_version' => env('OPENAPI_VERSION', '3.0.0'),
+    'openapi_version' => env('OPENAPI_VERSION', '3.1.0'),
 
     /*
     |--------------------------------------------------------------------------
@@ -51,6 +57,8 @@ return [
         'license' => [
             'name' => env('API_LICENSE_NAME', ''),
             'url' => env('API_LICENSE_URL', ''),
+            // SPDX identifier for OpenAPI 3.1+ (e.g., 'MIT', 'Apache-2.0')
+            'identifier' => env('API_LICENSE_IDENTIFIER', ''),
         ],
     ],
 
@@ -83,11 +91,8 @@ return [
         // Main documentation output directory
         'output' => base_path('docs'),
 
-        // Final swagger.json file location
-        'swagger' => base_path('docs/swagger.json'),
-
-        // JSON definitions for database tables
-        'database_definitions' => base_path('docs/json-definitions/database'),
+        // Final OpenAPI specification file location
+        'openapi' => base_path('docs/openapi.json'),
 
         // JSON definitions for route-based documentation
         'route_definitions' => base_path('docs/json-definitions/routes'),
@@ -106,8 +111,14 @@ return [
     |
     */
     'sources' => [
-        // Directory containing route files
+        // Directory containing project route files
         'routes' => base_path('routes'),
+
+        // Include framework routes in documentation generation
+        'include_framework_routes' => env('API_DOCS_INCLUDE_FRAMEWORK_ROUTES', true),
+
+        // Framework routes directory (auto-detected from vendor or local path)
+        'framework_routes' => null, // Will be resolved at runtime
     ],
 
     /*
@@ -137,9 +148,6 @@ return [
     |
     */
     'options' => [
-        // Include database table schemas in documentation
-        'include_tables' => true,
-
         // Include route-based documentation from PHPDoc comments
         'include_routes' => true,
 
@@ -148,6 +156,27 @@ return [
 
         // Pretty print JSON output
         'pretty_print' => true,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Excluded Tables
+    |--------------------------------------------------------------------------
+    |
+    | Tables to exclude from resource route expansion and documentation.
+    | System/internal tables that shouldn't be exposed in the API.
+    |
+    */
+    'excluded_tables' => [
+        'migrations',
+        'failed_jobs',
+        'password_resets',
+        'personal_access_tokens',
+        'jobs',
+        'job_batches',
+        'cache',
+        'cache_locks',
+        'sessions',
     ],
 
     /*
@@ -174,8 +203,10 @@ return [
             'theme' => env('API_DOCS_THEME', 'purple'),
             'dark_mode' => env('API_DOCS_DARK_MODE', true),
             'hide_download_button' => false,
+            'hide_client_button' => true,
             'hide_models' => false,
             'default_open_all_tags' => false,
+            'show_developer_tools' => 'never',
         ],
 
         // Swagger UI-specific settings

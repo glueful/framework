@@ -28,6 +28,8 @@ final class ControllerProvider extends BaseServiceProvider
             $this->autowire(\Glueful\Controllers\HealthController::class);
         $defs[\Glueful\Controllers\ExtensionsController::class] =
             $this->autowire(\Glueful\Controllers\ExtensionsController::class);
+        $defs[\Glueful\Controllers\DocsController::class] =
+            $this->autowire(\Glueful\Controllers\DocsController::class);
 
         return $defs;
     }
