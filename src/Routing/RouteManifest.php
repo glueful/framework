@@ -15,6 +15,7 @@ class RouteManifest
         return [
             'framework_routes' => [
                 '/routes/auth.php',
+                '/routes/docs.php',
                 '/routes/health.php',
                 '/routes/resource.php',
             ],

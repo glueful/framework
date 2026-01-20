@@ -150,14 +150,22 @@ class ServeCommand extends BaseCommand
 
     private function startServer(string $host, string $port, string $publicDir): int
     {
+        // Find the router script
+        $routerScript = $this->findRouterScript($publicDir);
+
         // Build the PHP server command
         $command = [
             'php',
             '-S',
             "$host:$port",
             '-t',
-            $publicDir
+            $publicDir,
         ];
+
+        // Add router script if available
+        if ($routerScript !== null) {
+            $command[] = $routerScript;
+        }
 
         // Create and start the process
         $process = new Process($command);
@@ -208,6 +216,34 @@ class ServeCommand extends BaseCommand
                 exit(0);
             });
         }
+    }
+
+    /**
+     * Find the router script for PHP's built-in server
+     *
+     * Searches for router.php in multiple locations:
+     * 1. Project public directory
+     * 2. Project root directory
+     * 3. Framework root directory
+     *
+     * @param string $publicDir The public directory path
+     * @return string|null Path to router script or null if not found
+     */
+    private function findRouterScript(string $publicDir): ?string
+    {
+        $possibleLocations = [
+            $publicDir . '/router.php',                           // Project public/router.php
+            dirname($publicDir) . '/router.php',                  // Project root/router.php
+            dirname(__DIR__, 3) . '/router.php',                  // Framework root/router.php
+        ];
+
+        foreach ($possibleLocations as $path) {
+            if (file_exists($path)) {
+                return realpath($path);
+            }
+        }
+
+        return null;
     }
 
     private function isPhpServerLogLine(string $line): bool

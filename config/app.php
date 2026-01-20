@@ -65,7 +65,7 @@ return [
             env('API_BASE_URL', rtrim(env('BASE_URL', 'http://localhost'), '/') . '/api/'),
             '/'
         ) . '/' . env('API_VERSION', 'v1'),
-        'docs' => rtrim(env('BASE_URL', 'http://localhost'), '/') . '/api/' . env('API_VERSION', 'v1') . '/docs/',
+        'docs' => rtrim(env('BASE_URL', 'http://localhost'), '/') . '/docs/',
     ],
 
     // Pagination Settings

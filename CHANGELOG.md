@@ -13,7 +13,7 @@ Patch release with a major refactor of the OpenAPI documentation system, adding 
   - Scalar (default) - Modern, beautiful API documentation
   - Swagger UI - Classic OpenAPI documentation interface
   - Redoc - Clean, responsive three-panel design
-- **Documentation**: New `--ui` option for `generate:openapi` command to generate documentation UI alongside swagger.json.
+- **Documentation**: New `--ui` option for `generate:openapi` command to generate documentation UI alongside openapi.json.
 - **Documentation**: New `config/documentation.php` centralizing all documentation settings including paths, API info, servers, security schemes, and UI configuration.
 - **Documentation**: New `OpenApiGenerator` class orchestrating the full documentation pipeline with lazy-loaded dependencies.
 - **Documentation**: New `TableDefinitionGenerator` class for generating JSON definitions from database tables.

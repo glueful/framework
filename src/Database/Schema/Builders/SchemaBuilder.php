@@ -384,8 +384,10 @@ class SchemaBuilder implements SchemaBuilderInterface
     public function getTableColumns(string $table): array
     {
         // Use the SQL generator's database-specific implementation
+        // SQL generators return associative arrays keyed by column name,
+        // convert to sequential array for consistent API
         $columns = $this->sqlGenerator->getTableColumns($table, $this->connection->getPDO());
-        return array_is_list($columns) ? $columns : [];
+        return array_values($columns);
     }
 
     /**

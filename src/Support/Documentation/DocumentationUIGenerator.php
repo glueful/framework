@@ -81,8 +81,10 @@ class DocumentationUIGenerator
         $theme = is_string($config['theme'] ?? null) ? $config['theme'] : 'purple';
         $darkMode = (bool) ($config['dark_mode'] ?? true) ? 'true' : 'false';
         $hideDownload = (bool) ($config['hide_download_button'] ?? false) ? 'true' : 'false';
+        $hideClient = (bool) ($config['hide_client_button'] ?? true) ? 'true' : 'false';
         $hideModels = (bool) ($config['hide_models'] ?? false) ? 'true' : 'false';
         $defaultOpenAllTags = (bool) ($config['default_open_all_tags'] ?? false) ? 'true' : 'false';
+        $showDevTools = is_string($config['show_developer_tools'] ?? null) ? $config['show_developer_tools'] : 'never';
 
         return <<<HTML
 <!DOCTYPE html>
@@ -96,14 +98,16 @@ class DocumentationUIGenerator
     </style>
 </head>
 <body>
-    <script id="api-reference" data-url="./swagger.json"></script>
+    <script id="api-reference" data-url="./openapi.json"></script>
     <script>
         var configuration = {
             theme: '{$theme}',
             darkMode: {$darkMode},
             hideDownloadButton: {$hideDownload},
+            hideClientButton: {$hideClient},
             hideModels: {$hideModels},
-            defaultOpenAllTags: {$defaultOpenAllTags}
+            defaultOpenAllTags: {$defaultOpenAllTags},
+            showDeveloperTools: '{$showDevTools}'
         };
         document.getElementById('api-reference').dataset.configuration = JSON.stringify(configuration);
     </script>
@@ -145,7 +149,7 @@ HTML;
     <script>
         window.onload = function() {
             SwaggerUIBundle({
-                url: './swagger.json',
+                url: './openapi.json',
                 dom_id: '#swagger-ui',
                 deepLinking: {$deepLinking},
                 displayRequestDuration: {$displayRequestDuration},
@@ -191,7 +195,7 @@ HTML;
 </head>
 <body>
     <redoc
-        spec-url="./swagger.json"
+        spec-url="./openapi.json"
         expand-responses="{$expandResponses}"
         hide-download-button="{$hideDownload}"
         lazy-rendering
