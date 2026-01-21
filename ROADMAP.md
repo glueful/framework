@@ -21,6 +21,23 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.12.0 — Mintaka (Released 2026-01-21)
+- **API Resource Transformers**: Complete JSON transformation layer for consistent, well-structured API responses.
+  - `JsonResource` base class for transforming arrays and simple objects.
+  - `ModelResource` class with ORM-specific helpers for model transformation.
+  - `ResourceCollection` for handling multiple items with metadata support.
+  - `PaginatedResourceResponse` for pagination with link generation.
+  - Conditional attributes: `when()`, `mergeWhen()`, `whenHas()`, `whenNotNull()`.
+  - Relationship helpers: `whenLoaded()`, `whenCounted()`, `whenPivotLoaded()`.
+  - `MissingValue` sentinel pattern for clean attribute omission.
+  - Pagination support for both QueryBuilder flat format and ORM meta format.
+- **Console Commands**: New `scaffold:resource` command to generate API resource classes.
+  - `--model` option for ModelResource with ORM-specific helpers.
+  - `--collection` option for ResourceCollection with metadata support.
+  - `--force` option to overwrite existing files.
+  - `--path` option for custom output directory.
+- Notes: No breaking changes; API Resources are opt-in and additive. Completes Priority 1 features.
+
 ### 1.11.0 — Alnilam (Released 2026-01-21)
 - **ORM / Active Record**: Complete Active Record implementation built on QueryBuilder.
   - New `Model` base class with CRUD operations, mass assignment protection, and attribute handling.
