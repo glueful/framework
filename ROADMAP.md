@@ -21,6 +21,23 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.11.0 — Alnilam (Released 2026-01-21)
+- **ORM / Active Record**: Complete Active Record implementation built on QueryBuilder.
+  - New `Model` base class with CRUD operations, mass assignment protection, and attribute handling.
+  - New `Builder` class wrapping QueryBuilder with model-aware queries, eager loading, and scope support.
+  - New `Collection` class for model results with rich iteration, filtering, and transformation methods.
+  - Relations: `HasOne`, `HasMany`, `BelongsTo`, `BelongsToMany`, `HasOneThrough`, `HasManyThrough`, `Pivot`.
+  - Traits: `HasAttributes`, `HasEvents`, `HasRelationships`, `HasTimestamps`, `HasGlobalScopes`, `SoftDeletes`.
+  - Custom casts: `AsJson`, `AsArrayObject`, `AsCollection`, `AsDateTime`, `AsEncryptedString`, `AsEnum`, `Attribute`.
+  - Model lifecycle events: `ModelCreating`, `ModelCreated`, `ModelUpdating`, `ModelUpdated`, `ModelSaving`, `ModelSaved`, `ModelDeleting`, `ModelDeleted`, `ModelRetrieved`.
+  - Contracts: `ModelInterface`, `CastsAttributes`, `Scope`, `SoftDeletable`.
+  - New `ORMProvider` service provider for DI container registration.
+- **Console Commands**: Reorganized CLI commands to `scaffold:*` namespace.
+  - New `scaffold:model` command to generate ORM model classes.
+  - Renamed `make:request` → `scaffold:request`, `generate:controller` → `scaffold:controller`.
+- **CI**: GitHub Actions jobs now run sequentially for better debugging.
+- Notes: No breaking changes; ORM is opt-in and additive. Existing QueryBuilder code continues to work.
+
 ### 1.10.0 — Elnath (Released 2026-01-21)
 - **Exception Handler**: Centralized exception handling with typed HTTP exceptions (4xx Client, 5xx Server, Domain).
   - New `ExceptionHandlerInterface` contract and `RenderableException` interface.
