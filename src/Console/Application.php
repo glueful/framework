@@ -55,6 +55,7 @@ class Application extends BaseApplication
         \Glueful\Console\Commands\Scaffold\ModelCommand::class,
         \Glueful\Console\Commands\Scaffold\ControllerCommand::class,
         \Glueful\Console\Commands\Scaffold\RequestCommand::class,
+        \Glueful\Console\Commands\Scaffold\ResourceCommand::class,
         // Extensions commands
         \Glueful\Console\Commands\Extensions\InfoCommand::class,
         \Glueful\Console\Commands\Extensions\EnableCommand::class,

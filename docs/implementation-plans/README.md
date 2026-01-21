@@ -36,8 +36,8 @@ The recommended implementation order based on dependencies:
 │                                                             │
 │  Phase 3: Output                                            │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │ API Resource Transformers                           │   │
-│  │ (works best with ORM models)                        │   │
+│  │ ✅ API Resource Transformers                        │   │
+│  │    (works best with ORM models)                     │   │
 │  └─────────────────────────────────────────────────────┘   │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
@@ -129,12 +129,18 @@ src/
 │   └── ...existing...
 │
 ├── Http/
-│   ├── Resources/                          # (Planned)
+│   ├── Resources/                          # ✅ IMPLEMENTED
 │   │   ├── JsonResource.php
+│   │   ├── ModelResource.php
 │   │   ├── ResourceCollection.php
 │   │   ├── AnonymousResourceCollection.php
-│   │   ├── MissingValue.php
-│   │   └── ConditionallyLoadsAttributes.php
+│   │   ├── PaginatedResourceResponse.php
+│   │   ├── Support/
+│   │   │   └── MissingValue.php
+│   │   └── Concerns/
+│   │       ├── ConditionallyLoadsAttributes.php
+│   │       ├── DelegatesToResource.php
+│   │       └── CollectsResources.php
 │   ├── Exceptions/                         # ✅ IMPLEMENTED
 │   │   ├── Contracts/
 │   │   │   ├── ExceptionHandlerInterface.php
@@ -208,6 +214,12 @@ When implementing these features:
 | Exception Handler | ✅ Complete | - | v1.10.0 |
 | Request Validation | ✅ Complete | - | v1.10.0 |
 | ORM / Active Record | ✅ Complete | - | v1.11.0 |
-| API Resource Transformers | 📋 Planned | - | v1.12.0 |
+| API Resource Transformers | ✅ Complete | - | v1.12.0 |
 
 Legend: 📋 Planned | 🚧 In Progress | ✅ Complete | 🔄 Review
+
+---
+
+All Priority 1 features have been implemented. See individual documentation files for usage details:
+- [ORM Documentation](../ORM.md)
+- [Resources Documentation](../RESOURCES.md)

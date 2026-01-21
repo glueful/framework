@@ -4,6 +4,76 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.12.0] - 2026-01-21 — Mintaka
+
+Feature release introducing API Resource Transformers, completing all Priority 1 features for modern API development.
+
+### Added
+
+#### API Resource Transformers
+- **JsonResource**: New base class for transforming data into consistent JSON API responses with property delegation and nested resource resolution.
+- **ModelResource**: New ORM-aware resource class extending JsonResource with model-specific helpers:
+  - `attribute()` / `hasAttribute()` - Attribute access with defaults
+  - `dateAttribute()` / `whenDateNotNull()` - ISO 8601 date formatting
+  - `isRelationLoaded()` / `getRelation()` - Relationship introspection
+  - `relationshipResource()` / `relationshipCollection()` - Transform loaded relationships
+  - `hasAnyRelationLoaded()` / `hasAllRelationsLoaded()` - Bulk relationship checks
+- **ResourceCollection**: New collection class for transforming multiple items with:
+  - `withPagination()` - Manual pagination metadata
+  - `withPaginationFrom()` - Auto-detect QueryBuilder or ORM pagination format
+  - `withLinks()` - Generate pagination links with query parameters
+  - `additional()` - Add extra response data
+  - `preserveKeys()` - Maintain array keys during iteration
+- **AnonymousResourceCollection**: Dynamic collection creation from `JsonResource::collection()` calls.
+- **PaginatedResourceResponse**: Advanced pagination handler with:
+  - `fromQueryResult()` - Create from QueryBuilder flat format
+  - `fromOrmResult()` - Create from ORM meta format
+  - `withBaseUrl()` / `withQueryParams()` - Link generation
+  - `setPage()` / `setPerPage()` / `setTotal()` - Manual configuration
+  - `getMeta()` / `getLinks()` - Access pagination data
+- **MissingValue**: Sentinel class for conditional attribute omission.
+- **Traits**:
+  - `ConditionallyLoadsAttributes` - Conditional inclusion helpers:
+    - `when()` - Include attribute when condition is true
+    - `unless()` - Include attribute when condition is false
+    - `mergeWhen()` - Merge multiple attributes conditionally
+    - `whenHas()` - Include if key exists in source data
+    - `whenNotNull()` - Include if value is not null
+    - `whenLoaded()` - Include only if relationship is loaded
+    - `whenCounted()` - Include relationship count if loaded
+    - `whenPivotLoaded()` - Access pivot table data
+  - `DelegatesToResource` - Property access delegation to underlying resource
+  - `CollectsResources` - Collection transformation logic
+
+#### Console Commands
+- **Scaffold**: New `scaffold:resource` command to generate API resource classes with options:
+  - `--model` / `-m` - Generate ModelResource with ORM integration
+  - `--collection` / `-c` - Generate ResourceCollection class
+  - `--force` / `-f` - Overwrite existing files
+  - `--path` / `-p` - Custom output path
+
+### Changed
+- **Console**: `ResourceCommand` registered in `ConsoleProvider` and `Application` command list.
+
+### Documentation
+- New `docs/RESOURCES.md` with comprehensive usage guide covering:
+  - Basic usage and resource creation
+  - Conditional attributes and relationships
+  - Collections and pagination
+  - Model resources and ORM integration
+  - Response customization and best practices
+- Updated `docs/implementation-plans/README.md` marking all Priority 1 features as complete.
+- Updated `docs/implementation-plans/03-api-resource-transformers.md` with implementation status.
+
+### Tests
+- New test suite in `tests/Unit/Http/Resources/`:
+  - `JsonResourceTest.php` - Base resource transformation
+  - `ResourceCollectionTest.php` - Collection handling
+  - `ConditionalAttributesTest.php` - Conditional inclusion logic
+  - `ModelResourceTest.php` - ORM integration with mock models
+  - `PaginationTest.php` - Pagination and link generation
+- Total: 71 tests, 155 assertions
+
 ## [1.11.0] - 2026-01-21 — Alnilam
 
 Feature release introducing the ORM/Active Record system, completing the data layer of Priority 1 features.
