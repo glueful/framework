@@ -40,11 +40,12 @@ final class ConsoleProvider extends BaseServiceProvider
             \Glueful\Console\Commands\Database\ResetCommand::class,
             \Glueful\Console\Commands\Database\ProfileCommand::class,
             // Generate commands
-            \Glueful\Console\Commands\Generate\ControllerCommand::class,
             \Glueful\Console\Commands\Generate\OpenApiDocsCommand::class,
             \Glueful\Console\Commands\Generate\KeyCommand::class,
-            // Make commands
-            \Glueful\Console\Commands\MakeRequestCommand::class,
+            // Scaffold commands
+            \Glueful\Console\Commands\Scaffold\ModelCommand::class,
+            \Glueful\Console\Commands\Scaffold\ControllerCommand::class,
+            \Glueful\Console\Commands\Scaffold\RequestCommand::class,
             // Extensions commands
             \Glueful\Console\Commands\Extensions\InfoCommand::class,
             \Glueful\Console\Commands\Extensions\EnableCommand::class,

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Glueful\Console\Commands;
+namespace Glueful\Console\Commands\Scaffold;
 
 use Glueful\Console\BaseCommand;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -12,22 +12,22 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * Make Request Command
+ * Scaffold Request Command
  *
  * Generates a new FormRequest class for request validation.
  *
- * @package Glueful\Console\Commands
+ * @package Glueful\Console\Commands\Scaffold
  */
 #[AsCommand(
-    name: 'make:request',
-    description: 'Create a new form request class'
+    name: 'scaffold:request',
+    description: 'Scaffold a new form request class'
 )]
-class MakeRequestCommand extends BaseCommand
+class RequestCommand extends BaseCommand
 {
     protected function configure(): void
     {
         $this
-            ->setDescription('Create a new form request class')
+            ->setDescription('Scaffold a new form request class')
             ->setHelp($this->getDetailedHelp())
             ->addArgument(
                 'name',
@@ -51,9 +51,13 @@ class MakeRequestCommand extends BaseCommand
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
+        /** @var string $name */
         $name = $input->getArgument('name');
+        /** @var bool $force */
         $force = (bool) $input->getOption('force');
+        /** @var string|null $customPath */
         $customPath = $input->getOption('path');
+        $customPath = is_string($customPath) ? $customPath : null;
 
         // Ensure name ends with 'Request'
         if (!str_ends_with($name, 'Request')) {
@@ -89,7 +93,7 @@ class MakeRequestCommand extends BaseCommand
             return self::FAILURE;
         }
 
-        $this->success("Form request created successfully!");
+        $this->success("Form request scaffolded successfully!");
         $this->line("File: {$filePath}");
         $this->line('');
         $this->info('Next steps:');
@@ -232,7 +236,9 @@ PHP;
     private function buildNamespace(string $name): string
     {
         // Check if we're in an app or framework context
-        $baseNamespace = is_dir(base_path('app')) ? 'App\\Http\\Requests' : 'Glueful\\Http\\Requests';
+        $baseNamespace = is_dir(base_path('app'))
+            ? 'App\\Http\\Requests'
+            : 'Glueful\\Http\\Requests';
 
         // Handle nested paths
         $parts = explode('/', str_replace('\\', '/', $name));
@@ -253,15 +259,15 @@ PHP;
     private function getDetailedHelp(): string
     {
         return <<<HELP
-Create a new FormRequest class for request validation.
+Scaffold a new FormRequest class for request validation.
 
 FormRequest classes provide a clean way to encapsulate validation logic,
 authorization checks, and input preparation in a single, testable class.
 
 Examples:
-  php glueful make:request CreateUserRequest
-  php glueful make:request User/UpdateProfileRequest
-  php glueful make:request StorePostRequest --force
+  php glueful scaffold:request CreateUserRequest
+  php glueful scaffold:request User/UpdateProfileRequest
+  php glueful scaffold:request StorePostRequest --force
 
 The generated class will be placed in app/Http/Requests/ (or src/Http/Requests/
 for framework development).

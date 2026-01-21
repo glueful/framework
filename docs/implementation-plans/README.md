@@ -24,14 +24,14 @@ The recommended implementation order based on dependencies:
 │                                                             │
 │  Phase 1: Foundation                                        │
 │  ┌─────────────────┐    ┌─────────────────────────────┐    │
-│  │ ✅ Exception    │───▶│ Request Validation          │    │
-│  │    Handler      │    │ (depends on error handling) │    │
+│  │ ✅ Exception    │───▶│ ✅ Request Validation       │    │
+│  │    Handler      │    │    (depends on error)       │    │
 │  └─────────────────┘    └─────────────────────────────┘    │
 │                                                             │
 │  Phase 2: Data Layer                                        │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │ ORM / Active Record                                 │   │
-│  │ (largest feature, builds on QueryBuilder)           │   │
+│  │ ✅ ORM / Active Record                              │   │
+│  │    (largest feature, builds on QueryBuilder)        │   │
 │  └─────────────────────────────────────────────────────┘   │
 │                                                             │
 │  Phase 3: Output                                            │
@@ -80,23 +80,52 @@ All implementations should follow these principles:
 ```
 src/
 ├── Database/
-│   ├── ORM/
+│   ├── ORM/                                   # ✅ IMPLEMENTED
 │   │   ├── Model.php
+│   │   ├── Builder.php
+│   │   ├── Collection.php
 │   │   ├── Relations/
 │   │   │   ├── Relation.php
 │   │   │   ├── HasOne.php
 │   │   │   ├── HasMany.php
+│   │   │   ├── HasManyThrough.php
+│   │   │   ├── HasOneThrough.php
 │   │   │   ├── BelongsTo.php
-│   │   │   └── BelongsToMany.php
+│   │   │   ├── BelongsToMany.php
+│   │   │   └── Pivot.php
 │   │   ├── Concerns/
 │   │   │   ├── HasAttributes.php
 │   │   │   ├── HasEvents.php
 │   │   │   ├── HasRelationships.php
 │   │   │   ├── HasTimestamps.php
+│   │   │   ├── HasGlobalScopes.php
 │   │   │   └── SoftDeletes.php
-│   │   ├── Builder.php
-│   │   ├── Collection.php
-│   │   └── ModelNotFoundException.php
+│   │   ├── Contracts/
+│   │   │   ├── ModelInterface.php
+│   │   │   ├── CastsAttributes.php
+│   │   │   ├── Scope.php
+│   │   │   └── SoftDeletable.php
+│   │   ├── Casts/
+│   │   │   ├── AsJson.php
+│   │   │   ├── AsArrayObject.php
+│   │   │   ├── AsCollection.php
+│   │   │   ├── AsDateTime.php
+│   │   │   ├── AsEncryptedString.php
+│   │   │   ├── AsEnum.php
+│   │   │   └── Attribute.php
+│   │   ├── Events/
+│   │   │   ├── ModelEvent.php
+│   │   │   ├── ModelCreating.php
+│   │   │   ├── ModelCreated.php
+│   │   │   ├── ModelUpdating.php
+│   │   │   ├── ModelUpdated.php
+│   │   │   ├── ModelSaving.php
+│   │   │   ├── ModelSaved.php
+│   │   │   ├── ModelDeleting.php
+│   │   │   ├── ModelDeleted.php
+│   │   │   └── ModelRetrieved.php
+│   │   └── Scopes/
+│   │       └── SoftDeletingScope.php
 │   └── ...existing...
 │
 ├── Http/
@@ -178,7 +207,7 @@ When implementing these features:
 |---------|--------|-----|----------------|
 | Exception Handler | ✅ Complete | - | v1.10.0 |
 | Request Validation | ✅ Complete | - | v1.10.0 |
-| ORM / Active Record | 📋 Planned | - | v1.11.0 |
-| API Resource Transformers | 📋 Planned | - | v1.11.0 |
+| ORM / Active Record | ✅ Complete | - | v1.11.0 |
+| API Resource Transformers | 📋 Planned | - | v1.12.0 |
 
 Legend: 📋 Planned | 🚧 In Progress | ✅ Complete | 🔄 Review
