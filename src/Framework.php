@@ -15,6 +15,7 @@ use Glueful\Cache\CacheTaggingService;
 use Glueful\Cache\CacheInvalidationService;
 use Glueful\Database\ConnectionValidator;
 use Glueful\Database\DevelopmentQueryMonitor;
+use Glueful\Database\ORM\Model;
 use Glueful\Exceptions\ExceptionHandler;
 use Glueful\Helpers\Utils;
 use Glueful\Security\SecurityManager;
@@ -223,6 +224,9 @@ class Framework
         CacheTaggingService::enable();
         CacheInvalidationService::enable();
         CacheInvalidationService::warmupPatterns();
+
+        // Initialize ORM - wire Model class to container for database access
+        Model::setContainer($this->container);
 
         // Enable development features
         if ($this->environment === 'development') {
