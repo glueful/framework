@@ -24,8 +24,8 @@ The recommended implementation order based on dependencies:
 │                                                             │
 │  Phase 1: Foundation                                        │
 │  ┌─────────────────┐    ┌─────────────────────────────┐    │
-│  │ Exception       │───▶│ Request Validation          │    │
-│  │ Handler         │    │ (depends on error handling) │    │
+│  │ ✅ Exception    │───▶│ Request Validation          │    │
+│  │    Handler      │    │ (depends on error handling) │    │
 │  └─────────────────┘    └─────────────────────────────┘    │
 │                                                             │
 │  Phase 2: Data Layer                                        │
@@ -100,16 +100,38 @@ src/
 │   └── ...existing...
 │
 ├── Http/
-│   ├── Resources/
+│   ├── Resources/                          # (Planned)
 │   │   ├── JsonResource.php
 │   │   ├── ResourceCollection.php
 │   │   ├── AnonymousResourceCollection.php
 │   │   ├── MissingValue.php
 │   │   └── ConditionallyLoadsAttributes.php
-│   ├── Exceptions/
-│   │   ├── Handler.php
-│   │   ├── ExceptionHandler.php (interface)
-│   │   └── RenderableException.php (interface)
+│   ├── Exceptions/                         # ✅ IMPLEMENTED
+│   │   ├── Contracts/
+│   │   │   ├── ExceptionHandlerInterface.php
+│   │   │   └── RenderableException.php
+│   │   ├── Client/                         # 4xx exceptions
+│   │   │   ├── BadRequestException.php
+│   │   │   ├── UnauthorizedException.php
+│   │   │   ├── ForbiddenException.php
+│   │   │   ├── NotFoundException.php
+│   │   │   ├── MethodNotAllowedException.php
+│   │   │   ├── ConflictException.php
+│   │   │   ├── UnprocessableEntityException.php
+│   │   │   └── TooManyRequestsException.php
+│   │   ├── Server/                         # 5xx exceptions
+│   │   │   ├── InternalServerException.php
+│   │   │   ├── ServiceUnavailableException.php
+│   │   │   └── GatewayTimeoutException.php
+│   │   ├── Domain/                         # Domain exceptions
+│   │   │   ├── ModelNotFoundException.php
+│   │   │   ├── AuthenticationException.php
+│   │   │   ├── AuthorizationException.php
+│   │   │   └── TokenExpiredException.php
+│   │   ├── HttpException.php
+│   │   └── Handler.php
+│   ├── Middleware/
+│   │   └── ExceptionMiddleware.php         # ✅ IMPLEMENTED
 │   └── ...existing...
 │
 ├── Validation/
@@ -152,9 +174,9 @@ When implementing these features:
 
 ## Status
 
-| Feature | Status | PR | Release Target |
-|---------|--------|-----|----------------|
-| Exception Handler | 📋 Planned | - | v1.10.0 |
+| Feature | Status | Branch | Release Target |
+|---------|--------|--------|----------------|
+| Exception Handler | ✅ Complete | `feature/exception-handler` | v1.10.0 |
 | Request Validation | 📋 Planned | - | v1.10.0 |
 | ORM / Active Record | 📋 Planned | - | v1.11.0 |
 | API Resource Transformers | 📋 Planned | - | v1.11.0 |
