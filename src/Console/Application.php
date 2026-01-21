@@ -52,6 +52,8 @@ class Application extends BaseApplication
         \Glueful\Console\Commands\Generate\ControllerCommand::class,
         \Glueful\Console\Commands\Generate\OpenApiDocsCommand::class,
         \Glueful\Console\Commands\Generate\KeyCommand::class,
+        // Make commands
+        \Glueful\Console\Commands\MakeRequestCommand::class,
         // Extensions commands
         \Glueful\Console\Commands\Extensions\InfoCommand::class,
         \Glueful\Console\Commands\Extensions\EnableCommand::class,
