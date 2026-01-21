@@ -170,48 +170,56 @@ return UserResource::collection($users)->additional(['meta' => ['version' => '1.
 
 ---
 
-### 1.4 Exception Handler with HTTP Mapping
+### 1.4 Exception Handler with HTTP Mapping ✅ IMPLEMENTED
 
-**Current State:** Basic exception handling without status code mapping.
+**Current State:** ~~Basic exception handling without status code mapping.~~ **Fully implemented in v1.10.0**
 
-**Proposed Addition:**
+**Implementation:**
 ```php
 // Automatic exception to HTTP response mapping
-class Handler extends ExceptionHandler
+use Glueful\Http\Exceptions\Handler;
+use Glueful\Http\Exceptions\Client\NotFoundException;
+use Glueful\Http\Exceptions\Domain\ModelNotFoundException;
+
+// Typed HTTP exceptions with automatic status codes
+throw new NotFoundException('User not found');           // 404
+throw new UnauthorizedException('Token required');       // 401
+throw new TooManyRequestsException(retryAfter: 60);     // 429
+
+// Model not found with context
+throw (new ModelNotFoundException())->setModel(User::class, $id);
+
+// Custom exception rendering via interface
+class QuotaExceededException extends HttpException implements RenderableException
 {
-    protected array $dontReport = [
-        ValidationException::class,
-        AuthenticationException::class,
-    ];
-
-    protected array $httpMapping = [
-        ModelNotFoundException::class => 404,
-        AuthorizationException::class => 403,
-        ValidationException::class => 422,
-        RateLimitException::class => 429,
-    ];
-
-    public function render(Throwable $e): Response
+    public function render(?Request $request): Response
     {
-        return match (true) {
-            $e instanceof ValidationException => $this->validationResponse($e),
-            $e instanceof HttpException => $this->httpResponse($e),
-            default => $this->genericResponse($e),
-        };
+        return new Response([
+            'success' => false,
+            'error' => ['code' => 'QUOTA_EXCEEDED', 'limit' => $this->limit],
+        ], 429);
     }
 }
 
-// Custom exceptions
-throw new ModelNotFoundException('User not found');
-// Automatically returns 404 with JSON: {"success": false, "message": "User not found"}
+// Middleware integration
+$router->group(['middleware' => ['exception', 'auth']], function ($router) {
+    // All routes have exception handling
+});
 ```
 
 **Implementation Path:**
-- [ ] Create `ExceptionHandler` base class
-- [ ] Map common exceptions to HTTP status codes
-- [ ] Add environment-aware error detail (hide in production)
-- [ ] Support custom exception rendering
-- [ ] Add exception reporting (logging, Sentry, etc.)
+- [x] Create `ExceptionHandlerInterface` contract
+- [x] Create `RenderableException` interface for custom rendering
+- [x] Create base `HttpException` class with status code and headers
+- [x] Create Client exceptions (4xx): BadRequest, Unauthorized, Forbidden, NotFound, MethodNotAllowed, Conflict, UnprocessableEntity, TooManyRequests
+- [x] Create Server exceptions (5xx): InternalServer, ServiceUnavailable, GatewayTimeout
+- [x] Create Domain exceptions: ModelNotFound, Authentication, Authorization, TokenExpired
+- [x] Create main `Handler` class with HTTP mapping, don't-report list, custom renderers
+- [x] Add environment-aware error detail (hide in production)
+- [x] Create `ExceptionMiddleware` for route integration
+- [x] Register in `ExceptionProvider` service provider
+
+**Location:** `src/Http/Exceptions/`, `src/Http/Middleware/ExceptionMiddleware.php`
 
 **Impact:** Medium - Better error handling and debugging
 
@@ -938,7 +946,7 @@ return Response::stream(function () {
 - [ ] ORM / Active Record Layer
 - [ ] Request Validation with Attributes
 - [ ] API Resource Transformers
-- [ ] Exception Handler with HTTP Mapping
+- [x] Exception Handler with HTTP Mapping ✅ (v1.10.0)
 - [ ] Database Factories & Seeders
 
 #### Phase 2 (Q2 2026) - Developer Experience

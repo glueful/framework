@@ -6,9 +6,11 @@ namespace Glueful;
 
 use Psr\Container\ContainerInterface;
 use Glueful\Routing\Router;
+use Glueful\Http\Exceptions\Contracts\ExceptionHandlerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
+use Throwable;
 
 /**
  * Application class - handles HTTP requests
@@ -33,9 +35,15 @@ class Application
         $startTime = microtime(true);
         $requestId = $this->getRequestId();
 
-        // Dispatch via Next-Gen Router
-        $router = $this->container->get(Router::class);
-        $response = $router->dispatch($request);
+        try {
+            // Dispatch via Next-Gen Router
+            $router = $this->container->get(Router::class);
+            $response = $router->dispatch($request);
+        } catch (Throwable $e) {
+            // Handle exceptions through centralized exception handler
+            $handler = $this->container->get(ExceptionHandlerInterface::class);
+            $response = $handler->handle($e, $request);
+        }
 
         $totalTime = round((microtime(true) - $startTime) * 1000, 2);
         $this->logger->info(
