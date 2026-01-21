@@ -85,6 +85,7 @@ class DocumentationUIGenerator
         $hideModels = (bool) ($config['hide_models'] ?? false) ? 'true' : 'false';
         $defaultOpenAllTags = (bool) ($config['default_open_all_tags'] ?? false) ? 'true' : 'false';
         $showDevTools = is_string($config['show_developer_tools'] ?? null) ? $config['show_developer_tools'] : 'never';
+        $hidePoweredBadge = (bool) ($config['hide_powered_badge'] ?? true) ? 'true' : 'false';
 
         return <<<HTML
 <!DOCTYPE html>
@@ -107,7 +108,10 @@ class DocumentationUIGenerator
             hideClientButton: {$hideClient},
             hideModels: {$hideModels},
             defaultOpenAllTags: {$defaultOpenAllTags},
-            showDeveloperTools: '{$showDevTools}'
+            showDeveloperTools: '{$showDevTools}',
+            metaData: {
+                hidePoweredBadge: {$hidePoweredBadge}
+            }
         };
         document.getElementById('api-reference').dataset.configuration = JSON.stringify(configuration);
     </script>

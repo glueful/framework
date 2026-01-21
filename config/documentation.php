@@ -44,6 +44,14 @@ return [
     | Metadata about your API that appears in the generated documentation.
     | These values populate the "info" section of the OpenAPI spec.
     |
+    | TIP: After adding or modifying endpoints in your code, regenerate docs:
+    |   php glueful generate:openapi -f -u
+    |
+    | If changes don't appear, try:
+    |   1. Hard refresh the browser (Cmd+Shift+R / Ctrl+Shift+R)
+    |   2. Clear browser cache
+    |   3. Run with --clean flag: php glueful generate:openapi -f -u --clean
+    |
     */
     'info' => [
         'title' => env('API_TITLE', env('APP_NAME', 'API Documentation')),
@@ -207,6 +215,7 @@ return [
             'hide_models' => false,
             'default_open_all_tags' => false,
             'show_developer_tools' => 'never',
+            'hide_powered_badge' => true,
         ],
 
         // Swagger UI-specific settings

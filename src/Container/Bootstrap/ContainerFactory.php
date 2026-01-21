@@ -115,6 +115,7 @@ final class ContainerFactory
             \Glueful\Container\Providers\AsyncProvider::class,
         ];
         $classes = array_merge($classes, [
+            \Glueful\Container\Providers\ExceptionProvider::class,
             \Glueful\Container\Providers\RequestProvider::class,
             \Glueful\Validation\ServiceProvider\ValidationProvider::class,
             \Glueful\Serialization\ServiceProvider\SerializerProvider::class,
