@@ -21,6 +21,26 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.10.0 — Elnath (Released 2026-01-21)
+- **Exception Handler**: Centralized exception handling with typed HTTP exceptions (4xx Client, 5xx Server, Domain).
+  - New `ExceptionHandlerInterface` contract and `RenderableException` interface.
+  - New `HttpException` base class with status codes and context.
+  - New `Handler` class with environment-aware error responses.
+  - New `ExceptionMiddleware` for automatic exception-to-response conversion.
+  - Client exceptions: `BadRequestException`, `UnauthorizedException`, `ForbiddenException`, `NotFoundException`, `MethodNotAllowedException`, `ConflictException`, `UnprocessableEntityException`, `TooManyRequestsException`.
+  - Server exceptions: `InternalServerException`, `ServiceUnavailableException`, `GatewayTimeoutException`.
+  - Domain exceptions: `ModelNotFoundException`, `AuthenticationException`, `AuthorizationException`, `TokenExpiredException`.
+- **Request Validation**: Declarative validation with PHP 8 attributes and FormRequest classes.
+  - New `#[Validate]` attribute for inline validation on controller methods.
+  - New `FormRequest` base class with authorization, custom messages, and data preparation hooks.
+  - New `ValidatedRequest` wrapper for type-safe validated data access.
+  - New `ValidationMiddleware` for automatic request validation in the pipeline.
+  - New `RuleParser` for Laravel-style string rule syntax (`'required|email|max:255'`).
+  - New `'validate'` middleware alias for route-level validation.
+  - New validation rules: `Confirmed`, `Date`, `Before`, `After`, `Url`, `Uuid`, `Json`, `Exists`, `Nullable`, `Sometimes`, `File`, `Image`, `Dimensions`.
+  - New `make:request` CLI command to generate FormRequest classes.
+- Notes: No breaking changes; both features are opt-in and additive.
+
 ### 1.9.2 — Deneb (Released 2026-01-20)
 - Documentation: New `ResourceRouteExpander` class that automatically expands `{resource}` routes to table-specific endpoints with full database schemas.
 - Documentation: OpenAPI 3.1.0 support with JSON Schema draft 2020-12 alignment (nullable type arrays, SPDX license identifiers, jsonSchemaDialect).

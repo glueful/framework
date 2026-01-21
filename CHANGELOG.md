@@ -4,6 +4,68 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.10.0] - 2026-01-21 — Elnath
+
+Feature release introducing centralized exception handling and declarative request validation, completing the foundation layer of Priority 1 features.
+
+### Added
+
+#### Exception Handler
+- **Exceptions**: New `ExceptionHandlerInterface` contract for customizable exception handling implementations.
+- **Exceptions**: New `RenderableException` interface for exceptions that can render themselves to responses.
+- **Exceptions**: New `HttpException` base class for all HTTP-related exceptions with status codes and context.
+- **Exceptions**: New `Handler` class providing default exception handling with environment-aware error responses.
+- **Exceptions**: New `ExceptionMiddleware` for automatic exception-to-response conversion in the middleware pipeline.
+- **Exceptions**: New `ExceptionProvider` service provider for DI container registration.
+- **Exceptions**: Client exceptions (4xx):
+  - `BadRequestException` (400)
+  - `UnauthorizedException` (401)
+  - `ForbiddenException` (403)
+  - `NotFoundException` (404)
+  - `MethodNotAllowedException` (405)
+  - `ConflictException` (409)
+  - `UnprocessableEntityException` (422)
+  - `TooManyRequestsException` (429)
+- **Exceptions**: Server exceptions (5xx):
+  - `InternalServerException` (500)
+  - `ServiceUnavailableException` (503)
+  - `GatewayTimeoutException` (504)
+- **Exceptions**: Domain exceptions:
+  - `ModelNotFoundException` - Entity not found in database
+  - `AuthenticationException` - Authentication failure
+  - `AuthorizationException` - Authorization/permission failure
+  - `TokenExpiredException` - JWT/session token expired
+
+#### Request Validation
+- **Validation**: New `#[Validate]` attribute for declarative validation on controller methods.
+- **Validation**: New `FormRequest` base class for complex validation with authorization, custom messages, and data preparation hooks.
+- **Validation**: New `ValidatedRequest` wrapper for type-safe access to validated data.
+- **Validation**: New `ValidationMiddleware` for automatic request validation in the middleware pipeline.
+- **Validation**: New `RuleParser` for Laravel-style string rule syntax (`'required|email|max:255'`).
+- **Validation**: New `'validate'` middleware alias for route-level validation.
+- **Validation**: New validation rules:
+  - `Confirmed` - Password confirmation matching
+  - `Date` - Date format validation with optional format
+  - `Before` / `After` - Date comparison rules
+  - `Url` - URL format with optional protocol restriction
+  - `Uuid` - UUID format validation
+  - `Json` - JSON string validation
+  - `Exists` - Database existence check
+  - `Nullable` / `Sometimes` - Conditional validation
+  - `File` - File upload validation (extensions, size)
+  - `Image` - Image file validation (types, size)
+  - `Dimensions` - Image dimensions (width, height, ratio)
+- **Console**: New `make:request` command to generate FormRequest classes.
+
+### Changed
+- **Validation**: `ValidationException` now extends `ApiException` and returns proper 422 HTTP responses with structured error format.
+- **Validation**: `DbUnique` rule updated to support both PDO injection and string-based syntax from `RuleParser`.
+- **Application**: Request dispatch now uses centralized exception handling via `ExceptionMiddleware`.
+
+### Documentation
+- Updated implementation plans to mark Exception Handler and Request Validation as complete.
+- Added implementation status indicators to architecture diagrams.
+
 ## [1.9.2] - 2026-01-20 — Deneb
 
 Patch release with OpenAPI 3.1 support, automatic resource route expansion from database schemas, and documentation UI improvements.
