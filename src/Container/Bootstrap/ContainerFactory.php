@@ -110,6 +110,7 @@ final class ContainerFactory
         /** @var array<class-string<BaseServiceProvider>> $classes */
         $classes = [
             \Glueful\Container\Providers\CoreProvider::class,
+            \Glueful\Container\Providers\ORMProvider::class,
             \Glueful\Container\Providers\ConsoleProvider::class,
             \Glueful\Container\Providers\StorageProvider::class,
             \Glueful\Container\Providers\AsyncProvider::class,

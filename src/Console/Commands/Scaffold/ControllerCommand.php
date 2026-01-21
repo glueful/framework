@@ -1,9 +1,10 @@
 <?php
 
-namespace Glueful\Console\Commands\Generate;
+declare(strict_types=1);
+
+namespace Glueful\Console\Commands\Scaffold;
 
 use Glueful\Console\BaseCommand;
-use Glueful\Exceptions\BusinessLogicException;
 use Glueful\Services\FileFinder;
 use Glueful\Storage\StorageManager;
 use Glueful\Storage\PathGuard;
@@ -14,43 +15,44 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * Generate Controller Command
- * - Interactive prompts for controller name validation
- * - Enhanced template management with better error handling
- * - Progress indicators for file creation
- * - Detailed validation with helpful error messages
- * - Better organization of generated files
- * - FileFinder and FileManager integration for safe file operations
- * @package Glueful\Console\Commands\Generate
+ * Scaffold Controller Command
+ *
+ * Generates a REST API controller with various options:
+ * - Basic controller with index/show methods
+ * - Resource controller with full CRUD methods
+ * - API-only controller (no create/edit views)
+ *
+ * @package Glueful\Console\Commands\Scaffold
  */
 #[AsCommand(
-    name: 'generate:controller',
-    description: 'Generate a REST API controller from template'
+    name: 'scaffold:controller',
+    description: 'Scaffold a REST API controller'
 )]
 class ControllerCommand extends BaseCommand
 {
     private FileFinder $fileFinder;
     private StorageManager $storage;
+
     protected function configure(): void
     {
-        $this->setDescription('Generate a REST API controller from template')
-             ->setHelp('This command generates a controller class with optional resource or API-only methods.')
+        $this->setDescription('Scaffold a REST API controller')
+             ->setHelp('This command scaffolds a controller class with optional resource or API-only methods.')
              ->addArgument(
                  'name',
                  InputArgument::REQUIRED,
-                 'The name of the controller to generate (e.g., TaskController)'
+                 'The name of the controller to scaffold (e.g., TaskController)'
              )
              ->addOption(
                  'resource',
                  'r',
                  InputOption::VALUE_NONE,
-                 'Generate resource controller with full CRUD methods'
+                 'Scaffold resource controller with full CRUD methods'
              )
              ->addOption(
                  'api',
                  'a',
                  InputOption::VALUE_NONE,
-                 'Generate API-only controller (no create/edit views)'
+                 'Scaffold API-only controller (no create/edit views)'
              )
              ->addOption(
                  'force',
@@ -64,10 +66,14 @@ class ControllerCommand extends BaseCommand
     {
         $this->initializeServices();
 
+        /** @var string $controllerName */
         $controllerName = $input->getArgument('name');
-        $resource = $input->getOption('resource');
-        $api = $input->getOption('api');
-        $force = $input->getOption('force');
+        /** @var bool $resource */
+        $resource = (bool) $input->getOption('resource');
+        /** @var bool $api */
+        $api = (bool) $input->getOption('api');
+        /** @var bool $force */
+        $force = (bool) $input->getOption('force');
 
         // Validate and normalize controller name
         $controllerName = $this->normalizeControllerName($controllerName);
@@ -77,16 +83,16 @@ class ControllerCommand extends BaseCommand
         }
 
         try {
-            $this->info("Generating controller: {$controllerName}");
+            $this->info("Scaffolding controller: {$controllerName}");
 
-            if ((bool)$resource && (bool)$api) {
+            if ($resource && $api) {
                 $this->warning('Both --resource and --api flags provided. Using --api only.');
                 $resource = false;
             }
 
             $filePath = $this->createController($controllerName, $resource, $api, $force);
 
-            $this->success("Controller created successfully!");
+            $this->success("Controller scaffolded successfully!");
             $this->table(['Property', 'Value'], [
                 ['File Path', $filePath],
                 ['Controller Type', $this->getControllerType($resource, $api)],
@@ -97,7 +103,7 @@ class ControllerCommand extends BaseCommand
 
             return self::SUCCESS;
         } catch (\Exception $e) {
-            $this->error("Failed to create controller: " . $e->getMessage());
+            $this->error("Failed to scaffold controller: " . $e->getMessage());
             return self::FAILURE;
         }
     }
@@ -118,12 +124,12 @@ class ControllerCommand extends BaseCommand
 
     private function validateControllerName(string $name): bool
     {
-        if (count([$name]) === 0 || $name === '') {
+        if ($name === '') {
             $this->error('Controller name cannot be empty.');
             return false;
         }
 
-        if (!(bool)preg_match('/^[A-Z][a-zA-Z0-9]*Controller$/', $name)) {
+        if (!preg_match('/^[A-Z][a-zA-Z0-9]*Controller$/', $name)) {
             $this->error('Controller name must be in PascalCase and end with "Controller".');
             $this->tip('Example: TaskController, UserController, ApiController');
             return false;
@@ -132,8 +138,12 @@ class ControllerCommand extends BaseCommand
         return true;
     }
 
-    private function createController(string $controllerName, bool $resource, bool $api, bool $force): string
-    {
+    private function createController(
+        string $controllerName,
+        bool $resource,
+        bool $api,
+        bool $force
+    ): string {
         $controllersDir = base_path('api/Controllers');
         $fileName = $controllerName . '.php';
         $filePath = $controllersDir . '/' . $fileName;
@@ -147,7 +157,7 @@ class ControllerCommand extends BaseCommand
         $disk = $this->makeStorage($controllersDir);
         if ($disk->fileExists($fileName) && !$force) {
             if (!$this->confirm("Controller file already exists: {$fileName}. Overwrite?", false)) {
-                throw new \Exception('Controller generation cancelled.');
+                throw new \Exception('Controller scaffolding cancelled.');
             }
         }
 
@@ -160,8 +170,11 @@ class ControllerCommand extends BaseCommand
         return $filePath;
     }
 
-    private function generateControllerContent(string $controllerName, bool $resource, bool $api): string
-    {
+    private function generateControllerContent(
+        string $controllerName,
+        bool $resource,
+        bool $api
+    ): string {
         // Extract resource name from controller name
         $resourceName = $this->extractResourceName($controllerName);
         $description = $this->generateControllerDescription($controllerName, $resourceName, $resource, $api);
@@ -196,8 +209,11 @@ class ControllerCommand extends BaseCommand
         return "{$type} controller for managing {$resourceName} operations.";
     }
 
-    private function generateBasicController(string $controllerName, string $resourceName, string $description): string
-    {
+    private function generateBasicController(
+        string $controllerName,
+        string $resourceName,
+        string $description
+    ): string {
         return <<<PHP
 <?php
 
@@ -262,7 +278,7 @@ class {$controllerName} extends BaseController
     {
         try {
             \$id = \$params['id'] ?? null;
-            
+
             if (!\$id) {
                 throw new ValidationException('ID parameter is required');
             }
@@ -288,7 +304,7 @@ class {$controllerName} extends BaseController
         if (\$e instanceof ValidationException) {
             return Response::error(\$e->getMessage(), Response::HTTP_BAD_REQUEST);
         }
-        
+
         if (\$e instanceof NotFoundException) {
             return Response::error(\$e->getMessage(), Response::HTTP_NOT_FOUND);
         }
@@ -346,7 +362,7 @@ class {$controllerName} extends BaseController
         if (\$e instanceof ValidationException) {
             return Response::error(\$e->getMessage(), Response::HTTP_BAD_REQUEST);
         }
-        
+
         if (\$e instanceof NotFoundException) {
             return Response::error(\$e->getMessage(), Response::HTTP_NOT_FOUND);
         }
@@ -398,7 +414,7 @@ PHP;
             // TODO: Implement pagination and filtering
             \$page = (int) \$request->query->get('page', 1);
             \$perPage = (int) \$request->query->get('per_page', 20);
-            
+
             // TODO: Get repository and fetch data
             // \$repository = \$this->repositoryFactory->getRepository('{$resourceName}');
             // \$result = \$repository->paginate(\$page, \$perPage);
@@ -434,7 +450,7 @@ PHP;
     {
         try {
             \$id = \$params['id'] ?? null;
-            
+
             if (!\$id) {
                 throw new ValidationException('ID parameter is required');
             }
@@ -503,13 +519,13 @@ PHP;
 
             // Get and validate input data
             \$data = \$request->toArray();
-            
+
             // TODO: Define validation rules
             \$rules = [
                 // 'name' => 'required|string|max:255',
                 // 'email' => 'required|email|unique:{$resourceName}s,email',
             ];
-            
+
             // Validate input
             \$validatedData = ValidationHelper::validateAndSanitize(\$data, \$rules);
 
@@ -567,7 +583,7 @@ PHP;
     {
         try {
             \$id = \$params['id'] ?? null;
-            
+
             if (!\$id) {
                 throw new ValidationException('ID parameter is required');
             }
@@ -580,13 +596,13 @@ PHP;
 
             // Get and validate input data
             \$data = \$request->toArray();
-            
+
             // TODO: Define validation rules
             \$rules = [
                 // 'name' => 'string|max:255',
                 // 'email' => 'email|unique:{$resourceName}s,email,' . \$id,
             ];
-            
+
             // Validate input
             \$validatedData = ValidationHelper::validateAndSanitize(\$data, \$rules);
 
@@ -626,7 +642,7 @@ PHP;
     {
         try {
             \$id = \$params['id'] ?? null;
-            
+
             if (!\$id) {
                 throw new ValidationException('ID parameter is required');
             }
@@ -692,11 +708,11 @@ PHP;
         $this->line('5. Register controller in DI container (ControllerServiceProvider)');
         $this->line('6. Test your endpoints');
         $this->line('');
-        $this->info('Generated controller follows Glueful patterns:');
-        $this->line('• Extends BaseController with full feature set');
-        $this->line('• Includes rate limiting and error handling');
-        $this->line('• Uses repository pattern and dependency injection');
-        $this->line('• Follows enterprise authentication and authorization');
+        $this->info('Scaffolded controller follows Glueful patterns:');
+        $this->line('- Extends BaseController with full feature set');
+        $this->line('- Includes rate limiting and error handling');
+        $this->line('- Uses repository pattern and dependency injection');
+        $this->line('- Follows enterprise authentication and authorization');
     }
 
     private function initializeServices(): void

@@ -4,6 +4,79 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.11.0] - 2026-01-21 — Alnilam
+
+Feature release introducing the ORM/Active Record system, completing the data layer of Priority 1 features.
+
+### Added
+
+#### ORM / Active Record
+- **Model**: New `Model` base class implementing Active Record pattern with CRUD operations, mass assignment protection, and attribute handling.
+- **Builder**: New `Builder` class wrapping QueryBuilder with model-aware query functionality, eager loading, and scope support.
+- **Collection**: New `Collection` class for model results with rich iteration, filtering, and transformation methods.
+- **Relations**: Complete relationship system:
+  - `HasOne` - One-to-one relationship (owning side)
+  - `HasMany` - One-to-many relationship
+  - `BelongsTo` - Inverse one-to-one/many relationship
+  - `BelongsToMany` - Many-to-many with pivot table support
+  - `HasOneThrough` - Has-one through intermediate model
+  - `HasManyThrough` - Has-many through intermediate model
+  - `Pivot` - Pivot model for many-to-many relationships
+- **Traits**:
+  - `HasAttributes` - Attribute get/set, casting, dirty tracking, and serialization
+  - `HasEvents` - Model lifecycle events integration with framework event system
+  - `HasRelationships` - Relationship definition and eager loading
+  - `HasTimestamps` - Automatic `created_at`/`updated_at` management
+  - `HasGlobalScopes` - Global query scope registration and removal
+  - `SoftDeletes` - Soft delete support with `deleted_at` column
+- **Casts**: Custom attribute casting system:
+  - `AsJson` - JSON encode/decode
+  - `AsArrayObject` - JSON to ArrayObject with ARRAY_AS_PROPS
+  - `AsCollection` - JSON to Collection instance
+  - `AsDateTime` - String to DateTimeImmutable with configurable format
+  - `AsEncryptedString` - Transparent encryption/decryption
+  - `AsEnum` - Backed enum casting
+  - `Attribute` - Custom getter/setter accessors with caching
+- **Events**: Model lifecycle events extending `BaseEvent`:
+  - `ModelCreating` / `ModelCreated`
+  - `ModelUpdating` / `ModelUpdated`
+  - `ModelSaving` / `ModelSaved`
+  - `ModelDeleting` / `ModelDeleted`
+  - `ModelRetrieved`
+- **Scopes**: `SoftDeletingScope` global scope with `withTrashed()`, `onlyTrashed()`, `restore()` macros.
+- **Contracts**: `ModelInterface`, `CastsAttributes`, `Scope`, `SoftDeletable` interfaces.
+- **Provider**: New `ORMProvider` service provider for DI container registration.
+
+#### Console Commands
+- **Scaffold**: New `scaffold:model` command to generate ORM model classes with options:
+  - `--migration` / `-m` - Generate accompanying migration
+  - `--soft-deletes` / `-s` - Include SoftDeletes trait
+  - `--timestamps` / `-t` - Include HasTimestamps trait
+  - `--fillable` - Comma-separated fillable attributes
+  - `--table` - Custom table name
+- **Reorganization**: Renamed command namespace from `make:*` / `generate:*` to `scaffold:*`:
+  - `make:request` → `scaffold:request`
+  - `generate:controller` → `scaffold:controller`
+
+### Changed
+- **Framework**: ORM initialization added to `Framework::initializeCoreServices()` via `Model::setContainer()`.
+- **Container**: `ORMProvider` registered in `ContainerFactory` provider list.
+- **CI**: GitHub Actions workflow jobs now run sequentially (lint → tests → coverage → static → security) for better debugging and resource usage.
+
+### Documentation
+- New `docs/ORM.md` with comprehensive usage guide covering models, relationships, eager loading, events, and casts.
+- Updated `docs/implementation-plans/README.md` marking ORM as complete.
+- Updated `docs/implementation-plans/01-orm-active-record.md` with implementation status.
+
+### Tests
+- New test suite in `tests/Unit/Database/ORM/`:
+  - `ModelTest.php` - Model base functionality
+  - `HasAttributesTest.php` - Attribute handling and casting
+  - `RelationsTest.php` - Relationship loading and management
+  - `CollectionTest.php` - Collection methods and iteration
+  - `CastsTest.php` - Custom cast classes
+  - `SoftDeletesTest.php` - Soft delete behavior
+
 ## [1.10.0] - 2026-01-21 — Elnath
 
 Feature release introducing centralized exception handling and declarative request validation, completing the foundation layer of Priority 1 features.
