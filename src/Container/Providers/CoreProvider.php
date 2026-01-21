@@ -444,6 +444,10 @@ final class CoreProvider extends BaseServiceProvider
         $defs[\Glueful\Routing\Middleware\LockdownMiddleware::class] =
             $this->autowire(\Glueful\Routing\Middleware\LockdownMiddleware::class);
 
+        // Validation middleware for automatic request validation (#[Validate] and FormRequest)
+        $defs[\Glueful\Validation\Middleware\ValidationMiddleware::class] =
+            $this->autowire(\Glueful\Validation\Middleware\ValidationMiddleware::class);
+
         // Gate-based permission middleware
         $defs[\Glueful\Permissions\Middleware\GateAttributeMiddleware::class] = new FactoryDefinition(
             \Glueful\Permissions\Middleware\GateAttributeMiddleware::class,
@@ -498,6 +502,10 @@ final class CoreProvider extends BaseServiceProvider
         $defs['auth_to_request'] = new AliasDefinition(
             'auth_to_request',
             \Glueful\Permissions\Middleware\AuthToRequestAttributesMiddleware::class
+        );
+        $defs['validate'] = new AliasDefinition(
+            'validate',
+            \Glueful\Validation\Middleware\ValidationMiddleware::class
         );
 
         return $defs;

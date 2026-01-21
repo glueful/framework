@@ -174,10 +174,10 @@ When implementing these features:
 
 ## Status
 
-| Feature | Status | Branch | Release Target |
-|---------|--------|--------|----------------|
-| Exception Handler | ✅ Complete | `feature/exception-handler` | v1.10.0 |
-| Request Validation | 📋 Planned | - | v1.10.0 |
+| Feature | Status | PR | Release Target |
+|---------|--------|-----|----------------|
+| Exception Handler | ✅ Complete | - | v1.10.0 |
+| Request Validation | ✅ Complete | - | v1.10.0 |
 | ORM / Active Record | 📋 Planned | - | v1.11.0 |
 | API Resource Transformers | 📋 Planned | - | v1.11.0 |
 
