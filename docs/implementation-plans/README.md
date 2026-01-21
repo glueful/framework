@@ -154,8 +154,8 @@ When implementing these features:
 
 | Feature | Status | PR | Release Target |
 |---------|--------|-----|----------------|
-| Exception Handler | 📋 Planned | - | v1.10.0 |
-| Request Validation | 📋 Planned | - | v1.10.0 |
+| Exception Handler | ✅ Complete | - | v1.10.0 |
+| Request Validation | ✅ Complete | - | v1.10.0 |
 | ORM / Active Record | 📋 Planned | - | v1.11.0 |
 | API Resource Transformers | 📋 Planned | - | v1.11.0 |
 
