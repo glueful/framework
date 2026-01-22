@@ -108,6 +108,10 @@ class Application extends BaseApplication
         // API commands
         \Glueful\Console\Commands\Api\VersionListCommand::class,
         \Glueful\Console\Commands\Api\VersionDeprecateCommand::class,
+        // Webhook commands
+        \Glueful\Console\Commands\Webhook\WebhookListCommand::class,
+        \Glueful\Console\Commands\Webhook\WebhookTestCommand::class,
+        \Glueful\Console\Commands\Webhook\WebhookRetryCommand::class,
     ];
 
     /**

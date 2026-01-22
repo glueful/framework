@@ -281,4 +281,95 @@ return [
         */
         'bypass_ips' => env('API_RATE_LIMIT_BYPASS_IPS', '127.0.0.1,::1'),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Webhooks Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configure webhook delivery, retry logic, and security settings.
+    | Tables are auto-created on first use (webhook_subscriptions, webhook_deliveries).
+    |
+    */
+    'webhooks' => [
+        /*
+        |--------------------------------------------------------------------------
+        | Enable Webhooks
+        |--------------------------------------------------------------------------
+        |
+        | Master switch for webhook functionality.
+        |
+        */
+        'enabled' => env('WEBHOOKS_ENABLED', true),
+
+        /*
+        |--------------------------------------------------------------------------
+        | Queue Configuration
+        |--------------------------------------------------------------------------
+        |
+        | Queue settings for webhook delivery jobs.
+        |
+        */
+        'queue' => env('WEBHOOKS_QUEUE', 'webhooks'),
+        'connection' => env('WEBHOOKS_QUEUE_CONNECTION', null),
+
+        /*
+        |--------------------------------------------------------------------------
+        | Signature Settings
+        |--------------------------------------------------------------------------
+        |
+        | Settings for HMAC signature generation and verification.
+        |
+        */
+        'signature_header' => 'X-Webhook-Signature',
+        'signature_algorithm' => 'sha256',
+
+        /*
+        |--------------------------------------------------------------------------
+        | HTTP Request Settings
+        |--------------------------------------------------------------------------
+        |
+        | Settings for outgoing webhook HTTP requests.
+        |
+        */
+        'timeout' => env('WEBHOOKS_TIMEOUT', 30),
+        'user_agent' => 'Glueful-Webhooks/1.0',
+
+        /*
+        |--------------------------------------------------------------------------
+        | Retry Configuration
+        |--------------------------------------------------------------------------
+        |
+        | Exponential backoff retry settings for failed deliveries.
+        | Default backoff: 1m, 5m, 30m, 2h, 12h
+        |
+        */
+        'retry' => [
+            'max_attempts' => env('WEBHOOKS_MAX_ATTEMPTS', 5),
+            'backoff' => [60, 300, 1800, 7200, 43200],
+        ],
+
+        /*
+        |--------------------------------------------------------------------------
+        | Security
+        |--------------------------------------------------------------------------
+        |
+        | Security settings for webhook endpoints.
+        |
+        */
+        'require_https' => env('WEBHOOKS_REQUIRE_HTTPS', true),
+
+        /*
+        |--------------------------------------------------------------------------
+        | Cleanup
+        |--------------------------------------------------------------------------
+        |
+        | Automatic cleanup of old delivery records.
+        |
+        */
+        'cleanup' => [
+            'keep_successful_days' => 7,
+            'keep_failed_days' => 30,
+        ],
+    ],
 ];

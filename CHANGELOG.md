@@ -4,6 +4,191 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.18.0] - 2026-01-22 — Hadar
+
+Feature release introducing a comprehensive Webhooks System with event-driven integrations, subscription management, HMAC signature verification, reliable delivery with exponential backoff retry, and auto-migration for database tables, completing the first feature of Phase 3: Data Access in Priority 3 API-specific features.
+
+### Added
+
+#### Webhooks System (`src/Api/Webhooks/`)
+
+- **Event-Based Subscriptions**: Subscribe to specific events or wildcard patterns:
+  - Exact matching: `user.created`, `order.completed`
+  - Wildcard matching: `user.*` matches `user.created`, `user.updated`, `user.deleted`
+  - Global wildcard: `*` matches all events
+  - Multiple event patterns per subscription
+
+- **HMAC-SHA256 Signatures**: Stripe-style signature format for payload verification:
+  - Format: `t=timestamp,v1=signature`
+  - Timing-safe comparison to prevent timing attacks
+  - Timestamp validation to prevent replay attacks (configurable tolerance)
+  - Public `parse()` method for signature header parsing
+
+- **Reliable Delivery System**:
+  - Queue-based delivery via `DeliverWebhookJob`
+  - Exponential backoff retry: 1m, 5m, 30m, 2h, 12h (configurable)
+  - Maximum 5 retry attempts (configurable)
+  - Uses Glueful HTTP Client (Symfony HttpClient)
+  - 30-second timeout per request
+
+- **Auto-Migration for Database Tables** (follows `DatabaseLogHandler` pattern):
+  - `webhook_subscriptions` - Stores subscription configuration
+  - `webhook_deliveries` - Tracks delivery attempts and responses
+  - Tables created automatically on first use via `WebhookDispatcher::ensureTables()`
+  - Zero configuration required
+
+- **ORM Models**:
+  - `WebhookSubscription` - Subscription management with `listensTo()` wildcard matching
+  - `WebhookDelivery` - Delivery tracking with status methods (`isPending()`, `isDelivered()`, `isFailed()`, `isRetrying()`)
+  - HasMany/BelongsTo relationships between models
+
+- **Event Integration**:
+  - `DispatchesWebhooks` trait for webhookable events
+  - `#[Webhookable]` PHP 8 attribute for marking events
+  - `WebhookEventListener` bridges application events to webhooks
+  - `WebhookDispatchedEvent` fired when webhooks are queued
+
+- **Static Facade** (`Webhook`):
+  - `Webhook::dispatch('event.name', $data)` - Dispatch webhooks
+  - `Webhook::subscribe(['event.*'], 'https://...')` - Create subscriptions
+  - `Webhook::subscriptionsFor('event.name')` - Get matching subscriptions
+
+- **REST API** (`WebhookController`):
+  - `POST /api/webhooks/subscriptions` - Create subscription
+  - `GET /api/webhooks/subscriptions` - List subscriptions (with pagination)
+  - `GET /api/webhooks/subscriptions/{id}` - Get subscription details
+  - `PATCH /api/webhooks/subscriptions/{id}` - Update subscription
+  - `DELETE /api/webhooks/subscriptions/{id}` - Delete subscription
+  - `POST /api/webhooks/subscriptions/{id}/test` - Send test webhook
+  - `GET /api/webhooks/deliveries` - List deliveries (filterable by status)
+  - `POST /api/webhooks/deliveries/{id}/retry` - Retry failed delivery
+
+- **CLI Commands** (`src/Console/Commands/Webhook/`):
+  - `php glueful webhook:list` - List all webhook subscriptions
+  - `php glueful webhook:test <url>` - Test a webhook endpoint
+  - `php glueful webhook:retry` - Retry failed webhook deliveries
+
+- **Contracts**:
+  - `WebhookDispatcherInterface` - Dispatcher contract
+  - `WebhookPayloadInterface` - Payload builder contract
+
+### Changed
+
+- **config/api.php**: Added comprehensive `webhooks` configuration section
+- **CoreProvider.php**: Registered `WebhookPayload`, `WebhookDispatcher`, `WebhookEventListener`, `WebhookController`
+- **ConsoleProvider.php**: Registered webhook CLI commands
+- **Application.php**: Registered webhook CLI commands
+
+### Configuration
+
+```php
+// config/api.php
+'webhooks' => [
+    'enabled' => true,
+    'queue' => 'webhooks',
+    'connection' => null, // Use default queue connection
+    'signature_header' => 'X-Webhook-Signature',
+    'signature_algorithm' => 'sha256',
+    'timeout' => 30,
+    'user_agent' => 'Glueful-Webhooks/1.0',
+    'retry' => [
+        'max_attempts' => 5,
+        'backoff' => [60, 300, 1800, 7200, 43200], // seconds
+    ],
+    'require_https' => true,
+    'cleanup' => [
+        'keep_successful_days' => 7,
+        'keep_failed_days' => 30,
+    ],
+]
+```
+
+### Usage Examples
+
+```php
+// Dispatch a webhook
+Webhook::dispatch('user.created', ['user' => $userData]);
+
+// Create a subscription
+$subscription = Webhook::subscribe(
+    ['user.*', 'order.completed'],
+    'https://example.com/webhooks'
+);
+
+// Make an event webhookable
+class UserCreated extends BaseEvent
+{
+    use DispatchesWebhooks;
+
+    public function webhookEventName(): string
+    {
+        return 'user.created';
+    }
+
+    public function webhookPayload(): array
+    {
+        return ['user' => $this->user];
+    }
+}
+
+// Verify webhook signature (for receiving webhooks)
+$isValid = WebhookSignature::verify(
+    $payload,
+    $request->headers->get('X-Webhook-Signature'),
+    $secret,
+    300 // tolerance in seconds, null to skip timestamp check
+);
+```
+
+### Webhook Payload Structure
+
+```json
+{
+    "id": "wh_evt_01HXYZ123456789ABCDEF",
+    "event": "user.created",
+    "created_at": "2026-01-22T12:00:00+00:00",
+    "data": {
+        "user": {
+            "id": "usr_01HXYZ987654321FEDCBA",
+            "email": "john@example.com",
+            "name": "John Doe"
+        }
+    }
+}
+```
+
+### Webhook Headers
+
+| Header | Description | Example |
+|--------|-------------|---------|
+| `X-Webhook-ID` | Unique delivery ID | `wh_del_01HXYZ...` |
+| `X-Webhook-Event` | Event name | `user.created` |
+| `X-Webhook-Timestamp` | Unix timestamp | `1706011200` |
+| `X-Webhook-Signature` | HMAC signature | `t=1706011200,v1=abc...` |
+| `Content-Type` | Always JSON | `application/json` |
+| `User-Agent` | Glueful identifier | `Glueful-Webhooks/1.0` |
+
+### Documentation
+
+- Updated `docs/implementation-plans/priority-3/README.md` marking Webhooks System as complete
+- Updated `docs/implementation-plans/priority-3/02-webhooks-system.md` with implementation status
+
+### Tests
+
+- **46 unit tests** with 93 assertions covering:
+  - `WebhookSignatureTest` - Signature generation, verification, parsing (16 tests)
+  - `WebhookPayloadTest` - Payload building, metadata handling (8 tests)
+  - `WebhookSubscriptionTest` - Event matching, wildcards, secret generation (11 tests)
+  - `WebhookDeliveryTest` - Status tracking, retry scheduling (11 tests)
+
+### Notes
+
+- **Auto-Migration**: Database tables are created automatically on first use - no manual migration required
+- **Queue Integration**: Webhooks are delivered asynchronously via the queue system
+- **Existing Events**: Integrates with existing `WebhookDeliveredEvent` and `WebhookFailedEvent` in `src/Events/Webhook/`
+
+---
+
 ## [1.17.0] - 2026-01-22 — Alnitak
 
 Feature release introducing Enhanced Rate Limiting with per-route limits, tiered user access, cost-based limiting, and IETF-compliant headers, completing Phase 2 of Priority 3 API-specific features.

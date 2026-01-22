@@ -21,6 +21,19 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.18.0 — Hadar (Released 2026-01-22)
+- **Webhooks System**: Comprehensive webhook infrastructure with event-driven integrations.
+  - Event-based subscriptions with wildcard matching (`user.*`, `*`).
+  - HMAC-SHA256 signatures in Stripe-style format (`t=timestamp,v1=signature`).
+  - Reliable delivery via queue with exponential backoff retry (1m, 5m, 30m, 2h, 12h).
+  - Auto-migration for database tables (follows `DatabaseLogHandler` pattern).
+  - `WebhookSubscription` and `WebhookDelivery` ORM models.
+  - `DispatchesWebhooks` trait and `#[Webhookable]` attribute for event integration.
+  - REST API for subscription management (`WebhookController`).
+  - CLI commands: `webhook:list`, `webhook:test`, `webhook:retry`.
+  - Static `Webhook` facade for easy dispatching.
+- Notes: No breaking changes. Auto-migration creates tables on first use. Completes Priority 3 Phase 3 (first feature).
+
 ### 1.17.0 — Alnitak (Released 2026-01-22)
 - **Rate Limiting Enhancements**: Comprehensive rate limiting system with per-route limits, tiered access, and multiple algorithms.
   - New `#[RateLimit]` attribute for per-route rate limiting (IS_REPEATABLE for multi-window).
