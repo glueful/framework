@@ -39,6 +39,7 @@ final class ConsoleProvider extends BaseServiceProvider
             \Glueful\Console\Commands\Database\StatusCommand::class,
             \Glueful\Console\Commands\Database\ResetCommand::class,
             \Glueful\Console\Commands\Database\ProfileCommand::class,
+            \Glueful\Console\Commands\Database\SeedCommand::class,
             // Generate commands
             \Glueful\Console\Commands\Generate\OpenApiDocsCommand::class,
             \Glueful\Console\Commands\Generate\KeyCommand::class,
@@ -47,6 +48,12 @@ final class ConsoleProvider extends BaseServiceProvider
             \Glueful\Console\Commands\Scaffold\ControllerCommand::class,
             \Glueful\Console\Commands\Scaffold\RequestCommand::class,
             \Glueful\Console\Commands\Scaffold\ResourceCommand::class,
+            \Glueful\Console\Commands\Scaffold\MiddlewareCommand::class,
+            \Glueful\Console\Commands\Scaffold\JobCommand::class,
+            \Glueful\Console\Commands\Scaffold\RuleCommand::class,
+            \Glueful\Console\Commands\Scaffold\TestCommand::class,
+            \Glueful\Console\Commands\Scaffold\SeederCommand::class,
+            \Glueful\Console\Commands\Scaffold\FactoryCommand::class,
             // Extensions commands
             \Glueful\Console\Commands\Extensions\InfoCommand::class,
             \Glueful\Console\Commands\Extensions\EnableCommand::class,

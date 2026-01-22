@@ -21,6 +21,22 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.13.0 — Saiph (Released 2026-01-22)
+- **Enhanced Scaffold Commands**: Complete scaffold command system for rapid development.
+  - `scaffold:middleware` - Generate route middleware classes implementing `RouteMiddleware`.
+  - `scaffold:job` - Generate queue job classes with queue, retry, and timeout options.
+  - `scaffold:rule` - Generate validation rule classes with parameter and implicit support.
+  - `scaffold:test` - Generate PHPUnit test classes for unit and feature testing.
+- **Database Factories & Seeders**: Complete test data generation and database seeding system.
+  - `Factory` base class with states, sequences, relationships, and lifecycle callbacks.
+  - `FakerBridge` for optional Faker integration with availability checking.
+  - `Seeder` base class with dependency ordering, transactions, and truncation helpers.
+  - `HasFactory` trait for ORM models enabling `Model::factory()` syntax.
+  - `db:seed` command with production environment protection.
+  - `scaffold:factory` and `scaffold:seeder` commands for generating classes.
+- **Documentation**: New `docs/FACTORIES.md` with comprehensive usage guide.
+- Notes: No breaking changes. Factories require `fakerphp/faker` as dev dependency. Completes Priority 2 features for v1.13.0.
+
 ### 1.12.0 — Mintaka (Released 2026-01-21)
 - **API Resource Transformers**: Complete JSON transformation layer for consistent, well-structured API responses.
   - `JsonResource` base class for transforming arrays and simple objects.

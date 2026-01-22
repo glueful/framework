@@ -13,13 +13,13 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.12.0';
+    public const VERSION = '1.13.0';
 
     /** Release code name */
-    public const NAME = 'Mintaka';
+    public const NAME = 'Saiph';
 
     /** Release date */
-    public const RELEASE_DATE = '2026-01-21';
+    public const RELEASE_DATE = '2026-01-22';
 
     /** Minimum required PHP version */
     public const MIN_PHP_VERSION = '8.3.0';
