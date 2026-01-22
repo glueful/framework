@@ -577,6 +577,47 @@ final class CoreProvider extends BaseServiceProvider
             \Glueful\Api\RateLimiting\Middleware\EnhancedRateLimiterMiddleware::class
         );
 
+        // ===== Webhooks System =====
+
+        // Webhook payload builder
+        $defs[\Glueful\Api\Webhooks\WebhookPayload::class] =
+            $this->autowire(\Glueful\Api\Webhooks\WebhookPayload::class);
+
+        $defs[\Glueful\Api\Webhooks\Contracts\WebhookPayloadInterface::class] = new AliasDefinition(
+            \Glueful\Api\Webhooks\Contracts\WebhookPayloadInterface::class,
+            \Glueful\Api\Webhooks\WebhookPayload::class
+        );
+
+        // Webhook dispatcher (with auto-migration)
+        $defs[\Glueful\Api\Webhooks\WebhookDispatcher::class] = new FactoryDefinition(
+            \Glueful\Api\Webhooks\WebhookDispatcher::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Api\Webhooks\WebhookDispatcher(
+                $c->get('database'),
+                $c->get(\Glueful\Api\Webhooks\Contracts\WebhookPayloadInterface::class)
+            )
+        );
+
+        $defs[\Glueful\Api\Webhooks\Contracts\WebhookDispatcherInterface::class] = new AliasDefinition(
+            \Glueful\Api\Webhooks\Contracts\WebhookDispatcherInterface::class,
+            \Glueful\Api\Webhooks\WebhookDispatcher::class
+        );
+
+        // Webhook event listener
+        $defs[\Glueful\Api\Webhooks\Listeners\WebhookEventListener::class] = new FactoryDefinition(
+            \Glueful\Api\Webhooks\Listeners\WebhookEventListener::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Api\Webhooks\Listeners\WebhookEventListener(
+                $c->get(\Glueful\Api\Webhooks\Contracts\WebhookDispatcherInterface::class)
+            )
+        );
+
+        // Webhook controller
+        $defs[\Glueful\Api\Webhooks\Http\Controllers\WebhookController::class] = new FactoryDefinition(
+            \Glueful\Api\Webhooks\Http\Controllers\WebhookController::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Api\Webhooks\Http\Controllers\WebhookController(
+                $c->get(\Glueful\Api\Webhooks\Contracts\WebhookDispatcherInterface::class)
+            )
+        );
+
         return $defs;
     }
 }
