@@ -97,6 +97,9 @@ final class ConsoleProvider extends BaseServiceProvider
             \Glueful\Console\Commands\Fields\ValidateCommand::class,
             \Glueful\Console\Commands\Fields\PerformanceCommand::class,
             \Glueful\Console\Commands\Fields\WhitelistCheckCommand::class,
+            // API commands
+            \Glueful\Console\Commands\Api\VersionListCommand::class,
+            \Glueful\Console\Commands\Api\VersionDeprecateCommand::class,
         ];
 
         foreach ($commands as $class) {

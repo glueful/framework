@@ -19,6 +19,8 @@ class Route
     private array $where = [];
     /** @var array<string,mixed>|null */
     private ?array $fieldsConfig = null;
+    /** @var array<string,mixed>|null */
+    private ?array $versionConfig = null;
 
     public function __construct(
         private Router $router, // Back-reference for named route registration
@@ -237,5 +239,38 @@ class Route
     public function getFieldsConfig(): ?array
     {
         return $this->fieldsConfig;
+    }
+
+    /**
+     * Set API version constraint for this route (fluent)
+     *
+     * @param string|array<string> $version Single version or array of versions
+     */
+    public function version(string|array $version): self
+    {
+        $this->versionConfig = $this->versionConfig ?? [];
+        $this->versionConfig['versions'] = is_array($version) ? $version : [$version];
+        return $this;
+    }
+
+    /**
+     * Set API version configuration for this route
+     *
+     * @param array<string,mixed> $config
+     */
+    public function setVersionConfig(array $config): self
+    {
+        $this->versionConfig = $config;
+        return $this;
+    }
+
+    /**
+     * Get API version configuration for this route
+     *
+     * @return array<string,mixed>|null
+     */
+    public function getVersionConfig(): ?array
+    {
+        return $this->versionConfig;
     }
 }
