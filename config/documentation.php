@@ -56,7 +56,7 @@ return [
     'info' => [
         'title' => env('API_TITLE', env('APP_NAME', 'API Documentation')),
         'description' => env('API_DESCRIPTION', 'Auto-generated API documentation'),
-        'version' => env('API_VERSION', '1.0.0'),
+        'version' => env('API_VERSION', '1') . '.0.0',
         'contact' => [
             'name' => env('API_CONTACT_NAME', ''),
             'email' => env('API_CONTACT_EMAIL', ''),

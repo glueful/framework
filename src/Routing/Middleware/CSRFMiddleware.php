@@ -803,12 +803,12 @@ class CSRFMiddleware implements RouteMiddleware
         $cleanPath = ltrim($path, '/');
 
         // Get API configuration from environment
-        $apiBaseUrl = env('API_BASE_URL', '');
-        $apiVersion = env('API_VERSION', 'v1');
+        $baseUrl = env('BASE_URL', '');
+        $apiVersion = 'v' . env('API_VERSION', '1');
 
-        // Extract base path from API_BASE_URL
-        if ($apiBaseUrl !== '') {
-            $parsedUrl = parse_url($apiBaseUrl);
+        // Extract base path from BASE_URL
+        if ($baseUrl !== '') {
+            $parsedUrl = parse_url($baseUrl);
             $basePath = isset($parsedUrl['path']) ? trim($parsedUrl['path'], '/') : '';
 
             if ($basePath !== '' && str_starts_with($cleanPath, $basePath)) {
@@ -817,8 +817,8 @@ class CSRFMiddleware implements RouteMiddleware
             }
         }
 
-        // Remove API version prefix
-        if ($apiVersion !== '' && str_starts_with($cleanPath, $apiVersion)) {
+        // Remove API version prefix (e.g., "v1")
+        if (str_starts_with($cleanPath, $apiVersion)) {
             $cleanPath = substr($cleanPath, strlen($apiVersion));
             $cleanPath = ltrim($cleanPath, '/');
         }
@@ -939,15 +939,9 @@ class CSRFMiddleware implements RouteMiddleware
         $origins = [];
 
         // Add current application URL
-        $appUrl = env('APP_URL', '');
+        $appUrl = env('APP_URL', env('BASE_URL', ''));
         if ($appUrl !== '') {
             $origins[] = rtrim($appUrl, '/');
-        }
-
-        // Add API base URL if different
-        $apiUrl = env('API_BASE_URL', '');
-        if ($apiUrl !== '' && $apiUrl !== $appUrl) {
-            $origins[] = rtrim($apiUrl, '/');
         }
 
         // Add frontend URL if configured

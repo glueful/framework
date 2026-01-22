@@ -28,15 +28,14 @@ return [
 
     // API Information
     'name' => env('APP_NAME', 'Glueful'),
-    'version_full' => env('API_VERSION_FULL', '1.0.0'),
-    'api_version' => env('API_VERSION', 'v1'),
+    'api_version' => env('API_VERSION', '1'),
 
     // API Versioning Configuration
     'versioning' => [
         'strategy' => env('API_VERSION_STRATEGY', 'url'), // url, header, both
-        'current' => env('API_VERSION', 'v1'),
-        'supported' => explode(',', env('API_SUPPORTED_VERSIONS', 'v1')),
-        'default' => env('API_VERSION', 'v1'),
+        'current' => env('API_VERSION', '1'),
+        'supported' => explode(',', env('API_SUPPORTED_VERSIONS', '1')),
+        'default' => env('API_VERSION', '1'),
     ],
 
     // Application Paths (filesystem only)
@@ -58,13 +57,11 @@ return [
     ],
 
     // Application URLs (web addresses grouped here)
+    // All URLs derive from BASE_URL - set it to your deployment URL (e.g., https://api.example.com)
     'urls' => [
         'base' => env('BASE_URL', 'http://localhost'),
         'cdn' => rtrim(env('BASE_URL', 'http://localhost'), '/') . '/storage/cdn/',
-        'api' => rtrim(
-            env('API_BASE_URL', rtrim(env('BASE_URL', 'http://localhost'), '/') . '/api/'),
-            '/'
-        ) . '/' . env('API_VERSION', 'v1'),
+        'api' => rtrim(env('BASE_URL', 'http://localhost'), '/') . '/api/v' . env('API_VERSION', '1'),
         'docs' => rtrim(env('BASE_URL', 'http://localhost'), '/') . '/docs/',
     ],
 
