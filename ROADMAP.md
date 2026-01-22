@@ -21,6 +21,32 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.17.0 — Alnitak (Released 2026-01-22)
+- **Rate Limiting Enhancements**: Comprehensive rate limiting system with per-route limits, tiered access, and multiple algorithms.
+  - New `#[RateLimit]` attribute for per-route rate limiting (IS_REPEATABLE for multi-window).
+  - New `#[RateLimitCost]` attribute for operation cost multipliers.
+  - Tiered rate limiting with configurable tiers (anonymous, free, pro, enterprise).
+  - Multiple algorithms: Fixed Window, Sliding Window, Token Bucket.
+  - IETF-compliant rate limit headers (`RateLimit-*`, `X-RateLimit-*`).
+  - Cost-based limiting for expensive operations.
+  - `RateLimitManager` for orchestrating limiters, tiers, and attributes.
+  - `EnhancedRateLimiterMiddleware` for automatic rate limit enforcement.
+  - Pluggable storage via `StorageInterface` with Cache and Memory backends.
+- Notes: No breaking changes. Backward compatible with existing `RateLimiterMiddleware`. Completes Priority 3 Phase 2.
+
+### 1.16.0 — Meissa (Released 2026-01-22)
+- **API Versioning Strategy**: Comprehensive API versioning system with multiple resolution strategies.
+  - New `#[Version]` attribute for declaring API version requirements on routes.
+  - New `#[Deprecated]` attribute for marking deprecated API versions with messages.
+  - New `#[Sunset]` attribute for specifying sunset dates on deprecated endpoints.
+  - Multiple version resolvers: URL prefix (`/v1/`), Header (`X-API-Version`), Query parameter, Accept header.
+  - `VersionManager` for managing version resolution strategies.
+  - `VersionNegotiationMiddleware` for automatic version detection.
+  - `ApiVersion` value object for version comparisons and constraints.
+  - Deprecation warnings via response headers.
+  - Sunset headers for scheduled API retirement.
+- Notes: No breaking changes. Versioning is opt-in and additive. Completes Priority 3 Phase 1.
+
 ### 1.15.0 — Rigel (Released 2026-01-22)
 - **Real-Time Development Server**: Enhanced development server with file watching and integrated services.
   - New `FileWatcher` class for automatic file change detection with polling strategy.
