@@ -660,10 +660,10 @@ php glueful stubs:publish
 ### Phase 1: Core Commands (Week 1)
 
 **Deliverables:**
-- [ ] `scaffold:middleware` command
+- [x] `scaffold:middleware` command ✅
 - [x] `event:create` command (✅ Already implemented)
 - [x] `event:listener` command (✅ Already implemented)
-- [ ] Basic stub templates
+- [x] Basic stub templates (inline heredoc templates) ✅
 
 **Acceptance Criteria:**
 ```bash
@@ -681,10 +681,10 @@ php glueful event:listener SendWelcomeEmail --event=App\\Events\\UserCreatedEven
 ### Phase 2: Job & Rule Commands (Week 2)
 
 **Deliverables:**
-- [ ] `scaffold:job` command
-- [ ] `scaffold:rule` command
+- [x] `scaffold:job` command ✅
+- [x] `scaffold:rule` command ✅
 - [ ] Queue integration for listeners
-- [ ] Extended stub options
+- [x] Extended stub options (inline heredoc templates) ✅
 
 **Acceptance Criteria:**
 ```bash
@@ -698,9 +698,9 @@ php glueful scaffold:rule UniqueEmail
 ### Phase 3: Test Commands & Polish (Week 3)
 
 **Deliverables:**
-- [ ] `scaffold:test` command
+- [x] `scaffold:test` command ✅
 - [ ] `stubs:publish` command
-- [ ] Complete documentation
+- [x] Complete documentation ✅
 - [ ] Test coverage for all commands
 
 **Acceptance Criteria:**

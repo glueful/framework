@@ -37,14 +37,19 @@ Several scaffold commands are already implemented:
 | `event:create` | ✅ Complete | Generate event classes (equiv. to `scaffold:event`) |
 | `event:listener` | ✅ Complete | Generate listener classes (equiv. to `scaffold:listener`) |
 
+**Implemented (v1.13.0):**
+
+| Command | Status | Description |
+|---------|--------|-------------|
+| `scaffold:middleware` | ✅ Complete | Generate middleware classes |
+| `scaffold:job` | ✅ Complete | Generate queue job classes |
+| `scaffold:rule` | ✅ Complete | Generate validation rule classes |
+| `scaffold:test` | ✅ Complete | Generate test classes |
+
 **Planned:**
 
 | Command | Status | Description |
 |---------|--------|-------------|
-| `scaffold:middleware` | 📋 Planned | Generate middleware classes |
-| `scaffold:job` | 📋 Planned | Generate queue job classes |
-| `scaffold:rule` | 📋 Planned | Generate validation rule classes |
-| `scaffold:test` | 📋 Planned | Generate test classes |
 | `scaffold:factory` | 📋 Planned | Generate model factory classes |
 | `scaffold:seeder` | 📋 Planned | Generate database seeder classes |
 
@@ -166,7 +171,7 @@ Each feature requires:
 
 | Feature | Status | PR | Release Target |
 |---------|--------|-----|----------------|
-| Scaffold Commands (Enhanced) | 📋 Planned | - | v1.13.0 |
+| Scaffold Commands (Enhanced) | ✅ Complete | - | v1.13.0 |
 | Database Factories & Seeders | 📋 Planned | - | v1.13.0 |
 | Interactive CLI Wizards | 📋 Planned | - | v1.14.0 |
 | Real-Time Dev Server | 📋 Planned | - | v1.14.0 |
