@@ -372,4 +372,108 @@ return [
             'keep_failed_days' => 30,
         ],
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Search & Filtering DSL Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configure the filtering, sorting, and search query parameter DSL.
+    | This enables standardized URL query parameter syntax for data access.
+    |
+    */
+    'filtering' => [
+        /*
+        |--------------------------------------------------------------------------
+        | Enable Filtering DSL
+        |--------------------------------------------------------------------------
+        |
+        | When enabled, the filter middleware will parse filter, sort, and search
+        | parameters from requests.
+        |
+        */
+        'enabled' => env('API_FILTERING_ENABLED', true),
+
+        /*
+        |--------------------------------------------------------------------------
+        | Query Parameters
+        |--------------------------------------------------------------------------
+        |
+        | Configure the query parameter names used for filtering.
+        |
+        */
+        'filter_param' => 'filter',
+        'sort_param' => 'sort',
+        'search_param' => 'search',
+        'search_fields_param' => 'search_fields',
+
+        /*
+        |--------------------------------------------------------------------------
+        | Limits
+        |--------------------------------------------------------------------------
+        |
+        | Security limits to prevent abuse.
+        |
+        */
+        'max_filters' => env('API_MAX_FILTERS', 20),
+        'max_depth' => env('API_FILTER_MAX_DEPTH', 3),
+        'max_sort_fields' => env('API_MAX_SORT_FIELDS', 5),
+
+        /*
+        |--------------------------------------------------------------------------
+        | Allowed Operators
+        |--------------------------------------------------------------------------
+        |
+        | List of operators that can be used in filters.
+        | Remove operators from this list to disable them globally.
+        |
+        */
+        'allowed_operators' => [
+            'eq', 'ne', 'gt', 'gte', 'lt', 'lte',
+            'contains', 'starts', 'ends',
+            'in', 'nin', 'between',
+            'null', 'not_null',
+        ],
+
+        /*
+        |--------------------------------------------------------------------------
+        | Search Driver
+        |--------------------------------------------------------------------------
+        |
+        | The search driver to use for full-text search:
+        | - database: Use SQL LIKE queries (default, no setup required)
+        | - elasticsearch: Use Elasticsearch (requires elasticsearch/elasticsearch)
+        | - meilisearch: Use Meilisearch (requires meilisearch/meilisearch-php)
+        |
+        */
+        'search_driver' => env('API_SEARCH_DRIVER', 'database'),
+
+        /*
+        |--------------------------------------------------------------------------
+        | Search Configuration
+        |--------------------------------------------------------------------------
+        |
+        | Configuration for search engine integrations.
+        |
+        | Available drivers:
+        | - database: Uses SQL LIKE queries (default, no setup required)
+        | - elasticsearch: Requires elasticsearch/elasticsearch package
+        |   Installation: composer require elasticsearch/elasticsearch:^8.0
+        | - meilisearch: Requires meilisearch/meilisearch-php package
+        |   Installation: composer require meilisearch/meilisearch-php:^1.0
+        |
+        */
+        'search' => [
+            'driver' => env('API_SEARCH_DRIVER', 'database'),
+            'index_prefix' => env('SEARCH_INDEX_PREFIX', ''),
+            'auto_index' => env('SEARCH_AUTO_INDEX', false),
+            'elasticsearch' => [
+                'hosts' => [env('ELASTICSEARCH_HOST', 'localhost:9200')],
+            ],
+            'meilisearch' => [
+                'host' => env('MEILISEARCH_HOST', 'http://localhost:7700'),
+                'key' => env('MEILISEARCH_KEY'),
+            ],
+        ],
+    ],
 ];

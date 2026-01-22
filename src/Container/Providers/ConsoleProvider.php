@@ -54,6 +54,7 @@ final class ConsoleProvider extends BaseServiceProvider
             \Glueful\Console\Commands\Scaffold\TestCommand::class,
             \Glueful\Console\Commands\Scaffold\SeederCommand::class,
             \Glueful\Console\Commands\Scaffold\FactoryCommand::class,
+            \Glueful\Console\Commands\Scaffold\FilterCommand::class,
             // Extensions commands
             \Glueful\Console\Commands\Extensions\InfoCommand::class,
             \Glueful\Console\Commands\Extensions\EnableCommand::class,

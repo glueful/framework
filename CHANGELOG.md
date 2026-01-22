@@ -4,6 +4,168 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.19.0] - 2026-01-22 — Canopus
+
+Feature release introducing a comprehensive Search & Filtering DSL with standardized URL query parameter syntax for filtering, sorting, and full-text search, including pluggable search engine adapters for Elasticsearch and Meilisearch integration.
+
+### Added
+
+#### Search & Filtering DSL (`src/Api/Filtering/`)
+
+- **Filter Parser**: Standardized URL query parameter syntax:
+  - Equality filters: `filter[status]=active`
+  - Comparison operators: `filter[age][gte]=18`, `filter[price][lt]=100`
+  - Array operators: `filter[status][in]=active,pending`
+  - Text operators: `filter[name][contains]=john`, `filter[email][starts]=admin`
+  - Null checks: `filter[deleted_at][null]`, `filter[verified_at][not_null]`
+  - Range queries: `filter[price][between]=10,100`
+
+- **14 Filter Operators** with aliases:
+  - `eq` (=, equal, equals) - Equality
+  - `ne` (!=, neq, not_equal) - Not equal
+  - `gt` (>, greater_than) - Greater than
+  - `gte` (>=, greater_than_or_equal) - Greater than or equal
+  - `lt` (<, less_than) - Less than
+  - `lte` (<=, less_than_or_equal) - Less than or equal
+  - `contains` (like, includes) - Contains substring
+  - `starts` (prefix, starts_with) - Starts with
+  - `ends` (suffix, ends_with) - Ends with
+  - `in` - In array
+  - `nin` (not_in) - Not in array
+  - `between` (range) - Between two values
+  - `null` (is_null) - Is null
+  - `not_null` (notnull, is_not_null) - Is not null
+
+- **Sorting**: Multi-column sorting with direction indicators:
+  - Ascending: `sort=name`
+  - Descending: `sort=-created_at`
+  - Multiple: `sort=-created_at,name`
+
+- **Full-Text Search**: Database LIKE queries and search engine integration:
+  - Search all fields: `search=john doe`
+  - Search specific fields: `search=tutorial&search_fields=title,body`
+
+- **QueryFilter Base Class**: Model-specific filter classes with:
+  - Field whitelisting (`$filterable`, `$sortable`, `$searchable`)
+  - Custom filter methods (`filterFieldName()` pattern)
+  - Default sort configuration
+  - Security limits (max filters, max depth)
+
+- **PHP 8 Attributes** for controller configuration:
+  - `#[Filterable]` - Define allowed filter fields
+  - `#[Searchable]` - Define searchable fields
+  - `#[Sortable]` - Define sortable fields
+
+- **FilterMiddleware**: Automatic query parameter parsing into request attributes
+
+- **OperatorRegistry**: Extensible operator registration with aliases
+
+#### Search Engine Adapters (`src/Api/Filtering/Adapters/`)
+
+- **SearchAdapterInterface**: Contract for search engine adapters
+- **SearchResult**: Value object with pagination, total count, and timing
+- **DatabaseAdapter**: SQL LIKE queries (default, no setup required)
+- **ElasticsearchAdapter**: Full Elasticsearch integration (optional)
+  - Multi-match queries with fuzziness
+  - Boolean filters
+  - Bulk indexing
+  - Installation: `composer require elasticsearch/elasticsearch:^8.0`
+- **MeilisearchAdapter**: Full Meilisearch integration (optional)
+  - Typo-tolerant search
+  - Faceted filtering
+  - Installation: `composer require meilisearch/meilisearch-php:^1.0`
+
+- **Auto-Migration**: `search_index_log` table created automatically when using search engines (follows `DatabaseLogHandler` pattern)
+
+- **Searchable Trait** (`src/Api/Filtering/Concerns/Searchable.php`):
+  - `makeSearchable()` - Index a model
+  - `removeFromSearch()` - Remove from index
+  - `Model::search($query)` - Static search method
+  - Auto-indexing on model save (configurable)
+  - Bulk indexing support
+
+#### CLI Commands
+
+- **scaffold:filter**: Generate QueryFilter classes
+  - `php glueful scaffold:filter UserFilter`
+  - `--filterable=status,role` - Define filterable fields
+  - `--sortable=name,created_at` - Define sortable fields
+  - `--searchable=name,email` - Define searchable fields
+  - `--model=User` - Associate with model
+
+### Changed
+
+- **config/api.php**: Added `filtering` configuration section with search driver settings
+- **composer.json**: Added `suggest` section for optional search dependencies
+- **CoreProvider**: Registered `FilterParser` and `FilterMiddleware` services
+- **ConsoleProvider**: Registered `FilterCommand`
+
+### Configuration
+
+```php
+// config/api.php
+'filtering' => [
+    'enabled' => true,
+    'filter_param' => 'filter',
+    'sort_param' => 'sort',
+    'search_param' => 'search',
+    'max_filters' => 20,
+    'max_depth' => 3,
+    'allowed_operators' => ['eq', 'ne', 'gt', 'gte', 'lt', 'lte', ...],
+    'search' => [
+        'driver' => 'database', // database, elasticsearch, meilisearch
+        'index_prefix' => '',
+        'auto_index' => false,
+        'elasticsearch' => ['hosts' => ['localhost:9200']],
+        'meilisearch' => ['host' => 'http://localhost:7700', 'key' => null],
+    ],
+],
+```
+
+### Usage Examples
+
+```php
+// Controller with QueryFilter
+class UserController extends Controller
+{
+    public function index(UserFilter $filter): Response
+    {
+        $users = User::query()
+            ->tap(fn($q) => $filter->apply($q))
+            ->paginate();
+
+        return UserResource::collection($users);
+    }
+}
+
+// Custom QueryFilter
+class UserFilter extends QueryFilter
+{
+    protected ?array $filterable = ['status', 'role', 'created_at'];
+    protected ?array $sortable = ['name', 'email', 'created_at'];
+    protected array $searchable = ['name', 'email', 'bio'];
+    protected ?string $defaultSort = '-created_at';
+
+    public function filterStatus(string $value, string $operator): void
+    {
+        if ($value === 'any') return;
+        $this->query->where('status', $value);
+    }
+}
+
+// Model with Searchable trait
+class Post extends Model
+{
+    use Searchable;
+    protected array $searchable = ['title', 'body'];
+}
+
+// Search
+$results = Post::search('php tutorial');
+```
+
+---
+
 ## [1.18.0] - 2026-01-22 — Hadar
 
 Feature release introducing a comprehensive Webhooks System with event-driven integrations, subscription management, HMAC signature verification, reliable delivery with exponential backoff retry, and auto-migration for database tables, completing the first feature of Phase 3: Data Access in Priority 3 API-specific features.
