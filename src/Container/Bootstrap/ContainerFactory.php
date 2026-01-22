@@ -140,6 +140,7 @@ final class ContainerFactory
             \Glueful\Permissions\ServiceProvider\PermissionsProvider::class,
             \Glueful\Permissions\ServiceProvider\GateProvider::class,
             \Glueful\Tasks\ServiceProvider\TasksProvider::class,
+            \Glueful\Container\Providers\ApiVersioningProvider::class,
         ]);
 
         if ($classes === []) {

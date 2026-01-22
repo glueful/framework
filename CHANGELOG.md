@@ -4,6 +4,247 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.17.0] - 2026-01-22 — Alnitak
+
+Feature release introducing Enhanced Rate Limiting with per-route limits, tiered user access, cost-based limiting, and IETF-compliant headers, completing Phase 2 of Priority 3 API-specific features.
+
+### Added
+
+#### Enhanced Rate Limiting System (`src/Api/RateLimiting/`)
+
+- **Per-Route Rate Limits**: New `#[RateLimit]` PHP 8 attribute for defining limits on individual endpoints:
+  - `#[RateLimit(attempts: 60, perMinutes: 1)]` - Basic per-minute limiting
+  - `#[RateLimit(attempts: 1000, perHours: 1)]` - Hourly limits
+  - `#[RateLimit(attempts: 10000, perDays: 1)]` - Daily limits
+  - `IS_REPEATABLE` attribute allows stacking multiple limits for multi-window protection
+  - Tier-specific limits: `#[RateLimit(tier: 'pro', attempts: 300)]`
+  - Custom key patterns: `#[RateLimit(key: 'custom:{ip}:{path}')]`
+
+- **Cost-Based Limiting**: New `#[RateLimitCost]` attribute for expensive operations:
+  - `#[RateLimitCost(cost: 10, reason: 'Complex query')]` - Consumes 10 quota units
+  - `#[RateLimitCost(cost: 100, reason: 'Full data export')]` - Heavy operations
+  - Protects against resource-intensive endpoints while maintaining simple counting
+
+- **Three Limiter Algorithms**:
+  - `FixedWindowLimiter` - Simple fixed time window counting
+  - `SlidingWindowLimiter` - Smooth distribution, prevents boundary spikes (default)
+  - `TokenBucketLimiter` - Allows bursts while maintaining average rate
+
+- **Tiered User Access**: Configurable rate limits per user tier:
+  - `anonymous` - 30/min, 500/hour, 5000/day (unauthenticated)
+  - `free` - 60/min, 1000/hour, 10000/day (basic authenticated)
+  - `pro` - 300/min, 10000/hour, 100000/day (premium users)
+  - `enterprise` - Unlimited (null values)
+  - Automatic tier resolution from user attributes (`tier`, `plan`, `subscription`, roles)
+
+- **IETF-Compliant Headers**: Following draft-ietf-httpapi-ratelimit-headers specification:
+  - Legacy: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
+  - IETF Draft: `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`, `RateLimit-Policy`
+  - `Retry-After` header on 429 responses (RFC 7231)
+
+- **Core Components**:
+  - `RateLimitManager` - Central orchestrator for rate limiting operations
+  - `RateLimitResult` - Immutable value object with limit status
+  - `RateLimitHeaders` - IETF-compliant header generation
+  - `TierManager` - Tier configuration management
+  - `TierResolver` - Request tier resolution from user data
+
+- **Storage Adapters**:
+  - `CacheStorage` - Production adapter using existing CacheStore
+  - `MemoryStorage` - In-memory storage for testing
+
+- **Middleware**:
+  - `EnhancedRateLimiterMiddleware` - New middleware implementing `RouteMiddleware`
+  - Registered as `enhanced_rate_limit` alias in container
+  - Backward compatible with existing `RateLimiterMiddleware`
+
+- **Route Integration**:
+  - `Route::rateLimit(attempts, perMinutes, tier, algorithm, by)` - Fluent method
+  - `Route::setRateLimitConfig(array)` / `getRateLimitConfig()` - Configuration accessors
+  - `Route::setRateLimitCost(int)` / `getRateLimitCost()` - Cost accessors
+
+- **Contracts**:
+  - `RateLimiterInterface` - Common limiter contract with `attempt()`, `check()`, `reset()`, `remaining()`
+  - `TierResolverInterface` - Contract for resolving user tier from request
+  - `StorageInterface` - Storage backend abstraction
+
+### Changed
+
+- **Route.php**: Added `rateLimitConfig` and `rateLimitCost` properties with fluent methods
+- **AttributeRouteLoader.php**: Added `processRateLimitAttributes()` method for attribute processing
+- **config/api.php**: Added comprehensive `rate_limiting` configuration section
+- **CoreProvider.php**: Registered all rate limiting services and middleware alias
+
+### Configuration
+
+```php
+// config/api.php
+'rate_limiting' => [
+    'enabled' => true,
+    'algorithm' => 'sliding', // fixed, sliding, bucket
+    'default_tier' => 'anonymous',
+    'tiers' => [
+        'anonymous' => ['requests_per_minute' => 30, ...],
+        'free' => ['requests_per_minute' => 60, ...],
+        'pro' => ['requests_per_minute' => 300, ...],
+        'enterprise' => ['requests_per_minute' => null, ...], // unlimited
+    ],
+    'headers' => ['enabled' => true, 'include_legacy' => true, 'include_ietf' => true],
+    'bypass_ips' => '127.0.0.1,::1',
+]
+```
+
+### Usage Examples
+
+```php
+// Multi-window limiting
+#[RateLimit(attempts: 60, perMinutes: 1)]
+#[RateLimit(attempts: 1000, perHours: 1)]
+public function index(): Response { }
+
+// Tier-specific limits
+#[RateLimit(tier: 'free', attempts: 100, perDays: 1)]
+#[RateLimit(tier: 'pro', attempts: 10000, perDays: 1)]
+#[RateLimit(tier: 'enterprise', attempts: 0)] // 0 = unlimited
+public function query(): Response { }
+
+// Cost-based limiting
+#[RateLimit(attempts: 1000, perDays: 1)]
+#[RateLimitCost(cost: 100, reason: 'Full data export')]
+public function export(): Response { }
+```
+
+### Documentation
+
+- Updated `docs/implementation-plans/priority-3/README.md` marking Rate Limiting Enhancements as complete
+- Updated `docs/implementation-plans/priority-3/03-rate-limiting-enhancements.md` with implementation status
+
+### Notes
+
+- **Backward Compatible**: Existing `RateLimiterMiddleware` continues to work unchanged
+- **Opt-In**: Use `enhanced_rate_limit` middleware to enable new features
+- **Unit Tests**: 44 tests with 88 assertions covering all components
+
+---
+
+## [1.16.0] - 2026-01-22 — Meissa
+
+Feature release introducing flexible API Versioning Strategy with multiple resolution methods, deprecation system, and version negotiation, completing Phase 1 of Priority 3 API-specific features.
+
+### Added
+
+#### API Versioning System (`src/Api/Versioning/`)
+
+- **Multiple Version Resolution Strategies**:
+  - `UrlPrefixResolver` - Extract version from URL path (e.g., `/api/v1/users`)
+  - `HeaderResolver` - Extract from `X-Api-Version` header
+  - `QueryParameterResolver` - Extract from `?api-version=1` query parameter
+  - `AcceptHeaderResolver` - Extract from Accept header (e.g., `application/vnd.glueful.v1+json`)
+
+- **Version Negotiation**: `VersionNegotiator` class for multi-strategy resolution:
+  - Configurable resolver priority
+  - Fallback to default version
+  - Strict mode for rejecting unsupported versions
+
+- **PHP 8 Attributes**:
+  - `#[Version('1', '2')]` - Specify supported versions for routes/controllers
+  - `#[Deprecated(since: '1', removeIn: '3', message: '...')]` - Mark deprecations
+  - `#[Sunset(date: '2025-06-01')]` - Specify sunset dates (RFC 8594)
+
+- **Version Manager**: Central management for version configuration:
+  - `getDefault()` / `setDefault()` - Default version management
+  - `getSupported()` / `isSupported()` - Supported version queries
+  - `getDeprecated()` / `isDeprecated()` - Deprecation tracking
+  - `getSunsetDate()` - Sunset date retrieval
+
+- **Middleware**: `VersionNegotiationMiddleware` implementing `RouteMiddleware`:
+  - Automatic version resolution from request
+  - Deprecation warning headers
+  - Sunset headers (RFC 8594)
+  - Version attribute on request for downstream use
+
+- **Value Object**: `ApiVersion` immutable value object:
+  - Version parsing and comparison
+  - Major/minor version extraction
+  - Equality and comparison operators
+
+- **Contracts**:
+  - `VersionResolverInterface` - Contract for version resolvers
+  - `VersionNegotiatorInterface` - Contract for version negotiation
+  - `DeprecatableInterface` - Contract for deprecatable resources
+
+### Changed
+
+- **config/api.php**: Added comprehensive `versioning` configuration section:
+  - `default` - Default API version
+  - `supported` - List of supported versions
+  - `deprecated` - Deprecated versions with sunset dates
+  - `strategy` - Primary resolution strategy
+  - `resolvers` - Ordered list of resolvers
+  - `resolver_options` - Per-resolver configuration
+  - `headers` - Response header configuration
+
+- **Route.php**: Added `version()` fluent method and `versionConfig` property
+- **CoreProvider.php**: Registered versioning services
+
+### Response Headers
+
+- `X-Api-Version` - Current API version in use
+- `Deprecation` - Deprecation notice (RFC 8594)
+- `Sunset` - Sunset date header (RFC 8594)
+- `Warning` - Deprecation warning message
+
+### Configuration
+
+```php
+// config/api.php
+'versioning' => [
+    'default' => '1',
+    'supported' => ['1', '2'],
+    'deprecated' => [
+        '1' => ['sunset' => '2025-06-01', 'message' => 'Please migrate to v2'],
+    ],
+    'strategy' => 'url_prefix',
+    'resolvers' => ['url_prefix', 'header', 'query', 'accept'],
+    'headers' => [
+        'include_version' => true,
+        'include_deprecation' => true,
+        'include_sunset' => true,
+    ],
+]
+```
+
+### Usage Examples
+
+```php
+// Route-level version constraint
+$router->get('/users', [UserController::class, 'index'])
+    ->version(['1', '2']);
+
+// Attribute-based versioning
+#[Version('2')]
+#[Deprecated(since: '2', removeIn: '3', message: 'Use /v3/users instead')]
+public function legacyUsers(): Response { }
+
+// Version-specific route groups
+$router->group(['prefix' => '/api/v1', 'middleware' => ['api_version']], function ($router) {
+    $router->get('/users', [UserController::class, 'indexV1']);
+});
+```
+
+### Documentation
+
+- Updated `docs/implementation-plans/priority-3/README.md` marking API Versioning as complete
+- Updated `docs/implementation-plans/priority-3/01-api-versioning.md` with implementation status
+
+### Notes
+
+- **Standards Compliant**: Follows RFC 8594 for Sunset headers
+- **Flexible**: Supports multiple resolution strategies simultaneously
+- **Graceful Deprecation**: Warns clients via headers before removal
+
+---
+
 ## [1.15.0] - 2026-01-22 — Rigel
 
 Feature release introducing Real-Time Development Server with file watching, colorized logging, and integrated services, completing Priority 2 developer experience features.

@@ -508,6 +508,75 @@ final class CoreProvider extends BaseServiceProvider
             \Glueful\Validation\Middleware\ValidationMiddleware::class
         );
 
+        // ===== Enhanced Rate Limiting =====
+
+        // Storage adapter for rate limiting (uses cache store)
+        $defs[\Glueful\Api\RateLimiting\Contracts\StorageInterface::class] = new FactoryDefinition(
+            \Glueful\Api\RateLimiting\Contracts\StorageInterface::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Api\RateLimiting\Storage\CacheStorage(
+                $c->get('cache.store')
+            )
+        );
+
+        // Tier manager for rate limit tiers
+        $defs[\Glueful\Api\RateLimiting\TierManager::class] = new FactoryDefinition(
+            \Glueful\Api\RateLimiting\TierManager::class,
+            function () {
+                $config = function_exists('config') ? (array) config('api.rate_limiting', []) : [];
+                return new \Glueful\Api\RateLimiting\TierManager($config);
+            }
+        );
+
+        // Tier resolver for determining user tier from request
+        $defs[\Glueful\Api\RateLimiting\Contracts\TierResolverInterface::class] = new FactoryDefinition(
+            \Glueful\Api\RateLimiting\Contracts\TierResolverInterface::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Api\RateLimiting\TierResolver(
+                $c->get(\Glueful\Api\RateLimiting\TierManager::class)
+            )
+        );
+
+        // Rate limit headers generator
+        $defs[\Glueful\Api\RateLimiting\RateLimitHeaders::class] = new FactoryDefinition(
+            \Glueful\Api\RateLimiting\RateLimitHeaders::class,
+            function () {
+                $config = function_exists('config') ? (array) config('api.rate_limiting.headers', []) : [];
+                return new \Glueful\Api\RateLimiting\RateLimitHeaders($config);
+            }
+        );
+
+        // Rate limit manager (central orchestrator)
+        $defs[\Glueful\Api\RateLimiting\RateLimitManager::class] = new FactoryDefinition(
+            \Glueful\Api\RateLimiting\RateLimitManager::class,
+            function (\Psr\Container\ContainerInterface $c) {
+                $config = function_exists('config') ? (array) config('api.rate_limiting', []) : [];
+                return new \Glueful\Api\RateLimiting\RateLimitManager(
+                    $c->get(\Glueful\Api\RateLimiting\Contracts\StorageInterface::class),
+                    $c->get(\Glueful\Api\RateLimiting\Contracts\TierResolverInterface::class),
+                    $c->get(\Glueful\Api\RateLimiting\TierManager::class),
+                    $config
+                );
+            }
+        );
+
+        // Enhanced rate limiter middleware
+        $defs[\Glueful\Api\RateLimiting\Middleware\EnhancedRateLimiterMiddleware::class] = new FactoryDefinition(
+            \Glueful\Api\RateLimiting\Middleware\EnhancedRateLimiterMiddleware::class,
+            function (\Psr\Container\ContainerInterface $c) {
+                $config = function_exists('config') ? (array) config('api.rate_limiting', []) : [];
+                return new \Glueful\Api\RateLimiting\Middleware\EnhancedRateLimiterMiddleware(
+                    $c->get(\Glueful\Api\RateLimiting\RateLimitManager::class),
+                    $c->get(\Glueful\Api\RateLimiting\RateLimitHeaders::class),
+                    $config
+                );
+            }
+        );
+
+        // Alias for enhanced rate limit middleware
+        $defs['enhanced_rate_limit'] = new AliasDefinition(
+            'enhanced_rate_limit',
+            \Glueful\Api\RateLimiting\Middleware\EnhancedRateLimiterMiddleware::class
+        );
+
         return $defs;
     }
 }

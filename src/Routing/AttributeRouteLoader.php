@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Glueful\Routing;
 
+use Glueful\Api\RateLimiting\Attributes\RateLimit;
+use Glueful\Api\RateLimiting\Attributes\RateLimitCost;
 use Glueful\Routing\Attributes\{Route, Controller, Middleware, Get, Post, Put, Delete, Fields};
 
 class AttributeRouteLoader
@@ -166,6 +168,9 @@ class AttributeRouteLoader
 
                 // Process Fields attribute for this route
                 $this->processFieldsAttribute($method, $registered);
+
+                // Process RateLimit attributes for this route
+                $this->processRateLimitAttributes($method, $registered);
             }
         }
 
@@ -218,6 +223,9 @@ class AttributeRouteLoader
 
                 // Process Fields attribute for this route
                 $this->processFieldsAttribute($method, $route);
+
+                // Process RateLimit attributes for this route
+                $this->processRateLimitAttributes($method, $route);
             }
         }
     }
@@ -320,6 +328,34 @@ class AttributeRouteLoader
             if (count($config) > 0) {
                 $route->setFieldsConfig($config);
             }
+        }
+    }
+
+    /**
+     * Process RateLimit and RateLimitCost attributes and set configuration on route
+     */
+    private function processRateLimitAttributes(\ReflectionMethod $method, \Glueful\Routing\Route $route): void
+    {
+        // Process RateLimit attributes (can be multiple for multi-window limiting)
+        $rateLimitAttributes = $method->getAttributes(RateLimit::class);
+
+        if (count($rateLimitAttributes) > 0) {
+            $rateLimitConfigs = [];
+
+            foreach ($rateLimitAttributes as $attribute) {
+                $rateLimitAttr = $attribute->newInstance();
+                $rateLimitConfigs[] = $rateLimitAttr->toArray();
+            }
+
+            $route->setRateLimitConfig($rateLimitConfigs);
+        }
+
+        // Process RateLimitCost attribute (only one per method)
+        $costAttributes = $method->getAttributes(RateLimitCost::class);
+
+        if (count($costAttributes) > 0) {
+            $costAttr = $costAttributes[0]->newInstance();
+            $route->setRateLimitCost($costAttr->cost);
         }
     }
 }

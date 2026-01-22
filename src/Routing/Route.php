@@ -19,6 +19,12 @@ class Route
     private array $where = [];
     /** @var array<string,mixed>|null */
     private ?array $fieldsConfig = null;
+    /** @var array<string,mixed>|null */
+    private ?array $versionConfig = null;
+    /** @var array<array<string,mixed>> Rate limit configurations from attributes */
+    private array $rateLimitConfig = [];
+    /** @var int|null Rate limit cost multiplier */
+    private ?int $rateLimitCost = null;
 
     public function __construct(
         private Router $router, // Back-reference for named route registration
@@ -237,5 +243,102 @@ class Route
     public function getFieldsConfig(): ?array
     {
         return $this->fieldsConfig;
+    }
+
+    /**
+     * Set API version constraint for this route (fluent)
+     *
+     * @param string|array<string> $version Single version or array of versions
+     */
+    public function version(string|array $version): self
+    {
+        $this->versionConfig = $this->versionConfig ?? [];
+        $this->versionConfig['versions'] = is_array($version) ? $version : [$version];
+        return $this;
+    }
+
+    /**
+     * Set API version configuration for this route
+     *
+     * @param array<string,mixed> $config
+     */
+    public function setVersionConfig(array $config): self
+    {
+        $this->versionConfig = $config;
+        return $this;
+    }
+
+    /**
+     * Get API version configuration for this route
+     *
+     * @return array<string,mixed>|null
+     */
+    public function getVersionConfig(): ?array
+    {
+        return $this->versionConfig;
+    }
+
+    /**
+     * Set rate limit for this route (fluent)
+     *
+     * @param int $attempts Maximum attempts allowed
+     * @param int $perMinutes Time window in minutes (default 1)
+     * @param string|null $tier Apply to specific tier only
+     * @param string $algorithm Algorithm: 'fixed', 'sliding', 'bucket'
+     * @param string $by What to limit by: 'ip', 'user', 'endpoint'
+     */
+    public function rateLimit(
+        int $attempts,
+        int $perMinutes = 1,
+        ?string $tier = null,
+        string $algorithm = 'sliding',
+        string $by = 'ip'
+    ): self {
+        $this->rateLimitConfig[] = [
+            'attempts' => $attempts,
+            'decaySeconds' => $perMinutes * 60,
+            'tier' => $tier,
+            'algorithm' => $algorithm,
+            'by' => $by,
+        ];
+        return $this;
+    }
+
+    /**
+     * Set rate limit configuration for this route
+     *
+     * @param array<array<string,mixed>> $config
+     */
+    public function setRateLimitConfig(array $config): self
+    {
+        $this->rateLimitConfig = $config;
+        return $this;
+    }
+
+    /**
+     * Get rate limit configuration for this route
+     *
+     * @return array<array<string,mixed>>
+     */
+    public function getRateLimitConfig(): array
+    {
+        return $this->rateLimitConfig;
+    }
+
+    /**
+     * Set rate limit cost multiplier for this route
+     */
+    public function setRateLimitCost(int $cost): self
+    {
+        $this->rateLimitCost = $cost;
+        return $this;
+    }
+
+    /**
+     * Get rate limit cost multiplier for this route
+     */
+    public function getRateLimitCost(): ?int
+    {
+        return $this->rateLimitCost;
     }
 }
