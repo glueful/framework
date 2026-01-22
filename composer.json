@@ -57,6 +57,11 @@
         "squizlabs/php_codesniffer": "^3.6",
         "symfony/var-dumper": "^7.3"
     },
+    "suggest": {
+        "elasticsearch/elasticsearch": "Required for Elasticsearch search adapter (^8.0)",
+        "meilisearch/meilisearch-php": "Required for Meilisearch search adapter (^1.0)",
+        "fakerphp/faker": "Required for database factories and seeders (^1.23)"
+    },
     "autoload": {
         "files": [
             "src/helpers.php"

@@ -21,6 +21,27 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.19.0 — Canopus (Released 2026-01-22)
+- **Search & Filtering DSL**: Comprehensive URL query parameter syntax for filtering, sorting, and search.
+  - Filter syntax: `filter[field][operator]=value` (14 operators with aliases).
+  - Sorting: `sort=-created_at,name` (multi-column with direction).
+  - Full-text search: `search=query&search_fields=title,body`.
+  - `QueryFilter` base class with field whitelisting and custom filter methods.
+  - PHP 8 attributes: `#[Filterable]`, `#[Searchable]`, `#[Sortable]`.
+  - `FilterMiddleware` for automatic query parameter parsing.
+  - `OperatorRegistry` for extensible operator management.
+- **Search Engine Adapters**: Pluggable search backends.
+  - `DatabaseAdapter` - SQL LIKE queries (default, no setup required).
+  - `ElasticsearchAdapter` - Full Elasticsearch integration (optional).
+  - `MeilisearchAdapter` - Full Meilisearch integration (optional).
+  - `SearchResult` value object with pagination.
+  - Auto-migration for `search_index_log` table.
+- **Searchable Trait**: ORM model integration for search engines.
+  - `makeSearchable()`, `removeFromSearch()`, `Model::search()`.
+  - Auto-indexing on model save (configurable).
+- **CLI**: `scaffold:filter` command for generating QueryFilter classes.
+- Notes: No breaking changes. Search adapters are optional (database works out of the box). Completes Priority 3 Phase 3 (Search & Filtering DSL).
+
 ### 1.18.0 — Hadar (Released 2026-01-22)
 - **Webhooks System**: Comprehensive webhook infrastructure with event-driven integrations.
   - Event-based subscriptions with wildcard matching (`user.*`, `*`).

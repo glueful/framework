@@ -618,6 +618,30 @@ final class CoreProvider extends BaseServiceProvider
             )
         );
 
+        // ===== Search & Filtering DSL =====
+
+        // Filter parser
+        $defs[\Glueful\Api\Filtering\FilterParser::class] = new FactoryDefinition(
+            \Glueful\Api\Filtering\FilterParser::class,
+            function () {
+                $config = function_exists('config') ? (array) config('api.filtering', []) : [];
+                return new \Glueful\Api\Filtering\FilterParser(
+                    (int) ($config['max_depth'] ?? 3),
+                    (int) ($config['max_filters'] ?? 20)
+                );
+            }
+        );
+
+        // Filter middleware
+        $defs[\Glueful\Api\Filtering\Middleware\FilterMiddleware::class] =
+            $this->autowire(\Glueful\Api\Filtering\Middleware\FilterMiddleware::class);
+
+        // Middleware alias for filtering
+        $defs['filter'] = new AliasDefinition(
+            'filter',
+            \Glueful\Api\Filtering\Middleware\FilterMiddleware::class
+        );
+
         return $defs;
     }
 }
