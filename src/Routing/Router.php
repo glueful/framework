@@ -271,6 +271,60 @@ class Router
     }
 
     /**
+     * Create a versioned API route group
+     *
+     * Routes defined within this group will be prefixed with the API version
+     * (e.g., /api/v1/users) and have the version negotiation middleware applied.
+     *
+     * @param string $version API version (e.g., '1', '2', 'v1')
+     * @param callable $routes Route definition callback
+     * @param array<string, mixed> $options Additional group options (prefix, middleware, etc.)
+     */
+    public function apiVersion(string $version, callable $routes, array $options = []): void
+    {
+        $version = ltrim($version, 'vV');
+
+        $config = function_exists('config') ? (array) config('api.versioning', []) : [];
+        $strategy = (string) ($config['strategy'] ?? 'url_prefix');
+        $apiPrefix = (string) ($config['prefix'] ?? '/api');
+
+        $groupAttributes = $options;
+
+        // Apply version prefix based on strategy
+        if ($strategy === 'url_prefix') {
+            $existingPrefix = isset($options['prefix']) ? rtrim((string) $options['prefix'], '/') : '';
+            $groupAttributes['prefix'] = rtrim($apiPrefix, '/') . '/v' . $version . $existingPrefix;
+        } else {
+            // For other strategies (header, query, accept), just use the base prefix
+            $groupAttributes['prefix'] = $options['prefix'] ?? $apiPrefix;
+        }
+
+        // Add version negotiation middleware
+        $existingMiddleware = isset($options['middleware']) ? (array) $options['middleware'] : [];
+        $groupAttributes['middleware'] = array_merge(['api_version'], $existingMiddleware);
+
+        // Store version metadata for the group
+        $groupAttributes['_api_version'] = $version;
+
+        $this->group($groupAttributes, $routes);
+    }
+
+    /**
+     * Get API version from current route group stack
+     *
+     * @return string|null The API version or null if not in a versioned group
+     */
+    public function getCurrentApiVersion(): ?string
+    {
+        foreach (array_reverse($this->groupStack) as $group) {
+            if (isset($group['_api_version'])) {
+                return (string) $group['_api_version'];
+            }
+        }
+        return null;
+    }
+
+    /**
      * Build comprehensive CORS headers from centralized configuration
      *
      * This method provides a single place to configure all CORS behavior,
