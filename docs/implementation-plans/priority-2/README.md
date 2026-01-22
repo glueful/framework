@@ -45,13 +45,9 @@ Several scaffold commands are already implemented:
 | `scaffold:job` | ✅ Complete | Generate queue job classes |
 | `scaffold:rule` | ✅ Complete | Generate validation rule classes |
 | `scaffold:test` | ✅ Complete | Generate test classes |
-
-**Planned:**
-
-| Command | Status | Description |
-|---------|--------|-------------|
-| `scaffold:factory` | 📋 Planned | Generate model factory classes |
-| `scaffold:seeder` | 📋 Planned | Generate database seeder classes |
+| `scaffold:factory` | ✅ Complete | Generate model factory classes |
+| `scaffold:seeder` | ✅ Complete | Generate database seeder classes |
+| `db:seed` | ✅ Complete | Run database seeders |
 
 ## Implementation Order
 
@@ -122,26 +118,26 @@ src/
 │           ├── ModelCommand.php           # ✅ IMPLEMENTED
 │           ├── RequestCommand.php         # ✅ IMPLEMENTED
 │           ├── ResourceCommand.php        # ✅ IMPLEMENTED
-│           ├── MiddlewareCommand.php      # 📋 PLANNED
-│           ├── EventCommand.php           # 📋 PLANNED
-│           ├── ListenerCommand.php        # 📋 PLANNED
-│           ├── JobCommand.php             # 📋 PLANNED
-│           ├── RuleCommand.php            # 📋 PLANNED
-│           ├── TestCommand.php            # 📋 PLANNED
-│           ├── FactoryCommand.php         # 📋 PLANNED
-│           └── SeederCommand.php          # 📋 PLANNED
+│           ├── MiddlewareCommand.php      # ✅ IMPLEMENTED
+│           ├── EventCommand.php           # 📋 PLANNED (use event:create)
+│           ├── ListenerCommand.php        # 📋 PLANNED (use event:listener)
+│           ├── JobCommand.php             # ✅ IMPLEMENTED
+│           ├── RuleCommand.php            # ✅ IMPLEMENTED
+│           ├── TestCommand.php            # ✅ IMPLEMENTED
+│           ├── FactoryCommand.php         # ✅ IMPLEMENTED
+│           └── SeederCommand.php          # ✅ IMPLEMENTED
 │
 ├── Database/
-│   ├── Factory/                           # 📋 PLANNED
+│   ├── Factory/                           # ✅ IMPLEMENTED
 │   │   ├── Factory.php
-│   │   ├── Concerns/
-│   │   │   ├── HasStates.php
-│   │   │   └── Relationships.php
 │   │   └── FakerBridge.php
 │   │
-│   └── Seeders/                           # 📋 PLANNED
-│       ├── Seeder.php
-│       └── DatabaseSeeder.php
+│   ├── Seeders/                           # ✅ IMPLEMENTED
+│   │   └── Seeder.php
+│   │
+│   └── ORM/
+│       └── Concerns/
+│           └── HasFactory.php             # ✅ IMPLEMENTED
 │
 ├── Support/
 │   └── InteractiveInput/                  # 📋 PLANNED
@@ -172,7 +168,7 @@ Each feature requires:
 | Feature | Status | PR | Release Target |
 |---------|--------|-----|----------------|
 | Scaffold Commands (Enhanced) | ✅ Complete | - | v1.13.0 |
-| Database Factories & Seeders | 📋 Planned | - | v1.13.0 |
+| Database Factories & Seeders | ✅ Complete | - | v1.13.0 |
 | Interactive CLI Wizards | 📋 Planned | - | v1.14.0 |
 | Real-Time Dev Server | 📋 Planned | - | v1.14.0 |
 
@@ -184,5 +180,6 @@ Legend: 📋 Planned | 🚧 In Progress | ✅ Complete | 🔄 Review
 
 - [Priority 1 Implementation Plans](../README.md) - Completed foundational features
 - [ORM Documentation](../../ORM.md) - Active Record implementation
+- [Factories & Seeders Documentation](../../FACTORIES.md) - Database factories and seeders
 - [Resources Documentation](../../RESOURCES.md) - API Resource transformers
 - [FRAMEWORK_IMPROVEMENTS.md](../../FRAMEWORK_IMPROVEMENTS.md) - Full roadmap

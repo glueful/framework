@@ -4,6 +4,96 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.13.0] - 2026-01-22 — Saiph
+
+Feature release introducing Enhanced Scaffold Commands and Database Factories & Seeders, completing Priority 2 developer experience features for v1.13.0.
+
+### Added
+
+#### Enhanced Scaffold Commands
+- **scaffold:middleware**: New command to generate route middleware classes implementing `RouteMiddleware` interface with options:
+  - `--force` / `-f` - Overwrite existing files
+  - `--path` / `-p` - Custom output path
+  - Supports nested namespaces (e.g., `Admin/AuthMiddleware`)
+- **scaffold:job**: New command to generate queue job classes extending `Glueful\Queue\Job` with options:
+  - `--queue` - Specify target queue name
+  - `--tries` - Number of retry attempts
+  - `--backoff` - Backoff delay in seconds
+  - `--timeout` - Job timeout in seconds
+  - `--unique` - Generate unique job (prevents duplicates)
+- **scaffold:rule**: New command to generate validation rule classes implementing `Rule` interface with options:
+  - `--params` - Constructor parameters (comma-separated)
+  - `--implicit` - Generate implicit rule (validates empty values)
+- **scaffold:test**: New command to generate PHPUnit test classes with options:
+  - `--unit` - Generate unit test (default)
+  - `--feature` - Generate feature test with HTTP testing traits
+  - `--class` - Target class to test
+  - `--methods` - Methods to generate test stubs for (comma-separated)
+
+#### Database Factories & Seeders
+- **Factory**: New `Glueful\Database\Factory\Factory` base class for test data generation:
+  - `definition()` - Define default model attributes
+  - `count(int $n)` - Set number of models to create
+  - `state(array|string|callable)` - Apply state transformations
+  - `sequence(array...)` - Rotate attribute values across created models
+  - `make()` / `makeMany()` - Create models without persisting
+  - `create()` / `createMany()` - Create and persist models
+  - `has(string $relation, int|Factory)` - Create with has-many relationships
+  - `for(string $relation, Factory|Model)` - Create with belongs-to relationships
+  - `recycle(Collection|Model)` - Reuse existing models for relationships
+  - `afterCreating(callable)` / `afterMaking(callable)` - Lifecycle callbacks
+- **FakerBridge**: New `Glueful\Database\Factory\FakerBridge` class for optional Faker integration:
+  - `getInstance()` - Get cached Faker instance
+  - `isAvailable()` - Check if Faker is installed
+  - `setLocale(string)` - Configure Faker locale
+  - `create(string $locale)` - Create new Faker instance
+  - Helpful error messages when Faker is not installed
+- **Seeder**: New `Glueful\Database\Seeders\Seeder` base class for database seeding:
+  - `run()` - Abstract method to implement seeding logic
+  - `call(string|array $class)` - Call other seeders
+  - `withTransaction(callable)` - Wrap operations in database transaction
+  - `truncate(string $table)` - Clear table before seeding
+  - `$dependencies` - Declare seeder execution order
+- **HasFactory**: New `Glueful\Database\ORM\Concerns\HasFactory` trait for models:
+  - `factory(int $count = 1)` - Get factory instance for model
+  - `factoryUsing(string $factoryClass)` - Use custom factory class
+  - Auto-resolves factory class from model name convention
+
+#### Console Commands
+- **db:seed**: New command to run database seeders with options:
+  - `[class]` - Specific seeder class to run (default: DatabaseSeeder)
+  - `--force` / `-f` - Required to run in production environment
+  - Environment protection prevents accidental production seeding
+- **scaffold:factory**: New command to generate model factory classes with options:
+  - `--model` / `-m` - The model class the factory creates
+  - `--force` / `-f` - Overwrite existing files
+  - `--path` / `-p` - Custom output path
+  - Warns if Faker is not installed
+- **scaffold:seeder**: New command to generate database seeder classes with options:
+  - `--model` / `-m` - The model class to use for seeding
+  - `--force` / `-f` - Overwrite existing files
+  - `--path` / `-p` - Custom output path
+  - Special handling for DatabaseSeeder (main orchestrator)
+
+### Changed
+- **Console**: All new commands registered in `ConsoleProvider` and `Application` command list.
+- **Application.php**: Added `SeedCommand`, `FactoryCommand`, `SeederCommand`, `MiddlewareCommand`, `JobCommand`, `RuleCommand`, `TestCommand` to command registry.
+
+### Documentation
+- New `docs/FACTORIES.md` with comprehensive usage guide covering:
+  - Factory creation and definition
+  - Factory states and sequences
+  - Relationships (has/for)
+  - Seeder creation and execution
+  - Console commands reference
+  - Best practices
+- Updated `docs/implementation-plans/priority-2/README.md` marking enhanced scaffold commands and factories/seeders as complete.
+
+### Notes
+- **Faker Dependency**: Factories require `fakerphp/faker` as a dev dependency. Install with `composer require --dev fakerphp/faker`.
+- **Production Safety**: The `db:seed` command requires `--force` flag in production environments.
+- **Generated Files**: Factories are created in `database/factories/`, seeders in `database/seeders/`.
+
 ## [1.12.0] - 2026-01-21 — Mintaka
 
 Feature release introducing API Resource Transformers, completing all Priority 1 features for modern API development.
