@@ -21,6 +21,18 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.15.0 — Rigel (Released 2026-01-22)
+- **Real-Time Development Server**: Enhanced development server with file watching and integrated services.
+  - New `FileWatcher` class for automatic file change detection with polling strategy.
+  - New `RequestLogger` class for colorized HTTP request logging with timing.
+  - New `LogEntry` class for structured request log entries.
+  - `serve --watch` option for auto-restart on code changes.
+  - `serve --queue` option for integrated queue worker.
+  - Port auto-selection when preferred port is in use.
+  - Colorized output with method and status code highlighting.
+  - Configurable poll interval with `--poll-interval`.
+- Notes: No breaking changes. Completes Priority 2 developer experience features.
+
 ### 1.14.0 — Bellatrix (Released 2026-01-22)
 - **Interactive CLI Wizards**: Enhanced developer experience for console commands.
   - New `Prompter` class with fluent API for CLI prompts (ask, confirm, choice, multiChoice, suggest).

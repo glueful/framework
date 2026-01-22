@@ -4,6 +4,80 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.15.0] - 2026-01-22 — Rigel
+
+Feature release introducing Real-Time Development Server with file watching, colorized logging, and integrated services, completing Priority 2 developer experience features.
+
+### Added
+
+#### Real-Time Development Server
+- **FileWatcher Class**: New `Glueful\Development\Watcher\FileWatcher` for automatic file change detection:
+  - Polling-based watching for cross-platform compatibility
+  - Configurable directories, extensions, and ignore patterns
+  - Change detection for created, modified, and deleted files
+  - `watch(callable $onChange)` - Watch with callback on changes
+  - `checkOnce()` - Single check for changes (non-blocking)
+  - `setInterval(int $ms)` - Configure polling interval
+  - `setExtensions(array)` / `addExtensions(array)` - Configure watched file types
+  - `setIgnore(array)` / `addIgnore(array)` - Configure ignore patterns
+
+- **RequestLogger Class**: New `Glueful\Development\Logger\RequestLogger` for colorized HTTP logging:
+  - Color-coded HTTP methods (GET=green, POST/PUT=yellow, DELETE=red)
+  - Color-coded status codes (2xx=green, 3xx=yellow, 4xx/5xx=red)
+  - Duration formatting with slow request highlighting (>200ms yellow, >1s red)
+  - Memory usage display
+  - `log(LogEntry $entry)` - Log a request entry
+  - `logStartup(string $host, int $port, array $options)` - Log server startup
+  - `logRestart(string $reason)` - Log server restart
+  - `logQueue(string $message)` - Log queue worker activity
+  - `logFileChange(string $file, string $type)` - Log file changes
+
+- **LogEntry Class**: New `Glueful\Development\Logger\LogEntry` structured data class:
+  - Immutable request log entry with method, path, status, duration, memory
+  - `fromAccessLog(string $line)` - Parse PHP built-in server log format
+  - `create(...)` - Factory method with defaults
+  - Status helpers: `isSuccessful()`, `isRedirect()`, `isClientError()`, `isServerError()`
+  - `isSlow(float $thresholdMs)` - Check if request was slow
+
+#### Enhanced ServeCommand
+- **File Watching**: New `--watch` / `-w` option for auto-restart on code changes:
+  - Watches `api/`, `src/`, `config/`, `routes/` directories
+  - Monitors `.php`, `.env`, `.json`, `.yaml`, `.yml` files
+  - Automatic server restart when changes detected
+  - Configurable poll interval with `--poll-interval`
+
+- **Queue Worker Integration**: New `--queue` / `-q` option:
+  - Starts queue worker alongside development server
+  - Queue output prefixed with `[Queue]` for clarity
+  - Graceful shutdown of both processes
+
+- **Port Auto-Selection**: Improved port handling:
+  - Automatically finds next available port if preferred port is in use
+  - Tries up to 10 consecutive ports before failing
+
+- **Colorized Output**: Enhanced request logging:
+  - Color-coded HTTP methods and status codes
+  - Request duration with slow request highlighting
+  - Clean, formatted output for development
+
+### Changed
+- **ServeCommand**: Completely rewritten with new features:
+  - Added `--watch` / `-w` for file watching
+  - Added `--queue` / `-q` for queue worker integration
+  - Added `--poll-interval` for watcher configuration
+  - Changed `--host` shortcut from `null` to `-H`
+  - Enhanced output formatting with RequestLogger
+  - Improved signal handling for graceful shutdown
+
+### Documentation
+- Updated `docs/implementation-plans/priority-2/README.md` marking Real-Time Dev Server as complete.
+- Updated `docs/implementation-plans/priority-2/04-realtime-dev-server.md` with implementation status.
+
+### Notes
+- **Cross-Platform**: File watcher uses polling strategy for compatibility with all operating systems.
+- **Performance**: Default poll interval is 500ms, configurable via `--poll-interval`.
+- **Directories**: Default watched directories are `api/`, `src/`, `config/`, `routes/`.
+
 ## [1.14.0] - 2026-01-22 — Bellatrix
 
 Feature release introducing Interactive CLI Wizards for enhanced developer experience, continuing Priority 2 developer experience features.

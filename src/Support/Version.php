@@ -13,10 +13,10 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.14.0';
+    public const VERSION = '1.15.0';
 
     /** Release code name */
-    public const NAME = 'Bellatrix';
+    public const NAME = 'Rigel';
 
     /** Release date */
     public const RELEASE_DATE = '2026-01-22';
