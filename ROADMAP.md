@@ -21,6 +21,13 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.19.1 — Canopus (Released 2026-01-22)
+- **Simplified Configuration**: Consolidate URL and version environment variables.
+  - Single `BASE_URL` for all URL derivation (removed `API_BASE_URL`).
+  - Single `API_VERSION` as integer (removed `API_VERSION_FULL`, `API_DEFAULT_VERSION`).
+  - Cleaner deployment configuration with fewer variables to manage.
+- Notes: Patch release. Update `.env` files to use simplified format.
+
 ### 1.19.0 — Canopus (Released 2026-01-22)
 - **Search & Filtering DSL**: Comprehensive URL query parameter syntax for filtering, sorting, and search.
   - Filter syntax: `filter[field][operator]=value` (14 operators with aliases).

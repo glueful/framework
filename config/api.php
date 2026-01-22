@@ -39,7 +39,7 @@ return [
         | The default API version when none is specified in the request.
         |
         */
-        'default' => env('API_DEFAULT_VERSION', '1'),
+        'default' => env('API_VERSION', '1'),
 
         /*
         |--------------------------------------------------------------------------

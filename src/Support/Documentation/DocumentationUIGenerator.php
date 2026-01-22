@@ -99,7 +99,7 @@ class DocumentationUIGenerator
     </style>
 </head>
 <body>
-    <script id="api-reference" data-url="./openapi.json"></script>
+    <script id="api-reference" data-url="/docs/openapi.json"></script>
     <script>
         var configuration = {
             theme: '{$theme}',
@@ -153,7 +153,7 @@ HTML;
     <script>
         window.onload = function() {
             SwaggerUIBundle({
-                url: './openapi.json',
+                url: '/docs/openapi.json',
                 dom_id: '#swagger-ui',
                 deepLinking: {$deepLinking},
                 displayRequestDuration: {$displayRequestDuration},
@@ -199,7 +199,7 @@ HTML;
 </head>
 <body>
     <redoc
-        spec-url="./openapi.json"
+        spec-url="/docs/openapi.json"
         expand-responses="{$expandResponses}"
         hide-download-button="{$hideDownload}"
         lazy-rendering

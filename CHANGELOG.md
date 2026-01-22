@@ -4,6 +4,51 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.19.1] - 2026-01-22 — Canopus
+
+Patch release simplifying API configuration by consolidating URL and version environment variables.
+
+### Changed
+
+- **Simplified URL Configuration**: All URLs now derive from single `BASE_URL` variable
+  - Removed `API_BASE_URL` — no longer needed, use `BASE_URL` instead
+  - Example: `BASE_URL=https://api.example.com` → API at `/api/v1/`, docs at `/docs/`
+
+- **Simplified Version Configuration**: Consolidated to single `API_VERSION` variable
+  - Removed `API_VERSION_FULL` — docs version now derived as `{API_VERSION}.0.0`
+  - Removed `API_DEFAULT_VERSION` — use `API_VERSION` instead
+  - Changed format from `API_VERSION=v1` to `API_VERSION=1` (integer)
+  - The "v" prefix is added automatically in URL paths
+
+- **Updated Files**:
+  - `.env.example` — Simplified to just `BASE_URL` and `API_VERSION`
+  - `config/app.php` — URLs derive from `BASE_URL`, removed `version_full`
+  - `config/api.php` — Uses `API_VERSION` for versioning default
+  - `config/documentation.php` — Derives version from `API_VERSION`
+  - `CSRFMiddleware` — Uses `BASE_URL` for path extraction
+
+### Migration
+
+Update your `.env` file:
+
+```diff
+- BASE_URL=http://localhost:8000
+- API_BASE_URL=http://localhost:8000
+- API_VERSION=v1
+- API_VERSION_FULL=1.0.0
+- API_DEFAULT_VERSION=1
++ BASE_URL=http://localhost:8000
++ API_VERSION=1
+```
+
+For production with API on subdomain:
+```env
+BASE_URL=https://api.example.com
+API_VERSION=1
+```
+
+---
+
 ## [1.19.0] - 2026-01-22 — Canopus
 
 Feature release introducing a comprehensive Search & Filtering DSL with standardized URL query parameter syntax for filtering, sorting, and full-text search, including pluggable search engine adapters for Elasticsearch and Meilisearch integration.
