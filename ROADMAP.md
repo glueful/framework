@@ -21,6 +21,16 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.14.0 — Bellatrix (Released 2026-01-22)
+- **Interactive CLI Wizards**: Enhanced developer experience for console commands.
+  - New `Prompter` class with fluent API for CLI prompts (ask, confirm, choice, multiChoice, suggest).
+  - New `ProgressBar` wrapper with enhanced formats and auto-progress iteration.
+  - New `Spinner` class with multiple animation styles for indeterminate progress.
+  - `BaseCommand` enhanced with interactive helper methods.
+  - Scaffold commands updated for interactive mode (prompts for arguments when not provided).
+  - Full `--no-interaction` support for CI/CD environments.
+- Notes: No breaking changes. Continues Priority 2 developer experience improvements.
+
 ### 1.13.0 — Saiph (Released 2026-01-22)
 - **Enhanced Scaffold Commands**: Complete scaffold command system for rapid development.
   - `scaffold:middleware` - Generate route middleware classes implementing `RouteMiddleware`.

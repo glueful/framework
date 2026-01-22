@@ -139,17 +139,13 @@ src/
 │       └── Concerns/
 │           └── HasFactory.php             # ✅ IMPLEMENTED
 │
-├── Support/
-│   └── InteractiveInput/                  # 📋 PLANNED
-│       ├── Prompter.php
-│       ├── Questions/
-│       │   ├── TextQuestion.php
-│       │   ├── ConfirmQuestion.php
-│       │   ├── ChoiceQuestion.php
-│       │   └── MultiChoiceQuestion.php
-│       └── Formatters/
-│           ├── TableFormatter.php
-│           └── ProgressFormatter.php
+├── Console/
+│   ├── BaseCommand.php                    # ✅ Updated with interactive helpers
+│   └── Interactive/                       # ✅ IMPLEMENTED
+│       ├── Prompter.php                   # Fluent API for CLI prompts
+│       └── Progress/
+│           ├── ProgressBar.php            # Enhanced progress bar wrapper
+│           └── Spinner.php                # Spinner animations
 │
 └── ...existing...
 ```
@@ -169,8 +165,8 @@ Each feature requires:
 |---------|--------|-----|----------------|
 | Scaffold Commands (Enhanced) | ✅ Complete | - | v1.13.0 |
 | Database Factories & Seeders | ✅ Complete | - | v1.13.0 |
-| Interactive CLI Wizards | 📋 Planned | - | v1.14.0 |
-| Real-Time Dev Server | 📋 Planned | - | v1.14.0 |
+| Interactive CLI Wizards | ✅ Complete | - | v1.14.0 |
+| Real-Time Dev Server | 📋 Planned | - | v1.15.0 |
 
 Legend: 📋 Planned | 🚧 In Progress | ✅ Complete | 🔄 Review
 
