@@ -2,6 +2,9 @@
 
 namespace Glueful\Console;
 
+use Glueful\Console\Interactive\Prompter;
+use Glueful\Console\Interactive\Progress\ProgressBar as EnhancedProgressBar;
+use Glueful\Console\Interactive\Progress\Spinner;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -33,6 +36,9 @@ abstract class BaseCommand extends Command
 
     /** @var OutputInterface Command output */
     protected OutputInterface $output;
+
+    /** @var Prompter|null Interactive prompter instance */
+    protected ?Prompter $prompter = null;
 
     /**
      * Initialize Command
@@ -411,5 +417,209 @@ abstract class BaseCommand extends Command
 
         $this->warning("You are about to {$operation} in PRODUCTION environment!");
         return $this->confirm("Are you sure you want to continue?", false);
+    }
+
+    // =====================================
+    // Enhanced Interactive Methods
+    // =====================================
+
+    /**
+     * Get the Prompter instance
+     *
+     * Returns a Prompter configured with the current input/output.
+     * The Prompter provides a fluent API for interactive prompts.
+     *
+     * @return Prompter
+     */
+    protected function getPrompter(): Prompter
+    {
+        if ($this->prompter === null) {
+            /** @var \Symfony\Component\Console\Helper\QuestionHelper $helper */
+            $helper = $this->getHelper('question');
+            $this->prompter = new Prompter($helper, $this->input, $this->output);
+        }
+
+        return $this->prompter;
+    }
+
+    /**
+     * Check if running in interactive mode
+     *
+     * Returns false when --no-interaction flag is used.
+     *
+     * @return bool True if interactive mode is enabled
+     */
+    protected function isInteractive(): bool
+    {
+        return $this->input->isInteractive();
+    }
+
+    /**
+     * Ask for text input with auto-fallback
+     *
+     * In non-interactive mode, returns the default value.
+     *
+     * @param string $question Question to ask
+     * @param string|null $default Default value
+     * @param callable|null $validator Validation callback
+     * @return string|null The answer or default
+     */
+    protected function prompt(
+        string $question,
+        ?string $default = null,
+        ?callable $validator = null
+    ): ?string {
+        return $this->getPrompter()->ask($question, $default, $validator);
+    }
+
+    /**
+     * Ask for required text input
+     *
+     * Continues prompting until a non-empty value is provided.
+     *
+     * @param string $question Question to ask
+     * @param string|null $default Default value
+     * @return string The answer
+     */
+    protected function promptRequired(string $question, ?string $default = null): string
+    {
+        return $this->getPrompter()->askRequired($question, $default);
+    }
+
+    /**
+     * Ask to select from multiple options
+     *
+     * In non-interactive mode, returns the defaults or empty array.
+     *
+     * @param string $question Question to ask
+     * @param array<string|int, string> $choices Available choices
+     * @param array<string|int>|null $defaults Default selections
+     * @return array<string|int> Selected choices
+     */
+    protected function multiChoice(
+        string $question,
+        array $choices,
+        ?array $defaults = null
+    ): array {
+        return $this->getPrompter()->multiChoice($question, $choices, $defaults);
+    }
+
+    /**
+     * Ask with auto-completion suggestions
+     *
+     * @param string $question Question to ask
+     * @param array<string> $suggestions Suggestions for auto-completion
+     * @param string|null $default Default value
+     * @return string|null The answer
+     */
+    protected function suggest(
+        string $question,
+        array $suggestions,
+        ?string $default = null
+    ): ?string {
+        return $this->getPrompter()->suggest($question, $suggestions, $default);
+    }
+
+    /**
+     * Create an enhanced progress bar
+     *
+     * @param int $max Maximum steps
+     * @return EnhancedProgressBar Progress bar instance
+     */
+    protected function createEnhancedProgressBar(int $max = 0): EnhancedProgressBar
+    {
+        return new EnhancedProgressBar($this->output, $max);
+    }
+
+    /**
+     * Create a spinner for indeterminate progress
+     *
+     * @param string $message Message to display
+     * @param string $style Animation style
+     * @return Spinner Spinner instance
+     */
+    protected function createSpinner(
+        string $message = 'Loading...',
+        string $style = 'dots'
+    ): Spinner {
+        return new Spinner($this->output, $message, $style);
+    }
+
+    /**
+     * Run a task with progress tracking
+     *
+     * @template T
+     * @param iterable<T> $items Items to process
+     * @param callable(T): void $callback Processing callback
+     * @param string|null $message Progress message (optional)
+     */
+    protected function withProgress(
+        iterable $items,
+        callable $callback,
+        ?string $message = null
+    ): void {
+        $progress = $this->createEnhancedProgressBar();
+
+        if ($message !== null) {
+            $progress->setFormat(EnhancedProgressBar::FORMAT_WITH_MESSAGE);
+            $progress->setMessage($message);
+        }
+
+        foreach ($progress->iterate($items) as $item) {
+            $callback($item);
+        }
+    }
+
+    /**
+     * Run a task with spinner animation
+     *
+     * @template T
+     * @param callable(): T $callback Task to run
+     * @param string $message Spinner message
+     * @return T The callback's return value
+     */
+    protected function withSpinner(callable $callback, string $message = 'Loading...'): mixed
+    {
+        $spinner = $this->createSpinner($message);
+        return $spinner->run($callback);
+    }
+
+    /**
+     * Run a task with spinner and success message
+     *
+     * @template T
+     * @param callable(): T $callback Task to run
+     * @param string $message Spinner message
+     * @param string $successMessage Success message
+     * @return T The callback's return value
+     */
+    protected function withSpinnerSuccess(
+        callable $callback,
+        string $message,
+        string $successMessage
+    ): mixed {
+        $spinner = $this->createSpinner($message);
+        return $spinner->runWithSuccess($callback, $successMessage);
+    }
+
+    /**
+     * Confirm before destructive operation
+     *
+     * Shows a warning and requires explicit confirmation.
+     * In non-interactive mode, returns --force option value.
+     *
+     * @param string $message Warning message
+     * @return bool True if confirmed
+     */
+    protected function confirmDestructive(string $message): bool
+    {
+        if (!$this->isInteractive()) {
+            return (bool) ($this->input->getOption('force') ?? false);
+        }
+
+        $this->line('');
+        $this->warning('This is a destructive operation.');
+
+        return $this->confirm($message, false);
     }
 }

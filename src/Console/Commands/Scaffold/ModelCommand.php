@@ -22,21 +22,23 @@ use Symfony\Component\Console\Output\OutputInterface;
  * - Generate model factory
  * - Include common traits
  *
+ * Supports interactive mode when name argument is omitted.
+ *
  * @package Glueful\Console\Commands\Scaffold
  */
 #[AsCommand(
     name: 'scaffold:model',
-    description: 'Scaffold an ORM model class'
+    description: 'Scaffold an ORM model class (interactive mode supported)'
 )]
 class ModelCommand extends BaseCommand
 {
     protected function configure(): void
     {
         $this->setDescription('Scaffold an ORM model class')
-            ->setHelp('This command scaffolds a model class with optional migration, factory, and traits.')
+            ->setHelp($this->getDetailedHelp())
             ->addArgument(
                 'name',
-                InputArgument::REQUIRED,
+                InputArgument::OPTIONAL,
                 'The name of the model to generate (e.g., User, Post, OrderItem)'
             )
             ->addOption(
@@ -81,8 +83,19 @@ class ModelCommand extends BaseCommand
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        /** @var string $modelName */
+        // Get model name from argument or prompt interactively
+        /** @var string|null $modelName */
         $modelName = $input->getArgument('name');
+
+        if ($modelName === null || $modelName === '') {
+            $modelName = $this->promptForModelName();
+            if ($modelName === null) {
+                $this->error('Model name is required.');
+                return self::FAILURE;
+            }
+        }
+
+        // Get options from flags
         /** @var bool $migration */
         $migration = (bool) $input->getOption('migration');
         /** @var bool $softDeletes */
@@ -95,6 +108,16 @@ class ModelCommand extends BaseCommand
         $table = is_string($table) ? $table : null;
         /** @var bool $force */
         $force = (bool) $input->getOption('force');
+
+        // In interactive mode, prompt for options if not already set via flags
+        if ($this->isInteractive() && !$this->hasAnyOptionSet($input)) {
+            $interactiveOptions = $this->promptForOptions();
+            $migration = $migration || $interactiveOptions['migration'];
+            $softDeletes = $softDeletes || $interactiveOptions['softDeletes'];
+            if ($fillable === null || $fillable === '') {
+                $fillable = $interactiveOptions['fillable'];
+            }
+        }
 
         // Normalize model name
         $modelName = $this->normalizeModelName($modelName);
@@ -502,6 +525,93 @@ PHP;
     private function camelCase(string $value): string
     {
         return lcfirst($value);
+    }
+
+    /**
+     * Prompt for model name in interactive mode
+     */
+    private function promptForModelName(): ?string
+    {
+        return $this->prompt(
+            'What should the model be named?',
+            null,
+            function ($answer) {
+                if ($answer === null || trim($answer) === '') {
+                    throw new \RuntimeException('Model name is required.');
+                }
+
+                $answer = trim($answer);
+
+                if (!preg_match('/^[A-Z][a-zA-Z0-9]*$/', $answer)) {
+                    throw new \RuntimeException(
+                        'Model name must start with uppercase letter and contain only alphanumeric characters.'
+                    );
+                }
+
+                return $answer;
+            }
+        );
+    }
+
+    /**
+     * Prompt for options in interactive mode
+     *
+     * @return array{migration: bool, softDeletes: bool, fillable: string|null}
+     */
+    private function promptForOptions(): array
+    {
+        $migration = $this->confirm('Would you like to create a migration?', true);
+        $softDeletes = $this->confirm('Would you like to include soft deletes?', false);
+
+        $fillable = null;
+        if ($this->confirm('Would you like to specify fillable attributes?', false)) {
+            $fillable = $this->prompt(
+                'Enter fillable attributes (comma-separated)',
+                null
+            );
+        }
+
+        return [
+            'migration' => $migration,
+            'softDeletes' => $softDeletes,
+            'fillable' => $fillable,
+        ];
+    }
+
+    /**
+     * Check if any model option was explicitly set
+     */
+    private function hasAnyOptionSet(InputInterface $input): bool
+    {
+        return (bool) $input->getOption('migration')
+            || (bool) $input->getOption('soft-deletes')
+            || ($input->getOption('fillable') !== null && $input->getOption('fillable') !== '');
+    }
+
+    /**
+     * Get detailed help text
+     */
+    private function getDetailedHelp(): string
+    {
+        return <<<HELP
+Scaffold an ORM model class with optional migration and traits.
+
+When run without arguments, the command enters interactive mode and prompts
+for the model name and options.
+
+Examples:
+  php glueful scaffold:model User
+  php glueful scaffold:model Post --migration --soft-deletes
+  php glueful scaffold:model Product --fillable=name,price,description
+
+  # Interactive mode
+  php glueful scaffold:model
+
+  # Non-interactive mode (for CI/CD)
+  php glueful scaffold:model User --migration --no-interaction
+
+The generated model will be placed in api/Models/.
+HELP;
     }
 
     private function makeStorage(string $root): \League\Flysystem\FilesystemOperator

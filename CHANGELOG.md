@@ -4,6 +4,69 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.14.0] - 2026-01-22 — Bellatrix
+
+Feature release introducing Interactive CLI Wizards for enhanced developer experience, continuing Priority 2 developer experience features.
+
+### Added
+
+#### Interactive CLI System
+- **Prompter Class**: New `Glueful\Console\Interactive\Prompter` class providing fluent API for CLI prompts:
+  - `ask(string $question, ?string $default, ?callable $validator)` - Text input with validation
+  - `askRequired(string $question, ?string $default)` - Required text input
+  - `secret(string $question, ?callable $validator)` - Hidden input for passwords
+  - `confirm(string $question, bool $default)` - Yes/no confirmation
+  - `choice(string $question, array $choices, $default)` - Single selection from options
+  - `multiChoice(string $question, array $choices, ?array $defaults)` - Multiple selection
+  - `suggest(string $question, array $suggestions, ?string $default)` - Auto-completion input
+  - Auto-fallback to defaults in non-interactive mode (`--no-interaction`)
+
+- **ProgressBar Wrapper**: New `Glueful\Console\Interactive\Progress\ProgressBar` enhanced wrapper:
+  - Predefined format constants (NORMAL, VERBOSE, DEBUG, WITH_MESSAGE)
+  - `iterate(iterable $items)` - Generator for automatic progress tracking
+  - `map(iterable $items, callable $callback)` - Process items with progress
+  - `times(int $count, callable $callback)` - Run callback N times with progress
+  - Fluent interface for configuration
+
+- **Spinner Animations**: New `Glueful\Console\Interactive\Progress\Spinner` class:
+  - Multiple animation styles: dots, line, arrows, bouncing, growing, circle, square, toggle, simple
+  - `run(callable $callback)` - Wrap task with spinner animation
+  - `runWithSuccess(callable $callback, string $successMessage)` - With completion message
+  - `setStyle(string $style)` / `setFrames(array $frames)` - Customize animation
+  - Success, error, warning, and info completion states
+
+#### BaseCommand Enhancements
+- **Interactive Helpers**: Added to `Glueful\Console\BaseCommand`:
+  - `getPrompter()` - Get Prompter instance
+  - `isInteractive()` - Check if running in interactive mode
+  - `prompt()`, `promptRequired()` - Quick text input methods
+  - `multiChoice()` - Multi-select from options
+  - `suggest()` - Input with auto-completion
+  - `createEnhancedProgressBar()` - Get enhanced progress bar
+  - `createSpinner()` - Create spinner instance
+  - `withProgress(iterable, callable)` - Process items with progress
+  - `withSpinner(callable, string)` - Run task with spinner
+  - `withSpinnerSuccess(callable, string, string)` - Spinner with success message
+  - `confirmDestructive(string)` - Confirmation for destructive operations
+
+#### Scaffold Command Improvements
+- **scaffold:model**: Now supports interactive mode:
+  - Prompts for model name when not provided as argument
+  - Interactive option selection for migration, soft-deletes, fillable fields
+  - Detailed help text with usage examples
+  - Maintains full CLI compatibility with `--no-interaction`
+
+### Changed
+- **BaseCommand**: Added `$prompter` property and interactive helper methods.
+- **ModelCommand**: Changed 'name' argument from REQUIRED to OPTIONAL for interactive support.
+
+### Documentation
+- Updated `docs/implementation-plans/priority-2/README.md` marking Interactive CLI Wizards as complete.
+
+### Notes
+- **Non-Interactive Mode**: All interactive prompts gracefully fallback to defaults when `--no-interaction` flag is used (CI/CD friendly).
+- **Existing Commands**: Destructive commands (db:reset, migrate:rollback, cache:clear, etc.) already have proper confirmation dialogs.
+
 ## [1.13.0] - 2026-01-22 — Saiph
 
 Feature release introducing Enhanced Scaffold Commands and Database Factories & Seeders, completing Priority 2 developer experience features for v1.13.0.
