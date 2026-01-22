@@ -1,6 +1,8 @@
 # Search & Filtering DSL Implementation Plan
 
-> A comprehensive plan for implementing an advanced search and filtering domain-specific language (DSL) with support for complex queries, full-text search, and search engine integration in Glueful Framework.
+> **Status: ✅ COMPLETE** — Released in v1.19.0 (Canopus)
+
+A comprehensive plan for implementing an advanced search and filtering domain-specific language (DSL) with support for complex queries, full-text search, and search engine integration in Glueful Framework.
 
 ## Table of Contents
 
@@ -1445,14 +1447,14 @@ class Sortable
 
 ## Implementation Phases
 
-### Phase 1: Core Infrastructure (Week 1)
+### Phase 1: Core Infrastructure (Week 1) ✅ COMPLETE
 
 **Deliverables:**
-- [ ] `FilterParser` class
-- [ ] `ParsedFilter` and `ParsedSort` value objects
-- [ ] Basic operators (eq, ne, gt, gte, lt, lte)
-- [ ] `OperatorRegistry`
-- [ ] `FilterBuilder` class
+- [x] `FilterParser` class
+- [x] `ParsedFilter` and `ParsedSort` value objects
+- [x] Basic operators (eq, ne, gt, gte, lt, lte)
+- [x] `OperatorRegistry`
+- [x] `FilterBuilder` class
 
 **Acceptance Criteria:**
 ```php
@@ -1461,14 +1463,14 @@ $filters = $parser->parseFilters($request);
 // Returns [ParsedFilter(field: 'status', operator: 'eq', value: 'active')]
 ```
 
-### Phase 2: QueryFilter Classes (Week 2)
+### Phase 2: QueryFilter Classes (Week 2) ✅ COMPLETE
 
 **Deliverables:**
-- [ ] `QueryFilter` base class
-- [ ] Custom filter method support
-- [ ] Sorting implementation
-- [ ] Basic search (LIKE queries)
-- [ ] Field whitelisting
+- [x] `QueryFilter` base class
+- [x] Custom filter method support
+- [x] Sorting implementation
+- [x] Basic search (LIKE queries)
+- [x] Field whitelisting
 
 **Acceptance Criteria:**
 ```php
@@ -1480,27 +1482,27 @@ class UserFilter extends QueryFilter {
 $users = User::query()->tap(fn($q) => $filter->apply($q))->get();
 ```
 
-### Phase 3: Advanced Operators (Week 2-3)
+### Phase 3: Advanced Operators (Week 2-3) ✅ COMPLETE
 
 **Deliverables:**
-- [ ] All operators (in, nin, between, contains, null, etc.)
-- [ ] Attribute-based configuration
-- [ ] `FilterMiddleware`
-- [ ] Error handling
+- [x] All operators (in, nin, between, contains, null, etc.)
+- [x] Attribute-based configuration
+- [x] `FilterMiddleware`
+- [x] Error handling
 
 **Acceptance Criteria:**
 ```
 GET /users?filter[status][in]=active,pending&filter[age][between]=18,65
 ```
 
-### Phase 4: Search Engine Integration (Week 3-4)
+### Phase 4: Search Engine Integration (Week 3-4) ✅ COMPLETE
 
 **Deliverables:**
-- [ ] `SearchAdapterInterface`
-- [ ] `ElasticsearchAdapter`
-- [ ] `MeilisearchAdapter`
-- [ ] `Searchable` trait
-- [ ] `scaffold:filter` command
+- [x] `SearchAdapterInterface`
+- [x] `ElasticsearchAdapter`
+- [x] `MeilisearchAdapter`
+- [x] `Searchable` trait
+- [x] `scaffold:filter` command
 
 **Acceptance Criteria:**
 ```php
