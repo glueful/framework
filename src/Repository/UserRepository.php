@@ -104,7 +104,8 @@ class UserRepository extends BaseRepository
         try {
             EmailDTO::from(['email' => $email]);
         } catch (\Glueful\Validation\ValidationException $e) {
-            return $e->errors();
+            // Invalid email format - return null (user not found)
+            return null;
         }
 
         // Use BaseRepository's findBy method
@@ -719,22 +720,13 @@ class UserRepository extends BaseRepository
     }
 
     /**
-     * Create validator instance with proper fallback handling
+     * Create validator instance
      *
      * @return Validator Validator instance
      */
     private function createValidatorInstance(): Validator
     {
-        try {
-            return container()->get(Validator::class);
-        } catch (\Exception) {
-            // Fallback to direct instantiation if container fails
-            // This should not happen in normal operation since the ValidatorServiceProvider
-            // registers the validator, but we provide a fallback for edge cases
-            throw new \RuntimeException(
-                'Unable to create Validator instance - ValidatorServiceProvider may not be registered'
-            );
-        }
+        return new Validator([]);
     }
 
     /**

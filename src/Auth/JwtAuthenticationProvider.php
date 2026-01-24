@@ -30,11 +30,11 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
     public function authenticate(Request $request): ?array
     {
         $this->lastError = null;
-        $clientIp = $request->getClientIp();
 
         try {
             // Extract token using centralized extractor
             $token = TokenManager::extractTokenFromRequest();
+
             if ($token === null || $token === '') {
                 $this->lastError = 'No authentication token provided';
                 return null;
@@ -134,7 +134,7 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
             $header = json_decode($headerJson, true);
             // Check if it has typical JWT header fields
             return is_array($header) && isset($header['alg']) && isset($header['typ']);
-        } catch (\Throwable $e) {
+        } catch (\Throwable) {
             return false;
         }
     }

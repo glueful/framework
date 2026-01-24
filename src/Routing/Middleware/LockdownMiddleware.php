@@ -398,7 +398,12 @@ class LockdownMiddleware implements RouteMiddleware
     {
         $path = $this->getRequestPath($request);
 
-        // Consider API requests
+        // Use helper to check if this is an API path (uses configured prefix)
+        if (function_exists('is_api_path') && is_api_path($path)) {
+            return false;
+        }
+
+        // Fallback check for when helper isn't loaded
         if (str_starts_with($path, '/api/')) {
             return false;
         }

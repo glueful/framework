@@ -15,7 +15,7 @@ use Glueful\Controllers\Traits\ResponseCachingTrait;
 use Glueful\Models\User;
 use Glueful\Http\RequestUserContext;
 use Glueful\Http\Response;
-use Glueful\Exceptions\ValidationException;
+use Glueful\Validation\ValidationException;
 use Glueful\Serialization\Serializer;
 use Glueful\Serialization\Context\SerializationContext;
 use Symfony\Component\HttpFoundation\Request;
@@ -140,7 +140,7 @@ abstract class BaseController
     /**
      * Create validation error response
      *
-     * @param array<string, string> $errors
+     * @param array<string, string|array<string>> $errors Field errors (string or array of strings)
      */
     protected function validationError(array $errors, string $message = 'Validation failed'): Response
     {
@@ -483,7 +483,7 @@ abstract class BaseController
     protected function handleException(\Exception $e): Response
     {
         if ($e instanceof ValidationException) {
-            return $this->validationError($e->getErrors(), $e->getMessage());
+            return $this->validationError($e->errors(), $e->getMessage());
         }
 
         // Log the exception for debugging

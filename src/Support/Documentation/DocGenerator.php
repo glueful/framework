@@ -254,7 +254,9 @@ class DocGenerator
      */
     private function addResourceEndpoints(string $tableName, array $schema): void
     {
-        $basePath = "/{$tableName}";
+        // Apply version prefix from config (resource routes are versioned)
+        $version = config('app.versioning.current', '1');
+        $basePath = "/v{$version}/{$tableName}";
         $isReadOnly = ($schema['x-access-mode'] ?? 'read-write') === 'read-only';
         $tag = "Table - {$tableName}";
 
@@ -608,7 +610,7 @@ class DocGenerator
             'info' => $this->buildInfoSection(),
             'servers' => config('documentation.servers', [
                 [
-                    'url' => rtrim(config('app.urls.api', ''), '/'),
+                    'url' => function_exists('api_url') ? api_url() : rtrim(config('app.urls.base', ''), '/'),
                     'description' => 'API Server'
                 ]
             ]),

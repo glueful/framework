@@ -24,6 +24,9 @@ class HealthService
     /** @var Connection|null Database connection instance */
     private ?Connection $connection = null;
 
+    /** @var array<string, array{result: array<string, mixed>, timestamp: float}> In-memory cache for health checks */
+    private static array $healthCache = [];
+
     /**
      * Constructor
      *
@@ -66,6 +69,15 @@ class HealthService
      */
     private function performDatabaseCheck(): array
     {
+        // Use in-memory cache to prevent duplicate queries within the same request (5 second TTL)
+        $cacheKey = 'database';
+        if (isset(self::$healthCache[$cacheKey])) {
+            $cached = self::$healthCache[$cacheKey];
+            if ((microtime(true) - $cached['timestamp']) < 5.0) {
+                return $cached['result'];
+            }
+        }
+
         try {
             // Test 1: Basic connectivity with QueryBuilder raw query
             $testResult = $this->connection->query()->executeRawFirst('SELECT 1 as test');
@@ -73,7 +85,7 @@ class HealthService
             // Test 2: Check if migrations table exists and is accessible
             $migrationCount = $this->connection->table('migrations')->count();
 
-            return [
+            $result = [
                 'status' => 'ok',
                 'message' => 'Database connection and QueryBuilder operational',
                 'driver' => $this->connection->getDriverName(),
@@ -81,7 +93,7 @@ class HealthService
                 'connectivity_test' => $testResult !== null && $testResult !== []
             ];
         } catch (\PDOException $e) {
-            return [
+            $result = [
                 'status' => 'error',
                 'message' => 'Database connection failed: ' . $e->getMessage(),
                 'type' => 'connection_error'
@@ -94,19 +106,27 @@ class HealthService
                  str_contains($e->getMessage(), 'does not exist') ||
                  str_contains($e->getMessage(), 'no such table'))
             ) {
-                return [
+                $result = [
                     'status' => 'warning',
                     'message' => 'Database connected but migrations not run',
                     'suggestion' => 'Run: php glueful migrate run'
                 ];
+            } else {
+                $result = [
+                    'status' => 'error',
+                    'message' => 'Database error: ' . $e->getMessage(),
+                    'type' => 'query_error'
+                ];
             }
-
-            return [
-                'status' => 'error',
-                'message' => 'Database error: ' . $e->getMessage(),
-                'type' => 'query_error'
-            ];
         }
+
+        // Cache the result
+        self::$healthCache[$cacheKey] = [
+            'result' => $result,
+            'timestamp' => microtime(true)
+        ];
+
+        return $result;
     }
 
     /**

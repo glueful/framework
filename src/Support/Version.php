@@ -13,13 +13,13 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.19.1';
+    public const VERSION = '1.19.2';
 
     /** Release code name */
     public const NAME = 'Canopus';
 
     /** Release date */
-    public const RELEASE_DATE = '2026-01-22';
+    public const RELEASE_DATE = '2026-01-24';
 
     /** Minimum required PHP version */
     public const MIN_PHP_VERSION = '8.3.0';

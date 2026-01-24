@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Helpers;
 
-use Glueful\Exceptions\ValidationException;
+use Glueful\Validation\ValidationException;
 
 /**
  * Validation Helper
@@ -34,10 +34,11 @@ class ValidationHelper
         }
 
         if (count($missing) > 0) {
-            throw new ValidationException([
-                'required_fields' => "The following fields are required: " . implode(', ', $missing),
-                'missing_fields' => $missing
-            ]);
+            $errors = [];
+            foreach ($missing as $field) {
+                $errors[$field] = "The {$field} field is required";
+            }
+            throw ValidationException::withErrors($errors);
         }
     }
 
@@ -51,9 +52,7 @@ class ValidationHelper
     public static function validateEmail(string $email, string $fieldName = 'email'): void
     {
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            throw new ValidationException([
-                $fieldName => "Invalid email format: {$email}"
-            ]);
+            throw ValidationException::forField($fieldName, "Invalid email format: {$email}");
         }
     }
 
@@ -69,9 +68,7 @@ class ValidationHelper
         $pattern = '/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i';
 
         if (!preg_match($pattern, $uuid)) {
-            throw new ValidationException([
-                $fieldName => "Invalid UUID format: {$uuid}"
-            ]);
+            throw ValidationException::forField($fieldName, "Invalid UUID format: {$uuid}");
         }
     }
 
@@ -89,15 +86,17 @@ class ValidationHelper
         $length = strlen($value);
 
         if ($length < $minLength) {
-            throw new ValidationException([
-                $fieldName => "{$fieldName} must be at least {$minLength} characters long"
-            ]);
+            throw ValidationException::forField(
+                $fieldName,
+                "{$fieldName} must be at least {$minLength} characters long"
+            );
         }
 
         if ($length > $maxLength) {
-            throw new ValidationException([
-                $fieldName => "{$fieldName} must not exceed {$maxLength} characters"
-            ]);
+            throw ValidationException::forField(
+                $fieldName,
+                "{$fieldName} must not exceed {$maxLength} characters"
+            );
         }
     }
 
@@ -114,9 +113,10 @@ class ValidationHelper
         $invalid = array_diff($values, $allowed);
 
         if (count($invalid) > 0) {
-            throw new ValidationException([
-                $fieldName => "Invalid values: " . implode(', ', $invalid) . ". Allowed: " . implode(', ', $allowed)
-            ]);
+            throw ValidationException::forField(
+                $fieldName,
+                "Invalid values: " . implode(', ', $invalid) . ". Allowed: " . implode(', ', $allowed)
+            );
         }
     }
 
@@ -130,15 +130,11 @@ class ValidationHelper
     public static function validatePositiveInteger($value, string $fieldName): void
     {
         if (!is_int($value) && !ctype_digit((string)$value)) {
-            throw new ValidationException([
-                $fieldName => "{$fieldName} must be a positive integer"
-            ]);
+            throw ValidationException::forField($fieldName, "{$fieldName} must be a positive integer");
         }
 
         if ((int)$value <= 0) {
-            throw new ValidationException([
-                $fieldName => "{$fieldName} must be greater than 0"
-            ]);
+            throw ValidationException::forField($fieldName, "{$fieldName} must be greater than 0");
         }
     }
 
@@ -158,9 +154,7 @@ class ValidationHelper
         $dateTime = \DateTime::createFromFormat($format, $date);
 
         if (!$dateTime || $dateTime->format($format) !== $date) {
-            throw new ValidationException([
-                $fieldName => "Invalid date format. Expected: {$format}"
-            ]);
+            throw ValidationException::forField($fieldName, "Invalid date format. Expected: {$format}");
         }
     }
 
@@ -176,9 +170,7 @@ class ValidationHelper
         json_decode($json);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new ValidationException([
-                $fieldName => "Invalid JSON: " . json_last_error_msg()
-            ]);
+            throw ValidationException::forField($fieldName, "Invalid JSON: " . json_last_error_msg());
         }
     }
 
@@ -277,12 +269,14 @@ class ValidationHelper
                     $sanitized[$field] = $value;
                 }
             } catch (ValidationException $e) {
-                $errors = array_merge($errors, $e->getErrors());
+                foreach ($e->errors() as $errorField => $messages) {
+                    $errors[$errorField] = is_array($messages) ? $messages[0] : $messages;
+                }
             }
         }
 
         if (count($errors) > 0) {
-            throw new ValidationException($errors);
+            throw ValidationException::withErrors($errors);
         }
 
         return $sanitized;

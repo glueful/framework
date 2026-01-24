@@ -99,8 +99,8 @@ interface WhereClauseInterface
     /**
      * Build database-agnostic aggregation query with JSON conditions
      *
-     * @param array<mixed> $jsonConditions
-     * @return array<string, mixed>
+     * @param array<array{0: string, 1: string, 2?: string|null}> $jsonConditions JSON conditions
+     * @return array{query: string, bindings: array<mixed>}
      */
     public function buildAggregationQuery(
         string $table,

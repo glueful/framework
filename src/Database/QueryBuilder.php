@@ -128,7 +128,16 @@ class QueryBuilder implements QueryBuilderInterface
     public function selectRaw(string $expression): static
     {
         $columns = $this->state->getSelectColumns();
-        $columns[] = new RawExpression($expression);
+
+        // If the only column is the default '*', replace it with the raw expression
+        // to avoid "SELECT *, COUNT(*)" which violates SQL standard GROUP BY rules
+        // (all non-aggregated columns must appear in GROUP BY)
+        if ($columns === ['*']) {
+            $columns = [new RawExpression($expression)];
+        } else {
+            $columns[] = new RawExpression($expression);
+        }
+
         $this->state->setSelectColumns($columns);
         return $this;
     }

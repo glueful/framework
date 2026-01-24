@@ -231,7 +231,11 @@ final class CoreProvider extends BaseServiceProvider
                 return new \Glueful\Auth\TokenManager();
             }
         );
-        $defs[\Glueful\Auth\AuthenticationManager::class] = $this->autowire(\Glueful\Auth\AuthenticationManager::class);
+        // Use the singleton from AuthBootstrap to ensure providers are registered
+        $defs[\Glueful\Auth\AuthenticationManager::class] = new FactoryDefinition(
+            \Glueful\Auth\AuthenticationManager::class,
+            fn() => \Glueful\Auth\AuthBootstrap::getManager()
+        );
 
         $defs[\Glueful\Auth\AuthenticationGuard::class] = new FactoryDefinition(
             \Glueful\Auth\AuthenticationGuard::class,

@@ -90,7 +90,8 @@ class NotificationRepository extends BaseRepository
             return $this->update($data['uuid'], $data);
         } else {
             // Remove the ID field if it's NULL to let the database auto-increment
-            if (isset($data['id']) && $data['id'] == null) {
+            // Note: isset() returns false for null values, so use array_key_exists()
+            if (array_key_exists('id', $data) && $data['id'] === null) {
                 unset($data['id']);
             }
 

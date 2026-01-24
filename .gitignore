@@ -11,3 +11,4 @@ vendor
 /.idea/
 /.vscode/
 /*.code-workspace
+bootstrap

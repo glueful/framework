@@ -8,7 +8,7 @@ use Glueful\Repository\BlobRepository;
 use Glueful\Helpers\Utils;
 use Glueful\Uploader\Storage\{StorageInterface, FlysystemStorage};
 use Glueful\Uploader\UploadException;
-use Glueful\Uploader\ValidationException;
+use Glueful\Validation\ValidationException;
 use Glueful\Storage\StorageManager;
 use Glueful\Storage\Support\UrlGenerator;
 
@@ -105,7 +105,7 @@ final class FileUploader
     private function validateRequest(string $token, array $getParams, array $fileParams): void
     {
         if (!isset($getParams['user_id']) || $getParams['user_id'] === '' || $token === '' || $fileParams === []) {
-            throw new ValidationException('Missing required parameters');
+            throw ValidationException::forField('file', 'Missing required parameters');
         }
     }
 
@@ -130,7 +130,7 @@ final class FileUploader
 
         $maxSize = (int) (config('filesystem.security.max_upload_size', self::MAX_FILE_SIZE));
         if ($file['size'] > $maxSize) {
-            throw new ValidationException('File size exceeds limit');
+            throw ValidationException::forField('file', 'File size exceeds limit');
         }
 
         return $file;
@@ -177,31 +177,31 @@ final class FileUploader
         if (is_array($allowedExtensions) && $allowedExtensions !== []) {
             $allowedExtensions = array_map('strtolower', $allowedExtensions);
             if ($originalExt === '' || !in_array($originalExt, $allowedExtensions, true)) {
-                throw new ValidationException('File extension not allowed');
+                throw ValidationException::forField('file', 'File extension not allowed');
             }
 
             $mimeMap = $this->validMimeMap();
             if (isset($mimeMap[$originalExt])) {
                 if (!in_array($mime, $mimeMap[$originalExt], true)) {
-                    throw new ValidationException('MIME type does not match file extension');
+                    throw ValidationException::forField('file', 'MIME type does not match file extension');
                 }
             } else {
                 // Unknown extension mapping: enforce generic allowed MIME list
                 if (!in_array($mime, self::ALLOWED_MIME_TYPES, true)) {
-                    throw new ValidationException('Invalid file type');
+                    throw ValidationException::forField('file', 'Invalid file type');
                 }
             }
         } else {
             // Fallback: generic allowed MIME list
             if (!in_array($mime, self::ALLOWED_MIME_TYPES, true)) {
-                throw new ValidationException('Invalid file type');
+                throw ValidationException::forField('file', 'Invalid file type');
             }
         }
 
         // Additional security checks (configurable)
         $scanEnabled = (bool) config('filesystem.security.scan_uploads', true);
         if ($scanEnabled && $this->isFileHazardous($file['tmp_name'])) {
-            throw new ValidationException('File content not allowed');
+            throw ValidationException::forField('file', 'File content not allowed');
         }
     }
 
@@ -270,7 +270,7 @@ final class FileUploader
     public function handleBase64Upload(string $base64String): string
     {
         if ($base64String === '') {
-            throw new ValidationException('Empty base64 string');
+            throw ValidationException::forField('file', 'Empty base64 string');
         }
 
         $tempFile = sprintf('/tmp/%s', bin2hex(random_bytes(16)));
@@ -278,7 +278,7 @@ final class FileUploader
         try {
             $data = base64_decode($base64String, true);
             if ($data === false) {
-                throw new ValidationException('Invalid base64 string');
+                throw ValidationException::forField('file', 'Invalid base64 string');
             }
 
             if (@file_put_contents($tempFile, $data) === false) {

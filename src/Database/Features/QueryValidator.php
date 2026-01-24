@@ -201,22 +201,71 @@ class QueryValidator implements QueryValidatorInterface
             throw new \InvalidArgumentException('Invalid characters in table name');
         }
 
-        // Check length
-        if (strlen($table) > 64) {
+        // Handle table aliases: "table AS alias" or "table alias"
+        // Supports: table, schema.table, table AS t, schema.table AS t, table t, schema.table t
+        $tableName = $table;
+        $alias = null;
+
+        // Pattern for valid identifier: letter/underscore followed by alphanumeric/underscore
+        $identifierPattern = '[a-zA-Z_][a-zA-Z0-9_]*';
+
+        // Pattern for table name: identifier or schema.identifier
+        $tablePattern = $identifierPattern . '(?:\.' . $identifierPattern . ')?';
+
+        // Check for "table AS alias" or "table alias" pattern (case-insensitive)
+        $aliasPattern = '/^(' . $tablePattern . ')\s+(?:AS\s+)?(' . $identifierPattern . ')$/i';
+        if (preg_match($aliasPattern, $table, $matches)) {
+            $tableName = $matches[1];
+            $alias = $matches[2];
+        }
+
+        // Split schema.table if present
+        $parts = explode('.', $tableName);
+        $schema = count($parts) === 2 ? $parts[0] : null;
+        $baseTableName = count($parts) === 2 ? $parts[1] : $parts[0];
+
+        // Check length of base table name (most databases limit to 64 characters)
+        if (strlen($baseTableName) > 64) {
             throw new \InvalidArgumentException('Table name too long (max 64 characters)');
         }
 
-        // Check if it's a reserved keyword
-        if ($this->strictMode && in_array(strtoupper($table), self::RESERVED_KEYWORDS, true)) {
-            throw new \InvalidArgumentException("Table name '$table' is a reserved SQL keyword");
+        // Check schema length if present
+        if ($schema !== null && strlen($schema) > 64) {
+            throw new \InvalidArgumentException('Schema name too long (max 64 characters)');
         }
 
-        // Validate identifier format
-        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $table)) {
+        // Check if table name is a reserved keyword
+        if ($this->strictMode && in_array(strtoupper($baseTableName), self::RESERVED_KEYWORDS, true)) {
+            throw new \InvalidArgumentException("Table name '$baseTableName' is a reserved SQL keyword");
+        }
+
+        // Validate table name identifier format
+        if (!preg_match('/^' . $identifierPattern . '$/', $baseTableName)) {
             throw new \InvalidArgumentException(
                 'Invalid table name format. Must start with letter or underscore, ' .
                 'followed by letters, numbers, or underscores.'
             );
+        }
+
+        // Validate schema name if present
+        if ($schema !== null) {
+            if ($this->strictMode && in_array(strtoupper($schema), self::RESERVED_KEYWORDS, true)) {
+                throw new \InvalidArgumentException("Schema name '$schema' is a reserved SQL keyword");
+            }
+
+            if (!preg_match('/^' . $identifierPattern . '$/', $schema)) {
+                throw new \InvalidArgumentException(
+                    'Invalid schema name format. Must start with letter or underscore, ' .
+                    'followed by letters, numbers, or underscores.'
+                );
+            }
+        }
+
+        // Validate alias if present
+        if ($alias !== null) {
+            if ($this->strictMode && in_array(strtoupper($alias), self::RESERVED_KEYWORDS, true)) {
+                throw new \InvalidArgumentException("Table alias '$alias' is a reserved SQL keyword");
+            }
         }
     }
 

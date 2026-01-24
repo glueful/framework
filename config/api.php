@@ -90,9 +90,40 @@ return [
         |--------------------------------------------------------------------------
         |
         | Base prefix for versioned API routes (used with url_prefix strategy).
+        | Set to empty string for subdomain-based APIs (e.g., api.example.com).
         |
         */
         'prefix' => env('API_PREFIX', '/api'),
+
+        /*
+        |--------------------------------------------------------------------------
+        | Apply Prefix to Routes
+        |--------------------------------------------------------------------------
+        |
+        | Whether to automatically apply the API prefix to framework routes.
+        | Set to false for subdomain-based APIs where prefix is not needed.
+        |
+        | Examples:
+        | - true + prefix=/api → routes at /api/v1/auth/login
+        | - false → routes at /v1/auth/login (for api.example.com subdomain)
+        |
+        */
+        'apply_prefix_to_routes' => env('API_USE_PREFIX', true),
+
+        /*
+        |--------------------------------------------------------------------------
+        | Version in URL Path
+        |--------------------------------------------------------------------------
+        |
+        | Whether to include the version number in the URL path.
+        | Set to false for unversioned APIs.
+        |
+        | Examples:
+        | - true → /api/v1/auth/login
+        | - false → /api/auth/login
+        |
+        */
+        'version_in_path' => env('API_VERSION_IN_PATH', true),
 
         /*
         |--------------------------------------------------------------------------

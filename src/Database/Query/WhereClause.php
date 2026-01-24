@@ -82,9 +82,6 @@ class WhereClause implements WhereClauseInterface
 
     /**
      * Add WHERE condition (convenience method for nested queries)
-     */
-    /**
-     * Add WHERE condition (convenience method for nested queries)
      *
      * @param string|array<string, mixed>|callable $column
      */
@@ -220,10 +217,7 @@ class WhereClause implements WhereClauseInterface
      * @param  string      $column      JSON column name
      * @param  string      $searchValue Value to search for
      * @param  string|null $path        JSON path (optional)
-     * @return array Array with 'condition' and 'bindings' keys
-     */
-    /**
-     * {@inheritdoc}
+     * @return array{condition: string, bindings: array<mixed>}
      */
     public function buildJsonCondition(string $column, string $searchValue, ?string $path = null): array
     {
@@ -273,11 +267,8 @@ class WhereClause implements WhereClauseInterface
      * @param  string $orderByColumn  Column to order by
      * @param  string $orderDirection Order direction (ASC/DESC)
      * @param  int    $limit          Number of results to limit
-     * @param  array  $jsonConditions Array of JSON conditions ['column', 'value', 'path']
-     * @return array Array with 'query' and 'bindings' keys
-     */
-    /**
-     * {@inheritdoc}
+     * @param  array<array{0: string, 1: string, 2?: string|null}> $jsonConditions JSON conditions
+     * @return array{query: string, bindings: array<mixed>}
      */
     public function buildAggregationQuery(
         string $table,
@@ -440,7 +431,12 @@ class WhereClause implements WhereClauseInterface
         // Handle array format: ['column' => 'value']
         if (is_array($column)) {
             foreach ($column as $col => $val) {
-                $this->addBasicCondition($col, '=', $val, $boolean);
+                // Handle null values with IS NULL syntax
+                if ($val === null) {
+                    $this->addNullCondition($col, $boolean);
+                } else {
+                    $this->addBasicCondition($col, '=', $val, $boolean);
+                }
             }
             return;
         }
@@ -453,9 +449,42 @@ class WhereClause implements WhereClauseInterface
         }
 
         // Handle three-parameter format: ('column', '>', 'value')
-        if ($value !== null) {
-            $this->addBasicCondition($column, $operator, $value, $boolean);
+        // Check if operator is a valid SQL operator to distinguish from two-parameter format
+        $validOperators = [
+            '=', '!=', '<>', '<', '>', '<=', '>=',
+            'LIKE', 'NOT LIKE',
+            'IN', 'NOT IN',
+            'IS', 'IS NOT',
+            'BETWEEN', 'NOT BETWEEN',
+            'REGEXP', 'RLIKE',  // MySQL regex
+            'ILIKE',            // PostgreSQL case-insensitive LIKE
+        ];
+        $upperOperator = $operator !== null ? strtoupper($operator) : null;
+        $isThreeParamFormat = $upperOperator !== null && in_array($upperOperator, $validOperators, true);
+
+        if ($isThreeParamFormat) {
+            // Handle null values with IS NULL / IS NOT NULL syntax
+            if ($value === null) {
+                if ($upperOperator === '=' || $upperOperator === 'IS') {
+                    $this->addNullCondition($column, $boolean);
+                } elseif ($upperOperator === '!=' || $upperOperator === '<>' || $upperOperator === 'IS NOT') {
+                    $this->addNotNullCondition($column, $boolean);
+                } else {
+                    // Operators like >, <, LIKE with NULL are invalid in SQL
+                    throw new \InvalidArgumentException(
+                        "Cannot use operator '$operator' with NULL value. Use 'IS' or 'IS NOT' for NULL comparisons."
+                    );
+                }
+            } else {
+                $this->addBasicCondition($column, $operator, $value, $boolean);
+            }
             return;
+        }
+
+        // If operator looks like an operator but isn't valid, throw an exception
+        // This prevents SQL injection via malicious operator strings
+        if ($operator !== null && preg_match('/^[<>=!]+$|^\w+\s+\w+$/i', $operator)) {
+            throw new \InvalidArgumentException("Invalid SQL operator: $operator");
         }
 
         // Handle two-parameter format: ('column', 'value')
@@ -466,8 +495,31 @@ class WhereClause implements WhereClauseInterface
     }
 
     /**
-     * Add basic condition
+     * Add IS NULL condition
      */
+    protected function addNullCondition(string $column, string $boolean): void
+    {
+        $sql = $this->wrapColumn($column) . ' IS NULL';
+        $this->conditions[] = [
+            'type' => 'raw',
+            'sql' => $sql,
+            'boolean' => $boolean
+        ];
+    }
+
+    /**
+     * Add IS NOT NULL condition
+     */
+    protected function addNotNullCondition(string $column, string $boolean): void
+    {
+        $sql = $this->wrapColumn($column) . ' IS NOT NULL';
+        $this->conditions[] = [
+            'type' => 'raw',
+            'sql' => $sql,
+            'boolean' => $boolean
+        ];
+    }
+
     /**
      * Add basic condition
      */
@@ -484,9 +536,6 @@ class WhereClause implements WhereClauseInterface
         $this->bindings[] = $value;
     }
 
-    /**
-     * Add raw condition
-     */
     /**
      * Add raw condition
      *

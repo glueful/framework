@@ -963,3 +963,107 @@ if (!function_exists('cancellation_token')) {
         return new \Glueful\Async\SimpleCancellationToken();
     }
 }
+
+if (!function_exists('api_url')) {
+    /**
+     * Generate a full API URL for a given path
+     *
+     * Uses the consolidated versioning config to build URLs that match
+     * the actual route structure. Supports multiple URL patterns:
+     * - Subdomain: api.example.com/v1/auth/login
+     * - Path prefix: example.com/api/v1/auth/login
+     * - No version: api.example.com/auth/login
+     *
+     * Example:
+     * ```php
+     * api_url('/auth/login');  // https://api.example.com/v1/auth/login
+     * api_url();               // https://api.example.com/v1
+     * ```
+     *
+     * @param string $path Route path (e.g., '/auth/login')
+     * @return string Full URL (e.g., 'https://api.example.com/v1/auth/login')
+     */
+    function api_url(string $path = ''): string
+    {
+        $baseUrl = rtrim(config('app.urls.base', 'http://localhost'), '/');
+        $prefix = api_prefix();
+
+        $url = $baseUrl . $prefix;
+
+        if (!empty($path)) {
+            $url .= '/' . ltrim($path, '/');
+        }
+
+        return $url;
+    }
+}
+
+if (!function_exists('api_prefix')) {
+    /**
+     * Get the API route prefix for use in route definitions
+     *
+     * Returns the prefix string based on versioning configuration.
+     * This is used by RouteManifest to prefix API routes and by
+     * middleware to detect API requests.
+     *
+     * Examples based on configuration:
+     * - apply_prefix=true, version_in_path=true: '/api/v1'
+     * - apply_prefix=false, version_in_path=true: '/v1'
+     * - apply_prefix=true, version_in_path=false: '/api'
+     * - apply_prefix=false, version_in_path=false: ''
+     *
+     * @return string Prefix (e.g., '/api/v1' or '/v1' or '')
+     */
+    function api_prefix(): string
+    {
+        $versionConfig = config('api.versioning', []);
+        $parts = [];
+
+        // Add prefix if configured (e.g., "/api")
+        $applyPrefix = $versionConfig['apply_prefix_to_routes'] ?? true;
+        $prefix = $versionConfig['prefix'] ?? '/api';
+
+        if ($applyPrefix && !empty($prefix)) {
+            $parts[] = rtrim($prefix, '/');
+        }
+
+        // Add version if configured (e.g., "/v1")
+        $versionInPath = $versionConfig['version_in_path'] ?? true;
+        $version = $versionConfig['default'] ?? '1';
+
+        if ($versionInPath) {
+            $parts[] = '/v' . $version;
+        }
+
+        return implode('', $parts) ?: '';
+    }
+}
+
+if (!function_exists('is_api_path')) {
+    /**
+     * Check if a path is an API route
+     *
+     * Determines if the given path matches the configured API prefix.
+     * Used by middleware to distinguish API requests from web requests.
+     *
+     * Example:
+     * ```php
+     * is_api_path('/api/v1/users');  // true (with default config)
+     * is_api_path('/admin/dashboard');  // false
+     * ```
+     *
+     * @param string $path URL path to check
+     * @return bool True if path is an API route
+     */
+    function is_api_path(string $path): bool
+    {
+        $prefix = api_prefix();
+
+        // If no prefix configured, all routes are considered API routes
+        if (empty($prefix)) {
+            return true;
+        }
+
+        return str_starts_with($path, $prefix);
+    }
+}

@@ -71,7 +71,15 @@ class RequestHelper
             return true;
         }
 
-        // Check for admin API endpoints
+        // Check for admin API endpoints using configured prefix
+        if (function_exists('api_prefix')) {
+            $apiPrefix = api_prefix();
+            if ($apiPrefix !== '' && str_contains($requestUri, $apiPrefix . '/admin')) {
+                return true;
+            }
+        }
+
+        // Fallback check for /api/admin
         if (str_contains($requestUri, '/api/admin')) {
             return true;
         }

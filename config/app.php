@@ -57,11 +57,11 @@ return [
     ],
 
     // Application URLs (web addresses grouped here)
-    // All URLs derive from BASE_URL - set it to your deployment URL (e.g., https://api.example.com)
+    // BASE_URL is your deployment URL (e.g., https://api.example.com)
+    // For API URLs, use the api_url() helper function instead of config
     'urls' => [
         'base' => env('BASE_URL', 'http://localhost'),
         'cdn' => rtrim(env('BASE_URL', 'http://localhost'), '/') . '/storage/cdn/',
-        'api' => rtrim(env('BASE_URL', 'http://localhost'), '/') . '/api/v' . env('API_VERSION', '1'),
         'docs' => rtrim(env('BASE_URL', 'http://localhost'), '/') . '/docs/',
     ],
 

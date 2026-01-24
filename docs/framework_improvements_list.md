@@ -80,4 +80,12 @@ Priority 1 - Critical Features:
   - Ready for php glueful make:* command integration                                                                                                                                                     
                                                                                                                                                                                                          
   Total estimated effort: 9-14 weeks for all Priority 1 features.                                                                                                                                        
-                                                                      
+
+
+now lets update '/Users/michaeltawiahsowah/Sites/glueful/framework/CHANGELOG.md' with the new release based on the changes in commits done so far since the last release
+
+
+now lets also update '/Users/michaeltawiahsowah/Sites/glueful/framework/ROADMAP.md' and '/Users/michaeltawiahsowah/Sites/glueful/docs/content/releases.md' accordingly
+
+
+now lets update '/Users/michaeltawiahsowah/Sites/glueful/api-skeleton/CHANGELOG.md' with the new release based on the changes in commits done so far since the last release

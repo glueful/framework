@@ -224,7 +224,7 @@ use Glueful\Http\Response;
 use Glueful\Repository\RepositoryFactory;
 use Glueful\Auth\AuthenticationManager;
 use Glueful\Exceptions\NotFoundException;
-use Glueful\Exceptions\ValidationException;
+use Glueful\Validation\ValidationException;
 use Glueful\Helpers\ValidationHelper;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -280,7 +280,7 @@ class {$controllerName} extends BaseController
             \$id = \$params['id'] ?? null;
 
             if (!\$id) {
-                throw new ValidationException('ID parameter is required');
+                throw ValidationException::forField('id', 'ID parameter is required');
             }
 
             // Apply rate limiting
@@ -335,7 +335,7 @@ use Glueful\Http\Response;
 use Glueful\Repository\RepositoryFactory;
 use Glueful\Auth\AuthenticationManager;
 use Glueful\Exceptions\NotFoundException;
-use Glueful\Exceptions\ValidationException;
+use Glueful\Validation\ValidationException;
 use Glueful\Exceptions\BusinessLogicException;
 use Glueful\Helpers\ValidationHelper;
 use Symfony\Component\HttpFoundation\Request;
@@ -452,7 +452,7 @@ PHP;
             \$id = \$params['id'] ?? null;
 
             if (!\$id) {
-                throw new ValidationException('ID parameter is required');
+                throw ValidationException::forField('id', 'ID parameter is required');
             }
 
             // Apply rate limiting
@@ -585,7 +585,7 @@ PHP;
             \$id = \$params['id'] ?? null;
 
             if (!\$id) {
-                throw new ValidationException('ID parameter is required');
+                throw ValidationException::forField('id', 'ID parameter is required');
             }
 
             // Apply rate limiting
@@ -644,7 +644,7 @@ PHP;
             \$id = \$params['id'] ?? null;
 
             if (!\$id) {
-                throw new ValidationException('ID parameter is required');
+                throw ValidationException::forField('id', 'ID parameter is required');
             }
 
             // Apply rate limiting
