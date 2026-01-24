@@ -17,9 +17,10 @@ final class AuthProvider extends BaseServiceProvider
     {
         $defs = [];
 
-        // Unified session store
-        $defs[SessionStoreInterface::class] = $this->autowire(SessionStore::class);
+        // Unified session store - single shared instance
+        // The concrete class is the canonical definition, interface aliases to it
         $defs[SessionStore::class] = $this->autowire(SessionStore::class);
+        $defs[SessionStoreInterface::class] = $this->alias(SessionStoreInterface::class, SessionStore::class);
 
         return $defs;
     }

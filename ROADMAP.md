@@ -21,6 +21,18 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.19.2 — Canopus (Released 2026-01-24)
+- **ValidationException Consolidation**: Unified validation exceptions from 3 classes to 1.
+  - Removed `Glueful\Exceptions\ValidationException` (legacy).
+  - Removed `Glueful\Uploader\ValidationException` (empty class).
+  - All code now uses `Glueful\Validation\ValidationException` with static factory methods.
+- **Database Query Building**: Improved SQL parsing and cross-database compatibility.
+  - `PaginationBuilder` regex improvements for ORDER BY, LIMIT, and complex query detection (UNION, CTEs, window functions).
+  - `QueryValidator` now supports `schema.table` format in table name validation.
+  - `WhereClause` expanded operators (IS, IS NOT, BETWEEN, REGEXP, ILIKE) with injection protection.
+- **Bug Fixes**: PHPStan and Intelephense warnings in Handler.php, variable shadowing in ValidationHelper.
+- Notes: Patch release. No breaking changes for most users. See CHANGELOG for migration if using legacy ValidationException directly.
+
 ### 1.19.1 — Canopus (Released 2026-01-22)
 - **Simplified Configuration**: Consolidate URL and version environment variables.
   - Single `BASE_URL` for all URL derivation (removed `API_BASE_URL`).

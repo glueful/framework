@@ -370,8 +370,12 @@ class ValidateCommand extends BaseCommand
         $method = $route->getMethod();
         $methods = [$method];
 
-        return (str_starts_with($path, '/api/') || str_contains($path, 'api.'))
-            && in_array('GET', $methods, true);
+        // Use is_api_path helper if available
+        $isApiRoute = function_exists('is_api_path')
+            ? is_api_path($path)
+            : (str_starts_with($path, '/api/') || str_contains($path, 'api.'));
+
+        return $isApiRoute && in_array('GET', $methods, true);
     }
 
     private function hasIdValidation(\Glueful\Routing\Route $route): bool

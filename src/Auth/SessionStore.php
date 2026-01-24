@@ -31,6 +31,12 @@ class SessionStore implements SessionStoreInterface
     private int $cacheDefaultTtl;
 
     /**
+     * Request-level cache to prevent N+1 queries within the same request
+     * @var array<string, array<string, mixed>|null>
+     */
+    private static array $requestCache = [];
+
+    /**
      * @param CacheStore<string>|null $cache
      */
     public function __construct(
@@ -179,12 +185,20 @@ class SessionStore implements SessionStoreInterface
 
     public function getByAccessToken(string $accessToken): ?array
     {
+        // Request-level cache to prevent N+1 queries within the same request
+        $requestCacheKey = 'access:' . $this->hashToken($accessToken);
+        if (array_key_exists($requestCacheKey, self::$requestCache)) {
+            return self::$requestCache[$requestCacheKey];
+        }
+
         // Cache lookup (use hashed token key)
         if ($this->cache !== null) {
             $tokenKey = $this->hashToken($accessToken);
             $cached = $this->resolveCacheReference("session_token_{$tokenKey}");
             if ($cached !== null) {
-                return json_decode($cached, true);
+                $session = json_decode($cached, true);
+                self::$requestCache[$requestCacheKey] = $session;
+                return $session;
             }
         }
 
@@ -196,13 +210,23 @@ class SessionStore implements SessionStoreInterface
             ->where('access_expires_at', '>', $now)
             ->get();
         if ($result === []) {
+            self::$requestCache[$requestCacheKey] = null;
             return null;
         }
         $session = $result[0];
         if ($this->cache !== null) {
             $this->cacheSessionData($session, $accessToken, null);
         }
+        self::$requestCache[$requestCacheKey] = $session;
         return $session;
+    }
+
+    /**
+     * Clear request-level cache (useful for testing or after session changes)
+     */
+    public static function clearRequestCache(): void
+    {
+        self::$requestCache = [];
     }
 
     public function getByRefreshToken(string $refreshToken): ?array

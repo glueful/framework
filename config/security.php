@@ -23,7 +23,7 @@ return [
     ],
 
     // Health endpoint security
-    'health_ip_allowlist' => explode(',', env('HEALTH_IP_ALLOWLIST', '')),
+    'health_ip_allowlist' => array_filter(explode(',', env('HEALTH_IP_ALLOWLIST', ''))),
     'health_auth_required' => env('HEALTH_AUTH_REQUIRED', false),
 
     // Smart environment-aware security level (stricter for production, flexible for development)

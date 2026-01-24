@@ -53,7 +53,7 @@ class OpenApiGenerator
      * Generate complete API documentation
      *
      * Runs the full pipeline:
-     * 1. Expand resource routes with table schemas
+     * 1. Expand resource routes with table schemas (if enabled)
      * 2. Process custom API docs
      * 3. Generate extension documentation
      * 4. Generate route documentation (non-resource routes)
@@ -66,9 +66,13 @@ class OpenApiGenerator
     {
         $this->log("Starting API documentation generation...");
 
-        // Step 1: Expand {resource} routes to table-specific endpoints
-        $this->log("Expanding resource routes with table schemas...");
-        $this->expandResourceRoutes();
+        // Step 1: Expand {resource} routes to table-specific endpoints (if enabled)
+        if ($this->shouldIncludeResourceRoutes()) {
+            $this->log("Expanding resource routes with table schemas...");
+            $this->expandResourceRoutes();
+        } else {
+            $this->log("Skipping resource routes generation (disabled in config)");
+        }
 
         // Step 2: Process custom API doc definitions
         $this->processCustomApiDocs();
@@ -111,11 +115,23 @@ class OpenApiGenerator
     {
         $this->log("Generating OpenAPI specification...");
 
-        $this->expandResourceRoutes();
+        if ($this->shouldIncludeResourceRoutes()) {
+            $this->expandResourceRoutes();
+        }
         $this->processCustomApiDocs();
         $this->processExtensionAndRouteDocs($force);
 
         return $this->writeSwaggerJson();
+    }
+
+    /**
+     * Check if resource routes should be included in documentation
+     *
+     * @return bool True if resource routes should be generated
+     */
+    private function shouldIncludeResourceRoutes(): bool
+    {
+        return (bool) config('documentation.options.include_resource_routes', true);
     }
 
     /**
@@ -132,6 +148,10 @@ class OpenApiGenerator
 
     /**
      * Process custom API documentation files
+     *
+     * Processes JSON files in the json-definitions directory, excluding
+     * 'extensions/' and 'routes/' subdirectories which are handled separately
+     * by generateFromExtensions() and generateFromRoutes().
      */
     private function processCustomApiDocs(): void
     {
@@ -142,7 +162,10 @@ class OpenApiGenerator
         }
 
         $finder = $this->fileFinder->createFinder();
-        $docFiles = $finder->files()->in($definitionsDocPath)->name('*.json');
+        $docFiles = $finder->files()
+            ->in($definitionsDocPath)
+            ->name('*.json')
+            ->exclude(['extensions', 'routes']); // These are processed separately
 
         foreach ($docFiles as $file) {
             try {
@@ -210,6 +233,12 @@ class OpenApiGenerator
         $meta = $extensionManager->listMeta();
 
         foreach ($providers as $providerClass => $_provider) {
+            // Skip app-level providers (not true extensions)
+            // These are in the App\ namespace and would incorrectly pick up project routes
+            if (str_starts_with($providerClass, 'App\\')) {
+                continue;
+            }
+
             $metadata = $meta[$providerClass] ?? [];
             $extensionName = $metadata['slug'] ?? basename(str_replace('\\', '/', $providerClass));
 

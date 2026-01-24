@@ -252,6 +252,11 @@ class WorkerMonitor
             return [];
         }
 
+        // Return empty if workers table doesn't exist yet
+        if (!$this->tableExists($this->workersTable)) {
+            return [];
+        }
+
         // Consider workers active if they've been seen in the last 2 minutes
         $cutoff = date('Y-m-d H:i:s', time() - 120);
 
@@ -271,6 +276,11 @@ class WorkerMonitor
     public function getWorkerStats(?string $workerUuid = null): array
     {
         if (!$this->enabled) {
+            return [];
+        }
+
+        // Return empty if workers table doesn't exist yet
+        if (!$this->tableExists($this->workersTable)) {
             return [];
         }
 
@@ -315,6 +325,11 @@ class WorkerMonitor
             return [];
         }
 
+        // Return empty if metrics table doesn't exist yet
+        if (!$this->tableExists($this->metricsTable)) {
+            return [];
+        }
+
         $limit = $filters['limit'] ?? 100;
 
         $query = $this->db->table($this->metricsTable)->select(['*']);
@@ -350,6 +365,19 @@ class WorkerMonitor
     {
         if (!$this->enabled) {
             return [];
+        }
+
+        // Return empty stats if metrics table doesn't exist yet
+        if (!$this->tableExists($this->metricsTable)) {
+            return [
+                'total_jobs' => 0,
+                'completed_jobs' => 0,
+                'failed_jobs' => 0,
+                'success_rate' => 0,
+                'failure_rate' => 0,
+                'avg_processing_time' => 0,
+                'active_workers' => count($this->getActiveWorkers())
+            ];
         }
 
         // Get basic stats

@@ -131,20 +131,132 @@ class PaginationBuilder implements PaginationBuilderInterface
 
     /**
      * Build optimized count query
+     *
+     * For complex queries with subqueries, functions, or GROUP BY,
+     * wraps the query as a subquery to ensure accurate counting.
      */
     public function buildCountQuery(string $originalQuery): string
     {
-        // Remove unnecessary parts that don't affect count
-        $countQuery = preg_replace('/SELECT\s.*?\sFROM/is', 'SELECT COUNT(*) as total FROM', $originalQuery);
-        $countQuery = preg_replace('/\sORDER BY\s.*$/is', '', $countQuery);
-        $countQuery = preg_replace('/\sLIMIT\s.*$/is', '', $countQuery);
+        // Remove ORDER BY and LIMIT as they don't affect count
+        // Stops at LIMIT, OFFSET, FOR UPDATE, or end of query
+        $orderByPattern = '/\sORDER\s+BY\s+.+?(?=\s*(?:LIMIT|OFFSET|FOR\s+UPDATE|$))/is';
+        $cleanedQuery = preg_replace($orderByPattern, '', $originalQuery);
 
-        // If there's a GROUP BY, we need to count differently
-        if (stripos($countQuery, 'GROUP BY') !== false) {
-            return "SELECT COUNT(*) as total FROM ({$originalQuery}) as count_table";
+        // Handles: LIMIT 10, LIMIT ?, LIMIT 10 OFFSET 5, LIMIT 10, 20 (MySQL syntax), LIMIT ? OFFSET ?
+        $limitPattern = '/\sLIMIT\s+(?:\d+|\?)\s*(?:,\s*(?:\d+|\?))?(?:\s+OFFSET\s+(?:\d+|\?))?$/is';
+        $cleanedQuery = preg_replace($limitPattern, '', $cleanedQuery);
+
+        // Check if this is a complex query that needs wrapping
+        // Complex = has GROUP BY, subqueries in SELECT, or aggregate functions
+        $isComplex = $this->isComplexQuery($cleanedQuery);
+
+        if ($isComplex) {
+            // Wrap the entire query and count its results
+            return "SELECT COUNT(*) as total FROM ({$cleanedQuery}) as count_table";
         }
 
-        return $countQuery;
+        // Simple query - find the main FROM and replace SELECT columns with COUNT(*)
+        $mainFromPos = $this->findMainFromPosition($cleanedQuery);
+
+        if ($mainFromPos !== false) {
+            return "SELECT COUNT(*) as total" . substr($cleanedQuery, $mainFromPos);
+        }
+
+        // Fallback: wrap as subquery
+        return "SELECT COUNT(*) as total FROM ({$cleanedQuery}) as count_table";
+    }
+
+    /**
+     * Check if query is complex (has subqueries, GROUP BY, UNION, window functions, CTEs, etc.)
+     */
+    private function isComplexQuery(string $query): bool
+    {
+        // Has GROUP BY
+        if (stripos($query, 'GROUP BY') !== false) {
+            return true;
+        }
+
+        // Has DISTINCT
+        if (preg_match('/SELECT\s+DISTINCT/i', $query)) {
+            return true;
+        }
+
+        // Has UNION (UNION, UNION ALL, INTERSECT, EXCEPT)
+        if (preg_match('/\b(UNION|INTERSECT|EXCEPT)\b/i', $query)) {
+            return true;
+        }
+
+        // Has CTE (WITH ... AS)
+        if (preg_match('/^\s*WITH\s+\w+\s+AS\s*\(/i', $query)) {
+            return true;
+        }
+
+        // Has window functions (OVER clause)
+        if (preg_match('/\bOVER\s*\(/i', $query)) {
+            return true;
+        }
+
+        // Check for subqueries or function calls in SELECT clause by finding parentheses
+        // before the main FROM
+        $mainFromPos = $this->findMainFromPosition($query);
+        if ($mainFromPos !== false) {
+            $selectClause = substr($query, 0, $mainFromPos);
+            // If there are parentheses in SELECT clause, it's complex
+            if (strpos($selectClause, '(') !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Find the position of the main FROM clause (not inside parentheses)
+     *
+     * @return int|false Position of " FROM" or false if not found
+     */
+    private function findMainFromPosition(string $query): int|false
+    {
+        $depth = 0;
+        $inString = false;
+        $stringChar = '';
+        $len = strlen($query);
+
+        for ($i = 0; $i < $len - 4; $i++) {
+            $char = $query[$i];
+
+            // Handle string literals
+            if (($char === "'" || $char === '"') && ($i === 0 || $query[$i - 1] !== '\\')) {
+                if (!$inString) {
+                    $inString = true;
+                    $stringChar = $char;
+                } elseif ($char === $stringChar) {
+                    $inString = false;
+                }
+                continue;
+            }
+
+            if ($inString) {
+                continue;
+            }
+
+            // Track parentheses depth
+            if ($char === '(') {
+                $depth++;
+            } elseif ($char === ')') {
+                $depth--;
+            }
+
+            // Look for FROM at depth 0 (main query level)
+            if ($depth === 0) {
+                $word = strtoupper(substr($query, $i, 5));
+                if ($word === ' FROM') {
+                    return $i;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -153,7 +265,9 @@ class PaginationBuilder implements PaginationBuilderInterface
     public function applyPagination(string $sql, int $page, int $perPage): string
     {
         // Remove existing LIMIT/OFFSET before adding a new one
-        $paginatedQuery = preg_replace('/\sLIMIT\s\d+(\sOFFSET\s\d+)?/i', '', $sql);
+        // Handles: LIMIT 10, LIMIT ?, LIMIT 10 OFFSET 5, LIMIT 10, 20 (MySQL syntax), LIMIT ? OFFSET ?
+        $limitPattern = '/\sLIMIT\s+(?:\d+|\?)\s*(?:,\s*(?:\d+|\?))?(?:\s+OFFSET\s+(?:\d+|\?))?/i';
+        $paginatedQuery = preg_replace($limitPattern, '', $sql);
         $paginatedQuery .= " LIMIT ? OFFSET ?";
 
         return $paginatedQuery;

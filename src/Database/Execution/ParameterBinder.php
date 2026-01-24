@@ -31,20 +31,22 @@ class ParameterBinder implements ParameterBinderInterface
     ];
 
     /**
-     * Flatten bindings to prevent nested arrays
+     * Flatten bindings to prevent nested arrays and normalize types for database
      */
     public function flattenBindings(array $bindings): array
     {
         $flattened = [];
-        $index = 0;
         foreach ($bindings as $key => $binding) {
             if (is_array($binding)) {
                 // Convert array to JSON string to prevent array to string conversion
                 $flattened[$key] = json_encode($binding);
+            } elseif (is_bool($binding)) {
+                // Convert PHP booleans to integers for cross-database compatibility
+                // Integer representation (0/1) is universally accepted by all SQL databases
+                $flattened[$key] = $binding ? 1 : 0;
             } else {
                 $flattened[$key] = $binding;
             }
-            $index++;
         }
         return $flattened;
     }

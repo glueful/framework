@@ -10,6 +10,7 @@ use Glueful\Http\Exceptions\Contracts\RenderableException;
 use Glueful\Http\Exceptions\Client\BadRequestException;
 use Glueful\Http\Exceptions\Client\UnauthorizedException;
 use Glueful\Http\Exceptions\Client\ForbiddenException;
+use Glueful\Permissions\Exceptions\UnauthorizedException as PermissionUnauthorizedException;
 use Glueful\Http\Exceptions\Client\NotFoundException;
 use Glueful\Http\Exceptions\Client\MethodNotAllowedException;
 use Glueful\Http\Exceptions\Client\ConflictException;
@@ -80,6 +81,7 @@ class Handler implements ExceptionHandlerInterface
         UnprocessableEntityException::class,
         TooManyRequestsException::class,
         TokenExpiredException::class,
+        PermissionUnauthorizedException::class,
     ];
 
     /**
@@ -98,6 +100,7 @@ class Handler implements ExceptionHandlerInterface
         TokenExpiredException::class => 401,
         AuthorizationException::class => 403,
         ForbiddenException::class => 403,
+        PermissionUnauthorizedException::class => 403,
         NotFoundException::class => 404,
         ModelNotFoundException::class => 404,
         MethodNotAllowedException::class => 405,
@@ -283,6 +286,7 @@ class Handler implements ExceptionHandlerInterface
         // Handle specific exception types
         return match (true) {
             $e instanceof ValidationException => $this->renderValidationException($e),
+            $e instanceof PermissionUnauthorizedException => $this->renderPermissionException($e),
             $e instanceof HttpException => $this->renderHttpException($e),
             default => $this->renderGenericException($e),
         };
@@ -321,6 +325,25 @@ class Handler implements ExceptionHandlerInterface
             'message' => $message !== '' ? $message : $this->getDefaultMessage($statusCode),
             'error' => $this->buildErrorDetails($e, $statusCode),
         ], $statusCode, $headers);
+    }
+
+    /**
+     * Render a permission unauthorized exception
+     *
+     * Always shows the user-friendly message since permission exceptions
+     * are designed to be safe to display to users.
+     *
+     * @param PermissionUnauthorizedException $e The permission exception
+     * @return Response JSON response with 403 status
+     */
+    protected function renderPermissionException(PermissionUnauthorizedException $e): Response
+    {
+        return new Response([
+            'success' => false,
+            'message' => $e->getMessage(),
+            'code' => 403,
+            'error_code' => 'FORBIDDEN',
+        ], 403);
     }
 
     /**
@@ -393,9 +416,9 @@ class Handler implements ExceptionHandlerInterface
 
         // Check if exception has a status code method
         if (method_exists($e, 'getStatusCode')) {
-            /** @var int $statusCode */
-            $statusCode = $e->getStatusCode();
-            return $statusCode;
+            /** @var callable(): int $getter */
+            $getter = [$e, 'getStatusCode'];
+            return $getter();
         }
 
         // Check exception code (if it's a valid HTTP code)

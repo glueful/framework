@@ -2,7 +2,7 @@
 
 namespace Glueful\Exceptions;
 
-use Glueful\Exceptions\ValidationException;
+use Glueful\Validation\ValidationException;
 use Glueful\Exceptions\AuthenticationException;
 use Glueful\Exceptions\NotFoundException;
 use Glueful\Exceptions\ApiException;
@@ -683,7 +683,7 @@ class ExceptionHandler
         if ($exception instanceof ValidationException) {
             $statusCode = 422;
             $message = $exception->getMessage();
-            $data = $exception->getErrors();
+            $data = $exception->errors();
         } elseif ($exception instanceof AuthenticationException) {
             $statusCode = 401;
             $message = $exception->getMessage();

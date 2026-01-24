@@ -4,6 +4,65 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.19.2] - 2026-01-24 — Canopus
+
+Patch release consolidating ValidationException classes, improving SQL query building, and enhancing cross-database compatibility.
+
+### Changed
+
+#### ValidationException Consolidation
+- **Removed Legacy ValidationException**: Consolidated from 3 classes to 1:
+  - Removed `Glueful\Exceptions\ValidationException` (legacy)
+  - Removed `Glueful\Uploader\ValidationException` (empty class)
+  - All code now uses `Glueful\Validation\ValidationException`
+- **Updated Files**: AuthController, ValidationHelper, ConfigController, BaseController, ControllerCommand, Handler, ExceptionHandler, FileUploader, UserRepository
+- **Static Factory Pattern**: All validation throws now use `ValidationException::forField()`, `forFields()`, or `withErrors()`
+
+#### Database Query Building Improvements
+- **PaginationBuilder**: Improved regex patterns for ORDER BY and LIMIT removal:
+  - Handles `LIMIT ?`, `LIMIT 10, 20` (MySQL offset syntax), `LIMIT ? OFFSET ?`
+  - ORDER BY regex now safely stops at LIMIT, OFFSET, FOR UPDATE, or end of query
+  - Added detection for UNION, INTERSECT, EXCEPT, CTEs (`WITH ... AS`), and window functions (`OVER`)
+- **QueryValidator**: Added `schema.table` format support in table name validation
+- **WhereClause**:
+  - Expanded valid operators: added `IS`, `IS NOT`, `BETWEEN`, `NOT BETWEEN`, `REGEXP`, `RLIKE`, `ILIKE`
+  - Added operator injection protection
+  - Invalid NULL comparisons (`column > NULL`) now throw clear exceptions
+
+#### Documentation Improvements
+- **ParameterBinder**: Updated comment to reflect cross-database compatibility (not just PostgreSQL)
+- **QueryBuilder**: Updated GROUP BY comment to reflect SQL standard compliance (not just PostgreSQL-specific)
+- **WhereClause**: Cleaned up duplicate PHPDoc blocks
+
+### Fixed
+
+- **Handler.php**: Fixed PHPStan `empty()` warning using strict comparison `$errors !== []`
+- **Handler.php**: Fixed Intelephense warning for dynamic `getStatusCode()` call using callable pattern
+- **ValidationHelper.php**: Fixed variable shadowing in foreach loop (`$field` → `$errorField`)
+- **BaseController**: Updated `validationError()` type hint to accept new error format
+
+### Removed
+
+- **ValidationProvider**: Removed unnecessary backwards compatibility binding for `Validator::class`
+- **UserRepository**: Simplified `createValidatorInstance()` to use direct instantiation instead of DI lookup
+
+### Migration
+
+If you were using the legacy ValidationException directly:
+
+```diff
+- use Glueful\Exceptions\ValidationException;
++ use Glueful\Validation\ValidationException;
+
+- throw new ValidationException('Error message');
++ throw ValidationException::forField('field', 'Error message');
+
+- throw new ValidationException(['field' => 'error']);
++ throw ValidationException::withErrors(['field' => 'error']);
+```
+
+---
+
 ## [1.19.1] - 2026-01-22 — Canopus
 
 Patch release simplifying API configuration by consolidating URL and version environment variables.

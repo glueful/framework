@@ -81,7 +81,10 @@ return [
     */
     'servers' => [
         [
-            'url' => env('API_SERVER_URL', env('APP_URL', 'http://localhost') . '/api'),
+            // Use api_url() helper if available, otherwise fall back to env vars
+            'url' => function_exists('api_url')
+                ? api_url()
+                : env('API_SERVER_URL', env('APP_URL', 'http://localhost') . '/api'),
             'description' => env('API_SERVER_DESCRIPTION', 'API Server'),
         ],
     ],
@@ -127,6 +130,27 @@ return [
 
         // Framework routes directory (auto-detected from vendor or local path)
         'framework_routes' => null, // Will be resolved at runtime
+
+        /*
+        |--------------------------------------------------------------------------
+        | Route File Prefixes
+        |--------------------------------------------------------------------------
+        |
+        | Map route files to their URL path prefixes. Routes in these files will
+        | have the prefix prepended to their documented paths.
+        |
+        | Format: 'filename.php' => '/prefix' or '' for no prefix
+        |
+        */
+        'route_prefixes' => [
+            // Framework routes - no version prefix
+            'health.php' => '',
+            'docs.php' => '',
+
+            // Framework auth/resource routes - versioned
+            'auth.php' => '/v1',
+            'resource.php' => '/v1',
+        ],
     ],
 
     /*
@@ -164,6 +188,10 @@ return [
 
         // Pretty print JSON output
         'pretty_print' => true,
+
+        // Generate resource/table routes (CRUD endpoints for all database tables)
+        // Set to false to disable automatic generation of table-based API endpoints
+        'include_resource_routes' => env('API_DOCS_INCLUDE_RESOURCE_ROUTES', true),
     ],
 
     /*

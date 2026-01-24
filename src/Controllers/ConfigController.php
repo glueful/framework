@@ -7,7 +7,7 @@ namespace Glueful\Controllers;
 use Glueful\Helpers\ConfigManager;
 use Glueful\Exceptions\SecurityException;
 use Glueful\Exceptions\BusinessLogicException;
-use Glueful\Exceptions\ValidationException;
+use Glueful\Validation\ValidationException;
 use Glueful\Helpers\ValidationHelper;
 use Glueful\Http\Response;
 use Glueful\Storage\StorageManager;
@@ -254,11 +254,11 @@ class ConfigController extends BaseController
         // Validate config name
         $configName = str_replace('.php', '', $name);
         if (!$this->validateConfigName($configName)) {
-            throw new ValidationException('Invalid configuration name');
+            throw ValidationException::forField('name', 'Invalid configuration name');
         }
 
         if (!$this->validateConfigData($data)) {
-            throw new ValidationException('Invalid configuration data');
+            throw ValidationException::forField('data', 'Invalid configuration data');
         }
 
         // Determine config path

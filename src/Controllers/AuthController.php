@@ -10,7 +10,7 @@ use Glueful\Security\EmailVerification;
 use Glueful\Auth\AuthenticationService;
 use Glueful\Auth\AuthBootstrap;
 use Glueful\Exceptions\AuthenticationException;
-use Glueful\Exceptions\ValidationException;
+use Glueful\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
 use Glueful\Events\Event;
 use Glueful\Events\Auth\LoginResponseBuildingEvent;
@@ -109,7 +109,7 @@ class AuthController
      *
      * @return mixed HTTP response with authentication tokens and user data
      * @throws \Glueful\Exceptions\AuthenticationException If credentials are invalid
-     * @throws \Glueful\Exceptions\ValidationException If request data is malformed
+     * @throws \Glueful\Validation\ValidationException If request data is malformed
      * @throws \RuntimeException If authentication system initialization fails
      */
     public function login()
@@ -201,7 +201,7 @@ class AuthController
      * - Prevention of token reuse after logout
      *
      * @return mixed HTTP response confirming successful logout
-     * @throws \Glueful\Exceptions\ValidationException If no token provided in request
+     * @throws \Glueful\Validation\ValidationException If no token provided in request
      * @throws \Glueful\Exceptions\AuthenticationException If logout operation fails
      */
     public function logout()
@@ -212,7 +212,7 @@ class AuthController
         $token = AuthenticationService::extractTokenFromRequest($request);
 
         if ($token === null) {
-            throw new ValidationException('No token provided');
+            throw ValidationException::forField('token', 'No token provided');
         }
 
 
@@ -234,7 +234,7 @@ class AuthController
     {
         $postData = RequestHelper::getRequestData();
         if (!isset($postData['email'])) {
-            throw new ValidationException('Email address is required');
+            throw ValidationException::forField('email', 'Email address is required');
         }
 
         $otp = $this->verifier->generateOTP();
@@ -245,7 +245,7 @@ class AuthController
         if (!$result['success']) {
             // Use the detailed error message from the verification service
             $errorMessage = $result['message'] ?? 'Failed to send verification email';
-            throw new ValidationException($errorMessage);
+            throw ValidationException::forField('email', $errorMessage);
         }
 
         return Response::success([
@@ -263,13 +263,16 @@ class AuthController
     {
         $postData = RequestHelper::getRequestData();
         if (!isset($postData['email']) || !isset($postData['otp'])) {
-            throw new ValidationException('Email and OTP are required');
+            throw ValidationException::forFields([
+                'email' => 'Email is required',
+                'otp' => 'OTP is required',
+            ]);
         }
 
         $isValid = $this->verifier->verifyOTP($postData['email'], $postData['otp']);
 
         if (!$isValid) {
-            throw new ValidationException('Invalid or expired OTP');
+            throw ValidationException::forField('otp', 'Invalid or expired OTP');
         }
 
         return Response::success([
@@ -288,7 +291,7 @@ class AuthController
     {
         $postData = RequestHelper::getRequestData();
         if (!isset($postData['email'])) {
-            throw new ValidationException('Email address is required');
+            throw ValidationException::forField('email', 'Email address is required');
         }
 
         $otp = $this->verifier->generateOTP();
@@ -299,7 +302,7 @@ class AuthController
         if (!$result['success']) {
             // Use the detailed error message from the verification service
             $errorMessage = $result['message'] ?? 'Failed to send verification email';
-            throw new ValidationException($errorMessage);
+            throw ValidationException::forField('email', $errorMessage);
         }
 
         return Response::success([
@@ -323,7 +326,7 @@ class AuthController
         $token = AuthenticationService::extractTokenFromRequest($request);
 
         if ($token === null) {
-            throw new ValidationException('No token provided');
+            throw ValidationException::forField('token', 'No token provided');
         }
 
         // Get session to extract user UUID via SessionStore
@@ -334,7 +337,7 @@ class AuthController
         } catch (\Throwable) {
             $session = null;
         }
-        if ($session === null || !isset($session['user']['uuid'])) {
+        if ($session === null || !isset($session['user_uuid'])) {
             throw new AuthenticationException('Invalid session');
         }
 
@@ -364,7 +367,7 @@ class AuthController
         $token = AuthenticationService::extractTokenFromRequest($request);
 
         if ($token === null) {
-            throw new ValidationException('No token provided');
+            throw ValidationException::forField('token', 'No token provided');
         }
 
         // Use our new authentication system to validate the token
@@ -417,26 +420,26 @@ class AuthController
      * ```
      *
      * @return mixed HTTP response confirming reset email sent
-     * @throws \Glueful\Exceptions\ValidationException If email is missing or user not found
+     * @throws \Glueful\Validation\ValidationException If email is missing or user not found
      * @throws \RuntimeException If email sending fails due to system issues
      */
     public function forgotPassword()
     {
         $postData = RequestHelper::getRequestData();
         if (!isset($postData['email'])) {
-            throw new ValidationException('Email address is required');
+            throw ValidationException::forField('email', 'Email address is required');
         }
 
         // Check if user exists before attempting password reset
         if (!$this->authService->userExists($postData['email'], 'email')) {
-            throw new ValidationException('User not found with the provided email address');
+            throw ValidationException::forField('email', 'User not found with the provided email address');
         }
 
         // Send verification email
         $result = EmailVerification::sendPasswordResetEmail($postData['email']);
         if (!$result['success']) {
             $errorMsg = $result['message'] ?? 'Failed to send reset email';
-            throw new ValidationException($errorMsg);
+            throw ValidationException::forField('email', $errorMsg);
         }
 
         return Response::success([
@@ -474,19 +477,22 @@ class AuthController
      * ```
      *
      * @return mixed HTTP response confirming password reset
-     * @throws \Glueful\Exceptions\ValidationException If email/password missing or user not found
+     * @throws \Glueful\Validation\ValidationException If email/password missing or user not found
      * @throws \Glueful\Exceptions\AuthenticationException If password update fails
      */
     public function resetPassword()
     {
         $postData = RequestHelper::getRequestData();
         if (!isset($postData['email']) || !isset($postData['password'])) {
-            throw new ValidationException('Email and new password are required');
+            throw ValidationException::forFields([
+                'email' => 'Email is required',
+                'password' => 'New password is required',
+            ]);
         }
 
         // Check if user exists before attempting password reset
         if (!$this->authService->userExists($postData['email'], 'email')) {
-            throw new ValidationException('User not found with the provided email address');
+            throw ValidationException::forField('email', 'User not found with the provided email address');
         }
 
         // Use the service method to update the password (this handles hashing internally)
@@ -544,7 +550,7 @@ class AuthController
      * ```
      *
      * @return mixed HTTP response with new authentication tokens
-     * @throws \Glueful\Exceptions\ValidationException If refresh token missing from request
+     * @throws \Glueful\Validation\ValidationException If refresh token missing from request
      * @throws \Glueful\Exceptions\AuthenticationException If refresh token invalid or expired
      */
     public function refreshToken()
@@ -552,7 +558,7 @@ class AuthController
         $postData = RequestHelper::getRequestData();
 
         if (!isset($postData['refresh_token'])) {
-            throw new ValidationException('Refresh token is required');
+            throw ValidationException::forField('refresh_token', 'Refresh token is required');
         }
 
         $refreshToken = $postData['refresh_token'];

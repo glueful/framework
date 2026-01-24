@@ -361,6 +361,11 @@ class CommentsDocGenerator
     {
         $paths = [];
 
+        // Get route prefix from config
+        $routePrefixes = config('documentation.sources.route_prefixes', []);
+        $routeFileName = strtolower($routeName) . '.php';
+        $pathPrefix = $routePrefixes[$routeFileName] ?? '';
+
         // Format route name for display
         $formattedRouteName = str_replace(['_', '-'], ' ', $routeName);
         $formattedRouteName = ucwords($formattedRouteName);
@@ -388,7 +393,8 @@ class CommentsDocGenerator
 
         // Generate paths
         foreach ($this->routeData as $route) {
-            $path = $route['path'];
+            // Apply route prefix from config
+            $path = $pathPrefix . $route['path'];
             $method = strtolower($route['method']);
 
             // Initialize path if it doesn't exist
@@ -438,12 +444,12 @@ class CommentsDocGenerator
                 'description' => 'API documentation for ' . $formattedRouteName . ' routes',
                 'version' => config('app.version_full', '1.0.0')
             ],
-            'servers' => [
+            'servers' => config('documentation.servers', [
                 [
-                    'url' => rtrim(config('app.urls.api'), '/') . '/' . config('app.api_version'),
-                    'description' => 'API Server ' . config('app.api_version')
+                    'url' => rtrim(config('app.urls.base', 'http://localhost'), '/'),
+                    'description' => 'API Server'
                 ]
-            ],
+            ]),
             'paths' => $paths,
             'components' => [
                 'securitySchemes' => [
@@ -1177,12 +1183,12 @@ class CommentsDocGenerator
                 'description' => 'API documentation for ' . $formattedExtName . ' extension',
                 'version' => config('app.version_full', '1.0.0')
             ],
-            'servers' => [
+            'servers' => config('documentation.servers', [
                 [
-                    'url' => rtrim(config('app.urls.api'), '/') . '/' . config('app.api_version'),
-                    'description' => 'API Server ' . config('app.api_version')
+                    'url' => rtrim(config('app.urls.base', 'http://localhost'), '/'),
+                    'description' => 'API Server'
                 ]
-            ],
+            ]),
             'paths' => $paths,
             'components' => [
                 'securitySchemes' => [

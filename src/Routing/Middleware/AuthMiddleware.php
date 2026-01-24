@@ -12,6 +12,7 @@ use Glueful\Auth\AuthenticationManager;
 use Glueful\Auth\TokenManager;
 use Psr\Container\ContainerInterface;
 use Glueful\Exceptions\AuthenticationException;
+use Glueful\Permissions\Exceptions\UnauthorizedException as PermissionUnauthorizedException;
 use Glueful\Events\Http\HttpAuthFailureEvent;
 use Glueful\Events\Http\HttpAuthSuccessEvent;
 use Glueful\Events\Event;
@@ -58,15 +59,10 @@ class AuthMiddleware implements RouteMiddleware
         $this->container = $container ?? $this->getDefaultContainer();
 
         // Setup auth manager
+        // Always use AuthBootstrap::getManager() which is the singleton with registered providers
+        // The container may return a new instance without providers configured
         if ($authManager !== null) {
             $this->authManager = $authManager;
-        } elseif ($this->container !== null && $this->container->has(AuthenticationManager::class)) {
-            $authManagerFromContainer = $this->container->get(AuthenticationManager::class);
-            if ($authManagerFromContainer instanceof AuthenticationManager) {
-                $this->authManager = $authManagerFromContainer;
-            } else {
-                $this->authManager = AuthBootstrap::getManager();
-            }
         } else {
             $this->authManager = AuthBootstrap::getManager();
         }
@@ -157,6 +153,9 @@ class AuthMiddleware implements RouteMiddleware
             return $next($request);
         } catch (AuthenticationException $e) {
             return $this->handleAuthenticationException($e, $request, $requestId);
+        } catch (PermissionUnauthorizedException $e) {
+            // Re-throw permission exceptions to be handled by the exception handler
+            throw $e;
         } catch (\Exception $e) {
             $this->logError('Unexpected error in auth middleware', $e, $request, $requestId);
             return $this->unauthorized('Authentication error occurred');

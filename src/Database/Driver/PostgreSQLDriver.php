@@ -23,6 +23,7 @@ class PostgreSQLDriver implements DatabaseDriver
      * Ensures proper escaping of column and table names:
      * - Wraps identifiers in double quotes
      * - Handles schema-qualified names
+     * - Handles table aliases (e.g., "table AS alias")
      * - Prevents SQL injection in identifiers
      *
      * @param  string $identifier Column or table name
@@ -30,6 +31,21 @@ class PostgreSQLDriver implements DatabaseDriver
      */
     public function wrapIdentifier(string $identifier): string
     {
+        // Handle table aliases: "table AS alias" or "table alias"
+        if (preg_match('/^(.+?)\s+(?:AS\s+)?([a-zA-Z_][a-zA-Z0-9_]*)$/i', $identifier, $matches)) {
+            $tableName = trim($matches[1]);
+            $alias = $matches[2];
+            return "\"$tableName\" AS \"$alias\"";
+        }
+
+        // Handle qualified column names: "alias.column" or "table.column"
+        // Convert f.created_at to f."created_at" (alias unquoted, column quoted)
+        if (str_contains($identifier, '.') && !str_contains($identifier, ' ')) {
+            $parts = explode('.', $identifier);
+            // Quote each part: f.created_at -> "f"."created_at"
+            return implode('.', array_map(fn($part) => "\"$part\"", $parts));
+        }
+
         return "\"$identifier\"";
     }
 
