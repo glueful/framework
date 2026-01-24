@@ -1,5 +1,31 @@
 <?php
 
+/**
+ * Storage Configuration
+ *
+ * Configure filesystem disks for file storage. Uses Flysystem under the hood.
+ *
+ * Included adapters:
+ *   - local: Local filesystem (included)
+ *   - memory: In-memory storage for testing (included)
+ *
+ * Optional adapters (install via Composer):
+ *   - S3/MinIO/DigitalOcean Spaces/Wasabi:
+ *       composer require league/flysystem-aws-s3-v3
+ *
+ *   - Google Cloud Storage:
+ *       composer require league/flysystem-google-cloud-storage
+ *
+ *   - Azure Blob Storage:
+ *       composer require league/flysystem-azure-blob-storage
+ *
+ *   - SFTP:
+ *       composer require league/flysystem-sftp-v3
+ *
+ *   - FTP:
+ *       composer require league/flysystem-ftp
+ */
+
 return [
     'default' => env('STORAGE_DEFAULT_DISK', env('STORAGE_DRIVER', 'uploads')),
 

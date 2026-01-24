@@ -4,6 +4,135 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.21.0] - 2026-01-24 — Mira
+
+Feature release refactoring the file upload system with improved architecture, pure PHP media metadata extraction, and enhanced configurability.
+
+### Added
+
+#### File Uploader Refactoring (`src/Uploader/`)
+
+- **ThumbnailGenerator**: New dedicated class for thumbnail creation:
+  - Uses ImageProcessor (Intervention Image) for high-quality thumbnail generation
+  - Configurable width, height, and quality settings via config or method parameters
+  - Configurable supported formats (JPEG, PNG, GIF, WebP by default)
+  - Configurable thumbnail subdirectory for organized storage
+  - `generate()` - Create thumbnails with automatic storage
+  - `supports()` - Check if MIME type supports thumbnail generation
+  - `getSupportedFormats()` - Get list of supported formats
+
+- **MediaMetadataExtractor**: New class for extracting media metadata using getID3:
+  - Pure PHP implementation - no external binaries required (removed ffprobe dependency)
+  - Supports images, audio, and video files
+  - `extract()` - Extract metadata from any media file
+  - Falls back gracefully when getID3 is not installed or file type unsupported
+
+- **MediaMetadata**: New readonly value object for type-safe metadata:
+  - Properties: `type`, `width`, `height`, `durationSeconds`
+  - Helper methods: `isImage()`, `isVideo()`, `isAudio()`, `hasDimensions()`
+  - `getAspectRatio()` - Calculate aspect ratio from dimensions
+  - `getFormattedDuration()` - Format duration as HH:MM:SS
+  - `toArray()` - Convert to array representation
+
+- **FileUploader Enhancements**:
+  - New `uploadMedia()` method for media files with automatic thumbnail generation
+  - `maybeGenerateThumbnail()` checks global config toggle before generating
+  - Simplified internal code by delegating to new specialized classes
+
+#### Configuration
+
+- **filesystem.uploader**: New uploader configuration section in `config/filesystem.php`:
+  - `thumbnail_enabled` - Global toggle for thumbnail generation (env: `THUMBNAIL_ENABLED`)
+  - `thumbnail_width` - Default thumbnail width (env: `THUMBNAIL_WIDTH`, default: 400)
+  - `thumbnail_height` - Default thumbnail height (env: `THUMBNAIL_HEIGHT`, default: 400)
+  - `thumbnail_quality` - JPEG quality 1-100 (env: `THUMBNAIL_QUALITY`, default: 80)
+  - `thumbnail_formats` - Array of MIME types supporting thumbnails (null = defaults)
+  - `thumbnail_subdirectory` - Subdirectory for thumbnails (env: `THUMBNAIL_SUBDIRECTORY`, default: 'thumbs')
+  - `allowed_mime_types` - Allowed upload MIME types (null = defaults)
+
+#### Documentation
+
+- **config/storage.php**: Added installation instructions for optional Flysystem adapters:
+  - S3/MinIO/DigitalOcean Spaces/Wasabi: `league/flysystem-aws-s3-v3`
+  - Google Cloud Storage: `league/flysystem-google-cloud-storage`
+  - Azure Blob Storage: `league/flysystem-azure-blob-storage`
+  - SFTP: `league/flysystem-sftp-v3`
+  - FTP: `league/flysystem-ftp`
+
+- **docs/content/3.features/file-uploads.md**: Updated documentation:
+  - Added storage backend installation instructions
+  - Added "Media Uploads" section with `uploadMedia()` examples
+  - Added thumbnail configuration documentation
+  - Added metadata extraction with getID3 documentation
+  - Updated Image Gallery example to use new API
+
+### Changed
+
+- **FileUploader**: Refactored to use new ThumbnailGenerator and MediaMetadataExtractor classes
+- **Dependencies**: Added `james-heinrich/getid3: ^1.9` for pure PHP media metadata extraction
+
+### Removed
+
+- **ffprobe dependency**: Removed shell_exec calls to ffprobe for video duration extraction
+- **Legacy thumbnail code**: ~200 lines of thumbnail generation code moved to ThumbnailGenerator
+
+### Fixed
+
+- **FileUploader PHPStan/Intelephense errors**:
+  - Fixed undefined constant `ALLOWED_MIME_TYPES` → `DEFAULT_ALLOWED_MIME_TYPES`
+  - Added `(bool)` casts for mixed types in boolean context
+  - Split long lines (740-742, 856) for readability
+  - Changed `finfo_close()` to OOP style `new \finfo()` (deprecated in PHP 8.1)
+  - Removed deprecated `imagedestroy()` calls (GdImage auto-freed in PHP 8.0+)
+
+### Configuration Examples
+
+```php
+// Disable thumbnail generation globally
+// .env
+THUMBNAIL_ENABLED=false
+
+// Custom thumbnail dimensions
+THUMBNAIL_WIDTH=300
+THUMBNAIL_HEIGHT=300
+THUMBNAIL_QUALITY=90
+THUMBNAIL_SUBDIRECTORY=thumbnails
+
+// Custom thumbnail formats in config/filesystem.php
+'uploader' => [
+    'thumbnail_formats' => [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+    ],
+],
+```
+
+### Usage Examples
+
+```php
+use Glueful\Uploader\FileUploader;
+
+// Upload media with automatic thumbnail generation
+$uploader = new FileUploader($storage);
+$result = $uploader->uploadMedia($file, 'media/images');
+
+// Result includes:
+// - file: uploaded file info
+// - thumbnail: thumbnail URL (if generated)
+// - metadata: MediaMetadata object with dimensions/duration
+
+// Access metadata
+$metadata = $result['metadata'];
+if ($metadata->isImage()) {
+    echo "Image: {$metadata->width}x{$metadata->height}";
+} elseif ($metadata->isVideo()) {
+    echo "Video duration: " . $metadata->getFormattedDuration();
+}
+```
+
+---
+
 ## [1.20.0] - 2026-01-24 — Regulus
 
 Minor release focusing on framework simplification by removing unused subsystems and improving API URL structure.

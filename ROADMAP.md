@@ -21,6 +21,22 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.21.0 — Mira (Released 2026-01-24)
+- **File Uploader Refactoring**: Complete architecture overhaul of file upload system.
+  - New `ThumbnailGenerator` class for dedicated thumbnail creation with ImageProcessor (Intervention Image).
+  - New `MediaMetadataExtractor` class using getID3 for pure PHP metadata extraction.
+  - New `MediaMetadata` readonly value object for type-safe metadata representation.
+  - New `uploadMedia()` method on FileUploader for media files with automatic thumbnails.
+- **Pure PHP Media Processing**: Removed ffprobe shell_exec dependency.
+  - All metadata extraction now uses getID3 library (pure PHP, no external binaries).
+  - Supports images, audio, and video file metadata extraction.
+- **Enhanced Configuration**: New uploader configuration section in `config/filesystem.php`.
+  - Global thumbnail enable/disable toggle (`THUMBNAIL_ENABLED`).
+  - Configurable thumbnail dimensions, quality, and subdirectory.
+  - Configurable supported formats for thumbnail generation.
+- **Documentation**: Added storage adapter installation instructions for S3, GCS, Azure, SFTP, FTP.
+- Notes: Minor release. No breaking changes. New `james-heinrich/getid3` dependency added.
+
 ### 1.20.0 — Regulus (Released 2026-01-24)
 - **Framework Simplification**: Removed unused subsystems for a leaner, more maintainable codebase.
 - **Resource Routes**: Added `/data` prefix to generic CRUD routes (`/api/v1/data/{table}`) to avoid conflicts with custom application routes.

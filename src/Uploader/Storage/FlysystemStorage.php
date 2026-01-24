@@ -37,6 +37,20 @@ class FlysystemStorage implements StorageInterface
         return $destinationPath;
     }
 
+    public function storeContent(string $content, string $destinationPath): string
+    {
+        try {
+            $this->storage->disk($this->disk)->write($destinationPath, $content);
+        } catch (\Throwable $e) {
+            if ($e instanceof FilesystemException) {
+                throw new UploadException('Storage write failed: ' . $e->getMessage(), 0, $e);
+            }
+            throw new UploadException('Storage write failed', 0, $e);
+        }
+
+        return $destinationPath;
+    }
+
     public function getUrl(string $path): string
     {
         return $this->urls->url($path, $this->disk);
