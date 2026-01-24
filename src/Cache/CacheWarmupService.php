@@ -146,7 +146,6 @@ class CacheWarmupService
             'app.version',
             'app.debug',
             'security.default_level',
-            'security.rate_limiter.defaults',
             'cache.default',
             'logging.log_level'
         ];

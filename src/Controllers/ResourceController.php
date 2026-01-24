@@ -91,9 +91,6 @@ class ResourceController extends BaseController
             $this->requirePermission('resource.read');
         }
 
-        // Apply rate limiting for resource access
-        $this->rateLimitResource($table, 'read', 100, 60);
-
         // Parse query parameters for repository
         $page = max(1, (int)($queryParams['page'] ?? 1));
         $perPage = min(100, max(1, (int)($queryParams['per_page'] ?? 25)));
@@ -148,9 +145,6 @@ class ResourceController extends BaseController
             $this->requirePermission('resource.read');
         }
 
-        // Apply rate limiting for single resource access
-        $this->rateLimitResource($table, 'read', 100, 60);
-
         // Get repository and find single record with caching
         $repository = $this->repositoryFactory->getRepository($table);
 
@@ -194,12 +188,6 @@ class ResourceController extends BaseController
             // Fall back to generic create permission
             $this->requirePermission('resource.create');
         }
-
-        // Apply rate limiting for resource creation (more restrictive)
-        $this->rateLimitResource($table, 'create', 50, 60);
-
-        // Require low-risk behavior for create operations
-        $this->requireLowRiskBehavior();
 
         if ($postData === []) {
             return Response::error('No data provided', ErrorCodes::BAD_REQUEST);
@@ -248,12 +236,6 @@ class ResourceController extends BaseController
             // Fall back to generic update permission
             $this->requirePermission('resource.update');
         }
-
-        // Apply rate limiting for resource updates
-        $this->rateLimitResource($table, 'update', 30, 60);
-
-        // Require low-risk behavior for update operations
-        $this->requireLowRiskBehavior();
 
         // Get repository and check if record exists
         $repository = $this->repositoryFactory->getRepository($table);
@@ -314,12 +296,6 @@ class ResourceController extends BaseController
             // Fall back to generic delete permission
             $this->requirePermission('resource.delete');
         }
-
-        // Apply strict rate limiting for delete operations
-        $this->rateLimitResource($table, 'delete', 10, 60);
-
-        // Require low-risk behavior for delete operations
-        $this->requireLowRiskBehavior();
 
         // Get repository and check if record exists
         $repository = $this->repositoryFactory->getRepository($table);

@@ -51,8 +51,6 @@ class MetricsController extends BaseController
     public function getApiMetrics(): mixed
     {
         $this->requirePermission('system.metrics.view', 'metrics:api');
-        $this->conditionalRateLimit('api_metrics_view');
-
 
         // Use the new method to get data
         $endpointMetrics = $this->getApiMetricsData();
@@ -75,9 +73,6 @@ class MetricsController extends BaseController
     public function resetApiMetrics(): mixed
     {
         $this->requirePermission('system.metrics.reset', 'metrics:api');
-        $this->rateLimit('metrics_reset', 5, 3600);
-        $this->requireLowRiskBehavior(0.4, 'metrics_reset');
-
 
         $metricsService = new \Glueful\Services\ApiMetricsService();
         $success = $metricsService->resetApiMetrics();
@@ -137,12 +132,6 @@ class MetricsController extends BaseController
     public function systemHealth(): mixed
     {
         $this->requirePermission('system.health.view', 'metrics:system');
-        $this->multiLevelRateLimit('system_health', [
-            'user' => ['attempts' => 60, 'window' => 60, 'adaptive' => true],
-            'ip' => ['attempts' => 100, 'window' => 60, 'adaptive' => false]
-        ]);
-        $this->requireLowRiskBehavior(0.6, 'system_health_access');
-
 
         // Use the new method to get data
         $metrics = $this->getSystemHealthData();
@@ -477,7 +466,6 @@ class MetricsController extends BaseController
     public function getExtensionHealth(?array $extension): mixed
     {
         $this->requirePermission('system.extensions.health.view', 'metrics:extensions');
-        $this->rateLimit('extension_health', 30, 60);
 
         $extensionName = $extension['name'] ?? 'unknown';
 

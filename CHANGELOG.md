@@ -4,6 +4,102 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.20.0] - 2026-01-24 — Regulus
+
+Minor release focusing on framework simplification by removing unused subsystems and improving API URL structure.
+
+### Changed
+
+#### Resource Routes URL Structure
+- **Added `/data` prefix** to generic CRUD routes to avoid conflicts with custom application routes:
+  - `GET /api/v1/{resource}` → `GET /api/v1/data/{table}`
+  - `GET /api/v1/{resource}/{uuid}` → `GET /api/v1/data/{table}/{uuid}`
+  - `POST /api/v1/{resource}` → `POST /api/v1/data/{table}`
+  - `PUT /api/v1/{resource}/{uuid}` → `PUT /api/v1/data/{table}/{uuid}`
+  - `DELETE /api/v1/{resource}/{uuid}` → `DELETE /api/v1/data/{table}/{uuid}`
+  - Bulk operations follow same pattern: `/api/v1/data/{table}/bulk`
+- **Renamed route parameter** from `{resource}` to `{table}` for clarity
+- **Simplified path extraction** using `$request->attributes->get()` instead of manual parsing
+- **Updated OpenAPI annotations** with new paths and "Data" tag
+
+#### Rate Limiting Consolidation
+- **Consolidated to single rate limiting system**: Removed basic rate limiting in favor of enhanced system
+- **Enhanced system features**: Tier-based limits, multiple algorithms (sliding/fixed/token bucket), IETF-compliant headers
+- **Updated `rate_limit` middleware alias** to point to `EnhancedRateLimiterMiddleware`
+
+### Removed
+
+#### Async/Fiber System
+- **Removed entire `src/Async/` directory** (~30 files):
+  - `FiberScheduler` - Cooperative task scheduler
+  - `Promise` - Promise-style async wrapper
+  - `CurlMultiHttpClient` - Parallel HTTP client
+  - `AsyncStream`, `BufferedAsyncStream` - Non-blocking I/O
+  - Task types: `FiberTask`, `TimeoutTask`, `DelayedTask`, `RepeatingTask`
+  - Exceptions, contracts, and instrumentation
+- **Removed `AsyncProvider`** service provider
+- **Removed `config/async.php`** configuration file
+- **Removed async helper functions** from `helpers.php`:
+  - `scheduler()`, `async()`, `await()`, `await_all()`, `await_race()`
+  - `async_sleep()`, `async_sleep_default()`, `async_stream()`, `cancellation_token()`
+- **Removed async tests** from `tests/Unit/Async/` and `tests/Integration/Async/`
+- **Removed async documentation** from docs site
+
+#### Basic Rate Limiting System
+- **Removed `src/Security/RateLimiter.php`** and related classes:
+  - `AdaptiveRateLimiter`, `RateLimiterRule`, `RateLimiterDistributor`
+- **Removed `RateLimiterMiddleware`** (basic version)
+- **Removed `RateLimitingTrait`** from controllers
+- **Removed `rate_limiter` section** from `config/security.php`
+- **Removed rate limiting method calls** from controllers:
+  - `ConfigController`, `MetricsController`, `HealthController`, `ExtensionsController`
+  - `ResourceController`, `BulkOperationsTrait`
+
+#### Unused Configuration
+- **Removed `ENABLE_AUDIT`** from `.env.example` (audit logging uses activity_logs table directly)
+- **Removed pagination config** from `.env.example` and `config/app.php` (unused, PaginationBuilder uses hardcoded defaults)
+
+### Migration
+
+#### Resource Routes
+Update any client code or documentation referencing the old resource URLs:
+
+```diff
+- GET /api/v1/users
++ GET /api/v1/data/users
+
+- POST /api/v1/orders
++ POST /api/v1/data/orders
+
+- PUT /api/v1/products/abc-123
++ PUT /api/v1/data/products/abc-123
+```
+
+#### Rate Limiting
+If you were using the basic rate limiting trait methods in custom controllers, remove the calls:
+
+```diff
+  public function index()
+  {
+-     $this->rateLimit('my_endpoint');
+-     $this->requireLowRiskBehavior();
+      // ... controller logic
+  }
+```
+
+Rate limiting is now handled via middleware. Apply rate limits using the `rate_limit` middleware:
+
+```php
+$router->get('/endpoint', $handler)->middleware(['rate_limit:100,60']);
+```
+
+#### Async System
+If you were using the async helpers (unlikely as they weren't integrated into core), migrate to:
+- **Guzzle Promises** for async HTTP requests
+- **Queue system** for background job processing
+
+---
+
 ## [1.19.2] - 2026-01-24 — Canopus
 
 Patch release consolidating ValidationException classes, improving SQL query building, and enhancing cross-database compatibility.

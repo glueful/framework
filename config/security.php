@@ -33,8 +33,7 @@ return [
         default => 1        // Flexible security for development
     }),
 
-    // Permission system settings
-    'enabled_permissions' => env('ENABLE_PERMISSIONS', true),
+    // Security settings
     'nanoid_length' => env('NANOID_LENGTH', 12),
 
     // Sensitive configuration files
@@ -92,46 +91,6 @@ return [
         'content_security_policy' => env('CSP_HEADER'),
     ],
 
-    // Adaptive Rate Limiting settings
-    'rate_limiter' => [
-        'enable_adaptive' => env('ENABLE_ADAPTIVE_RATE_LIMITING', true),
-        'enable_distributed' => env('ENABLE_DISTRIBUTED_RATE_LIMITING', false),
-        'enable_ml' => env('ENABLE_ML_RATE_LIMITING', false),
-        'default_behavior_score' => 0.25,
-        'sync_interval' => 30,
-        'rule_update_interval' => 3600,
-        'behavior_ttl' => 86400,
-        'anomaly_ttl' => 604800,
-
-        // Smart environment-aware rate limits (stricter for production, relaxed for development)
-        'defaults' => [
-            'ip' => [
-                'max_attempts' => env('IP_RATE_LIMIT_MAX', match (env('APP_ENV')) {
-                    'production' => 30,   // Strict for production
-                    'staging' => 45,      // Moderate for staging
-                    default => 60         // Relaxed for development
-                }),
-                'window_seconds' => env('IP_RATE_LIMIT_WINDOW', 60)
-            ],
-            'user' => [
-                'max_attempts' => env('USER_RATE_LIMIT_MAX', match (env('APP_ENV')) {
-                    'production' => 500,  // Strict for production
-                    'staging' => 750,     // Moderate for staging
-                    default => 1000       // Relaxed for development
-                }),
-                'window_seconds' => env('USER_RATE_LIMIT_WINDOW', 3600)
-            ],
-            'endpoint' => [
-                'max_attempts' => env('ENDPOINT_RATE_LIMIT_MAX', match (env('APP_ENV')) {
-                    'production' => 15,   // Strict for production
-                    'staging' => 22,      // Moderate for staging
-                    default => 30         // Relaxed for development
-                }),
-                'window_seconds' => env('ENDPOINT_RATE_LIMIT_WINDOW', 60)
-            ]
-        ]
-    ],
-
     // Password Security
     'password' => [
         'min_length' => env('PASSWORD_MIN_LENGTH', 8),
@@ -181,14 +140,5 @@ return [
         // Additional validation settings
         'job_name_pattern' => '/^[a-z][a-z0-9_]*[a-z0-9]$/',
         'max_job_data_size' => 65536, // 64KB
-    ],
-
-    // Audit and Monitoring
-    'audit' => [
-        'enabled' => env('AUDIT_ENABLED', true),
-        'log_failed_logins' => env('AUDIT_LOG_FAILED_LOGINS', true),
-        'log_permission_denials' => env('AUDIT_LOG_PERMISSION_DENIALS', true),
-        'log_suspicious_activity' => env('AUDIT_LOG_SUSPICIOUS_ACTIVITY', true),
-        'retention_days' => env('AUDIT_RETENTION_DAYS', 365),
     ],
 ];

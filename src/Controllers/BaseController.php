@@ -10,7 +10,6 @@ use Glueful\Repository\RepositoryFactory;
 use Glueful\Helpers\DatabaseConnectionTrait;
 use Glueful\Controllers\Traits\CachedUserContextTrait;
 use Glueful\Controllers\Traits\AuthorizationTrait;
-use Glueful\Controllers\Traits\RateLimitingTrait;
 use Glueful\Controllers\Traits\ResponseCachingTrait;
 use Glueful\Models\User;
 use Glueful\Http\RequestUserContext;
@@ -30,8 +29,10 @@ use Symfony\Component\HttpFoundation\Request;
  * - DatabaseConnectionTrait: Database connection management
  * - CachedUserContextTrait: Cached user context and permissions
  * - AuthorizationTrait: Authorization and permission checks
- * - RateLimitingTrait: Rate limiting functionality
  * - ResponseCachingTrait: Response and query caching
+ *
+ * Note: For rate limiting, use the enhanced rate limiting middleware via
+ * #[RateLimit] attributes or the 'enhanced_rate_limit' middleware.
  *
  * @package Glueful\Controllers
  */
@@ -40,7 +41,6 @@ abstract class BaseController
     use DatabaseConnectionTrait;
     use CachedUserContextTrait;
     use AuthorizationTrait;
-    use RateLimitingTrait;
     use ResponseCachingTrait;
 
     /**

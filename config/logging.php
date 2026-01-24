@@ -68,6 +68,29 @@ return [
         'max_size' => env('LOG_MAX_SIZE', '100M'), // For size-based rotation
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Log Retention Settings (Database)
+    |--------------------------------------------------------------------------
+    |
+    | Configure how long logs are retained in the database per channel.
+    | Channels with longer retention (auth, security, error) are kept for
+    | compliance and auditing purposes. File rotation is separate (see above).
+    |
+    */
+    'retention' => [
+        'default' => env('LOG_RETENTION_DAYS', 90),
+        'channels' => [
+            'debug' => env('LOG_RETENTION_DEBUG_DAYS', 7),
+            'api' => env('LOG_RETENTION_API_DAYS', 30),
+            'app' => env('LOG_RETENTION_APP_DAYS', 90),
+            'framework' => env('LOG_RETENTION_FRAMEWORK_DAYS', 90),
+            'auth' => env('LOG_RETENTION_AUTH_DAYS', 365),
+            'security' => env('LOG_RETENTION_SECURITY_DAYS', 365),
+            'error' => env('LOG_RETENTION_ERROR_DAYS', 365),
+        ],
+    ],
+
     // Channels configuration
     'channels' => [
         'framework' => [

@@ -21,6 +21,14 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.20.0 — Regulus (Released 2026-01-24)
+- **Framework Simplification**: Removed unused subsystems for a leaner, more maintainable codebase.
+- **Resource Routes**: Added `/data` prefix to generic CRUD routes (`/api/v1/data/{table}`) to avoid conflicts with custom application routes.
+- **Async System Removed**: Entire Fiber-based async subsystem removed (~30 files) as it was unused in practice.
+- **Rate Limiting Consolidated**: Basic rate limiting system removed; enhanced system (`EnhancedRateLimiterMiddleware`) retained with all advanced features.
+- **Configuration Cleanup**: Removed unused environment variables (`ENABLE_AUDIT`) and duplicate pagination settings.
+- Notes: Minor release. Resource route URLs changed from `/api/v1/{table}` to `/api/v1/data/{table}`.
+
 ### 1.19.2 — Canopus (Released 2026-01-24)
 - **ValidationException Consolidation**: Unified validation exceptions from 3 classes to 1.
   - Removed `Glueful\Exceptions\ValidationException` (legacy).

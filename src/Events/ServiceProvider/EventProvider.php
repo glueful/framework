@@ -57,6 +57,8 @@ final class EventProvider extends BaseServiceProvider
             $this->autowire(\Glueful\Events\Listeners\SecurityMonitoringListener::class);
         $defs[\Glueful\Events\Listeners\PerformanceMonitoringListener::class] =
             $this->autowire(\Glueful\Events\Listeners\PerformanceMonitoringListener::class);
+        $defs[\Glueful\Events\Listeners\ActivityLoggingSubscriber::class] =
+            $this->autowire(\Glueful\Events\Listeners\ActivityLoggingSubscriber::class);
 
         return $defs;
     }

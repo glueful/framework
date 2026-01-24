@@ -27,7 +27,7 @@ namespace Glueful\Controllers\Traits;
  * Set restricted tables in config/resource.php:
  * ```php
  * 'restricted_tables' => [
- *     'app_logs' => 'admin.logs.access',
+ *     'activity_logs' => 'admin.logs.access',
  *     'auth_sessions' => 'admin.sessions.access'
  * ]
  * ```
@@ -66,7 +66,7 @@ trait TableAccessControlTrait
 
         // Sensible defaults for common sensitive tables
         return [
-            'app_logs' => 'admin.logs.access',
+            'activity_logs' => 'admin.logs.access',
             'auth_sessions' => 'admin.sessions.access',
             'users' => 'users.admin.access',
             'audit_logs' => 'audit.access'

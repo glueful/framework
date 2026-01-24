@@ -204,6 +204,9 @@ class Framework
             /** @var \Glueful\Events\ListenerProvider $provider */
             $provider = $this->container->get(\Glueful\Events\ListenerProvider::class);
             \Glueful\Events\Event::bootstrap($dispatcher, $provider, $this->container);
+
+            // Register core event subscribers for activity logging
+            $this->registerCoreEventSubscribers();
         } catch (\Throwable) {
             // Events are optional; ignore if not available
         }
@@ -341,6 +344,20 @@ class Framework
         } catch (\Throwable $e) {
             error_log("Auth initialization failed: " . $e->getMessage());
         }
+    }
+
+    /**
+     * Register core event subscribers for activity logging
+     *
+     * Subscribes framework event listeners that log auth and security
+     * events to the activity_logs table with channel-based retention.
+     */
+    private function registerCoreEventSubscribers(): void
+    {
+        // ActivityLoggingSubscriber handles auth/security event logging
+        \Glueful\Events\Event::subscribe(
+            \Glueful\Events\Listeners\ActivityLoggingSubscriber::class
+        );
     }
 
     /**

@@ -17,9 +17,9 @@ use Throwable;
  *
  * Supported Cleanup Types:
  * - filesystem: Clean file system log files
- * - database: Clean database log records
- * - audit: Clean audit log entries
- * - all: Complete log cleanup (filesystem + database + audit)
+ * - database: Clean database log records (simple age-based)
+ * - channel: Clean database logs using channel-specific retention
+ * - all: Complete log cleanup (filesystem + channel-based database)
  *
  * Usage:
  * ```php
@@ -30,10 +30,10 @@ use Throwable;
  *     'maintenance'
  * );
  *
- * // Queue database log cleanup
+ * // Queue database log cleanup with channel retention
  * app(\Glueful\Queue\QueueManager::class)->push(
  *     LogCleanupJob::class,
- *     ['cleanupType' => 'database', 'options' => ['retention_days' => 7]],
+ *     ['cleanupType' => 'channel'],
  *     'maintenance'
  * );
  *
@@ -74,22 +74,23 @@ class LogCleanupJob extends Job
         $result = match ($cleanupType) {
             'filesystem' => (function () use ($task, $retentionDays) {
                 $task->cleanFileSystemLogs($retentionDays);
-                return $task->handle();
-            })(),
-            'all' => (function () use ($task, $retentionDays) {
-                $task->cleanFileSystemLogs($retentionDays);
-                $task->cleanDatabaseLogs($retentionDays);
-                $task->cleanAuditLogs($retentionDays);
-                return $task->handle();
-            })(),
-            'audit' => (function () use ($task, $retentionDays) {
-                $task->cleanAuditLogs($retentionDays);
-                return $task->handle();
+                $task->logResults();
+                return ['deleted_files' => 0, 'deleted_db_logs' => 0, 'bytes_freed' => 0];
             })(),
             'database' => (function () use ($task, $retentionDays) {
                 $task->cleanDatabaseLogs($retentionDays);
-                return $task->handle();
+                $task->logResults();
+                return ['deleted_files' => 0, 'deleted_db_logs' => 0, 'bytes_freed' => 0];
             })(),
+            'channel' => (function () use ($task) {
+                $task->cleanDatabaseLogsByChannel();
+                $task->logResults();
+                return ['deleted_files' => 0, 'deleted_db_logs' => 0, 'bytes_freed' => 0];
+            })(),
+            'all' => $task->handle([
+                'retention_days' => $retentionDays,
+                'use_channel_retention' => true,
+            ]),
             default => throw new \InvalidArgumentException("Unknown cleanup type: {$cleanupType}")
         };
 
