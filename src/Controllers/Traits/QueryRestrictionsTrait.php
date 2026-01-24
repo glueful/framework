@@ -106,7 +106,7 @@ trait QueryRestrictionsTrait
                 'user_agent' => 'admin.sessions.search_by_agent',
                 'token_fingerprint' => 'admin.sessions.view_tokens'
             ],
-            'app_logs' => [
+            'activity_logs' => [
                 'context' => 'admin.logs.search_context',
                 'exec_time' => 'admin.logs.performance_data',
                 'channel' => 'admin.logs.filter_by_channel'

@@ -38,11 +38,6 @@ class HealthController extends BaseController
      */
     public function index()
     {
-        // Apply conditional rate limiting based on authentication
-        // Anonymous users: 30 requests/minute per IP
-        // Authenticated users: 100 requests/minute per user
-        $this->conditionalRateLimit('health_check');
-
         // Cache response with short TTL for monitoring tools
         $response = $this->cacheResponse('health_overall', function () {
 
@@ -138,9 +133,6 @@ class HealthController extends BaseController
      */
     public function readiness(): Response
     {
-        // Minimal protection to avoid probe abuse
-        $this->rateLimit('health_readiness', 60, 60);
-
         $db = HealthService::checkDatabase();
         $cache = HealthService::checkCache();
         $config = HealthService::checkConfiguration();
@@ -189,10 +181,6 @@ class HealthController extends BaseController
         // Require permission for detailed health monitoring
         $this->requirePermission('system.health.detailed', 'health:detailed');
 
-        // Apply stricter rate limiting for detailed monitoring
-        $this->rateLimit('health_detailed', 10, 60); // 10 requests per minute
-
-
         // Cache detailed health metrics for shorter duration (more frequent updates)
         $health = $this->cacheResponse('health_detailed', function () {
             return $this->generateDetailedHealthMetrics();
@@ -215,7 +203,6 @@ class HealthController extends BaseController
     public function middleware(): Response
     {
         $this->requirePermission('system.middleware.health', 'health:middleware');
-        $this->rateLimit('health_middleware', 20, 60);
 
         // Middleware are now handled per-route, no pipeline health check needed
         $middlewareHealth = [
@@ -237,7 +224,6 @@ class HealthController extends BaseController
     public function responseApi(): Response
     {
         $this->requirePermission('system.response_api.metrics', 'health:response_api');
-        $this->rateLimit('health_response_api', 30, 60);
 
         $responseApiMetrics = [
             'performance' => $this->getResponseApiPerformance(),
@@ -756,7 +742,6 @@ class HealthController extends BaseController
      */
     public function queue(): Response
     {
-        $this->rateLimit('health_queue', 20, 60);
         $data = $this->getQueueHealth();
         if (($data['status'] ?? 'healthy') === 'error') {
             return Response::error('Queue health check failed', Response::HTTP_SERVICE_UNAVAILABLE, $data);

@@ -76,12 +76,6 @@ trait BulkOperationsTrait
         $limits = $this->getBulkLimits();
         $maxDeletes = $limits['delete'] ?? 100;
 
-        // Apply strict rate limiting for bulk operations
-        $this->rateLimitResource($table, 'bulk_delete', 5, 300); // 5 per 5 minutes
-
-        // Require low-risk behavior for bulk delete operations
-        $this->requireLowRiskBehavior();
-
         // Validate bulk operation limits
         if (count($uuids) > $maxDeletes) {
             return Response::error(
@@ -177,12 +171,6 @@ trait BulkOperationsTrait
         // Get bulk limits
         $limits = $this->getBulkLimits();
         $maxUpdates = $limits['update'] ?? 50;
-
-        // Apply strict rate limiting for bulk operations
-        $this->rateLimitResource($table, 'bulk_update', 3, 300); // 3 per 5 minutes
-
-        // Require low-risk behavior for bulk update operations
-        $this->requireLowRiskBehavior();
 
         // Validate bulk operation limits
         if (count($updates) > $maxUpdates) {

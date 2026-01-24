@@ -427,8 +427,6 @@ final class CoreProvider extends BaseServiceProvider
         // Middleware registrations (autowire with sensible defaults)
         $defs[\Glueful\Routing\Middleware\AuthMiddleware::class] =
             $this->autowire(\Glueful\Routing\Middleware\AuthMiddleware::class);
-        $defs[\Glueful\Routing\Middleware\RateLimiterMiddleware::class] =
-            $this->autowire(\Glueful\Routing\Middleware\RateLimiterMiddleware::class);
         $defs[\Glueful\Routing\Middleware\CSRFMiddleware::class] =
             $this->autowire(\Glueful\Routing\Middleware\CSRFMiddleware::class);
         $defs[\Glueful\Routing\Middleware\SecurityHeadersMiddleware::class] =
@@ -476,7 +474,7 @@ final class CoreProvider extends BaseServiceProvider
         );
         $defs['rate_limit'] = new AliasDefinition(
             'rate_limit',
-            \Glueful\Routing\Middleware\RateLimiterMiddleware::class
+            \Glueful\Api\RateLimiting\Middleware\EnhancedRateLimiterMiddleware::class
         );
         $defs['csrf'] = new AliasDefinition(
             'csrf',

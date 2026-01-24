@@ -13,10 +13,10 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.19.2';
+    public const VERSION = '1.20.0';
 
     /** Release code name */
-    public const NAME = 'Canopus';
+    public const NAME = 'Regulus';
 
     /** Release date */
     public const RELEASE_DATE = '2026-01-24';

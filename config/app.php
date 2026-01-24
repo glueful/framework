@@ -65,14 +65,6 @@ return [
         'docs' => rtrim(env('BASE_URL', 'http://localhost'), '/') . '/docs/',
     ],
 
-    // Pagination Settings
-    'pagination' => [
-        'enabled' => env('PAGINATION_ENABLED', true),
-        'default_size' => env('PAGINATION_DEFAULT_SIZE', 25),
-        'max_size' => env('PAGINATION_MAX_SIZE', 100),
-        'list_limit' => env('PAGINATION_LIST_LIMIT', 1000),
-    ],
-
     // Performance Settings
     'performance' => [
         'memory' => [

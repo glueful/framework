@@ -3,7 +3,15 @@
 namespace Glueful\Tasks;
 
 use Glueful\Database\Connection;
+use Glueful\Logging\DatabaseLogPruner;
 
+/**
+ * Log Cleanup Task
+ *
+ * Handles cleanup of old log files and database log records.
+ * Supports channel-based retention policies where different log channels
+ * can have different retention periods.
+ */
 class LogCleanupTask
 {
     /** @var array{deleted_files: int, deleted_db_logs: int, bytes_freed: int, errors: string[]} */
@@ -21,6 +29,9 @@ class LogCleanupTask
         $this->connection = new Connection();
     }
 
+    /**
+     * Clean old log files from the filesystem
+     */
     public function cleanFileSystemLogs(int $retentionDays): void
     {
         $logDir = config('app.paths.logs');
@@ -32,13 +43,18 @@ class LogCleanupTask
         $cutoffTime = time() - ($retentionDays * 24 * 60 * 60);
         $files = glob($logDir . '/*.log');
 
+        if ($files === false) {
+            return;
+        }
+
         foreach ($files as $file) {
             try {
-                if (filemtime($file) < $cutoffTime) {
+                $mtime = filemtime($file);
+                if ($mtime !== false && $mtime < $cutoffTime) {
                     $size = filesize($file);
                     if (unlink($file)) {
                         $this->stats['deleted_files']++;
-                        $this->stats['bytes_freed'] += $size;
+                        $this->stats['bytes_freed'] += $size !== false ? $size : 0;
                     }
                 }
             } catch (\Exception $e) {
@@ -47,13 +63,16 @@ class LogCleanupTask
         }
     }
 
+    /**
+     * Clean old database logs using simple age-based retention
+     */
     public function cleanDatabaseLogs(int $retentionDays): void
     {
         try {
-            // Clean app_logs table if it exists
             $cutoffDate = date('Y-m-d H:i:s', time() - ($retentionDays * 24 * 60 * 60));
 
-            $affected = $this->connection->table('app_logs')
+            /** @var int $affected */
+            $affected = $this->connection->table('activity_logs')
                 ->where('created_at', '<', $cutoffDate)
                 ->delete();
 
@@ -63,24 +82,28 @@ class LogCleanupTask
         }
     }
 
-    public function cleanAuditLogs(int $retentionDays): void
+    /**
+     * Clean database logs using channel-specific retention policies
+     *
+     * This method respects the retention configuration in config/logging.php
+     * where different channels can have different retention periods.
+     * For example: auth/security logs kept 365 days, debug logs 7 days.
+     */
+    public function cleanDatabaseLogsByChannel(): void
     {
         try {
-            // Clean audit_logs table if it exists
-            $cutoffDate = date('Y-m-d H:i:s', time() - ($retentionDays * 24 * 60 * 60));
+            $pruner = new DatabaseLogPruner();
+            $deleted = $pruner->pruneByChannel();
 
-            $affected = $this->connection->table('audit_logs')
-                ->where('created_at', '<', $cutoffDate)
-                ->delete();
-
-            if ($affected > 0) {
-                $this->stats['deleted_db_logs'] += $affected;
-            }
+            $this->stats['deleted_db_logs'] += $deleted;
         } catch (\Exception $e) {
-            $this->stats['errors'][] = "Failed to clean audit logs: " . $e->getMessage();
+            $this->stats['errors'][] = "Failed to clean database logs by channel: " . $e->getMessage();
         }
     }
 
+    /**
+     * Log the cleanup results to a file
+     */
     public function logResults(): void
     {
         $timestamp = date('Y-m-d H:i:s');
@@ -116,22 +139,32 @@ class LogCleanupTask
         }
 
         $units = ['B', 'KB', 'MB', 'GB'];
-        $i = floor(log($bytes, 1024));
+        $i = (int) floor(log($bytes, 1024));
 
         return round($bytes / (1024 ** $i), 2) . ' ' . $units[$i];
     }
 
     /**
+     * Run the log cleanup task
+     *
      * @param array<string, mixed> $parameters
      * @return array{deleted_files: int, deleted_db_logs: int, bytes_freed: int, errors: string[]}
      */
     public function handle(array $parameters = []): array
     {
-        $retentionDays = $parameters['retention_days'] ?? 30;
+        $retentionDays = (int) ($parameters['retention_days'] ?? 30);
+        $useChannelRetention = (bool) ($parameters['use_channel_retention'] ?? true);
 
         $this->cleanFileSystemLogs($retentionDays);
-        $this->cleanDatabaseLogs($retentionDays);
-        $this->cleanAuditLogs($retentionDays);
+
+        if ($useChannelRetention) {
+            // Use channel-specific retention from config/logging.php
+            $this->cleanDatabaseLogsByChannel();
+        } else {
+            // Use simple age-based retention
+            $this->cleanDatabaseLogs($retentionDays);
+        }
+
         $this->logResults();
 
         return $this->stats;

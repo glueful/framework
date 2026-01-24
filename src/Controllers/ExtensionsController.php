@@ -28,13 +28,6 @@ class ExtensionsController extends BaseController
      */
     public function index(): mixed
     {
-        // Basic rate limiting for read operation
-        $this->rateLimitMethod(null, [
-            'attempts' => 100,
-            'window' => 60,
-            'adaptive' => true
-        ]);
-
         $providers = $this->extensionManager->getProviders();
         $meta = $this->extensionManager->listMeta();
 
@@ -63,13 +56,6 @@ class ExtensionsController extends BaseController
      */
     public function summary(): mixed
     {
-        // Basic rate limiting for read operation
-        $this->rateLimitMethod(null, [
-            'attempts' => 60,
-            'window' => 60,
-            'adaptive' => true
-        ]);
-
         return Response::success(
             $this->extensionManager->getSummary(),
             'Extension system summary retrieved successfully'

@@ -81,10 +81,8 @@ return [
     */
     'servers' => [
         [
-            // Use api_url() helper if available, otherwise fall back to env vars
-            'url' => function_exists('api_url')
-                ? api_url()
-                : env('API_SERVER_URL', env('APP_URL', 'http://localhost') . '/api'),
+            // Use base URL - route paths include their own prefixes
+            'url' => env('API_SERVER_URL', config('app.urls.base', env('APP_URL', 'http://localhost'))),
             'description' => env('API_SERVER_DESCRIPTION', 'API Server'),
         ],
     ],
@@ -143,11 +141,14 @@ return [
         |
         */
         'route_prefixes' => [
+            // App routes - versioned API
+            'api.php' => '/v1',
+
             // Framework routes - no version prefix
             'health.php' => '',
             'docs.php' => '',
 
-            // Framework auth/resource routes - versioned
+            // Framework auth routes - versioned
             'auth.php' => '/v1',
             'resource.php' => '/v1',
         ],
@@ -191,7 +192,7 @@ return [
 
         // Generate resource/table routes (CRUD endpoints for all database tables)
         // Set to false to disable automatic generation of table-based API endpoints
-        'include_resource_routes' => env('API_DOCS_INCLUDE_RESOURCE_ROUTES', true),
+        'include_resource_routes' => env('API_DOCS_INCLUDE_RESOURCE_ROUTES', false),
     ],
 
     /*
@@ -204,6 +205,7 @@ return [
     |
     */
     'excluded_tables' => [
+        // System tables
         'migrations',
         'failed_jobs',
         'password_resets',
@@ -213,6 +215,10 @@ return [
         'cache',
         'cache_locks',
         'sessions',
+        // Tables with explicit routes in api.php (avoid duplicate docs)
+        'notifications',
+        'notification_preferences',
+        'notification_templates',
     ],
 
     /*

@@ -45,7 +45,7 @@ return [
     */
 
     'restricted_tables' => [
-        'app_logs' => 'admin.logs.access',
+        'activity_logs' => 'admin.logs.access',
         'auth_sessions' => 'admin.sessions.access',
         'users' => 'users.admin.access',
         'audit_logs' => 'audit.access',
@@ -82,7 +82,7 @@ return [
             'refresh_token',
             'token_fingerprint',
         ],
-        'app_logs' => [
+        'activity_logs' => [
             'context',
         ],
         'audit_logs' => [
@@ -116,7 +116,7 @@ return [
             'user_agent' => 'admin.sessions.search_by_agent',
             'token_fingerprint' => 'admin.sessions.view_tokens',
         ],
-        'app_logs' => [
+        'activity_logs' => [
             'context' => 'admin.logs.search_context',
             'exec_time' => 'admin.logs.performance_data',
             'channel' => 'admin.logs.filter_by_channel',

@@ -73,10 +73,6 @@ class ConfigController extends BaseController
         // Check permissions÷
         $this->requirePermission('system.config.view');
 
-        // Multi-level rate limiting (using BaseController's rateLimitMethod)
-        $this->rateLimitMethod('config_file');
-
-
         // Remove .php extension if present for consistent lookup
         $configName = str_replace('.php', '', $filename);
 
@@ -142,13 +138,6 @@ class ConfigController extends BaseController
     {
         // No authentication required for public config
 
-        // Add modest public rate limiting to prevent abuse
-        $this->rateLimitMethod('public_config', [
-            'attempts' => 60,
-            'window' => 60,
-            'adaptive' => true
-        ]);
-
         $publicConfig = [
             'app_name' => ConfigManager::get('app.name', 'Glueful'),
             'api_version' => ConfigManager::get('app.version', '1.0'),
@@ -176,13 +165,6 @@ class ConfigController extends BaseController
     {
         // Check permissions
         $this->requirePermission('system.config.edit');
-
-        // Multi-level rate limiting for write operations
-        $this->rateLimitMethod('config_update');
-
-
-        // Require low risk behavior for sensitive operations (using BaseController)
-        $this->requireLowRiskBehavior(0.6, 'config_update');
 
         $configName = str_replace('.php', '', $filename);
 
@@ -243,13 +225,6 @@ class ConfigController extends BaseController
     {
         // Check permissions
         $this->requirePermission('system.config.create');
-
-        // Multi-level rate limiting for write operations
-        $this->rateLimitMethod('config_create');
-
-
-        // Require low risk behavior for sensitive operations
-        $this->requireLowRiskBehavior(0.6, 'config_create');
 
         // Validate config name
         $configName = str_replace('.php', '', $name);
@@ -376,9 +351,6 @@ class ConfigController extends BaseController
         // Check permissions
         $this->requirePermission('system.config.view');
 
-        // Multi-level rate limiting for validation operations
-        $this->rateLimitMethod('config_validate');
-
         $requestData = $this->getRequestData();
 
         // Validate request data
@@ -424,9 +396,6 @@ class ConfigController extends BaseController
     {
         // Check permissions
         $this->requirePermission('system.config.view');
-
-        // Multi-level rate limiting
-        $this->rateLimitMethod('config_validate');
 
         try {
             // Load existing configuration

@@ -128,7 +128,7 @@ trait FieldLevelPermissionsTrait
             'users' => ['password', 'ip_address', 'x_forwarded_for_ip_address', 'user_agent'],
             'profiles' => ['deleted_at'],
             'auth_sessions' => ['access_token', 'refresh_token', 'token_fingerprint'],
-            'app_logs' => ['context'],
+            'activity_logs' => ['context'],
             'audit_logs' => ['context', 'raw_data']
         ];
     }

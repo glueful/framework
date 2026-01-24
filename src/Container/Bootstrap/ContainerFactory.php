@@ -113,7 +113,6 @@ final class ContainerFactory
             \Glueful\Container\Providers\ORMProvider::class,
             \Glueful\Container\Providers\ConsoleProvider::class,
             \Glueful\Container\Providers\StorageProvider::class,
-            \Glueful\Container\Providers\AsyncProvider::class,
         ];
         $classes = array_merge($classes, [
             \Glueful\Container\Providers\ExceptionProvider::class,
