@@ -26,6 +26,7 @@
         "php": "^8.3",
         "dragonmantank/cron-expression": "^3.4",
         "intervention/image": "^3.11",
+        "james-heinrich/getid3": "^1.9",
         "league/flysystem": "^3.30",
         "league/flysystem-local": "^3.30",
         "monolog/monolog": "^3.8",

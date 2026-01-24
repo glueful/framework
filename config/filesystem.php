@@ -64,6 +64,26 @@ return [
         'quarantine_suspicious' => env('QUARANTINE_SUSPICIOUS_FILES', true),
     ],
 
+    // File uploader settings
+    'uploader' => [
+        // Allowed MIME types for uploads (null = use defaults)
+        // Default: images, videos, audio, and documents
+        'allowed_mime_types' => null,
+
+        // Thumbnail generation settings
+        'thumbnail_enabled' => env('THUMBNAIL_ENABLED', true),
+        'thumbnail_width' => env('THUMBNAIL_WIDTH', 400),
+        'thumbnail_height' => env('THUMBNAIL_HEIGHT', 400),
+        'thumbnail_quality' => env('THUMBNAIL_QUALITY', 80),
+
+        // MIME types that support thumbnail generation (null = use defaults)
+        // Default: image/jpeg, image/png, image/gif, image/webp
+        'thumbnail_formats' => null,
+
+        // Thumbnail storage subdirectory
+        'thumbnail_subdirectory' => env('THUMBNAIL_SUBDIRECTORY', 'thumbs'),
+    ],
+
     // Performance settings
     'performance' => [
         'cache_file_stats' => env('CACHE_FILE_STATS', true),
