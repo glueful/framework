@@ -40,9 +40,9 @@ abstract class SearchAdapter implements SearchAdapterInterface
         ?ApplicationContext $context = null
     ) {
         $this->indexName = $indexName;
-        $this->db = $connection ?? new Connection();
-        $this->schema = $this->db->getSchemaBuilder();
         $this->context = $context;
+        $this->db = $connection ?? Connection::fromContext($context);
+        $this->schema = $this->db->getSchemaBuilder();
     }
 
     /**

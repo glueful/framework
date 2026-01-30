@@ -35,7 +35,7 @@ class ResourceRouteExpander
     public function __construct(?Connection $connection = null, ?ApplicationContext $context = null)
     {
         $this->context = $context;
-        $this->db = $connection ?? new Connection([], $this->context);
+        $this->db = $connection ?? Connection::fromContext($this->context);
         $this->schema = $this->db->getSchemaBuilder();
 
         // Load excluded tables from config

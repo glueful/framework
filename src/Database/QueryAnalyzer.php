@@ -4,6 +4,7 @@ namespace Glueful\Database;
 
 use PDO;
 use PDOException;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Driver\DatabaseDriver;
 use Glueful\Database\Connection;
 
@@ -41,9 +42,9 @@ class QueryAnalyzer
     /**
      * Initialize the query analyzer with a new database connection
      */
-    public function __construct()
+    public function __construct(?ApplicationContext $context = null)
     {
-        $this->connection = new Connection();
+        $this->connection = Connection::fromContext($context);
         $this->pdo = $this->connection->getPDO();
         $this->driver = $this->connection->getDriver();
     }

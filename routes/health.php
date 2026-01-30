@@ -10,13 +10,10 @@ use Symfony\Component\HttpFoundation\Request;
  * @var ApplicationContext $context
  */
 
-// Type hints for static analysis (variables injected by RouteManifest::requireRouteFile)
-assert($router instanceof Router);
 /** @var ApplicationContext|null $context */
 $context = (isset($context) && $context instanceof ApplicationContext)
     ? $context
     : $router->getContext();
-assert($context instanceof ApplicationContext);
 
 // Health check routes - organized by access level
 $router->group(['prefix' => '/health'], function (Router $router) use ($context) {

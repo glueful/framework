@@ -36,7 +36,7 @@ use Symfony\Component\HttpFoundation\Request;
  *
  * @package Glueful\Controllers
  */
-abstract class BaseController
+abstract class BaseController implements \Glueful\Contracts\ContextAwareInterface
 {
     use DatabaseConnectionTrait;
     use CachedUserContextTrait;
@@ -125,7 +125,7 @@ abstract class BaseController
         $this->currentToken = $this->userContext->getToken();
     }
 
-    protected function getContext(): ApplicationContext
+    public function getContext(): ApplicationContext
     {
         return $this->context;
     }

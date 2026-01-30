@@ -74,7 +74,7 @@ class RevokeTokensCommand extends BaseSecurityCommand
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         // Initialize database connection
-        $this->db = new Connection();
+        $this->db = Connection::fromContext($this->context);
         $userOption = $input->getOption('user');
         $user = $userOption !== null ? (string) $userOption : null;
         $all = (bool) $input->getOption('all');

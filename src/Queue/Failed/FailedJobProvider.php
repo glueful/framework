@@ -55,7 +55,7 @@ class FailedJobProvider
         ?ApplicationContext $context = null
     ) {
         $this->context = $context;
-        $this->db = $connection ?? new Connection([], $this->context);
+        $this->db = $connection ?? Connection::fromContext($this->context);
         $this->table = $table;
         $this->maxRetries = $maxRetries;
         $this->retentionDays = $retentionDays;

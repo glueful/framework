@@ -23,8 +23,8 @@ class RepositoryFactory
 
     public function __construct(?Connection $connection = null, ?ApplicationContext $context = null)
     {
-        $this->connection = $connection ?? new Connection();
         $this->context = $context;
+        $this->connection = $connection ?? Connection::fromContext($context);
     }
 
     /**

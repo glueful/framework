@@ -61,7 +61,7 @@ class StatusCommand extends BaseCommand
         $showDetails = $input->getOption('details');
 
         try {
-            $this->connection = new Connection();
+            $this->connection = Connection::fromContext($this->context);
             $this->schema = $this->connection->getSchemaBuilder();
 
             $this->displayConnectionStatus();
@@ -162,7 +162,7 @@ class StatusCommand extends BaseCommand
             }
 
             $headers = ['Metric', 'Value'];
-            $poolingEnabled = config($this->getContext(), 'database.pooling.enabled', false);
+            $poolingEnabled = (bool) config($this->getContext(), 'database.pooling.enabled', false);
             $rows = [
                 ['Total Tables', $tableCount],
                 ['Database Engine', ucfirst($driverName)],

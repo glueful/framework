@@ -36,7 +36,7 @@ class ArchiveHealthChecker
         ?ApplicationContext $context = null
     ) {
         $this->context = $context;
-        $this->db = $connection ?? new Connection([], $this->context);
+        $this->db = $connection ?? Connection::fromContext($this->context);
         $this->config = array_merge([
             'storage_path' => $this->getConfig('archive.storage.path', './storage/archive'),
             'disk_space_threshold' => $this->getConfig('archive.monitoring.disk_space_threshold_percent', 85),

@@ -381,7 +381,7 @@ class InstallCommand extends BaseCommand
             }
 
             // Initialize cache system
-            $cacheStore = \Glueful\Helpers\CacheHelper::createCacheInstance();
+            $cacheStore = \Glueful\Helpers\CacheHelper::createCacheInstance($this->getContext());
             if ($cacheStore !== null) {
                 $this->line('✓ Cache system initialized successfully');
             } else {
@@ -629,7 +629,7 @@ HELP;
 
     private function checkDatabaseHealth(): void
     {
-        $dbHealth = HealthService::checkDatabase();
+        $dbHealth = HealthService::checkDatabase($this->getContext());
 
         if ($dbHealth['status'] !== 'ok') {
             throw new \Exception('Database health check failed: ' . ($dbHealth['message'] ?? 'Unknown error'));
@@ -639,7 +639,7 @@ HELP;
     private function checkCacheHealth(): void
     {
         try {
-            $cacheStore = \Glueful\Helpers\CacheHelper::createCacheInstance();
+            $cacheStore = \Glueful\Helpers\CacheHelper::createCacheInstance($this->getContext());
             if ($cacheStore === null) {
                 throw new \Exception('Cache instance could not be created');
             }

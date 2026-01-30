@@ -33,7 +33,7 @@ class DatabaseLogPruner
         $this->table = $table;
         $this->context = $context;
 
-        $connection = new Connection([], $this->context);
+        $connection = Connection::fromContext($this->context);
         $this->db = $connection;
     }
 

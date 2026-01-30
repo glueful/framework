@@ -59,9 +59,18 @@ abstract class BaseRepository implements RepositoryInterface
      *
      * @return Connection The shared database connection
      */
-    protected static function getSharedConnection(): Connection
+    protected static function getSharedConnection(?ApplicationContext $context = null): Connection
     {
-        return self::$sharedConnection ??= new Connection();
+        if (self::$sharedConnection === null) {
+            self::$sharedConnection = Connection::fromContext($context);
+            return self::$sharedConnection;
+        }
+
+        if ($context !== null && self::$sharedConnection->hasContext() === false) {
+            self::$sharedConnection = Connection::fromContext($context);
+        }
+
+        return self::$sharedConnection;
     }
 
     /**
@@ -72,9 +81,9 @@ abstract class BaseRepository implements RepositoryInterface
      *
      * @return Connection The shared database connection
      */
-    protected static function getSharedDb(): Connection
+    protected static function getSharedDb(?ApplicationContext $context = null): Connection
     {
-        return self::getSharedConnection();
+        return self::getSharedConnection($context);
     }
 
     /**
@@ -91,7 +100,7 @@ abstract class BaseRepository implements RepositoryInterface
             self::$sharedConnection = $connection;
         }
 
-        $this->db = self::getSharedDb();
+        $this->db = self::getSharedDb($context);
         $this->table = $this->getTableName();
     }
 

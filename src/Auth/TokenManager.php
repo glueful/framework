@@ -43,7 +43,7 @@ class TokenManager
         ?AuthenticationManager $authManager = null
     ) {
         $this->context = $context;
-        $this->db = $db ?? new Connection();
+        $this->db = $db ?? Connection::fromContext($context);
         $this->authManager = $authManager;
         $this->ttl = (int) $this->getConfig('session.access_token_lifetime', self::DEFAULT_TTL);
     }

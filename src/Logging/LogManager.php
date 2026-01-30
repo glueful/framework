@@ -203,7 +203,9 @@ class LogManager implements LoggerInterface, LogManagerInterface
 
         // Add database handler if configured
         if ((bool) $this->getConfig('logging.application.database_logging', false)) {
-            $this->logger->pushHandler(new DatabaseLogHandler());
+            $this->logger->pushHandler(new DatabaseLogHandler([
+                'context' => $this->context,
+            ]));
         }
 
         // Register shutdown handler to flush logs
@@ -482,6 +484,9 @@ class LogManager implements LoggerInterface, LogManagerInterface
      */
     public function configureDatabaseLogging(bool $enabled, array $options = []): self
     {
+        if (!array_key_exists('context', $options)) {
+            $options['context'] = $this->context;
+        }
         // Get current handlers
         $handlers = $this->logger->getHandlers();
 

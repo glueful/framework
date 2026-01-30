@@ -24,7 +24,7 @@ class SessionCleanupTask
     public function __construct(?ApplicationContext $context = null)
     {
         $this->context = $context;
-        self::$connection = new Connection([], $this->context);
+        self::$connection = Connection::fromContext($this->context);
     }
 
     public function cleanExpiredAccessTokens(): void

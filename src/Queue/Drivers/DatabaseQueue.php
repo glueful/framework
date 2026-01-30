@@ -89,7 +89,7 @@ class DatabaseQueue implements QueueDriverInterface
     public function initialize(array $config): void
     {
         $this->context = $config['context'] ?? null;
-        $this->db = new Connection([], $this->context);
+        $this->db = Connection::fromContext($this->context);
         $this->schema = $this->db->getSchemaBuilder();
         $this->table = (string) $this->getConfig('queue.connections.database.table', 'queue_jobs');
         $this->failedTable = (string) $this->getConfig('queue.connections.database.failed_table', 'queue_failed_jobs');

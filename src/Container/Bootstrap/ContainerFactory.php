@@ -26,6 +26,9 @@ final class ContainerFactory
             $defs += $provider->defs();
         }
 
+        // Make ApplicationContext available for autowiring.
+        $defs[ApplicationContext::class] = new ValueDefinition(ApplicationContext::class, $context);
+
         // Merge extension-provided service definitions (typed or DSL)
         $defs += self::loadExtensionDefinitions($tags, $context, $prod);
 
@@ -48,7 +51,6 @@ final class ContainerFactory
 
             try {
                 $defsRef = (new \ReflectionClass($container))->getProperty('definitions');
-                $defsRef->setAccessible(true);
                 /** @var array<string, mixed> $normalized */
                 $normalized = $defsRef->getValue($container);
 

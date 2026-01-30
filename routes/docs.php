@@ -10,13 +10,10 @@ use Symfony\Component\HttpFoundation\Request;
  * @var ApplicationContext $context
  */
 
-// Type hints for static analysis (variables injected by RouteManifest::requireRouteFile)
-assert($router instanceof Router);
 /** @var ApplicationContext|null $context */
 $context = (isset($context) && $context instanceof ApplicationContext)
     ? $context
     : $router->getContext();
-assert($context instanceof ApplicationContext);
 
 // Documentation routes - serves OpenAPI spec and interactive UI
 $router->group(['prefix' => '/docs'], function (Router $router) use ($context) {

@@ -50,7 +50,7 @@ class SessionStore implements SessionStoreInterface
     ) {
         $this->context = $context;
         $this->cache = $cache ?? CacheHelper::createCacheInstance();
-        $this->db = $db ?? new Connection();
+        $this->db = $db ?? Connection::fromContext($context);
         $this->requestContext = $requestContext ?? RequestContext::fromGlobals();
         $this->useTransactions = $useTransactions;
         $this->cacheDefaultTtl = (int) $this->getConfig('session.access_token_lifetime', 900);

@@ -288,6 +288,9 @@ class Framework
     private function initializeCoreServices(): void
     {
         // Register exception handler
+        if ($this->context !== null) {
+            ExceptionHandler::setContext($this->context);
+        }
         ExceptionHandler::register();
 
         // Initialize Cache Driver
@@ -372,7 +375,8 @@ class Framework
             !(bool) env('SKIP_DB_VALIDATION', false)
         ) {
             ConnectionValidator::validateOnStartup(
-                throwOnFailure: (bool) env('DB_STARTUP_STRICT', false)
+                throwOnFailure: (bool) env('DB_STARTUP_STRICT', false),
+                context: $this->context
             );
         }
 

@@ -40,6 +40,18 @@ trait DatabaseConnectionTrait
      */
     protected function getConnection(): Connection
     {
-        return self::$traitConnection ??= new Connection();
+        // Try to get context from the using class if available
+        /** @var \Glueful\Bootstrap\ApplicationContext|null $context */
+        $context = null;
+        if ($this instanceof \Glueful\Contracts\ContextAwareInterface) {
+            $context = $this->getContext();
+        }
+
+        if (self::$traitConnection === null) {
+            self::$traitConnection = Connection::fromContext($context);
+        } elseif ($context !== null && self::$traitConnection->hasContext() === false) {
+            self::$traitConnection = Connection::fromContext($context);
+        }
+        return self::$traitConnection;
     }
 }

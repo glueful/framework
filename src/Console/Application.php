@@ -12,10 +12,12 @@ use Glueful\Support\Version;
  *
  * Enhanced console application built on Symfony Console:
  * - Integrates with Glueful's DI container
- * - Auto-registers commands with dependency injection
+ * - Auto-registers commands via container tagging
  * - Provides consistent branding and help system
  * - Organized command structure by functional groups
  * - Supports modern Symfony Console patterns
+ *
+ * Commands are registered in ConsoleProvider using the 'console.commands' tag.
  *
  * @package Glueful\Console
  */
@@ -23,96 +25,6 @@ class Application extends BaseApplication
 {
     /** @var ContainerInterface DI Container */
     protected ContainerInterface $container;
-
-    /** @var array<string> List of command classes */
-    protected array $commands = [
-        // Migration commands
-        \Glueful\Console\Commands\Migrate\RunCommand::class,
-        \Glueful\Console\Commands\Migrate\CreateCommand::class,
-        \Glueful\Console\Commands\Migrate\StatusCommand::class,
-        \Glueful\Console\Commands\Migrate\RollbackCommand::class,
-        // Development commands
-        \Glueful\Console\Commands\ServeCommand::class,
-        \Glueful\Console\Commands\VersionCommand::class,
-        // Cache commands
-        \Glueful\Console\Commands\Cache\ClearCommand::class,
-        \Glueful\Console\Commands\Cache\StatusCommand::class,
-        \Glueful\Console\Commands\Cache\GetCommand::class,
-        \Glueful\Console\Commands\Cache\SetCommand::class,
-        \Glueful\Console\Commands\Cache\DeleteCommand::class,
-        \Glueful\Console\Commands\Cache\TtlCommand::class,
-        \Glueful\Console\Commands\Cache\ExpireCommand::class,
-        \Glueful\Console\Commands\Cache\PurgeCommand::class,
-        \Glueful\Console\Commands\Cache\MaintenanceCommand::class,
-        // Database commands
-        \Glueful\Console\Commands\Database\StatusCommand::class,
-        \Glueful\Console\Commands\Database\ResetCommand::class,
-        \Glueful\Console\Commands\Database\ProfileCommand::class,
-        \Glueful\Console\Commands\Database\SeedCommand::class,
-        // Generate commands
-        \Glueful\Console\Commands\Generate\OpenApiDocsCommand::class,
-        \Glueful\Console\Commands\Generate\KeyCommand::class,
-        // Scaffold commands
-        \Glueful\Console\Commands\Scaffold\ModelCommand::class,
-        \Glueful\Console\Commands\Scaffold\ControllerCommand::class,
-        \Glueful\Console\Commands\Scaffold\RequestCommand::class,
-        \Glueful\Console\Commands\Scaffold\ResourceCommand::class,
-        \Glueful\Console\Commands\Scaffold\MiddlewareCommand::class,
-        \Glueful\Console\Commands\Scaffold\JobCommand::class,
-        \Glueful\Console\Commands\Scaffold\RuleCommand::class,
-        \Glueful\Console\Commands\Scaffold\TestCommand::class,
-        \Glueful\Console\Commands\Scaffold\SeederCommand::class,
-        \Glueful\Console\Commands\Scaffold\FactoryCommand::class,
-        // Extensions commands
-        \Glueful\Console\Commands\Extensions\InfoCommand::class,
-        \Glueful\Console\Commands\Extensions\EnableCommand::class,
-        \Glueful\Console\Commands\Extensions\DisableCommand::class,
-        \Glueful\Console\Commands\Extensions\CreateCommand::class,
-        \Glueful\Console\Commands\Extensions\ListCommand::class,
-        \Glueful\Console\Commands\Extensions\SummaryCommand::class,
-        \Glueful\Console\Commands\Extensions\CacheCommand::class,
-        \Glueful\Console\Commands\Extensions\ClearCommand::class,
-        \Glueful\Console\Commands\Extensions\WhyCommand::class,
-
-        // System commands
-        \Glueful\Console\Commands\InstallCommand::class,
-        \Glueful\Console\Commands\System\CheckCommand::class,
-        \Glueful\Console\Commands\System\ProductionCommand::class,
-        \Glueful\Console\Commands\System\MemoryMonitorCommand::class,
-        // Security commands
-        \Glueful\Console\Commands\Security\CheckCommand::class,
-        \Glueful\Console\Commands\Security\VulnerabilityCheckCommand::class,
-        \Glueful\Console\Commands\Security\LockdownCommand::class,
-        \Glueful\Console\Commands\Security\ResetPasswordCommand::class,
-        \Glueful\Console\Commands\Security\ReportCommand::class,
-        \Glueful\Console\Commands\Security\RevokeTokensCommand::class,
-        \Glueful\Console\Commands\Security\ScanCommand::class,
-        // Notification commands
-        \Glueful\Console\Commands\Notifications\ProcessRetriesCommand::class,
-        // Queue commands
-        \Glueful\Console\Commands\Queue\WorkCommand::class,
-        \Glueful\Console\Commands\Queue\AutoScaleCommand::class,
-        \Glueful\Console\Commands\Queue\SchedulerCommand::class,
-        // Archive commands
-        \Glueful\Console\Commands\Archive\ManageCommand::class,
-        // Container management commands
-        \Glueful\Console\Commands\Container\ContainerDebugCommand::class,
-        \Glueful\Console\Commands\Container\ContainerCompileCommand::class,
-        \Glueful\Console\Commands\Container\ContainerValidateCommand::class,
-        \Glueful\Console\Commands\Container\LazyStatusCommand::class,
-        // Field analysis commands
-        \Glueful\Console\Commands\Fields\AnalyzeCommand::class,
-        \Glueful\Console\Commands\Fields\ValidateCommand::class,
-        \Glueful\Console\Commands\Fields\PerformanceCommand::class,
-        \Glueful\Console\Commands\Fields\WhitelistCheckCommand::class,
-        // API commands
-        \Glueful\Console\Commands\Api\VersionListCommand::class,
-        \Glueful\Console\Commands\Api\VersionDeprecateCommand::class,
-        // Webhook commands
-        \Glueful\Console\Commands\Webhook\WebhookListCommand::class,
-        \Glueful\Console\Commands\Webhook\WebhookTestCommand::class,
-        \Glueful\Console\Commands\Webhook\WebhookRetryCommand::class,
-    ];
 
     /**
      * Initialize Glueful Console Application
@@ -138,26 +50,26 @@ class Application extends BaseApplication
     /**
      * Register All Commands
      *
-     * Registers all console commands:
-     * - Resolves commands via DI container
-     * - Handles command dependencies
-     * - Validates command structure
-     * - Sets up command metadata
+     * Registers all console commands from the container's 'console.commands' tag:
+     * - Commands are tagged in ConsoleProvider
+     * - Resolved via DI container with dependencies
+     * - Sorted by priority (higher priority first)
      *
      * @return void
      */
     private function registerCommands(): void
     {
-        // Register commands
-        foreach ($this->commands as $commandClass) {
-            // @phpstan-ignore-next-line Command classes are validated to be proper Command instances
-            $command = $this->container->get($commandClass);
-            if ($command instanceof Command) {
-                $this->addCommand($command);
+        // Get all commands tagged with 'console.commands' from the container
+        // The TaggedIteratorDefinition resolves to an array of Command instances
+        if ($this->container->has('console.commands')) {
+            /** @var array<Command> $commands */
+            $commands = $this->container->get('console.commands');
+            foreach ($commands as $command) {
+                if ($command instanceof Command) {
+                    $this->addCommand($command);
+                }
             }
         }
-
-        // All commands are now using Symfony Console
     }
 
     /**
@@ -201,40 +113,25 @@ class Application extends BaseApplication
     /**
      * Register Command Class
      *
-     * Registers a new command by class name:
-     * - Validates command class
+     * Dynamically registers a command by class name:
      * - Resolves via DI container
-     * - Adds to command registry
-     * - Updates command list
+     * - Adds to Symfony Console registry
+     *
+     * Note: For framework commands, prefer registering in ConsoleProvider.
+     * This method is for runtime/extension command registration.
      *
      * @param string $commandClass Command class name
      * @return void
      */
     public function registerCommandClass(string $commandClass): void
     {
-        if (!in_array($commandClass, $this->commands, true)) {
-            $this->commands[] = $commandClass;
-
-            // Register immediately if application is already initialized
-            // @phpstan-ignore-next-line Command classes are validated to be proper Command instances
-            $command = $this->container->get($commandClass);
-            if ($command instanceof Command) {
+        // Check if command is already registered by name
+        $command = $this->container->get($commandClass);
+        if ($command instanceof Command) {
+            $name = $command->getName();
+            if ($name !== null && !$this->has($name)) {
                 $this->addCommand($command);
             }
         }
-    }
-
-    /**
-     * Get Registered Commands
-     *
-     * Returns list of registered commands:
-     * - Provides command class names
-     * - Used for debugging and introspection
-     *
-     * @return array<string>
-     */
-    public function getCommands(): array
-    {
-        return $this->commands;
     }
 }

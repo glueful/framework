@@ -48,7 +48,7 @@ class HealthService
             );
         }
 
-        $this->connection = $connection ?? new Connection([], $this->context);
+        $this->connection = $connection ?? Connection::fromContext($this->context);
     }
 
     /**
@@ -59,7 +59,8 @@ class HealthService
         if (self::$instance === null) {
             self::$instance = new self(null, null, $context);
         } elseif ($context !== null && self::$instance->context === null) {
-            self::$instance->context = $context;
+            // Context provided but instance was created without it - recreate with proper context
+            self::$instance = new self(null, null, $context);
         }
 
         return self::$instance;
@@ -95,6 +96,9 @@ class HealthService
             // Test 1: Basic connectivity with QueryBuilder raw query
             $testResult = $this->connection->query()->executeRawFirst('SELECT 1 as test');
 
+            // Get current database name for debugging
+            $dbName = $this->getCurrentDatabaseName();
+
             // Test 2: Check if migrations table exists and is accessible
             $migrationCount = $this->connection->table('migrations')->count();
 
@@ -102,32 +106,66 @@ class HealthService
                 'status' => 'ok',
                 'message' => 'Database connection and QueryBuilder operational',
                 'driver' => $this->connection->getDriverName(),
+                'database' => $dbName,
                 'migrations_applied' => $migrationCount,
                 'connectivity_test' => $testResult !== null && $testResult !== []
             ];
         } catch (\PDOException $e) {
-            $result = [
-                'status' => 'error',
-                'message' => 'Database connection failed: ' . $e->getMessage(),
-                'type' => 'connection_error'
-            ];
-        } catch (\Exception $e) {
-            // Check if it's a table not found error (migrations not run)
+            // Check if it's a table not found error (migrations not run) vs actual connection error
+            $msg = $e->getMessage();
             if (
-                str_contains($e->getMessage(), 'migrations') &&
-                (str_contains($e->getMessage(), "doesn't exist") ||
-                 str_contains($e->getMessage(), 'does not exist') ||
-                 str_contains($e->getMessage(), 'no such table'))
+                str_contains($msg, 'migrations') &&
+                (str_contains($msg, "doesn't exist") ||
+                 str_contains($msg, 'does not exist') ||
+                 str_contains($msg, 'no such table') ||
+                 str_contains($msg, 'Undefined table') ||
+                 str_contains($msg, '42P01'))  // PostgreSQL error code for undefined table
             ) {
                 $result = [
                     'status' => 'warning',
-                    'message' => 'Database connected but migrations not run',
-                    'suggestion' => 'Run: php glueful migrate run'
+                    'message' => 'Database connected but migrations table not found',
+                    'driver' => $this->connection->getDriverName(),
+                    'database' => $this->getCurrentDatabaseName(),
+                    'suggestion' => 'Run: php glueful migrate:run',
+                    // Debug: show what env values are being read
+                    '_debug_env' => [
+                        'DB_DRIVER' => env('DB_DRIVER'),
+                        'DB_PGSQL_DATABASE' => env('DB_PGSQL_DATABASE'),
+                        'DB_PGSQL_HOST' => env('DB_PGSQL_HOST'),
+                        'base_path' => $this->context?->getBasePath(),
+                    ],
+                    '_debug_config' => [
+                        'engine' => $this->getConfig('database.engine'),
+                        'pgsql_db' => $this->getConfig('database.pgsql.db'),
+                    ],
                 ];
             } else {
                 $result = [
                     'status' => 'error',
-                    'message' => 'Database error: ' . $e->getMessage(),
+                    'message' => 'Database connection failed: ' . $msg,
+                    'type' => 'connection_error'
+                ];
+            }
+        } catch (\Exception $e) {
+            // Check if it's a table not found error (migrations not run)
+            $msg = $e->getMessage();
+            if (
+                str_contains($msg, 'migrations') &&
+                (str_contains($msg, "doesn't exist") ||
+                 str_contains($msg, 'does not exist') ||
+                 str_contains($msg, 'no such table'))
+            ) {
+                $result = [
+                    'status' => 'warning',
+                    'message' => 'Database connected but migrations not run',
+                    'driver' => $this->connection->getDriverName(),
+                    'database' => $this->getCurrentDatabaseName(),
+                    'suggestion' => 'Run: php glueful migrate:run'
+                ];
+            } else {
+                $result = [
+                    'status' => 'error',
+                    'message' => 'Database error: ' . $msg,
                     'type' => 'query_error'
                 ];
             }
@@ -341,6 +379,31 @@ class HealthService
         }
 
         return config($this->context, $key, $default);
+    }
+
+    /**
+     * Get the current database name for debugging
+     */
+    private function getCurrentDatabaseName(): ?string
+    {
+        try {
+            $driver = $this->connection->getDriverName();
+            $query = match ($driver) {
+                'pgsql' => 'SELECT current_database() as db',
+                'mysql' => 'SELECT DATABASE() as db',
+                'sqlite' => null,
+                default => null,
+            };
+
+            if ($query === null) {
+                return $driver === 'sqlite' ? 'SQLite (file-based)' : null;
+            }
+
+            $result = $this->connection->query()->executeRawFirst($query);
+            return $result['db'] ?? null;
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function getBasePath(string $path = ''): string

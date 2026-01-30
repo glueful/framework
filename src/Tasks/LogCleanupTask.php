@@ -29,7 +29,7 @@ class LogCleanupTask
     public function __construct(?ApplicationContext $context = null)
     {
         $this->context = $context;
-        $this->connection = new Connection([], $this->context);
+        $this->connection = Connection::fromContext($this->context);
     }
 
     /**

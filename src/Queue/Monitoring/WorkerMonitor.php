@@ -54,7 +54,7 @@ class WorkerMonitor
         ?ApplicationContext $context = null
     ) {
         $this->context = $context;
-        $this->db = $connection ?? new Connection([], $this->context);
+        $this->db = $connection ?? Connection::fromContext($this->context);
         $this->schema = $this->db->getSchemaBuilder();
         $this->enabled = $enabled;
     }

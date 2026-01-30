@@ -221,11 +221,10 @@ class ConnectionPoolManager
                 $config['charset'] ?? 'utf8mb4'
             ),
             'pgsql' => sprintf(
-                'pgsql:host=%s;dbname=%s;port=%d;sslmode=%s',
+                'pgsql:host=%s;port=%d;dbname=%s',
                 $config['host'] ?? '127.0.0.1',
-                $config['db'] ?? '',
                 $config['port'] ?? 5432,
-                $config['sslmode'] ?? 'prefer'
+                $config['db'] ?? 'postgres'
             ),
             'sqlite' => $this->prepareSQLiteDSN($config['primary'] ?? ':memory:'),
             default => throw new \Exception("Unsupported database engine: {$engine}"),

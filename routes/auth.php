@@ -15,13 +15,10 @@ use Glueful\Http\Response;
 use Glueful\Helpers\Utils;
 use Symfony\Component\HttpFoundation\Request;
 
-// Type hints for static analysis (variables injected by RouteManifest::requireRouteFile)
-assert($router instanceof Router);
 /** @var ApplicationContext|null $context */
 $context = (isset($context) && $context instanceof ApplicationContext)
     ? $context
     : $router->getContext();
-assert($context instanceof ApplicationContext);
 
 // Auth routes
 $router->group(['prefix' => '/auth'], function (Router $router) use ($context) {

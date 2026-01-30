@@ -44,7 +44,8 @@ class DatabaseLogHandler extends AbstractProcessingHandler
     public function __construct(array $options = [])
     {
         parent::__construct($options['level'] ?? Level::Debug);
-        $connection = new Connection();
+        $context = $options['context'] ?? null;
+        $connection = Connection::fromContext($context);
         $this->schema = $connection->getSchemaBuilder();
         $this->db = $connection;
 

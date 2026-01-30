@@ -191,7 +191,7 @@ class ProductionCommand extends BaseCommand
         // Step 1: Current status check
         $this->io->text('Step 1: Checking current configuration...');
         $validation = SecurityManager::validateProductionEnvironment();
-        $health = HealthService::getOverallHealth();
+        $health = HealthService::getOverallHealth($this->getContext());
 
         if (count($validation['warnings']) > 0 || $health['status'] !== 'ok') {
             $this->io->warning('Issues detected in current configuration.');
@@ -234,7 +234,7 @@ class ProductionCommand extends BaseCommand
         $this->io->section('🔍 Production Readiness Check');
 
         $validation = SecurityManager::validateProductionEnvironment();
-        $health = HealthService::getOverallHealth();
+        $health = HealthService::getOverallHealth($this->getContext());
 
         if (!(bool)$validation['is_production']) {
             $this->io->warning("⚠️ Current environment is not set to production");
@@ -502,7 +502,7 @@ class ProductionCommand extends BaseCommand
     {
         $timestamp = date('Y-m-d H:i:s T');
         $validation = SecurityManager::validateProductionEnvironment();
-        $health = HealthService::getOverallHealth();
+        $health = HealthService::getOverallHealth($this->getContext());
         $score = SecurityManager::getProductionReadinessScore();
 
         $report = $this->buildAuditReport($timestamp, $validation, $health, $score);

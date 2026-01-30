@@ -11,13 +11,10 @@ use Symfony\Component\HttpFoundation\Request;
  * @var ApplicationContext $context
  */
 
-// Type hints for static analysis (variables injected by RouteManifest::requireRouteFile)
-assert($router instanceof Router);
 /** @var ApplicationContext|null $context */
 $context = (isset($context) && $context instanceof ApplicationContext)
     ? $context
     : $router->getContext();
-assert($context instanceof ApplicationContext);
 
 // RESTful Resource CRUD Routes
 // All routes are prefixed with /data to avoid conflicts with custom application routes
@@ -156,7 +153,7 @@ $router->group(['prefix' => '/data'], function (Router $router) use ($context) {
     })->middleware(['auth', 'rate_limit:20,60']); // 20 deletes per minute
 
     // Bulk operation routes (only if enabled in configuration)
-    if (config('resource.security.bulk_operations', false)) {
+    if (config($context, 'resource.security.bulk_operations', false)) {
         /**
          * @route DELETE /data/{table}/bulk
          * @summary Bulk Delete Resources

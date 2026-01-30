@@ -113,11 +113,12 @@ class EmailVerification
             );
         }
 
-        // Initialize EmailNotificationProvider if extension is available
-        if (class_exists('\Glueful\Extensions\EmailNotification\EmailNotificationProvider')) {
+        // Initialize EmailNotificationProvider if extension is available and context exists
+        $emailExtensionClass = '\Glueful\Extensions\EmailNotification\EmailNotificationProvider';
+        if (class_exists($emailExtensionClass) && $this->context !== null) {
             /** @var class-string $providerClass */
-            $providerClass = '\Glueful\Extensions\EmailNotification\EmailNotificationProvider';
-            $this->emailProvider = new $providerClass();
+            $providerClass = $emailExtensionClass;
+            $this->emailProvider = new $providerClass($this->context);
             if (method_exists($this->emailProvider, 'initialize')) {
                 $this->emailProvider->initialize();
             }
@@ -125,10 +126,7 @@ class EmailVerification
             // Only register manually in fallback mode.
             $usingDi = false;
             try {
-                $c = $this->context !== null ? container($this->context) : null;
-                if ($c === null) {
-                    throw new \RuntimeException('Container unavailable without ApplicationContext.');
-                }
+                $c = container($this->context);
                 $usingDi = $c->has(\Glueful\Notifications\Services\NotificationDispatcher::class);
             } catch (\Throwable $e) {
                 $usingDi = false;

@@ -81,7 +81,7 @@ class JobScheduler
     public function __construct(?LockManagerInterface $lockManager = null, ?ApplicationContext $context = null)
     {
         $this->context = $context;
-        $this->db = new Connection([], $this->context);
+        $this->db = Connection::fromContext($this->context);
 
         // Get lock manager from container if not provided
         if ($lockManager !== null) {
@@ -109,8 +109,7 @@ class JobScheduler
     protected function ensureTablesExist(): void
     {
         try {
-            $connection = new Connection([], $this->context);
-            $schema = $connection->getSchemaBuilder();
+            $schema = $this->db->getSchemaBuilder();
 
             // Create Scheduled Jobs Table
             if (!$schema->hasTable('scheduled_jobs')) {

@@ -53,7 +53,7 @@ class ArchiveService implements ArchiveServiceInterface
         ?ApplicationContext $context = null
     ) {
         $this->context = $context;
-        $this->db = $connection ?? new Connection([], $this->context);
+        $this->db = $connection ?? Connection::fromContext($this->context);
         $this->schemaManager = $this->schemaManager ?? $this->db->getSchemaBuilder();
         $this->randomGenerator = $this->randomGenerator ?? new RandomStringGenerator();
         $this->config = array_merge([

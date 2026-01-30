@@ -21,6 +21,25 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.22.0 — Achernar (Released 2026-01-30)
+- **Console Command Auto-Discovery**: Zero-config command registration via `#[AsCommand]` attribute scanning.
+  - Commands auto-discovered from `src/Console/Commands/` directory.
+  - Production caching for fast startup (auto-generated on first run).
+  - New `commands:cache` CLI command for cache management.
+- **Global State Removal**: Major refactoring to replace `$GLOBALS` with explicit `ApplicationContext` dependency injection.
+  - All helper functions (`config()`, `app()`, `base_path()`, etc.) now require `ApplicationContext` as first parameter.
+  - New `QueueContextHolder` class replaces deprecated static trait properties (PHP 8.3 compatibility).
+  - PHPStan `banned_code` rule added to prevent future `$GLOBALS` usage.
+- **Service Provider Updates**: `register()` and `boot()` methods now receive `ApplicationContext` parameter.
+  - `ServiceProvider` interface updated with context parameter.
+  - `BaseExtension::boot()` receives context for proper DI access.
+- **Authentication Refactoring**: Auth services updated for explicit context dependency.
+  - `AuthenticationService`, `SessionStore`, `TokenManager` refactored for context injection.
+  - `ResolvesSessionStore` trait simplified with default `getContext()` method.
+- **Code Quality**: Fixed PHPStan errors, PHPCS line length violations (25+ files), PHP 8.3 compatibility.
+- **Test Suite**: Updated tests to properly initialize `ApplicationContext` for Router/RouteCache.
+- Notes: **Breaking change** for extensions using old helper signatures. See migration guide in CHANGELOG.
+
 ### 1.21.0 — Mira (Released 2026-01-24)
 - **File Uploader Refactoring**: Complete architecture overhaul of file upload system.
   - New `ThumbnailGenerator` class for dedicated thumbnail creation with ImageProcessor (Intervention Image).

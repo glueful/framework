@@ -48,7 +48,7 @@ class CacheWarmupService
         }
 
         // Set up database connection
-        $this->db = $connection ?? new Connection();
+        $this->db = $connection ?? Connection::fromContext($context);
     }
 
     /** @var array<string, string> Default warmup strategies mapping strategy names to method names */

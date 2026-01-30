@@ -205,7 +205,7 @@ final class CoreProvider extends BaseServiceProvider
             function () {
                 if (class_exists('\Glueful\Database\Connection')) {
                     $config = (array) (function_exists('config') ? config($this->context, 'database', []) : []);
-                    return new \Glueful\Database\Connection($config);
+                    return new \Glueful\Database\Connection($config, $this->context);
                 }
                 throw new \RuntimeException('Database connection factory not configured');
             }

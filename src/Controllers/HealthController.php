@@ -42,7 +42,7 @@ class HealthController extends BaseController
         // Cache response with short TTL for monitoring tools
         $response = $this->cacheResponse('health_overall', function () {
 
-            $health = HealthService::getOverallHealth();
+            $health = HealthService::getOverallHealth($this->context);
 
             if ($health['status'] === 'error') {
                 return [
@@ -84,7 +84,7 @@ class HealthController extends BaseController
      */
     public function database()
     {
-        $health = HealthService::checkDatabase();
+        $health = HealthService::checkDatabase($this->context);
 
         if ($health['status'] === 'error') {
             return Response::error(
@@ -108,7 +108,7 @@ class HealthController extends BaseController
      */
     public function cache()
     {
-        $health = HealthService::checkCache();
+        $health = HealthService::checkCache($this->context);
 
         if ($health['status'] === 'error') {
             return Response::error(
@@ -134,9 +134,9 @@ class HealthController extends BaseController
      */
     public function readiness(): Response
     {
-        $db = HealthService::checkDatabase();
-        $cache = HealthService::checkCache();
-        $config = HealthService::checkConfiguration();
+        $db = HealthService::checkDatabase($this->context);
+        $cache = HealthService::checkCache($this->context);
+        $config = HealthService::checkConfiguration($this->context);
 
         $checks = [
             'database' => $db,

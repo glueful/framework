@@ -36,10 +36,10 @@ class WebhookDispatcher implements WebhookDispatcherInterface
         ?WebhookPayloadInterface $payloadBuilder = null,
         ?ApplicationContext $context = null
     ) {
-        $this->db = $connection ?? new Connection();
+        $this->context = $context;
+        $this->db = $connection ?? Connection::fromContext($context);
         $this->schema = $this->db->getSchemaBuilder();
         $this->payloadBuilder = $payloadBuilder ?? new WebhookPayload();
-        $this->context = $context;
     }
 
     /**

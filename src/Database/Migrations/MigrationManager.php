@@ -90,7 +90,7 @@ class MigrationManager
         ?ApplicationContext $context = null
     ) {
         $this->context = $context;
-        $connection = new Connection();
+        $connection = Connection::fromContext($context);
         $this->db = $connection;
         $this->schema = $connection->getSchemaBuilder();
 

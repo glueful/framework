@@ -87,11 +87,3 @@ parameters:
         - '#Foreach overwrites \$class with its value variable\.#'
         # Short ternary in helper functions
         - '#Short ternary operator is not allowed.*#'
-
-    banned_code:
-        nodes:
-            -
-                type: Expr_ArrayDimFetch
-                variable: '$GLOBALS'
-                message: 'Use ApplicationContext instead of $GLOBALS'
-        

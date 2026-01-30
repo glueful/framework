@@ -274,7 +274,7 @@ class CheckCommand extends BaseCommand
     {
         try {
             // Use ConnectionValidator to avoid duplicate queries with bootstrap validation
-            $healthResult = \Glueful\Database\ConnectionValidator::performHealthCheck();
+            $healthResult = \Glueful\Database\ConnectionValidator::performHealthCheck($this->getContext());
             /** @var HealthService $healthService */
             $healthService = $this->getService(HealthService::class);
             $healthServiceClass = get_class($healthService);

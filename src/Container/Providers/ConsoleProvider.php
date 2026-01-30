@@ -5,9 +5,24 @@ declare(strict_types=1);
 namespace Glueful\Container\Providers;
 
 use Glueful\Container\Definition\DefinitionInterface;
+use Symfony\Component\Console\Attribute\AsCommand;
+use ReflectionClass;
 
+/**
+ * Console Command Service Provider
+ *
+ * Registers all console commands with the DI container using auto-discovery.
+ *
+ * - Development: Scans Commands directory for classes with #[AsCommand]
+ * - Production: Uses cached manifest for fast startup
+ *
+ * Cache is auto-generated on first production run or via:
+ *   php glueful commands:cache
+ */
 final class ConsoleProvider extends BaseServiceProvider
 {
+    private const CACHE_FILE = 'glueful_commands_manifest.php';
+
     /**
      * @return array<string, DefinitionInterface|callable|mixed>
      */
@@ -15,103 +30,207 @@ final class ConsoleProvider extends BaseServiceProvider
     {
         $defs = [];
 
-        // List of command classes to register and tag
-        $commands = [
-            // Migration commands
-            \Glueful\Console\Commands\Migrate\RunCommand::class,
-            \Glueful\Console\Commands\Migrate\CreateCommand::class,
-            \Glueful\Console\Commands\Migrate\StatusCommand::class,
-            \Glueful\Console\Commands\Migrate\RollbackCommand::class,
-            // Development commands
-            \Glueful\Console\Commands\ServeCommand::class,
-            \Glueful\Console\Commands\VersionCommand::class,
-            // Cache commands
-            \Glueful\Console\Commands\Cache\ClearCommand::class,
-            \Glueful\Console\Commands\Cache\StatusCommand::class,
-            \Glueful\Console\Commands\Cache\GetCommand::class,
-            \Glueful\Console\Commands\Cache\SetCommand::class,
-            \Glueful\Console\Commands\Cache\DeleteCommand::class,
-            \Glueful\Console\Commands\Cache\TtlCommand::class,
-            \Glueful\Console\Commands\Cache\ExpireCommand::class,
-            \Glueful\Console\Commands\Cache\PurgeCommand::class,
-            \Glueful\Console\Commands\Cache\MaintenanceCommand::class,
-            // Database commands
-            \Glueful\Console\Commands\Database\StatusCommand::class,
-            \Glueful\Console\Commands\Database\ResetCommand::class,
-            \Glueful\Console\Commands\Database\ProfileCommand::class,
-            \Glueful\Console\Commands\Database\SeedCommand::class,
-            // Generate commands
-            \Glueful\Console\Commands\Generate\OpenApiDocsCommand::class,
-            \Glueful\Console\Commands\Generate\KeyCommand::class,
-            // Scaffold commands
-            \Glueful\Console\Commands\Scaffold\ModelCommand::class,
-            \Glueful\Console\Commands\Scaffold\ControllerCommand::class,
-            \Glueful\Console\Commands\Scaffold\RequestCommand::class,
-            \Glueful\Console\Commands\Scaffold\ResourceCommand::class,
-            \Glueful\Console\Commands\Scaffold\MiddlewareCommand::class,
-            \Glueful\Console\Commands\Scaffold\JobCommand::class,
-            \Glueful\Console\Commands\Scaffold\RuleCommand::class,
-            \Glueful\Console\Commands\Scaffold\TestCommand::class,
-            \Glueful\Console\Commands\Scaffold\SeederCommand::class,
-            \Glueful\Console\Commands\Scaffold\FactoryCommand::class,
-            \Glueful\Console\Commands\Scaffold\FilterCommand::class,
-            // Extensions commands
-            \Glueful\Console\Commands\Extensions\InfoCommand::class,
-            \Glueful\Console\Commands\Extensions\EnableCommand::class,
-            \Glueful\Console\Commands\Extensions\DisableCommand::class,
-            \Glueful\Console\Commands\Extensions\CreateCommand::class,
-            \Glueful\Console\Commands\Extensions\ListCommand::class,
-            \Glueful\Console\Commands\Extensions\SummaryCommand::class,
-            \Glueful\Console\Commands\Extensions\CacheCommand::class,
-            \Glueful\Console\Commands\Extensions\ClearCommand::class,
-            \Glueful\Console\Commands\Extensions\WhyCommand::class,
-            \Glueful\Console\Commands\Extensions\DiagnoseCommand::class,
-            // System commands
-            \Glueful\Console\Commands\InstallCommand::class,
-            \Glueful\Console\Commands\System\CheckCommand::class,
-            \Glueful\Console\Commands\System\ProductionCommand::class,
-            \Glueful\Console\Commands\System\MemoryMonitorCommand::class,
-            // Security commands
-            \Glueful\Console\Commands\Security\CheckCommand::class,
-            \Glueful\Console\Commands\Security\VulnerabilityCheckCommand::class,
-            \Glueful\Console\Commands\Security\LockdownCommand::class,
-            \Glueful\Console\Commands\Security\ResetPasswordCommand::class,
-            \Glueful\Console\Commands\Security\ReportCommand::class,
-            \Glueful\Console\Commands\Security\RevokeTokensCommand::class,
-            \Glueful\Console\Commands\Security\ScanCommand::class,
-            // Notification commands
-            \Glueful\Console\Commands\Notifications\ProcessRetriesCommand::class,
-            // Queue commands
-            \Glueful\Console\Commands\Queue\WorkCommand::class,
-            \Glueful\Console\Commands\Queue\AutoScaleCommand::class,
-            \Glueful\Console\Commands\Queue\SchedulerCommand::class,
-            // Archive commands
-            \Glueful\Console\Commands\Archive\ManageCommand::class,
-            // Container management commands
-            \Glueful\Console\Commands\Container\ContainerDebugCommand::class,
-            \Glueful\Console\Commands\Container\ContainerCompileCommand::class,
-            \Glueful\Console\Commands\Container\ContainerValidateCommand::class,
-            \Glueful\Console\Commands\Container\LazyStatusCommand::class,
-            \Glueful\Console\Commands\Container\ContainerMapCommand::class,
-            // Field analysis commands
-            \Glueful\Console\Commands\Fields\AnalyzeCommand::class,
-            \Glueful\Console\Commands\Fields\ValidateCommand::class,
-            \Glueful\Console\Commands\Fields\PerformanceCommand::class,
-            \Glueful\Console\Commands\Fields\WhitelistCheckCommand::class,
-            // API commands
-            \Glueful\Console\Commands\Api\VersionListCommand::class,
-            \Glueful\Console\Commands\Api\VersionDeprecateCommand::class,
-            // Webhook commands
-            \Glueful\Console\Commands\Webhook\WebhookListCommand::class,
-            \Glueful\Console\Commands\Webhook\WebhookTestCommand::class,
-            \Glueful\Console\Commands\Webhook\WebhookRetryCommand::class,
-        ];
-
-        foreach ($commands as $class) {
+        foreach ($this->getCommands() as $class) {
             $defs[$class] = $this->autowire($class);
             $this->tag($class, 'console.commands', 0);
         }
 
         return $defs;
+    }
+
+    /**
+     * Get command classes - from cache in production, discovery in development
+     *
+     * @return array<string>
+     */
+    private function getCommands(): array
+    {
+        $isProduction = $this->isProduction();
+        $cacheFile = $this->getCacheFilePath();
+
+        // Production: use cache if available
+        if ($isProduction && file_exists($cacheFile)) {
+            $cached = require $cacheFile;
+            if (is_array($cached)) {
+                return $cached;
+            }
+        }
+
+        // Discover commands
+        $commands = $this->discoverCommands();
+
+        // Production: write cache for next time
+        if ($isProduction) {
+            $this->writeCache($cacheFile, $commands);
+        }
+
+        return $commands;
+    }
+
+    /**
+     * Auto-discover command classes from the Commands directory
+     *
+     * Scans recursively for PHP files and includes classes that:
+     * - Are not abstract
+     * - Have the #[AsCommand] attribute
+     *
+     * @return array<string>
+     */
+    private function discoverCommands(): array
+    {
+        $commands = [];
+        $commandsDir = dirname(__DIR__, 2) . '/Console/Commands';
+
+        if (!is_dir($commandsDir)) {
+            return $commands;
+        }
+
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($commandsDir, \FilesystemIterator::SKIP_DOTS)
+        );
+
+        foreach ($iterator as $file) {
+            /** @var \SplFileInfo $file */
+            if ($file->getExtension() !== 'php') {
+                continue;
+            }
+
+            $className = $this->fileToClassName($file->getPathname(), $commandsDir);
+
+            if ($className === null || !class_exists($className)) {
+                continue;
+            }
+
+            if (!$this->isValidCommand($className)) {
+                continue;
+            }
+
+            $commands[] = $className;
+        }
+
+        // Sort for consistent ordering
+        sort($commands);
+
+        return $commands;
+    }
+
+    /**
+     * Convert file path to fully qualified class name
+     */
+    private function fileToClassName(string $filePath, string $baseDir): ?string
+    {
+        $relativePath = str_replace($baseDir . DIRECTORY_SEPARATOR, '', $filePath);
+        $relativePath = str_replace(DIRECTORY_SEPARATOR, '\\', $relativePath);
+        $relativePath = preg_replace('/\.php$/', '', $relativePath);
+
+        if ($relativePath === null) {
+            return null;
+        }
+
+        return 'Glueful\\Console\\Commands\\' . $relativePath;
+    }
+
+    /**
+     * Check if a class is a valid command (not abstract, has #[AsCommand])
+     */
+    private function isValidCommand(string $className): bool
+    {
+        try {
+            $reflection = new ReflectionClass($className);
+
+            // Skip abstract classes (BaseCommand, BaseSecurityCommand, etc.)
+            if ($reflection->isAbstract()) {
+                return false;
+            }
+
+            // Must have #[AsCommand] attribute
+            if ($reflection->getAttributes(AsCommand::class) === []) {
+                return false;
+            }
+
+            return true;
+        } catch (\ReflectionException) {
+            return false;
+        }
+    }
+
+    /**
+     * Check if running in production mode
+     */
+    private function isProduction(): bool
+    {
+        $env = $_ENV['APP_ENV'] ?? $_SERVER['APP_ENV'] ?? getenv('APP_ENV') ?: 'production';
+        return $env === 'production' || $env === 'prod';
+    }
+
+    /**
+     * Get the cache file path
+     */
+    private function getCacheFilePath(): string
+    {
+        // Use framework's storage/cache if available, otherwise sys_get_temp_dir
+        $storageCache = dirname(__DIR__, 3) . '/storage/cache';
+
+        if (is_dir($storageCache) && is_writable($storageCache)) {
+            return $storageCache . '/' . self::CACHE_FILE;
+        }
+
+        return sys_get_temp_dir() . '/' . self::CACHE_FILE;
+    }
+
+    /**
+     * Write commands to cache file
+     *
+     * @param string $cacheFile
+     * @param array<string> $commands
+     */
+    private function writeCache(string $cacheFile, array $commands): void
+    {
+        $content = "<?php\n\n// Auto-generated by ConsoleProvider - do not edit\n// Generated: "
+            . date('Y-m-d H:i:s') . "\n\nreturn " . var_export($commands, true) . ";\n";
+
+        file_put_contents($cacheFile, $content, LOCK_EX);
+    }
+
+    /**
+     * Clear the command cache (called by commands:clear)
+     */
+    public static function clearCache(): bool
+    {
+        $storageCache = dirname(__DIR__, 3) . '/storage/cache/' . self::CACHE_FILE;
+        $tempCache = sys_get_temp_dir() . '/' . self::CACHE_FILE;
+
+        $cleared = false;
+
+        if (file_exists($storageCache)) {
+            unlink($storageCache);
+            $cleared = true;
+        }
+
+        if (file_exists($tempCache)) {
+            unlink($tempCache);
+            $cleared = true;
+        }
+
+        return $cleared;
+    }
+
+    /**
+     * Get cache file location (for status/debugging)
+     */
+    public static function getCacheLocation(): ?string
+    {
+        $storageCache = dirname(__DIR__, 3) . '/storage/cache/' . self::CACHE_FILE;
+        $tempCache = sys_get_temp_dir() . '/' . self::CACHE_FILE;
+
+        if (file_exists($storageCache)) {
+            return $storageCache;
+        }
+
+        if (file_exists($tempCache)) {
+            return $tempCache;
+        }
+
+        return null;
     }
 }
