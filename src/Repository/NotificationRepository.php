@@ -9,6 +9,7 @@ use Glueful\Notifications\Models\Notification;
 use Glueful\Notifications\Models\NotificationPreference;
 use Glueful\Notifications\Models\NotificationTemplate;
 use Glueful\Helpers\Utils;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use Glueful\Repository\Concerns\QueryFilterTrait;
 
@@ -35,13 +36,13 @@ class NotificationRepository extends BaseRepository
      *
      * Sets up database connection and dependencies
      */
-    public function __construct(?Connection $connection = null)
+    public function __construct(?Connection $connection = null, ?ApplicationContext $context = null)
     {
         // Configure repository settings before calling parent
         $this->defaultFields = ['*'];
 
         // Call parent constructor to set up database connection and audit logger
-        parent::__construct($connection);
+        parent::__construct($connection, $context);
     }
 
     /**

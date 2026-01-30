@@ -83,7 +83,7 @@ class OpenApiDocsCommand extends BaseCommand
             }
 
             $this->info('Initializing OpenAPI Documentation Generator...');
-            $generator = new OpenApiGenerator(null, null, null, true);
+            $generator = new OpenApiGenerator($this->getContext(), null, null, null, true);
 
             // Display generation scope
             $this->displayGenerationScope($force, $ui);
@@ -129,7 +129,8 @@ class OpenApiDocsCommand extends BaseCommand
 
         // UI generation info
         if ($ui !== false) {
-            $uiType = is_string($ui) && $ui !== '' ? $ui : config('documentation.ui.default', 'scalar');
+            $defaultUi = config($this->getContext(), 'documentation.ui.default', 'scalar');
+            $uiType = is_string($ui) && $ui !== '' ? $ui : $defaultUi;
             $scope[] = ['Generate UI', "Yes ({$uiType})"];
         } else {
             $scope[] = ['Generate UI', 'No'];
@@ -160,7 +161,8 @@ class OpenApiDocsCommand extends BaseCommand
      */
     private function generateDocumentationUI($ui): void
     {
-        $uiType = is_string($ui) && $ui !== '' ? $ui : config('documentation.ui.default', 'scalar');
+        $defaultUi = config($this->getContext(), 'documentation.ui.default', 'scalar');
+        $uiType = is_string($ui) && $ui !== '' ? $ui : $defaultUi;
 
         $this->line('');
         $this->info("Generating documentation UI ({$uiType})...");
@@ -190,7 +192,8 @@ class OpenApiDocsCommand extends BaseCommand
         $this->line('Generated openapi.json specification');
 
         if ($ui !== false) {
-            $uiType = is_string($ui) && $ui !== '' ? $ui : config('documentation.ui.default', 'scalar');
+            $defaultUi = config($this->getContext(), 'documentation.ui.default', 'scalar');
+            $uiType = is_string($ui) && $ui !== '' ? $ui : $defaultUi;
             $this->line("Generated {$uiType} documentation UI");
         }
 
@@ -199,7 +202,7 @@ class OpenApiDocsCommand extends BaseCommand
         $this->line('1. Review generated openapi.json');
         $this->line('2. Customize route annotations as needed for your API');
 
-        $docsUrl = config('app.urls.docs');
+        $docsUrl = config($this->getContext(), 'app.urls.docs');
 
         $this->line("3. Visit the API documentation at {$docsUrl}");
         $this->line('4. Test your API endpoints');
@@ -230,7 +233,7 @@ class OpenApiDocsCommand extends BaseCommand
         $fileFinder = $this->getFileFinder();
 
         try {
-            $apiDocDefinitionsPath = config('documentation.paths.output') . '/json-definitions';
+            $apiDocDefinitionsPath = config($this->getContext(), 'documentation.paths.output') . '/json-definitions';
 
             // Clean json-definitions directory (including subdirectories)
             if (is_dir($apiDocDefinitionsPath)) {

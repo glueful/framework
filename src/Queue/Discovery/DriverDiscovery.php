@@ -2,6 +2,7 @@
 
 namespace Glueful\Queue\Discovery;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Queue\Contracts\QueueDriverInterface;
 
 /**
@@ -33,6 +34,12 @@ class DriverDiscovery
         // Extension drivers - dynamic paths
         // Will be expanded at runtime
     ];
+    private ?ApplicationContext $context;
+
+    public function __construct(?ApplicationContext $context = null)
+    {
+        $this->context = $context;
+    }
 
     /**
      * Discover all available queue drivers
@@ -62,7 +69,7 @@ class DriverDiscovery
         $paths = $this->searchPaths;
 
         // Add dynamic extension paths
-        $basePath = base_path();
+        $basePath = $this->getBasePath();
         $extensionPaths = [
             $basePath . '/extensions/*/Queue/Drivers',
             $basePath . '/vendor/*/queue-drivers/src',
@@ -77,6 +84,18 @@ class DriverDiscovery
         }
 
         return array_filter($paths, 'is_dir');
+    }
+
+    private function getBasePath(string $suffix = ''): string
+    {
+        if ($this->context !== null) {
+            return base_path($this->context, $suffix);
+        }
+
+        $root = rtrim(dirname(__DIR__, 3), DIRECTORY_SEPARATOR);
+        return $suffix !== ''
+            ? $root . DIRECTORY_SEPARATOR . ltrim($suffix, DIRECTORY_SEPARATOR)
+            : $root;
     }
 
     /**

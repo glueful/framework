@@ -1,13 +1,25 @@
 <?php
 
 use Glueful\Routing\Router;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Controllers\HealthController;
 use Symfony\Component\HttpFoundation\Request;
 
-/** @var Router $router Router instance injected by RouteManifest::load() */
+/**
+ * @var Router $router Router instance injected by RouteManifest::load()
+ * @var ApplicationContext $context
+ */
+
+// Type hints for static analysis (variables injected by RouteManifest::requireRouteFile)
+assert($router instanceof Router);
+/** @var ApplicationContext|null $context */
+$context = (isset($context) && $context instanceof ApplicationContext)
+    ? $context
+    : $router->getContext();
+assert($context instanceof ApplicationContext);
 
 // Health check routes - organized by access level
-$router->group(['prefix' => '/health'], function (Router $router) {
+$router->group(['prefix' => '/health'], function (Router $router) use ($context) {
     /**
      * @route GET /health
      * @summary System Health Check
@@ -56,8 +68,8 @@ $router->group(['prefix' => '/health'], function (Router $router) {
      *   }
      * }
      */
-    $router->get('/', function (Request $request) {
-        $healthController = container()->get(HealthController::class);
+    $router->get('/', function (Request $request) use ($context) {
+        $healthController = container($context)->get(HealthController::class);
         return $healthController->index();
     })->middleware('rate_limit:60,60'); // 60 requests per minute - high limit for monitoring
 
@@ -87,8 +99,8 @@ $router->group(['prefix' => '/health'], function (Router $router) {
      *   }
      * }
      */
-    $router->get('/database', function (Request $request) {
-        $healthController = container()->get(HealthController::class);
+    $router->get('/database', function (Request $request) use ($context) {
+        $healthController = container($context)->get(HealthController::class);
         return $healthController->database();
     })->middleware('rate_limit:30,60'); // 30 requests per minute
 
@@ -116,8 +128,8 @@ $router->group(['prefix' => '/health'], function (Router $router) {
      *   }
      * }
      */
-    $router->get('/cache', function (Request $request) {
-        $healthController = container()->get(HealthController::class);
+    $router->get('/cache', function (Request $request) use ($context) {
+        $healthController = container($context)->get(HealthController::class);
         return $healthController->cache();
     })->middleware('rate_limit:30,60'); // 30 requests per minute
 
@@ -154,8 +166,8 @@ $router->group(['prefix' => '/health'], function (Router $router) {
      * @response 403 "Insufficient permissions for detailed health metrics"
      * @response 503 "System health check failed"
      */
-    $router->get('/detailed', function (Request $request) {
-        $healthController = container()->get(HealthController::class);
+    $router->get('/detailed', function (Request $request) use ($context) {
+        $healthController = container($context)->get(HealthController::class);
         return $healthController->detailed();
     })->middleware(['auth', 'rate_limit:10,60']); // Authenticated, 10 requests per minute
 
@@ -187,8 +199,8 @@ $router->group(['prefix' => '/health'], function (Router $router) {
      * @response 403 "Insufficient permissions for middleware health"
      * @response 503 "Middleware health check failed"
      */
-    $router->get('/middleware', function (Request $request) {
-        $healthController = container()->get(HealthController::class);
+    $router->get('/middleware', function (Request $request) use ($context) {
+        $healthController = container($context)->get(HealthController::class);
         return $healthController->middleware();
     })->middleware(['auth', 'rate_limit:20,60']); // Authenticated, 20 requests per minute
 
@@ -224,8 +236,8 @@ $router->group(['prefix' => '/health'], function (Router $router) {
      * @response 403 "Insufficient permissions for Response API health"
      * @response 503 "Response API health check failed"
      */
-    $router->get('/response-api', function (Request $request) {
-        $healthController = container()->get(HealthController::class);
+    $router->get('/response-api', function (Request $request) use ($context) {
+        $healthController = container($context)->get(HealthController::class);
         return $healthController->responseApi();
     })->middleware(['auth', 'rate_limit:15,60']); // Authenticated, 15 requests per minute
 
@@ -242,8 +254,8 @@ $router->group(['prefix' => '/health'], function (Router $router) {
      *   issues:array
      * }
      */
-    $router->get('/queue', function (Request $request) {
-        $controller = container()->get(HealthController::class);
+    $router->get('/queue', function (Request $request) use ($context) {
+        $controller = container($context)->get(HealthController::class);
         return $controller->queue();
     })->middleware('rate_limit:20,60');
 });

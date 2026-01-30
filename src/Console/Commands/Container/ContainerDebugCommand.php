@@ -272,10 +272,10 @@ class ContainerDebugCommand extends BaseCommand
     {
         // Placeholder for container parameters
         $parameters = [
-            'app.env' => config('app.env', 'production'),
-            'app.debug' => config('app.debug', false),
-            'database.driver' => config('database.driver', 'mysql'),
-            'cache.driver' => config('cache.driver', 'redis')
+            'app.env' => config($this->getContext(), 'app.env', 'production'),
+            'app.debug' => config($this->getContext(), 'app.debug', false),
+            'database.driver' => config($this->getContext(), 'database.driver', 'mysql'),
+            'cache.driver' => config($this->getContext(), 'cache.driver', 'redis')
         ];
 
         if ($format === 'json') {
@@ -325,8 +325,8 @@ class ContainerDebugCommand extends BaseCommand
         $overview = [
             'container_class' => get_class($container),
             'service_count' => $this->getServiceCount($container),
-            'environment' => config('app.env', 'unknown'),
-            'debug_mode' => config('app.debug', false),
+            'environment' => config($this->getContext(), 'app.env', 'unknown'),
+            'debug_mode' => config($this->getContext(), 'app.debug', false),
             'compiled' => $this->isContainerCompiled()
         ];
 
@@ -404,7 +404,7 @@ class ContainerDebugCommand extends BaseCommand
     private function isContainerCompiled(): bool
     {
         // Check if container is compiled (simplified check)
-        return !(bool) config('app.debug', false);
+        return !(bool) config($this->getContext(), 'app.debug', false);
     }
 
     /**

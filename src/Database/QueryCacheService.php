@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Database;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Cache\CacheStore;
 use Glueful\Database\Attributes\CacheResult;
 use Glueful\Helpers\CacheHelper;
@@ -21,6 +22,7 @@ class QueryCacheService
      * @var CacheStore<mixed> Cache store instance
      */
     private CacheStore $cache;
+    private ?ApplicationContext $context;
 
     /**
      * @var QueryHasher Query hash generator
@@ -42,19 +44,20 @@ class QueryCacheService
      *
      * @param CacheStore<mixed>|null $cache Optional custom cache store instance
      */
-    public function __construct(?CacheStore $cache = null)
+    public function __construct(?CacheStore $cache = null, ?ApplicationContext $context = null)
     {
+        $this->context = $context;
         // Set up cache - try provided instance or get from helper
-        $this->cache = $cache ?? CacheHelper::createCacheInstance();
+        $this->cache = $cache ?? CacheHelper::createCacheInstance($this->context);
 
         if ($this->cache === null) {
             throw new \RuntimeException(
                 'CacheStore is required for query cache service: Unable to create cache instance.'
             );
         }
-        $this->queryHasher = new QueryHasher();
-        $this->enabled = config('database.query_cache.enabled', true);
-        $this->defaultTtl = config('database.query_cache.default_ttl', 3600);
+        $this->queryHasher = new QueryHasher($this->context);
+        $this->enabled = (bool) $this->getConfig('database.query_cache.enabled', true);
+        $this->defaultTtl = (int) $this->getConfig('database.query_cache.default_ttl', 3600);
     }
 
     /**
@@ -188,7 +191,7 @@ class QueryCacheService
         }
 
         // Check against exclude patterns from config
-        $excludePatterns = config('database.query_cache.exclude_patterns', []);
+        $excludePatterns = $this->getConfig('database.query_cache.exclude_patterns', []);
         foreach ($excludePatterns as $pattern) {
             if (preg_match($pattern, $query)) {
                 return false;
@@ -196,7 +199,7 @@ class QueryCacheService
         }
 
         // Skip queries on excluded tables
-        $excludeTables = config('database.query_cache.exclude_tables', []);
+        $excludeTables = $this->getConfig('database.query_cache.exclude_tables', []);
         $tables = $this->extractTablesFromQuery($query);
 
         foreach ($tables as $table) {
@@ -206,6 +209,15 @@ class QueryCacheService
         }
 
         return true;
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 
     /**

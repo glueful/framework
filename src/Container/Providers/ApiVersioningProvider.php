@@ -35,7 +35,7 @@ final class ApiVersioningProvider extends BaseServiceProvider
             VersionManager::class,
             function (ContainerInterface $c): VersionManager {
                 $config = function_exists('config')
-                    ? (array) config('api.versioning', [])
+                    ? (array) config($this->context, 'api.versioning', [])
                     : [];
 
                 $logger = $c->has(LoggerInterface::class)

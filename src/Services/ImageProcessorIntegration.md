@@ -194,9 +194,9 @@ class ImageProcessingRateLimitMiddleware
 
 ```php
 // Events for monitoring
-Event::dispatch(new ImageProcessed($imageUrl, $operations, $duration));
-Event::dispatch(new ImageCached($cacheKey, $size));
-Event::dispatch(new ImageProcessingFailed($imageUrl, $error));
+app($context, \Glueful\Events\EventService::class)->dispatch(new ImageProcessed($imageUrl, $operations, $duration));
+app($context, \Glueful\Events\EventService::class)->dispatch(new ImageCached($cacheKey, $size));
+app($context, \Glueful\Events\EventService::class)->dispatch(new ImageProcessingFailed($imageUrl, $error));
 ```
 
 ## Key Integration Points

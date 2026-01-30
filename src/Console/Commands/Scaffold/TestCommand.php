@@ -207,7 +207,7 @@ class TestCommand extends BaseCommand
      */
     private function getDefaultTestPath(string $type): string
     {
-        $basePath = base_path('tests');
+        $basePath = base_path($this->getContext(), 'tests');
 
         if ($type === 'feature') {
             return $basePath . '/Feature';
@@ -536,7 +536,7 @@ PHP;
     private function buildNamespace(string $name, string $type): string
     {
         // Check if we're in an app or framework context
-        if (is_dir(base_path('app'))) {
+        if (is_dir(base_path($this->getContext(), 'app'))) {
             $baseNamespace = $type === 'feature' ? 'App\\Tests\\Feature' : 'App\\Tests\\Unit';
         } else {
             $baseNamespace = $type === 'feature' ? 'Glueful\\Tests\\Feature' : 'Glueful\\Tests\\Unit';

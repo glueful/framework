@@ -134,7 +134,7 @@ class ServeCommand extends BaseCommand
         }
 
         // Get public directory
-        $publicDir = base_path('public');
+        $publicDir = base_path($this->getContext(), 'public');
         if (!is_dir($publicDir)) {
             $this->error('Public directory not found. Expected: ' . $publicDir);
             return self::FAILURE;
@@ -375,7 +375,7 @@ class ServeCommand extends BaseCommand
             'glueful',
             'queue:work',
             '--sleep=3',
-        ], base_path());
+        ], base_path($this->getContext()));
 
         $this->queueProcess->setTimeout(null);
         $this->queueProcess->start(function (string $_type, string $buffer) {

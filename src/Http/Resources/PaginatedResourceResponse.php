@@ -16,7 +16,7 @@ use Glueful\Http\Response;
  * @example
  * ```php
  * // From QueryBuilder pagination
- * $result = User::query()->paginate(page: 2, perPage: 25);
+ * $result = User::query($context)->paginate(page: 2, perPage: 25);
  *
  * return PaginatedResourceResponse::fromQueryResult($result, UserResource::class)
  *     ->withBaseUrl('/api/users')

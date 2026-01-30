@@ -80,7 +80,7 @@ final class VersionDeprecateCommand extends BaseCommand
         }
 
         // Get current configuration
-        $config = (array) config('api.versioning', []);
+        $config = (array) config($this->getContext(), 'api.versioning', []);
         $supported = (array) ($config['supported'] ?? []);
 
         // Validate version exists in supported versions (if list is not empty)

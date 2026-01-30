@@ -33,7 +33,7 @@ class InstallCommand extends BaseCommand
     public function __construct()
     {
         parent::__construct();
-        $this->installContainer = container();
+        $this->installContainer = container($this->getContext());
     }
 
     protected function configure(): void
@@ -223,14 +223,14 @@ class InstallCommand extends BaseCommand
     private function validateEnvironment(bool $force, bool $quiet): void
     {
         // Check for .env file
-        $envPath = base_path('.env');
+        $envPath = base_path($this->getContext(), '.env');
 
         if (!file_exists($envPath)) {
             if (!$quiet) {
                 $this->warning('.env file not found. Creating from .env.example...');
             }
 
-            $examplePath = base_path('.env.example');
+            $examplePath = base_path($this->getContext(), '.env.example');
             if (file_exists($examplePath)) {
                 copy($examplePath, $envPath);
                 $this->success('Created .env file from .env.example');
@@ -251,7 +251,7 @@ class InstallCommand extends BaseCommand
     private function generateSecurityKeys(bool $force, bool $quiet): void
     {
         // Generate APP_KEY if not exists, is placeholder, or force
-        $appKey = config('app.key');
+        $appKey = config($this->getContext(), 'app.key');
         $isAppKeyPlaceholder = in_array($appKey, [
             'generate-secure-32-char-key-here',
             'your-secure-app-key-here',
@@ -268,7 +268,7 @@ class InstallCommand extends BaseCommand
         }
 
         // Generate TOKEN_SALT if not exists, is placeholder, or force
-        $tokenSalt = config('session.token_salt');
+        $tokenSalt = config($this->getContext(), 'session.token_salt');
         $isTokenSaltPlaceholder = in_array($tokenSalt, [
             'your-secure-salt-here',
             'generate-secure-32-char-key-here',
@@ -285,7 +285,7 @@ class InstallCommand extends BaseCommand
         }
 
         // Generate JWT_KEY if not exists, is placeholder, or force
-        $jwtKey = config('session.jwt_key');
+        $jwtKey = config($this->getContext(), 'session.jwt_key');
         $isJwtKeyPlaceholder = in_array($jwtKey, [
             'your-secure-jwt-key-here',
             'generate-secure-32-char-key-here',
@@ -305,7 +305,7 @@ class InstallCommand extends BaseCommand
     private function setupDatabase(bool $force, bool $quiet): void
     {
         // Create SQLite database file if it doesn't exist
-        $dbDriver = config('database.engine');
+        $dbDriver = config($this->getContext(), 'database.engine');
 
         // Enforce SQLite-only behavior during install. Other engines can be configured after.
         if ($dbDriver !== 'sqlite') {
@@ -314,7 +314,7 @@ class InstallCommand extends BaseCommand
             return;
         }
         // At this point we know engine is sqlite
-        $dbPath = config('database.sqlite.primary');
+        $dbPath = config($this->getContext(), 'database.sqlite.primary');
         if (!file_exists($dbPath)) {
             $dbDir = dirname($dbPath);
             if (!is_dir($dbDir)) {
@@ -443,7 +443,7 @@ class InstallCommand extends BaseCommand
         $this->line('');
 
         $this->line('Database Configuration:');
-        $dbDriver = config('database.engine');
+        $dbDriver = config($this->getContext(), 'database.engine');
         if ($dbDriver === 'sqlite') {
             $this->line('• Currently using: SQLite (storage/database/glueful.sqlite)');
             $this->line('• To switch to MySQL/PostgreSQL, update your .env file');
@@ -512,7 +512,7 @@ HELP;
     private function validateDirectoryPermissions(): void
     {
         $directories = [
-            base_path('storage'),
+            base_path($this->getContext(), 'storage'),
         ];
 
         foreach ($directories as $dir) {
@@ -530,7 +530,7 @@ HELP;
 
     private function updateEnvFile(string $key, string $value): void
     {
-        $envPath = base_path('.env');
+        $envPath = base_path($this->getContext(), '.env');
 
         if (!file_exists($envPath)) {
             throw new \Exception('.env file not found');
@@ -613,7 +613,7 @@ HELP;
     {
         $this->line('SQLite Configuration:');
 
-        $defaultPath = config('app.paths.storage') . '/database/primary.sqlite';
+        $defaultPath = config($this->getContext(), 'app.paths.storage') . '/database/primary.sqlite';
         $databasePath = $this->ask('Database file path', $defaultPath);
 
         // Ensure the database directory exists
@@ -651,7 +651,7 @@ HELP;
     private function checkSecurityHealth(): void
     {
         // Read keys directly from .env file to avoid caching issues
-        $envPath = base_path('.env');
+        $envPath = base_path($this->getContext(), '.env');
         if (file_exists($envPath)) {
             $envContent = file_get_contents($envPath);
 
@@ -663,10 +663,10 @@ HELP;
             $jwtKey = isset($jwtKeyMatches[1]) ? $jwtKeyMatches[1] : '';
         } else {
             // Fallback to config/env if .env file not found
-            $configTokenSalt = config('session.token_salt');
+            $configTokenSalt = config($this->getContext(), 'session.token_salt');
             $envTokenSalt = env('TOKEN_SALT');
             $tokenSalt = $configTokenSalt !== null ? $configTokenSalt : ($envTokenSalt !== null ? $envTokenSalt : '');
-            $configJwtKey = config('session.jwt_key');
+            $configJwtKey = config($this->getContext(), 'session.jwt_key');
             $envJwtKey = env('JWT_KEY');
             $jwtKey = $configJwtKey !== null ? $configJwtKey : ($envJwtKey !== null ? $envJwtKey : '');
         }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Uploader;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Services\ImageProcessor;
 use Glueful\Uploader\Storage\StorageInterface;
 
@@ -36,7 +37,8 @@ final class ThumbnailGenerator
     ];
 
     public function __construct(
-        private readonly StorageInterface $storage
+        private readonly StorageInterface $storage,
+        private readonly ?ApplicationContext $context = null
     ) {
     }
 
@@ -67,7 +69,7 @@ final class ThumbnailGenerator
         $height = $this->getOption($options, 'height', $heightConfigKey, self::DEFAULT_HEIGHT);
         $quality = $this->getOption($options, 'quality', $qualityConfigKey, self::DEFAULT_QUALITY);
         $subdirectory = (string) ($options['subdirectory']
-            ?? config('filesystem.uploader.thumbnail_subdirectory', 'thumbs'));
+            ?? $this->getConfig('filesystem.uploader.thumbnail_subdirectory', 'thumbs'));
 
         try {
             $thumbFilename = $this->generateFilename($originalFilename);
@@ -102,7 +104,7 @@ final class ThumbnailGenerator
      */
     public function getSupportedFormats(): array
     {
-        $configured = config('filesystem.uploader.thumbnail_formats');
+        $configured = $this->getConfig('filesystem.uploader.thumbnail_formats');
 
         if (is_array($configured) && $configured !== []) {
             return $configured;
@@ -121,7 +123,7 @@ final class ThumbnailGenerator
             return null;
         }
 
-        $processor = ImageProcessor::make($sourcePath);
+        $processor = ImageProcessor::make($sourcePath, $this->context);
 
         return $processor
             ->fit($width, $height)
@@ -169,11 +171,20 @@ final class ThumbnailGenerator
             return (int) $options[$key];
         }
 
-        $configValue = config($configKey);
+        $configValue = $this->getConfig($configKey);
         if ($configValue !== null) {
             return (int) $configValue;
         }
 
         return $default;
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 }

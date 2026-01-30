@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Repository;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 
 /**
@@ -16,10 +17,10 @@ class ResourceRepository extends BaseRepository
 {
     protected string $tableName;
 
-    public function __construct(string $tableName, ?Connection $connection = null)
+    public function __construct(string $tableName, ?Connection $connection = null, ?ApplicationContext $context = null)
     {
         $this->tableName = $tableName;
-        parent::__construct($connection);
+        parent::__construct($connection, $context);
     }
 
     /**

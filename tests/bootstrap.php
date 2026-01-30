@@ -27,8 +27,11 @@ if (!$loaded) {
     exit(1);
 }
 
+
 // Now setup the proper container with mocked services
 try {
+    $context = \Glueful\Bootstrap\ApplicationContext::forTesting(dirname(__DIR__));
+
     // Create a minimal container for testing with mocked services
     $mockLogger = new class {
         public function info($message, $context = [])
@@ -50,12 +53,18 @@ try {
         \Glueful\Logging\LogManager::class => new \Glueful\Container\Definition\ValueDefinition(
             \Glueful\Logging\LogManager::class,
             $mockLogger
-        )
+        ),
+        \Glueful\Bootstrap\ApplicationContext::class => new \Glueful\Container\Definition\ValueDefinition(
+            \Glueful\Bootstrap\ApplicationContext::class,
+            $context
+        ),
     ]);
-    $GLOBALS['container'] = $container;
+
+    $context->setContainer($container);
 } catch (\Throwable $e) {
     // If container can't be created, create a mock one
-    $GLOBALS['container'] = new class implements \Psr\Container\ContainerInterface {
+    $context = \Glueful\Bootstrap\ApplicationContext::forTesting(dirname(__DIR__));
+    $container = new class implements \Psr\Container\ContainerInterface {
         public function get(string $id)
         {
             // Return mock services for common dependencies
@@ -75,14 +84,19 @@ try {
                     }
                 };
             }
+            if ($id === \Glueful\Bootstrap\ApplicationContext::class) {
+                return $context;
+            }
             return null;
         }
 
         public function has(string $id): bool
         {
-            return $id === \Glueful\Logging\LogManager::class;
+            return in_array($id, [\Glueful\Logging\LogManager::class, \Glueful\Bootstrap\ApplicationContext::class], true);
         }
     };
+
+    $context->setContainer($container);
 }
 
 // Set environment variables for tests
@@ -105,7 +119,7 @@ foreach ($testDirs as $dir) {
 
 // Mock basic framework functions for unit tests
 if (!function_exists('config')) {
-    function config($key, $default = null)
+    function config(\Glueful\Bootstrap\ApplicationContext $context, $key, $default = null)
     {
         $configs = [
             'database.driver' => 'mysql',
@@ -122,32 +136,16 @@ if (!function_exists('config')) {
 }
 
 if (!function_exists('base_path')) {
-    function base_path($path = '')
+    function base_path(\Glueful\Bootstrap\ApplicationContext $context, $path = '')
     {
         return __DIR__ . '/..' . ($path ? '/' . ltrim($path, '/') : '');
     }
 }
 
 if (!function_exists('app')) {
-    function app($service = null)
+    function app(\Glueful\Bootstrap\ApplicationContext $context, $service = null)
     {
-        // Use the same container as the global one
-        $container = $GLOBALS['container'] ?? null;
-
-        if (!$container) {
-            // Fallback to a mock container if needed
-            $container = new class implements \Psr\Container\ContainerInterface {
-                public function get(string $id)
-                {
-                    return null;
-                }
-
-                public function has(string $id): bool
-                {
-                    return false;
-                }
-            };
-        }
+        $container = $context->getContainer();
 
         if ($service === null) {
             return $container;

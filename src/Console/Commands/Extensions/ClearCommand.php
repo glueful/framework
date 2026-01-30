@@ -55,7 +55,7 @@ final class ClearCommand extends BaseCommand
 
         // Step 1: Clear main extensions cache
         $output->writeln('1. <info>Clearing main extensions cache...</info>');
-        $mainCache = base_path('bootstrap/cache/extensions.php');
+        $mainCache = base_path($this->getContext(), 'bootstrap/cache/extensions.php');
 
         if (file_exists($mainCache)) {
             if (@unlink($mainCache)) {
@@ -79,7 +79,7 @@ final class ClearCommand extends BaseCommand
             $output->writeln('2. <info>Clearing additional extension caches...</info>');
 
             // Clear any versioned cache files
-            $cachePattern = base_path('bootstrap/cache/extensions*.php');
+            $cachePattern = base_path($this->getContext(), 'bootstrap/cache/extensions*.php');
             $cacheFiles = glob($cachePattern);
             if ($cacheFiles !== false) {
                 foreach ($cacheFiles as $file) {
@@ -96,7 +96,7 @@ final class ClearCommand extends BaseCommand
             }
 
             // Clear temporary extension files
-            $tempPattern = base_path('storage/framework/cache/extensions*');
+            $tempPattern = base_path($this->getContext(), 'storage/framework/cache/extensions*');
             $tempFiles = glob($tempPattern);
             if ($tempFiles !== false) {
                 foreach ($tempFiles as $file) {
@@ -116,7 +116,7 @@ final class ClearCommand extends BaseCommand
             // Clear Composer autoload cache if in development
             $appEnv = $_ENV['APP_ENV'] ?? (getenv('APP_ENV') !== false ? getenv('APP_ENV') : 'production');
             if ($appEnv !== 'production') {
-                $composerCache = base_path('vendor/composer');
+                $composerCache = base_path($this->getContext(), 'vendor/composer');
                 if (is_dir($composerCache)) {
                     // Clear Composer's installed.php cache
                     $installedPhp = $composerCache . '/installed.php';
@@ -127,9 +127,10 @@ final class ClearCommand extends BaseCommand
                 }
 
                 // Clear local extension scan cache (if any)
-                $localPath = config('extensions.local_path');
+                $localPath = config($this->getContext(), 'extensions.local_path');
                 if ($localPath !== null && is_string($localPath)) {
-                    $scanCacheFile = base_path("storage/framework/cache/local_extensions_{$localPath}_scan.php");
+                    $cacheFileName = "storage/framework/cache/local_extensions_{$localPath}_scan.php";
+                    $scanCacheFile = base_path($this->getContext(), $cacheFileName);
                     if (file_exists($scanCacheFile) && @unlink($scanCacheFile)) {
                         $output->writeln('   ✓ Local extension scan cache cleared');
                         $clearedItems++;
@@ -147,7 +148,7 @@ final class ClearCommand extends BaseCommand
             }
 
             // Clear config cache that might affect extensions
-            $configCache = base_path('bootstrap/cache/config.php');
+            $configCache = base_path($this->getContext(), 'bootstrap/cache/config.php');
             if (file_exists($configCache)) {
                 @unlink($configCache);
                 $output->writeln('   ✓ Configuration cache cleared');

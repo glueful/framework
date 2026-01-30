@@ -24,11 +24,8 @@ final class ExtensionProvider extends BaseServiceProvider
         $defs['extension.manager'] = new FactoryDefinition(
             'extension.manager',
             function () {
-                $di = $GLOBALS['container'] ?? null;
-                if ($di === null) {
-                    throw new \RuntimeException('Global DI container not initialized');
-                }
-                return new \Glueful\Extensions\ExtensionManager($di);
+                $container = $this->context->getContainer();
+                return new \Glueful\Extensions\ExtensionManager($container);
             }
         );
         $defs[\Glueful\Extensions\ExtensionManager::class] = new AliasDefinition(

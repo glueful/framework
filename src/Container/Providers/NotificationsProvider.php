@@ -31,7 +31,15 @@ final class NotificationsProvider extends BaseServiceProvider
                     /** @var \Glueful\Logging\LogManager $logger */
                     $logger = $c->get(\Glueful\Logging\LogManager::class);
                 }
-                return new \Glueful\Notifications\Services\NotificationDispatcher($channelManager, $logger);
+                $events = $c->has(\Glueful\Events\EventService::class)
+                    ? $c->get(\Glueful\Events\EventService::class)
+                    : null;
+                return new \Glueful\Notifications\Services\NotificationDispatcher(
+                    $channelManager,
+                    $logger,
+                    [],
+                    $events instanceof \Glueful\Events\EventService ? $events : null
+                );
             },
             true
         );

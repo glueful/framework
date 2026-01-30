@@ -87,7 +87,7 @@ trait QueryRestrictionsTrait
     protected function getRestrictedQueryParams(): array
     {
         // Allow configuration override
-        $configParams = config('resource.restricted_query_params', []);
+        $configParams = config($this->getContext(), 'resource.restricted_query_params', []);
 
         if (!empty($configParams)) {
             return $configParams;

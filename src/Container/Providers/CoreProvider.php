@@ -20,7 +20,7 @@ final class CoreProvider extends BaseServiceProvider
         // Logger service (Monolog) with StandardLogProcessor parity
         $defs['logger'] = new FactoryDefinition('logger', function (): \Psr\Log\LoggerInterface {
             // Framework logging can be toggled via config
-            $config = function_exists('config') ? (array) config('logging.framework', []) : [];
+            $config = function_exists('config') ? (array) config($this->context, 'logging.framework', []) : [];
             $enabled = $config['enabled'] ?? true;
             if ($enabled !== true) {
                 return new \Psr\Log\NullLogger();
@@ -41,11 +41,13 @@ final class CoreProvider extends BaseServiceProvider
             $level = \Monolog\Logger::toMonologLevel($levelName);
 
             // Write to file path if configured, else stdout
-            $channelConfig = function_exists('config') ? (array) config('logging.channels.framework', []) : [];
+            $channelConfig = function_exists('config')
+                ? (array) config($this->context, 'logging.channels.framework', [])
+                : [];
             $path = is_string($channelConfig['path'] ?? null)
                 ? $channelConfig['path']
                 : (function_exists('base_path')
-                    ? base_path('storage/logs/framework-' . date('Y-m-d') . '.log')
+                    ? base_path($this->context, 'storage/logs/framework-' . date('Y-m-d') . '.log')
                     : 'php://stdout');
             $handler = new \Monolog\Handler\StreamHandler($path, $level);
             $logger->pushHandler($handler);
@@ -53,7 +55,7 @@ final class CoreProvider extends BaseServiceProvider
             // Attach StandardLogProcessor with env + version and robust user resolver
             try {
                 $env = (string) (
-                    (function_exists('config') ? config('app.env', null) : null)
+                    (function_exists('config') ? config($this->context, 'app.env', null) : null)
                     ?? ($_ENV['APP_ENV'] ?? 'production')
                 );
                 $version = '1.0.0';
@@ -64,13 +66,13 @@ final class CoreProvider extends BaseServiceProvider
                             $version = $maybe;
                         } else {
                             $version = (string) (
-                                (function_exists('config') ? config('app.version_full', null) : null)
+                                (function_exists('config') ? config($this->context, 'app.version_full', null) : null)
                                 ?? '1.0.0'
                             );
                         }
                     } catch (\Throwable) {
                         $version = (string) (
-                            (function_exists('config') ? config('app.version_full', null) : null)
+                            (function_exists('config') ? config($this->context, 'app.version_full', null) : null)
                             ?? '1.0.0'
                         );
                     }
@@ -79,8 +81,8 @@ final class CoreProvider extends BaseServiceProvider
                 $userIdResolver = function (): ?string {
                     try {
                         // Priority: Request attribute user via global container
-                        if (isset($GLOBALS['container'])) {
-                            $c = $GLOBALS['container'];
+                        if ($this->context->hasContainer()) {
+                            $c = $this->context->getContainer();
                             if ($c->has('request')) {
                                 $req = $c->get('request');
                                 if (is_object($req) && method_exists($req, 'get')) {
@@ -104,8 +106,9 @@ final class CoreProvider extends BaseServiceProvider
                         }
 
                         // AuthenticationService current user if available
-                        if (function_exists('has_service') && has_service(\Glueful\Auth\AuthenticationService::class)) {
-                            $auth = app(\Glueful\Auth\AuthenticationService::class);
+                        $authServiceClass = \Glueful\Auth\AuthenticationService::class;
+                        if (function_exists('has_service') && has_service($this->context, $authServiceClass)) {
+                            $auth = app($this->context, $authServiceClass);
                             if (method_exists($auth, 'getCurrentUser')) {
                                 $u = $auth->getCurrentUser();
                                 if ($u && method_exists($u, 'getId')) {
@@ -120,8 +123,9 @@ final class CoreProvider extends BaseServiceProvider
                             $authHeader = (string) $_SERVER['HTTP_AUTHORIZATION'];
                             if (str_starts_with($authHeader, 'Bearer ')) {
                                 $token = substr($authHeader, 7);
-                                if (function_exists('has_service') && has_service(\Glueful\Auth\TokenManager::class)) {
-                                    $tm = app(\Glueful\Auth\TokenManager::class);
+                                $tokenManagerClass = \Glueful\Auth\TokenManager::class;
+                                if (function_exists('has_service') && has_service($this->context, $tokenManagerClass)) {
+                                    $tm = app($this->context, $tokenManagerClass);
                                     if (method_exists($tm, 'validateToken')) {
                                         $payload = $tm->validateToken($token);
                                         if (is_array($payload)) {
@@ -200,7 +204,7 @@ final class CoreProvider extends BaseServiceProvider
             /** @return \Glueful\Database\Connection|\Glueful\Database\PooledConnection */
             function () {
                 if (class_exists('\Glueful\Database\Connection')) {
-                    $config = (array) (function_exists('config') ? config('database', []) : []);
+                    $config = (array) (function_exists('config') ? config($this->context, 'database', []) : []);
                     return new \Glueful\Database\Connection($config);
                 }
                 throw new \RuntimeException('Database connection factory not configured');
@@ -224,17 +228,23 @@ final class CoreProvider extends BaseServiceProvider
             $this->autowire(\Glueful\Security\RandomStringGenerator::class);
 
         // Auth core services
-        $defs[\Glueful\Auth\TokenManager::class] = new FactoryDefinition(
-            \Glueful\Auth\TokenManager::class,
-            function () {
-                \Glueful\Auth\TokenManager::initialize();
-                return new \Glueful\Auth\TokenManager();
-            }
+        $defs[\Glueful\Auth\AuthBootstrap::class] = new FactoryDefinition(
+            \Glueful\Auth\AuthBootstrap::class,
+            fn() => new \Glueful\Auth\AuthBootstrap($this->context)
         );
-        // Use the singleton from AuthBootstrap to ensure providers are registered
+
         $defs[\Glueful\Auth\AuthenticationManager::class] = new FactoryDefinition(
             \Glueful\Auth\AuthenticationManager::class,
-            fn() => \Glueful\Auth\AuthBootstrap::getManager()
+            fn(\Psr\Container\ContainerInterface $c) => $c->get(\Glueful\Auth\AuthBootstrap::class)->getManager()
+        );
+
+        $defs[\Glueful\Auth\TokenManager::class] = new FactoryDefinition(
+            \Glueful\Auth\TokenManager::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Auth\TokenManager(
+                $this->context,
+                null,
+                $c->get(\Glueful\Auth\AuthenticationManager::class)
+            )
         );
 
         $defs[\Glueful\Auth\AuthenticationGuard::class] = new FactoryDefinition(
@@ -256,7 +266,7 @@ final class CoreProvider extends BaseServiceProvider
         $defs[\Glueful\Permissions\Gate::class] = new FactoryDefinition(
             \Glueful\Permissions\Gate::class,
             function (\Psr\Container\ContainerInterface $c): \Glueful\Permissions\Gate {
-                $config = function_exists('config') ? (array) config('permissions', []) : [];
+                $config = function_exists('config') ? (array) config($this->context, 'permissions', []) : [];
 
                 $gate = new \Glueful\Permissions\Gate(
                     $config['strategy'] ?? 'affirmative',
@@ -292,7 +302,7 @@ final class CoreProvider extends BaseServiceProvider
         $defs[\Glueful\Permissions\PolicyRegistry::class] = new FactoryDefinition(
             \Glueful\Permissions\PolicyRegistry::class,
             function (\Psr\Container\ContainerInterface $c): \Glueful\Permissions\PolicyRegistry {
-                $config = function_exists('config') ? (array) config('permissions', []) : [];
+                $config = function_exists('config') ? (array) config($this->context, 'permissions', []) : [];
                 return new \Glueful\Permissions\PolicyRegistry($config['policies'] ?? []);
             }
         );
@@ -310,7 +320,7 @@ final class CoreProvider extends BaseServiceProvider
                 }
 
                 // Inject permissions config
-                $config = function_exists('config') ? (array) config('permissions', []) : [];
+                $config = function_exists('config') ? (array) config($this->context, 'permissions', []) : [];
                 $manager->setPermissionsConfig($config);
 
                 return $manager;
@@ -331,7 +341,7 @@ final class CoreProvider extends BaseServiceProvider
                 }
 
                 // Inject permissions config
-                $config = function_exists('config') ? (array) config('permissions', []) : [];
+                $config = function_exists('config') ? (array) config($this->context, 'permissions', []) : [];
                 $context->setPermissionsConfig($config);
 
                 return $context;
@@ -347,7 +357,12 @@ final class CoreProvider extends BaseServiceProvider
             \Glueful\Auth\AuthenticationService::class,
             fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Auth\AuthenticationService(
                 $c->get(\Glueful\Auth\Interfaces\SessionStoreInterface::class),
-                $c->get(\Glueful\Auth\SessionCacheManager::class)
+                $c->get(\Glueful\Auth\SessionCacheManager::class),
+                null,
+                null,
+                $this->context,
+                $c->get(\Glueful\Auth\AuthenticationManager::class),
+                $c->get(\Glueful\Auth\TokenManager::class)
             )
         );
 
@@ -379,7 +394,7 @@ final class CoreProvider extends BaseServiceProvider
         $defs[\Glueful\Support\FieldSelection\Projector::class] = new FactoryDefinition(
             \Glueful\Support\FieldSelection\Projector::class,
             function () {
-                $cfg = \function_exists('config') ? (array)\config('api.field_selection', []) : [];
+                $cfg = \function_exists('config') ? (array)\config($this->context, 'api.field_selection', []) : [];
                 $whitelist = (array)($cfg['whitelists'] ?? []);
                 return new \Glueful\Support\FieldSelection\Projector(
                     whitelist: $whitelist,
@@ -524,7 +539,7 @@ final class CoreProvider extends BaseServiceProvider
         $defs[\Glueful\Api\RateLimiting\TierManager::class] = new FactoryDefinition(
             \Glueful\Api\RateLimiting\TierManager::class,
             function () {
-                $config = function_exists('config') ? (array) config('api.rate_limiting', []) : [];
+                $config = function_exists('config') ? (array) config($this->context, 'api.rate_limiting', []) : [];
                 return new \Glueful\Api\RateLimiting\TierManager($config);
             }
         );
@@ -541,7 +556,9 @@ final class CoreProvider extends BaseServiceProvider
         $defs[\Glueful\Api\RateLimiting\RateLimitHeaders::class] = new FactoryDefinition(
             \Glueful\Api\RateLimiting\RateLimitHeaders::class,
             function () {
-                $config = function_exists('config') ? (array) config('api.rate_limiting.headers', []) : [];
+                $config = function_exists('config')
+                    ? (array) config($this->context, 'api.rate_limiting.headers', [])
+                    : [];
                 return new \Glueful\Api\RateLimiting\RateLimitHeaders($config);
             }
         );
@@ -550,7 +567,7 @@ final class CoreProvider extends BaseServiceProvider
         $defs[\Glueful\Api\RateLimiting\RateLimitManager::class] = new FactoryDefinition(
             \Glueful\Api\RateLimiting\RateLimitManager::class,
             function (\Psr\Container\ContainerInterface $c) {
-                $config = function_exists('config') ? (array) config('api.rate_limiting', []) : [];
+                $config = function_exists('config') ? (array) config($this->context, 'api.rate_limiting', []) : [];
                 return new \Glueful\Api\RateLimiting\RateLimitManager(
                     $c->get(\Glueful\Api\RateLimiting\Contracts\StorageInterface::class),
                     $c->get(\Glueful\Api\RateLimiting\Contracts\TierResolverInterface::class),
@@ -564,7 +581,7 @@ final class CoreProvider extends BaseServiceProvider
         $defs[\Glueful\Api\RateLimiting\Middleware\EnhancedRateLimiterMiddleware::class] = new FactoryDefinition(
             \Glueful\Api\RateLimiting\Middleware\EnhancedRateLimiterMiddleware::class,
             function (\Psr\Container\ContainerInterface $c) {
-                $config = function_exists('config') ? (array) config('api.rate_limiting', []) : [];
+                $config = function_exists('config') ? (array) config($this->context, 'api.rate_limiting', []) : [];
                 return new \Glueful\Api\RateLimiting\Middleware\EnhancedRateLimiterMiddleware(
                     $c->get(\Glueful\Api\RateLimiting\RateLimitManager::class),
                     $c->get(\Glueful\Api\RateLimiting\RateLimitHeaders::class),
@@ -616,6 +633,7 @@ final class CoreProvider extends BaseServiceProvider
         $defs[\Glueful\Api\Webhooks\Http\Controllers\WebhookController::class] = new FactoryDefinition(
             \Glueful\Api\Webhooks\Http\Controllers\WebhookController::class,
             fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Api\Webhooks\Http\Controllers\WebhookController(
+                $this->context,
                 $c->get(\Glueful\Api\Webhooks\Contracts\WebhookDispatcherInterface::class)
             )
         );
@@ -626,7 +644,7 @@ final class CoreProvider extends BaseServiceProvider
         $defs[\Glueful\Api\Filtering\FilterParser::class] = new FactoryDefinition(
             \Glueful\Api\Filtering\FilterParser::class,
             function () {
-                $config = function_exists('config') ? (array) config('api.filtering', []) : [];
+                $config = function_exists('config') ? (array) config($this->context, 'api.filtering', []) : [];
                 return new \Glueful\Api\Filtering\FilterParser(
                     (int) ($config['max_depth'] ?? 3),
                     (int) ($config['max_filters'] ?? 20)

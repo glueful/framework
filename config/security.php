@@ -13,6 +13,14 @@ return [
         // Statuses that are permitted to authenticate/login.
         // Adjust as needed (e.g., include 'verified', 'onboarding').
         'allowed_login_statuses' => ['active'],
+        // Use generic responses to avoid account enumeration in auth flows.
+        'generic_error_responses' => env('AUTH_GENERIC_ERRORS', env('APP_ENV') === 'production'),
+    ],
+
+    // Token handling
+    'tokens' => [
+        // Allow ?token= query param as a legacy fallback (discouraged).
+        'allow_query_param' => env('TOKEN_ALLOW_QUERY_PARAM', false),
     ],
 
     // Security level definitions
@@ -66,6 +74,10 @@ return [
         'enabled' => env('CSRF_PROTECTION_ENABLED', true),
         'tokenLifetime' => env('CSRF_TOKEN_LIFETIME', 3600),
         'useDoubleSubmit' => env('CSRF_DOUBLE_SUBMIT', false),
+        // Allow requests without Origin/Referer (useful for non-browser clients).
+        'allow_missing_origin' => env('CSRF_ALLOW_MISSING_ORIGIN', false),
+        // Skip Origin/Referer validation for Bearer token auth.
+        'skip_for_bearer_auth' => env('CSRF_SKIP_FOR_BEARER_AUTH', true),
         'exemptRoutes' => [
             'auth/login',
             'auth/register',

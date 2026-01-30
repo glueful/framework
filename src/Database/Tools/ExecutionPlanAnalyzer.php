@@ -2,6 +2,7 @@
 
 namespace Glueful\Database\Tools;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use PDO;
 
@@ -24,6 +25,7 @@ class ExecutionPlanAnalyzer
      * @var Connection
      */
     private $connection;
+    private ?ApplicationContext $context;
 
        /**
         * @var PDO Active database connection
@@ -35,10 +37,11 @@ class ExecutionPlanAnalyzer
      *
      * @param Connection $connection Database connection
      */
-    public function __construct(Connection $connection)
+    public function __construct(Connection $connection, ?ApplicationContext $context = null)
     {
         $this->connection = $connection;
         $this->pdo = $connection->getPDO();
+        $this->context = $context;
     }
 
     /**
@@ -632,9 +635,8 @@ class ExecutionPlanAnalyzer
      */
     private function getConfig(string $key, $default = null)
     {
-        // Try to get configuration from database.profiler settings
-        if (function_exists('config')) {
-            return config("database.profiler.{$key}", $default);
+        if ($this->context !== null) {
+            return config($this->context, "database.profiler.{$key}", $default);
         }
 
         return $default;

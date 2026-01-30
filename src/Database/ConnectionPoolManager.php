@@ -9,6 +9,7 @@ use Glueful\Database\Driver\MySQLDriver;
 use Glueful\Database\Driver\PostgreSQLDriver;
 use Glueful\Database\Driver\SQLiteDriver;
 use Glueful\Database\Driver\DatabaseDriver;
+use Glueful\Bootstrap\ApplicationContext;
 
 /**
  * ConnectionPoolManager
@@ -41,15 +42,17 @@ class ConnectionPoolManager
      * @var bool Whether manager has been shut down
      */
     private bool $isShutdown = false;
+    private ?ApplicationContext $context;
 
     /**
      * Initialize pool manager
      *
      * Loads global configuration and registers cleanup handlers.
      */
-    public function __construct()
+    public function __construct(?ApplicationContext $context = null)
     {
-        $this->globalConfig = config('database.pooling', []);
+        $this->context = $context;
+        $this->globalConfig = $this->getConfig('database.pooling', []);
 
         // Register shutdown handler for cleanup
         register_shutdown_function([$this, 'shutdown']);
@@ -79,7 +82,7 @@ class ConnectionPoolManager
             );
 
             // Get database configuration for DSN building
-            $dbConfig = config("database.{$engine}", []);
+            $dbConfig = $this->getConfig("database.{$engine}", []);
 
             // Build DSN and options
             $dsn = $this->buildDSN($engine, $dbConfig);
@@ -188,6 +191,15 @@ class ConnectionPoolManager
 
         $this->pools = [];
         $this->isShutdown = true;
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 
     /**

@@ -48,10 +48,12 @@ class ResourceController extends BaseController
     protected bool $enableQueryRestrictions = false;
     protected bool $enableOwnershipValidation = true; // Keep this as reasonable default
 
-    public function __construct(?RepositoryFactory $repositoryFactory = null)
-    {
+    public function __construct(
+        \Glueful\Bootstrap\ApplicationContext $context,
+        ?RepositoryFactory $repositoryFactory = null
+    ) {
         // Call parent constructor which handles auth initialization
-        parent::__construct($repositoryFactory);
+        parent::__construct($context, $repositoryFactory);
 
         // Load configuration-based feature toggles
         $this->loadSecurityConfiguration();
@@ -63,7 +65,7 @@ class ResourceController extends BaseController
     protected function loadSecurityConfiguration(): void
     {
         // Allow configuration to override defaults
-        $config = config('resource.security', []);
+        $config = config($this->getContext(), 'resource.security', []);
 
         $this->enableTableAccessControl = $config['table_access_control'] ?? $this->enableTableAccessControl;
         $this->enableFieldPermissions = $config['field_permissions'] ?? $this->enableFieldPermissions;

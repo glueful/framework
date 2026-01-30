@@ -55,7 +55,7 @@ class WebhookListCommand extends BaseCommand
         $showStats = (bool) $input->getOption('stats');
         $jsonOutput = (bool) $input->getOption('json');
 
-        $query = WebhookSubscription::query();
+        $query = WebhookSubscription::query($this->getContext());
 
         if ($activeOnly) {
             $query->where('is_active', true);

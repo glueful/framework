@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Glueful\Cache;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Cache\Drivers\{RedisCacheDriver, MemcachedCacheDriver, ArrayCacheDriver};
+use Glueful\Services\FileFinder;
 use Redis;
 use Memcached;
 use Glueful\Exceptions\BusinessLogicException;
@@ -25,22 +27,25 @@ class CacheFactory
      * Handles connection setup and error handling.
      *
      * @param string $driverOverride Optional driver override
+     * @param ApplicationContext|null $context Application context for config/container access
      * @return CacheStore<mixed> Configured cache driver
      * @throws \Glueful\Exceptions\DatabaseException If connection fails
      * @throws \Glueful\Exceptions\BusinessLogicException If cache type is not supported
      */
-    public static function create(string $driverOverride = ''): CacheStore
+    public static function create(string $driverOverride = '', ?ApplicationContext $context = null): CacheStore
     {
         $cacheType = $driverOverride !== ''
             ? $driverOverride
-            : (string) config('cache.default', 'redis');
+            : (string) self::getConfig($context, 'cache.default', 'redis');
 
         if ($cacheType === 'redis') {
             $redis = new Redis();
-            $host = config('cache.stores.redis.host', null) ?? env('REDIS_HOST', '127.0.0.1');
-            $port = (int) (config('cache.stores.redis.port', null) ?? env('REDIS_PORT', 6379));
-            $timeout = (float) (config('cache.stores.redis.timeout', null) ?? env('REDIS_TIMEOUT', 2.5));
-            $password = config('cache.stores.redis.password', null) ?? env('REDIS_PASSWORD');
+            $host = self::getConfig($context, 'cache.stores.redis.host', null) ?? env('REDIS_HOST', '127.0.0.1');
+            $port = (int) (self::getConfig($context, 'cache.stores.redis.port', null) ?? env('REDIS_PORT', 6379));
+            $timeout = (float) (
+                self::getConfig($context, 'cache.stores.redis.timeout', null) ?? env('REDIS_TIMEOUT', 2.5)
+            );
+            $password = self::getConfig($context, 'cache.stores.redis.password', null) ?? env('REDIS_PASSWORD');
 
             try {
                 // Set connection timeout to prevent long hangs - use shorter timeout
@@ -64,7 +69,9 @@ class CacheFactory
                 }
 
                 // Select database if specified
-                $database = (int) (config('cache.stores.redis.database', null) ?? env('REDIS_DB', 0));
+                $database = (int) (
+                    self::getConfig($context, 'cache.stores.redis.database', null) ?? env('REDIS_DB', 0)
+                );
                 if ($database > 0) {
                     $redis->select($database);
                 }
@@ -89,8 +96,11 @@ class CacheFactory
         if ($cacheType === 'memcached') {
             try {
                 $memcached = new Memcached();
-                $host = config('cache.stores.memcached.host', null) ?? env('MEMCACHED_HOST', '127.0.0.1');
-                $port = (int) (config('cache.stores.memcached.port', null) ?? env('MEMCACHED_PORT', 11211));
+                $host = self::getConfig($context, 'cache.stores.memcached.host', null)
+                    ?? env('MEMCACHED_HOST', '127.0.0.1');
+                $port = (int) (
+                    self::getConfig($context, 'cache.stores.memcached.port', null) ?? env('MEMCACHED_PORT', 11211)
+                );
 
                 $memcached->addServer($host, $port);
 
@@ -127,9 +137,9 @@ class CacheFactory
         }
 
         // Fall back to file-based caching if enabled
-        $fallbackToFile = (bool) config('cache.fallback_to_file', false);
+        $fallbackToFile = (bool) self::getConfig($context, 'cache.fallback_to_file', false);
         if ($cacheType === 'file' || ($driverOverride === '' && $fallbackToFile)) {
-            return self::createFileDriver();
+            return self::createFileDriver($context);
         }
 
         throw BusinessLogicException::operationNotAllowed(
@@ -143,7 +153,7 @@ class CacheFactory
      *
      * @return CacheStore<mixed> File-based cache driver
      */
-    private static function createFileDriver(): CacheStore
+    private static function createFileDriver(?ApplicationContext $context = null): CacheStore
     {
         if (!class_exists('\\Glueful\\Cache\\Drivers\\FileCacheDriver')) {
             throw BusinessLogicException::operationNotAllowed(
@@ -152,7 +162,7 @@ class CacheFactory
             );
         }
 
-        $path = config('app.paths.storage_path', __DIR__ . '/../../storage') . '/cache/';
+        $path = self::getConfig($context, 'app.paths.storage_path', __DIR__ . '/../../storage') . '/cache/';
         if (!is_dir($path)) {
             mkdir($path, 0755, true);
         }
@@ -169,11 +179,21 @@ class CacheFactory
             ],
         ];
 
-        // Use global PSR-11 container helper
-        $fileFinder = container()->get(\Glueful\Services\FileFinder::class);
+        $fileFinder = $context !== null
+            ? container($context)->get(FileFinder::class)
+            : new FileFinder();
 
         $storage = new \Glueful\Storage\StorageManager($storageConfig, new \Glueful\Storage\PathGuard());
 
         return new \Glueful\Cache\Drivers\FileCacheDriver($path, $storage, $fileFinder, 'cache');
+    }
+
+    private static function getConfig(?ApplicationContext $context, string $key, mixed $default = null): mixed
+    {
+        if ($context === null) {
+            return $default;
+        }
+
+        return config($context, $key, $default);
     }
 }

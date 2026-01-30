@@ -6,6 +6,7 @@ namespace Glueful\Tests\Unit\Extensions;
 
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\MockObject\MockObject;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Extensions\ServiceProvider;
 use Psr\Container\ContainerInterface;
 use Glueful\Routing\Router;
@@ -175,12 +176,12 @@ class TestServiceProvider extends ServiceProvider // phpcs:ignore PSR1.Classes.C
         return [];
     }
 
-    public function register(): void
+    public function register(ApplicationContext $context): void
     {
         // Empty implementation for testing
     }
 
-    public function boot(): void
+    public function boot(ApplicationContext $context): void
     {
         // Empty implementation for testing
     }

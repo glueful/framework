@@ -2,6 +2,7 @@
 
 namespace Glueful\Tasks;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Cache\CacheFactory;
 use Glueful\Cache\CacheStore;
 
@@ -18,16 +19,18 @@ class CacheMaintenanceTask
 
     /** @var CacheStore<mixed> */
     private CacheStore $cache;
+    private ?ApplicationContext $context;
 
-    public function __construct()
+    public function __construct(?ApplicationContext $context = null)
     {
-        $this->cache = CacheFactory::create();
+        $this->context = $context;
+        $this->cache = CacheFactory::create('', $this->context);
     }
 
     public function clearExpiredKeys(): void
     {
         try {
-            $cacheDir = base_path('storage/cache');
+            $cacheDir = $this->getBasePath('storage/cache');
 
             if (!is_dir($cacheDir)) {
                 return;
@@ -121,7 +124,7 @@ class CacheMaintenanceTask
     {
         // For file-based cache, we can reorganize files
         // For Redis/Memcached, this might involve compaction
-        $cacheDir = base_path('storage/cache');
+        $cacheDir = $this->getBasePath('storage/cache');
 
         if (!is_dir($cacheDir)) {
             return;
@@ -165,7 +168,7 @@ class CacheMaintenanceTask
     private function updateCacheStatistics(): void
     {
         // Update cache statistics file
-        $statsFile = base_path('storage/cache/stats.json');
+        $statsFile = $this->getBasePath('storage/cache/stats.json');
         $stats = [
             'last_maintenance' => time(),
             'keys_removed' => $this->stats['expired_keys_removed'],
@@ -216,7 +219,7 @@ class CacheMaintenanceTask
             $message .= "Errors:\n- " . implode("\n- ", $this->stats['errors']) . "\n";
         }
 
-        $logFile = base_path('storage/logs/cache-maintenance.log');
+        $logFile = $this->getBasePath('storage/logs/cache-maintenance.log');
         $logDir = dirname($logFile);
 
         if (!is_dir($logDir)) {
@@ -236,6 +239,20 @@ class CacheMaintenanceTask
         $i = floor(log($bytes, 1024));
 
         return round($bytes / (1024 ** $i), 2) . ' ' . $units[$i];
+    }
+
+    private function getBasePath(string $path = ''): string
+    {
+        if ($this->context !== null) {
+            return base_path($this->context, $path);
+        }
+
+        $root = getcwd() ?: '.';
+        if ($path === '') {
+            return $root;
+        }
+
+        return rtrim($root, '/') . '/' . ltrim($path, '/');
     }
 
     /**

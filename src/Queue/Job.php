@@ -4,6 +4,7 @@ namespace Glueful\Queue;
 
 use Glueful\Queue\Contracts\JobInterface;
 use Glueful\Queue\Contracts\QueueDriverInterface;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Helpers\Utils;
 use Glueful\Exceptions\BusinessLogicException;
 use Glueful\Exceptions\DatabaseException;
@@ -51,6 +52,7 @@ abstract class Job implements JobInterface
 
     /** @var QueueDriverInterface|null Queue driver instance */
     protected ?QueueDriverInterface $driver = null;
+    protected ?ApplicationContext $context = null;
 
     /** @var bool Whether job has been deleted */
     protected bool $deleted = false;
@@ -63,10 +65,11 @@ abstract class Job implements JobInterface
      *
      * @param array<string, mixed> $data Job data
      */
-    public function __construct(array $data = [])
+    public function __construct(array $data = [], ?ApplicationContext $context = null)
     {
         $this->payload = ['data' => $data];
         $this->uuid = Utils::generateNanoID();
+        $this->context = $context;
     }
 
     /**

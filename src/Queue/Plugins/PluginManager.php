@@ -2,6 +2,7 @@
 
 namespace Glueful\Queue\Plugins;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Queue\Events\EventDispatcher;
 use Glueful\Queue\Registry\DriverRegistry;
 
@@ -42,13 +43,15 @@ class PluginManager
 
     /** @var DriverRegistry|null Driver registry for plugin drivers */
     private ?DriverRegistry $driverRegistry = null;
+    private ?ApplicationContext $context;
 
     /**
      * Initialize plugin manager
      */
-    public function __construct()
+    public function __construct(?ApplicationContext $context = null)
     {
         $this->events = new EventDispatcher();
+        $this->context = $context;
         $this->loadPlugins();
     }
 
@@ -59,7 +62,7 @@ class PluginManager
      */
     public function loadPlugins(): void
     {
-        $basePath = base_path();
+        $basePath = $this->getBasePath();
         $pluginPaths = [
             $basePath . '/extensions/*/queue-plugin.php',
             $basePath . '/vendor/*/queue-plugins/*/plugin.php'
@@ -160,6 +163,18 @@ class PluginManager
                 error_log("Failed to register driver '{$driverConfig['name']}': " . $e->getMessage());
             }
         }
+    }
+
+    private function getBasePath(string $suffix = ''): string
+    {
+        if ($this->context !== null) {
+            return base_path($this->context, $suffix);
+        }
+
+        $root = rtrim(dirname(__DIR__, 3), DIRECTORY_SEPARATOR);
+        return $suffix !== ''
+            ? $root . DIRECTORY_SEPARATOR . ltrim($suffix, DIRECTORY_SEPARATOR)
+            : $root;
     }
 
     /**

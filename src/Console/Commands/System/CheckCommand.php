@@ -158,7 +158,7 @@ class CheckCommand extends BaseCommand
         ];
 
         $issues = [];
-        $baseDir = base_path();
+        $baseDir = base_path($this->getContext());
 
         foreach ($dirs as $dir => $requiredPerms) {
             $path = "$baseDir/$dir";
@@ -202,7 +202,7 @@ class CheckCommand extends BaseCommand
         $issues = [];
 
         // Check for .env file
-        $envPath = base_path('.env');
+        $envPath = base_path($this->getContext(), '.env');
         if (!file_exists($envPath)) {
             $issues[] = '.env file not found - copy .env.example';
         }
@@ -242,14 +242,14 @@ class CheckCommand extends BaseCommand
         }
 
         // Check for common security files
-        $publicEnv = base_path('public/.env');
+        $publicEnv = base_path($this->getContext(), 'public/.env');
         if (file_exists($publicEnv)) {
             $issues[] = '.env file in public directory (critical security risk)';
         }
 
         // Production-specific security checks
         if ($production === true) {
-            $publicIndex = base_path('public/index.php');
+            $publicIndex = base_path($this->getContext(), 'public/index.php');
             if (file_exists($publicIndex)) {
                 $content = file_get_contents($publicIndex);
                 if ($content !== false && strpos($content, 'error_reporting(E_ALL)') !== false) {

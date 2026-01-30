@@ -52,7 +52,11 @@ final class ExceptionProvider extends BaseServiceProvider
                     $debug = $appDebug === true || $appEnv === 'development';
                 }
 
-                return new Handler($logger, $debug);
+                $events = $c->has(\Glueful\Events\EventService::class)
+                    ? $c->get(\Glueful\Events\EventService::class)
+                    : null;
+
+                return new Handler($logger, $debug, $events instanceof \Glueful\Events\EventService ? $events : null);
             }
         );
 

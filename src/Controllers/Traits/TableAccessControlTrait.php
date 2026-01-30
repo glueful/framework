@@ -58,7 +58,7 @@ trait TableAccessControlTrait
     protected function getRestrictedTables(): array
     {
         // Allow configuration override
-        $configTables = config('resource.restricted_tables', []);
+        $configTables = config($this->getContext(), 'resource.restricted_tables', []);
 
         if (!empty($configTables)) {
             return $configTables;

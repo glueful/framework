@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Repository;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use Glueful\Repository\Interfaces\RepositoryInterface;
 
@@ -16,12 +17,14 @@ use Glueful\Repository\Interfaces\RepositoryInterface;
 class RepositoryFactory
 {
     private Connection $connection;
+    private ?ApplicationContext $context;
     /** @var array<string, RepositoryInterface> */
     private array $repositories = [];
 
-    public function __construct(?Connection $connection = null)
+    public function __construct(?Connection $connection = null, ?ApplicationContext $context = null)
     {
         $this->connection = $connection ?? new Connection();
+        $this->context = $context;
     }
 
     /**
@@ -39,8 +42,8 @@ class RepositoryFactory
 
         // Create repository based on resource name
         $repository = match ($resource) {
-            'users' => new UserRepository($this->connection),
-            default => new ResourceRepository($resource, $this->connection)
+            'users' => new UserRepository($this->connection, null, $this->context),
+            default => new ResourceRepository($resource, $this->connection, $this->context)
         };
 
         // Cache the repository instance
@@ -64,7 +67,7 @@ class RepositoryFactory
         }
 
         // Create repository instance
-        $repository = new $repositoryClass($this->connection);
+        $repository = new $repositoryClass($this->connection, $this->context);
 
         // Cache the repository instance
         $this->repositories[$repositoryClass] = $repository;

@@ -84,24 +84,11 @@ abstract class TestCase extends PHPUnitTestCase
 
     private function resetFrameworkState(): void
     {
-        // Clear framework globals
-        unset(
-            $GLOBALS['base_path'],
-            $GLOBALS['config_paths'],
-            $GLOBALS['container'],
-            $GLOBALS['framework_booting'],
-            $GLOBALS['framework_bootstrapped'],
-            $GLOBALS['configs_loaded'],
-            $GLOBALS['config_loader'],
-            $GLOBALS['lazy_initializer']
-        );
-
-        // Reset static caches in framework helper functions
-        if (function_exists('base_path')) {
-            base_path('__RESET__');
-        }
-        if (function_exists('config_path')) {
-            config_path('__RESET__');
+        // Reset context caches between tests
+        $context = $this->app?->getContext();
+        if ($context !== null) {
+            $context->clearConfigCache();
+            $context->resetRequestState();
         }
     }
 }

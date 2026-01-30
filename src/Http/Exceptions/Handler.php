@@ -24,7 +24,7 @@ use Glueful\Http\Exceptions\Domain\AuthenticationException;
 use Glueful\Http\Exceptions\Domain\AuthorizationException;
 use Glueful\Http\Exceptions\Domain\TokenExpiredException;
 use Glueful\Validation\ValidationException;
-use Glueful\Events\Event;
+use Glueful\Events\EventService;
 use Glueful\Events\Http\ExceptionEvent;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -147,7 +147,8 @@ class Handler implements ExceptionHandlerInterface
      */
     public function __construct(
         protected ?LoggerInterface $logger = null,
-        bool $debug = false
+        bool $debug = false,
+        private ?EventService $events = null
     ) {
         $this->debug = $debug || $this->detectDebugMode();
     }
@@ -189,7 +190,7 @@ class Handler implements ExceptionHandlerInterface
         // Dispatch exception event (only if request is available)
         if ($request !== null) {
             try {
-                Event::dispatch(new ExceptionEvent($request, $e));
+                $this->events?->dispatch(new ExceptionEvent($request, $e));
             } catch (Throwable) {
                 // Don't let event dispatch failures break error handling
             }

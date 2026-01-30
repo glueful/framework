@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Controllers;
 
-use Glueful\Auth\AuthBootstrap;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Auth\AuthenticationManager;
 use Glueful\Repository\RepositoryFactory;
 use Glueful\Helpers\DatabaseConnectionTrait;
@@ -79,24 +79,32 @@ abstract class BaseController
     protected RequestUserContext $userContext;
 
     /**
+     * @var ApplicationContext Application context instance
+     */
+    protected ApplicationContext $context;
+
+    /**
      * BaseController constructor
      *
+     * @param ApplicationContext $context Application context
      * @param RepositoryFactory|null $repositoryFactory Repository factory instance
      * @param AuthenticationManager|null $authManager Authentication manager
      * @param Request|null $request HTTP request
      * @param Serializer|null $serializer Serializer instance
      */
     public function __construct(
+        ApplicationContext $context,
         ?RepositoryFactory $repositoryFactory = null,
         ?AuthenticationManager $authManager = null,
         ?Request $request = null,
         ?Serializer $serializer = null
     ) {
+        $this->context = $context;
         // Initialize authentication system
-        $this->authManager = $authManager ?? AuthBootstrap::getManager();
+        $this->authManager = $authManager ?? container($this->context)->get(AuthenticationManager::class);
 
         // Initialize repository factory
-        $this->repositoryFactory = $repositoryFactory ?? new RepositoryFactory();
+        $this->repositoryFactory = $repositoryFactory ?? new RepositoryFactory(null, $this->context);
 
         // Initialize serializer
         $this->serializer = $serializer ?? (
@@ -107,7 +115,7 @@ abstract class BaseController
         \Glueful\Http\Response::setSerializer($this->serializer);
 
         // Set request - use provided request or get from container
-        $this->request = $request ?? container()->get(Request::class);
+        $this->request = $request ?? container($this->context)->get(Request::class);
 
         // Initialize request user context for cached authentication
         $this->userContext = RequestUserContext::getInstance()->initialize();
@@ -115,6 +123,11 @@ abstract class BaseController
         // Set current user and token from context (cached)
         $this->currentUser = $this->userContext->getUser();
         $this->currentToken = $this->userContext->getToken();
+    }
+
+    protected function getContext(): ApplicationContext
+    {
+        return $this->context;
     }
 
     /**

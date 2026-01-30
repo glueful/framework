@@ -2,6 +2,7 @@
 
 namespace Glueful\Performance;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
@@ -11,17 +12,19 @@ class MemoryManager
     private float $alertThreshold;
     private float $criticalThreshold;
     private LoggerInterface $logger;
+    private ?ApplicationContext $context;
 
     /**
      * Initialize the Memory Manager
      *
      * @param LoggerInterface|null $logger Optional logger instance, uses NullLogger if not provided
      */
-    public function __construct(?LoggerInterface $logger = null)
+    public function __construct(?LoggerInterface $logger = null, ?ApplicationContext $context = null)
     {
+        $this->context = $context;
         $this->memoryLimit = $this->parseMemoryLimit(ini_get('memory_limit'));
-        $this->alertThreshold = config('app.performance.memory.alert_threshold', 0.8);
-        $this->criticalThreshold = config('app.performance.memory.critical_threshold', 0.9);
+        $this->alertThreshold = (float) $this->getConfig('app.performance.memory.alert_threshold', 0.8);
+        $this->criticalThreshold = (float) $this->getConfig('app.performance.memory.critical_threshold', 0.9);
         $this->logger = $logger ?? new NullLogger();
     }
 
@@ -190,6 +193,15 @@ class MemoryManager
         $bytes /= pow(1024, $pow);
 
         return round($bytes, $precision) . ' ' . $units[$pow];
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 
     /**

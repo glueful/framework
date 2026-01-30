@@ -1,6 +1,9 @@
 # Extensions + New Container Integration
 
-Status: Draft
+Status: Draft (proposal only; not implemented)
+
+Note: Current runtime supports only `Glueful\Extensions\ServiceProvider::services()` for extension DI.
+`defs()` and DSL-based registration are proposed in this document and are not available yet.
 
 This plan describes how extensions define services and runtime hooks with the new PSR‑11 container. It keeps DX high while avoiding Symfony‑specific features (parameters, compiler passes, runtime mutation).
 
@@ -13,11 +16,11 @@ This plan describes how extensions define services and runtime hooks with the ne
 
 ## Overview
 
-Extensions consist of two complementary parts:
+Extensions consist of two complementary parts (proposed):
 
 1) DI registration (services) — compile‑time
 - Provide service definitions to the container before it is created/compiled.
-- Two supported ways:
+- Proposed ways (not implemented yet):
   - Strongly typed: `defs(): array` returning DefinitionInterface objects
   - DSL: `services(): array` — a small declarative map we translate into definitions
 
@@ -25,6 +28,7 @@ Extensions consist of two complementary parts:
 - `register()` and `boot()` for routes, migrations, config merging, static asset mounts, console commands.
 
 Both live in a single `Glueful\Extensions\ServiceProvider` subclass for a convenience, static (services/defs) + instance (register/boot) model.
+In current runtime, only `services()` exists.
 
 ## Option A: Strongly‑Typed Definitions (Recommended)
 
@@ -182,4 +186,3 @@ In strongly‑typed defs (Option A), call `$this->tag('service.id', 'lazy.backgr
 - Existing extensions that returned Symfony DI structures should be refactored to either `defs()` or `services()`.
 - Replace `%param%` with `config()`‑backed values, and `@service` references remain valid in DSL.
 - Avoid closures in factories for compiled (production) builds; use `Class::method` or `['@id', 'method']`.
-

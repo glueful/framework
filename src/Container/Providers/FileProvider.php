@@ -18,7 +18,7 @@ final class FileProvider extends BaseServiceProvider
         $defs[\Glueful\Services\FileFinder::class] = new FactoryDefinition(
             \Glueful\Services\FileFinder::class,
             function (\Psr\Container\ContainerInterface $c) {
-                $cfg = function_exists('config') ? (array) config('filesystem.file_finder', []) : [];
+                $cfg = function_exists('config') ? (array) config($this->context, 'filesystem.file_finder', []) : [];
                 return new \Glueful\Services\FileFinder(
                     $c->get('logger'),
                     $cfg

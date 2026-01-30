@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace Glueful\Api\Webhooks\Jobs;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Api\Webhooks\WebhookDelivery;
 use Glueful\Api\Webhooks\WebhookSignature;
 use Glueful\Api\Webhooks\WebhookSubscription;
-use Glueful\Events\Event;
+use Glueful\Events\EventService;
 use Glueful\Events\Webhook\WebhookDeliveredEvent;
 use Glueful\Events\Webhook\WebhookFailedEvent;
 use Glueful\Http\Client;
@@ -25,6 +26,19 @@ use Glueful\Queue\Job;
  */
 class DeliverWebhookJob extends Job
 {
+    private const IPV6_BLOCKED_CIDRS = [
+        '::/128',          // unspecified
+        '::1/128',         // loopback
+        'fe80::/10',       // link-local
+        'fc00::/7',        // unique-local
+        'fec0::/10',       // deprecated site-local
+        '2001:db8::/32',   // documentation
+        '2001::/32',       // Teredo
+        '2002::/16',       // 6to4
+        '2001:10::/28',    // ORCHID
+        '2001:20::/28',    // ORCHIDv2
+        '100::/64',        // discard-only
+    ];
     /** @var string|null Queue name for webhook deliveries */
     protected ?string $queue = 'webhooks';
 
@@ -33,6 +47,15 @@ class DeliverWebhookJob extends Job
 
     /** @var int Request timeout in seconds */
     private const TIMEOUT = 30;
+
+    /** @var array<string, string> Resolved IP addresses for DNS rebinding protection */
+    private array $resolvedIps = [];
+
+    public function __construct(array $data = [], ?ApplicationContext $context = null)
+    {
+        parent::__construct($data);
+        $this->context = $context;
+    }
 
     /**
      * Execute the webhook delivery
@@ -44,14 +67,31 @@ class DeliverWebhookJob extends Job
             return;
         }
 
-        $delivery = WebhookDelivery::find($deliveryId);
-        if ($delivery === null) {
+        if ($this->context === null) {
+            return;
+        }
+
+        $delivery = WebhookDelivery::query($this->context)->find($deliveryId);
+        if (!$delivery instanceof WebhookDelivery) {
             return;
         }
 
         $subscription = $this->getSubscription($delivery);
         if ($subscription === null || !$subscription->is_active) {
             $delivery->markFailed(0, 'Subscription disabled or not found');
+            return;
+        }
+
+        $urlError = $this->validateWebhookUrl($subscription->url);
+        if ($urlError !== null) {
+            $delivery->markFailed(0, $urlError);
+            $this->dispatchEvent(new WebhookFailedEvent(
+                $subscription->url,
+                $delivery->payload,
+                0,
+                $urlError,
+                0.0
+            ));
             return;
         }
 
@@ -66,7 +106,7 @@ class DeliverWebhookJob extends Job
 
             if ($statusCode >= 200 && $statusCode < 300) {
                 $delivery->markDelivered($statusCode, $body);
-                Event::dispatch(new WebhookDeliveredEvent(
+                $this->dispatchEvent(new WebhookDeliveredEvent(
                     $subscription->url,
                     $delivery->payload,
                     $statusCode,
@@ -126,31 +166,51 @@ class DeliverWebhookJob extends Job
 
     /**
      * Create HTTP client for webhook delivery
+     *
+     * Uses resolved IPs from validation to prevent DNS rebinding attacks.
      */
     private function createClient(): Client
     {
         $timeout = $this->getConfigTimeout();
 
+        // Build resolve map for DNS rebinding protection
+        $resolve = [];
+        foreach ($this->resolvedIps as $host => $ip) {
+            $resolve[$host] = $ip;
+        }
+
+        $options = [
+            'timeout' => $timeout,
+            'max_redirects' => 0,
+        ];
+
+        // Add DNS pinning if we have resolved IPs
+        if ($resolve !== []) {
+            $options['resolve'] = $resolve;
+        }
+
         // Get the HTTP client from the container if available
-        if (function_exists('app') && app()->has(Client::class)) {
-            $client = app(Client::class);
-            return $client->createScopedClient([
-                'timeout' => $timeout,
-                'max_redirects' => 0,
-            ]);
+        if ($this->context !== null) {
+            $container = container($this->context);
+            if ($container->has(Client::class)) {
+                /** @var Client $client */
+                $client = $container->get(Client::class);
+                return $client->createScopedClient($options);
+            }
         }
 
         // Create a new client instance using Symfony HttpClient
-        $httpClient = \Symfony\Component\HttpClient\HttpClient::create([
-            'timeout' => $timeout,
-            'max_redirects' => 0,
-        ]);
+        $httpClient = \Symfony\Component\HttpClient\HttpClient::create($options);
 
-        $logger = function_exists('app') && app()->has(\Psr\Log\LoggerInterface::class)
-            ? app(\Psr\Log\LoggerInterface::class)
-            : new \Psr\Log\NullLogger();
+        $logger = new \Psr\Log\NullLogger();
+        if ($this->context !== null) {
+            $container = container($this->context);
+            if ($container->has(\Psr\Log\LoggerInterface::class)) {
+                $logger = $container->get(\Psr\Log\LoggerInterface::class);
+            }
+        }
 
-        return new Client($httpClient, $logger);
+        return new Client($httpClient, $logger, $this->context);
     }
 
     /**
@@ -168,7 +228,7 @@ class DeliverWebhookJob extends Job
         if ($delivery->attempts >= $maxAttempts) {
             // All retries exhausted
             $delivery->markFailed($statusCode, $body);
-            Event::dispatch(new WebhookFailedEvent(
+            $this->dispatchEvent(new WebhookFailedEvent(
                 $url,
                 $delivery->payload,
                 $statusCode,
@@ -193,8 +253,12 @@ class DeliverWebhookJob extends Job
     {
         $deliveryId = $this->getData()['delivery_id'] ?? null;
         if ($deliveryId !== null) {
-            $delivery = WebhookDelivery::find($deliveryId);
-            if ($delivery !== null) {
+            if ($this->context === null) {
+                return;
+            }
+
+            $delivery = WebhookDelivery::query($this->context)->find($deliveryId);
+            if ($delivery instanceof WebhookDelivery) {
                 $delivery->markFailed(0, 'Job failed: ' . $exception->getMessage());
             }
         }
@@ -202,13 +266,26 @@ class DeliverWebhookJob extends Job
         parent::failed($exception);
     }
 
+    private function dispatchEvent(object $event): void
+    {
+        if ($this->context === null) {
+            return;
+        }
+
+        try {
+            app($this->context, EventService::class)->dispatch($event);
+        } catch (\Throwable) {
+            // best-effort only
+        }
+    }
+
     /**
      * Get maximum number of delivery attempts
      */
     public function getMaxAttempts(): int
     {
-        if (function_exists('config')) {
-            $config = (array) config('api.webhooks.retry', []);
+        if (function_exists('config') && $this->context !== null) {
+            $config = (array) config($this->context, 'api.webhooks.retry', []);
             return (int) ($config['max_attempts'] ?? 5);
         }
 
@@ -216,12 +293,184 @@ class DeliverWebhookJob extends Job
     }
 
     /**
+     * Validate webhook URL for SSRF protection
+     *
+     * Validates the URL scheme, host, and all resolved IP addresses to prevent
+     * Server-Side Request Forgery attacks. Stores resolved IPs for DNS rebinding protection.
+     */
+    private function validateWebhookUrl(string $url): ?string
+    {
+        $parts = parse_url($url);
+        if (!is_array($parts)) {
+            return 'Invalid URL format';
+        }
+
+        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+        if ($scheme === '') {
+            return 'Webhook URL must include a scheme';
+        }
+
+        if (
+            function_exists('config')
+            && $this->context !== null
+            && (bool) config($this->context, 'api.webhooks.require_https', false)
+        ) {
+            if ($scheme !== 'https') {
+                return 'Webhook URL must use HTTPS';
+            }
+        } elseif (!in_array($scheme, ['http', 'https'], true)) {
+            return 'Webhook URL must use http or https';
+        }
+
+        $host = $parts['host'] ?? '';
+        if ($host === '') {
+            return 'Webhook URL must include a host';
+        }
+
+        $lowerHost = strtolower($host);
+        if ($lowerHost === 'localhost' || str_ends_with($lowerHost, '.localhost')) {
+            return 'Webhook URL host is not allowed';
+        }
+
+        // Direct IP address in URL
+        if (filter_var($host, FILTER_VALIDATE_IP)) {
+            $ipError = $this->validateIpAddress($host);
+            if ($ipError !== null) {
+                return $ipError;
+            }
+            // Store the IP for DNS rebinding protection
+            $this->resolvedIps[$host] = $host;
+            return null;
+        }
+
+        // Resolve hostname to IP addresses
+        $ips = $this->resolveHostname($host);
+        if ($ips === []) {
+            return 'Webhook URL host could not be resolved';
+        }
+
+        // Validate all resolved IPs
+        foreach ($ips as $ip) {
+            $ipError = $this->validateIpAddress($ip);
+            if ($ipError !== null) {
+                return $ipError;
+            }
+        }
+
+        // Store first valid IP for DNS rebinding protection
+        $this->resolvedIps[$host] = $ips[0];
+
+        return null;
+    }
+
+    /**
+     * Resolve hostname to IP addresses (both IPv4 and IPv6)
+     *
+     * @return array<string>
+     */
+    private function resolveHostname(string $host): array
+    {
+        $ips = @gethostbynamel($host) ?: [];
+
+        $records = @dns_get_record($host, DNS_AAAA);
+        if (is_array($records)) {
+            foreach ($records as $record) {
+                if (isset($record['ipv6'])) {
+                    $ips[] = $record['ipv6'];
+                }
+            }
+        }
+
+        return array_values(array_unique($ips));
+    }
+
+    /**
+     * Validate an IP address against SSRF blocklists
+     *
+     * Blocks private ranges, reserved ranges, loopback, link-local,
+     * unique-local (RFC4193), and documentation addresses (RFC3849).
+     */
+    private function validateIpAddress(string $ip): ?string
+    {
+        // IPv4 validation
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                return 'Webhook URL host is not allowed';
+            }
+            return null;
+        }
+
+        // IPv6 validation
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            $lowerIp = strtolower($ip);
+
+            // Strip zone ID (e.g., fe80::1%eth0 -> fe80::1)
+            $zonePos = strpos($lowerIp, '%');
+            if ($zonePos !== false) {
+                $lowerIp = substr($lowerIp, 0, $zonePos);
+            }
+
+            // Check IPv4-mapped IPv6 addresses (::ffff:x.x.x.x)
+            if (str_starts_with($lowerIp, '::ffff:')) {
+                $ipv4 = substr($lowerIp, 7);
+                if (
+                    !filter_var(
+                        $ipv4,
+                        FILTER_VALIDATE_IP,
+                        FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+                    )
+                ) {
+                    return 'Webhook URL host is not allowed';
+                }
+                return null;
+            }
+
+            foreach (self::IPV6_BLOCKED_CIDRS as $cidr) {
+                if ($this->ipInCidr($lowerIp, $cidr)) {
+                    return 'Webhook URL host is not allowed';
+                }
+            }
+
+            return null;
+        }
+
+        return 'Invalid IP address format';
+    }
+
+    private function ipInCidr(string $ip, string $cidr): bool
+    {
+        $packed = inet_pton($ip);
+        if ($packed === false) {
+            return false;
+        }
+
+        [$subnet, $bits] = explode('/', $cidr, 2);
+        $bits = (int) $bits;
+        $subnetPacked = inet_pton($subnet);
+        if ($subnetPacked === false) {
+            return false;
+        }
+
+        $maskBytes = '';
+        $fullBytes = intdiv($bits, 8);
+        $remainingBits = $bits % 8;
+
+        $maskBytes .= str_repeat("\xff", $fullBytes);
+        if ($remainingBits > 0) {
+            $maskBytes .= chr(0xff << (8 - $remainingBits));
+        }
+        $maskBytes = str_pad($maskBytes, strlen($packed), "\x00");
+
+        return ($packed & $maskBytes) === ($subnetPacked & $maskBytes);
+    }
+
+    /**
      * Get request timeout from config
      */
     private function getConfigTimeout(): int
     {
-        if (function_exists('config')) {
-            return (int) config('api.webhooks.timeout', self::TIMEOUT);
+        if (function_exists('config') && $this->context !== null) {
+            return (int) config($this->context, 'api.webhooks.timeout', self::TIMEOUT);
         }
 
         return self::TIMEOUT;
@@ -232,8 +481,8 @@ class DeliverWebhookJob extends Job
      */
     private function getUserAgent(): string
     {
-        if (function_exists('config')) {
-            return (string) config('api.webhooks.user_agent', 'Glueful-Webhooks/1.0');
+        if (function_exists('config') && $this->context !== null) {
+            return (string) config($this->context, 'api.webhooks.user_agent', 'Glueful-Webhooks/1.0');
         }
 
         return 'Glueful-Webhooks/1.0';

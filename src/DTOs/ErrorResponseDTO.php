@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Glueful\DTOs;
 
+use Glueful\Bootstrap\ApplicationContext;
+
 /**
  * Error Response DTO
  *
@@ -22,7 +24,7 @@ class ErrorResponseDTO
     public ?array $details = null;
 
     /** @var array<string, mixed>|null */
-    public ?array $context = null;
+    public ?array $errorContext = null;
 
     /** @var array<string, mixed>|null */
     public ?array $validation = null;
@@ -42,30 +44,37 @@ class ErrorResponseDTO
     public ?string $ipAddress = null;
     public \DateTime $timestamp;
     public ?\Throwable $originalException = null;
+    private ?ApplicationContext $context = null;
 
     public function __construct(
         string $error,
         string $message,
         int $code = 500,
-        ?string $type = null
+        ?string $type = null,
+        ?ApplicationContext $context = null
     ) {
         $this->error = $error;
         $this->message = $message;
         $this->code = $code;
         $this->type = $type;
         $this->timestamp = new \DateTime();
+        $this->context = $context;
     }
 
     /**
      * Create from exception
      */
-    public static function fromException(\Throwable $exception, bool $includeTrace = false): self
-    {
+    public static function fromException(
+        \Throwable $exception,
+        bool $includeTrace = false,
+        ?ApplicationContext $context = null
+    ): self {
         $error = new self(
             $exception::class,
             $exception->getMessage(),
             $exception->getCode() !== 0 ? $exception->getCode() : 500,
-            'exception'
+            'exception',
+            $context
         );
 
         $error->originalException = $exception;
@@ -93,13 +102,17 @@ class ErrorResponseDTO
      *
      * @param array<string, mixed> $errors
      */
-    public static function createValidationError(array $errors, string $message = 'Validation failed'): self
-    {
+    public static function createValidationError(
+        array $errors,
+        string $message = 'Validation failed',
+        ?ApplicationContext $context = null
+    ): self {
         $error = new self(
             'ValidationError',
             $message,
             422,
-            'validation'
+            'validation',
+            $context
         );
 
         $error->validation = $errors;
@@ -109,34 +122,43 @@ class ErrorResponseDTO
     /**
      * Create authentication error
      */
-    public static function authentication(string $message = 'Authentication required'): self
-    {
+    public static function authentication(
+        string $message = 'Authentication required',
+        ?ApplicationContext $context = null
+    ): self {
         return new self(
             'AuthenticationError',
             $message,
             401,
-            'authentication'
+            'authentication',
+            $context
         );
     }
 
     /**
      * Create authorization error
      */
-    public static function authorization(string $message = 'Access denied'): self
-    {
+    public static function authorization(
+        string $message = 'Access denied',
+        ?ApplicationContext $context = null
+    ): self {
         return new self(
             'AuthorizationError',
             $message,
             403,
-            'authorization'
+            'authorization',
+            $context
         );
     }
 
     /**
      * Create not found error
      */
-    public static function notFound(string $resource = 'Resource', ?string $identifier = null): self
-    {
+    public static function notFound(
+        string $resource = 'Resource',
+        ?string $identifier = null,
+        ?ApplicationContext $context = null
+    ): self {
         $message = $identifier !== null
             ? "{$resource} with identifier '{$identifier}' not found"
             : "{$resource} not found";
@@ -145,20 +167,22 @@ class ErrorResponseDTO
             'NotFoundError',
             $message,
             404,
-            'not_found'
+            'not_found',
+            $context
         );
     }
 
     /**
      * Create rate limit error
      */
-    public static function rateLimit(?int $retryAfter = null): self
+    public static function rateLimit(?int $retryAfter = null, ?ApplicationContext $context = null): self
     {
         $error = new self(
             'RateLimitError',
             'Rate limit exceeded',
             429,
-            'rate_limit'
+            'rate_limit',
+            $context
         );
 
         if ($retryAfter !== null) {
@@ -171,13 +195,16 @@ class ErrorResponseDTO
     /**
      * Create server error
      */
-    public static function server(string $message = 'Internal server error'): self
-    {
+    public static function server(
+        string $message = 'Internal server error',
+        ?ApplicationContext $context = null
+    ): self {
         return new self(
             'ServerError',
             $message,
             500,
-            'server'
+            'server',
+            $context
         );
     }
 
@@ -219,7 +246,7 @@ class ErrorResponseDTO
      */
     public function withContext(array $context): self
     {
-        $this->context = array_merge($this->context ?? [], $context);
+        $this->errorContext = array_merge($this->errorContext ?? [], $context);
         return $this;
     }
 
@@ -256,11 +283,20 @@ class ErrorResponseDTO
     public function getSafeMessage(): string
     {
         // In production, sanitize certain error messages
-        if ($this->isServerError() && !app()->isDebugMode()) {
+        if ($this->isServerError() && !$this->isDebugMode()) {
             return 'An internal error occurred. Please try again later.';
         }
 
         return $this->message;
+    }
+
+    private function isDebugMode(): bool
+    {
+        if ($this->context === null) {
+            return false;
+        }
+
+        return (bool) config($this->context, 'app.debug', false);
     }
 
     /**

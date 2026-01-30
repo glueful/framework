@@ -64,9 +64,9 @@ class StatusCommand extends BaseCommand
         $headers = ['Configuration', 'Value'];
         $rows = [
             ['Status', '<info>✓ Connected</info>'],
-            ['Driver', config('cache.default', 'Unknown')],
-            ['Prefix', config('cache.prefix', 'None')],
-            ['Default TTL', config('cache.ttl', '3600') . ' seconds'],
+            ['Driver', config($this->getContext(), 'cache.default', 'Unknown')],
+            ['Prefix', config($this->getContext(), 'cache.prefix', 'None')],
+            ['Default TTL', config($this->getContext(), 'cache.ttl', '3600') . ' seconds'],
         ];
 
         $this->table($headers, $rows);
@@ -124,7 +124,7 @@ class StatusCommand extends BaseCommand
         $headers = ['Configuration', 'Value'];
         $rows = [
             ['Status', '<error>✗ Disconnected</error>'],
-            ['Driver', config('cache.default', 'Unknown')],
+            ['Driver', config($this->getContext(), 'cache.default', 'Unknown')],
             ['Error', $e->getMessage()],
         ];
 

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Glueful\Support\Documentation;
 
+use Glueful\Bootstrap\ApplicationContext;
+
 /**
  * Documentation UI Generator
  *
@@ -15,6 +17,12 @@ namespace Glueful\Support\Documentation;
 class DocumentationUIGenerator
 {
     private const SUPPORTED_UIS = ['scalar', 'swagger-ui', 'redoc'];
+    private ?ApplicationContext $context;
+
+    public function __construct(?ApplicationContext $context = null)
+    {
+        $this->context = $context;
+    }
 
     /**
      * Generate documentation UI HTML file
@@ -51,8 +59,8 @@ class DocumentationUIGenerator
      */
     private function getDefaultOutputPath(): string
     {
-        $outputDir = config('documentation.paths.output', base_path('docs'));
-        $filename = config('documentation.ui.filename', 'index.html');
+        $outputDir = $this->getConfig('documentation.paths.output', $this->getBasePath('docs'));
+        $filename = $this->getConfig('documentation.ui.filename', 'index.html');
 
         return rtrim($outputDir, '/') . '/' . $filename;
     }
@@ -75,8 +83,8 @@ class DocumentationUIGenerator
      */
     private function generateScalarHtml(): string
     {
-        $title = $this->escapeHtml(config('documentation.ui.title', 'API Documentation'));
-        $config = config('documentation.ui.scalar', []);
+        $title = $this->escapeHtml($this->getConfig('documentation.ui.title', 'API Documentation'));
+        $config = $this->getConfig('documentation.ui.scalar', []);
 
         $theme = is_string($config['theme'] ?? null) ? $config['theme'] : 'purple';
         $darkMode = (bool) ($config['dark_mode'] ?? true) ? 'true' : 'false';
@@ -126,8 +134,8 @@ HTML;
      */
     private function generateSwaggerUIHtml(): string
     {
-        $title = $this->escapeHtml(config('documentation.ui.title', 'API Documentation'));
-        $config = config('documentation.ui.swagger_ui', []);
+        $title = $this->escapeHtml($this->getConfig('documentation.ui.title', 'API Documentation'));
+        $config = $this->getConfig('documentation.ui.swagger_ui', []);
 
         $deepLinking = (bool) ($config['deep_linking'] ?? true) ? 'true' : 'false';
         $displayRequestDuration = (bool) ($config['display_request_duration'] ?? true) ? 'true' : 'false';
@@ -179,8 +187,8 @@ HTML;
      */
     private function generateRedocHtml(): string
     {
-        $title = $this->escapeHtml(config('documentation.ui.title', 'API Documentation'));
-        $config = config('documentation.ui.redoc', []);
+        $title = $this->escapeHtml($this->getConfig('documentation.ui.title', 'API Documentation'));
+        $config = $this->getConfig('documentation.ui.redoc', []);
 
         $expandResponses = is_string($config['expand_responses'] ?? null) ? $config['expand_responses'] : '200,201';
         $hideDownload = (bool) ($config['hide_download_button'] ?? false) ? 'true' : 'false';
@@ -216,6 +224,29 @@ HTML;
     private function escapeHtml(string $value): string
     {
         return htmlspecialchars($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
+    }
+
+    private function getBasePath(string $path = ''): string
+    {
+        if ($this->context !== null) {
+            return base_path($this->context, $path);
+        }
+
+        $root = getcwd() ?: '.';
+        if ($path === '') {
+            return $root;
+        }
+
+        return rtrim($root, '/') . '/' . ltrim($path, '/');
     }
 
     /**

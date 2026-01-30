@@ -8,6 +8,7 @@ use Glueful\DTOs\{UsernameDTO, EmailDTO};
 use Glueful\Validation\Validator;
 use Glueful\Database\Connection;
 use Glueful\Exceptions\DatabaseException;
+use Glueful\Bootstrap\ApplicationContext;
 
 /**
  * User Repository
@@ -41,14 +42,17 @@ class UserRepository extends BaseRepository
      * @param Connection|null $connection Database connection instance
      * @param Validator|null $validator Validator instance
      */
-    public function __construct(?Connection $connection = null, ?Validator $validator = null)
-    {
+    public function __construct(
+        ?Connection $connection = null,
+        ?Validator $validator = null,
+        ?ApplicationContext $context = null
+    ) {
         // Configure repository settings before calling parent
         $this->defaultFields = ['*'];
         $this->hasUpdatedAt = false; // users table doesn't have updated_at column
 
         // Call parent constructor to set up database connection
-        parent::__construct($connection);
+        parent::__construct($connection, $context);
 
         // Initialize validator with dependency injection or fallback
         $this->validator = $validator ?? $this->createValidatorInstance();
@@ -737,15 +741,18 @@ class UserRepository extends BaseRepository
     private function getSessionCacheManager(): \Glueful\Auth\SessionCacheManager
     {
         try {
-            return container()->get(\Glueful\Auth\SessionCacheManager::class);
+            if ($this->context === null) {
+                throw new \RuntimeException('Container unavailable without ApplicationContext.');
+            }
+            return container($this->context)->get(\Glueful\Auth\SessionCacheManager::class);
         } catch (\Exception) {
             // Fallback to direct instantiation if container fails
             // SessionCacheManager requires a CacheStore, so create one
-            $cacheStore = \Glueful\Helpers\CacheHelper::createCacheInstance();
+            $cacheStore = \Glueful\Helpers\CacheHelper::createCacheInstance($this->context);
             if ($cacheStore === null) {
                 throw new \RuntimeException('Unable to create cache instance for SessionCacheManager');
             }
-            return new \Glueful\Auth\SessionCacheManager($cacheStore);
+            return new \Glueful\Auth\SessionCacheManager($cacheStore, $this->context);
         }
     }
 

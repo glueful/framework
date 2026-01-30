@@ -19,7 +19,7 @@ abstract class BaseSecurityCommand extends BaseCommand
     public function __construct(?ContainerInterface $container = null)
     {
         parent::__construct();
-        $this->container = $container ?? container();
+        $this->container = $container ?? container($this->getContext());
     }
 
     /**

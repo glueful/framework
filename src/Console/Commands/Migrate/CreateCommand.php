@@ -91,7 +91,7 @@ class CreateCommand extends BaseCommand
     private function createMigration(string $migrationName): string
     {
         // Get migrations directory
-        $migrationsDir = base_path('database/migrations');
+        $migrationsDir = base_path($this->getContext(), 'database/migrations');
 
         // Get next migration number
         $nextNumber = $this->getNextMigrationNumber($migrationsDir);
@@ -243,7 +243,7 @@ PHP;
             'disks' => [
                 'local' => [
                     'driver' => 'local',
-                    'root' => base_path()
+                    'root' => base_path($this->getContext())
                 ]
             ]
         ], new PathGuard());

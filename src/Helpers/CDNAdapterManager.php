@@ -3,6 +3,7 @@
 namespace Glueful\Helpers;
 
 use Glueful\Cache\CDN\CDNAdapterInterface;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Extensions\ExtensionManager;
 
 /**
@@ -13,6 +14,12 @@ use Glueful\Extensions\ExtensionManager;
  */
 trait CDNAdapterManager
 {
+    private static ?ApplicationContext $context = null;
+
+    public static function setContext(?ApplicationContext $context): void
+    {
+        self::$context = $context;
+    }
     /**
      * Resolve a CDN adapter from available extensions
      *
@@ -93,9 +100,14 @@ trait CDNAdapterManager
      *
      * @return array The loaded extensions
      */
-    private static function getLoadedExtensions(): array
+    private static function getLoadedExtensions(?ApplicationContext $context = null): array
     {
-        $extensionManager = container()->get(ExtensionManager::class);
+        $resolvedContext = $context ?? self::$context;
+        if ($resolvedContext === null) {
+            return [];
+        }
+
+        $extensionManager = container($resolvedContext)->get(ExtensionManager::class);
         return $extensionManager->getLoadedExtensions();
     }
 }

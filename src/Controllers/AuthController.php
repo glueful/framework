@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace Glueful\Controllers;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Http\Response;
 use Glueful\Helpers\RequestHelper;
 use Glueful\Security\EmailVerification;
 use Glueful\Auth\AuthenticationService;
-use Glueful\Auth\AuthBootstrap;
 use Glueful\Exceptions\AuthenticationException;
 use Glueful\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
-use Glueful\Events\Event;
+use Glueful\Events\EventService;
 use Glueful\Events\Auth\LoginResponseBuildingEvent;
 use Glueful\Events\Auth\LoginResponseBuiltEvent;
 
@@ -48,19 +48,21 @@ class AuthController
 {
     private EmailVerification $verifier;
     private AuthenticationService $authService;
+    private ApplicationContext $context;
 
-    public function __construct()
+    public function __construct(ApplicationContext $context)
     {
+        $this->context = $context;
         $this->verifier = new EmailVerification();
         try {
-            $this->authService = container()->get(AuthenticationService::class);
+            $this->authService = container($this->context)->get(AuthenticationService::class);
         } catch (\Throwable) {
             // Fallback to direct construction (will self-resolve dependencies)
             $this->authService = new AuthenticationService();
         }
 
         // Initialize the authentication system
-        AuthBootstrap::initialize();
+        app($this->context, \Glueful\Auth\AuthBootstrap::class)->initialize();
     }
 
     /**
@@ -112,13 +114,10 @@ class AuthController
      * @throws \Glueful\Validation\ValidationException If request data is malformed
      * @throws \RuntimeException If authentication system initialization fails
      */
-    public function login()
+    public function login(SymfonyRequest $request)
     {
-        // Create request object for IP and user agent information
-        $request = SymfonyRequest::createFromGlobals();
-
         // Get credentials using the getPostData method from our Helper Request class
-        $credentials = RequestHelper::getRequestData();
+        $credentials = RequestHelper::getRequestData($request);
 
         $clientIp = $request->getClientIp();
         $userAgent = $request->headers->get('User-Agent');
@@ -169,8 +168,8 @@ class AuthController
         ];
         $user = $result['user'] ?? [];
         try {
-            Event::dispatch(new LoginResponseBuildingEvent($tokens, $user, $data));
-            Event::dispatch(new LoginResponseBuiltEvent($data));
+            app($this->context, EventService::class)->dispatch(new LoginResponseBuildingEvent($tokens, $user, $data));
+            app($this->context, EventService::class)->dispatch(new LoginResponseBuiltEvent($data));
         } catch (\Throwable $e) {
             // Do not fail login if event listeners throw
             error_log('Login response events failed: ' . $e->getMessage());
@@ -204,12 +203,9 @@ class AuthController
      * @throws \Glueful\Validation\ValidationException If no token provided in request
      * @throws \Glueful\Exceptions\AuthenticationException If logout operation fails
      */
-    public function logout()
+    public function logout(SymfonyRequest $request)
     {
-        // Convert globals to Symfony Request for compatibility with our new system
-        $request = SymfonyRequest::createFromGlobals();
-
-        $token = AuthenticationService::extractTokenFromRequest($request);
+        $token = $this->authService->extractTokenFromRequest($request, $this->context);
 
         if ($token === null) {
             throw ValidationException::forField('token', 'No token provided');
@@ -230,9 +226,9 @@ class AuthController
      *
      * @return mixed HTTP response
      */
-    public function verifyEmail()
+    public function verifyEmail(SymfonyRequest $request)
     {
-        $postData = RequestHelper::getRequestData();
+        $postData = RequestHelper::getRequestData($request);
         if (!isset($postData['email'])) {
             throw ValidationException::forField('email', 'Email address is required');
         }
@@ -259,9 +255,9 @@ class AuthController
      *
      * @return mixed HTTP response
      */
-    public function verifyOtp()
+    public function verifyOtp(SymfonyRequest $request)
     {
-        $postData = RequestHelper::getRequestData();
+        $postData = RequestHelper::getRequestData($request);
         if (!isset($postData['email']) || !isset($postData['otp'])) {
             throw ValidationException::forFields([
                 'email' => 'Email is required',
@@ -287,9 +283,9 @@ class AuthController
      *
      * @return mixed HTTP response
      */
-    public function resendOtp()
+    public function resendOtp(SymfonyRequest $request)
     {
-        $postData = RequestHelper::getRequestData();
+        $postData = RequestHelper::getRequestData($request);
         if (!isset($postData['email'])) {
             throw ValidationException::forField('email', 'Email address is required');
         }
@@ -319,11 +315,9 @@ class AuthController
      *
      * @return mixed HTTP response
      */
-    public function refreshPermissions()
+    public function refreshPermissions(SymfonyRequest $request)
     {
-        // Convert globals to Symfony Request for compatibility with our new system
-        $request = SymfonyRequest::createFromGlobals();
-        $token = AuthenticationService::extractTokenFromRequest($request);
+        $token = $this->authService->extractTokenFromRequest($request, $this->context);
 
         if ($token === null) {
             throw ValidationException::forField('token', 'No token provided');
@@ -332,7 +326,7 @@ class AuthController
         // Get session to extract user UUID via SessionStore
         try {
             /** @var \Glueful\Auth\Interfaces\SessionStoreInterface $store */
-            $store = container()->get(\Glueful\Auth\Interfaces\SessionStoreInterface::class);
+            $store = container($this->context)->get(\Glueful\Auth\Interfaces\SessionStoreInterface::class);
             $session = $store->getByAccessToken($token);
         } catch (\Throwable) {
             $session = null;
@@ -358,20 +352,17 @@ class AuthController
      *
      * @return mixed HTTP response
      */
-    public function validateToken()
+    public function validateToken(SymfonyRequest $request)
     {
-        // Convert globals to Symfony Request for compatibility with our new system
-        $request = SymfonyRequest::createFromGlobals();
-
         // Get token from request
-        $token = AuthenticationService::extractTokenFromRequest($request);
+        $token = $this->authService->extractTokenFromRequest($request, $this->context);
 
         if ($token === null) {
             throw ValidationException::forField('token', 'No token provided');
         }
 
         // Use our new authentication system to validate the token
-        $authManager = AuthBootstrap::getManager();
+        $authManager = app($this->context, \Glueful\Auth\AuthenticationManager::class);
         $userData = $authManager->authenticate($request);
 
         if ($userData === null) {
@@ -423,15 +414,24 @@ class AuthController
      * @throws \Glueful\Validation\ValidationException If email is missing or user not found
      * @throws \RuntimeException If email sending fails due to system issues
      */
-    public function forgotPassword()
+    public function forgotPassword(SymfonyRequest $request)
     {
-        $postData = RequestHelper::getRequestData();
+        $postData = RequestHelper::getRequestData($request);
         if (!isset($postData['email'])) {
             throw ValidationException::forField('email', 'Email address is required');
         }
 
         // Check if user exists before attempting password reset
         if (!$this->authService->userExists($postData['email'], 'email')) {
+            if (env('APP_ENV', 'production') !== 'production') {
+                error_log('Password reset requested for non-existent email: ' . $postData['email']);
+            }
+            if ((bool) config($this->context, 'security.auth.generic_error_responses', true)) {
+                return Response::success([
+                    'email' => $postData['email'],
+                    'expires_in' => EmailVerification::OTP_EXPIRY_MINUTES * 60
+                ], 'Password reset instructions have been sent to your email');
+            }
             throw ValidationException::forField('email', 'User not found with the provided email address');
         }
 
@@ -480,9 +480,9 @@ class AuthController
      * @throws \Glueful\Validation\ValidationException If email/password missing or user not found
      * @throws \Glueful\Exceptions\AuthenticationException If password update fails
      */
-    public function resetPassword()
+    public function resetPassword(SymfonyRequest $request)
     {
-        $postData = RequestHelper::getRequestData();
+        $postData = RequestHelper::getRequestData($request);
         if (!isset($postData['email']) || !isset($postData['password'])) {
             throw ValidationException::forFields([
                 'email' => 'Email is required',
@@ -492,6 +492,12 @@ class AuthController
 
         // Check if user exists before attempting password reset
         if (!$this->authService->userExists($postData['email'], 'email')) {
+            if (env('APP_ENV', 'production') !== 'production') {
+                error_log('Password reset attempted for non-existent email: ' . $postData['email']);
+            }
+            if ((bool) config($this->context, 'security.auth.generic_error_responses', true)) {
+                return Response::success(null, 'Password has been reset successfully');
+            }
             throw ValidationException::forField('email', 'User not found with the provided email address');
         }
 
@@ -553,9 +559,9 @@ class AuthController
      * @throws \Glueful\Validation\ValidationException If refresh token missing from request
      * @throws \Glueful\Exceptions\AuthenticationException If refresh token invalid or expired
      */
-    public function refreshToken()
+    public function refreshToken(SymfonyRequest $request)
     {
-        $postData = RequestHelper::getRequestData();
+        $postData = RequestHelper::getRequestData($request);
 
         if (!isset($postData['refresh_token'])) {
             throw ValidationException::forField('refresh_token', 'Refresh token is required');

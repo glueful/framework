@@ -19,10 +19,10 @@ final class DiagnoseCommand extends BaseCommand
 {
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $manager = container()->get(ExtensionManager::class);
+        $manager = container($this->getContext())->get(ExtensionManager::class);
 
         $loaded = $manager->getProviders();
-        $manifest = new PackageManifest();
+        $manifest = new PackageManifest($this->getContext());
         $composerProviders = $manifest->getGluefulProviders();
 
         $rows = [];

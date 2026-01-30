@@ -20,7 +20,9 @@ final class HttpClientProvider extends BaseServiceProvider
         $defs[\Symfony\Contracts\HttpClient\HttpClientInterface::class] = new FactoryDefinition(
             \Symfony\Contracts\HttpClient\HttpClientInterface::class,
             function () {
-                $cfg = function_exists('config') ? (array) config('http.default', []) : [];
+                $cfg = function_exists('config')
+                    ? (array) config($this->context, 'http.default', [])
+                    : [];
                 return \Symfony\Component\HttpClient\HttpClient::create([
                     'timeout' => $cfg['timeout'] ?? 30,
                     'max_duration' => $cfg['max_duration'] ?? 60,
@@ -47,7 +49,8 @@ final class HttpClientProvider extends BaseServiceProvider
             \Glueful\Http\Client::class,
             fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Http\Client(
                 $c->get(\Symfony\Contracts\HttpClient\HttpClientInterface::class),
-                $c->get('logger')
+                $c->get('logger'),
+                $this->context
             )
         );
 
@@ -62,7 +65,8 @@ final class HttpClientProvider extends BaseServiceProvider
             \Glueful\Http\Services\WebhookDeliveryService::class,
             fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Http\Services\WebhookDeliveryService(
                 $c->get(\Glueful\Http\Client::class),
-                $c->get('logger')
+                $c->get('logger'),
+                $c->get(\Glueful\Events\EventService::class)
             )
         );
 

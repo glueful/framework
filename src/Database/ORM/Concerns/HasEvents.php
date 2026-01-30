@@ -14,7 +14,7 @@ use Glueful\Database\ORM\Events\ModelSaved;
 use Glueful\Database\ORM\Events\ModelSaving;
 use Glueful\Database\ORM\Events\ModelUpdated;
 use Glueful\Database\ORM\Events\ModelUpdating;
-use Glueful\Events\Event;
+use Glueful\Events\EventService;
 
 /**
  * Has Events Trait
@@ -76,16 +76,27 @@ trait HasEvents
         // Create and dispatch the event
         $eventInstance = new $eventClass($this);
 
-        try {
-            Event::dispatch($eventInstance);
-        } catch (\LogicException) {
-            // Event facade not bootstrapped - skip event dispatch
-            // This allows models to work even if the event system isn't set up
-            return true;
+        $context = $this->getContext();
+
+        if ($context !== null) {
+            try {
+                app($context, EventService::class)->dispatch($eventInstance);
+            } catch (\Throwable) {
+                // best-effort only
+            }
         }
 
-        // Check if propagation was stopped
-        return !$eventInstance->isPropagationStopped();
+        if ($eventInstance->isPropagationStopped()) {
+            return false;
+        }
+
+        if (isset(static::$modelEventCallbacks[$event])) {
+            foreach (static::$modelEventCallbacks[$event] as $callback) {
+                $callback($this);
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -320,17 +331,7 @@ trait HasEvents
             return;
         }
 
-        try {
-            Event::listen($eventClass, function (ModelEvent $e) use ($callback): void {
-                // Only call callback for this specific model class
-                if ($e->getModel() instanceof static) {
-                    $callback($e->getModel());
-                }
-            });
-        } catch (\LogicException) {
-            // Event facade not bootstrapped - store for later
-            static::$modelEventCallbacks[$event][] = $callback;
-        }
+        static::$modelEventCallbacks[$event][] = $callback;
     }
 
     /**

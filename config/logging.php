@@ -1,5 +1,7 @@
 <?php
 
+$root = dirname(__DIR__);
+
 /**
  * Logging Configuration
  *
@@ -8,7 +10,6 @@
  * - Application logs: Business logic, user actions, custom events
  */
 
-declare(strict_types=1);
 
 return [
     // Framework-level logging configuration
@@ -58,7 +59,7 @@ return [
 
     // File paths and rotation settings
     'paths' => [
-        'log_directory' => env('LOG_FILE_PATH', base_path('storage/logs') . '/'),
+        'log_directory' => env('LOG_FILE_PATH', $root . '/storage/logs/'),
         'api_log_file' => env('API_LOG_FILE', 'api_debug_') . date('Y-m-d') . '.log',
     ],
 
@@ -95,31 +96,31 @@ return [
     'channels' => [
         'framework' => [
             'driver' => 'daily',
-            'path' => env('LOG_FILE_PATH', base_path('storage/logs') . '/') . 'framework.log',
+            'path' => env('LOG_FILE_PATH', $root . '/storage/logs/') . 'framework.log',
             'level' => env('FRAMEWORK_LOG_LEVEL', 'info'),
             'days' => env('LOG_ROTATION_DAYS', 30),
         ],
         'app' => [
             'driver' => 'daily',
-            'path' => env('LOG_FILE_PATH', base_path('storage/logs') . '/') . 'app.log',
+            'path' => env('LOG_FILE_PATH', $root . '/storage/logs/') . 'app.log',
             'level' => env('LOG_LEVEL', 'debug'),
             'days' => env('LOG_ROTATION_DAYS', 30),
         ],
         'api' => [
             'driver' => 'daily',
-            'path' => env('LOG_FILE_PATH', base_path('storage/logs') . '/') . 'api.log',
+            'path' => env('LOG_FILE_PATH', $root . '/storage/logs/') . 'api.log',
             'level' => env('LOG_LEVEL', 'debug'),
             'days' => env('LOG_ROTATION_DAYS', 30),
         ],
         'error' => [
             'driver' => 'daily',
-            'path' => env('LOG_FILE_PATH', base_path('storage/logs') . '/') . 'error.log',
+            'path' => env('LOG_FILE_PATH', $root . '/storage/logs/') . 'error.log',
             'level' => 'error',
             'days' => env('LOG_ROTATION_DAYS', 30),
         ],
         'debug' => [
             'driver' => 'daily',
-            'path' => env('LOG_FILE_PATH', base_path('storage/logs') . '/') . 'debug.log',
+            'path' => env('LOG_FILE_PATH', $root . '/storage/logs/') . 'debug.log',
             'level' => 'debug',
             'days' => env('LOG_ROTATION_DAYS', 30),
         ]

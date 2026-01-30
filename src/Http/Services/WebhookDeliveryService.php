@@ -7,7 +7,7 @@ namespace Glueful\Http\Services;
 use Glueful\Http\Client;
 use Glueful\Events\Webhook\WebhookDeliveredEvent;
 use Glueful\Events\Webhook\WebhookFailedEvent;
-use Glueful\Events\Event;
+use Glueful\Events\EventService;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -20,7 +20,8 @@ class WebhookDeliveryService
 {
     public function __construct(
         private Client $httpClient,
-        private LoggerInterface $logger
+        private LoggerInterface $logger,
+        private ?EventService $events = null
     ) {
     }
 
@@ -51,7 +52,7 @@ class WebhookDeliveryService
                     'payload_size' => strlen(json_encode($payload))
                 ]);
 
-                Event::dispatch(new WebhookDeliveredEvent(
+                $this->events?->dispatch(new WebhookDeliveredEvent(
                     $url,
                     $payload,
                     $response->getStatusCode(),
@@ -62,7 +63,7 @@ class WebhookDeliveryService
             } else {
                 $this->logWebhookFailure($url, $payload, $response->getStatusCode(), $duration);
 
-                Event::dispatch(new WebhookFailedEvent(
+                $this->events?->dispatch(new WebhookFailedEvent(
                     $url,
                     $payload,
                     $response->getStatusCode(),
@@ -77,7 +78,7 @@ class WebhookDeliveryService
 
             $this->logWebhookFailure($url, $payload, 0, $duration, $e->getMessage());
 
-            Event::dispatch(new WebhookFailedEvent(
+            $this->events?->dispatch(new WebhookFailedEvent(
                 $url,
                 $payload,
                 0,
@@ -145,14 +146,14 @@ class WebhookDeliveryService
                 ];
 
                 if ($success) {
-                    Event::dispatch(new WebhookDeliveredEvent(
+                    $this->events?->dispatch(new WebhookDeliveredEvent(
                         $webhook['url'],
                         $webhook['payload'],
                         $statusCode,
                         $duration
                     ));
                 } else {
-                    Event::dispatch(new WebhookFailedEvent(
+                    $this->events?->dispatch(new WebhookFailedEvent(
                         $webhook['url'],
                         $webhook['payload'],
                         $statusCode,
@@ -167,7 +168,7 @@ class WebhookDeliveryService
                     'duration_ms' => round((microtime(true) - $startTime) * 1000, 2)
                 ];
 
-                Event::dispatch(new WebhookFailedEvent(
+                $this->events?->dispatch(new WebhookFailedEvent(
                     $webhook['url'],
                     $webhook['payload'],
                     0,

@@ -95,12 +95,19 @@ class StatusCommand extends BaseCommand
         }
 
         $headers = ['Property', 'Value'];
+        $ctx = $this->getContext();
+        $mysqlHost = config($ctx, 'database.mysql.host', null);
+        $pgsqlHost = config($ctx, 'database.pgsql.host', 'Unknown');
+        $mysqlDb = config($ctx, 'database.mysql.db', null);
+        $pgsqlDb = config($ctx, 'database.pgsql.db', 'Unknown');
+        $mysqlUser = config($ctx, 'database.mysql.user', null);
+        $pgsqlUser = config($ctx, 'database.pgsql.user', 'Unknown');
         $rows = [
             ['Status', $status],
             ['Driver', $this->connection->getDriverName()],
-            ['Host', config('database.mysql.host', config('database.pgsql.host', 'Unknown'))],
-            ['Database', config('database.mysql.db', config('database.pgsql.db', 'Unknown'))],
-            ['User', config('database.mysql.user', config('database.pgsql.user', 'Unknown'))],
+            ['Host', $mysqlHost ?? $pgsqlHost],
+            ['Database', $mysqlDb ?? $pgsqlDb],
+            ['User', $mysqlUser ?? $pgsqlUser],
         ];
 
         $this->table($headers, $rows);
@@ -155,11 +162,12 @@ class StatusCommand extends BaseCommand
             }
 
             $headers = ['Metric', 'Value'];
+            $poolingEnabled = config($this->getContext(), 'database.pooling.enabled', false);
             $rows = [
                 ['Total Tables', $tableCount],
                 ['Database Engine', ucfirst($driverName)],
                 ['Database Size', $this->formatBytes($totalSize)],
-                ['Connection Pooling', (config('database.pooling.enabled', false) === true) ? 'Enabled' : 'Disabled'],
+                ['Connection Pooling', $poolingEnabled ? 'Enabled' : 'Disabled'],
             ];
 
             $this->table($headers, $rows);
@@ -229,14 +237,14 @@ class StatusCommand extends BaseCommand
         $this->line('');
         $this->info('Connection Pool Information');
 
-        $poolEnabled = config('database.pooling.enabled', false);
+        $poolEnabled = config($this->getContext(), 'database.pooling.enabled', false);
 
         if ($poolEnabled === true) {
             $headers = ['Property', 'Value'];
             $rows = [
                 ['Pool Enabled', '<info>Yes</info>'],
-                ['Min Connections', config('database.pooling.min_connections', 5)],
-                ['Max Connections', config('database.pooling.max_connections', 20)],
+                ['Min Connections', config($this->getContext(), 'database.pooling.min_connections', 5)],
+                ['Max Connections', config($this->getContext(), 'database.pooling.max_connections', 20)],
                 [
                     'Pool Manager',
                     (Connection::getPoolManager() !== null) ? '<info>Active</info>' : '<comment>Inactive</comment>'
@@ -259,9 +267,9 @@ class StatusCommand extends BaseCommand
         $rows = [
             ['Status', '<error>✗ Disconnected</error>'],
             ['Error', $e->getMessage()],
-            ['Driver', config('database.driver', 'Unknown')],
-            ['Host', config('database.host', 'Unknown')],
-            ['Database', config('database.database', 'Unknown')],
+            ['Driver', config($this->getContext(), 'database.driver', 'Unknown')],
+            ['Host', config($this->getContext(), 'database.host', 'Unknown')],
+            ['Database', config($this->getContext(), 'database.database', 'Unknown')],
         ];
 
         $this->table($headers, $rows);

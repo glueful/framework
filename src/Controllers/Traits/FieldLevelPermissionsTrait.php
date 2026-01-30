@@ -117,7 +117,7 @@ trait FieldLevelPermissionsTrait
     protected function getSensitiveFields(): array
     {
         // Allow configuration override
-        $configFields = config('resource.sensitive_fields', []);
+        $configFields = config($this->getContext(), 'resource.sensitive_fields', []);
 
         if (!empty($configFields)) {
             return $configFields;

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Helpers;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Security\RandomStringGenerator;
 use Glueful\Cache\CacheStore;
 use PDO;
@@ -21,6 +22,12 @@ class Utils
 {
     /** @var CacheStore<mixed>|null Cache driver instance */
     private static ?CacheStore $cache = null;
+    private static ?ApplicationContext $context = null;
+
+    public static function setContext(?ApplicationContext $context): void
+    {
+        self::$context = $context;
+    }
 
     /**
      * Get cache instance
@@ -29,7 +36,7 @@ class Utils
      */
     private static function getCache(): CacheStore
     {
-        return self::$cache ??= CacheHelper::createCacheInstance();
+        return self::$cache ??= CacheHelper::createCacheInstance(self::$context);
     }
     /**
      * @param array<string, mixed> $data
@@ -124,6 +131,10 @@ class Utils
      */
     public static function getSession(): ?array
     {
+        if (self::$context === null) {
+            return null;
+        }
+
         $token = $_SERVER['HTTP_AUTHORIZATION'] ?? null;
         if (!$token) {
             return null;
@@ -131,7 +142,7 @@ class Utils
 
         // Remove 'Bearer ' if present
         $token = str_replace('Bearer ', '', $token);
-        $sessionCacheManager = container()->get(SessionCacheManager::class);
+        $sessionCacheManager = container(self::$context)->get(SessionCacheManager::class);
         return $sessionCacheManager->getSession($token);
     }
 
@@ -156,11 +167,20 @@ class Utils
     {
 
         if ($length === null || $length === 0) {
-            $length = (int)config('security.nanoid_length', 12);
+            $length = (int) self::getConfig('security.nanoid_length', 12);
         }
         return RandomStringGenerator::generate(
             length: $length
         );
+    }
+
+    private static function getConfig(string $key, mixed $default = null): mixed
+    {
+        if (self::$context === null) {
+            return $default;
+        }
+
+        return config(self::$context, $key, $default);
     }
 
     /**

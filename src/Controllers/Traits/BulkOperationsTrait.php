@@ -304,7 +304,7 @@ trait BulkOperationsTrait
     protected function getBulkLimits(): array
     {
         // Allow configuration override
-        $configLimits = config('resource.bulk_limits', []);
+        $configLimits = config($this->getContext(), 'resource.bulk_limits', []);
 
         if (!empty($configLimits)) {
             return $configLimits;

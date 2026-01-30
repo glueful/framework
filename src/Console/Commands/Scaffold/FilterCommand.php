@@ -145,7 +145,7 @@ class FilterCommand extends BaseCommand
         $this->line('Example usage in controller:');
         $this->line("  public function index({$className} \$filter): Response");
         $this->line('  {');
-        $this->line("      \$items = Model::query()");
+        $this->line("      \$items = Model::query(\$this->getContext())");
         $this->line("          ->tap(fn(\$q) => \$filter->apply(\$q))");
         $this->line('          ->paginate();');
         $this->line('');
@@ -211,10 +211,10 @@ class FilterCommand extends BaseCommand
      */
     private function getDefaultFilterPath(): string
     {
-        $appPath = base_path('app/Filters');
-        $srcPath = base_path('src/Filters');
+        $appPath = base_path($this->getContext(), 'app/Filters');
+        $srcPath = base_path($this->getContext(), 'src/Filters');
 
-        if (is_dir(base_path('app'))) {
+        if (is_dir(base_path($this->getContext(), 'app'))) {
             return $appPath;
         }
 
@@ -357,7 +357,7 @@ PHP;
      */
     private function buildNamespace(string $name): string
     {
-        $baseNamespace = is_dir(base_path('app'))
+        $baseNamespace = is_dir(base_path($this->getContext(), 'app'))
             ? 'App\\Filters'
             : 'Glueful\\Filters';
 
@@ -413,7 +413,7 @@ Custom filter method:
 Controller usage:
   public function index(UserFilter \$filter): Response
   {
-      \$users = User::query()
+      \$users = User::query(\$this->getContext())
           ->tap(fn(\$q) => \$filter->apply(\$q))
           ->paginate();
 

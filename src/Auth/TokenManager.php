@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Glueful\Auth;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use Glueful\Helpers\Utils;
+use Glueful\Helpers\CacheHelper;
 use Glueful\Http\RequestContext;
 use Glueful\Auth\Interfaces\AuthenticationProviderInterface;
 use Glueful\Auth\Interfaces\SessionStoreInterface;
@@ -30,18 +32,20 @@ use Glueful\Auth\Utils\SessionStoreResolver;
 class TokenManager
 {
     private const DEFAULT_TTL = 3600; // 1 hour
-    private static ?int $ttl = null;
-    private static ?Connection $db = null;
+    private ?int $ttl = null;
+    private Connection $db;
+    private ?ApplicationContext $context = null;
+    private ?AuthenticationManager $authManager = null;
 
-    /**
-     * Initialize token manager
-     *
-     * Loads configuration.
-     */
-    public static function initialize(): void
-    {
-        // Cast the config value to int
-        self::$ttl = (int)config('session.access_token_lifetime', self::DEFAULT_TTL);
+    public function __construct(
+        ?ApplicationContext $context = null,
+        ?Connection $db = null,
+        ?AuthenticationManager $authManager = null
+    ) {
+        $this->context = $context;
+        $this->db = $db ?? new Connection();
+        $this->authManager = $authManager;
+        $this->ttl = (int) $this->getConfig('session.access_token_lifetime', self::DEFAULT_TTL);
     }
 
 
@@ -50,12 +54,9 @@ class TokenManager
      *
      * @return Connection
      */
-    private static function getDb(): Connection
+    private function getDb(): Connection
     {
-        if (self::$db === null) {
-            self::$db = new Connection();
-        }
-        return self::$db;
+        return $this->db;
     }
 
     /**
@@ -63,22 +64,46 @@ class TokenManager
      *
      * @return SessionCacheManager
      */
-    private static function getSessionCacheManager(): SessionCacheManager
+    private function getSessionCacheManager(): SessionCacheManager
     {
-        return app(SessionCacheManager::class);
+        if ($this->context !== null) {
+            return container($this->context)->get(SessionCacheManager::class);
+        }
+
+        $cache = CacheHelper::createCacheInstance();
+        if ($cache === null) {
+            throw new \RuntimeException('CacheStore is required to create SessionCacheManager.');
+        }
+
+        return new SessionCacheManager($cache, $this->context);
     }
 
     /**
      * Resolve the session store via container with a safe fallback
      */
-    private static function getSessionStore(): SessionStoreInterface
+    private function getSessionStore(): SessionStoreInterface
     {
         try {
-            /** @var SessionStoreInterface $store */
-            $store = container()->get(SessionStoreInterface::class);
+            if ($this->context !== null) {
+                /** @var SessionStoreInterface $store */
+                $store = container($this->context)->get(SessionStoreInterface::class);
+            } else {
+                throw new \RuntimeException('Container unavailable without ApplicationContext.');
+            }
             return $store;
         } catch (\Throwable) {
             return new SessionStore();
+        }
+    }
+
+    /**
+     * Clear per-request caches held by dependent services.
+     */
+    public function resetRequestCache(): void
+    {
+        $store = $this->getSessionStore();
+        if (method_exists($store, 'resetRequestCache')) {
+            $store->resetRequestCache();
         }
     }
 
@@ -101,7 +126,8 @@ class TokenManager
      *
      * **Usage Example:**
      * ```php
-     * $tokens = TokenManager::generateTokenPair(
+     * $tokenManager = app($context, TokenManager::class);
+     * $tokens = $tokenManager->generateTokenPair(
      *     ['uuid' => $user['uuid'], 'email' => $user['email']],
      *     900,  // 15 minutes access token
      *     604800 // 7 days refresh token
@@ -118,19 +144,19 @@ class TokenManager
      * @throws \RuntimeException If JWT key is not configured or token generation fails
      * @throws \Glueful\Exceptions\AuthenticationException If token encoding fails
      */
-    public static function generateTokenPair(
+    public function generateTokenPair(
         array $userData,
         ?int $accessTokenLifetime = null,
         ?int $refreshTokenLifetime = null
     ): array {
-        if (self::$ttl === null) {
-            self::$ttl = (int)config('session.access_token_lifetime', self::DEFAULT_TTL);
+        if ($this->ttl === null) {
+            $this->ttl = (int) $this->getConfig('session.access_token_lifetime', self::DEFAULT_TTL);
         }
 
         // Use provided lifetimes or defaults
-        $accessTokenLifetime = $accessTokenLifetime ?? self::$ttl;
+        $accessTokenLifetime = $accessTokenLifetime ?? $this->ttl;
         $refreshTokenLifetime = $refreshTokenLifetime ??
-        config('session.refresh_token_lifetime', 30 * 24 * 3600); // Default 30 days
+        $this->getConfig('session.refresh_token_lifetime', 30 * 24 * 3600); // Default 30 days
 
         // Add remember-me indicator to token payload if applicable
         $tokenPayload = $userData;
@@ -162,7 +188,7 @@ class TokenManager
      * @param string|null $provider Optional provider name to use for validation
      * @return bool Validity status
      */
-    public static function validateAccessToken(
+    public function validateAccessToken(
         string $token,
         ?string $provider = null,
         ?RequestContext $requestContext = null
@@ -170,7 +196,7 @@ class TokenManager
         $requestContext = $requestContext ?? RequestContext::fromGlobals();
 
         // Get the authentication manager instance
-        $authManager = self::getAuthManager();
+        $authManager = $this->getAuthManager();
 
         $isValid = false;
 
@@ -178,19 +204,19 @@ class TokenManager
         if ($provider !== null && $authManager !== null) {
             $authProvider = $authManager->getProvider($provider);
             if ($authProvider !== null) {
-                $isValid = $authProvider->validateToken($token) && !self::isTokenRevoked($token);
+                $isValid = $authProvider->validateToken($token) && !$this->isTokenRevoked($token);
             }
         } elseif ($authManager !== null) {
             // We need to loop through the available providers
-            $providers = self::getAvailableProviders($authManager);
+            $providers = $this->getAvailableProviders($authManager);
             foreach ($providers as $authProvider) {
                 if ($authProvider->canHandleToken($token)) {
-                    $isValid = $authProvider->validateToken($token) && !self::isTokenRevoked($token);
+                    $isValid = $authProvider->validateToken($token) && !$this->isTokenRevoked($token);
                     break;
                 }
             }
         } else {
-            $isValid = JWTService::verify($token) && !self::isTokenRevoked($token);
+            $isValid = JWTService::verify($token) && !$this->isTokenRevoked($token);
         }
 
 
@@ -225,13 +251,14 @@ class TokenManager
      * **Usage Examples:**
      * ```php
      * // Standard JWT token refresh
-     * $newTokens = TokenManager::refreshTokens($oldRefreshToken);
+     * $tokenManager = app($context, TokenManager::class);
+     * $newTokens = $tokenManager->refreshTokens($oldRefreshToken);
      *
      * // LDAP provider refresh
-     * $newTokens = TokenManager::refreshTokens($refreshToken, 'ldap');
+     * $newTokens = $tokenManager->refreshTokens($refreshToken, 'ldap');
      *
      * // With request context for analytics
-     * $newTokens = TokenManager::refreshTokens(
+     * $newTokens = $tokenManager->refreshTokens(
      *     $refreshToken,
      *     'saml',
      *     RequestContext::fromGlobals()
@@ -247,14 +274,14 @@ class TokenManager
      * @throws \Glueful\Exceptions\AuthenticationException If token refresh fails
      * @throws \RuntimeException If specified authentication provider is unavailable
      */
-    public static function refreshTokens(
+    public function refreshTokens(
         string $refreshToken,
         ?string $provider = null,
         ?RequestContext $requestContext = null
     ): ?array {
         $requestContext = $requestContext ?? RequestContext::fromGlobals();
         // Get session data from refresh token
-        $sessionData = self::getSessionFromRefreshToken($refreshToken);
+        $sessionData = $this->getSessionFromRefreshToken($refreshToken);
 
         $isValid = $sessionData !== null;
 
@@ -263,7 +290,7 @@ class TokenManager
         }
 
         // Get the authentication manager instance
-        $authManager = self::getAuthManager();
+        $authManager = $this->getAuthManager();
         $tokens = null;
 
         // If provider is explicitly specified, use it
@@ -276,7 +303,7 @@ class TokenManager
 
         // If no explicit provider but we have stored provider in session
         if ($tokens === null) {
-            $db = self::getDb();
+            $db = $this->getDb();
             $result = $db->table('auth_sessions')
                 ->select(['provider'])
                 ->where(['refresh_token' => $refreshToken])
@@ -296,17 +323,17 @@ class TokenManager
         // Default to standard JWT token generation for backward compatibility
         if ($tokens === null) {
             // Get remember_me and provider to determine token lifetime via SessionStore
-            $db = self::getDb();
+            $db = $this->getDb();
             $sessionResult = $db->table('auth_sessions')
                 ->select(['remember_me', 'provider'])
                 ->where(['refresh_token' => $refreshToken])
                 ->get();
             $rememberMe = (bool)($sessionResult[0]['remember_me'] ?? false);
             $providerName = (string)($sessionResult[0]['provider'] ?? 'jwt');
-            $store = self::getSessionStore();
+            $store = $this->getSessionStore();
             $accessTokenLifetime = $store->getAccessTtl($providerName, $rememberMe);
             $refreshTokenLifetime = $store->getRefreshTtl($providerName, $rememberMe);
-            $tokens = self::generateTokenPair($sessionData, $accessTokenLifetime, $refreshTokenLifetime);
+            $tokens = $this->generateTokenPair($sessionData, $accessTokenLifetime, $refreshTokenLifetime);
         }
 
 
@@ -324,12 +351,12 @@ class TokenManager
     /**
      * @return array{uuid: string, created_at: string}|null
      */
-    private static function getSessionFromRefreshToken(string $refreshToken): ?array
+    private function getSessionFromRefreshToken(string $refreshToken): ?array
     {
-        $db = self::getDb();
+        $db = $this->getDb();
 
         $result = $db->table('auth_sessions')
-            ->select(['user_uuid', 'access_token', 'created_at'])
+            ->select(['user_uuid', 'access_token', 'created_at', 'refresh_expires_at'])
             ->where(['refresh_token' => $refreshToken, 'status' => 'active'])
             ->get();
 
@@ -340,9 +367,17 @@ class TokenManager
         // Return basic session data with user UUID
         // The calling method will handle fetching full user data
         // Note: We exclude access_token to prevent token wrapping
+        $session = $result[0];
+        if (isset($session['refresh_expires_at'])) {
+            $expiresAt = strtotime((string) $session['refresh_expires_at']);
+            if ($expiresAt !== false && $expiresAt < time()) {
+                return null;
+            }
+        }
+
         return [
-            'uuid' => $result[0]['user_uuid'],
-            'created_at' => $result[0]['created_at']
+            'uuid' => $session['user_uuid'],
+            'created_at' => $session['created_at']
         ];
     }
 
@@ -356,7 +391,7 @@ class TokenManager
      * @param string|null $provider Provider name (jwt, admin, ldap, saml, etc.)
      * @return array<string, mixed> Normalized user data with consistent structure
      */
-    private static function normalizeUserData(array $user, ?string $provider = null): array
+    private function normalizeUserData(array $user, ?string $provider = null): array
     {
         // Start with the existing user data
         $normalizedUser = $user;
@@ -428,17 +463,18 @@ class TokenManager
      * **Usage Examples:**
      * ```php
      * // Standard JWT authentication
-     * $session = TokenManager::createUserSession([
+     * $tokenManager = app($context, TokenManager::class);
+     * $session = $tokenManager->createUserSession([
      *     'uuid' => $user['uuid'],
      *     'email' => $user['email'],
      *     'remember_me' => true
      * ]);
      *
      * // LDAP authentication
-     * $session = TokenManager::createUserSession($userData, 'ldap');
+     * $session = $tokenManager->createUserSession($userData, 'ldap');
      *
      * // SAML authentication with custom claims
-     * $session = TokenManager::createUserSession($samlUserData, 'saml');
+     * $session = $tokenManager->createUserSession($samlUserData, 'saml');
      * ```
      *
      * @param array $user User data array (must include 'uuid' field)
@@ -453,7 +489,7 @@ class TokenManager
      * @param array<string, mixed> $user
      * @return array<string, mixed>
      */
-    public static function createUserSession(array $user, ?string $provider = null): array
+    public function createUserSession(array $user, ?string $provider = null): array
     {
         // Add validation to ensure we have valid user data
         if ($user === [] || !isset($user['uuid'])) {
@@ -461,28 +497,28 @@ class TokenManager
         }
 
         // Normalize user data to ensure consistent structure
-        $user = self::normalizeUserData($user, $provider);
+        $user = $this->normalizeUserData($user, $provider);
 
         // Adjust token lifetime using canonical policy in SessionStore
         $rememberMe = (bool)($user['remember_me'] ?? false);
         $providerName = $provider ?? 'jwt';
-        $store = self::getSessionStore();
+        $store = $this->getSessionStore();
         $accessTokenLifetime = $store->getAccessTtl($providerName, $rememberMe);
         $refreshTokenLifetime = $store->getRefreshTtl($providerName, $rememberMe);
 
         // Use authentication provider if specified and available
-        $authManager = self::getAuthManager();
+        $authManager = $this->getAuthManager();
         if ($provider !== null && $authManager !== null) {
             $authProvider = $authManager->getProvider($provider);
             if ($authProvider !== null) {
                 $tokens = $authProvider->generateTokens($user, $accessTokenLifetime, $refreshTokenLifetime);
             } else {
                 // Fall back to default token generation
-                $tokens = self::generateTokenPair($user, $accessTokenLifetime, $refreshTokenLifetime);
+                $tokens = $this->generateTokenPair($user, $accessTokenLifetime, $refreshTokenLifetime);
             }
         } else {
             // Default to JWT tokens for backward compatibility
-            $tokens = self::generateTokenPair($user, $accessTokenLifetime, $refreshTokenLifetime);
+            $tokens = $this->generateTokenPair($user, $accessTokenLifetime, $refreshTokenLifetime);
         }
 
         // Store session using SessionStore for unified database/cache management
@@ -491,7 +527,7 @@ class TokenManager
         $user['provider'] = $provider ?? 'jwt';
         $user['remember_me'] = $user['remember_me'] ?? false;
 
-        self::getSessionStore()->create(
+        $this->getSessionStore()->create(
             $user,
             $tokens,
             $user['provider'],
@@ -499,7 +535,7 @@ class TokenManager
         );
 
         // Also store in cache for quick lookup
-        $sessionCacheManager = self::getSessionCacheManager();
+        $sessionCacheManager = $this->getSessionCacheManager();
         $sessionCacheManager->storeSession(
             $user, // userData array
             $tokens['access_token'], // token string
@@ -555,9 +591,9 @@ class TokenManager
      * @param string $token Authentication token
      * @return bool True if revoked
      */
-    public static function isTokenRevoked(string $token): bool
+    public function isTokenRevoked(string $token): bool
     {
-        $db = self::getDb();
+        $db = $this->getDb();
 
         $result = $db->table('auth_sessions')
             ->select(['status'])
@@ -575,9 +611,9 @@ class TokenManager
      * @param string $token Authentication token
      * @return string Fingerprint hash
      */
-    public static function generateTokenFingerprint(string $token): string
+    public function generateTokenFingerprint(string $token): string
     {
-        return hash('sha256', $token . config('session.fingerprint_salt', ''));
+        return hash('sha256', $token . $this->getConfig('session.fingerprint_salt', ''));
     }
 
     /**
@@ -601,13 +637,14 @@ class TokenManager
      *
      * @example
      * ```php
-     * $token = TokenManager::extractTokenFromRequest();
+     * $tokenManager = app($context, TokenManager::class);
+     * $token = $tokenManager->extractTokenFromRequest();
      * if ($token) {
-     *     $userData = TokenManager::validateAccessToken($token);
+     *     $userData = $tokenManager->validateAccessToken($token);
      * }
      * ```
      */
-    public static function extractTokenFromRequest(?RequestContext $requestContext = null): ?string
+    public function extractTokenFromRequest(?RequestContext $requestContext = null): ?string
     {
         $requestContext = $requestContext ?? RequestContext::fromGlobals();
         $authorization_header = $requestContext->getAuthorizationHeader();
@@ -644,6 +681,14 @@ class TokenManager
         }
 
         // Last fallback: Check query parameter `token`
+        if ((bool) $this->getConfig('security.tokens.allow_query_param', false) !== true) {
+            return null;
+        }
+
+        if (env('APP_ENV', 'production') !== 'production') {
+            error_log('Deprecated: token passed via query string');
+        }
+
         return $requestContext->getQueryParam('token');
     }
 
@@ -657,9 +702,9 @@ class TokenManager
      * @param string $providerName The name of the provider to check against
      * @return bool True if the provider can handle this token
      */
-    public static function isTokenCompatibleWithProvider(string $token, string $providerName): bool
+    public function isTokenCompatibleWithProvider(string $token, string $providerName): bool
     {
-        $authManager = self::getAuthManager();
+        $authManager = $this->getAuthManager();
         if ($authManager === null) {
             // If no authentication manager is active, only jwt tokens are supported
             return $providerName === 'jwt';
@@ -680,13 +725,25 @@ class TokenManager
      *
      * @return AuthenticationManager|null
      */
-    private static function getAuthManager(): ?AuthenticationManager
+    private function getAuthManager(): ?AuthenticationManager
     {
-        try {
-            return AuthBootstrap::getManager();
-        } catch (\Throwable) {
-            return null;
+        if ($this->authManager !== null) {
+            return $this->authManager;
         }
+
+        if ($this->context !== null && $this->context->hasContainer()) {
+            try {
+                $manager = $this->context->getContainer()->get(AuthenticationManager::class);
+                if ($manager instanceof AuthenticationManager) {
+                    $this->authManager = $manager;
+                    return $manager;
+                }
+            } catch (\Throwable) {
+                return null;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -697,7 +754,7 @@ class TokenManager
      * @param AuthenticationManager $authManager The authentication manager instance
      * @return array<int, AuthenticationProviderInterface> Array of AuthenticationProviderInterface instances
      */
-    private static function getAvailableProviders(AuthenticationManager $authManager): array
+    private function getAvailableProviders(AuthenticationManager $authManager): array
     {
         $providers = [];
 
@@ -723,5 +780,14 @@ class TokenManager
         }
 
         return $providers;
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if (function_exists('config') && $this->context !== null) {
+            return config($this->context, $key, $default);
+        }
+
+        return $default;
     }
 }

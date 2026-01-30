@@ -11,6 +11,7 @@ use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
 use Throwable;
+use Glueful\Bootstrap\ApplicationContext;
 
 /**
  * Application class - handles HTTP requests
@@ -18,13 +19,15 @@ use Throwable;
  */
 class Application
 {
+    private ApplicationContext $context;
     private ContainerInterface $container;
     private LoggerInterface $logger;
 
-    public function __construct(ContainerInterface $container)
+    public function __construct(ApplicationContext $context)
     {
-        $this->container = $container;
-        $this->logger = $container->get(LoggerInterface::class);
+        $this->context = $context;
+        $this->container = $context->getContainer();
+        $this->logger = $this->container->get(LoggerInterface::class);
     }
 
     /**
@@ -80,6 +83,11 @@ class Application
     public function getContainer(): ContainerInterface
     {
         return $this->container;
+    }
+
+    public function getContext(): ApplicationContext
+    {
+        return $this->context;
     }
 
     /**

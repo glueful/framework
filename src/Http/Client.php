@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Http;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
 use Symfony\Component\HttpClient\Retry\GenericRetryStrategy;
@@ -11,7 +12,7 @@ use Symfony\Component\HttpClient\RetryableHttpClient;
 use Glueful\Http\Response\Response;
 use Glueful\Http\Exceptions\HttpClientException;
 use Glueful\Events\Http\HttpClientFailureEvent;
-use Glueful\Events\Event;
+use Glueful\Events\EventService;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -24,7 +25,8 @@ class Client
 {
     public function __construct(
         private HttpClientInterface $httpClient,
-        private LoggerInterface $logger
+        private LoggerInterface $logger,
+        private ?ApplicationContext $context = null
     ) {
     }
 
@@ -98,7 +100,7 @@ class Client
                 $this->logServerError($method, $url, $statusCode, $duration);
 
                 $exception = new HttpClientException("HTTP $statusCode error from server", $statusCode);
-                Event::dispatch(new HttpClientFailureEvent(
+                $this->dispatchEvent(new HttpClientFailureEvent(
                     $method,
                     $url,
                     $exception,
@@ -120,7 +122,7 @@ class Client
 
             $exception = new HttpClientException($e->getMessage(), $e->getCode());
 
-            Event::dispatch(new HttpClientFailureEvent(
+            $this->dispatchEvent(new HttpClientFailureEvent(
                 $method,
                 $url,
                 $exception,
@@ -141,7 +143,7 @@ class Client
     public function createScopedClient(array $defaultOptions = []): self
     {
         $scopedClient = $this->httpClient->withOptions($defaultOptions);
-        return new self($scopedClient, $this->logger);
+        return new self($scopedClient, $this->logger, $this->context);
     }
 
     /**
@@ -157,7 +159,7 @@ class Client
      */
     public function withHttpClient(HttpClientInterface $httpClient): self
     {
-        return new self($httpClient, $this->logger);
+        return new self($httpClient, $this->logger, $this->context);
     }
 
     /**
@@ -181,7 +183,20 @@ class Client
             maxRetries: $config['max_retries'] ?? 3
         );
 
-        return new self($retrying, $this->logger);
+        return new self($retrying, $this->logger, $this->context);
+    }
+
+    private function dispatchEvent(object $event): void
+    {
+        if ($this->context === null) {
+            return;
+        }
+
+        try {
+            app($this->context, EventService::class)->dispatch($event);
+        } catch (\Throwable) {
+            // best-effort only
+        }
     }
 
     /**
@@ -281,7 +296,7 @@ class Client
      */
     private function logSlowRequest(string $method, string $url, float $duration): void
     {
-        $slowThreshold = config('http.logging.slow_threshold_ms', 5000);
+        $slowThreshold = (int) $this->getConfig('http.logging.slow_threshold_ms', 5000);
         if ($duration > $slowThreshold) {
             $this->logger->warning('HTTP client slow request', [
                 'type' => 'performance',
@@ -318,5 +333,14 @@ class Client
     {
         $this->logger = $logger;
         return $this;
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 }

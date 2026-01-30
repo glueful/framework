@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Glueful\Extensions;
 
+use Glueful\Bootstrap\ApplicationContext;
+
 /**
  * Unified provider discovery for both compile-time and runtime phases.
  * Prevents mismatches where config-enabled extensions work in dev but break in prod.
@@ -15,15 +17,15 @@ final class ProviderLocator
      * Supports enterprise features: allow-list mode and blacklisting.
      * @return list<class-string>
      */
-    public static function all(): array
+    public static function all(ApplicationContext $context): array
     {
         // Exclusive allow-list mode (highest priority)
         // Prefer app service providers allow-list if defined; otherwise fall back to extensions.
-        $appOnly = config('serviceproviders.only');
+        $appOnly = config($context, 'serviceproviders.only');
         if ($appOnly !== null) {
             return array_values((array) $appOnly);
         }
-        $extOnly = config('extensions.only');
+        $extOnly = config($context, 'extensions.only');
         if ($extOnly !== null) {
             return array_values((array) $extOnly);
         }
@@ -31,37 +33,40 @@ final class ProviderLocator
         $providers = [];
 
         // 1) enabled (preserve order) — app providers first, then extensions
-        foreach ((array) config('serviceproviders.enabled', []) as $cls) {
+        foreach ((array) config($context, 'serviceproviders.enabled', []) as $cls) {
             $providers[] = $cls;
         }
-        foreach ((array) config('extensions.enabled', []) as $cls) {
+        foreach ((array) config($context, 'extensions.enabled', []) as $cls) {
             $providers[] = $cls;
         }
 
         // 2) dev_only (preserve order)
-        $appEnv = $_ENV['APP_ENV'] ?? (getenv('APP_ENV') !== false ? getenv('APP_ENV') : 'production');
+        $appEnv = $context->getEnvironment();
         if ($appEnv !== 'production') {
             // 2) dev_only — app providers first, then extensions
-            foreach ((array) config('serviceproviders.dev_only', []) as $cls) {
+            foreach ((array) config($context, 'serviceproviders.dev_only', []) as $cls) {
                 $providers[] = $cls;
             }
-            foreach ((array) config('extensions.dev_only', []) as $cls) {
+            foreach ((array) config($context, 'extensions.dev_only', []) as $cls) {
                 $providers[] = $cls;
             }
 
             // 3) local scan (sort by folder name for stability)
-            $localPath = config('extensions.local_path');
+            $localPath = config($context, 'extensions.local_path');
             if ($localPath !== null) {
-                $local = self::scanLocalExtensions($localPath);
+                $local = self::scanLocalExtensions($context, $localPath);
                 sort($local, SORT_STRING);
                 array_push($providers, ...$local);
             }
         }
 
         // 4) composer scan (already deterministic in PackageManifest)
-        $scanComposer = config('extensions.scan_composer', true);
+        $scanComposer = config($context, 'extensions.scan_composer', true);
         if ($scanComposer === true) {
-            $providers = array_merge($providers, array_values((new PackageManifest())->getGluefulProviders()));
+            $providers = array_merge(
+                $providers,
+                array_values((new PackageManifest($context))->getGluefulProviders())
+            );
         }
 
         // dedupe while preserving first occurrence
@@ -70,8 +75,8 @@ final class ProviderLocator
         // Apply blacklist filter with strict comparison and normalization
         // Union of app-level disabled and extensions-level disabled
         $disabled = array_merge(
-            (array) config('serviceproviders.disabled', []),
-            (array) config('extensions.disabled', [])
+            (array) config($context, 'serviceproviders.disabled', []),
+            (array) config($context, 'extensions.disabled', [])
         );
         $disabled = array_values(array_unique(array_map('strval', $disabled)));
 
@@ -87,16 +92,10 @@ final class ProviderLocator
      * Duplicated intentionally to keep compile-time/runtime parity; update both together.
      * @return list<class-string>
      */
-    private static function scanLocalExtensions(string $path): array
+    private static function scanLocalExtensions(ApplicationContext $context, string $path): array
     {
         $providers = [];
-        // Be resilient to test environments that update $GLOBALS['base_path'] mid-run
-        // Prefer explicit global when provided, otherwise use helper resolution.
-        if ($path === '' && isset($GLOBALS['base_path']) && is_string($GLOBALS['base_path'])) {
-            $extensionsPath = rtrim($GLOBALS['base_path'], '/');
-        } else {
-            $extensionsPath = base_path($path);
-        }
+        $extensionsPath = base_path($context, $path);
 
         if (!is_dir($extensionsPath)) {
             return [];
@@ -134,7 +133,7 @@ final class ProviderLocator
 
                     static $composerLoader = null;
                     if ($composerLoader === null) {
-                        $composerLoader = require base_path('vendor/autoload.php');
+                        $composerLoader = require base_path($context, 'vendor/autoload.php');
                     }
 
                     if ($composerLoader instanceof \Composer\Autoload\ClassLoader) {

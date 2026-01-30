@@ -110,7 +110,7 @@ class LockdownCommand extends BaseSecurityCommand
         $this->info('🔍 Lockdown Status Check');
         $this->line('');
 
-        $storagePath = config('app.paths.storage', './storage/');
+        $storagePath = config($this->getContext(), 'app.paths.storage', './storage/');
         $maintenanceFile = $storagePath . 'framework/maintenance.json';
 
         if (!file_exists($maintenanceFile)) {
@@ -156,7 +156,7 @@ class LockdownCommand extends BaseSecurityCommand
         $this->info('🔒 Enabling Security Lockdown');
         $this->line('');
 
-        $storagePath = config('app.paths.storage', './storage/');
+        $storagePath = config($this->getContext(), 'app.paths.storage', './storage/');
         $maintenanceFile = $storagePath . 'framework/maintenance.json';
 
         // Check if already enabled
@@ -228,7 +228,7 @@ class LockdownCommand extends BaseSecurityCommand
         $this->info('🔓 Disabling Security Lockdown');
         $this->line('');
 
-        $storagePath = config('app.paths.storage', './storage/');
+        $storagePath = config($this->getContext(), 'app.paths.storage', './storage/');
         $maintenanceFile = $storagePath . 'framework/maintenance.json';
 
         // Check if already disabled

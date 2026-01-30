@@ -16,10 +16,10 @@ use Glueful\Extensions\ExtensionManager;
 
 class ConfigController extends BaseController
 {
-    public function __construct()
+    public function __construct(\Glueful\Bootstrap\ApplicationContext $context)
     {
         // CRITICAL: Call parent constructor to initialize BaseController properties
-        parent::__construct();
+        parent::__construct($context);
     }
 
     /**
@@ -32,7 +32,7 @@ class ConfigController extends BaseController
      */
     private function getSensitiveConfigFiles(): array
     {
-        return config('security.sensitive_config_files', [
+        return config($this->getContext(), 'security.sensitive_config_files', [
             'security',
             'database',
             'app',
@@ -237,7 +237,7 @@ class ConfigController extends BaseController
         }
 
         // Determine config path
-        $configPath = config_path();
+        $configPath = config_path($this->getContext());
         $filePath = $configPath . '/' . $configName . '.php';
 
         // Build a local disk rooted at config directory
@@ -292,7 +292,7 @@ class ConfigController extends BaseController
         $this->requirePermission('system.config.view');
 
         try {
-            $schemaPath = base_path('config/' . $configName . '.php');
+            $schemaPath = base_path($this->getContext(), 'config/' . $configName . '.php');
             if (!is_file($schemaPath)) {
                 return $this->notFound('Schema not found for configuration: ' . $configName);
             }
@@ -321,7 +321,7 @@ class ConfigController extends BaseController
         $this->requirePermission('system.config.view');
 
         try {
-            $pattern = base_path('config/*.php');
+            $pattern = base_path($this->getContext(), 'config/*.php');
             $globResult = glob($pattern);
             $files = $globResult !== false ? $globResult : [];
 
@@ -432,7 +432,7 @@ class ConfigController extends BaseController
     private function loadAllConfigs(): array
     {
         // Load config files directly from the application config directory
-        $configPath = config_path();
+        $configPath = config_path($this->getContext());
         $configFiles = glob($configPath . '/*.php');
 
         if ($configFiles === false) {
@@ -493,7 +493,7 @@ class ConfigController extends BaseController
         // Use permission-aware caching for config file access
         return $this->cacheByPermission("config_file_{$configName}", function () use ($configName) {
             // First check core config files
-            $configPath = config_path();
+            $configPath = config_path($this->getContext());
             $filePath = $configPath . '/' . $configName . '.php';
 
             // Check if the core config file exists and is readable
@@ -527,7 +527,7 @@ class ConfigController extends BaseController
      */
     private function getConfigLastModified(string $configName): ?\DateTime
     {
-        $configPath = config_path();
+        $configPath = config_path($this->getContext());
         $filePath = $configPath . '/' . $configName . '.php';
 
         if (file_exists($filePath)) {
@@ -558,12 +558,12 @@ class ConfigController extends BaseController
 
         try {
             // Get enabled extension names directly
-            $extensionManager = container()->get(ExtensionManager::class);
+            $extensionManager = container($this->getContext())->get(ExtensionManager::class);
             $enabledExtensionNames = $extensionManager->listEnabled();
 
             foreach ($enabledExtensionNames as $extensionName) {
                 // Check common config file locations in extensions directory
-                $extensionPath = base_path('extensions/' . $extensionName);
+                $extensionPath = base_path($this->getContext(), 'extensions/' . $extensionName);
 
                 if (!is_dir($extensionPath)) {
                     continue;
@@ -610,7 +610,7 @@ class ConfigController extends BaseController
     {
         // Basic security: ensure file is within allowed paths
         $realPath = realpath($file);
-        $basePath = realpath(base_path());
+        $basePath = realpath(base_path($this->getContext()));
 
         if (!$realPath || !str_starts_with($realPath, $basePath)) {
             throw new SecurityException("Invalid config file path: {$file}");
@@ -816,7 +816,7 @@ class ConfigController extends BaseController
      */
     private function persistConfigToFile(string $configName, array $config): bool
     {
-        $configPath = config_path();
+        $configPath = config_path($this->getContext());
         $filePath = $configPath . '/' . $configName . '.php';
 
         // Create a backup before writing
@@ -842,7 +842,7 @@ class ConfigController extends BaseController
      */
     private function updateEnvVariables(array $data): void
     {
-        $envPath = base_path('.env');
+        $envPath = base_path($this->getContext(), '.env');
         if (!file_exists($envPath)) {
             return;
         }
@@ -914,7 +914,7 @@ class ConfigController extends BaseController
     private function createConfigRollbackPoint(string $configName, array $config): void
     {
         try {
-            $configDir = config_path();
+            $configDir = config_path($this->getContext());
             $filePath = $configDir . '/' . $configName . '.php';
             if (!file_exists($filePath)) {
                 return; // nothing to back up
@@ -993,7 +993,7 @@ class ConfigController extends BaseController
      */
     private function configFileExists(string $configName): bool
     {
-        $configPath = config_path();
+        $configPath = config_path($this->getContext());
         $filePath = $configPath . '/' . $configName . '.php';
         return file_exists($filePath) && is_readable($filePath);
     }

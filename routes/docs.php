@@ -1,13 +1,25 @@
 <?php
 
 use Glueful\Routing\Router;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Controllers\DocsController;
 use Symfony\Component\HttpFoundation\Request;
 
-/** @var Router $router Router instance injected by RouteManifest::load() */
+/**
+ * @var Router $router Router instance injected by RouteManifest::load()
+ * @var ApplicationContext $context
+ */
+
+// Type hints for static analysis (variables injected by RouteManifest::requireRouteFile)
+assert($router instanceof Router);
+/** @var ApplicationContext|null $context */
+$context = (isset($context) && $context instanceof ApplicationContext)
+    ? $context
+    : $router->getContext();
+assert($context instanceof ApplicationContext);
 
 // Documentation routes - serves OpenAPI spec and interactive UI
-$router->group(['prefix' => '/docs'], function (Router $router) {
+$router->group(['prefix' => '/docs'], function (Router $router) use ($context) {
     /**
      * @route GET /docs
      * @summary API Documentation UI
@@ -19,8 +31,8 @@ $router->group(['prefix' => '/docs'], function (Router $router) {
      *   message:string="Documentation not generated. Run: php glueful generate:openapi --ui"
      * }
      */
-    $router->get('/', function (Request $request) {
-        $controller = container()->get(DocsController::class);
+    $router->get('/', function (Request $request) use ($context) {
+        $controller = container($context)->get(DocsController::class);
         return $controller->index($request);
     });
 
@@ -40,8 +52,8 @@ $router->group(['prefix' => '/docs'], function (Router $router) {
      *   message:string="OpenAPI specification not generated. Run: php glueful generate:openapi"
      * }
      */
-    $router->get('/openapi.json', function (Request $request) {
-        $controller = container()->get(DocsController::class);
+    $router->get('/openapi.json', function (Request $request) use ($context) {
+        $controller = container($context)->get(DocsController::class);
         return $controller->openapi($request);
     });
 });

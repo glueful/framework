@@ -4,22 +4,29 @@ declare(strict_types=1);
 
 namespace Glueful;
 
-use Glueful\Bootstrap\ConfigurationCache;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Bootstrap\ConfigurationLoader;
 use Glueful\Bootstrap\BootProfiler;
+use Glueful\Bootstrap\RequestLifecycle;
 use Psr\Container\ContainerInterface;
 use Glueful\Container\Support\LazyInitializer;
 use Glueful\Container\Bootstrap\ContainerFactory;
+use Glueful\Container\Container as GluefulContainer;
+use Glueful\Container\Definition\FactoryDefinition;
+use Glueful\Container\Definition\ValueDefinition;
 use Glueful\Routing\RouteManifest;
 use Glueful\Cache\CacheTaggingService;
 use Glueful\Cache\CacheInvalidationService;
 use Glueful\Database\ConnectionValidator;
 use Glueful\Database\DevelopmentQueryMonitor;
-use Glueful\Database\ORM\Model;
 use Glueful\Exceptions\ExceptionHandler;
+use Glueful\Events\QueueContextHolder;
 use Glueful\Helpers\Utils;
 use Glueful\Security\SecurityManager;
 use Psr\Log\LoggerInterface;
+use Glueful\Auth\SessionStore;
+use Glueful\Auth\TokenManager;
+use Glueful\Http\RequestContext;
 
 /**
  * Consolidated Framework class - handles all bootstrapping logic
@@ -31,6 +38,7 @@ class Framework
     private string $configPath;
     private string $environment;
     private ?ContainerInterface $container = null;
+    private ?ApplicationContext $context = null;
     private ?Application $application = null;
     private bool $booted = false;
     private bool $strictMode = true;
@@ -85,14 +93,24 @@ class Framework
 
         $profiler = new BootProfiler();
 
+        $this->context = new ApplicationContext(
+            basePath: $this->basePath,
+            environment: $this->environment,
+            configPaths: [
+                'framework' => dirname(__DIR__) . '/config',
+                'application' => $this->configPath,
+            ],
+        );
+
         // Phase 1: Environment & Globals (0-2ms)
-        $profiler->time('environment', fn() => $this->initializeEnvironment());
+        $profiler->time('environment', fn() => $this->initializeEnvironment($this->context));
 
         // Phase 2: Configuration (now instant!) - Just initialize lazy loading
-        $profiler->time('config', fn() => $this->initializeConfiguration());
+        $profiler->time('config', fn() => $this->initializeConfiguration($this->context));
 
         // Phase 3: Container (5-8ms) - Now config() will work during container build
-        $profiler->time('container', fn() => $this->buildContainer());
+        $profiler->time('container', fn() => $this->buildContainer($this->context));
+        $this->configureProfilerLogger($profiler);
 
         // Phase 4: Core Services (8-10ms)
         $profiler->time('core', fn() => $this->initializeCoreServices());
@@ -107,7 +125,7 @@ class Framework
         $profiler->time('validation', fn() => $this->validateFramework());
 
         // Create Application instance
-        $this->application = new Application($this->container);
+        $this->application = new Application($this->context);
 
         $this->booted = true;
 
@@ -123,22 +141,13 @@ class Framework
     /**
      * Phase 1: Initialize environment and globals
      */
-    private function initializeEnvironment(): void
+    private function initializeEnvironment(ApplicationContext $context): void
     {
         // Load .env file if not already loaded
         if (file_exists($this->basePath . '/.env') && !isset($_ENV['APP_ENV'])) {
             $dotenv = \Dotenv\Dotenv::createImmutable($this->basePath);
             $dotenv->load();
         }
-
-        // Set globals FIRST to prevent circular dependencies
-        $GLOBALS['framework_booting'] = true;
-        $GLOBALS['base_path'] = $this->basePath;
-        $GLOBALS['app_environment'] = $this->environment;
-        $GLOBALS['config_paths'] = [
-            'framework' => dirname(__DIR__) . '/config',
-            'application' => $this->configPath
-        ];
 
         // Production security validation
         if ($this->environment === 'production') {
@@ -166,50 +175,111 @@ class Framework
         }
     }
 
+    private function configureProfilerLogger(BootProfiler $profiler): void
+    {
+        try {
+            if ($this->container !== null && $this->container->has(LoggerInterface::class)) {
+                $logger = $this->container->get(LoggerInterface::class);
+                if ($logger instanceof LoggerInterface) {
+                    $profiler->setLogger($logger);
+                }
+            }
+        } catch (\Throwable) {
+            // best-effort only
+        }
+    }
+
     /**
      * Phase 2: Initialize configuration system (lazy loading)
      */
-    private function initializeConfiguration(): void
+    private function initializeConfiguration(ApplicationContext $context): void
     {
         // Don't load any configs yet - just set up the loader
         $loader = new ConfigurationLoader($this->basePath, $this->environment, $this->configPath);
 
-        // Store the loader for lazy loading
-        $GLOBALS['config_loader'] = $loader;
-        $GLOBALS['configs_loaded'] = true;
-
-        // Initialize empty cache - configs will be loaded on demand
-        ConfigurationCache::setLoader($loader);
+        $context->setConfigLoader($loader);
     }
 
     /**
      * Phase 3: Build and initialize container
      */
-    private function buildContainer(): void
+    private function buildContainer(ApplicationContext $context): void
     {
         // Build new PSR-11 container. Use compiled container in production when not debugging.
         $debug = (bool) (env('APP_DEBUG', $_ENV['APP_DEBUG'] ?? false));
         $prod = ($this->environment === 'production') && ($debug === false);
 
-        $this->container = ContainerFactory::create($prod);
+        $this->container = ContainerFactory::create($context, $prod);
 
-        // Make container globally available
-        $GLOBALS['container'] = $this->container;
-        $GLOBALS['framework_bootstrapped'] = true;
+        $context->setContainer($this->container);
+        QueueContextHolder::setContext($context);
+        $this->registerContextServices($context);
+        $this->registerRequestLifecycleHooks($context);
 
-        // Bootstrap Event facade if available (PSR-14)
         try {
-            /** @var \Psr\EventDispatcher\EventDispatcherInterface $dispatcher */
-            $dispatcher = $this->container->get(\Psr\EventDispatcher\EventDispatcherInterface::class);
-            /** @var \Glueful\Events\ListenerProvider $provider */
-            $provider = $this->container->get(\Glueful\Events\ListenerProvider::class);
-            \Glueful\Events\Event::bootstrap($dispatcher, $provider, $this->container);
-
             // Register core event subscribers for activity logging
             $this->registerCoreEventSubscribers();
         } catch (\Throwable) {
             // Events are optional; ignore if not available
         }
+    }
+
+    private function registerContextServices(ApplicationContext $context): void
+    {
+        if (!($this->container instanceof GluefulContainer)) {
+            return;
+        }
+
+        $this->container->load([
+            ApplicationContext::class => new ValueDefinition(ApplicationContext::class, $context),
+            RequestLifecycle::class => new FactoryDefinition(
+                RequestLifecycle::class,
+                fn() => new RequestLifecycle($context)
+            ),
+        ]);
+    }
+
+    private function registerRequestLifecycleHooks(ApplicationContext $context): void
+    {
+        if (!($this->container instanceof GluefulContainer)) {
+            return;
+        }
+
+        if (!$this->container->has(RequestLifecycle::class)) {
+            return;
+        }
+
+        /** @var RequestLifecycle $lifecycle */
+        $lifecycle = $this->container->get(RequestLifecycle::class);
+
+        $lifecycle->onEndRequest(function (ApplicationContext $ctx): void {
+            if (!$ctx->hasContainer()) {
+                return;
+            }
+
+            $container = $ctx->getContainer();
+
+            if ($container->has(SessionStore::class)) {
+                $store = $container->get(SessionStore::class);
+                if (method_exists($store, 'resetRequestCache')) {
+                    $store->resetRequestCache();
+                }
+            }
+
+            if ($container->has(TokenManager::class)) {
+                $tm = $container->get(TokenManager::class);
+                if (method_exists($tm, 'resetRequestCache')) {
+                    $tm->resetRequestCache();
+                }
+            }
+
+            if ($container->has(RequestContext::class)) {
+                $rc = $container->get(RequestContext::class);
+                if (method_exists($rc, 'reset')) {
+                    $rc->reset();
+                }
+            }
+        });
     }
 
     /**
@@ -227,9 +297,6 @@ class Framework
         CacheTaggingService::enable();
         CacheInvalidationService::enable();
         CacheInvalidationService::warmupPatterns();
-
-        // Initialize ORM - wire Model class to container for database access
-        Model::setContainer($this->container);
 
         // Enable development features
         if ($this->environment === 'development') {
@@ -256,7 +323,9 @@ class Framework
             $router = $this->container->get(\Glueful\Routing\Router::class);
 
             // Load routes using a single manifest to keep sources centralized
-            RouteManifest::load($router);
+            if ($this->context !== null) {
+                RouteManifest::load($router, $this->context);
+            }
 
             // Auto-discover controllers with attributes if directory exists
             if (is_dir($this->basePath . '/app/Controllers')) {
@@ -285,7 +354,6 @@ class Framework
                 /** @var LazyInitializer $li */
                 $li = $this->container->get(LazyInitializer::class);
                 $this->lazyInitializer = $li;
-                $GLOBALS['lazy_initializer'] = $li; // optional debug access
             }
         } catch (\Throwable) {
             // Best-effort; lazy warming is optional
@@ -338,8 +406,8 @@ class Framework
     private function initializeAuth(): void
     {
         try {
-            if (class_exists(\Glueful\Auth\AuthBootstrap::class)) {
-                \Glueful\Auth\AuthBootstrap::initialize();
+            if ($this->container !== null && $this->container->has(\Glueful\Auth\AuthBootstrap::class)) {
+                $this->container->get(\Glueful\Auth\AuthBootstrap::class)->initialize();
             }
         } catch (\Throwable $e) {
             error_log("Auth initialization failed: " . $e->getMessage());
@@ -355,9 +423,13 @@ class Framework
     private function registerCoreEventSubscribers(): void
     {
         // ActivityLoggingSubscriber handles auth/security event logging
-        \Glueful\Events\Event::subscribe(
-            \Glueful\Events\Listeners\ActivityLoggingSubscriber::class
-        );
+        if ($this->container === null) {
+            return;
+        }
+
+        /** @var \Glueful\Events\EventService $events */
+        $events = $this->container->get(\Glueful\Events\EventService::class);
+        $events->subscribe(\Glueful\Events\Listeners\ActivityLoggingSubscriber::class);
     }
 
     /**
@@ -484,8 +556,8 @@ class Framework
 
         // Prefer configured version if available
         try {
-            if (function_exists('config')) {
-                $v = config('app.version_full', null);
+            if (function_exists('config') && $this->context !== null) {
+                $v = config($this->context, 'app.version_full', null);
                 if (is_string($v) && $v !== '') {
                     return $v;
                 }

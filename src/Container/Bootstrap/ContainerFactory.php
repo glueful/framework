@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Container\Bootstrap;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Container\Container;
 use Glueful\Container\Support\ParamBag;
 use Glueful\Container\Definition\{ValueDefinition, TaggedIteratorDefinition};
@@ -15,18 +16,18 @@ use Psr\Container\ContainerInterface;
 
 final class ContainerFactory
 {
-    public static function create(bool $prod = false): ContainerInterface
+    public static function create(ApplicationContext $context, bool $prod = false): ContainerInterface
     {
         $tags = new TagCollector();
         $defs = [];
 
-        foreach (self::providers($tags) as $provider) {
+        foreach (self::providers($tags, $context) as $provider) {
             /** @var BaseServiceProvider $provider */
             $defs += $provider->defs();
         }
 
         // Merge extension-provided service definitions (typed or DSL)
-        $defs += self::loadExtensionDefinitions($tags, $prod);
+        $defs += self::loadExtensionDefinitions($tags, $context, $prod);
 
         $defs['param.bag'] = new ValueDefinition('param.bag', new ParamBag([
             'env' => $prod ? 'prod' : 'dev',
@@ -105,7 +106,7 @@ final class ContainerFactory
     }
 
     /** @return iterable<BaseServiceProvider> */
-    private static function providers(TagCollector $tags): iterable
+    private static function providers(TagCollector $tags, ApplicationContext $context): iterable
     {
         /** @var array<class-string<BaseServiceProvider>> $classes */
         $classes = [
@@ -147,7 +148,7 @@ final class ContainerFactory
         }
 
         return array_map(
-            static fn (string $class): BaseServiceProvider => new $class($tags),
+            static fn (string $class): BaseServiceProvider => new $class($tags, $context),
             $classes
         );
     }
@@ -158,11 +159,11 @@ final class ContainerFactory
      *
      * @return array<string, mixed>
      */
-    private static function loadExtensionDefinitions(TagCollector $tags, bool $prod): array
+    private static function loadExtensionDefinitions(TagCollector $tags, ApplicationContext $context, bool $prod): array
     {
         $defs = [];
         $loader = self::dslLoader();
-        foreach (ProviderLocator::all() as $providerClass) {
+        foreach (ProviderLocator::all($context) as $providerClass) {
             if (!class_exists($providerClass)) {
                 continue;
             }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Cache;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Cache\CacheStore;
 use Glueful\Database\Connection;
 use Glueful\Helpers\CacheHelper;
@@ -21,12 +22,17 @@ class CacheWarmupService
      */
     private CacheStore $cache;
     private Connection $db;
+    private ?ApplicationContext $context;
 
     /**
      * @param CacheStore<mixed>|null $cache
      */
-    public function __construct(?CacheStore $cache = null, ?Connection $connection = null)
-    {
+    public function __construct(
+        ?CacheStore $cache = null,
+        ?Connection $connection = null,
+        ?ApplicationContext $context = null
+    ) {
+        $this->context = $context;
         // Set up cache - try provided instance or get from container
         if ($cache !== null) {
             $this->cache = $cache;
@@ -156,7 +162,7 @@ class CacheWarmupService
 
                 if (!$this->cache->has($cacheKey)) {
                     // Get config value and cache it
-                    $value = config($key);
+                    $value = $this->getConfig($key);
                     if ($value !== null) {
                         $this->cache->set($cacheKey, $value, 3600); // Cache for 1 hour
                         $items++;
@@ -358,7 +364,7 @@ class CacheWarmupService
     {
         $items = 0;
         $metadata = [
-            'system:version' => config('app.version', '1.0.0'),
+            'system:version' => $this->getConfig('app.version', '1.0.0'),
             'system:environment' => env('APP_ENV', 'production'),
             'system:timezone' => date_default_timezone_get(),
             'system:php_version' => PHP_VERSION,
@@ -533,5 +539,14 @@ class CacheWarmupService
             default:
                 return ['status' => 'skipped', 'items' => 0, 'message' => 'Unknown strategy'];
         }
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 }

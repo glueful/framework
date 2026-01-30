@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Logging;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Monolog\Logger;
 use Monolog\Handler\RotatingFileHandler;
 use Monolog\Formatter\LineFormatter;
@@ -122,6 +123,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
 
     /** @var array<string, int> Log statistics counters */
     private array $logStatistics = [];
+    private ?ApplicationContext $context = null;
 
     /**
      * Initialize the application logger
@@ -132,14 +134,20 @@ class LogManager implements LoggerInterface, LogManagerInterface
      * @param string $defaultChannel Default logging channel name (default: 'app')
      * @throws \RuntimeException If log directory creation fails
      */
-    public function __construct(string $logFile = "", int $maxFiles = 30, string $defaultChannel = 'app')
-    {
+    public function __construct(
+        string $logFile = "",
+        int $maxFiles = 30,
+        string $defaultChannel = 'app',
+        ?ApplicationContext $context = null
+    ) {
+        $this->context = $context;
         $this->defaultChannel = $defaultChannel;
         $this->maxFiles = $maxFiles;
         $this->minimumLevel = Level::Debug;
 
         // Get log directory from config
-        $logDirectory = config('logging.paths.log_directory') ?? base_path('storage/logs/');
+        $logDirectory = $this->getConfig('logging.paths.log_directory')
+            ?? $this->getBasePath('storage/logs/');
 
         // Create logs directory if it doesn't exist
         if (!is_dir($logDirectory) && !mkdir($logDirectory, 0755, true)) {
@@ -152,7 +160,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
         }
 
         // Get max files setting from config
-        $this->maxFiles = (int) config('logging.rotation.days', 30);
+        $this->maxFiles = (int) $this->getConfig('logging.rotation.days', 30);
 
         // Create logger
         $this->logger = new Logger($defaultChannel);
@@ -194,7 +202,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
         $this->logger->pushHandler($defaultHandler);  // Other logs go to default log
 
         // Add database handler if configured
-        if ((bool) config('logging.application.database_logging', false)) {
+        if ((bool) $this->getConfig('logging.application.database_logging', false)) {
             $this->logger->pushHandler(new DatabaseLogHandler());
         }
 
@@ -992,7 +1000,8 @@ class LogManager implements LoggerInterface, LogManagerInterface
      */
     private function getLogFilename(string $channel, Level $level): string
     {
-        $baseDir = config('logging.paths.log_directory') ?? dirname(dirname(__FILE__)) . '/logs/';
+        $baseDir = $this->getConfig('logging.paths.log_directory')
+            ?? dirname(dirname(__FILE__)) . '/logs/';
 
         // Organize logs in subdirectories by channel for better organization
         $channelDir = $baseDir . ($channel !== 'app' ? $channel . '/' : '');
@@ -1349,7 +1358,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
 
         // Add environment info
         if (!isset($context['environment'])) {
-            $context['environment'] = config('app.env') ?? 'production';
+            $context['environment'] = $this->getConfig('app.env') ?? 'production';
         }
 
         // Add user info if available and not sensitive
@@ -1406,6 +1415,27 @@ class LogManager implements LoggerInterface, LogManagerInterface
             }
         }
         return $sanitized;
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
+    }
+
+    private function getBasePath(string $suffix = ''): string
+    {
+        if ($this->context !== null) {
+            return base_path($this->context, $suffix);
+        }
+
+        $root = rtrim(dirname(__DIR__, 2), DIRECTORY_SEPARATOR);
+        return $suffix !== ''
+            ? $root . DIRECTORY_SEPARATOR . ltrim($suffix, DIRECTORY_SEPARATOR)
+            : $root;
     }
 
     /**

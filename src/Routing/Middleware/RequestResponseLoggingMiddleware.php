@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Routing\Middleware;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Routing\RouteMiddleware;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -53,6 +54,8 @@ use Psr\Container\ContainerInterface;
  */
 class RequestResponseLoggingMiddleware implements RouteMiddleware
 {
+    private ?ApplicationContext $context;
+
     /** @var string Default log level */
     private const DEFAULT_LOG_LEVEL = 'info';
 
@@ -147,6 +150,7 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
      * @param bool $anonymizeIps Whether to anonymize IP addresses
      * @param LoggerInterface|null $logger Logger instance
      * @param ContainerInterface|null $container DI Container instance
+     * @param ApplicationContext|null $context Application context
      */
     public function __construct(
         string $logMode = 'both',
@@ -157,8 +161,10 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
         int $bodySizeLimit = self::DEFAULT_BODY_SIZE_LIMIT,
         bool $anonymizeIps = false,
         ?LoggerInterface $logger = null,
-        ?ContainerInterface $container = null
+        ?ContainerInterface $container = null,
+        ?ApplicationContext $context = null
     ) {
+        $this->context = $context;
         $this->logMode = $logMode;
         $this->logHeaders = $logHeaders;
         $this->logBodies = $logBodies;
@@ -641,18 +647,18 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
      */
     private function getDefaultContainer(): ?\Psr\Container\ContainerInterface
     {
-        if (function_exists('container')) {
+        if ($this->context !== null && function_exists('container')) {
             try {
-                $c = container();
+                $c = container($this->context);
                 return $c;
             } catch (\Exception) {
                 return null;
             }
         }
 
-        if (function_exists('app')) {
+        if ($this->context !== null && function_exists('app')) {
             try {
-                $a = app();
+                $a = app($this->context);
                 return $a instanceof \Psr\Container\ContainerInterface ? $a : null;
             } catch (\Exception) {
                 return null;

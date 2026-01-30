@@ -2,6 +2,7 @@
 
 namespace Glueful\Services;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Cache\CacheStore;
 use Glueful\Database\Connection;
 use Glueful\Helpers\CacheHelper;
@@ -27,29 +28,41 @@ class HealthService
     /** @var array<string, array{result: array<string, mixed>, timestamp: float}> In-memory cache for health checks */
     private static array $healthCache = [];
 
+    private ?ApplicationContext $context;
+
     /**
      * Constructor
      *
      * @param CacheStore<mixed>|null $cache
      */
-    public function __construct(?CacheStore $cache = null, ?Connection $connection = null)
-    {
-        $this->cache = $cache ?? CacheHelper::createCacheInstance();
+    public function __construct(
+        ?CacheStore $cache = null,
+        ?Connection $connection = null,
+        ?ApplicationContext $context = null
+    ) {
+        $this->context = $context;
+        $this->cache = $cache ?? CacheHelper::createCacheInstance($this->context);
         if ($this->cache === null) {
             throw new \RuntimeException(
                 'CacheStore is required for HealthService: Unable to create cache instance.'
             );
         }
 
-        $this->connection = $connection ?? new Connection();
+        $this->connection = $connection ?? new Connection([], $this->context);
     }
 
     /**
      * Get singleton instance
      */
-    private static function getInstance(): self
+    private static function getInstance(?ApplicationContext $context = null): self
     {
-        return self::$instance ??= new self();
+        if (self::$instance === null) {
+            self::$instance = new self(null, null, $context);
+        } elseif ($context !== null && self::$instance->context === null) {
+            self::$instance->context = $context;
+        }
+
+        return self::$instance;
     }
 
     /**
@@ -57,9 +70,9 @@ class HealthService
      *
      * @return array<string, mixed>
      */
-    public static function checkDatabase(): array
+    public static function checkDatabase(?ApplicationContext $context = null): array
     {
-        return self::getInstance()->performDatabaseCheck();
+        return self::getInstance($context)->performDatabaseCheck();
     }
 
     /**
@@ -134,9 +147,9 @@ class HealthService
      *
      * @return array<string, mixed>
      */
-    public static function checkCache(): array
+    public static function checkCache(?ApplicationContext $context = null): array
     {
-        return self::getInstance()->performCacheCheck();
+        return self::getInstance($context)->performCacheCheck();
     }
 
     /**
@@ -159,7 +172,7 @@ class HealthService
                 return [
                     'status' => 'ok',
                     'message' => 'Cache is working properly',
-                    'driver' => config('cache.default', 'unknown'),
+                    'driver' => $this->getConfig('cache.default', 'unknown'),
                     'operations' => 'read/write/delete functional'
                 ];
             } else {
@@ -219,8 +232,9 @@ class HealthService
     /**
      * @return array<string, mixed>
      */
-    public static function checkConfiguration(): array
+    public static function checkConfiguration(?ApplicationContext $context = null): array
     {
+        $instance = self::getInstance($context);
         $issues = [];
         $warnings = [];
 
@@ -234,7 +248,7 @@ class HealthService
         }
 
         // Check .env file exists
-        $envPath = base_path('.env');
+        $envPath = $instance->getBasePath('.env');
         if (!file_exists($envPath)) {
             $issues[] = '.env file not found';
         }
@@ -282,13 +296,14 @@ class HealthService
     /**
      * @return array<string, mixed>
      */
-    public static function getOverallHealth(): array
+    public static function getOverallHealth(?ApplicationContext $context = null): array
     {
+        $instance = self::getInstance($context);
         $checks = [
-            'database' => self::checkDatabase(),
-            'cache' => self::checkCache(),
+            'database' => self::checkDatabase($context),
+            'cache' => self::checkCache($context),
             'extensions' => self::checkExtensions(),
-            'config' => self::checkConfiguration()
+            'config' => self::checkConfiguration($context)
         ];
 
         // Determine overall status
@@ -313,10 +328,33 @@ class HealthService
         return [
             'status' => $overallStatus,
             'timestamp' => date('c'),
-            'version' => config('app.version', '1.0.0'),
+            'version' => $instance->getConfig('app.version', '1.0.0'),
             'environment' => env('APP_ENV', 'unknown'),
             'checks' => $checks
         ];
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
+    }
+
+    private function getBasePath(string $path = ''): string
+    {
+        if ($this->context !== null) {
+            return base_path($this->context, $path);
+        }
+
+        $root = getcwd() ?: '.';
+        if ($path === '') {
+            return $root;
+        }
+
+        return rtrim($root, '/') . '/' . ltrim($path, '/');
     }
 
     /**

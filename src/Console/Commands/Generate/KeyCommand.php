@@ -112,7 +112,7 @@ class KeyCommand extends BaseCommand
      */
     private function generateAppKey(RandomStringGenerator $generator, bool $force): array
     {
-        $currentKey = config('app.key');
+        $currentKey = config($this->getContext(), 'app.key');
 
         if ($currentKey !== null && $currentKey !== '' && !$force) {
             if (!$this->confirm('APP_KEY already exists. Overwrite?', false)) {
@@ -141,7 +141,7 @@ class KeyCommand extends BaseCommand
      */
     private function generateJwtKey(RandomStringGenerator $generator, bool $force): array
     {
-        $currentKey = config('jwt.key');
+        $currentKey = config($this->getContext(), 'jwt.key');
 
         if ($currentKey !== null && $currentKey !== '' && !$force) {
             if (!$this->confirm('JWT_KEY already exists. Overwrite?', false)) {
@@ -269,6 +269,6 @@ HELP;
      */
     private function getEnvPath(): string
     {
-        return base_path('.env');
+        return base_path($this->getContext(), '.env');
     }
 }

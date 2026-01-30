@@ -4,14 +4,19 @@ declare(strict_types=1);
 
 namespace Glueful\Services;
 
+use Glueful\Bootstrap\ApplicationContext;
+
 final class RouteHash
 {
     /**
      * Compute a stable checksum of route source files (app + extensions)
      */
-    public static function computeChecksum(): string
+    public static function computeChecksum(?ApplicationContext $context = null): string
     {
-        $routesDir = base_path(config('app.routes_path', 'routes'));
+        $routesDir = self::getBasePath(
+            $context,
+            (string) self::getConfig($context, 'app.routes_path', 'routes')
+        );
         $parts = [];
         // App routes
         if (is_dir($routesDir)) {
@@ -22,12 +27,12 @@ final class RouteHash
             }
         }
         // Extension routes
-        $extensionRoutes = glob(base_path('extensions/*/routes.php'));
+        $extensionRoutes = glob(self::getBasePath($context, 'extensions/*/routes.php'));
         foreach (($extensionRoutes !== false ? $extensionRoutes : []) as $file) {
             $hash = md5_file($file);
             $parts[] = $hash !== false ? $hash : '';
         }
-        $extensionSrcRoutes = glob(base_path('extensions/*/src/routes.php'));
+        $extensionSrcRoutes = glob(self::getBasePath($context, 'extensions/*/src/routes.php'));
         foreach (($extensionSrcRoutes !== false ? $extensionSrcRoutes : []) as $file) {
             $hash = md5_file($file);
             $parts[] = $hash !== false ? $hash : '';
@@ -38,24 +43,50 @@ final class RouteHash
     /**
      * Compute the short hash used in cache filenames (env + checksum)
      */
-    public static function computeEnvHash(?string $env = null): string
+    public static function computeEnvHash(?string $env = null, ?ApplicationContext $context = null): string
     {
-        $env = $env ?? (string) config('app.env', env('APP_ENV', 'production'));
-        $checksum = self::computeChecksum();
+        $env = $env ?? (string) self::getConfig($context, 'app.env', env('APP_ENV', 'production'));
+        $checksum = self::computeChecksum($context);
         return substr(sha1($checksum . '|' . $env), 0, 8);
     }
 
     /**
      * Count extension route files included in checksum (for diagnostics)
      */
-    public static function countExtensionRouteFiles(): int
+    public static function countExtensionRouteFiles(?ApplicationContext $context = null): int
     {
         $count = 0;
-        $aGlob = glob(base_path('extensions/*/routes.php'));
+        $aGlob = glob(self::getBasePath($context, 'extensions/*/routes.php'));
         $a = $aGlob !== false ? $aGlob : [];
-        $bGlob = glob(base_path('extensions/*/src/routes.php'));
+        $bGlob = glob(self::getBasePath($context, 'extensions/*/src/routes.php'));
         $b = $bGlob !== false ? $bGlob : [];
         $count += count($a) + count($b);
         return $count;
+    }
+
+    private static function getConfig(
+        ?ApplicationContext $context,
+        string $key,
+        mixed $default = null
+    ): mixed {
+        if ($context === null) {
+            return $default;
+        }
+
+        return config($context, $key, $default);
+    }
+
+    private static function getBasePath(?ApplicationContext $context, string $path = ''): string
+    {
+        if ($context !== null) {
+            return base_path($context, $path);
+        }
+
+        $root = getcwd() ?: '.';
+        if ($path === '') {
+            return $root;
+        }
+
+        return rtrim($root, '/') . '/' . ltrim($path, '/');
     }
 }

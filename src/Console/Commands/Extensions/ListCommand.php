@@ -49,7 +49,7 @@ final class ListCommand extends BaseCommand
         $meta = $this->extensions->listMeta();
 
         // Get all discoverable providers to show disabled ones too
-        $allDiscoverable = ProviderLocator::all();
+        $allDiscoverable = ProviderLocator::all($this->getContext());
         $disabledProviders = $this->getDisabledProviders();
 
         if (count($loadedProviders) === 0 && count($disabledProviders) === 0) {
@@ -124,21 +124,21 @@ final class ListCommand extends BaseCommand
     private function getDiscoverySource(string $class): string
     {
         // Check enabled config
-        $enabled = (array) config('extensions.enabled', []);
+        $enabled = (array) config($this->getContext(), 'extensions.enabled', []);
         if (in_array($class, $enabled, true)) {
             return 'config';
         }
 
         // Check dev_only config
-        $devOnly = (array) config('extensions.dev_only', []);
+        $devOnly = (array) config($this->getContext(), 'extensions.dev_only', []);
         if (in_array($class, $devOnly, true)) {
             return 'dev_only';
         }
 
         // Check Composer packages
-        $scanComposer = config('extensions.scan_composer', true);
+        $scanComposer = config($this->getContext(), 'extensions.scan_composer', true);
         if ($scanComposer === true) {
-            $manifest = new PackageManifest();
+            $manifest = new PackageManifest($this->getContext());
             $composerProviders = $manifest->getGluefulProviders();
             if (in_array($class, $composerProviders, true)) {
                 return 'composer';
@@ -148,7 +148,7 @@ final class ListCommand extends BaseCommand
         // Check local scan
         $appEnv = $_ENV['APP_ENV'] ?? (getenv('APP_ENV') !== false ? getenv('APP_ENV') : 'production');
         if ($appEnv !== 'production') {
-            $localPath = config('extensions.local_path');
+            $localPath = config($this->getContext(), 'extensions.local_path');
             if ($localPath !== null) {
                 $localProviders = $this->scanLocalExtensions($localPath);
                 if (in_array($class, $localProviders, true)) {
@@ -188,21 +188,22 @@ final class ListCommand extends BaseCommand
     private function getDisabledProviders(): array
     {
         $disabled = [];
-        $disabledConfig = (array) config('extensions.disabled', []);
+        $disabledConfig = (array) config($this->getContext(), 'extensions.disabled', []);
 
         // Get all possible providers from discovery sources
         $allDiscovered = [];
 
         // Check enabled config
-        $allDiscovered = array_merge($allDiscovered, (array) config('extensions.enabled', []));
+        $allDiscovered = array_merge($allDiscovered, (array) config($this->getContext(), 'extensions.enabled', []));
 
         // Check dev_only config
         $appEnv = $_ENV['APP_ENV'] ?? (getenv('APP_ENV') !== false ? getenv('APP_ENV') : 'production');
         if ($appEnv !== 'production') {
-            $allDiscovered = array_merge($allDiscovered, (array) config('extensions.dev_only', []));
+            $devOnly = (array) config($this->getContext(), 'extensions.dev_only', []);
+            $allDiscovered = array_merge($allDiscovered, $devOnly);
 
             // Check local scan
-            $localPath = config('extensions.local_path');
+            $localPath = config($this->getContext(), 'extensions.local_path');
             if ($localPath !== null) {
                 try {
                     $local = $this->scanLocalExtensions($localPath);
@@ -214,10 +215,10 @@ final class ListCommand extends BaseCommand
         }
 
         // Check Composer packages
-        $scanComposerDisabled = config('extensions.scan_composer', true);
+        $scanComposerDisabled = config($this->getContext(), 'extensions.scan_composer', true);
         if ($scanComposerDisabled === true) {
             try {
-                $manifest = new PackageManifest();
+                $manifest = new PackageManifest($this->getContext());
                 $composer = $manifest->getGluefulProviders();
                 $allDiscovered = array_merge($allDiscovered, array_values($composer));
             } catch (\Throwable) {
@@ -237,13 +238,13 @@ final class ListCommand extends BaseCommand
 
     private function getDisabledReason(string $class): string
     {
-        $disabled = (array) config('extensions.disabled', []);
+        $disabled = (array) config($this->getContext(), 'extensions.disabled', []);
         if (in_array($class, $disabled, true)) {
             return 'blacklisted';
         }
 
         // Check allow-list mode
-        $only = config('extensions.only');
+        $only = config($this->getContext(), 'extensions.only');
         if ($only !== null) {
             $onlyArray = (array) $only;
             if (!in_array($class, $onlyArray, true)) {
@@ -260,7 +261,7 @@ final class ListCommand extends BaseCommand
     private function scanLocalExtensions(string $path): array
     {
         $providers = [];
-        $extensionsPath = base_path($path);
+        $extensionsPath = base_path($this->getContext(), $path);
 
         if (!is_dir($extensionsPath)) {
             return [];

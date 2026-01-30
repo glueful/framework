@@ -155,7 +155,7 @@ class WorkCommand extends BaseQueueCommand
     private function initializeServices(): void
     {
         $logger = $this->getService(LoggerInterface::class);
-        $basePath = base_path(); // Path to glueful root
+        $basePath = base_path($this->getContext()); // Path to glueful root
 
         $processFactory = new ProcessFactory($logger, $basePath);
         $this->workerMonitor = $this->getService(WorkerMonitor::class);
@@ -164,7 +164,7 @@ class WorkCommand extends BaseQueueCommand
             $processFactory,
             $this->workerMonitor,
             $logger,
-            config('queue.workers.process', [])
+            config($this->getContext(), 'queue.workers.process', [])
         );
     }
 

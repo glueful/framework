@@ -2,6 +2,7 @@
 
 namespace Glueful\Queue\Monitoring;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Queue\Contracts\JobInterface;
 use Glueful\Database\Connection;
 use Glueful\Database\Schema\Interfaces\SchemaBuilderInterface;
@@ -39,6 +40,7 @@ class WorkerMonitor
 
     /** @var bool Whether monitoring is enabled */
     private bool $enabled;
+    private ?ApplicationContext $context;
 
     /**
      * Create worker monitor instance
@@ -46,9 +48,13 @@ class WorkerMonitor
      * @param Connection|null $connection Database connection (optional)
      * @param bool $enabled Whether monitoring is enabled
      */
-    public function __construct(?Connection $connection = null, bool $enabled = true)
-    {
-        $this->db = $connection ?? new Connection();
+    public function __construct(
+        ?Connection $connection = null,
+        bool $enabled = true,
+        ?ApplicationContext $context = null
+    ) {
+        $this->context = $context;
+        $this->db = $connection ?? new Connection([], $this->context);
         $this->schema = $this->db->getSchemaBuilder();
         $this->enabled = $enabled;
     }

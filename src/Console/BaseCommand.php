@@ -2,9 +2,12 @@
 
 namespace Glueful\Console;
 
+use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Bootstrap\ConfigurationLoader;
 use Glueful\Console\Interactive\Prompter;
 use Glueful\Console\Interactive\Progress\ProgressBar as EnhancedProgressBar;
 use Glueful\Console\Interactive\Progress\Spinner;
+use Glueful\Container\Bootstrap\ContainerFactory;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -28,6 +31,9 @@ abstract class BaseCommand extends Command
     /** @var ContainerInterface DI Container */
     protected ContainerInterface $container;
 
+    /** @var ApplicationContext Application context */
+    protected ApplicationContext $context;
+
     /** @var SymfonyStyle Enhanced output formatter */
     protected SymfonyStyle $io;
 
@@ -49,10 +55,13 @@ abstract class BaseCommand extends Command
      * - Calls parent constructor
      *
      * @param ContainerInterface|null $container DI Container instance
+     * @param ApplicationContext|null $context Application context
      */
-    public function __construct(?ContainerInterface $container = null)
+    public function __construct(?ContainerInterface $container = null, ?ApplicationContext $context = null)
     {
-        $this->container = $container ?? container();
+        $this->context = $context ?? $this->buildDefaultContext();
+        $this->container = $container ?? ContainerFactory::create($this->context, false);
+        $this->context->setContainer($this->container);
         parent::__construct();
     }
 
@@ -88,6 +97,31 @@ abstract class BaseCommand extends Command
     protected function getContainer(): ContainerInterface
     {
         return $this->container;
+    }
+
+    protected function getContext(): ApplicationContext
+    {
+        return $this->context;
+    }
+
+    private function buildDefaultContext(): ApplicationContext
+    {
+        $basePath = getcwd() ?: dirname(__DIR__, 2);
+        $env = $_ENV['APP_ENV'] ?? 'production';
+        $configPath = $basePath . '/config';
+
+        $context = new ApplicationContext(
+            $basePath,
+            $env,
+            [
+                'framework' => $basePath . '/config',
+                'application' => $configPath,
+            ]
+        );
+
+        $context->setConfigLoader(new ConfigurationLoader($basePath, $env, $configPath));
+
+        return $context;
     }
 
     /**
@@ -395,7 +429,7 @@ abstract class BaseCommand extends Command
      */
     protected function isProduction(): bool
     {
-        return config('app.env') === 'production';
+        return config($this->context, 'app.env') === 'production';
     }
 
     /**

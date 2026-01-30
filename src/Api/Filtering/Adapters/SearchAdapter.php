@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Api\Filtering\Adapters;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Api\Filtering\Contracts\SearchAdapterInterface;
 use Glueful\Api\Filtering\SearchResult;
 use Glueful\Database\Connection;
@@ -26,16 +27,22 @@ abstract class SearchAdapter implements SearchAdapterInterface
     protected Connection $db;
     protected bool $tableEnsured = false;
     protected string $indexName;
+    protected ?ApplicationContext $context;
 
     /**
      * @param string $indexName The name of the search index
      * @param Connection|null $connection Optional database connection
+     * @param ApplicationContext|null $context Application context
      */
-    public function __construct(string $indexName, ?Connection $connection = null)
-    {
+    public function __construct(
+        string $indexName,
+        ?Connection $connection = null,
+        ?ApplicationContext $context = null
+    ) {
         $this->indexName = $indexName;
         $this->db = $connection ?? new Connection();
         $this->schema = $this->db->getSchemaBuilder();
+        $this->context = $context;
     }
 
     /**
@@ -275,8 +282,8 @@ abstract class SearchAdapter implements SearchAdapterInterface
      */
     protected function getConfig(): array
     {
-        if (function_exists('config')) {
-            return (array) config('api.filtering.search', []);
+        if (function_exists('config') && $this->context !== null) {
+            return (array) config($this->context, 'api.filtering.search', []);
         }
 
         return [];

@@ -2,7 +2,7 @@
 
 namespace Glueful\Performance;
 
-use function config;
+use Glueful\Bootstrap\ApplicationContext;
 
 class MemoryPool
 {
@@ -19,6 +19,7 @@ class MemoryPool
      * @var int
      */
     private $maxSize;
+    private ?ApplicationContext $context;
 
     /**
      * Current number of objects in the pool
@@ -39,9 +40,10 @@ class MemoryPool
      *
      * @param int|null $maxSize Maximum number of objects in the pool
      */
-    public function __construct(?int $maxSize = null)
+    public function __construct(?int $maxSize = null, ?ApplicationContext $context = null)
     {
-        $this->maxSize = $maxSize ?? config('app.performance.memory.pool_size', 100);
+        $this->context = $context;
+        $this->maxSize = $maxSize ?? (int) $this->getConfig('app.performance.memory.pool_size', 100);
     }
 
     /**
@@ -112,6 +114,15 @@ class MemoryPool
         }
 
         return false;
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 
     /**

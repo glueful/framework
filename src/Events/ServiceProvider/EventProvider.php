@@ -41,6 +41,15 @@ final class EventProvider extends BaseServiceProvider
             \Glueful\Events\EventDispatcher::class
         );
 
+        $defs[\Glueful\Events\EventService::class] = new FactoryDefinition(
+            \Glueful\Events\EventService::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Events\EventService(
+                $c->get(\Psr\EventDispatcher\EventDispatcherInterface::class),
+                $c->get(\Glueful\Events\ListenerProvider::class),
+                $c
+            )
+        );
+
         // Subscriber registrar to add subscribers lazily via container
         $defs[\Glueful\Events\SubscriberRegistrar::class] = new FactoryDefinition(
             \Glueful\Events\SubscriberRegistrar::class,

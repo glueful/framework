@@ -96,8 +96,8 @@ class CreateListenerCommand extends BaseCommand
             $this->line('');
             $this->info('Next steps:');
             $this->line('  1. Implement your event handling logic in the ' . $methodName . '() method');
-            $this->line('  2. Register the listener: Event::listen(EventClass::class, ['
-                . $listenerInfo['className'] . '::class, \'' . $methodName . '\'])');
+            $cls = $listenerInfo['className'];
+            $this->line("  2. Register: \$events->addListener(Event::class, [{$cls}::class, '{$methodName}'])");
             if ($eventClass !== null && $eventClass !== '') {
                 $this->line('  3. Or inject as dependency in your service provider');
             }
@@ -118,7 +118,7 @@ class CreateListenerCommand extends BaseCommand
         $this->storage = new StorageManager([
             'default' => 'local',
             'disks' => [
-                'local' => ['driver' => 'local', 'root' => base_path(), 'visibility' => 'private'],
+                'local' => ['driver' => 'local', 'root' => base_path($this->getContext()), 'visibility' => 'private'],
             ],
         ], new PathGuard());
     }
@@ -156,7 +156,7 @@ class CreateListenerCommand extends BaseCommand
         }
 
         // Build directory path using config
-        $baseDir = config('app.paths.app_listeners');
+        $baseDir = config($this->getContext(), 'app.paths.app_listeners');
         $filePath = $baseDir . DIRECTORY_SEPARATOR . $listenerName . '.php';
 
         // Build namespace for application listeners
@@ -239,7 +239,10 @@ use Psr\Log\LoggerInterface;
  * Handles events and performs business logic operations
  *
  * Usage:
- * Event::listen(EventClass::class, [{$className}::class, '{$methodName}']);
+ * app(\$context, \\Glueful\\Events\\EventService::class)->addListener(
+ *     EventClass::class,
+ *     [{$className}::class, '{$methodName}']
+ * );
  */
 class {$className}
 {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Routing\Middleware;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Routing\RouteMiddleware;
 use Glueful\Support\FieldSelection\Parsers\GraphQLProjectionParser;
 use Glueful\Support\FieldSelection\Parsers\RestProjectionParser;
@@ -14,9 +15,13 @@ use Symfony\Component\HttpFoundation\Response;
 
 final class FieldSelectionMiddleware implements RouteMiddleware
 {
+    private ?ApplicationContext $context;
+
     public function __construct(
-        private readonly Projector $projector
+        private readonly Projector $projector,
+        ?ApplicationContext $context = null
     ) {
+        $this->context = $context;
     }
 
     /**
@@ -121,7 +126,7 @@ final class FieldSelectionMiddleware implements RouteMiddleware
     private function defaults(): array
     {
         // Pull from config('api.field_selection') with fallbacks
-        $cfg = \function_exists('config') ? (array)\config('api.field_selection', []) : [];
+        $cfg = (array) $this->getConfig('api.field_selection', []);
         return array_merge([
             'strict' => false,
             'maxDepth' => 6,
@@ -130,6 +135,15 @@ final class FieldSelectionMiddleware implements RouteMiddleware
             'whitelistKey' => null,
             'allowed' => null,
         ], $cfg);
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 
     /**

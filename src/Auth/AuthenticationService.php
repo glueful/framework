@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Glueful\Auth;
 
+use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Cache\Drivers\ArrayCacheDriver;
+use Glueful\Helpers\CacheHelper;
 use Glueful\Repository\UserRepository;
 use Glueful\DTOs\{PasswordDTO};
 use Symfony\Component\HttpFoundation\Request;
@@ -32,8 +35,10 @@ class AuthenticationService
     private UserRepository $userRepository;
     private PasswordHasher $passwordHasher;
     private AuthenticationManager $authManager;
+    private TokenManager $tokenManager;
     private SessionStoreInterface $sessionStore;
     private SessionCacheManager $sessionCacheManager;
+    private ?ApplicationContext $context;
 
     /**
      * Initialize AuthenticationService with dependency injection
@@ -56,6 +61,7 @@ class AuthenticationService
      * @param SessionCacheManager|null $sessionCacheManager Session management and caching service
      * @param UserRepository|null $userRepository User data repository for authentication
      * @param PasswordHasher|null $passwordHasher Password hashing and verification service
+     * @param ApplicationContext|null $context
      * @throws \RuntimeException If authentication system initialization fails
      * @throws \InvalidArgumentException If any provided dependency has incorrect interface
      */
@@ -63,19 +69,45 @@ class AuthenticationService
         ?SessionStoreInterface $sessionStore = null,
         ?SessionCacheManager $sessionCacheManager = null,
         ?UserRepository $userRepository = null,
-        ?PasswordHasher $passwordHasher = null
+        ?PasswordHasher $passwordHasher = null,
+        ?ApplicationContext $context = null,
+        ?AuthenticationManager $authManager = null,
+        ?TokenManager $tokenManager = null
     ) {
+        $this->context = $context;
         // Resolve SessionStore via trait helper (container with fallback)
         $this->sessionStore = $sessionStore ?? $this->getSessionStore();
-        $this->sessionCacheManager = $sessionCacheManager ?? container()->get(SessionCacheManager::class);
+        if ($sessionCacheManager !== null) {
+            $this->sessionCacheManager = $sessionCacheManager;
+        } elseif ($this->context !== null) {
+            $this->sessionCacheManager = container($this->context)->get(SessionCacheManager::class);
+        } else {
+            $cache = CacheHelper::createCacheInstance($this->context) ?? new ArrayCacheDriver();
+            $this->sessionCacheManager = new SessionCacheManager($cache, $this->context);
+        }
         $this->userRepository = $userRepository ?? new UserRepository();
         $this->passwordHasher = $passwordHasher ?? new PasswordHasher();
 
-        // Ensure authentication system is initialized
-        AuthBootstrap::initialize();
+        if ($authManager !== null) {
+            $this->authManager = $authManager;
+        } elseif ($this->context !== null && $this->context->hasContainer()) {
+            $this->authManager = $this->context->getContainer()->get(AuthenticationManager::class);
+        } else {
+            $this->authManager = new AuthenticationManager(new JwtAuthenticationProvider());
+        }
 
-        // Get the authentication manager instance
-        $this->authManager = AuthBootstrap::getManager();
+        if ($tokenManager !== null) {
+            $this->tokenManager = $tokenManager;
+        } elseif ($this->context !== null && $this->context->hasContainer()) {
+            $this->tokenManager = $this->context->getContainer()->get(TokenManager::class);
+        } else {
+            $this->tokenManager = new TokenManager($this->context, null, $this->authManager);
+        }
+    }
+
+    protected function getContext(): ?ApplicationContext
+    {
+        return $this->context;
     }
 
     /**
@@ -123,14 +155,17 @@ class AuthenticationService
         // Process credentials based on type (username or email) using optimized query
         $user = null;
 
-        if (isset($credentials['username'])) {
-            if (filter_var($credentials['username'], FILTER_VALIDATE_EMAIL)) {
-                // For email login
-                $user = $this->userRepository->findByEmail($credentials['username']);
-            } else {
-                // For username login
-                $user = $this->userRepository->findByUsername($credentials['username']);
-            }
+        $username = $credentials['username'] ?? $credentials['email'] ?? null;
+        if ($username === null) {
+            return null;
+        }
+
+        if (filter_var($username, FILTER_VALIDATE_EMAIL)) {
+            // For email login
+            $user = $this->userRepository->findByEmail($username);
+        } else {
+            // For username login
+            $user = $this->userRepository->findByUsername($username);
         }
 
         // If user not found or is an array of error messages
@@ -139,7 +174,7 @@ class AuthenticationService
         }
 
         // Enforce allowed login statuses (default: ['active'])
-        $allowedStatuses = (array) config('security.auth.allowed_login_statuses', ['active']);
+        $allowedStatuses = (array) $this->getConfig('security.auth.allowed_login_statuses', ['active']);
         $userStatus = (string) ($user['status'] ?? '');
         if ($allowedStatuses !== [] && !in_array($userStatus, $allowedStatuses, true)) {
             // Fail silently to avoid account enumeration
@@ -194,7 +229,7 @@ class AuthenticationService
         $preferredProvider = $providerName ?? ($credentials['provider'] ?? 'jwt');
 
         // Create user session with the appropriate provider
-        $userSession = TokenManager::createUserSession($userData, $preferredProvider);
+        $userSession = $this->tokenManager->createUserSession($userData, $preferredProvider);
 
         // Return authentication result
         return $userSession;
@@ -225,14 +260,19 @@ class AuthenticationService
      * @param string $token Authentication token
      * @return array<string, mixed>|null Session data if valid
      */
-    public static function validateAccessToken(string $token): ?array
-    {
-        if (TokenManager::validateAccessToken($token) === false) {
+    public function validateAccessToken(
+        string $token,
+        ?ApplicationContext $context = null
+    ): ?array {
+        if ($this->tokenManager->validateAccessToken($token) === false) {
             return null;
         }
 
-        // For static method, we need to get instance through container
-        $sessionCacheManager = container()->get(SessionCacheManager::class);
+        $sessionCacheManager = $this->sessionCacheManager;
+        if ($context !== null && $context->hasContainer()) {
+            $sessionCacheManager = container($context)->get(SessionCacheManager::class);
+        }
+
         return $sessionCacheManager->getSession($token);
     }
 
@@ -260,10 +300,42 @@ class AuthenticationService
      * @param Request|null $request The request object
      * @return string|null Authentication token
      */
-    public static function extractTokenFromRequest(?Request $request = null): ?string
-    {
-        // Delegate to the centralized extractor to avoid divergence
-        return TokenManager::extractTokenFromRequest();
+    public function extractTokenFromRequest(
+        ?Request $request = null,
+        ?ApplicationContext $context = null
+    ): ?string {
+        if ($request === null) {
+            // Delegate to centralized extractor when no request is provided
+            return $this->tokenManager->extractTokenFromRequest();
+        }
+
+        $authorizationHeader = $request->headers->get('Authorization');
+        if ($authorizationHeader === null || $authorizationHeader === '') {
+            $authorizationHeader = $request->server->get('HTTP_AUTHORIZATION')
+                ?? $request->server->get('REDIRECT_HTTP_AUTHORIZATION')
+                ?? $request->server->get('PHP_AUTH_DIGEST');
+        }
+
+        if (
+            $authorizationHeader !== null && $authorizationHeader !== ''
+            && preg_match('/Bearer\s+(.+)/i', $authorizationHeader, $matches)
+        ) {
+            return trim($matches[1]);
+        }
+
+        $context = $context ?? $this->context;
+        $allowQueryParam = $context !== null
+            ? (bool) config($context, 'security.tokens.allow_query_param', false)
+            : false;
+        if ($allowQueryParam !== true) {
+            return null;
+        }
+
+        if (env('APP_ENV', 'production') !== 'production') {
+            error_log('Deprecated: token passed via query string');
+        }
+
+        return $request->query->get('token');
     }
 
     /**
@@ -322,7 +394,7 @@ class AuthenticationService
 
         if ($authProvider !== null) {
             // Generate new token using the same provider that created the original token
-            $tokenLifetime = (int)config('session.access_token_lifetime');
+            $tokenLifetime = (int) $this->getConfig('session.access_token_lifetime');
 
             // Create a minimal user data array with permissions
             $userData = [
@@ -346,7 +418,7 @@ class AuthenticationService
             ];
         } else {
             // Fall back to default JWT method if provider not found
-            $tokenLifetime = (int)config('session.access_token_lifetime');
+            $tokenLifetime = (int) $this->getConfig('session.access_token_lifetime');
             $newToken = JWTService::generate($session, $tokenLifetime);
 
             // Update session storage
@@ -443,7 +515,7 @@ class AuthenticationService
     public function refreshTokens(string $refreshToken): ?array
     {
         // Get new token pair from TokenManager
-        $tokens = TokenManager::refreshTokens($refreshToken);
+        $tokens = $this->tokenManager->refreshTokens($refreshToken);
 
         if ($tokens === null || $tokens === []) {
             return null;
@@ -548,7 +620,7 @@ class AuthenticationService
         }
 
         // Enforce allowed statuses for token refresh as well
-        $allowedStatuses = (array) config('security.auth.allowed_login_statuses', ['active']);
+        $allowedStatuses = (array) $this->getConfig('security.auth.allowed_login_statuses', ['active']);
         $userStatus = (string) ($user['status'] ?? '');
         if ($allowedStatuses !== [] && !in_array($userStatus, $allowedStatuses, true)) {
             return null;
@@ -573,7 +645,7 @@ class AuthenticationService
      * @param Request|mixed $request The request to check
      * @return bool True if authenticated, false otherwise
      */
-    public static function checkAuth($request): bool
+    public function checkAuth($request): bool
     {
         // Ensure we're working with a Request object
         if (!($request instanceof Request)) {
@@ -582,7 +654,7 @@ class AuthenticationService
         }
 
         // Use the authentication manager
-        $authManager = AuthBootstrap::getManager();
+        $authManager = $this->authManager;
         $userData = $authManager->authenticate($request);
 
         return $userData !== null;
@@ -596,7 +668,7 @@ class AuthenticationService
      * @param Request|mixed $request The request to check
      * @return bool True if authenticated as admin, false otherwise
      */
-    public static function checkAdminAuth($request): bool
+    public function checkAdminAuth($request): bool
     {
         // Ensure we're working with a Request object
         if (!($request instanceof Request)) {
@@ -605,7 +677,7 @@ class AuthenticationService
         }
 
         // Use the authentication manager
-        $authManager = AuthBootstrap::getManager();
+        $authManager = $this->authManager;
         $userData = $authManager->authenticate($request);
 
         if ($userData === null) {
@@ -628,9 +700,9 @@ class AuthenticationService
      * @param list<string> $providers Names of providers to try (e.g. 'jwt', 'api_key')
      * @return array<string, mixed>|null User data if authenticated, null otherwise
      */
-    public static function authenticateWithProviders(Request $request, array $providers = ['jwt', 'api_key']): ?array
+    public function authenticateWithProviders(Request $request, array $providers = ['jwt', 'api_key']): ?array
     {
-        $authManager = AuthBootstrap::getManager();
+        $authManager = $this->authManager;
         return $authManager->authenticateWithProviders($providers, $request);
     }
 
@@ -646,11 +718,17 @@ class AuthenticationService
     {
         try {
             // Try to get request from container first
-            if (isset($GLOBALS['container'])) {
-                $container = $GLOBALS['container'];
+            if ($this->context !== null && $this->context->hasContainer()) {
+                $container = $this->context->getContainer();
                 if ($container->has('request')) {
                     $request = $container->get('request');
                     if ($request instanceof Request) {
+                        if ($request->attributes->has('user')) {
+                            $user = $request->attributes->get('user');
+                            if (is_object($user)) {
+                                return $user;
+                            }
+                        }
                         $userData = self::authenticateWithProviders($request);
                         if ($userData !== null && isset($userData['user'])) {
                             return (object) $userData['user'];
@@ -670,5 +748,14 @@ class AuthenticationService
         }
 
         return null;
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if (function_exists('config') && $this->context !== null) {
+            return config($this->context, $key, $default);
+        }
+
+        return $default;
     }
 }

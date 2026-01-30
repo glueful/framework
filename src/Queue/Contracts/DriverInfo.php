@@ -2,6 +2,8 @@
 
 namespace Glueful\Queue\Contracts;
 
+use Glueful\Bootstrap\ApplicationContext;
+
 /**
  * Driver Information Class
  *
@@ -39,7 +41,8 @@ class DriverInfo
         public readonly array $supportedFeatures,
         /** @var array<string, string> */
         public readonly array $requiredDependencies,
-        public readonly string $documentationUrl = ''
+        public readonly string $documentationUrl = '',
+        public readonly ?ApplicationContext $context = null
     ) {
     }
 
@@ -124,7 +127,19 @@ class DriverInfo
     private function isPackageInstalled(string $package): bool
     {
         // Simple check - in production you might want to use Composer's API
-        $vendorPath = base_path('vendor/' . $package);
+        $vendorPath = $this->getBasePath('vendor/' . $package);
         return is_dir($vendorPath);
+    }
+
+    private function getBasePath(string $suffix = ''): string
+    {
+        if ($this->context !== null) {
+            return base_path($this->context, $suffix);
+        }
+
+        $root = rtrim(dirname(__DIR__, 3), DIRECTORY_SEPARATOR);
+        return $suffix !== ''
+            ? $root . DIRECTORY_SEPARATOR . ltrim($suffix, DIRECTORY_SEPARATOR)
+            : $root;
     }
 }

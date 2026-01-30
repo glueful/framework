@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Routing\Middleware;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Routing\RouteMiddleware;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -13,7 +14,7 @@ use Glueful\Cache\CacheStore;
 use Glueful\Exceptions\SecurityException;
 use Psr\Container\ContainerInterface;
 use Glueful\Events\Security\CSRFViolationEvent;
-use Glueful\Events\Event;
+use Glueful\Events\EventService;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -65,6 +66,8 @@ use Psr\Log\LoggerInterface;
  */
 class CSRFMiddleware implements RouteMiddleware
 {
+    private ?ApplicationContext $context;
+
     /** @var string CSRF token header name */
     private const CSRF_HEADER = 'X-CSRF-Token';
 
@@ -148,6 +151,7 @@ class CSRFMiddleware implements RouteMiddleware
      * @param ContainerInterface|null $container DI Container instance
      * @param CacheStore<string>|null $cache Cache instance
      * @param LoggerInterface|null $logger Logger instance
+     * @param ApplicationContext|null $context Application context
      */
     public function __construct(
         array $exemptRoutes = [],
@@ -160,8 +164,10 @@ class CSRFMiddleware implements RouteMiddleware
         array $allowedOrigins = [],
         ?ContainerInterface $container = null,
         ?CacheStore $cache = null,
-        ?LoggerInterface $logger = null
+        ?LoggerInterface $logger = null,
+        ?ApplicationContext $context = null
     ) {
+        $this->context = $context;
         $this->exemptRoutes = $this->normalizeRoutes($exemptRoutes);
         $this->tokenLifetime = $tokenLifetime;
         $this->useDoubleSubmit = $useDoubleSubmit;
@@ -259,7 +265,7 @@ class CSRFMiddleware implements RouteMiddleware
                 'path' => $request->getPathInfo()
             ]);
 
-            Event::dispatch(new CSRFViolationEvent(
+            $this->getEventService()?->dispatch(new CSRFViolationEvent(
                 'csrf_origin_mismatch',
                 $request
             ));
@@ -283,7 +289,7 @@ class CSRFMiddleware implements RouteMiddleware
                 'method' => $request->getMethod()
             ]);
 
-            Event::dispatch(new CSRFViolationEvent(
+            $this->getEventService()?->dispatch(new CSRFViolationEvent(
                 'csrf_token_mismatch',
                 $request
             ));
@@ -518,9 +524,16 @@ class CSRFMiddleware implements RouteMiddleware
         $origin = $request->headers->get('Origin');
         $referer = $request->headers->get('Referer');
 
-        // If neither header is present, fail closed for security
+        // If neither header is present, decide based on configuration
         if ($origin === null && $referer === null) {
-            return false;
+            if ((bool) $this->getConfig('security.csrf.skip_for_bearer_auth', true)) {
+                $authorization = $request->headers->get('Authorization', '');
+                if (str_starts_with($authorization, 'Bearer ')) {
+                    return true;
+                }
+            }
+
+            return (bool) $this->getConfig('security.csrf.allow_missing_origin', false);
         }
 
         // Check Origin header first (more reliable)
@@ -966,18 +979,18 @@ class CSRFMiddleware implements RouteMiddleware
      */
     private function getDefaultContainer(): ?\Psr\Container\ContainerInterface
     {
-        if (function_exists('container')) {
+        if ($this->context !== null && function_exists('container')) {
             try {
-                $c = container();
+                $c = container($this->context);
                 return $c;
             } catch (\Exception) {
                 return null;
             }
         }
 
-        if (function_exists('app')) {
+        if ($this->context !== null && function_exists('app')) {
             try {
-                $a = app();
+                $a = app($this->context);
                 return $a instanceof \Psr\Container\ContainerInterface ? $a : null;
             } catch (\Exception) {
                 return null;
@@ -985,6 +998,15 @@ class CSRFMiddleware implements RouteMiddleware
         }
 
         return null;
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 
     /**
@@ -1112,5 +1134,20 @@ class CSRFMiddleware implements RouteMiddleware
         );
 
         return $tags;
+    }
+
+    private function getEventService(): ?EventService
+    {
+        if ($this->container !== null && $this->container->has(EventService::class)) {
+            $service = $this->container->get(EventService::class);
+            return $service instanceof EventService ? $service : null;
+        }
+
+        if ($this->context !== null && $this->context->hasContainer()) {
+            $service = $this->context->getContainer()->get(EventService::class);
+            return $service instanceof EventService ? $service : null;
+        }
+
+        return null;
     }
 }

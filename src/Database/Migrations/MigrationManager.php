@@ -10,6 +10,7 @@ use Glueful\Database\Connection;
 use Glueful\Exceptions\DatabaseException;
 use Glueful\Exceptions\BusinessLogicException;
 use Glueful\Services\FileFinder;
+use Glueful\Bootstrap\ApplicationContext;
 
 /**
  * Database Migration Manager
@@ -56,6 +57,7 @@ class MigrationManager
      * @var string Directory containing migration files
      */
     private string $migrationsPath;
+    private ?ApplicationContext $context;
 
 
     /**
@@ -84,17 +86,37 @@ class MigrationManager
      */
     public function __construct(
         ?string $migrationsPath = null,
-        ?FileFinder $fileFinder = null
+        ?FileFinder $fileFinder = null,
+        ?ApplicationContext $context = null
     ) {
+        $this->context = $context;
         $connection = new Connection();
         $this->db = $connection;
         $this->schema = $connection->getSchemaBuilder();
 
-        $this->migrationsPath = $migrationsPath ?? config(('app.paths.migrations'));
-        $this->fileFinder = $fileFinder ?? container()->get(FileFinder::class);
+        $this->migrationsPath = $migrationsPath ?? $this->getConfig('app.paths.migrations');
+        $this->fileFinder = $fileFinder ?? $this->resolveFileFinder();
         // echo $this->migrationsPath;
         // exit;
         $this->ensureVersionTable();
+    }
+
+    private function resolveFileFinder(): FileFinder
+    {
+        if ($this->context !== null) {
+            return container($this->context)->get(FileFinder::class);
+        }
+
+        return new FileFinder();
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 
     /**

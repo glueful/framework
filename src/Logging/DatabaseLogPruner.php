@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Logging;
 
 use Glueful\Database\Connection;
+use Glueful\Bootstrap\ApplicationContext;
 
 /**
  * Log Pruner for DatabaseLogHandler
@@ -19,17 +20,20 @@ class DatabaseLogPruner
     private int $maxAgeInDays;
     private int $maxRecords;
     private string $table;
+    private ?ApplicationContext $context;
 
     public function __construct(
         int $maxAgeInDays = 90,
         int $maxRecords = 1000000,
-        string $table = 'activity_logs'
+        string $table = 'activity_logs',
+        ?ApplicationContext $context = null
     ) {
         $this->maxAgeInDays = $maxAgeInDays;
         $this->maxRecords = $maxRecords;
         $this->table = $table;
+        $this->context = $context;
 
-        $connection = new Connection();
+        $connection = new Connection([], $this->context);
         $this->db = $connection;
     }
 
@@ -102,11 +106,11 @@ class DatabaseLogPruner
      */
     private function getChannelRetention(): array
     {
-        if (!function_exists('config')) {
+        if ($this->context === null) {
             return [];
         }
 
-        $config = config('logging.retention.channels', []);
+        $config = config($this->context, 'logging.retention.channels', []);
 
         return is_array($config) ? $config : [];
     }
@@ -118,11 +122,11 @@ class DatabaseLogPruner
      */
     private function getDefaultRetention(): int
     {
-        if (!function_exists('config')) {
+        if ($this->context === null) {
             return $this->maxAgeInDays;
         }
 
-        return (int) config('logging.retention.default', $this->maxAgeInDays);
+        return (int) config($this->context, 'logging.retention.default', $this->maxAgeInDays);
     }
 
     /**

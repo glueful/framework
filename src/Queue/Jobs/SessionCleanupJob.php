@@ -90,7 +90,10 @@ class SessionCleanupJob extends Job
             default => throw new \InvalidArgumentException("Unknown cleanup type: {$cleanupType}")
         };
 
-        app(LogManager::class)->info('Session cleanup completed', [
+        $logger = $this->context !== null
+            ? container($this->context)->get(LogManager::class)
+            : LogManager::getInstance();
+        $logger->info('Session cleanup completed', [
             'cleanup_type' => $cleanupType,
             'sessions_cleaned' => $result['cleaned_count'] ?? 0,
             'errors' => $result['errors'] ?? []
@@ -107,7 +110,10 @@ class SessionCleanupJob extends Job
         $cleanupType = $data['cleanupType'] ?? 'expired';
         $options = $data['options'] ?? [];
 
-        app(LogManager::class)->error('Session cleanup job failed', [
+        $logger = $this->context !== null
+            ? container($this->context)->get(LogManager::class)
+            : LogManager::getInstance();
+        $logger->error('Session cleanup job failed', [
             'cleanup_type' => $cleanupType,
             'options' => $options,
             'error' => $exception->getMessage()

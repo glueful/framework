@@ -137,9 +137,13 @@ class ProcessRetriesCommand extends BaseCommand
         // Set up notification service
         $this->notificationService = new NotificationService(
             new NotificationDispatcher(
-                new ChannelManager()
+                new ChannelManager(),
+                null,
+                [],
+                app($this->getContext(), \Glueful\Events\EventService::class)
             ),
-            new NotificationRepository()
+            new NotificationRepository(),
+            context: $this->getContext()
         );
 
         // Initialize retry service with logger and configuration
@@ -147,7 +151,7 @@ class ProcessRetriesCommand extends BaseCommand
             $this->logger,
             null, // Use default NotificationRepository
             // Align with extension config namespace used by EmailNotification
-            config('emailnotification.retry') ?? []
+            config($this->getContext(), 'emailnotification.retry') ?? []
         );
     }
 

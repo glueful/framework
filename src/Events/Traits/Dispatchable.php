@@ -4,35 +4,36 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Traits;
 
-use Glueful\Events\Event;
+use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Events\EventService;
 
-/**
- * Dispatchable Trait
- *
- * Allows events to be dispatched using a static method.
- * Inspired by Laravel's Dispatchable trait.
- */
+    /**
+     * Dispatchable Trait
+     *
+     * Allows events to be dispatched using a static method.
+     * Inspired by Laravel's Dispatchable trait.
+     */
 trait Dispatchable
 {
-    public static function dispatch(...$args): static
+    public static function dispatch(ApplicationContext $context, ...$args): static
     {
         $event = new static(...$args);
-        Event::dispatch($event);
+        app($context, EventService::class)->dispatch($event);
         return $event;
     }
 
-    public static function dispatchIf(bool $condition, ...$args): ?static
+    public static function dispatchIf(ApplicationContext $context, bool $condition, ...$args): ?static
     {
         if ($condition) {
-            return static::dispatch(...$args);
+            return static::dispatch($context, ...$args);
         }
         return null;
     }
 
-    public static function dispatchUnless(bool $condition, ...$args): ?static
+    public static function dispatchUnless(ApplicationContext $context, bool $condition, ...$args): ?static
     {
         if (!$condition) {
-            return static::dispatch(...$args);
+            return static::dispatch($context, ...$args);
         }
         return null;
     }

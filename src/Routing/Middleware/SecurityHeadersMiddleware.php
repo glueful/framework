@@ -668,8 +668,8 @@ class SecurityHeadersMiddleware implements RouteMiddleware
                 'report_only' => false,
                 'directives' => [
                     'default-src' => ["'self'"],
-                    'script-src' => ["'self'", "'unsafe-inline'"],
-                    'style-src' => ["'self'", "'unsafe-inline'"],
+                    'script-src' => ["'self'"],
+                    'style-src' => ["'self'"],
                     'img-src' => ["'self'", 'data:', 'https:'],
                     'font-src' => ["'self'", 'data:'],
                     'connect-src' => ["'self'"],
@@ -684,8 +684,8 @@ class SecurityHeadersMiddleware implements RouteMiddleware
                 'report_only' => false,
                 'directives' => [
                     'default-src' => ["*"],
-                    'script-src' => ["*", "'unsafe-inline'", "'unsafe-eval'"],
-                    'style-src' => ["*", "'unsafe-inline'"],
+                    'script-src' => ["*", "'unsafe-eval'"],
+                    'style-src' => ["*"],
                     'img-src' => ["*", 'data:'],
                     'font-src' => ["*", 'data:'],
                     'connect-src' => ["*"],
@@ -694,6 +694,11 @@ class SecurityHeadersMiddleware implements RouteMiddleware
                 ]
             ]
         ];
+
+        foreach ($configs as &$config) {
+            $config['directives'] = $this->applyUnsafeInlineOptIn($config['directives']);
+        }
+        unset($config);
 
         return $configs[$level] ?? $configs['moderate'];
     }
@@ -783,8 +788,8 @@ class SecurityHeadersMiddleware implements RouteMiddleware
                 'report_only' => false,
                 'directives' => [
                     'default-src' => ["'self'"],
-                    'script-src' => ["'self'", "'unsafe-inline'"],
-                    'style-src' => ["'self'", "'unsafe-inline'"],
+                    'script-src' => ["'self'"],
+                    'style-src' => ["'self'"],
                     'img-src' => ["'self'", 'data:', 'https:'],
                     'font-src' => ["'self'", 'data:'],
                     'connect-src' => ["'self'"],
@@ -828,10 +833,44 @@ class SecurityHeadersMiddleware implements RouteMiddleware
             ]
         ];
 
+        $defaults['content_security_policy']['directives'] = $this->applyUnsafeInlineOptIn(
+            $defaults['content_security_policy']['directives']
+        );
+
         // Handle legacy configuration format from security.php
         $config = $this->normalizeLegacyConfig($config);
 
         return array_replace_recursive($defaults, $config);
+    }
+
+    /**
+     * Apply unsafe-inline directives when explicitly enabled via env flags.
+     *
+     * @param array<string, array<string>> $directives
+     * @return array<string, array<string>>
+     */
+    private function applyUnsafeInlineOptIn(array $directives): array
+    {
+        $allowScriptUnsafeInline = (bool) env('CSP_SCRIPT_UNSAFE_INLINE', false);
+        $allowStyleUnsafeInline = (bool) env('CSP_STYLE_UNSAFE_INLINE', false);
+
+        if (
+            $allowScriptUnsafeInline
+            && isset($directives['script-src'])
+            && !in_array("'unsafe-inline'", $directives['script-src'], true)
+        ) {
+            $directives['script-src'][] = "'unsafe-inline'";
+        }
+
+        if (
+            $allowStyleUnsafeInline
+            && isset($directives['style-src'])
+            && !in_array("'unsafe-inline'", $directives['style-src'], true)
+        ) {
+            $directives['style-src'][] = "'unsafe-inline'";
+        }
+
+        return $directives;
     }
 
     /**

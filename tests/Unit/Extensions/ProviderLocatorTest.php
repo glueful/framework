@@ -6,48 +6,26 @@ namespace Glueful\Tests\Unit\Extensions;
 
 use PHPUnit\Framework\TestCase;
 use Glueful\Extensions\ProviderLocator;
+use Glueful\Bootstrap\ApplicationContext;
 
 class ProviderLocatorTest extends TestCase
 {
     private string $tempConfigDir;
+    private ?ApplicationContext $context = null;
 
     protected function setUp(): void
     {
         // Create temporary config directory for testing
         $this->tempConfigDir = sys_get_temp_dir() . '/test_config_' . uniqid();
         mkdir($this->tempConfigDir, 0755, true);
-
-        // Set up config paths for the helper function
-        $GLOBALS['config_paths'] = [
-            'application' => $this->tempConfigDir,
-            'framework' => $this->tempConfigDir
-        ];
-
-        // Force clear the static config cache using a reflection hack
-        $this->clearStaticConfigCache();
-    }
-
-    private function clearStaticConfigCache(): void
-    {
-        // Unfortunately, PHP doesn't allow direct modification of static variables via reflection in PHP 8+
-        // As a workaround, we'll use a different approach: temporarily unset the config paths
-        // to force the config function to use its fallback loading mechanism
-
-        // Store the current paths and temporarily clear them
-        $currentPaths = $GLOBALS['config_paths'] ?? null;
-        unset($GLOBALS['config_paths']);
-
-        // Make a dummy config call to potentially clear any cached state
-        try {
-            config('dummy.nonexistent', null);
-        } catch (\Throwable) {
-            // Ignore any errors
-        }
-
-        // Restore the paths
-        if ($currentPaths !== null) {
-            $GLOBALS['config_paths'] = $currentPaths;
-        }
+        $this->context = new ApplicationContext(
+            basePath: sys_get_temp_dir(),
+            environment: 'testing',
+            configPaths: [
+                'application' => $this->tempConfigDir,
+                'framework' => $this->tempConfigDir
+            ]
+        );
     }
 
 
@@ -98,9 +76,14 @@ class ProviderLocatorTest extends TestCase
         $extensionDir = $tempDir . '/test-extension';
         mkdir($extensionDir, 0755, true);
 
-        // Set up base_path to point to our temp directory
-        $originalBasePath = $GLOBALS['base_path'] ?? null;
-        $GLOBALS['base_path'] = $tempDir;
+        $context = new ApplicationContext(
+            basePath: $tempDir,
+            environment: 'testing',
+            configPaths: [
+                'application' => $this->tempConfigDir,
+                'framework' => $this->tempConfigDir
+            ]
+        );
 
         // Create a mock vendor/autoload.php file for the test
         $vendorDir = $tempDir . '/vendor';
@@ -140,17 +123,10 @@ class ProviderLocatorTest extends TestCase
             $method->setAccessible(true);
 
             // Pass an empty string since base_path will be prepended
-            $providers = $method->invoke(null, '');
+            $providers = $method->invoke(null, $context, '');
 
             $this->assertEquals(['Test\\Extension\\TestProvider'], $providers);
         } finally {
-            // Restore original base path
-            if ($originalBasePath === null) {
-                unset($GLOBALS['base_path']);
-            } else {
-                $GLOBALS['base_path'] = $originalBasePath;
-            }
-
             // Clean up
             unlink($extensionDir . '/composer.json');
             rmdir($extensionDir . '/src');
@@ -168,9 +144,14 @@ class ProviderLocatorTest extends TestCase
         $extensionDir = $tempDir . '/invalid-extension';
         mkdir($extensionDir, 0755, true);
 
-        // Set up base_path to point to our temp directory
-        $originalBasePath = $GLOBALS['base_path'] ?? null;
-        $GLOBALS['base_path'] = $tempDir;
+        $context = new ApplicationContext(
+            basePath: $tempDir,
+            environment: 'testing',
+            configPaths: [
+                'application' => $this->tempConfigDir,
+                'framework' => $this->tempConfigDir
+            ]
+        );
 
         // Create a mock vendor/autoload.php file for the test
         $vendorDir = $tempDir . '/vendor';
@@ -193,18 +174,11 @@ class ProviderLocatorTest extends TestCase
             $method->setAccessible(true);
 
             // Pass an empty string since base_path will be prepended
-            $providers = $method->invoke(null, '');
+            $providers = $method->invoke(null, $context, '');
 
             // Should return empty array for invalid JSON
             $this->assertEquals([], $providers);
         } finally {
-            // Restore original base path
-            if ($originalBasePath === null) {
-                unset($GLOBALS['base_path']);
-            } else {
-                $GLOBALS['base_path'] = $originalBasePath;
-            }
-
             // Clean up
             unlink($extensionDir . '/composer.json');
             rmdir($extensionDir);
@@ -218,6 +192,7 @@ class ProviderLocatorTest extends TestCase
     {
         // Reset environment
         unset($_ENV['APP_ENV']);
+        $this->context = null;
 
         // Clean up temporary config directory
         if (is_dir($this->tempConfigDir)) {
@@ -226,8 +201,5 @@ class ProviderLocatorTest extends TestCase
             }
             rmdir($this->tempConfigDir);
         }
-
-        // Reset config paths
-        unset($GLOBALS['config_paths']);
     }
 }

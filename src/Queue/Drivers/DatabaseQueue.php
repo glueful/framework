@@ -7,6 +7,7 @@ use Glueful\Queue\Contracts\JobInterface;
 use Glueful\Queue\Contracts\DriverInfo;
 use Glueful\Queue\Contracts\HealthStatus;
 use Glueful\Queue\Jobs\DatabaseJob;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use Glueful\Database\Schema\Interfaces\SchemaBuilderInterface;
 use Glueful\Helpers\Utils;
@@ -50,6 +51,7 @@ class DatabaseQueue implements QueueDriverInterface
 
     /** @var int Seconds before job retry */
     private int $retryAfter;
+    private ?ApplicationContext $context = null;
 
 
     /**
@@ -73,7 +75,8 @@ class DatabaseQueue implements QueueDriverInterface
                 'job_batching',
                 'queue_separation'
             ],
-            requiredDependencies: []
+            requiredDependencies: [],
+            context: $this->context
         );
     }
 
@@ -85,14 +88,24 @@ class DatabaseQueue implements QueueDriverInterface
      */
     public function initialize(array $config): void
     {
-        $this->db = new Connection();
+        $this->context = $config['context'] ?? null;
+        $this->db = new Connection([], $this->context);
         $this->schema = $this->db->getSchemaBuilder();
-        $this->table = config('queue.connections.database.table') ?? 'queue_jobs';
-        $this->failedTable = config('queue.connections.database.failed_table') ?? 'queue_failed_jobs';
-        $this->retryAfter = config('queue.connections.database.retry_after') ?? 90;
+        $this->table = (string) $this->getConfig('queue.connections.database.table', 'queue_jobs');
+        $this->failedTable = (string) $this->getConfig('queue.connections.database.failed_table', 'queue_failed_jobs');
+        $this->retryAfter = (int) $this->getConfig('queue.connections.database.retry_after', 90);
 
         // Ensure queue tables exist
         $this->ensureQueueTables();
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 
     /**

@@ -7,6 +7,8 @@
  * Values can be overridden using environment variables.
  */
 
+$basePath = dirname(__DIR__);
+
 return [
     // Application Environment (development, staging, production)
     'env' => env('APP_ENV', 'development'),
@@ -19,6 +21,9 @@ return [
 
     // Smart environment-aware development mode
     'dev_mode' => env('DEV_MODE', env('APP_ENV') === 'development'),
+
+    // Warn when app routes don't use api_prefix() (dev only)
+    'warn_unprefixed_routes' => env('WARN_UNPREFIXED_ROUTES', false),
 
     // Smart environment-aware HTTPS enforcement
     'force_https' => env('FORCE_HTTPS', env('APP_ENV') === 'production'),
@@ -40,20 +45,20 @@ return [
 
     // Application Paths (filesystem only)
     'paths' => [
-        'base' => base_path(),
-        'api_base_directory' => base_path('api'),
-        'api_docs' => base_path('docs'),
-        'uploads' => base_path('storage/cdn'),
-        'logs' => base_path('storage/logs'),
-        'cache' => base_path('storage/cache'),
-        'backups' => base_path('storage/backups'),
-        'storage' => base_path('storage'),
-        'database_json_definitions' => base_path('docs/json-definitions/database'),
-        'project_extensions' => base_path('extensions'),
-        'archives' => base_path('storage/archives'),
-        'migrations' => base_path('database/migrations'),
-        'app_events' => base_path('app/Events'),
-        'app_listeners' => base_path('app/Events/Listeners'),
+        'base' => $basePath,
+        'api_base_directory' => $basePath . '/api',
+        'api_docs' => $basePath . '/docs',
+        'uploads' => $basePath . '/storage/cdn',
+        'logs' => $basePath . '/storage/logs',
+        'cache' => $basePath . '/storage/cache',
+        'backups' => $basePath . '/storage/backups',
+        'storage' => $basePath . '/storage',
+        'database_json_definitions' => $basePath . '/docs/json-definitions/database',
+        'project_extensions' => $basePath . '/extensions',
+        'archives' => $basePath . '/storage/archives',
+        'migrations' => $basePath . '/database/migrations',
+        'app_events' => $basePath . '/app/Events',
+        'app_listeners' => $basePath . '/app/Events/Listeners',
     ],
 
     // Application URLs (web addresses grouped here)

@@ -19,7 +19,9 @@ final class ArchiveProvider extends BaseServiceProvider
         $defs[\Glueful\Services\Archive\ArchiveServiceInterface::class] = new FactoryDefinition(
             \Glueful\Services\Archive\ArchiveServiceInterface::class,
             function (\Psr\Container\ContainerInterface $c) {
-                $cfg = function_exists('config') ? (array) config('archive.config', []) : [];
+                $cfg = function_exists('config')
+                    ? (array) config($this->context, 'archive.config', [])
+                    : [];
                 return new \Glueful\Services\Archive\ArchiveService(
                     $c->get('database'),
                     $c->get(\Glueful\Database\Schema\Interfaces\SchemaBuilderInterface::class),

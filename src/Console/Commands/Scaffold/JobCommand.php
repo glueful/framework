@@ -220,10 +220,10 @@ class JobCommand extends BaseCommand
     private function getDefaultJobPath(): string
     {
         // Check if we're in an app context or framework context
-        $appPath = base_path('app/Jobs');
-        $srcPath = base_path('src/Jobs');
+        $appPath = base_path($this->getContext(), 'app/Jobs');
+        $srcPath = base_path($this->getContext(), 'src/Jobs');
 
-        if (is_dir(base_path('app'))) {
+        if (is_dir(base_path($this->getContext(), 'app'))) {
             return $appPath;
         }
 
@@ -414,7 +414,7 @@ PHP;
     private function buildNamespace(string $name): string
     {
         // Check if we're in an app or framework context
-        $baseNamespace = is_dir(base_path('app'))
+        $baseNamespace = is_dir(base_path($this->getContext(), 'app'))
             ? 'App\\Jobs'
             : 'Glueful\\Jobs';
 

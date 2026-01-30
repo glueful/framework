@@ -95,7 +95,11 @@ class DocsController extends BaseController
      */
     private function isDocsEnabled(): bool
     {
-        return (bool) config('documentation.enabled', config('app.api_docs_enabled', true));
+        return (bool) config(
+            $this->getContext(),
+            'documentation.enabled',
+            config($this->getContext(), 'app.api_docs_enabled', true)
+        );
     }
 
     /**
@@ -106,7 +110,11 @@ class DocsController extends BaseController
      */
     private function getDocsPath(string $filename): string
     {
-        $docsDir = config('documentation.paths.output', base_path('docs'));
+        $docsDir = config(
+            $this->getContext(),
+            'documentation.paths.output',
+            base_path($this->getContext(), 'docs')
+        );
         return rtrim($docsDir, '/') . '/' . $filename;
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Support\Documentation;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Schema\Interfaces\SchemaBuilderInterface;
 use Glueful\Database\Connection;
 
@@ -18,6 +19,7 @@ class ResourceRouteExpander
 {
     private SchemaBuilderInterface $schema;
     private Connection $db;
+    private ?ApplicationContext $context;
 
     /** @var array<string, array<string, mixed>> Cached table schemas */
     private array $tableSchemas = [];
@@ -30,19 +32,29 @@ class ResourceRouteExpander
      *
      * @param Connection|null $connection Database connection
      */
-    public function __construct(?Connection $connection = null)
+    public function __construct(?Connection $connection = null, ?ApplicationContext $context = null)
     {
-        $this->db = $connection ?? new Connection();
+        $this->context = $context;
+        $this->db = $connection ?? new Connection([], $this->context);
         $this->schema = $this->db->getSchemaBuilder();
 
         // Load excluded tables from config
-        $configExcluded = config('documentation.excluded_tables', []);
+        $configExcluded = $this->getConfig('documentation.excluded_tables', []);
         $this->excludedTables = is_array($configExcluded) ? $configExcluded : [
             'migrations',
             'failed_jobs',
             'password_resets',
             'personal_access_tokens',
         ];
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 
     /**

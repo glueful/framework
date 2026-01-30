@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Tests\Unit\Routing;
 
 use PHPUnit\Framework\TestCase;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Routing\Router;
 use Glueful\Routing\AttributeRouteLoader;
 use Glueful\Routing\Attributes\{Controller, Get, Post, Put, Delete, Middleware, Route};
@@ -25,14 +26,15 @@ class AttributeRouteLoaderTest extends TestCase
         $this->container = new class implements ContainerInterface {
             /** @var array<string,mixed> */
             private array $services = [];
-            public function has(string $id): bool { return array_key_exists($id, $this->services) || class_exists($id); }
+            public function has(string $id): bool { return array_key_exists($id, $this->services); }
             public function get(string $id): mixed {
                 if (array_key_exists($id, $this->services)) { return $this->services[$id]; }
-                if (class_exists($id)) { return $this->services[$id] = new $id(); }
                 throw new class("Service '".$id."' not found") extends \RuntimeException implements \Psr\Container\NotFoundExceptionInterface {};
             }
             public function set(string $id, mixed $service): void { $this->services[$id] = $service; }
         };
+        // Register ApplicationContext for Router
+        $this->container->set(ApplicationContext::class, new ApplicationContext(__DIR__));
         $this->router = new Router($this->container);
         $this->loader = new AttributeRouteLoader($this->router);
     }

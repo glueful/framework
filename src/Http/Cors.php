@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Http;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
@@ -72,6 +73,7 @@ class Cors
      * @var array<string, mixed>
      */
     private array $config;
+    private ?ApplicationContext $context;
 
     /**
      * Initialize the CORS handler with configuration
@@ -96,39 +98,61 @@ class Cors
      *
      * @param array<string, mixed> $config Override configuration options
      */
-    public function __construct(array $config = [])
+    public function __construct(array $config = [], ?ApplicationContext $context = null)
     {
-        // Load origins from config and normalize to array
-        // This supports both string (from env vars) and array formats
-        $allowedOrigins = config('security.cors.allowed_origins', []);
-
-        // Handle string input (from env vars) by converting to array
-        // Expected format: "https://app1.com,https://app2.com,http://localhost:3000"
-        if (is_string($allowedOrigins)) {
-            $allowedOrigins = array_map('trim', explode(',', $allowedOrigins));
-            $allowedOrigins = array_filter($allowedOrigins); // Remove empty strings
+        $this->context = $context;
+        $corsConfig = $this->getConfig('cors', []);
+        if (!is_array($corsConfig) || $corsConfig === []) {
+            $corsConfig = $this->getConfig('security.cors', []);
         }
 
-        // If no origins configured, allow all (wildcard) for easy development
-        // Note: This disables credential support for security reasons
+        $allowedOrigins = $corsConfig['allowed_origins'] ?? [];
+        $allowAllOrigins = (bool) ($corsConfig['allow_all_origins'] ?? false);
+
+        if ($allowAllOrigins) {
+            $allowedOrigins = ['*'];
+        } elseif (is_string($allowedOrigins)) {
+            $allowedOrigins = array_map('trim', explode(',', $allowedOrigins));
+            $allowedOrigins = array_filter($allowedOrigins);
+        } elseif (!is_array($allowedOrigins)) {
+            $allowedOrigins = [];
+        }
+
         if (count($allowedOrigins) === 0) {
             $allowedOrigins = ['*'];
+        }
+
+        $allowedHeaders = $corsConfig['allow_headers'] ?? $corsConfig['allowed_headers'] ?? [
+            'Content-Type', 'Authorization', 'X-Requested-With'
+        ];
+        if (is_string($allowedHeaders)) {
+            $allowedHeaders = array_map('trim', explode(',', $allowedHeaders));
+            $allowedHeaders = array_filter($allowedHeaders);
+        } elseif (!is_array($allowedHeaders)) {
+            $allowedHeaders = [];
+        }
+
+        $exposedHeaders = $corsConfig['expose_headers'] ?? $corsConfig['exposed_headers'] ?? [
+            'X-Total-Count', 'X-Page-Count'
+        ];
+        if (is_string($exposedHeaders)) {
+            $exposedHeaders = array_map('trim', explode(',', $exposedHeaders));
+            $exposedHeaders = array_filter($exposedHeaders);
+        } elseif (!is_array($exposedHeaders)) {
+            $exposedHeaders = [];
         }
 
         // Merge configuration with defaults, giving precedence to constructor params
         $this->config = array_merge([
             'allowedOrigins' => $allowedOrigins,
-            'allowedMethods' => config('security.cors.allowed_methods', [
+            'allowedMethods' => $corsConfig['allowed_methods'] ?? $this->getConfig('security.cors.allowed_methods', [
                 'GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'
             ]),
-            'allowedHeaders' => config('security.cors.allowed_headers', [
-                'Content-Type', 'Authorization', 'X-Requested-With'
-            ]),
-            'exposedHeaders' => config('security.cors.expose_headers', [
-                'X-Total-Count', 'X-Page-Count'
-            ]),
-            'maxAge' => config('security.cors.max_age', 86400), // 24 hours
-            'supportsCredentials' => config('security.cors.supports_credentials', true),
+            'allowedHeaders' => $allowedHeaders,
+            'exposedHeaders' => $exposedHeaders,
+            'maxAge' => $corsConfig['max_age'] ?? $this->getConfig('security.cors.max_age', 86400), // 24 hours
+            'supportsCredentials' => $corsConfig['supports_credentials']
+                ?? $this->getConfig('security.cors.supports_credentials', true),
         ], $config);
     }
 
@@ -257,6 +281,15 @@ class Cors
         if ($this->config['supportsCredentials'] === true) {
             header('Access-Control-Allow-Credentials: true');
         }
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 
     /**

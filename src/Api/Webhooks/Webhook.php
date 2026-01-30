@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Api\Webhooks;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Api\Webhooks\Contracts\WebhookDispatcherInterface;
 
 /**
@@ -31,6 +32,7 @@ use Glueful\Api\Webhooks\Contracts\WebhookDispatcherInterface;
 class Webhook
 {
     private static ?WebhookDispatcherInterface $dispatcher = null;
+    private static ?ApplicationContext $context = null;
 
     /**
      * Set the dispatcher instance
@@ -40,6 +42,11 @@ class Webhook
     public static function setDispatcher(WebhookDispatcherInterface $dispatcher): void
     {
         self::$dispatcher = $dispatcher;
+    }
+
+    public static function setContext(ApplicationContext $context): void
+    {
+        self::$context = $context;
     }
 
     /**
@@ -52,13 +59,17 @@ class Webhook
     {
         if (self::$dispatcher === null) {
             // Try to get from container
-            if (function_exists('app') && app()->has(WebhookDispatcherInterface::class)) {
-                self::$dispatcher = app(WebhookDispatcherInterface::class);
-            } elseif (function_exists('app') && app()->has(WebhookDispatcher::class)) {
-                self::$dispatcher = app(WebhookDispatcher::class);
-            } else {
+            if (self::$context !== null) {
+                $container = container(self::$context);
+                if ($container->has(WebhookDispatcherInterface::class)) {
+                    self::$dispatcher = $container->get(WebhookDispatcherInterface::class);
+                } elseif ($container->has(WebhookDispatcher::class)) {
+                    self::$dispatcher = $container->get(WebhookDispatcher::class);
+                }
+            }
+            if (self::$dispatcher === null) {
                 // Create a default dispatcher
-                self::$dispatcher = new WebhookDispatcher();
+                self::$dispatcher = new WebhookDispatcher(context: self::requireContext());
             }
         }
 
@@ -90,7 +101,7 @@ class Webhook
     {
         $events = is_array($events) ? $events : [$events];
 
-        return WebhookSubscription::create([
+        return WebhookSubscription::create(self::requireContext(), [
             'url' => $url,
             'events' => $events,
             'is_active' => true,
@@ -106,7 +117,7 @@ class Webhook
      */
     public static function findSubscription(string $uuid): ?WebhookSubscription
     {
-        $result = WebhookSubscription::query()
+        $result = WebhookSubscription::query(self::requireContext())
             ->where('uuid', $uuid)
             ->first();
 
@@ -121,7 +132,8 @@ class Webhook
      */
     public static function findSubscriptionById(int $id): ?WebhookSubscription
     {
-        return WebhookSubscription::find($id);
+        $result = WebhookSubscription::query(self::requireContext())->find($id);
+        return $result instanceof WebhookSubscription ? $result : null;
     }
 
     /**
@@ -131,7 +143,7 @@ class Webhook
      */
     public static function activeSubscriptions(): array
     {
-        $results = WebhookSubscription::query()
+        $results = WebhookSubscription::query(self::requireContext())
             ->where('is_active', true)
             ->get();
 
@@ -152,7 +164,7 @@ class Webhook
      */
     public static function subscriptionsForEvent(string $event): array
     {
-        $all = WebhookSubscription::query()
+        $all = WebhookSubscription::query(self::requireContext())
             ->where('is_active', true)
             ->get();
 
@@ -176,7 +188,7 @@ class Webhook
      */
     public static function findDelivery(string $uuid): ?WebhookDelivery
     {
-        $result = WebhookDelivery::query()
+        $result = WebhookDelivery::query(self::requireContext())
             ->where('uuid', $uuid)
             ->first();
 
@@ -193,7 +205,7 @@ class Webhook
     {
         $now = date('Y-m-d H:i:s');
 
-        $results = WebhookDelivery::query()
+        $results = WebhookDelivery::query(self::requireContext())
             ->where('status', WebhookDelivery::STATUS_RETRYING)
             ->where('next_retry_at', '<=', $now)
             ->orderBy('next_retry_at', 'asc')
@@ -218,7 +230,7 @@ class Webhook
      */
     public static function failedDeliveries(int $limit = 100, ?string $since = null): array
     {
-        $query = WebhookDelivery::query()
+        $query = WebhookDelivery::query(self::requireContext())
             ->where('status', WebhookDelivery::STATUS_FAILED)
             ->orderBy('created_at', 'desc')
             ->limit($limit);
@@ -257,10 +269,16 @@ class Webhook
         $delivery->resetForRetry();
 
         // Queue the delivery job
-        $job = new Jobs\DeliverWebhookJob(['delivery_id' => $delivery->id]);
+        $job = new Jobs\DeliverWebhookJob(
+            ['delivery_id' => $delivery->id],
+            self::$context
+        );
 
-        if (function_exists('app') && app()->has(\Glueful\Queue\QueueManager::class)) {
-            app(\Glueful\Queue\QueueManager::class)->push($job);
+        if (self::$context !== null) {
+            $container = container(self::$context);
+            if ($container->has(\Glueful\Queue\QueueManager::class)) {
+                $container->get(\Glueful\Queue\QueueManager::class)->push($job);
+            }
         }
 
         return true;
@@ -348,6 +366,15 @@ class Webhook
     public static function verify(string $payload, string $signature, string $secret, ?int $tolerance = 300): bool
     {
         return WebhookSignature::verify($payload, $signature, $secret, $tolerance);
+    }
+
+    private static function requireContext(): ApplicationContext
+    {
+        if (self::$context === null) {
+            throw new \RuntimeException('ApplicationContext is required for webhook operations.');
+        }
+
+        return self::$context;
     }
 
     /**

@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Glueful\Tests\Integration;
 
 use PHPUnit\Framework\TestCase;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Routing\Router;
+use Glueful\Routing\RouteCache;
 use Glueful\Routing\AttributeRouteLoader;
 use Psr\Container\ContainerInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -20,6 +22,14 @@ class RouterIntegrationTest extends TestCase
     {
         parent::setUp();
 
+        // Setup temp cache directory
+        $this->tempCacheDir = sys_get_temp_dir() . '/router_test_' . uniqid();
+        mkdir($this->tempCacheDir, 0755, true);
+        mkdir($this->tempCacheDir . '/storage/cache', 0755, true);
+
+        // Create ApplicationContext for testing
+        $context = new ApplicationContext($this->tempCacheDir);
+
         // Minimal PSR-11 test container
         $this->container = new class implements ContainerInterface {
             /** @var array<string,mixed> */
@@ -27,18 +37,14 @@ class RouterIntegrationTest extends TestCase
             public function has(string $id): bool { return array_key_exists($id, $this->services); }
             public function get(string $id): mixed {
                 if ($this->has($id)) { return $this->services[$id]; }
-                if (class_exists($id)) { return $this->services[$id] = new $id(); }
                 throw new class("Service '".$id."' not found") extends \RuntimeException implements \Psr\Container\NotFoundExceptionInterface {};
             }
             public function set(string $id, mixed $service): void { $this->services[$id] = $service; }
         };
-
-        // Setup temp cache directory
-        $this->tempCacheDir = sys_get_temp_dir() . '/router_test_' . uniqid();
-        mkdir($this->tempCacheDir, 0755, true);
+        $this->container->set(ApplicationContext::class, $context);
 
         // Clear route cache to ensure clean state for each test
-        $cache = new \Glueful\Routing\RouteCache();
+        $cache = new RouteCache($context);
         $cache->clear();
 
         // Create router - cache will be empty since we cleared it

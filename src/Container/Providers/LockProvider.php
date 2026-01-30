@@ -18,7 +18,7 @@ final class LockProvider extends BaseServiceProvider
         $defs[\Glueful\Lock\LockManagerInterface::class] = new FactoryDefinition(
             \Glueful\Lock\LockManagerInterface::class,
             function (\Psr\Container\ContainerInterface $c) {
-                $config = function_exists('config') ? (array) config('lock', []) : [];
+                $config = function_exists('config') ? (array) config($this->context, 'lock', []) : [];
                 $logger = $c->has('logger') ? $c->get('logger') : null;
 
                 $storeType = (string) ($config['default'] ?? 'file');
@@ -51,7 +51,7 @@ final class LockProvider extends BaseServiceProvider
                         $path = $storeCfg['path'] ?? 'framework/locks';
                         if (!str_starts_with((string) $path, '/')) {
                             $base = function_exists('base_path')
-                                ? base_path('storage')
+                                ? base_path($this->context, 'storage')
                                 : (__DIR__ . '/../../../storage');
                             $path = rtrim($base, '/') . '/' . ltrim((string) $path, '/');
                         }

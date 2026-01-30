@@ -194,12 +194,12 @@ class AutoScaleCommand extends BaseQueueCommand
 
     private function initializeServices(): void
     {
-        $this->config = config('queue.workers', []);
+        $this->config = config($this->getContext(), 'queue.workers', []);
 
         $logger = $this->getService(LoggerInterface::class);
         $queueManager = $this->getService(QueueManager::class);
         $workerMonitor = $this->getService(WorkerMonitor::class);
-        $basePath = base_path();
+        $basePath = base_path($this->getContext());
 
         $processFactory = new ProcessFactory($logger, $basePath);
         $this->processManager = new ProcessManager($processFactory, $workerMonitor, $logger, $this->config);
@@ -352,7 +352,7 @@ class AutoScaleCommand extends BaseQueueCommand
 
         if ((bool) $input->getOption('reload')) {
             $this->info("🔄 Reloading configuration...");
-            $this->config = config('queue.workers', []);
+            $this->config = config($this->getContext(), 'queue.workers', []);
             $this->success("Configuration reloaded successfully");
             return self::SUCCESS;
         }

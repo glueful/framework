@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Helpers;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
@@ -14,6 +15,12 @@ use Symfony\Component\HttpFoundation\Request;
  */
 class RequestHelper
 {
+    private static ?ApplicationContext $context = null;
+
+    public static function setContext(?ApplicationContext $context): void
+    {
+        self::$context = $context;
+    }
     /**
      * Get request data (POST/PUT/PATCH) with automatic JSON parsing
      *
@@ -61,7 +68,7 @@ class RequestHelper
      * @param Request|null $request Request instance (null uses createFromGlobals)
      * @return bool
      */
-    public static function isAdminRequest(?Request $request = null): bool
+    public static function isAdminRequest(?Request $request = null, ?ApplicationContext $context = null): bool
     {
         $request = $request ?? Request::createFromGlobals();
         $requestUri = $request->getRequestUri();
@@ -72,8 +79,9 @@ class RequestHelper
         }
 
         // Check for admin API endpoints using configured prefix
-        if (function_exists('api_prefix')) {
-            $apiPrefix = api_prefix();
+        $resolvedContext = $context ?? self::$context;
+        if ($resolvedContext !== null) {
+            $apiPrefix = api_prefix($resolvedContext);
             if ($apiPrefix !== '' && str_contains($requestUri, $apiPrefix . '/admin')) {
                 return true;
             }

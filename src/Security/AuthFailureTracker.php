@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Security;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Cache\CacheStore;
 use Glueful\Helpers\Utils;
 use Glueful\Helpers\CacheHelper;
@@ -21,6 +22,7 @@ class AuthFailureTracker
 
     /** @var CacheStore<mixed> Cache driver instance */
     private CacheStore $cache;
+    private ?ApplicationContext $context;
 
     /**
      * Constructor
@@ -34,8 +36,10 @@ class AuthFailureTracker
         private readonly string $key, // Either user ID or IP
         private readonly int $maxAttempts = 5,
         private readonly int $decaySeconds = 900, // 15 minutes
-        ?CacheStore $cache = null
+        ?CacheStore $cache = null,
+        ?ApplicationContext $context = null
     ) {
+        $this->context = $context;
         $this->cache = $cache ?? $this->createCacheInstance();
     }
 
@@ -115,18 +119,22 @@ class AuthFailureTracker
     private function createCacheInstance(): CacheStore
     {
         try {
-            return container()->get(CacheStore::class);
-        } catch (\Exception) {
-            // Try using CacheHelper as fallback
-            $cache = CacheHelper::createCacheInstance();
-            if ($cache === null) {
-                throw new \RuntimeException(
-                    'Cache is required for AuthFailureTracker. '
-                    . 'Please ensure cache is properly configured.'
-                );
+            if ($this->context !== null && function_exists('container')) {
+                return container($this->context)->get(CacheStore::class);
             }
-            return $cache;
+        } catch (\Exception) {
+            // Fall through to CacheHelper fallback
         }
+
+        // Try using CacheHelper as fallback
+        $cache = CacheHelper::createCacheInstance($this->context);
+        if ($cache === null) {
+            throw new \RuntimeException(
+                'Cache is required for AuthFailureTracker. '
+                . 'Please ensure cache is properly configured.'
+            );
+        }
+        return $cache;
     }
 
     /**
@@ -137,9 +145,19 @@ class AuthFailureTracker
      * @param int $decaySeconds Block duration
      * @return self Tracker instance
      */
-    public static function forUser(string $userId, int $maxAttempts = 5, int $decaySeconds = 900): self
-    {
-        return new self("user:$userId", $maxAttempts, $decaySeconds, self::createStaticCacheInstance());
+    public static function forUser(
+        string $userId,
+        int $maxAttempts = 5,
+        int $decaySeconds = 900,
+        ?ApplicationContext $context = null
+    ): self {
+        return new self(
+            "user:$userId",
+            $maxAttempts,
+            $decaySeconds,
+            self::createStaticCacheInstance($context),
+            $context
+        );
     }
 
     /**
@@ -150,9 +168,19 @@ class AuthFailureTracker
      * @param int $decaySeconds Block duration
      * @return self Tracker instance
      */
-    public static function forIp(string $ip, int $maxAttempts = 5, int $decaySeconds = 900): self
-    {
-        return new self("ip:$ip", $maxAttempts, $decaySeconds, self::createStaticCacheInstance());
+    public static function forIp(
+        string $ip,
+        int $maxAttempts = 5,
+        int $decaySeconds = 900,
+        ?ApplicationContext $context = null
+    ): self {
+        return new self(
+            "ip:$ip",
+            $maxAttempts,
+            $decaySeconds,
+            self::createStaticCacheInstance($context),
+            $context
+        );
     }
 
     /**
@@ -160,13 +188,17 @@ class AuthFailureTracker
      *
      * @return CacheStore<mixed>|null Cache instance or null for graceful degradation
      */
-    private static function createStaticCacheInstance(): ?CacheStore
+    private static function createStaticCacheInstance(?ApplicationContext $context): ?CacheStore
     {
         try {
-            return container()->get(CacheStore::class);
+            if ($context !== null && function_exists('container')) {
+                return container($context)->get(CacheStore::class);
+            }
         } catch (\Exception) {
             // Try using CacheHelper as fallback
-            return CacheHelper::createCacheInstance();
+            return CacheHelper::createCacheInstance($context);
         }
+
+        return CacheHelper::createCacheInstance($context);
     }
 }

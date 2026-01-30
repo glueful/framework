@@ -3,6 +3,7 @@
 namespace Glueful\Database;
 
 use PDO;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Driver\MySQLDriver;
 use Glueful\Database\Driver\PostgreSQLDriver;
 use Glueful\Database\Driver\SQLiteDriver;
@@ -94,6 +95,7 @@ class Connection implements DatabaseInterface
      * @var array<string, mixed> Database configuration
      */
     protected array $config;
+    private ?ApplicationContext $context;
 
     /**
      * @var ConnectionPool|null Active connection pool
@@ -122,15 +124,16 @@ class Connection implements DatabaseInterface
      * @param  array<string, mixed> $config Optional configuration override
      * @throws \Glueful\Exceptions\DatabaseException On connection failure or invalid configuration
      */
-    public function __construct(array $config = [])
+    public function __construct(array $config = [], ?ApplicationContext $context = null)
     {
+        $this->context = $context;
         $this->config = array_merge($this->loadConfig(), $config);
-        $this->engine = $this->config['engine'] ?? config('database.engine');
+        $this->engine = $this->config['engine'] ?? (string) $this->getConfig('database.engine');
 
         // Initialize pool manager if pooling is enabled
         $poolingEnabled = (bool) ($this->config['pooling']['enabled'] ?? false);
         if ($poolingEnabled === true) {
-            self::$poolManager ??= new ConnectionPoolManager();
+            self::$poolManager ??= new ConnectionPoolManager($this->context);
             $this->pool = self::$poolManager->getPool($this->engine);
         }
 
@@ -142,6 +145,16 @@ class Connection implements DatabaseInterface
         }
 
         // Note: Schema manager is initialized lazily when first accessed
+    }
+
+    /**
+     * Load database configuration
+     *
+     * @return array<string, mixed> Complete database configuration
+     */
+    private function loadConfig(): array
+    {
+        return $this->getConfig('database', []);
     }
 
     /**
@@ -158,21 +171,11 @@ class Connection implements DatabaseInterface
      * @return PDO Configured PDO instance
      * @throws \Glueful\Exceptions\DatabaseException On connection failure or invalid credentials
      */
-    /**
-     * Load database configuration
-     *
-     * @return array<string, mixed> Complete database configuration
-     */
-    private function loadConfig(): array
-    {
-        return config('database', []);
-    }
-
     private function createPDOConnection(string $engine): PDO
     {
         // Get engine-specific configuration
         $dbConfig = array_merge(
-            config("database.{$engine}") ?? [],
+            $this->getConfig("database.{$engine}", []) ?? [],
         );
 
         // Set common PDO options
@@ -253,6 +256,15 @@ class Connection implements DatabaseInterface
                 "Unsupported database engine: {$engine}"
             ),
         };
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 
     /**

@@ -35,7 +35,7 @@ final class CreateCommand extends BaseCommand
         $className = ucfirst($slug);
         $namespace = "Extensions\\{$className}";
 
-        $extensionsDir = base_path('extensions');
+        $extensionsDir = base_path($this->getContext(), 'extensions');
         $extensionDir = $extensionsDir . '/' . $slug;
 
         if (is_dir($extensionDir)) {
@@ -104,16 +104,17 @@ declare(strict_types=1);
 namespace {$namespace};
 
 use Glueful\Extensions\ServiceProvider;
+use Glueful\Bootstrap\ApplicationContext;
 
 class {$className}ServiceProvider extends ServiceProvider
 {
-    public function register(): void
+    public function register(ApplicationContext \$context): void
     {
         // Register services here
         // \$this->mergeConfig('{$className}', require __DIR__.'/../config/{$className}.php');
     }
     
-    public function boot(): void
+    public function boot(ApplicationContext \$context): void
     {
         // Load routes
         \$this->loadRoutesFrom(__DIR__.'/../routes/routes.php');
