@@ -39,9 +39,13 @@ jobs:
             echo "ERROR: \\$GLOBALS usage detected. Use ApplicationContext instead."
             exit 1
           fi
-          MATCHES=$(grep -rn 'Event::' src/ tests/ --include="*.php" 2>/dev/null \
-              | grep -v ':use Glueful\\Events\\Event;' \
-              | grep -v ':\s*//')
+          # Check for static Event facade usage (Event::dispatch, Event::listen, etc.)
+          # Excludes: *Event::class (class constants), use statements, comments
+          MATCHES=$(grep -rn '[^a-zA-Z]Event::' src/ tests/ --include="*.php" 2>/dev/null \
+              | grep -v 'Event::class' \
+              | grep -v ':use ' \
+              | grep -v ':\s*//' \
+              | grep -v '#\[')
           if [ -n "$MATCHES" ]; then
             echo "ERROR: Static Event facade usage detected."
             echo "$MATCHES"
