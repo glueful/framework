@@ -662,6 +662,12 @@ final class CoreProvider extends BaseServiceProvider
             \Glueful\Api\Filtering\Middleware\FilterMiddleware::class
         );
 
+        // Encryption service
+        $defs[\Glueful\Encryption\EncryptionService::class] = new FactoryDefinition(
+            \Glueful\Encryption\EncryptionService::class,
+            fn() => new \Glueful\Encryption\EncryptionService($this->context)
+        );
+
         return $defs;
     }
 }
