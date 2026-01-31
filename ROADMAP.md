@@ -21,6 +21,25 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.23.0 — Aldebaran (Released 2026-01-31)
+- **Blob Visibility Support**: Per-blob `public`/`private` visibility controls.
+  - Upload requests accept `visibility` parameter (`public` or `private`).
+  - Defaults to configured `uploads.default_visibility` (private by default).
+  - Public blobs accessible without auth (unless global access is `private`).
+  - Private blobs require authentication or valid signed URL.
+  - Database schema updated with `visibility` column and index.
+- **Signed URL Support**: HMAC-based temporary access URLs for private blobs.
+  - New `SignedUrl` helper class for URL signing and validation.
+  - Time-limited access with customizable TTL (default 1 hour, max 7 days).
+  - New endpoint `POST /blobs/{uuid}/signed-url` for generating signed URLs.
+  - Automatic signature validation on blob retrieval.
+  - Falls back to `APP_KEY` if no dedicated secret configured.
+- **Test Coverage**: Comprehensive unit tests for blob and signed URL functionality.
+  - `SignedUrlTest` with 17 tests covering generation, validation, expiration, tampering.
+  - `UploadControllerTest` with 38 tests covering resize, caching, access control, visibility.
+- **Configuration**: New uploads config options for visibility and signed URLs.
+- Notes: No breaking changes. Enhances blob storage system with secure temporary access.
+
 ### 1.22.0 — Achernar (Released 2026-01-30)
 - **Console Command Auto-Discovery**: Zero-config command registration via `#[AsCommand]` attribute scanning.
   - Commands auto-discovered from `src/Console/Commands/` directory.

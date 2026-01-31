@@ -437,6 +437,14 @@ final class FileUploader
 
     private function validateFileSize(int $size): void
     {
+        $uploadsMaxSize = $this->getConfig('uploads.max_size');
+        if (is_int($uploadsMaxSize) && $uploadsMaxSize > 0) {
+            if ($size > $uploadsMaxSize) {
+                throw ValidationException::forField('file', 'File size exceeds limit');
+            }
+            return;
+        }
+
         $maxSize = (int) $this->getConfig('filesystem.security.max_upload_size', self::MAX_FILE_SIZE);
 
         if ($size > $maxSize) {
@@ -448,9 +456,36 @@ final class FileUploader
     {
         $allowed = $this->getAllowedMimeTypes();
 
-        if (!in_array($mime, $allowed, true)) {
-            throw ValidationException::forField('file', 'File type not allowed: ' . $mime);
+        if ($this->mimeAllowed($mime, $allowed)) {
+            return;
         }
+
+        throw ValidationException::forField('file', 'File type not allowed: ' . $mime);
+    }
+
+    /**
+     * @param array<string> $allowed
+     */
+    private function mimeAllowed(string $mime, array $allowed): bool
+    {
+        if (in_array($mime, $allowed, true)) {
+            return true;
+        }
+
+        foreach ($allowed as $pattern) {
+            if (!is_string($pattern) || $pattern === '') {
+                continue;
+            }
+
+            if (str_ends_with($pattern, '/*')) {
+                $prefix = rtrim($pattern, '*');
+                if (str_starts_with($mime, $prefix)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -575,6 +610,7 @@ final class FileUploader
             'name' => $file['name'],
             'mime_type' => $file['type'],
             'url' => $filename,
+            'storage_type' => (string) ($this->getConfig('uploads.disk', $this->storageDriver) ?? 'uploads'),
             'created_by' => $user['uuid'] ?? null,
             'size' => $file['size'],
             'status' => 'active',
@@ -600,6 +636,7 @@ final class FileUploader
             'name' => $file['name'] ?? basename($path),
             'mime_type' => $mime,
             'url' => $path,
+            'storage_type' => (string) ($this->getConfig('uploads.disk', $this->storageDriver) ?? 'uploads'),
             'created_by' => $user['uuid'] ?? null,
             'size' => $file['size'] ?? 0,
             'status' => 'active',
@@ -612,6 +649,11 @@ final class FileUploader
      */
     private function getAllowedMimeTypes(): array
     {
+        $uploadsConfigured = $this->getConfig('uploads.allowed_types');
+        if (is_array($uploadsConfigured) && $uploadsConfigured !== []) {
+            return $uploadsConfigured;
+        }
+
         $configured = $this->getConfig('filesystem.uploader.allowed_mime_types');
 
         if (is_array($configured) && $configured !== []) {
