@@ -4,6 +4,71 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.23.0] - 2026-01-31 — Aldebaran
+
+Enhanced blob storage system with visibility controls, signed URLs for secure temporary access, and comprehensive test coverage.
+
+### Added
+
+#### Blob Visibility Support
+- **Per-blob visibility**: Blobs can now be marked as `public` or `private` individually
+  - Upload requests accept `visibility` parameter (`public` or `private`)
+  - Defaults to configured `uploads.default_visibility` (private by default)
+  - Public blobs accessible without auth (unless global access is `private`)
+  - Private blobs require authentication or valid signed URL
+- **Database schema**: Added `visibility` column to `blobs` table with index
+- **BlobRepository**: Updated default fields to include `visibility` and `storage_type`
+
+#### Signed URL Support
+- **SignedUrl helper class** (`src/Support/SignedUrl.php`):
+  - HMAC-based URL signing with configurable secret and algorithm
+  - Time-limited access with customizable TTL (default 1 hour, max 7 days)
+  - Supports additional query parameters in signed URLs
+  - Validates signatures and expiration timestamps
+  - Falls back to `APP_KEY` if no dedicated secret configured
+- **New endpoint**: `POST /blobs/{uuid}/signed-url` generates temporary access URLs
+  - Requires authentication
+  - Optional `ttl` query parameter to customize expiration
+  - Returns signed URL, expiration time, and expiration timestamp
+- **Automatic validation**: Private blob retrieval accepts signed URLs as alternative to auth
+
+#### Configuration Options
+- **uploads.default_visibility**: Set default visibility for new uploads (`public` or `private`)
+- **uploads.signed_urls.enabled**: Enable/disable signed URL generation (default: true)
+- **uploads.signed_urls.secret**: Dedicated secret for URL signing (falls back to APP_KEY)
+- **uploads.signed_urls.ttl**: Default TTL in seconds (default: 3600)
+
+#### Test Coverage
+- **SignedUrlTest** (`tests/Unit/Support/SignedUrlTest.php`): 17 tests covering:
+  - URL generation and validation
+  - Expiration handling
+  - Signature tampering detection
+  - Parameter inclusion and validation
+  - Different secrets producing different signatures
+  - Port and existing query param handling
+- **UploadControllerTest** (`tests/Unit/Controllers/UploadControllerTest.php`): 38 tests covering:
+  - Resize parameter parsing (width, height, quality, format, fit)
+  - Cache key generation and consistency
+  - MIME type detection and format conversion
+  - Access control logic for private/public/upload_only modes
+  - Path prefix building and sanitization
+  - Disk resolution from blob metadata
+  - Cache-Control header generation
+  - Visibility resolution logic
+
+### Changed
+
+- **UploadController**: Enhanced with visibility-aware access control
+  - `checkBlobAccess()` method validates visibility, auth, and signed URLs
+  - `hasValidSignature()` method verifies signed URL parameters
+  - Upload response now includes `visibility` field
+- **routes/blobs.php**: Added signed URL generation endpoint with auth middleware
+- **config/uploads.php**: Added `default_visibility` and `signed_urls` configuration sections
+
+### Fixed
+
+- **Blob access control**: Now properly respects per-blob visibility settings combined with global access mode
+
 ## [1.22.0] - 2026-01-30 — Achernar
 
 Major refactoring release replacing global state with explicit dependency injection via `ApplicationContext`. This release improves testability, enables multi-app support, and prepares the framework for long-running server environments (Swoole, RoadRunner).

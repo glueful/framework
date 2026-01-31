@@ -26,7 +26,7 @@ class BlobRepository extends BaseRepository
     /** @var array<string> Default fields to retrieve for blob operations */
     private array $defaultBlobFields = [
         'uuid', 'name', 'description', 'mime_type', 'size',
-        'url', 'status', 'created_by', 'created_at', 'updated_at'
+        'url', 'status', 'visibility', 'storage_type', 'created_by', 'created_at', 'updated_at'
     ];
 
     /**

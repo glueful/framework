@@ -33,6 +33,7 @@ class RouteManifest
             // Routes that get the API prefix (e.g., /api/v1/auth/login)
             'api_routes' => [
                 '/routes/auth.php',
+                '/routes/blobs.php',
                 '/routes/resource.php',
             ],
             // Routes that don't get the API prefix (public endpoints)

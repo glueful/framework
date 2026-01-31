@@ -1,7 +1,7 @@
 # Upload Endpoints Implementation Plan
 
 **Version:** 1.22.0+
-**Status:** Proposed
+**Status:** Implemented
 **Author:** Framework Team
 **Date:** 2026-01-30
 
@@ -30,10 +30,10 @@ Add built-in file upload and retrieval endpoints to Glueful's core framework rou
 
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
-| `POST` | `/uploads` | Upload a file | Configurable |
-| `GET` | `/uploads/{uuid}` | Retrieve a file (with optional resize) | Configurable |
-| `DELETE` | `/uploads/{uuid}` | Delete an uploaded file | Required |
-| `GET` | `/uploads/{uuid}/info` | Get file metadata | Configurable |
+| `POST` | `/blobs` | Upload a file | Configurable |
+| `GET` | `/blobs/{uuid}` | Retrieve a file (with optional resize) | Configurable |
+| `DELETE` | `/blobs/{uuid}` | Delete an uploaded file | Required |
+| `GET` | `/blobs/{uuid}/info` | Get file metadata | Configurable |
 
 **Why UUID instead of path?**
 - Consistent with Glueful's REST pattern (`/data/{table}/{uuid}`)
@@ -45,7 +45,7 @@ Add built-in file upload and retrieval endpoints to Glueful's core framework rou
 
 Retrieval visibility is controlled by the `access` config:
 
-| Mode | Upload | `GET /uploads/{uuid}` | Direct URL (`data.url`) |
+| Mode | Upload | `GET /blobs/{uuid}` | Direct URL (`data.url`) |
 |------|--------|----------------------|-------------------------|
 | `private` | Auth required | Auth required | N/A (use endpoint) |
 | `upload_only` | Auth required | Public | Public |
@@ -58,7 +58,7 @@ Retrieval visibility is controlled by the `access` config:
 **Option 1: Multipart Form (type=file)**
 
 ```http
-POST /api/v1/uploads
+POST /api/v1/blobs
 Content-Type: multipart/form-data
 Authorization: Bearer <token>
 
@@ -70,7 +70,7 @@ path_prefix: "avatars" (optional)
 **Option 2: Base64 Encoded (type=base64)**
 
 ```http
-POST /api/v1/uploads
+POST /api/v1/blobs
 Content-Type: application/json
 Authorization: Bearer <token>
 
@@ -99,7 +99,7 @@ Authorization: Bearer <token>
   "success": true,
   "data": {
     "uuid": "abc123-def456",
-    "url": "https://cdn.example.com/uploads/2024/01/abc123.jpg",
+    "url": "https://cdn.example.com/blobs/2024/01/abc123.jpg",
     "thumb_url": null,
     "filename": "abc123_original.jpg",
     "original_name": "profile-photo.jpg",
@@ -111,12 +111,12 @@ Authorization: Bearer <token>
 }
 ```
 
-> **Note:** `thumb_url` is `null` by default. Enable `thumbnails.enabled` to auto-generate thumbnails on upload, or use on-demand resize: `GET /uploads/{uuid}?width=400&height=400`
+> **Note:** `thumb_url` is `null` by default. Enable `thumbnails.enabled` to auto-generate thumbnails on upload, or use on-demand resize: `GET /blobs/{uuid}?width=400&height=400`
 
 ### Retrieval with Resize
 
 ```http
-GET /api/v1/uploads/abc123-def456?width=300&height=200&quality=80&format=webp
+GET /api/v1/blobs/abc123-def456?width=300&height=200&quality=80&format=webp
 ```
 
 | Parameter | Type | Description | Default |
@@ -244,7 +244,7 @@ The `disk` config determines where files are stored and how URLs are generated.
     'uploads' => [
         'driver' => 'local',
         'root' => storage_path('uploads'),
-        'base_url' => env('UPLOADS_URL', '/storage/uploads'),
+        'base_url' => env('UPLOADS_URL', '/storage/blobs'),
     ],
     // OR for S3:
     'uploads' => [
@@ -261,10 +261,10 @@ The `url` returned in upload responses uses `StorageManager->url($path)`, which 
 
 | Endpoint | Use Case |
 |----------|----------|
-| `GET /uploads/{uuid}` | Framework-mediated retrieval with auth, resize, caching |
+| `GET /blobs/{uuid}` | Framework-mediated retrieval with auth, resize, caching |
 | `data.url` (from upload response) | Direct storage URL (local path or S3/CDN) for public assets |
 
-For `access: 'private'` mode, clients should use the `/uploads/{uuid}` endpoint. For `access: 'upload_only'` or `'public'`, the direct `data.url` can be used for better performance (bypasses framework).
+For `access: 'private'` mode, clients should use the `/blobs/{uuid}` endpoint. For `access: 'upload_only'` or `'public'`, the direct `data.url` can be used for better performance (bypasses framework).
 
 ---
 
@@ -276,7 +276,7 @@ For `access: 'private'` mode, clients should use the `/uploads/{uuid}` endpoint.
 |------|---------|
 | `config/uploads.php` | Upload configuration |
 | `src/Controllers/UploadController.php` | Handle upload/retrieval logic |
-| `routes/uploads.php` | Define upload routes |
+| `routes/blobs.php` | Define upload routes |
 
 ### Modified Files
 
@@ -378,7 +378,7 @@ class UploadController extends BaseController
 ### 2. Upload Flow
 
 ```
-POST /uploads with type=file OR type=base64
+POST /blobs with type=file OR type=base64
 
 ┌─────────────────────────────────────────────────────────────┐
 │                    UploadController::upload()                │
@@ -413,7 +413,7 @@ POST /uploads with type=file OR type=base64
 ### 3. Image Resize Flow
 
 ```
-Request: GET /uploads/abc123-def456?width=300&height=200&fit=cover
+Request: GET /blobs/abc123-def456?width=300&height=200&fit=cover
 
 ┌─────────────────────────────────────────────────────────────┐
 │                    UploadController::retrieve()              │
@@ -451,7 +451,7 @@ Request: GET /uploads/abc123-def456?width=300&height=200&fit=cover
 
 ```php
 <?php
-// routes/uploads.php
+// routes/blobs.php
 
 use Glueful\Routing\Router;
 use Glueful\Bootstrap\ApplicationContext;
@@ -475,8 +475,8 @@ $retrieveMiddleware = $access === 'private' ? ['auth'] : [];
 $uploadRate = config($context, 'uploads.rate_limits.uploads_per_minute', 30);
 $retrieveRate = config($context, 'uploads.rate_limits.retrieval_per_minute', 200);
 
-// Register under /uploads (will be prefixed by api_prefix() in RouteManifest)
-$router->group(['prefix' => '/uploads'], function (Router $router) use ($context, $uploadMiddleware, $retrieveMiddleware, $uploadRate, $retrieveRate) {
+// Register under /blobs (will be prefixed by api_prefix() in RouteManifest)
+$router->group(['prefix' => '/blobs'], function (Router $router) use ($context, $uploadMiddleware, $retrieveMiddleware, $uploadRate, $retrieveRate) {
 
     // Upload file (multipart or base64)
     $router->post('', function (Request $request) use ($context) {
@@ -642,7 +642,7 @@ Accept-Ranges: bytes
 For video/audio files, support partial content:
 
 ```http
-GET /uploads/{uuid}
+GET /blobs/{uuid}
 Range: bytes=0-1023
 
 HTTP/1.1 206 Partial Content
@@ -731,7 +731,7 @@ The `blobs` table is already part of the framework schema - no additional migrat
 |-------|-------|----------|
 | 1 | Create config/uploads.php | - |
 | 2 | Create UploadController | - |
-| 3 | Create routes/uploads.php | - |
+| 3 | Create routes/blobs.php | - |
 | 4 | Add tests | - |
 | 5 | Documentation | - |
 
