@@ -461,8 +461,8 @@ class ManageCommand extends BaseCommand
         }
 
         // Use FileFinder to discover cleanup candidates
-        $storagePath = base_path('storage/archives');
-        $archiveDir = config('archive.storage_path', $storagePath);
+        $storagePath = base_path($this->getContext(), 'storage/archives');
+        $archiveDir = config($this->getContext(), 'archive.storage_path', $storagePath);
 
         if ($olderThan !== null && $olderThan !== '') {
             $oldFiles = $this->fileFinder->findCacheFiles($archiveDir, '*.gz', "{$olderThan} days ago");
@@ -510,7 +510,7 @@ class ManageCommand extends BaseCommand
             $progressBar->setMessage("Archiving: {$table}");
 
             try {
-                $retentionPolicies = config('archive.retention_policies', []);
+                $retentionPolicies = config($this->getContext(), 'archive.retention_policies', []);
                 $policy = $retentionPolicies[$table] ?? null;
 
                 if ($policy === null || !((bool) ($policy['auto_archive'] ?? false))) {
@@ -627,8 +627,8 @@ class ManageCommand extends BaseCommand
         $this->io->text("Table size: " . $this->formatBytes($stats->currentSizeBytes));
 
         // Check available disk space
-        $storagePath = base_path('storage/archives');
-        $archiveDir = config('archive.storage_path', $storagePath);
+        $storagePath = base_path($this->getContext(), 'storage/archives');
+        $archiveDir = config($this->getContext(), 'archive.storage_path', $storagePath);
         if (!is_dir($archiveDir)) {
             @mkdir($archiveDir, 0755, true);
         }

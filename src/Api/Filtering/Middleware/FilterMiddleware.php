@@ -6,6 +6,7 @@ namespace Glueful\Api\Filtering\Middleware;
 
 use Glueful\Api\Filtering\Exceptions\InvalidFilterException;
 use Glueful\Api\Filtering\FilterParser;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Routing\RouteMiddleware;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -27,9 +28,11 @@ use Symfony\Component\HttpFoundation\Response;
 final class FilterMiddleware implements RouteMiddleware
 {
     private FilterParser $parser;
+    private ApplicationContext $context;
 
-    public function __construct()
+    public function __construct(ApplicationContext $context)
     {
+        $this->context = $context;
         $maxDepth = $this->getConfig('max_depth', 3);
         $maxFilters = $this->getConfig('max_filters', 20);
         $this->parser = new FilterParser(
@@ -96,7 +99,7 @@ final class FilterMiddleware implements RouteMiddleware
     private function getConfig(string $key, mixed $default = null): mixed
     {
         if (function_exists('config')) {
-            return config("api.filtering.{$key}", $default);
+            return config($this->context, "api.filtering.{$key}", $default);
         }
 
         return $default;

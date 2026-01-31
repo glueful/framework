@@ -2,6 +2,7 @@
 
 namespace Glueful\Services;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use Glueful\Cache\CacheStore;
 use Glueful\Database\Schema\Interfaces\SchemaBuilderInterface;
@@ -39,12 +40,13 @@ class ApiMetricsService
     public function __construct(
         ?CacheStore $cache = null,
         ?Connection $connection = null,
-        ?SchemaBuilderInterface $schemaManager = null
+        ?SchemaBuilderInterface $schemaManager = null,
+        ?ApplicationContext $context = null
     ) {
         try {
             // Assign dependencies with sensible defaults
             $this->cache = $cache ?? CacheHelper::createCacheInstance();
-            $connection = $connection ?? new Connection();
+            $connection = $connection ?? Connection::fromContext($context);
             $this->schemaManager = $schemaManager ?? $connection->getSchemaBuilder();
 
             // Initialize derived dependencies

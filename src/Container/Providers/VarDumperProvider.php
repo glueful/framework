@@ -35,7 +35,7 @@ final class VarDumperProvider extends BaseServiceProvider
             \Symfony\Component\VarDumper\Dumper\CliDumper::class,
             function () {
                 $dumper = new \Symfony\Component\VarDumper\Dumper\CliDumper();
-                $config = function_exists('config') ? (array) config('vardumper.dumpers.cli', []) : [];
+                $config = function_exists('config') ? (array) config($this->context, 'vardumper.dumpers.cli', []) : [];
                 $dumper->setColors($config['colors'] ?? true);
                 if (isset($config['max_string_width']) && (int) $config['max_string_width'] > 0) {
                     $dumper->setMaxStringWidth((int) $config['max_string_width']);
@@ -48,7 +48,7 @@ final class VarDumperProvider extends BaseServiceProvider
             \Symfony\Component\VarDumper\Dumper\HtmlDumper::class,
             function () {
                 $dumper = new \Symfony\Component\VarDumper\Dumper\HtmlDumper();
-                $config = function_exists('config') ? (array) config('vardumper.dumpers.html', []) : [];
+                $config = function_exists('config') ? (array) config($this->context, 'vardumper.dumpers.html', []) : [];
                 $dumper->setTheme($config['theme'] ?? 'dark');
                 if (isset($config['file_link_format'])) {
                     $dumper->setDumpHeader($config['file_link_format']);

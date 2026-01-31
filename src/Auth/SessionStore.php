@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace Glueful\Auth;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Auth\Interfaces\SessionStoreInterface;
 use Glueful\Cache\CacheStore;
 use Glueful\Database\Connection;
 use Glueful\Events\Auth\SessionCreatedEvent;
 use Glueful\Events\Auth\SessionDestroyedEvent;
-use Glueful\Events\Event;
+use Glueful\Events\EventService;
 use Glueful\Helpers\CacheHelper;
 use Glueful\Helpers\Utils;
 use Glueful\Http\RequestContext;
@@ -29,12 +30,13 @@ class SessionStore implements SessionStoreInterface
     private bool $useTransactions = true;
     private string $sessionTable = 'auth_sessions';
     private int $cacheDefaultTtl;
+    private ?ApplicationContext $context;
 
     /**
      * Request-level cache to prevent N+1 queries within the same request
      * @var array<string, array<string, mixed>|null>
      */
-    private static array $requestCache = [];
+    private array $requestCache = [];
 
     /**
      * @param CacheStore<string>|null $cache
@@ -43,13 +45,15 @@ class SessionStore implements SessionStoreInterface
         ?CacheStore $cache = null,
         ?Connection $db = null,
         ?RequestContext $requestContext = null,
-        bool $useTransactions = true
+        bool $useTransactions = true,
+        ?ApplicationContext $context = null
     ) {
+        $this->context = $context;
         $this->cache = $cache ?? CacheHelper::createCacheInstance();
-        $this->db = $db ?? new Connection();
+        $this->db = $db ?? Connection::fromContext($context);
         $this->requestContext = $requestContext ?? RequestContext::fromGlobals();
         $this->useTransactions = $useTransactions;
-        $this->cacheDefaultTtl = (int) (function_exists('config') ? config('session.access_token_lifetime', 900) : 900);
+        $this->cacheDefaultTtl = (int) $this->getConfig('session.access_token_lifetime', 900);
     }
 
     /**
@@ -106,7 +110,7 @@ class SessionStore implements SessionStoreInterface
             }
 
             // Event
-            Event::dispatch(new SessionCreatedEvent($user, $tokens, [
+            $this->dispatchEvent(new SessionCreatedEvent($user, $tokens, [
                 'session_uuid' => $sessionUuid,
                 'ip_address' => $this->requestContext?->getClientIp(),
                 'user_agent' => $this->requestContext?->getUserAgent()
@@ -134,6 +138,12 @@ class SessionStore implements SessionStoreInterface
             $existing = $this->getByRefreshToken($sessionIdOrRefreshToken);
             if ($existing === null) {
                 throw new \RuntimeException('Session not found');
+            }
+            if (isset($existing['refresh_expires_at'])) {
+                $expiresAt = strtotime((string) $existing['refresh_expires_at']);
+                if ($expiresAt !== false && $expiresAt < time()) {
+                    throw new \RuntimeException('Refresh token expired');
+                }
             }
 
             $remember = (bool)($existing['remember_me'] ?? false);
@@ -187,8 +197,8 @@ class SessionStore implements SessionStoreInterface
     {
         // Request-level cache to prevent N+1 queries within the same request
         $requestCacheKey = 'access:' . $this->hashToken($accessToken);
-        if (array_key_exists($requestCacheKey, self::$requestCache)) {
-            return self::$requestCache[$requestCacheKey];
+        if (array_key_exists($requestCacheKey, $this->requestCache)) {
+            return $this->requestCache[$requestCacheKey];
         }
 
         // Cache lookup (use hashed token key)
@@ -197,7 +207,7 @@ class SessionStore implements SessionStoreInterface
             $cached = $this->resolveCacheReference("session_token_{$tokenKey}");
             if ($cached !== null) {
                 $session = json_decode($cached, true);
-                self::$requestCache[$requestCacheKey] = $session;
+                $this->requestCache[$requestCacheKey] = $session;
                 return $session;
             }
         }
@@ -210,23 +220,23 @@ class SessionStore implements SessionStoreInterface
             ->where('access_expires_at', '>', $now)
             ->get();
         if ($result === []) {
-            self::$requestCache[$requestCacheKey] = null;
+            $this->requestCache[$requestCacheKey] = null;
             return null;
         }
         $session = $result[0];
         if ($this->cache !== null) {
             $this->cacheSessionData($session, $accessToken, null);
         }
-        self::$requestCache[$requestCacheKey] = $session;
+        $this->requestCache[$requestCacheKey] = $session;
         return $session;
     }
 
     /**
      * Clear request-level cache (useful for testing or after session changes)
      */
-    public static function clearRequestCache(): void
+    public function resetRequestCache(): void
     {
-        self::$requestCache = [];
+        $this->requestCache = [];
     }
 
     public function getByRefreshToken(string $refreshToken): ?array
@@ -246,6 +256,12 @@ class SessionStore implements SessionStoreInterface
             return null;
         }
         $session = $result[0];
+        if (isset($session['refresh_expires_at'])) {
+            $expiresAt = strtotime((string) $session['refresh_expires_at']);
+            if ($expiresAt !== false && $expiresAt < time()) {
+                return null;
+            }
+        }
         if ($this->cache !== null) {
             $this->cacheSessionData($session, null, $refreshToken);
         }
@@ -281,7 +297,7 @@ class SessionStore implements SessionStoreInterface
                 $this->db->getPDO()->commit();
             }
 
-            Event::dispatch(new SessionDestroyedEvent(
+            $this->dispatchEvent(new SessionDestroyedEvent(
                 $session['access_token'] ?? $sessionIdOrToken,
                 $session['user_uuid'] ?? null,
                 'revoked',
@@ -453,7 +469,7 @@ class SessionStore implements SessionStoreInterface
     public function listByProvider(string $provider): array
     {
         try {
-            $manager = container()->get(SessionCacheManager::class);
+            $manager = $this->resolveSessionCacheManager();
             return $manager->getSessionsByProvider($provider);
         } catch (\Throwable) {
             return [];
@@ -463,7 +479,7 @@ class SessionStore implements SessionStoreInterface
     public function listByUser(string $userUuid): array
     {
         try {
-            $manager = container()->get(SessionCacheManager::class);
+            $manager = $this->resolveSessionCacheManager();
             return $manager->getUserSessions($userUuid);
         } catch (\Throwable) {
             return [];
@@ -474,41 +490,25 @@ class SessionStore implements SessionStoreInterface
 
     public function getAccessTtl(string $provider, bool $rememberMe = false): int
     {
-        $providerConfigs = (array) (function_exists('config') ? config('security.authentication_providers', []) : []);
+        $providerConfigs = (array) $this->getConfig('security.authentication_providers', []);
         if (isset($providerConfigs[$provider]['session_ttl'])) {
             return (int) $providerConfigs[$provider]['session_ttl'];
         }
 
         if ($rememberMe) {
-            return (int) (
-                function_exists('config')
-                    ? config('session.remember_expiration', 30 * 24 * 3600)
-                    : 30 * 24 * 3600
-            );
+            return (int) $this->getConfig('session.remember_expiration', 30 * 24 * 3600);
         }
 
-        return (int) (
-            function_exists('config')
-                ? config('session.access_token_lifetime', 3600)
-                : 3600
-        );
+        return (int) $this->getConfig('session.access_token_lifetime', 3600);
     }
 
     public function getRefreshTtl(string $provider, bool $rememberMe = false): int
     {
         if ($rememberMe) {
-            return (int) (
-                function_exists('config')
-                    ? config('session.remember_expiration', 60 * 24 * 3600)
-                    : 60 * 24 * 3600
-            );
+            return (int) $this->getConfig('session.remember_expiration', 60 * 24 * 3600);
         }
 
-        return (int) (
-            function_exists('config')
-                ? config('session.refresh_token_lifetime', 7 * 24 * 3600)
-                : 7 * 24 * 3600
-        );
+        return (int) $this->getConfig('session.refresh_token_lifetime', 7 * 24 * 3600);
     }
 
     /**
@@ -521,7 +521,7 @@ class SessionStore implements SessionStoreInterface
         }
         $canonicalKey = "session_data_{$session['uuid']}";
         $sessionJson = json_encode($session);
-        $refreshTtl = (int) (function_exists('config') ? config('session.refresh_token_lifetime', 604800) : 604800);
+        $refreshTtl = (int) $this->getConfig('session.refresh_token_lifetime', 604800);
         $maxTtl = max($this->cacheDefaultTtl, $refreshTtl);
         $this->cache?->set($canonicalKey, $sessionJson, $maxTtl);
         if ($accessToken !== null) {
@@ -546,6 +546,41 @@ class SessionStore implements SessionStoreInterface
         return $cached;
     }
 
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if (function_exists('config') && $this->context !== null) {
+            return config($this->context, $key, $default);
+        }
+
+        return $default;
+    }
+
+    private function resolveSessionCacheManager(): SessionCacheManager
+    {
+        if ($this->context !== null) {
+            return container($this->context)->get(SessionCacheManager::class);
+        }
+
+        if ($this->cache === null) {
+            throw new \RuntimeException('CacheStore is required to create SessionCacheManager.');
+        }
+
+        return new SessionCacheManager($this->cache, $this->context);
+    }
+
+    private function dispatchEvent(object $event): void
+    {
+        if ($this->context === null) {
+            return;
+        }
+
+        try {
+            app($this->context, EventService::class)->dispatch($event);
+        } catch (\Throwable) {
+            // Best-effort only
+        }
+    }
+
     /**
      * @param array<string, mixed> $session
      */
@@ -558,7 +593,7 @@ class SessionStore implements SessionStoreInterface
             $this->cache?->delete("session_refresh_" . $this->hashToken((string)$session['refresh_token']));
         }
         if (isset($session['uuid'])) {
-            $this->cache?->delete("session_data:{$session['uuid']}");
+            $this->cache?->delete("session_data_{$session['uuid']}");
         }
     }
 
@@ -601,11 +636,7 @@ class SessionStore implements SessionStoreInterface
         } catch (\Throwable) {
             return date(
                 'Y-m-d H:i:s',
-                time() + (int) (
-                    function_exists('config')
-                        ? config('session.access_token_lifetime', 3600)
-                        : 3600
-                )
+                time() + (int) $this->getConfig('session.access_token_lifetime', 3600)
             );
         }
     }

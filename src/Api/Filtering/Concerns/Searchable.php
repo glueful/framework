@@ -6,6 +6,8 @@ namespace Glueful\Api\Filtering\Concerns;
 
 use Glueful\Api\Filtering\Contracts\SearchAdapterInterface;
 use Glueful\Api\Filtering\SearchResult;
+use Glueful\Bootstrap\ApplicationContext;
+use Psr\Container\ContainerInterface;
 
 /**
  * Searchable trait for ORM models
@@ -108,8 +110,9 @@ trait Searchable
      */
     protected function getSearchIndexPrefix(): string
     {
-        if (function_exists('config')) {
-            return (string) config('api.filtering.search.index_prefix', '');
+        $context = $this->resolveSearchContext();
+        if ($context !== null) {
+            return (string) config($context, 'api.filtering.search.index_prefix', '');
         }
 
         return '';
@@ -125,8 +128,9 @@ trait Searchable
         }
 
         // Check configuration
-        if (function_exists('config')) {
-            return (bool) config('api.filtering.search.auto_index', false);
+        $context = $this->resolveSearchContext();
+        if ($context !== null) {
+            return (bool) config($context, 'api.filtering.search.auto_index', false);
         }
 
         return false;
@@ -269,30 +273,33 @@ trait Searchable
      */
     protected function getSearchAdapter(): ?SearchAdapterInterface
     {
-        // Try to get from container
-        if (function_exists('app') && app()->has(SearchAdapterInterface::class)) {
-            return app(SearchAdapterInterface::class);
+        $context = $this->resolveSearchContext();
+        if ($context !== null && $context->hasContainer()) {
+            $container = $context->getContainer();
+            if ($container->has(SearchAdapterInterface::class)) {
+                return $container->get(SearchAdapterInterface::class);
+            }
         }
 
         // Try to get the configured adapter
-        return $this->resolveSearchAdapter();
+        return $this->resolveSearchAdapter($context);
     }
 
     /**
      * Resolve the search adapter based on configuration
      */
-    protected function resolveSearchAdapter(): ?SearchAdapterInterface
+    protected function resolveSearchAdapter(?ApplicationContext $context): ?SearchAdapterInterface
     {
-        if (!function_exists('config')) {
+        if ($context === null) {
             return null;
         }
 
-        $driver = (string) config('api.filtering.search.driver', 'database');
+        $driver = (string) config($context, 'api.filtering.search.driver', 'database');
         $index = $this->searchableIndex();
 
         return match ($driver) {
-            'elasticsearch' => $this->createElasticsearchAdapter($index),
-            'meilisearch' => $this->createMeilisearchAdapter($index),
+            'elasticsearch' => $this->createElasticsearchAdapter($index, $context),
+            'meilisearch' => $this->createMeilisearchAdapter($index, $context),
             'database' => $this->createDatabaseAdapter($index),
             default => null,
         };
@@ -301,14 +308,16 @@ trait Searchable
     /**
      * Create Elasticsearch adapter
      */
-    private function createElasticsearchAdapter(string $index): ?SearchAdapterInterface
-    {
+    private function createElasticsearchAdapter(
+        string $index,
+        ?ApplicationContext $context,
+    ): ?SearchAdapterInterface {
         if (!class_exists(\Glueful\Api\Filtering\Adapters\ElasticsearchAdapter::class)) {
             return null;
         }
 
-        $config = function_exists('config')
-            ? (array) config('api.filtering.search.elasticsearch', [])
+        $config = $context !== null
+            ? (array) config($context, 'api.filtering.search.elasticsearch', [])
             : [];
 
         return new \Glueful\Api\Filtering\Adapters\ElasticsearchAdapter($index, $config);
@@ -317,14 +326,16 @@ trait Searchable
     /**
      * Create Meilisearch adapter
      */
-    private function createMeilisearchAdapter(string $index): ?SearchAdapterInterface
-    {
+    private function createMeilisearchAdapter(
+        string $index,
+        ?ApplicationContext $context,
+    ): ?SearchAdapterInterface {
         if (!class_exists(\Glueful\Api\Filtering\Adapters\MeilisearchAdapter::class)) {
             return null;
         }
 
-        $config = function_exists('config')
-            ? (array) config('api.filtering.search.meilisearch', [])
+        $config = $context !== null
+            ? (array) config($context, 'api.filtering.search.meilisearch', [])
             : [];
 
         return new \Glueful\Api\Filtering\Adapters\MeilisearchAdapter($index, $config);
@@ -343,5 +354,27 @@ trait Searchable
             $this->getTable(),
             $this->getSearchableFields()
         );
+    }
+
+    private function resolveSearchContext(): ?ApplicationContext
+    {
+        if (method_exists($this, 'getContext')) {
+            $context = $this->getContext();
+            if ($context instanceof ApplicationContext) {
+                return $context;
+            }
+        }
+
+        if (method_exists(static::class, 'getContainer')) {
+            $container = static::getContainer();
+            if ($container instanceof ContainerInterface && $container->has(ApplicationContext::class)) {
+                $context = $container->get(ApplicationContext::class);
+                if ($context instanceof ApplicationContext) {
+                    return $context;
+                }
+            }
+        }
+
+        return null;
     }
 }

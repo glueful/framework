@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Auth;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Cache\CacheStore;
 use Glueful\Helpers\CacheHelper;
 
@@ -37,23 +38,33 @@ class SessionAnalytics
 
     /** @var SessionCacheManager Session cache manager service */
     private SessionCacheManager $sessionCacheManager;
+    private ?ApplicationContext $context;
 
     /**
      * Constructor
      *
      * @param CacheStore<mixed>|null $cache Cache driver service
      * @param SessionCacheManager|null $sessionCacheManager Session cache manager service
+     * @param ApplicationContext|null $context
      */
     public function __construct(
         ?CacheStore $cache = null,
-        ?SessionCacheManager $sessionCacheManager = null
+        ?SessionCacheManager $sessionCacheManager = null,
+        ?ApplicationContext $context = null
     ) {
+        $this->context = $context;
         $this->cache = $cache ?? CacheHelper::createCacheInstance();
-        $this->sessionCacheManager = $sessionCacheManager ?? container()->get(SessionCacheManager::class);
         if ($this->cache === null) {
             throw new \RuntimeException(
                 'CacheStore is required for SessionAnalytics: Unable to create cache instance.'
             );
+        }
+        if ($sessionCacheManager !== null) {
+            $this->sessionCacheManager = $sessionCacheManager;
+        } elseif ($this->context !== null) {
+            $this->sessionCacheManager = container($this->context)->get(SessionCacheManager::class);
+        } else {
+            $this->sessionCacheManager = new SessionCacheManager($this->cache, $this->context);
         }
     }
 
@@ -687,8 +698,12 @@ class SessionAnalytics
     {
         // Prefer SessionStoreInterface for decoupled reads
         try {
-            /** @var \Glueful\Auth\Interfaces\SessionStoreInterface $store */
-            $store = container()->get(\Glueful\Auth\Interfaces\SessionStoreInterface::class);
+            if ($this->context !== null) {
+                /** @var \Glueful\Auth\Interfaces\SessionStoreInterface $store */
+                $store = container($this->context)->get(\Glueful\Auth\Interfaces\SessionStoreInterface::class);
+            } else {
+                throw new \RuntimeException('Container unavailable without ApplicationContext.');
+            }
 
             $providers = ['jwt', 'apikey', 'oauth', 'saml'];
             $all = [];

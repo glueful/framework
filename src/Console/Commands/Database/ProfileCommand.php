@@ -151,7 +151,7 @@ class ProfileCommand extends BaseCommand
 
     private function initializeServices(): void
     {
-        $this->connection = new Connection();
+        $this->connection = Connection::fromContext($this->context);
         $this->profilerService = new QueryProfilerService();
         $this->planAnalyzer = new ExecutionPlanAnalyzer($this->connection);
         $this->patternRecognizer = new QueryPatternRecognizer();

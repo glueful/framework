@@ -27,14 +27,14 @@ class MaintenanceCommand extends BaseCommand
 
         if ($queueFlag === true) {
             /** @var QueueManager $queue */
-            $queue = app(QueueManager::class);
+            $queue = app($this->getContext(), QueueManager::class);
             $queue->push(CacheMaintenanceJob::class, ['operation' => $operation], 'maintenance');
             $this->info("Queued cache maintenance job: {$operation}");
             return self::SUCCESS;
         }
 
         /** @var CacheMaintenanceTask $task */
-        $task = app(CacheMaintenanceTask::class);
+        $task = app($this->getContext(), CacheMaintenanceTask::class);
         match ($operation) {
             'clearExpiredKeys' => $task->clearExpiredKeys(),
             'optimizeCache' => $task->optimizeCache(),

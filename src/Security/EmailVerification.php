@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Security;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Cache\CacheStore;
 use Glueful\Http\RequestContext;
 use Glueful\Notifications\Contracts\Notifiable;
@@ -49,6 +50,8 @@ class EmailVerification
     /** @var CacheStore<mixed> Cache driver instance */
     private CacheStore $cache;
 
+    private ?ApplicationContext $context;
+
     /**
      * Constructor
      *
@@ -57,9 +60,14 @@ class EmailVerification
     /**
      * @param RequestContext|null $requestContext
      * @param CacheStore<mixed>|null $cache
+     * @param ApplicationContext|null $context
      */
-    public function __construct(?RequestContext $requestContext = null, ?CacheStore $cache = null)
-    {
+    public function __construct(
+        ?RequestContext $requestContext = null,
+        ?CacheStore $cache = null,
+        ?ApplicationContext $context = null
+    ) {
+        $this->context = $context;
         $this->requestContext = $requestContext ?? RequestContext::fromGlobals();
         $this->cache = $cache ?? CacheHelper::createCacheInstance();
 
@@ -73,7 +81,10 @@ class EmailVerification
         $dispatcher = null;
         $channelManager = null;
         try {
-            $c = container();
+            $c = $this->context !== null ? container($this->context) : null;
+            if ($c === null) {
+                throw new \RuntimeException('Container unavailable without ApplicationContext.');
+            }
             if ($c->has(\Glueful\Notifications\Services\NotificationDispatcher::class)) {
                 /** @var \Glueful\Notifications\Services\NotificationDispatcher $diDispatcher */
                 $diDispatcher = $c->get(\Glueful\Notifications\Services\NotificationDispatcher::class);
@@ -85,14 +96,29 @@ class EmailVerification
         }
         if ($dispatcher === null || $channelManager === null) {
             $channelManager = new \Glueful\Notifications\Services\ChannelManager();
-            $dispatcher = new \Glueful\Notifications\Services\NotificationDispatcher($channelManager);
+            $events = null;
+            try {
+                $c = $this->context !== null ? container($this->context) : null;
+                if ($c !== null && $c->has(\Glueful\Events\EventService::class)) {
+                    $events = $c->get(\Glueful\Events\EventService::class);
+                }
+            } catch (\Throwable) {
+                $events = null;
+            }
+            $dispatcher = new \Glueful\Notifications\Services\NotificationDispatcher(
+                $channelManager,
+                null,
+                [],
+                $events instanceof \Glueful\Events\EventService ? $events : null
+            );
         }
 
-        // Initialize EmailNotificationProvider if extension is available
-        if (class_exists('\Glueful\Extensions\EmailNotification\EmailNotificationProvider')) {
+        // Initialize EmailNotificationProvider if extension is available and context exists
+        $emailExtensionClass = '\Glueful\Extensions\EmailNotification\EmailNotificationProvider';
+        if (class_exists($emailExtensionClass) && $this->context !== null) {
             /** @var class-string $providerClass */
-            $providerClass = '\Glueful\Extensions\EmailNotification\EmailNotificationProvider';
-            $this->emailProvider = new $providerClass();
+            $providerClass = $emailExtensionClass;
+            $this->emailProvider = new $providerClass($this->context);
             if (method_exists($this->emailProvider, 'initialize')) {
                 $this->emailProvider->initialize();
             }
@@ -100,7 +126,7 @@ class EmailVerification
             // Only register manually in fallback mode.
             $usingDi = false;
             try {
-                $c = container();
+                $c = container($this->context);
                 $usingDi = $c->has(\Glueful\Notifications\Services\NotificationDispatcher::class);
             } catch (\Throwable $e) {
                 $usingDi = false;
@@ -123,7 +149,11 @@ class EmailVerification
 
         // Initialize NotificationService with required dispatcher and repository
         $notificationRepository = new \Glueful\Repository\NotificationRepository();
-        $this->notificationService = new NotificationService($dispatcher, $notificationRepository);
+        $this->notificationService = new NotificationService(
+            $dispatcher,
+            $notificationRepository,
+            context: $this->context
+        );
     }
 
     /**
@@ -278,7 +308,10 @@ class EmailVerification
 
             // Debug what's happening with the cache operation
             if (!$result) {
-                error_log("Failed to store OTP in cache. Key: $key, Driver: " . config('cache.default'));
+                $driver = $this->context !== null
+                    ? (string) config($this->context, 'cache.default')
+                    : 'unknown';
+                error_log("Failed to store OTP in cache. Key: $key, Driver: " . $driver);
 
                 // Try with a shorter expiry as fallback
                 $fallbackResult = $this->cache->set($key, $data, 900); // 15 minutes in seconds
@@ -312,7 +345,9 @@ class EmailVerification
     {
         try {
             // Try to use file-based storage as last resort
-            $storagePath = config('app.paths.storage_path', __DIR__ . '/../../storage') . '/cache/';
+            $storagePath = $this->context !== null
+                ? config($this->context, 'app.paths.storage_path', __DIR__ . '/../../storage') . '/cache/'
+                : __DIR__ . '/../../storage/cache/';
             if (!is_dir($storagePath)) {
                 mkdir($storagePath, 0755, true);
             }

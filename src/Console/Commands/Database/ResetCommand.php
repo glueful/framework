@@ -57,7 +57,7 @@ class ResetCommand extends BaseCommand
         $dryRun = $input->getOption('dry-run');
 
         try {
-            $this->connection = new Connection();
+            $this->connection = Connection::fromContext($this->context);
             $schema = $this->connection->getSchemaBuilder();
 
             // Get all tables

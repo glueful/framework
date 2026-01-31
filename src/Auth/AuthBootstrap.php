@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Auth;
 
 use Glueful\Auth\Interfaces\AuthenticationProviderInterface;
+use Glueful\Bootstrap\ApplicationContext;
 
 /**
  * Authentication Bootstrapper
@@ -14,8 +15,12 @@ use Glueful\Auth\Interfaces\AuthenticationProviderInterface;
  */
 class AuthBootstrap
 {
-    /** @var AuthenticationManager|null The singleton manager instance */
-    private static ?AuthenticationManager $manager = null;
+    private ?AuthenticationManager $manager = null;
+
+    public function __construct(
+        private ApplicationContext $context
+    ) {
+    }
 
     /**
      * Initialize the authentication system
@@ -24,15 +29,15 @@ class AuthBootstrap
      *
      * @return AuthenticationManager The configured authentication manager
      */
-    public static function initialize(): AuthenticationManager
+    public function initialize(): AuthenticationManager
     {
-        if (self::$manager !== null) {
-            return self::$manager;
+        if ($this->manager !== null) {
+            return $this->manager;
         }
 
         // Create default authentication providers
-        $jwtProvider = new JwtAuthenticationProvider();
-        $apiKeyProvider = new ApiKeyAuthenticationProvider();
+        $jwtProvider = new JwtAuthenticationProvider($this->context);
+        $apiKeyProvider = new ApiKeyAuthenticationProvider($this->context);
 
         // Create manager with JWT provider as default
         $manager = new AuthenticationManager($jwtProvider);
@@ -42,10 +47,14 @@ class AuthBootstrap
         $manager->registerProvider('api_key', $apiKeyProvider);
 
         // Register additional custom providers
-        self::registerCustomProviders($manager);
+        $this->registerCustomProviders($manager);
 
-        // Store the singleton instance
-        self::$manager = $manager;
+        // Store the instance
+        $this->manager = $manager;
+
+        // Give providers access to the manager for admin checks
+        $jwtProvider->setAuthManager($manager);
+        $apiKeyProvider->setAuthManager($manager);
 
         return $manager;
     }
@@ -55,10 +64,13 @@ class AuthBootstrap
      *
      * @param AuthenticationManager $manager The manager to configure
      */
-    private static function registerCustomProviders(AuthenticationManager $manager): void
+    private function registerCustomProviders(AuthenticationManager $manager): void
     {
         // Get configured providers from configuration
-        $configuredProviders = config('session.providers', []);
+        $configuredProviders = [];
+        if (function_exists('config')) {
+            $configuredProviders = (array) config($this->context, 'session.providers', []);
+        }
 
         foreach ($configuredProviders as $name => $providerClass) {
             // Skip if already registered
@@ -89,8 +101,8 @@ class AuthBootstrap
      *
      * @return AuthenticationManager The manager instance
      */
-    public static function getManager(): AuthenticationManager
+    public function getManager(): AuthenticationManager
     {
-        return self::$manager ?? self::initialize();
+        return $this->manager ?? $this->initialize();
     }
 }

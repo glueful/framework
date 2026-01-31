@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Notifications\Services;
 
 use DateTime;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use Glueful\Logging\LogManager;
 use Glueful\Notifications\Contracts\Notifiable;
@@ -44,18 +45,26 @@ class NotificationRetryService
     private ?NotificationRepository $notificationRepository;
 
     /**
+     * @var ApplicationContext|null Application context
+     */
+    private ?ApplicationContext $context;
+
+    /**
      * NotificationRetryService constructor
      *
      * @param LogManager|null $logger Logger instance
      * @param NotificationRepository|null $notificationRepository Notification repository
      * @param array<string, mixed> $config Configuration options
+     * @param ApplicationContext|null $context Application context
      */
     public function __construct(
         ?LogManager $logger = null,
         ?NotificationRepository $notificationRepository = null,
-        array $config = []
+        array $config = [],
+        ?ApplicationContext $context = null
     ) {
         $this->logger = $logger;
+        $this->context = $context;
         $this->notificationRepository = $notificationRepository ?? new NotificationRepository();
         $this->connection = null; // Lazy initialization
         $this->config = $config;
@@ -69,7 +78,7 @@ class NotificationRetryService
     private function initDatabase(): void
     {
         if ($this->connection === null) {
-            $this->connection = new Connection();
+            $this->connection = Connection::fromContext($this->context);
         }
     }
 
@@ -202,7 +211,7 @@ class NotificationRetryService
     public function ensureRetryQueueTableExists(): void
     {
         try {
-            $connection = new Connection();
+            $connection = Connection::fromContext($this->context);
             $schema = $connection->getSchemaBuilder();
 
             // Check if table exists first

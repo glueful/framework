@@ -2,6 +2,7 @@
 
 namespace Glueful\Tasks;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use Glueful\Logging\DatabaseLogPruner;
 
@@ -23,10 +24,12 @@ class LogCleanupTask
     ];
 
     private Connection $connection;
+    private ?ApplicationContext $context;
 
-    public function __construct()
+    public function __construct(?ApplicationContext $context = null)
     {
-        $this->connection = new Connection();
+        $this->context = $context;
+        $this->connection = Connection::fromContext($this->context);
     }
 
     /**
@@ -34,7 +37,7 @@ class LogCleanupTask
      */
     public function cleanFileSystemLogs(int $retentionDays): void
     {
-        $logDir = config('app.paths.logs');
+        $logDir = (string) $this->getConfig('app.paths.logs', './storage/logs/');
 
         if (!is_dir($logDir)) {
             return;
@@ -92,7 +95,7 @@ class LogCleanupTask
     public function cleanDatabaseLogsByChannel(): void
     {
         try {
-            $pruner = new DatabaseLogPruner();
+            $pruner = new DatabaseLogPruner(context: $this->context);
             $deleted = $pruner->pruneByChannel();
 
             $this->stats['deleted_db_logs'] += $deleted;
@@ -122,7 +125,7 @@ class LogCleanupTask
             $message .= "Errors:\n- " . implode("\n- ", $this->stats['errors']) . "\n";
         }
 
-        $logFile = base_path('storage/logs/log-cleanup.log');
+        $logFile = $this->getBasePath('storage/logs/log-cleanup.log');
         $logDir = dirname($logFile);
 
         if (!is_dir($logDir)) {
@@ -142,6 +145,29 @@ class LogCleanupTask
         $i = (int) floor(log($bytes, 1024));
 
         return round($bytes / (1024 ** $i), 2) . ' ' . $units[$i];
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
+    }
+
+    private function getBasePath(string $path = ''): string
+    {
+        if ($this->context !== null) {
+            return base_path($this->context, $path);
+        }
+
+        $root = getcwd() ?: '.';
+        if ($path === '') {
+            return $root;
+        }
+
+        return rtrim($root, '/') . '/' . ltrim($path, '/');
     }
 
     /**

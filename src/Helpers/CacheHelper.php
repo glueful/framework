@@ -7,6 +7,7 @@ namespace Glueful\Helpers;
 use Glueful\Cache\CacheStore;
 use Glueful\Cache\CacheFactory;
 use Glueful\Helpers\Utils;
+use Glueful\Bootstrap\ApplicationContext;
 
 /**
  * Cache Helper Utilities
@@ -17,6 +18,7 @@ use Glueful\Helpers\Utils;
  */
 class CacheHelper
 {
+    private static ?ApplicationContext $context = null;
     /**
      * Create cache instance with proper fallback handling
      *
@@ -27,10 +29,10 @@ class CacheHelper
      *
      * @return CacheStore<mixed>|null Cache instance or null if cache unavailable
      */
-    public static function createCacheInstance(): ?CacheStore
+    public static function createCacheInstance(?ApplicationContext $context = null): ?CacheStore
     {
         try {
-            return CacheFactory::create();
+            return CacheFactory::create('', $context);
         } catch (\Exception $e) {
             // Log the cache initialization failure but don't throw
             // This allows services to degrade gracefully without caching
@@ -162,7 +164,7 @@ class CacheHelper
     public static function getDefaultPrefix(): string
     {
         if (self::$defaultPrefix === null) {
-            self::$defaultPrefix = config('cache.prefix', '');
+            self::$defaultPrefix = (string) self::getConfig('cache.prefix', '');
         }
 
         return self::$defaultPrefix;
@@ -177,6 +179,11 @@ class CacheHelper
     public static function setDefaultPrefix(string $prefix): void
     {
         self::$defaultPrefix = $prefix;
+    }
+
+    public static function setContext(?ApplicationContext $context): void
+    {
+        self::$context = $context;
     }
 
     /**
@@ -403,20 +410,26 @@ class CacheHelper
 
         // Determine if stampede protection should be used
         $shouldUseStampedeProtection = $useStampedeProtection ??
-            (bool) config('cache.stampede_protection.enabled', false);
+            (bool) self::getConfig('cache.stampede_protection.enabled', false);
 
         if ($shouldUseStampedeProtection) {
             // Check if early expiration is enabled
-            $earlyExpirationEnabled = (bool) config('cache.stampede_protection.early_expiration.enabled', false);
+            $earlyExpirationEnabled = (bool) self::getConfig(
+                'cache.stampede_protection.early_expiration.enabled',
+                false
+            );
 
             if ($earlyExpirationEnabled) {
-                $threshold = (float) config('cache.stampede_protection.early_expiration.threshold', 0.8);
-                $lockTtl = (int) config('cache.stampede_protection.lock_ttl', 60);
+                $threshold = (float) self::getConfig(
+                    'cache.stampede_protection.early_expiration.threshold',
+                    0.8
+                );
+                $lockTtl = (int) self::getConfig('cache.stampede_protection.lock_ttl', 60);
                 return self::rememberWithEarlyExpiration($cache, $key, $callback, $ttl, $threshold, $lockTtl);
             } else {
-                $lockTtl = (int) config('cache.stampede_protection.lock_ttl', 60);
-                $maxWait = (int) config('cache.stampede_protection.max_wait_time', 30);
-                $retryInterval = (int) config('cache.stampede_protection.retry_interval', 100000);
+                $lockTtl = (int) self::getConfig('cache.stampede_protection.lock_ttl', 60);
+                $maxWait = (int) self::getConfig('cache.stampede_protection.max_wait_time', 30);
+                $retryInterval = (int) self::getConfig('cache.stampede_protection.retry_interval', 100000);
                 return self::rememberWithStampedeProtection(
                     $cache,
                     $key,
@@ -431,6 +444,15 @@ class CacheHelper
 
         // CacheStore interface always has remember method, so we can call it directly
         return $cache->remember($key, $callback, $ttl);
+    }
+
+    private static function getConfig(string $key, mixed $default = null): mixed
+    {
+        if (self::$context === null) {
+            return $default;
+        }
+
+        return config(self::$context, $key, $default);
     }
 
     /**

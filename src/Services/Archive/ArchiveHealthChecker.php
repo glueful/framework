@@ -2,6 +2,7 @@
 
 namespace Glueful\Services\Archive;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use Glueful\Services\Archive\DTOs\HealthCheckResult;
 
@@ -24,20 +25,23 @@ class ArchiveHealthChecker
     private array $config;
 
     private Connection $db;
+    private ?ApplicationContext $context;
 
     /**
      * @param array<string, mixed> $config
      */
     public function __construct(
         ?Connection $connection = null,
-        array $config = []
+        array $config = [],
+        ?ApplicationContext $context = null
     ) {
-        $this->db = $connection ?? new Connection();
+        $this->context = $context;
+        $this->db = $connection ?? Connection::fromContext($this->context);
         $this->config = array_merge([
-            'storage_path' => config('archive.storage.path'),
-            'disk_space_threshold' => config('archive.monitoring.disk_space_threshold_percent', 85),
-            'enable_health_checks' => config('archive.monitoring.enable_health_checks', true),
-            'max_failed_archives' => config('archive.monitoring.max_failed_archives', 5),
+            'storage_path' => $this->getConfig('archive.storage.path', './storage/archive'),
+            'disk_space_threshold' => $this->getConfig('archive.monitoring.disk_space_threshold_percent', 85),
+            'enable_health_checks' => $this->getConfig('archive.monitoring.enable_health_checks', true),
+            'max_failed_archives' => $this->getConfig('archive.monitoring.max_failed_archives', 5),
         ], $config);
 
         $this->archivePath = $this->config['storage_path'];
@@ -325,7 +329,7 @@ class ArchiveHealthChecker
     private function findStaleArchives(): int
     {
         try {
-            $retentionPolicies = config('archive.retention_policies', []);
+            $retentionPolicies = $this->getConfig('archive.retention_policies', []);
             $staleCount = 0;
 
             foreach ($retentionPolicies as $table => $policy) {
@@ -350,6 +354,15 @@ class ArchiveHealthChecker
             error_log("Error checking stale archives: " . $e->getMessage());
             return 0;
         }
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 
     /**

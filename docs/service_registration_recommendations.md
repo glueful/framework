@@ -1,5 +1,10 @@
 # Service Registration: Recommended Additions To Fully Close Gaps
 
+Status: Proposal only (not implemented)
+
+Note: Current runtime supports only `Glueful\Extensions\ServiceProvider::services()` for extension DI.
+The DSL/defs ideas in this document are proposed future enhancements.
+
 This document proposes targeted enhancements to Glueful’s DI ergonomics while preserving the current compile‑first, deterministic container.
 
 ## Context

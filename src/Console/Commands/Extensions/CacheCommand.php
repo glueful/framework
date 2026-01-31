@@ -63,7 +63,7 @@ final class CacheCommand extends BaseCommand
 
         // Step 2: Clear existing cache
         $output->writeln('2. <info>Clearing existing cache...</info>');
-        $cacheFile = base_path('bootstrap/cache/extensions.php');
+        $cacheFile = base_path($this->getContext(), 'bootstrap/cache/extensions.php');
         if (file_exists($cacheFile)) {
             @unlink($cacheFile);
             $output->writeln('   ✓ Existing cache cleared');
@@ -73,7 +73,7 @@ final class CacheCommand extends BaseCommand
 
         // Step 3: Discover providers
         $output->writeln('3. <info>Discovering providers...</info>');
-        $discoveredProviders = ProviderLocator::all();
+        $discoveredProviders = ProviderLocator::all($this->getContext());
         $providerCount = count($discoveredProviders);
         $output->writeln("   ✓ Found {$providerCount} providers");
 
@@ -139,19 +139,19 @@ final class CacheCommand extends BaseCommand
         $errors = [];
 
         // Check required config values
-        $enabled = config('extensions.enabled');
+        $enabled = config($this->getContext(), 'extensions.enabled');
         if ($enabled === null) {
             $errors[] = 'extensions.enabled config is not set';
         }
 
         // Validate allow-list mode configuration
-        $only = config('extensions.only');
+        $only = config($this->getContext(), 'extensions.only');
         if ($only !== null && !is_array($only) && !is_string($only)) {
             $errors[] = 'extensions.only must be array or string';
         }
 
         // Validate blacklist configuration
-        $disabled = config('extensions.disabled');
+        $disabled = config($this->getContext(), 'extensions.disabled');
         if ($disabled !== null && !is_array($disabled)) {
             $errors[] = 'extensions.disabled must be array';
         }
@@ -162,7 +162,7 @@ final class CacheCommand extends BaseCommand
         }
 
         // Validate local path configuration
-        $localPath = config('extensions.local_path');
+        $localPath = config($this->getContext(), 'extensions.local_path');
         if ($localPath !== null && !is_string($localPath)) {
             $errors[] = 'extensions.local_path must be string';
         }
@@ -210,7 +210,7 @@ final class CacheCommand extends BaseCommand
      */
     private function verifyCacheIntegrity(): array
     {
-        $cacheFile = base_path('bootstrap/cache/extensions.php');
+        $cacheFile = base_path($this->getContext(), 'bootstrap/cache/extensions.php');
 
         // Check if cache file exists
         if (!file_exists($cacheFile)) {

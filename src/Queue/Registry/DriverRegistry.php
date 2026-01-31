@@ -2,6 +2,7 @@
 
 namespace Glueful\Queue\Registry;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Queue\Contracts\QueueDriverInterface;
 use Glueful\Queue\Contracts\DriverInfo;
 use Glueful\Queue\Discovery\DriverDiscovery;
@@ -43,13 +44,15 @@ class DriverRegistry
 
     /** @var PluginManager|null Plugin manager instance */
     private ?PluginManager $pluginManager = null;
+    private ?ApplicationContext $context;
 
     /**
      * Initialize driver registry
      */
-    public function __construct()
+    public function __construct(?ApplicationContext $context = null)
     {
-        $this->discovery = new DriverDiscovery();
+        $this->context = $context;
+        $this->discovery = new DriverDiscovery($this->context);
         $this->loadDrivers();
         $this->initializePluginManager();
     }
@@ -347,7 +350,7 @@ class DriverRegistry
      */
     private function initializePluginManager(): void
     {
-        $this->pluginManager = new PluginManager();
+        $this->pluginManager = new PluginManager($this->context);
         $this->pluginManager->setDriverRegistry($this);
     }
 

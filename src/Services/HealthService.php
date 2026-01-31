@@ -2,6 +2,7 @@
 
 namespace Glueful\Services;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Cache\CacheStore;
 use Glueful\Database\Connection;
 use Glueful\Helpers\CacheHelper;
@@ -27,29 +28,42 @@ class HealthService
     /** @var array<string, array{result: array<string, mixed>, timestamp: float}> In-memory cache for health checks */
     private static array $healthCache = [];
 
+    private ?ApplicationContext $context;
+
     /**
      * Constructor
      *
      * @param CacheStore<mixed>|null $cache
      */
-    public function __construct(?CacheStore $cache = null, ?Connection $connection = null)
-    {
-        $this->cache = $cache ?? CacheHelper::createCacheInstance();
+    public function __construct(
+        ?CacheStore $cache = null,
+        ?Connection $connection = null,
+        ?ApplicationContext $context = null
+    ) {
+        $this->context = $context;
+        $this->cache = $cache ?? CacheHelper::createCacheInstance($this->context);
         if ($this->cache === null) {
             throw new \RuntimeException(
                 'CacheStore is required for HealthService: Unable to create cache instance.'
             );
         }
 
-        $this->connection = $connection ?? new Connection();
+        $this->connection = $connection ?? Connection::fromContext($this->context);
     }
 
     /**
      * Get singleton instance
      */
-    private static function getInstance(): self
+    private static function getInstance(?ApplicationContext $context = null): self
     {
-        return self::$instance ??= new self();
+        if (self::$instance === null) {
+            self::$instance = new self(null, null, $context);
+        } elseif ($context !== null && self::$instance->context === null) {
+            // Context provided but instance was created without it - recreate with proper context
+            self::$instance = new self(null, null, $context);
+        }
+
+        return self::$instance;
     }
 
     /**
@@ -57,9 +71,9 @@ class HealthService
      *
      * @return array<string, mixed>
      */
-    public static function checkDatabase(): array
+    public static function checkDatabase(?ApplicationContext $context = null): array
     {
-        return self::getInstance()->performDatabaseCheck();
+        return self::getInstance($context)->performDatabaseCheck();
     }
 
     /**
@@ -82,6 +96,9 @@ class HealthService
             // Test 1: Basic connectivity with QueryBuilder raw query
             $testResult = $this->connection->query()->executeRawFirst('SELECT 1 as test');
 
+            // Get current database name for debugging
+            $dbName = $this->getCurrentDatabaseName();
+
             // Test 2: Check if migrations table exists and is accessible
             $migrationCount = $this->connection->table('migrations')->count();
 
@@ -89,32 +106,66 @@ class HealthService
                 'status' => 'ok',
                 'message' => 'Database connection and QueryBuilder operational',
                 'driver' => $this->connection->getDriverName(),
+                'database' => $dbName,
                 'migrations_applied' => $migrationCount,
                 'connectivity_test' => $testResult !== null && $testResult !== []
             ];
         } catch (\PDOException $e) {
-            $result = [
-                'status' => 'error',
-                'message' => 'Database connection failed: ' . $e->getMessage(),
-                'type' => 'connection_error'
-            ];
-        } catch (\Exception $e) {
-            // Check if it's a table not found error (migrations not run)
+            // Check if it's a table not found error (migrations not run) vs actual connection error
+            $msg = $e->getMessage();
             if (
-                str_contains($e->getMessage(), 'migrations') &&
-                (str_contains($e->getMessage(), "doesn't exist") ||
-                 str_contains($e->getMessage(), 'does not exist') ||
-                 str_contains($e->getMessage(), 'no such table'))
+                str_contains($msg, 'migrations') &&
+                (str_contains($msg, "doesn't exist") ||
+                 str_contains($msg, 'does not exist') ||
+                 str_contains($msg, 'no such table') ||
+                 str_contains($msg, 'Undefined table') ||
+                 str_contains($msg, '42P01'))  // PostgreSQL error code for undefined table
             ) {
                 $result = [
                     'status' => 'warning',
-                    'message' => 'Database connected but migrations not run',
-                    'suggestion' => 'Run: php glueful migrate run'
+                    'message' => 'Database connected but migrations table not found',
+                    'driver' => $this->connection->getDriverName(),
+                    'database' => $this->getCurrentDatabaseName(),
+                    'suggestion' => 'Run: php glueful migrate:run',
+                    // Debug: show what env values are being read
+                    '_debug_env' => [
+                        'DB_DRIVER' => env('DB_DRIVER'),
+                        'DB_PGSQL_DATABASE' => env('DB_PGSQL_DATABASE'),
+                        'DB_PGSQL_HOST' => env('DB_PGSQL_HOST'),
+                        'base_path' => $this->context?->getBasePath(),
+                    ],
+                    '_debug_config' => [
+                        'engine' => $this->getConfig('database.engine'),
+                        'pgsql_db' => $this->getConfig('database.pgsql.db'),
+                    ],
                 ];
             } else {
                 $result = [
                     'status' => 'error',
-                    'message' => 'Database error: ' . $e->getMessage(),
+                    'message' => 'Database connection failed: ' . $msg,
+                    'type' => 'connection_error'
+                ];
+            }
+        } catch (\Exception $e) {
+            // Check if it's a table not found error (migrations not run)
+            $msg = $e->getMessage();
+            if (
+                str_contains($msg, 'migrations') &&
+                (str_contains($msg, "doesn't exist") ||
+                 str_contains($msg, 'does not exist') ||
+                 str_contains($msg, 'no such table'))
+            ) {
+                $result = [
+                    'status' => 'warning',
+                    'message' => 'Database connected but migrations not run',
+                    'driver' => $this->connection->getDriverName(),
+                    'database' => $this->getCurrentDatabaseName(),
+                    'suggestion' => 'Run: php glueful migrate:run'
+                ];
+            } else {
+                $result = [
+                    'status' => 'error',
+                    'message' => 'Database error: ' . $msg,
                     'type' => 'query_error'
                 ];
             }
@@ -134,9 +185,9 @@ class HealthService
      *
      * @return array<string, mixed>
      */
-    public static function checkCache(): array
+    public static function checkCache(?ApplicationContext $context = null): array
     {
-        return self::getInstance()->performCacheCheck();
+        return self::getInstance($context)->performCacheCheck();
     }
 
     /**
@@ -159,7 +210,7 @@ class HealthService
                 return [
                     'status' => 'ok',
                     'message' => 'Cache is working properly',
-                    'driver' => config('cache.default', 'unknown'),
+                    'driver' => $this->getConfig('cache.default', 'unknown'),
                     'operations' => 'read/write/delete functional'
                 ];
             } else {
@@ -219,8 +270,9 @@ class HealthService
     /**
      * @return array<string, mixed>
      */
-    public static function checkConfiguration(): array
+    public static function checkConfiguration(?ApplicationContext $context = null): array
     {
+        $instance = self::getInstance($context);
         $issues = [];
         $warnings = [];
 
@@ -234,7 +286,7 @@ class HealthService
         }
 
         // Check .env file exists
-        $envPath = base_path('.env');
+        $envPath = $instance->getBasePath('.env');
         if (!file_exists($envPath)) {
             $issues[] = '.env file not found';
         }
@@ -282,13 +334,14 @@ class HealthService
     /**
      * @return array<string, mixed>
      */
-    public static function getOverallHealth(): array
+    public static function getOverallHealth(?ApplicationContext $context = null): array
     {
+        $instance = self::getInstance($context);
         $checks = [
-            'database' => self::checkDatabase(),
-            'cache' => self::checkCache(),
+            'database' => self::checkDatabase($context),
+            'cache' => self::checkCache($context),
             'extensions' => self::checkExtensions(),
-            'config' => self::checkConfiguration()
+            'config' => self::checkConfiguration($context)
         ];
 
         // Determine overall status
@@ -313,10 +366,58 @@ class HealthService
         return [
             'status' => $overallStatus,
             'timestamp' => date('c'),
-            'version' => config('app.version', '1.0.0'),
+            'version' => $instance->getConfig('app.version', '1.0.0'),
             'environment' => env('APP_ENV', 'unknown'),
             'checks' => $checks
         ];
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
+    }
+
+    /**
+     * Get the current database name for debugging
+     */
+    private function getCurrentDatabaseName(): ?string
+    {
+        try {
+            $driver = $this->connection->getDriverName();
+            $query = match ($driver) {
+                'pgsql' => 'SELECT current_database() as db',
+                'mysql' => 'SELECT DATABASE() as db',
+                'sqlite' => null,
+                default => null,
+            };
+
+            if ($query === null) {
+                return $driver === 'sqlite' ? 'SQLite (file-based)' : null;
+            }
+
+            $result = $this->connection->query()->executeRawFirst($query);
+            return $result['db'] ?? null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function getBasePath(string $path = ''): string
+    {
+        if ($this->context !== null) {
+            return base_path($this->context, $path);
+        }
+
+        $root = getcwd() ?: '.';
+        if ($path === '') {
+            return $root;
+        }
+
+        return rtrim($root, '/') . '/' . ltrim($path, '/');
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace Glueful\Tasks;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 
 // @schedule:  0 0 * * *
@@ -18,10 +19,12 @@ class SessionCleanupTask
     ];
 
     private static Connection $connection;
+    private ?ApplicationContext $context;
 
-    public function __construct()
+    public function __construct(?ApplicationContext $context = null)
     {
-        self::$connection = new Connection();
+        $this->context = $context;
+        self::$connection = Connection::fromContext($this->context);
     }
 
     public function cleanExpiredAccessTokens(): void
@@ -56,7 +59,7 @@ class SessionCleanupTask
     {
         try {
             // Get configurable retention period, default to 30 days
-            $retentionDays = config('session.cleanup.revoked_retention_days', 30);
+            $retentionDays = $this->getConfig('session.cleanup.revoked_retention_days', 30);
             $cutoffDate = date('Y-m-d H:i:s', strtotime("-{$retentionDays} days"));
             $affected = self::$connection->table('auth_sessions')
                 ->where('status', 'revoked')
@@ -87,7 +90,7 @@ class SessionCleanupTask
             $message .= "Errors:\n- " . implode("\n- ", $this->stats['errors']) . "\n";
         }
 
-        $logFile = config('app.paths.logs') . 'session-cleanup.log';
+        $logFile = rtrim((string) $this->getConfig('app.paths.logs', './storage/logs/'), '/') . '/session-cleanup.log';
         $logDir = dirname($logFile);
 
         if (!is_dir($logDir)) {
@@ -103,6 +106,15 @@ class SessionCleanupTask
         $this->cleanExpiredRefreshTokens();
         $this->cleanOldRevokedSessions();
         $this->logResults();
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 
     /**

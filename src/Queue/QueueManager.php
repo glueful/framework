@@ -2,6 +2,7 @@
 
 namespace Glueful\Queue;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Queue\Contracts\QueueDriverInterface;
 use Glueful\Queue\Registry\DriverRegistry;
 use Glueful\Queue\Plugins\PluginManager;
@@ -49,20 +50,23 @@ class QueueManager
 
     /** @var string Default connection name */
     private string $defaultConnection;
+    private ?ApplicationContext $context;
+    private static ?ApplicationContext $defaultContext = null;
 
     /**
      * Create queue manager
      *
      * @param array<string, mixed> $config Queue configuration
      */
-    public function __construct(array $config = [])
+    public function __construct(array $config = [], ?ApplicationContext $context = null)
     {
+        $this->context = $context;
         $this->config = $this->normalizeConfig($config);
         $this->defaultConnection = $this->config['default'] ?? 'database';
 
         // Initialize registry and plugins
-        $this->registry = new DriverRegistry();
-        $this->plugins = new PluginManager();
+        $this->registry = new DriverRegistry($this->context);
+        $this->plugins = new PluginManager($this->context);
 
         // Set up plugin integration
         $this->plugins->setDriverRegistry($this->registry);
@@ -259,6 +263,9 @@ class QueueManager
     private function createConnection(string $name): QueueDriverInterface
     {
         $config = $this->getConnectionConfig($name);
+        if (!isset($config['context']) && $this->context !== null) {
+            $config['context'] = $this->context;
+        }
         $driverName = $config['driver'];
 
         if (!$this->registry->hasDriver($driverName)) {
@@ -436,10 +443,16 @@ class QueueManager
     public static function createDefault(): self
     {
         // Load merged queue configuration using helper
-        $config = function_exists('loadConfigWithHierarchy')
-            ? loadConfigWithHierarchy('queue')
-            : [];
+        $config = [];
+        if (function_exists('loadConfigWithHierarchy') && self::$defaultContext instanceof ApplicationContext) {
+            $config = loadConfigWithHierarchy(self::$defaultContext, 'queue');
+        }
 
-        return new self($config);
+        return new self($config, self::$defaultContext);
+    }
+
+    public static function setContext(?ApplicationContext $context): void
+    {
+        self::$defaultContext = $context;
     }
 }

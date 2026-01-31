@@ -4,14 +4,18 @@ declare(strict_types=1);
 
 namespace Glueful\Routing;
 
+use Glueful\Bootstrap\ApplicationContext;
+
 class RouteCache
 {
     private string $cacheDir;
     private int $devTtl = 5; // 5 seconds in dev
+    private ApplicationContext $context;
 
-    public function __construct()
+    public function __construct(ApplicationContext $context)
     {
-        $this->cacheDir = base_path('storage/cache');
+        $this->context = $context;
+        $this->cacheDir = base_path($this->context, 'storage/cache');
         if (!is_dir($this->cacheDir)) {
             mkdir($this->cacheDir, 0755, true);
         }
@@ -82,13 +86,13 @@ class RouteCache
 
     private function isDevelopment(): bool
     {
-        return env('APP_ENV', 'production') !== 'production';
+        return $this->context->getEnvironment() !== 'production';
     }
 
     private function routeFilesChanged(int $cacheTime): bool
     {
         // App route files
-        $appGlob = glob(base_path('routes/*.php'));
+        $appGlob = glob(base_path($this->context, 'routes/*.php'));
         $appFiles = $appGlob !== false ? $appGlob : [];
 
         // Framework route files (under src/routes)

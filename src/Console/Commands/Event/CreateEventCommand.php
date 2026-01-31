@@ -110,7 +110,7 @@ class CreateEventCommand extends BaseCommand
         $this->storage = new StorageManager([
             'default' => 'local',
             'disks' => [
-                'local' => ['driver' => 'local', 'root' => base_path(), 'visibility' => 'private'],
+                'local' => ['driver' => 'local', 'root' => base_path($this->getContext()), 'visibility' => 'private'],
             ],
         ], new PathGuard());
     }
@@ -168,7 +168,7 @@ class CreateEventCommand extends BaseCommand
         }
 
         // Build directory path using config
-        $baseDir = config('app.paths.app_events');
+        $baseDir = config($this->getContext(), 'app.paths.app_events');
         $subDir = (count($parts) > 0) ? DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $parts) : '';
         $directory = $baseDir . $subDir;
         $filePath = $directory . DIRECTORY_SEPARATOR . $className . '.php';
@@ -243,9 +243,9 @@ use Glueful\Events\Traits\EventHelpers;
  * Dispatched when [describe when this event occurs]
  *
  * Usage:
- * {$className}::dispatch(\$data);
+ * {$className}::dispatch(\$context, \$data);
  * // or
- * Event::dispatch(new {$className}(\$data));
+ * app(\$context, \\Glueful\\Events\\EventService::class)->dispatch(new {$className}(\$data));
  */
 class {$className}
 {

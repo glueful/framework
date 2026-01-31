@@ -1,15 +1,27 @@
 <?php
 
+/**
+ * Auth routes - loaded via RouteManifest::requireRouteFile()
+ *
+ * Variables provided in scope by the loader:
+ * @var Router $router
+ * @var ApplicationContext $context
+ */
+
 use Glueful\Routing\Router;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Controllers\AuthController;
 use Glueful\Http\Response;
 use Glueful\Helpers\Utils;
 use Symfony\Component\HttpFoundation\Request;
 
-/** @var Router $router Router instance injected by RouteManifest::load() */
+/** @var ApplicationContext|null $context */
+$context = (isset($context) && $context instanceof ApplicationContext)
+    ? $context
+    : $router->getContext();
 
 // Auth routes
-$router->group(['prefix' => '/auth'], function (Router $router) {
+$router->group(['prefix' => '/auth'], function (Router $router) use ($context) {
     /**
      * @route POST /auth/login
      * @summary User Login
@@ -42,9 +54,9 @@ $router->group(['prefix' => '/auth'], function (Router $router) {
      * @response 401 "Invalid credentials"
      * @response 400 "Missing required fields"
      */
-    $router->post('/login', function (Request $request) {
-        $authController = container()->get(AuthController::class);
-        return $authController->login();
+    $router->post('/login', function (Request $request) use ($context) {
+        $authController = container($context)->get(AuthController::class);
+        return $authController->login($request);
     })->middleware('rate_limit:5,60'); // 5 attempts per minute
 
     /**
@@ -64,9 +76,9 @@ $router->group(['prefix' => '/auth'], function (Router $router) {
      * @response 400 "Invalid email address"
      * @response 404 "Email not found"
      */
-    $router->post('/verify-email', function () {
-        $authController = container()->get(AuthController::class);
-        return $authController->verifyEmail();
+    $router->post('/verify-email', function (Request $request) use ($context) {
+        $authController = container($context)->get(AuthController::class);
+        return $authController->verifyEmail($request);
     });
 
     /**
@@ -87,9 +99,9 @@ $router->group(['prefix' => '/auth'], function (Router $router) {
      * @response 400 "Invalid OTP"
      * @response 401 "OTP expired"
      */
-    $router->post('/verify-otp', function () {
-        $authController = container()->get(AuthController::class);
-        return $authController->verifyOtp();
+    $router->post('/verify-otp', function (Request $request) use ($context) {
+        $authController = container($context)->get(AuthController::class);
+        return $authController->verifyOtp($request);
     })->middleware('rate_limit:3,60'); // 3 attempts per minute
 
     /**
@@ -109,9 +121,9 @@ $router->group(['prefix' => '/auth'], function (Router $router) {
      * @response 400 "Invalid email address"
      * @response 404 "Email not found"
      */
-    $router->post('/resend-otp', function () {
-        $authController = container()->get(AuthController::class);
-        return $authController->resendOtp();
+    $router->post('/resend-otp', function (Request $request) use ($context) {
+        $authController = container($context)->get(AuthController::class);
+        return $authController->resendOtp($request);
     })->middleware('rate_limit:2,120'); // 2 attempts per 2 minutes (stricter for resend)
 
     /**
@@ -131,9 +143,9 @@ $router->group(['prefix' => '/auth'], function (Router $router) {
      * @response 404 "Email not found"
      * @response 400 "Invalid email format"
      */
-    $router->post('/forgot-password', function () {
-        $authController = container()->get(AuthController::class);
-        return $authController->forgotPassword();
+    $router->post('/forgot-password', function (Request $request) use ($context) {
+        $authController = container($context)->get(AuthController::class);
+        return $authController->forgotPassword($request);
     });
 
     /**
@@ -153,9 +165,9 @@ $router->group(['prefix' => '/auth'], function (Router $router) {
      * @response 400 "Invalid password format"
      * @response 404 "Email not found"
      */
-    $router->post('/reset-password', function () {
-        $authController = container()->get(AuthController::class);
-        return $authController->resetPassword();
+    $router->post('/reset-password', function (Request $request) use ($context) {
+        $authController = container($context)->get(AuthController::class);
+        return $authController->resetPassword($request);
     });
 
     /**
@@ -174,9 +186,9 @@ $router->group(['prefix' => '/auth'], function (Router $router) {
      * }
      * @response 401 "Invalid or expired token"
      */
-    $router->post('/validate-token', function () {
-        $authController = container()->get(AuthController::class);
-        return $authController->validateToken();
+    $router->post('/validate-token', function (Request $request) use ($context) {
+        $authController = container($context)->get(AuthController::class);
+        return $authController->validateToken($request);
     })->middleware(['auth']);
 
     /**
@@ -198,9 +210,9 @@ $router->group(['prefix' => '/auth'], function (Router $router) {
      * @response 401 "Invalid refresh token"
      * @response 400 "Missing refresh token"
      */
-    $router->post('/refresh-token', function () {
-        $authController = container()->get(AuthController::class);
-        return $authController->refreshToken();
+    $router->post('/refresh-token', function (Request $request) use ($context) {
+        $authController = container($context)->get(AuthController::class);
+        return $authController->refreshToken($request);
     });
 
     /**
@@ -215,9 +227,9 @@ $router->group(['prefix' => '/auth'], function (Router $router) {
      * }
      * @response 401 "Unauthorized - not logged in"
      */
-    $router->post('/logout', function () {
-        $authController = container()->get(AuthController::class);
-        return $authController->logout();
+    $router->post('/logout', function (Request $request) use ($context) {
+        $authController = container($context)->get(AuthController::class);
+        return $authController->logout($request);
     })->middleware(['auth']);
 
     /**
@@ -239,9 +251,9 @@ $router->group(['prefix' => '/auth'], function (Router $router) {
      * @response 401 "Unauthorized - invalid token"
      * @response 400 "Missing or invalid token"
      */
-    $router->post('/refresh-permissions', function () {
-        $authController = container()->get(AuthController::class);
-        return $authController->refreshPermissions();
+    $router->post('/refresh-permissions', function (Request $request) use ($context) {
+        $authController = container($context)->get(AuthController::class);
+        return $authController->refreshPermissions($request);
     })->middleware(['auth']);
 });
 

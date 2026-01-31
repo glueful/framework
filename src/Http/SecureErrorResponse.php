@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Http;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Exceptions\ExceptionHandler;
 
 /**
@@ -23,6 +24,12 @@ use Glueful\Exceptions\ExceptionHandler;
  */
 class SecureErrorResponse
 {
+    private static ?ApplicationContext $context = null;
+
+    public static function setContext(?ApplicationContext $context): void
+    {
+        self::$context = $context;
+    }
     /** @var array<string, string> Standard error messages for common scenarios */
     private const ERROR_MESSAGES = [
         'general' => 'An error occurred while processing your request',
@@ -338,7 +345,7 @@ class SecureErrorResponse
     private static function isDebugMode(): bool
     {
         $environment = env('APP_ENV', 'production');
-        $debugMode = config('app.debug', false);
+        $debugMode = self::getConfig('app.debug', false);
 
         return (bool) $debugMode && in_array($environment, ['development', 'local'], true);
     }
@@ -351,5 +358,14 @@ class SecureErrorResponse
     private static function isLocalEnvironment(): bool
     {
         return env('APP_ENV', 'production') === 'local';
+    }
+
+    private static function getConfig(string $key, mixed $default = null): mixed
+    {
+        if (self::$context === null) {
+            return $default;
+        }
+
+        return config(self::$context, $key, $default);
     }
 }

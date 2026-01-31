@@ -183,7 +183,7 @@ class FactoryCommand extends BaseCommand
      */
     private function getDefaultFactoryPath(): string
     {
-        return base_path('database/factories');
+        return base_path($this->getContext(), 'database/factories');
     }
 
     /**

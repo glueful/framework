@@ -61,10 +61,11 @@ final class FrameworkBootBenchmark extends TestCase
             $testPath . '/config/app.php',
             "<?php return ['env'=>'testing','debug'=>true,'version_full'=>'1.0.0'];\n"
         );
-        Framework::create($testPath)->withEnvironment('testing')->boot(allowReboot: true);
+        $app = Framework::create($testPath)->withEnvironment('testing')->boot(allowReboot: true);
+        $context = $app->getContext();
 
         // Register a simple route using DI container
-        $router = container()->get(Router::class);
+        $router = container($context)->get(Router::class);
         $router->get('/perf-test', function () {
             return ApiResponse::success(['timestamp' => microtime(true)]);
         });

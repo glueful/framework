@@ -10,10 +10,10 @@ use Glueful\Exceptions\HttpProtocolException;
 use Glueful\Exceptions\HttpAuthException;
 use Glueful\Events\Http\ExceptionEvent;
 use Psr\Log\LoggerInterface;
-use Glueful\Events\Event;
+use Glueful\Events\EventService;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Glueful\Events\ListenerProvider as PsrListenerProvider;
-use Glueful\Events\EventDispatcher as PsrEventDispatcher;
+use Glueful\Bootstrap\ApplicationContext;
 
 class ExceptionHandler
 {
@@ -21,6 +21,8 @@ class ExceptionHandler
      * @var LoggerInterface|null PSR-3 compliant logger
      */
     private static ?LoggerInterface $logger = null;
+    private static ?ApplicationContext $context = null;
+    private static ?EventService $eventService = null;
 
 
     /**
@@ -194,7 +196,9 @@ class ExceptionHandler
         // Try extracting from authentication headers
         try {
             $request = \Symfony\Component\HttpFoundation\Request::createFromGlobals();
-            $authManager = \Glueful\Auth\AuthBootstrap::getManager();
+            $authManager = self::$context !== null
+                ? container(self::$context)->get(\Glueful\Auth\AuthenticationManager::class)
+                : null;
             $userData = $authManager->authenticateWithProviders(['jwt', 'api_key'], $request);
 
             if ($userData !== null) {
@@ -590,6 +594,11 @@ class ExceptionHandler
         self::$logger = $logger;
     }
 
+    public static function setContext(?ApplicationContext $context): void
+    {
+        self::$context = $context;
+    }
+
     /**
      * Set the event dispatcher instance for testing
      *
@@ -597,22 +606,13 @@ class ExceptionHandler
      */
     public static function setEventDispatcher(?EventDispatcherInterface $eventDispatcher): void
     {
-        // Bootstrap the PSR-14 Event facade for tests
-        // Ignore the Symfony dispatcher instance here and use the new system
-        $provider = new PsrListenerProvider();
-        $dispatcher = new PsrEventDispatcher($provider);
-
-        // Pass container when available for lazy listeners
-        $container = null;
-        if (function_exists('container')) {
-            try {
-                $container = container();
-            } catch (\Throwable) {
-                $container = null;
-            }
+        if ($eventDispatcher === null) {
+            self::$eventService = null;
+            return;
         }
 
-        Event::bootstrap($dispatcher, $provider, $container);
+        $provider = new PsrListenerProvider();
+        self::$eventService = new EventService($eventDispatcher, $provider);
     }
 
 
@@ -628,10 +628,32 @@ class ExceptionHandler
     private static function getLogger(): LoggerInterface
     {
         if (self::$logger === null) {
-            self::$logger = container()->get(LoggerInterface::class);
+            if (self::$context !== null) {
+                self::$logger = container(self::$context)->get(LoggerInterface::class);
+            } else {
+                self::$logger = new \Psr\Log\NullLogger();
+            }
         }
 
         return self::$logger;
+    }
+
+    private static function getEventService(): ?EventService
+    {
+        if (self::$eventService !== null) {
+            return self::$eventService;
+        }
+
+        if (self::$context === null) {
+            return null;
+        }
+
+        try {
+            $service = container(self::$context)->get(EventService::class);
+            return $service instanceof EventService ? $service : null;
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**
@@ -667,7 +689,7 @@ class ExceptionHandler
                 $exception,
                 $context
             );
-            Event::dispatch($event);
+            self::getEventService()?->dispatch($event);
         } catch (\Throwable $eventException) {
             // Don't let event dispatching errors break exception handling
             error_log("Failed to dispatch exception event: " . $eventException->getMessage());
@@ -757,7 +779,7 @@ class ExceptionHandler
     private static function shouldShowErrorDetails(): bool
     {
         $environment = env('APP_ENV', 'production');
-        $debugMode = config('app.debug', false);
+        $debugMode = self::getConfig('app.debug', false);
 
         // Only show detailed errors in development environment with debug enabled
         return (bool)$debugMode && ($environment === 'development' || $environment === 'local');
@@ -921,7 +943,7 @@ class ExceptionHandler
         $environment = env('APP_ENV', 'production');
 
         // Always sanitize sensitive information unless in development/local
-        if (!in_array($environment, ['development', 'local'], true) || !(bool)config('app.debug', false)) {
+        if (!in_array($environment, ['development', 'local'], true) || !(bool) self::getConfig('app.debug', false)) {
             // Remove all file paths (both Unix and Windows)
             $message = preg_replace('/[\/\\\\][^\s]*\.php/', '[file]', $message);
             $message = preg_replace('/[\/\\\\][^\s]*\.inc/', '[file]', $message);
@@ -972,6 +994,15 @@ class ExceptionHandler
         }
 
         return trim($message);
+    }
+
+    private static function getConfig(string $key, mixed $default = null): mixed
+    {
+        if (self::$context === null) {
+            return $default;
+        }
+
+        return config(self::$context, $key, $default);
     }
 
 

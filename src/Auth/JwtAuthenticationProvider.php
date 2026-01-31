@@ -6,7 +6,9 @@ namespace Glueful\Auth;
 
 use Symfony\Component\HttpFoundation\Request;
 use Glueful\Auth\Interfaces\AuthenticationProviderInterface;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Auth\Traits\ResolvesSessionStore;
+use Glueful\Http\RequestContext;
 
 /**
  * JWT Authentication Provider
@@ -23,6 +25,18 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
 
     /** @var string|null Last authentication error message */
     private ?string $lastError = null;
+    private ?ApplicationContext $context = null;
+    private ?AuthenticationManager $authManager = null;
+
+    public function __construct(?ApplicationContext $context = null)
+    {
+        $this->context = $context;
+    }
+
+    public function setAuthManager(AuthenticationManager $authManager): void
+    {
+        $this->authManager = $authManager;
+    }
 
     /**
      * {@inheritdoc}
@@ -32,8 +46,7 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
         $this->lastError = null;
 
         try {
-            // Extract token using centralized extractor
-            $token = TokenManager::extractTokenFromRequest();
+            $token = $this->extractTokenFromRequest();
 
             if ($token === null || $token === '') {
                 $this->lastError = 'No authentication token provided';
@@ -79,13 +92,17 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
     {
         // Delegate to the central AuthenticationManager to avoid duplication
         try {
-            $manager = AuthBootstrap::getManager();
-            return $manager->isAdmin($userData);
+            if ($this->authManager !== null) {
+                return $this->authManager->isAdmin($userData);
+            }
         } catch (\Throwable) {
             // Conservative fallback to original heuristic
             $user = $userData['user'] ?? $userData;
             return (bool)($user['is_admin'] ?? false);
         }
+
+        $user = $userData['user'] ?? $userData;
+        return (bool)($user['is_admin'] ?? false);
     }
 
     /**
@@ -139,6 +156,51 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
         }
     }
 
+    private function extractTokenFromRequest(?RequestContext $requestContext = null): ?string
+    {
+        $requestContext = $requestContext ?? RequestContext::fromGlobals();
+        $authorization_header = $requestContext->getAuthorizationHeader();
+
+        if (($authorization_header === null || $authorization_header === '') && function_exists('getallheaders')) {
+            foreach (getallheaders() as $name => $value) {
+                if (strcasecmp($name, 'Authorization') === 0) {
+                    $authorization_header = $value;
+                    break;
+                }
+            }
+        }
+
+        if (
+            ($authorization_header === null || $authorization_header === '')
+            && function_exists('apache_request_headers')
+        ) {
+            foreach (apache_request_headers() as $name => $value) {
+                if (strcasecmp($name, 'Authorization') === 0) {
+                    $authorization_header = $value;
+                    break;
+                }
+            }
+        }
+
+        if (
+            $authorization_header !== null && $authorization_header !== ''
+            && preg_match('/Bearer\s+(.+)/i', $authorization_header, $matches)
+        ) {
+            return trim($matches[1]);
+        }
+
+        $allowQueryParam = (bool) config($this->context, 'security.tokens.allow_query_param', false);
+        if ($this->context === null || $allowQueryParam !== true) {
+            return null;
+        }
+
+        if (env('APP_ENV', 'production') !== 'production') {
+            error_log('Deprecated: token passed via query string');
+        }
+
+        return $requestContext->getQueryParam('token');
+    }
+
     /**
      * {@inheritdoc}
      */
@@ -148,8 +210,7 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
         ?int $refreshTokenLifetime = null
     ): array {
         try {
-            // Use TokenManager to generate token pair
-            return TokenManager::generateTokenPair(
+            return $this->getTokenManager()->generateTokenPair(
                 $userData,
                 $accessTokenLifetime,
                 $refreshTokenLifetime
@@ -162,6 +223,15 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
                 'expires_in' => 0
             ];
         }
+    }
+
+    private function getTokenManager(): TokenManager
+    {
+        if ($this->context !== null && $this->context->hasContainer()) {
+            return $this->context->getContainer()->get(TokenManager::class);
+        }
+
+        return new TokenManager($this->context, null, $this->authManager);
     }
 
     /**

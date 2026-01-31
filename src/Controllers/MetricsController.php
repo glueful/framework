@@ -13,11 +13,12 @@ class MetricsController extends BaseController
     private SchemaBuilderInterface $schemaManager;
 
     public function __construct(
+        \Glueful\Bootstrap\ApplicationContext $context,
         ?\Glueful\Repository\RepositoryFactory $repositoryFactory = null,
         ?\Glueful\Auth\AuthenticationManager $authManager = null,
         ?\Symfony\Component\HttpFoundation\Request $request = null
     ) {
-        parent::__construct($repositoryFactory, $authManager, $request);
+        parent::__construct($context, $repositoryFactory, $authManager, $request);
         $connection = $this->getConnection();
         $this->schemaManager = $connection->getSchemaBuilder();
     }
@@ -208,7 +209,7 @@ class MetricsController extends BaseController
         }
 
             // File system metrics
-            $storagePath = realpath(base_path('storage'));
+            $storagePath = realpath(base_path($this->getContext(), 'storage'));
             $fileSystemMetrics = [
                 'storage_free_space' => $this->formatBytes(disk_free_space($storagePath)),
                 'storage_total_space' => $this->formatBytes(disk_total_space($storagePath)),
@@ -223,7 +224,7 @@ class MetricsController extends BaseController
             $metrics['file_system'] = $fileSystemMetrics;
 
             // Check for log files
-            $logPath = realpath(base_path('storage/logs'));
+            $logPath = realpath(base_path($this->getContext(), 'storage/logs'));
             if ($logPath && is_dir($logPath)) {
                 $logFiles = glob($logPath . '/*.log');
                 $recentLogs = [];
@@ -304,7 +305,7 @@ class MetricsController extends BaseController
 
             // Extensions status - get from config without loading classes
             try {
-                $extensionManager = container()->get(ExtensionManager::class);
+                $extensionManager = container($this->getContext())->get(ExtensionManager::class);
                 $globalConfig = $extensionManager->getGlobalConfig();
                 $extensionConfigFile = $globalConfig['config_path'] ?? 'config/extensions.json';
                 $content = file_get_contents($extensionConfigFile);
@@ -479,7 +480,7 @@ class MetricsController extends BaseController
 
         $extensionName = $extension['name'];
 
-        $extensionManager = container()->get(ExtensionManager::class);
+        $extensionManager = container($this->getContext())->get(ExtensionManager::class);
         if (!$extensionManager->isInstalled($extensionName)) {
             return Response::error(
                 'Extension not found',
@@ -492,7 +493,7 @@ class MetricsController extends BaseController
         $health = $this->cacheResponse(
             "extension_health_{$extensionName}",
             function () use ($extensionName) {
-                $extensionManager = container()->get(ExtensionManager::class);
+                $extensionManager = container($this->getContext())->get(ExtensionManager::class);
                 return $extensionManager->checkHealth($extensionName);
             },
             600, // 10 minutes

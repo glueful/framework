@@ -2,6 +2,7 @@
 
 namespace Glueful\Cache;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Cache\CDN\CDNAdapterInterface;
 use Glueful\Extensions\ExtensionManager;
 use Glueful\Helpers\CacheHelper;
@@ -45,14 +46,20 @@ class EdgeCacheService
      */
     private $config;
 
+    private ApplicationContext $context;
+
     /**
      * Constructor for the Edge Cache Service
      *
      * @param CacheStore<mixed>|null $cacheStore The cache store to use
      * @param CDNAdapterInterface|null $cdnAdapter A specific CDN adapter to use
      */
-    public function __construct(?CacheStore $cacheStore = null, ?CDNAdapterInterface $cdnAdapter = null)
-    {
+    public function __construct(
+        ApplicationContext $context,
+        ?CacheStore $cacheStore = null,
+        ?CDNAdapterInterface $cdnAdapter = null
+    ) {
+        $this->context = $context;
         // Set up cache store - try provided instance or get from container
         $this->cacheStore = $cacheStore;
 
@@ -64,7 +71,7 @@ class EdgeCacheService
                 error_log('EdgeCacheService: Could not create CacheStore instance');
             }
         }
-        $this->config = config('cache.edge', []);
+        $this->config = config($this->context, 'cache.edge', []);
 
         // If no adapter is provided, attempt to resolve one
         if ($cdnAdapter === null) {
@@ -227,7 +234,7 @@ class EdgeCacheService
 
         try {
             // Get the extension manager
-            $extensionManager = container()->get(ExtensionManager::class);
+            $extensionManager = container($this->context)->get(ExtensionManager::class);
 
             // Normalize provider name for consistent lookup
             $normalizedProvider = strtolower($this->config['provider']);

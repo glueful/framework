@@ -80,7 +80,10 @@ class CacheMaintenanceJob extends Job
             default => throw new \InvalidArgumentException("Unknown operation: {$operation}")
         };
 
-        app(LogManager::class)->info('Cache maintenance job completed', [
+        $logger = $this->context !== null
+            ? container($this->context)->get(LogManager::class)
+            : LogManager::getInstance();
+        $logger->info('Cache maintenance job completed', [
             'operation' => $operation,
             'result' => $result
         ]);
@@ -96,7 +99,10 @@ class CacheMaintenanceJob extends Job
         $operation = $data['operation'] ?? 'clearExpiredKeys';
         $options = $data['options'] ?? [];
 
-        app(LogManager::class)->error('Cache maintenance job failed', [
+        $logger = $this->context !== null
+            ? container($this->context)->get(LogManager::class)
+            : LogManager::getInstance();
+        $logger->error('Cache maintenance job failed', [
             'operation' => $operation,
             'options' => $options,
             'error' => $exception->getMessage()

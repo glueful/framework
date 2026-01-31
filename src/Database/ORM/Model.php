@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Database\ORM;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use Glueful\Database\ORM\Concerns\HasAttributes;
 use Glueful\Database\ORM\Concerns\HasEvents;
@@ -13,7 +14,6 @@ use Glueful\Database\ORM\Concerns\HasTimestamps;
 use Glueful\Database\ORM\Contracts\ModelInterface;
 use Glueful\Database\QueryBuilder;
 use JsonSerializable;
-use Psr\Container\ContainerInterface;
 
 /**
  * Base Model Class
@@ -42,15 +42,15 @@ use Psr\Container\ContainerInterface;
  * }
  *
  * // Create a new user
- * $user = User::create(['name' => 'John', 'email' => 'john@example.com']);
+ * $user = User::create($context, ['name' => 'John', 'email' => 'john@example.com']);
  *
  * // Find and update
- * $user = User::find(1);
+ * $user = User::find($context, 1);
  * $user->name = 'Jane';
  * $user->save();
  *
  * // Query with relationships
- * $users = User::with('posts')->where('active', true)->get();
+ * $users = User::with($context, 'posts')->where('active', true)->get();
  */
 abstract class Model implements ModelInterface, JsonSerializable
 {
@@ -68,9 +68,9 @@ abstract class Model implements ModelInterface, JsonSerializable
     protected ?Connection $connection = null;
 
     /**
-     * The container for resolving dependencies
+     * Application context (optional, required for container-backed services)
      */
-    protected static ?ContainerInterface $container = null;
+    protected ?ApplicationContext $context = null;
 
     /**
      * The table associated with the model
@@ -112,8 +112,9 @@ abstract class Model implements ModelInterface, JsonSerializable
      *
      * @param array<string, mixed> $attributes
      */
-    public function __construct(array $attributes = [])
+    public function __construct(array $attributes = [], ?ApplicationContext $context = null)
     {
+        $this->context = $context;
         $this->bootIfNotBooted();
         $this->fill($attributes);
     }
@@ -172,25 +173,14 @@ abstract class Model implements ModelInterface, JsonSerializable
         }
     }
 
-    /**
-     * Set the container instance
-     *
-     * @param ContainerInterface $container
-     * @return void
-     */
-    public static function setContainer(ContainerInterface $container): void
+    public function setContext(ApplicationContext $context): void
     {
-        static::$container = $container;
+        $this->context = $context;
     }
 
-    /**
-     * Get the container instance
-     *
-     * @return ContainerInterface|null
-     */
-    public static function getContainer(): ?ContainerInterface
+    public function getContext(): ?ApplicationContext
     {
-        return static::$container;
+        return $this->context;
     }
 
     /**
@@ -204,12 +194,12 @@ abstract class Model implements ModelInterface, JsonSerializable
             return $this->connection;
         }
 
-        if (static::$container !== null) {
-            return static::$container->get('database');
+        if ($this->context !== null && $this->context->hasContainer()) {
+            return $this->context->getContainer()->get('database');
         }
 
         throw new \RuntimeException(
-            'No database connection available. Set the container using Model::setContainer().'
+            'No database connection available. Provide ApplicationContext or set a connection.'
         );
     }
 
@@ -341,7 +331,7 @@ abstract class Model implements ModelInterface, JsonSerializable
      */
     public function newInstance(array $attributes = []): static
     {
-        $model = new static($attributes);
+        $model = new static($attributes, $this->context);
 
         $model->connection = $this->connection;
 
@@ -372,9 +362,9 @@ abstract class Model implements ModelInterface, JsonSerializable
      *
      * @return Builder
      */
-    public static function query(): Builder
+    public static function query(ApplicationContext $context): Builder
     {
-        return (new static())->newQuery();
+        return (new static([], $context))->newQuery();
     }
 
     /**
@@ -654,9 +644,9 @@ abstract class Model implements ModelInterface, JsonSerializable
      * @param array<string> $columns
      * @return Collection<static>
      */
-    public static function all(array $columns = ['*']): Collection
+    public static function all(ApplicationContext $context, array $columns = ['*']): Collection
     {
-        return static::query()->get($columns);
+        return static::query($context)->get($columns);
     }
 
     /**
@@ -666,9 +656,9 @@ abstract class Model implements ModelInterface, JsonSerializable
      * @param array<string> $columns
      * @return static|null
      */
-    public static function find(mixed $id, array $columns = ['*']): ?static
+    public static function find(ApplicationContext $context, mixed $id, array $columns = ['*']): ?static
     {
-        return static::query()->find($id, $columns);
+        return static::query($context)->find($id, $columns);
     }
 
     /**
@@ -679,9 +669,9 @@ abstract class Model implements ModelInterface, JsonSerializable
      * @return static
      * @throws \Glueful\Http\Exceptions\Domain\ModelNotFoundException
      */
-    public static function findOrFail(mixed $id, array $columns = ['*']): static
+    public static function findOrFail(ApplicationContext $context, mixed $id, array $columns = ['*']): static
     {
-        return static::query()->findOrFail($id, $columns);
+        return static::query($context)->findOrFail($id, $columns);
     }
 
     /**
@@ -690,9 +680,9 @@ abstract class Model implements ModelInterface, JsonSerializable
      * @param array<string, mixed> $attributes
      * @return static
      */
-    public static function create(array $attributes = []): static
+    public static function create(ApplicationContext $context, array $attributes = []): static
     {
-        return static::query()->create($attributes);
+        return static::query($context)->create($attributes);
     }
 
     /**
@@ -701,7 +691,7 @@ abstract class Model implements ModelInterface, JsonSerializable
      * @param mixed $ids
      * @return int
      */
-    public static function destroy(mixed $ids): int
+    public static function destroy(ApplicationContext $context, mixed $ids): int
     {
         if (!is_array($ids)) {
             $ids = [$ids];
@@ -710,7 +700,7 @@ abstract class Model implements ModelInterface, JsonSerializable
         $count = 0;
 
         foreach ($ids as $id) {
-            $model = static::find($id);
+            $model = static::find($context, $id);
 
             if ($model !== null && $model->delete()) {
                 $count++;
@@ -727,9 +717,9 @@ abstract class Model implements ModelInterface, JsonSerializable
      * @param array<string, mixed> $values
      * @return static
      */
-    public static function firstOrCreate(array $attributes, array $values = []): static
+    public static function firstOrCreate(ApplicationContext $context, array $attributes, array $values = []): static
     {
-        return static::query()->firstOrCreate($attributes, $values);
+        return static::query($context)->firstOrCreate($attributes, $values);
     }
 
     /**
@@ -739,9 +729,9 @@ abstract class Model implements ModelInterface, JsonSerializable
      * @param array<string, mixed> $values
      * @return static
      */
-    public static function firstOrNew(array $attributes, array $values = []): static
+    public static function firstOrNew(ApplicationContext $context, array $attributes, array $values = []): static
     {
-        return static::query()->firstOrNew($attributes, $values);
+        return static::query($context)->firstOrNew($attributes, $values);
     }
 
     /**
@@ -751,9 +741,9 @@ abstract class Model implements ModelInterface, JsonSerializable
      * @param array<string, mixed> $values
      * @return static
      */
-    public static function updateOrCreate(array $attributes, array $values = []): static
+    public static function updateOrCreate(ApplicationContext $context, array $attributes, array $values = []): static
     {
-        return static::query()->updateOrCreate($attributes, $values);
+        return static::query($context)->updateOrCreate($attributes, $values);
     }
 
     /**
@@ -762,9 +752,9 @@ abstract class Model implements ModelInterface, JsonSerializable
      * @param array<string>|string $relations
      * @return Builder
      */
-    public static function with(array|string $relations): Builder
+    public static function with(ApplicationContext $context, array|string $relations): Builder
     {
-        return static::query()->with($relations);
+        return static::query($context)->with($relations);
     }
 
     /**
@@ -896,7 +886,13 @@ abstract class Model implements ModelInterface, JsonSerializable
      */
     public static function __callStatic(string $method, array $parameters): mixed
     {
-        return (new static())->$method(...$parameters);
+        if (!($parameters[0] ?? null) instanceof ApplicationContext) {
+            throw new \RuntimeException('ApplicationContext is required for static model calls.');
+        }
+
+        /** @var ApplicationContext $context */
+        $context = array_shift($parameters);
+        return (new static([], $context))->$method(...$parameters);
     }
 
     /**

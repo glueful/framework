@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Uploader;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Repository\BlobRepository;
 use Glueful\Helpers\Utils;
 use Glueful\Uploader\Storage\StorageInterface;
@@ -51,15 +52,18 @@ final class FileUploader
     private BlobRepository $blobRepository;
     private ThumbnailGenerator $thumbnailGenerator;
     private MediaMetadataExtractor $metadataExtractor;
+    private ?ApplicationContext $context;
 
     public function __construct(
         private readonly string $uploadsDirectory = '',
         private readonly string $cdnBaseUrl = '',
-        private readonly ?string $storageDriver = null
+        private readonly ?string $storageDriver = null,
+        ?ApplicationContext $context = null
     ) {
-        $this->blobRepository = container()->get(BlobRepository::class);
+        $this->context = $context;
+        $this->blobRepository = $this->getContainer()->get(BlobRepository::class);
         $this->storage = $this->initializeStorage();
-        $this->thumbnailGenerator = new ThumbnailGenerator($this->storage);
+        $this->thumbnailGenerator = new ThumbnailGenerator($this->storage, $this->context);
         $this->metadataExtractor = new MediaMetadataExtractor();
     }
 
@@ -209,7 +213,7 @@ final class FileUploader
             ];
         }
 
-        $fileFinder = container()->get(\Glueful\Services\FileFinder::class);
+        $fileFinder = $this->getContainer()->get(\Glueful\Services\FileFinder::class);
         $finder = $fileFinder->createFinder();
         $files = $finder->files()->in($directory);
 
@@ -245,7 +249,7 @@ final class FileUploader
      */
     public function cleanupOldFiles(string $directory, int $maxAge = 86400): array
     {
-        $fileFinder = container()->get(\Glueful\Services\FileFinder::class);
+        $fileFinder = $this->getContainer()->get(\Glueful\Services\FileFinder::class);
         $finder = $fileFinder->createFinder();
         $cutoffTime = time() - $maxAge;
 
@@ -329,13 +333,13 @@ final class FileUploader
     {
         $diskName = $this->storageDriver !== null && $this->storageDriver !== ''
             ? $this->storageDriver
-            : (string) (config('storage.default') ?? 'uploads');
+            : (string) ($this->getConfig('storage.default', 'uploads'));
 
         try {
             /** @var StorageManager $storageManager */
-            $storageManager = app(StorageManager::class);
+            $storageManager = app($this->resolveContext(), StorageManager::class);
             /** @var UrlGenerator $urlGenerator */
-            $urlGenerator = app(UrlGenerator::class);
+            $urlGenerator = app($this->resolveContext(), UrlGenerator::class);
 
             return new FlysystemStorage($storageManager, $urlGenerator, $diskName);
         } catch (\Throwable) {
@@ -345,7 +349,7 @@ final class FileUploader
 
     private function createFallbackStorage(string $diskName): StorageInterface
     {
-        $storageConfig = (array) config('storage');
+        $storageConfig = (array) $this->getConfig('storage', []);
 
         if (isset($storageConfig['disks'][$diskName]) && is_array($storageConfig['disks'][$diskName])) {
             $diskCfg = $storageConfig['disks'][$diskName];
@@ -433,7 +437,7 @@ final class FileUploader
 
     private function validateFileSize(int $size): void
     {
-        $maxSize = (int) config('filesystem.security.max_upload_size', self::MAX_FILE_SIZE);
+        $maxSize = (int) $this->getConfig('filesystem.security.max_upload_size', self::MAX_FILE_SIZE);
 
         if ($size > $maxSize) {
             throw ValidationException::forField('file', 'File size exceeds limit');
@@ -455,7 +459,7 @@ final class FileUploader
     private function validateFileContent(array $file, ?string $detectedMime = null): void
     {
         $mime = $detectedMime ?? $this->detectMime($file['tmp_name']);
-        $allowedExtensions = config('filesystem.file_manager.allowed_extensions');
+        $allowedExtensions = $this->getConfig('filesystem.file_manager.allowed_extensions');
         $originalExt = strtolower((string) pathinfo((string) ($file['name'] ?? ''), PATHINFO_EXTENSION));
 
         if (is_array($allowedExtensions) && $allowedExtensions !== []) {
@@ -478,7 +482,7 @@ final class FileUploader
         }
 
         // Security scan
-        $scanEnabled = (bool) config('filesystem.security.scan_uploads', true);
+        $scanEnabled = (bool) $this->getConfig('filesystem.security.scan_uploads', true);
         if ($scanEnabled && $this->isFileHazardous($file['tmp_name'])) {
             throw ValidationException::forField('file', 'File content not allowed');
         }
@@ -538,7 +542,7 @@ final class FileUploader
         array $options
     ): ?string {
         // Check global config first
-        $globalEnabled = (bool) config('filesystem.uploader.thumbnail_enabled', true);
+        $globalEnabled = (bool) $this->getConfig('filesystem.uploader.thumbnail_enabled', true);
         if (!$globalEnabled) {
             return null;
         }
@@ -608,7 +612,7 @@ final class FileUploader
      */
     private function getAllowedMimeTypes(): array
     {
-        $configured = config('filesystem.uploader.allowed_mime_types');
+        $configured = $this->getConfig('filesystem.uploader.allowed_mime_types');
 
         if (is_array($configured) && $configured !== []) {
             return $configured;
@@ -669,5 +673,28 @@ final class FileUploader
         }
 
         return round($size / (1024 ** $power), 2) . ' ' . $units[$power];
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
+    }
+
+    private function getContainer(): \Psr\Container\ContainerInterface
+    {
+        return container($this->resolveContext());
+    }
+
+    private function resolveContext(): ApplicationContext
+    {
+        if ($this->context === null) {
+            throw new \RuntimeException('ApplicationContext is required for FileUploader.');
+        }
+
+        return $this->context;
     }
 }

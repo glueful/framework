@@ -4,18 +4,19 @@ declare(strict_types=1);
 
 namespace Glueful\Routing\Middleware;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Routing\RouteMiddleware;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\JsonResponse;
-use Glueful\Auth\AuthBootstrap;
 use Glueful\Auth\AuthenticationManager;
+use Glueful\Auth\JwtAuthenticationProvider;
 use Glueful\Auth\TokenManager;
 use Psr\Container\ContainerInterface;
 use Glueful\Exceptions\AuthenticationException;
 use Glueful\Permissions\Exceptions\UnauthorizedException as PermissionUnauthorizedException;
 use Glueful\Events\Http\HttpAuthFailureEvent;
 use Glueful\Events\Http\HttpAuthSuccessEvent;
-use Glueful\Events\Event;
+use Glueful\Events\EventService;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -32,6 +33,8 @@ use Psr\Log\LoggerInterface;
  */
 class AuthMiddleware implements RouteMiddleware
 {
+    private ?ApplicationContext $context;
+
     private AuthenticationManager $authManager;
     private ?ContainerInterface $container;
     private ?LoggerInterface $logger = null;
@@ -48,23 +51,27 @@ class AuthMiddleware implements RouteMiddleware
      * @param ContainerInterface|null $container DI container for services
      * @param array<string> $providerNames Authentication providers to use
      * @param array<string, mixed> $options Additional options
+     * @param ApplicationContext|null $context Application context
      */
     public function __construct(
         ?AuthenticationManager $authManager = null,
         ?ContainerInterface $container = null,
         array $providerNames = [],
-        array $options = []
+        array $options = [],
+        ?ApplicationContext $context = null
     ) {
+        $this->context = $context;
         // Setup container
         $this->container = $container ?? $this->getDefaultContainer();
 
-        // Setup auth manager
-        // Always use AuthBootstrap::getManager() which is the singleton with registered providers
-        // The container may return a new instance without providers configured
         if ($authManager !== null) {
             $this->authManager = $authManager;
+        } elseif ($this->container !== null && $this->container->has(AuthenticationManager::class)) {
+            $this->authManager = $this->container->get(AuthenticationManager::class);
+        } elseif ($this->context !== null && $this->context->hasContainer()) {
+            $this->authManager = $this->context->getContainer()->get(AuthenticationManager::class);
         } else {
-            $this->authManager = AuthBootstrap::getManager();
+            $this->authManager = new AuthenticationManager(new JwtAuthenticationProvider($this->context));
         }
 
         // Setup logger
@@ -172,7 +179,7 @@ class AuthMiddleware implements RouteMiddleware
     {
         // Use TokenManager for consistent token extraction across framework
         if (class_exists('\\Glueful\\Auth\\TokenManager')) {
-            return TokenManager::extractTokenFromRequest();
+            return $this->getTokenManager()->extractTokenFromRequest();
         }
 
         // Fallback for environments without TokenManager (shouldn't happen in normal usage)
@@ -480,7 +487,7 @@ class AuthMiddleware implements RouteMiddleware
         }
 
         if (class_exists('\\Glueful\\Events\\Http\\HttpAuthSuccessEvent')) {
-            Event::dispatch(new HttpAuthSuccessEvent(
+            $this->getEventService()?->dispatch(new HttpAuthSuccessEvent(
                 $request,
                 [
                     'user_id' => $user['id'] ?? $user['uuid'] ?? null,
@@ -504,12 +511,40 @@ class AuthMiddleware implements RouteMiddleware
         }
 
         if (class_exists('\\Glueful\\Events\\Http\\HttpAuthFailureEvent')) {
-            Event::dispatch(new HttpAuthFailureEvent(
+            $this->getEventService()?->dispatch(new HttpAuthFailureEvent(
                 $reason,
                 $request,
                 $token !== null ? substr($token, 0, 10) : null
             ));
         }
+    }
+
+    private function getEventService(): ?EventService
+    {
+        if ($this->container !== null && $this->container->has(EventService::class)) {
+            $service = $this->container->get(EventService::class);
+            return $service instanceof EventService ? $service : null;
+        }
+
+        if ($this->context !== null && $this->context->hasContainer()) {
+            $service = $this->context->getContainer()->get(EventService::class);
+            return $service instanceof EventService ? $service : null;
+        }
+
+        return null;
+    }
+
+    private function getTokenManager(): TokenManager
+    {
+        if ($this->container !== null && $this->container->has(TokenManager::class)) {
+            return $this->container->get(TokenManager::class);
+        }
+
+        if ($this->context !== null && $this->context->hasContainer()) {
+            return $this->context->getContainer()->get(TokenManager::class);
+        }
+
+        return new TokenManager($this->context);
     }
 
     /**
@@ -518,9 +553,9 @@ class AuthMiddleware implements RouteMiddleware
     private function getDefaultContainer(): ?ContainerInterface
     {
         // Check if container() function exists
-        if (function_exists('container')) {
+        if ($this->context !== null && function_exists('container')) {
             try {
-                $c = container();
+                $c = container($this->context);
                 return $c;
             } catch (\Exception) {
                 return null;
@@ -528,9 +563,9 @@ class AuthMiddleware implements RouteMiddleware
         }
 
         // Try to get from global app instance
-        if (function_exists('app')) {
+        if ($this->context !== null && function_exists('app')) {
             try {
-                $app = app();
+                $app = app($this->context);
                 if ($app instanceof ContainerInterface) {
                     return $app;
                 }

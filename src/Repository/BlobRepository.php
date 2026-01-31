@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Repository;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 
 /**
@@ -33,14 +34,14 @@ class BlobRepository extends BaseRepository
      *
      * Sets up database connection and blob-specific configuration
      */
-    public function __construct(?Connection $connection = null)
+    public function __construct(?Connection $connection = null, ?ApplicationContext $context = null)
     {
         // Configure repository settings before calling parent
         $this->defaultFields = $this->defaultBlobFields;
         $this->hasUpdatedAt = true;
 
         // Call parent constructor to set up database connection
-        parent::__construct($connection);
+        parent::__construct($connection, $context);
     }
 
     /**

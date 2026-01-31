@@ -126,7 +126,7 @@ class WebhookSubscription extends Model
     {
         $since = date('Y-m-d H:i:s', strtotime("-{$days} days"));
 
-        $deliveries = WebhookDelivery::query()
+        $deliveries = WebhookDelivery::query($this->getContext())
             ->where('subscription_id', $this->id)
             ->where('created_at', '>=', $since)
             ->get();

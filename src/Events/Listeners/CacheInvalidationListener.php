@@ -10,7 +10,7 @@ use Glueful\Events\Database\EntityCreatedEvent;
 use Glueful\Events\Database\EntityUpdatedEvent;
 use Glueful\Events\Cache\CacheInvalidatedEvent;
 use Glueful\Cache\CacheStore;
-use Glueful\Events\Event;
+use Glueful\Events\EventService;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
 /**
@@ -52,7 +52,8 @@ class CacheInvalidationListener implements EventSubscriberInterface
      * @param CacheStore<mixed> $cache
      */
     public function __construct(
-        private CacheStore $cache
+        private CacheStore $cache,
+        private ?EventService $events = null
     ) {
     }
 
@@ -186,7 +187,7 @@ class CacheInvalidationListener implements EventSubscriberInterface
                 'timestamp' => time(),
                 'count' => count($invalidatedKeys)
             ]));
-            Event::dispatch($event);
+            $this->events?->dispatch($event);
         }
     }
 

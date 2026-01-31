@@ -26,7 +26,7 @@ use Psr\Container\ContainerInterface;
  *
  *     public function run(): void
  *     {
- *         User::create(['name' => 'Admin', 'email' => 'admin@example.com']);
+ *         User::create($context, ['name' => 'Admin', 'email' => 'admin@example.com']);
  *     }
  * }
  *

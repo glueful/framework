@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Glueful\Security;
 
+use Glueful\Bootstrap\ApplicationContext;
+
 /**
  * Production Security Validator
  *
@@ -31,7 +33,7 @@ class ProductionSecurityValidator
      *               critical_issues: array<array<string, mixed>>, warnings: array<array<string, mixed>>,
      *               recommendations: array<string>, passed: bool} Validation results
      */
-    public static function validateProductionSecurity(): array
+    public static function validateProductionSecurity(?ApplicationContext $context = null): array
     {
         $environment = env('APP_ENV', 'production');
         $issues = [];
@@ -41,7 +43,7 @@ class ProductionSecurityValidator
         // Check critical security settings for production
         if ($isProduction) {
             foreach (self::REQUIRED_PRODUCTION_SETTINGS as $setting => $expectedValue) {
-                $currentValue = self::getConfigValue($setting);
+                $currentValue = self::getConfigValue($context, $setting);
 
                 if ($currentValue !== $expectedValue) {
                     $issues[] = [
@@ -56,7 +58,7 @@ class ProductionSecurityValidator
         }
 
         // Check debug information exposure
-        $debugInfo = self::checkDebugInformationExposure();
+        $debugInfo = self::checkDebugInformationExposure($context);
         if (isset($debugInfo['risks']) && is_array($debugInfo['risks']) && count($debugInfo['risks']) > 0) {
             $issues = array_merge($issues, $debugInfo['risks']);
         }
@@ -95,12 +97,12 @@ class ProductionSecurityValidator
      *
      * @return array{risks: array<array<string, mixed>>} Debug exposure analysis
      */
-    private static function checkDebugInformationExposure(): array
+    private static function checkDebugInformationExposure(?ApplicationContext $context = null): array
     {
         $risks = [];
         $environment = env('APP_ENV', 'production');
-        $debugMode = config('app.debug', false);
-        $apiDebug = config('api.debug_mode', false);
+        $debugMode = self::getConfig($context, 'app.debug', false);
+        $apiDebug = self::getConfig($context, 'api.debug_mode', false);
 
         // Check if debug is enabled in non-debug environments
         if (!in_array($environment, self::DEBUG_ALLOWED_ENVIRONMENTS, true) && (bool) $debugMode) {
@@ -270,14 +272,26 @@ class ProductionSecurityValidator
      * @param string $setting Setting name
      * @return mixed Configuration value
      */
-    private static function getConfigValue(string $setting): mixed
+    private static function getConfigValue(?ApplicationContext $context, string $setting): mixed
     {
         return match ($setting) {
-            'APP_DEBUG' => config('app.debug', false),
-            'API_DOCS_ENABLED' => config('api.docs_enabled', false),
-            'API_DEBUG_MODE' => config('api.debug_mode', false),
+            'APP_DEBUG' => self::getConfig($context, 'app.debug', false),
+            'API_DOCS_ENABLED' => self::getConfig($context, 'api.docs_enabled', false),
+            'API_DEBUG_MODE' => self::getConfig($context, 'api.debug_mode', false),
             default => env($setting)
         };
+    }
+
+    private static function getConfig(
+        ?ApplicationContext $context,
+        string $key,
+        mixed $default = null
+    ): mixed {
+        if ($context === null) {
+            return $default;
+        }
+
+        return config($context, $key, $default);
     }
 
     /**

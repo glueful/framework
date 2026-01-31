@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Tests\Unit;
 
+use Glueful\Bootstrap\ApplicationContext;
 use PHPUnit\Framework\TestCase;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -12,17 +13,11 @@ final class PathResolutionTest extends TestCase
 {
     private string $tmpBase = '';
     private string $tmpConfig = '';
-    private mixed $originalContainer = null;
+    private ?ApplicationContext $context = null;
 
     protected function setUp(): void
     {
         parent::setUp();
-
-        // Save the original container before clearing
-        $this->originalContainer = $GLOBALS['container'] ?? null;
-
-        // Reset path function static caches
-        $this->resetPathCaches();
 
         $uniq = uniqid('glueful_test_', true);
         $this->tmpBase = sys_get_temp_dir() . '/' . $uniq . '_base';
@@ -40,23 +35,20 @@ final class PathResolutionTest extends TestCase
             $this->tmpConfig . '/extensions.php',
             "<?php return ['discovery' => ['allow_local' => false, 'allow_composer' => false]];"
         );
+
+        $this->context = new ApplicationContext(
+            basePath: $this->tmpBase,
+            environment: 'testing',
+            configPaths: [
+                'application' => $this->tmpConfig,
+                'framework' => dirname(__DIR__, 2) . '/config',
+            ]
+        );
     }
 
     protected function tearDown(): void
     {
-        // Legacy DI bootstrap removed; nothing to reset
-
-        // Reset path function static caches
-        $this->resetPathCaches();
-
-        // Clear any globals we set
-        unset($GLOBALS['base_path'], $GLOBALS['config_paths'], $GLOBALS['container']);
-
-        // Restore the original container if it existed
-        if ($this->originalContainer !== null) {
-            $GLOBALS['container'] = $this->originalContainer;
-        }
-
+        $this->context = null;
         $this->removeDir($this->tmpBase);
         $this->removeDir($this->tmpConfig);
         parent::tearDown();
@@ -64,49 +56,27 @@ final class PathResolutionTest extends TestCase
 
     public function testAllPathsResolveCorrectly(): void
     {
-        // Set globals directly instead of using full framework boot
-        $GLOBALS['base_path'] = $this->tmpBase;
-        $GLOBALS['config_paths'] = [
-            'application' => $this->tmpConfig,
-            'framework' => dirname(__DIR__, 2) . '/config'
-        ];
+        $context = $this->context;
+        $this->assertNotNull($context);
 
-        $this->assertSame($this->tmpBase, base_path());
-        $this->assertSame($this->tmpConfig, config_path());
-        $this->assertSame($this->tmpBase . '/storage', base_path('storage'));
-        $this->assertSame($this->tmpBase . '/resources', resource_path());
+        $this->assertSame($this->tmpBase, base_path($context));
+        $this->assertSame($this->tmpConfig, config_path($context));
+        $this->assertSame($this->tmpBase . '/storage', base_path($context, 'storage'));
+        $this->assertSame($this->tmpBase . '/resources', resource_path($context));
     }
 
     public function testStoragePathCreatesParentDirectories(): void
     {
-        // Set globals directly instead of using full framework boot
-        $GLOBALS['base_path'] = $this->tmpBase;
-        $GLOBALS['config_paths'] = [
-            'application' => $this->tmpConfig,
-            'framework' => dirname(__DIR__, 2) . '/config'
-        ];
+        $context = $this->context;
+        $this->assertNotNull($context);
 
-        $target = storage_path('cache/demo/test.txt');
+        $target = storage_path($context, 'cache/demo/test.txt');
         // Note: storage_path() creates parent directories as a convenience feature
 
         // storage_path should create parent dirs when writing
         file_put_contents($target, 'ok');
         $this->assertFileExists($target);
         $this->assertSame('ok', file_get_contents($target));
-    }
-
-    private function resetPathCaches(): void
-    {
-        // Clear globals that path functions check (but save container first)
-        unset($GLOBALS['base_path'], $GLOBALS['config_paths'], $GLOBALS['container']);
-
-        // Reset static variables in path functions
-        if (function_exists('base_path')) {
-            base_path('__RESET__');
-        }
-        if (function_exists('config_path')) {
-            config_path('__RESET__');
-        }
     }
 
     private function removeDir(string $dir): void

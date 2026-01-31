@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace Glueful\Api\Webhooks;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Api\Webhooks\Contracts\WebhookDispatcherInterface;
 use Glueful\Api\Webhooks\Contracts\WebhookPayloadInterface;
 use Glueful\Api\Webhooks\Events\WebhookDispatchedEvent;
 use Glueful\Api\Webhooks\Jobs\DeliverWebhookJob;
 use Glueful\Database\Connection;
 use Glueful\Database\Schema\Interfaces\SchemaBuilderInterface;
-use Glueful\Events\Event;
+use Glueful\Events\EventService;
 use Glueful\Queue\QueueManager;
 
 /**
@@ -28,12 +29,15 @@ class WebhookDispatcher implements WebhookDispatcherInterface
     private Connection $db;
     private bool $tablesEnsured = false;
     private WebhookPayloadInterface $payloadBuilder;
+    private ?ApplicationContext $context;
 
     public function __construct(
         ?Connection $connection = null,
-        ?WebhookPayloadInterface $payloadBuilder = null
+        ?WebhookPayloadInterface $payloadBuilder = null,
+        ?ApplicationContext $context = null
     ) {
-        $this->db = $connection ?? new Connection();
+        $this->context = $context;
+        $this->db = $connection ?? Connection::fromContext($context);
         $this->schema = $this->db->getSchemaBuilder();
         $this->payloadBuilder = $payloadBuilder ?? new WebhookPayload();
     }
@@ -61,7 +65,11 @@ class WebhookDispatcher implements WebhookDispatcherInterface
         }
 
         // Find active subscriptions for this event
-        $subscriptions = WebhookSubscription::query()
+        if ($this->context === null) {
+            throw new \RuntimeException('ApplicationContext is required for webhook dispatch.');
+        }
+
+        $subscriptions = WebhookSubscription::query($this->context)
             ->where('is_active', true)
             ->get()
             ->filter(fn(WebhookSubscription $sub) => $sub->listensTo($event));
@@ -77,7 +85,11 @@ class WebhookDispatcher implements WebhookDispatcherInterface
 
         // Dispatch internal event if any deliveries were created
         if (count($deliveries) > 0) {
-            Event::dispatch(new WebhookDispatchedEvent($event, count($deliveries)));
+            if ($this->context !== null) {
+                app($this->context, EventService::class)->dispatch(
+                    new WebhookDispatchedEvent($event, count($deliveries))
+                );
+            }
         }
 
         return $deliveries;
@@ -93,7 +105,11 @@ class WebhookDispatcher implements WebhookDispatcherInterface
         string $event,
         array $data
     ): WebhookDelivery {
-        return WebhookDelivery::create([
+        if ($this->context === null) {
+            throw new \RuntimeException('ApplicationContext is required for webhook delivery creation.');
+        }
+
+        $delivery = WebhookDelivery::query($this->context)->create([
             'subscription_id' => $subscription->id,
             'event' => $event,
             'payload' => $this->payloadBuilder->build($event, $data),
@@ -101,6 +117,12 @@ class WebhookDispatcher implements WebhookDispatcherInterface
             'attempts' => 0,
             'created_at' => date('Y-m-d H:i:s'),
         ]);
+
+        if (!$delivery instanceof WebhookDelivery) {
+            throw new \RuntimeException('Unexpected delivery model returned.');
+        }
+
+        return $delivery;
     }
 
     /**
@@ -110,14 +132,18 @@ class WebhookDispatcher implements WebhookDispatcherInterface
      */
     private function queueDelivery(WebhookDelivery $delivery, array $config): void
     {
-        $job = new DeliverWebhookJob(['delivery_id' => $delivery->id]);
+        $job = new DeliverWebhookJob(['delivery_id' => $delivery->id], $this->context);
         $job->setQueue($config['queue'] ?? 'webhooks');
 
         // Use queue manager to dispatch if available
-        if (function_exists('app') && app()->has(QueueManager::class)) {
-            app(QueueManager::class)->push($job);
+        if ($this->context !== null) {
+            $container = container($this->context);
+            if ($container->has(QueueManager::class)) {
+                $container->get(QueueManager::class)->push($job);
+            }
         }
     }
+
 
     /**
      * Get webhook configuration
@@ -126,8 +152,8 @@ class WebhookDispatcher implements WebhookDispatcherInterface
      */
     private function getConfig(): array
     {
-        if (function_exists('config')) {
-            return (array) config('api.webhooks', []);
+        if (function_exists('config') && $this->context !== null) {
+            return (array) config($this->context, 'api.webhooks', []);
         }
 
         return [];

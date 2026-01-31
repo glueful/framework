@@ -1,16 +1,25 @@
 <?php
 
 use Glueful\Routing\Router;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Controllers\ResourceController;
 use Glueful\Helpers\RequestHelper;
 use Symfony\Component\HttpFoundation\Request;
 
-/** @var Router $router Router instance injected by RouteManifest::load() */
+/**
+ * @var Router $router Router instance injected by RouteManifest::load()
+ * @var ApplicationContext $context
+ */
+
+/** @var ApplicationContext|null $context */
+$context = (isset($context) && $context instanceof ApplicationContext)
+    ? $context
+    : $router->getContext();
 
 // RESTful Resource CRUD Routes
 // All routes are prefixed with /data to avoid conflicts with custom application routes
 // Final URLs: /api/v1/data/{table}, /api/v1/data/{table}/{uuid}, etc.
-$router->group(['prefix' => '/data'], function (Router $router) {
+$router->group(['prefix' => '/data'], function (Router $router) use ($context) {
     /**
      * @route GET /data/{table}
      * @summary List Resources
@@ -35,8 +44,8 @@ $router->group(['prefix' => '/data'], function (Router $router) {
      * @response 404 "Resource table not found"
      * @requiresAuth true
      */
-    $router->get('/{table}', function (Request $request) {
-        $resourceController = container()->get(ResourceController::class);
+    $router->get('/{table}', function (Request $request) use ($context) {
+        $resourceController = container($context)->get(ResourceController::class);
         $params = ['resource' => $request->attributes->get('table')];
         $queryParams = $request->query->all();
         return $resourceController->get($params, $queryParams);
@@ -61,8 +70,8 @@ $router->group(['prefix' => '/data'], function (Router $router) {
      * @response 403 "Insufficient permissions"
      * @requiresAuth true
      */
-    $router->get('/{table}/{uuid}', function (Request $request) {
-        $resourceController = container()->get(ResourceController::class);
+    $router->get('/{table}/{uuid}', function (Request $request) use ($context) {
+        $resourceController = container($context)->get(ResourceController::class);
         $params = [
             'resource' => $request->attributes->get('table'),
             'uuid' => $request->attributes->get('uuid')
@@ -90,8 +99,8 @@ $router->group(['prefix' => '/data'], function (Router $router) {
      * @response 403 "Insufficient permissions"
      * @requiresAuth true
      */
-    $router->post('/{table}', function (Request $request) {
-        $resourceController = container()->get(ResourceController::class);
+    $router->post('/{table}', function (Request $request) use ($context) {
+        $resourceController = container($context)->get(ResourceController::class);
         $params = ['resource' => $request->attributes->get('table')];
         $postData = RequestHelper::getRequestData();
         return $resourceController->post($params, $postData);
@@ -111,8 +120,8 @@ $router->group(['prefix' => '/data'], function (Router $router) {
      * @response 403 "Insufficient permissions"
      * @requiresAuth true
      */
-    $router->put('/{table}/{uuid}', function (Request $request) {
-        $resourceController = container()->get(ResourceController::class);
+    $router->put('/{table}/{uuid}', function (Request $request) use ($context) {
+        $resourceController = container($context)->get(ResourceController::class);
         $params = [
             'resource' => $request->attributes->get('table'),
             'uuid' => $request->attributes->get('uuid')
@@ -134,8 +143,8 @@ $router->group(['prefix' => '/data'], function (Router $router) {
      * @response 403 "Insufficient permissions"
      * @requiresAuth true
      */
-    $router->delete('/{table}/{uuid}', function (Request $request) {
-        $resourceController = container()->get(ResourceController::class);
+    $router->delete('/{table}/{uuid}', function (Request $request) use ($context) {
+        $resourceController = container($context)->get(ResourceController::class);
         $params = [
             'resource' => $request->attributes->get('table'),
             'uuid' => $request->attributes->get('uuid')
@@ -144,7 +153,7 @@ $router->group(['prefix' => '/data'], function (Router $router) {
     })->middleware(['auth', 'rate_limit:20,60']); // 20 deletes per minute
 
     // Bulk operation routes (only if enabled in configuration)
-    if (config('resource.security.bulk_operations', false)) {
+    if (config($context, 'resource.security.bulk_operations', false)) {
         /**
          * @route DELETE /data/{table}/bulk
          * @summary Bulk Delete Resources
@@ -157,8 +166,8 @@ $router->group(['prefix' => '/data'], function (Router $router) {
          * @response 403 "Insufficient permissions or bulk operations disabled"
          * @requiresAuth true
          */
-        $router->delete('/{table}/bulk', function (Request $request) {
-            $resourceController = container()->get(ResourceController::class);
+        $router->delete('/{table}/bulk', function (Request $request) use ($context) {
+            $resourceController = container($context)->get(ResourceController::class);
             $params = ['resource' => $request->attributes->get('table')];
             $deleteData = RequestHelper::getRequestData();
             return $resourceController->bulkDelete($params, $deleteData);
@@ -176,8 +185,8 @@ $router->group(['prefix' => '/data'], function (Router $router) {
          * @response 403 "Insufficient permissions or bulk operations disabled"
          * @requiresAuth true
          */
-        $router->put('/{table}/bulk', function (Request $request) {
-            $resourceController = container()->get(ResourceController::class);
+        $router->put('/{table}/bulk', function (Request $request) use ($context) {
+            $resourceController = container($context)->get(ResourceController::class);
             $params = ['resource' => $request->attributes->get('table')];
             $updateData = RequestHelper::getRequestData();
             return $resourceController->bulkUpdate($params, $updateData);

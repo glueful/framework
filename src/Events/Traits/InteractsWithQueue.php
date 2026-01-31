@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Traits;
 
-use Glueful\Events\Event;
+use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Events\EventService;
+use Glueful\Events\QueueContextHolder;
 
 /**
  * InteractsWithQueue Trait (migrated)
  *
- * Adds queue interaction helpers for events, compatible with the
- * PSR-14-based Event facade. Uses container() if available.
+ * Adds queue interaction helpers for events, using EventService
+ * when available via ApplicationContext.
  */
 trait InteractsWithQueue
 {
@@ -41,15 +43,18 @@ trait InteractsWithQueue
         $event = new static(...$args);
 
         try {
-            if (function_exists('container')) {
-                $container = container();
-                if ($container && $container->has('queue')) {
-                    $queueManager = $container->get('queue');
-                    if (method_exists($queueManager, 'push')) {
-                        // Serializable trait's toArray() is optional; fall back to public props
-                        $payload = method_exists($event, 'toArray') ? $event->toArray() : get_object_vars($event);
-                        $queueManager->push(static::class, $payload, $event->queue, $event->delay);
-                    }
+            $context = QueueContextHolder::getContext();
+            if ($context === null || !$context->hasContainer()) {
+                return $event;
+            }
+
+            $container = $context->getContainer();
+            if ($container->has('queue')) {
+                $queueManager = $container->get('queue');
+                if (method_exists($queueManager, 'push')) {
+                    // Serializable trait's toArray() is optional; fall back to public props
+                    $payload = method_exists($event, 'toArray') ? $event->toArray() : get_object_vars($event);
+                    $queueManager->push(static::class, $payload, $event->queue, $event->delay);
                 }
             }
         } catch (\Throwable) {
@@ -64,13 +69,14 @@ trait InteractsWithQueue
         $event = new static(...$args);
 
         try {
-            if (function_exists('container')) {
-                $container = container();
-                if ($container && $container->has('db')) {
+            $context = QueueContextHolder::getContext();
+            if ($context !== null && $context->hasContainer()) {
+                $container = $context->getContainer();
+                if ($container->has('db')) {
                     $db = $container->get('db');
                     if (method_exists($db, 'afterCommit')) {
                         $db->afterCommit(function () use ($event) {
-                            Event::dispatch($event);
+                            self::resolveEventService()?->dispatch($event);
                         });
                         return $event;
                     }
@@ -80,8 +86,23 @@ trait InteractsWithQueue
             // Fall through to immediate dispatch
         }
 
-        Event::dispatch($event);
+        self::resolveEventService()?->dispatch($event);
         return $event;
+    }
+
+    private static function resolveEventService(): ?EventService
+    {
+        $context = QueueContextHolder::getContext();
+        if ($context === null || !$context->hasContainer()) {
+            return null;
+        }
+
+        try {
+            $service = $context->getContainer()->get(EventService::class);
+            return $service instanceof EventService ? $service : null;
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     public function getQueueConfig(): array

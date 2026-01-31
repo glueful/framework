@@ -10,10 +10,20 @@ use Glueful\Auth\Utils\SessionStoreResolver;
 trait ResolvesSessionStore
 {
     /**
+     * Get the application context for session store resolution.
+     * Classes using this trait should override this method.
+     */
+    protected function getContext(): ?\Glueful\Bootstrap\ApplicationContext
+    {
+        return $this->context ?? null;
+    }
+
+    /**
      * Resolve SessionStore via DI container with fallback
      */
     protected function getSessionStore(): SessionStoreInterface
     {
-        return SessionStoreResolver::resolve();
+        $context = $this->getContext();
+        return SessionStoreResolver::resolve($context);
     }
 }

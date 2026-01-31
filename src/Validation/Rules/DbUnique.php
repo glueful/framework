@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Validation\Rules;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Validation\Contracts\Rule;
 use PDO;
 
@@ -88,9 +89,9 @@ final class DbUnique implements Rule
             $pdo = $context['pdo'];
         }
 
-        if ($pdo === null && function_exists('app')) {
+        if ($pdo === null && ($context['context'] ?? null) instanceof ApplicationContext) {
             try {
-                $pdo = app()->get(PDO::class);
+                $pdo = container($context['context'])->get(PDO::class);
             } catch (\Throwable) {
                 // PDO not available in container
             }

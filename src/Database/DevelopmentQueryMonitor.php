@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Glueful\Database;
 
+use Glueful\Bootstrap\ApplicationContext;
+
 /**
  * Development Query Monitor
  *
@@ -12,6 +14,12 @@ namespace Glueful\Database;
  */
 class DevelopmentQueryMonitor
 {
+    private static ?ApplicationContext $context = null;
+
+    public static function setContext(?ApplicationContext $context): void
+    {
+        self::$context = $context;
+    }
     /**
      * @var bool Whether monitoring is enabled
      */
@@ -398,7 +406,7 @@ class DevelopmentQueryMonitor
      */
     private static function logToFile(array $logEntry): void
     {
-        $logPath = base_path('storage/logs/queries-' . date('Y-m-d') . '.log');
+        $logPath = self::getBasePath('storage/logs/queries-' . date('Y-m-d') . '.log');
 
         $logLine = sprintf(
             "[%s] %.3fs - %s %s\n",
@@ -409,6 +417,16 @@ class DevelopmentQueryMonitor
         );
 
         file_put_contents($logPath, $logLine, FILE_APPEND | LOCK_EX);
+    }
+
+    private static function getBasePath(string $suffix = ''): string
+    {
+        if (self::$context !== null) {
+            return base_path(self::$context, $suffix);
+        }
+
+        return rtrim(dirname(__DIR__, 3), DIRECTORY_SEPARATOR)
+            . ($suffix !== '' ? DIRECTORY_SEPARATOR . ltrim($suffix, DIRECTORY_SEPARATOR) : '');
     }
 
     /**

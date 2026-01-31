@@ -51,41 +51,14 @@ if (!function_exists('config')) {
     /**
      * Get configuration value using dot notation with framework hierarchy support
      *
+     * @param \Glueful\Bootstrap\ApplicationContext $context Application context
      * @param string $key Configuration key in dot notation
      * @param mixed $default Default value if key not found
      * @return mixed Configuration value or default
      */
-    function config(string $key, mixed $default = null): mixed
+    function config(\Glueful\Bootstrap\ApplicationContext $context, string $key, mixed $default = null): mixed
     {
-        // Use fast ConfigurationCache if loaded (modern bootstrap)
-        if (\Glueful\Bootstrap\ConfigurationCache::isLoaded()) {
-            return \Glueful\Bootstrap\ConfigurationCache::get($key, $default);
-        }
-
-        // Legacy repository fallback removed; use direct file loading
-
-        // Final fallback to direct file loading (legacy support)
-        static $config = [];
-        $segments = explode('.', $key);
-        $file = array_shift($segments);
-
-        if (!isset($config[$file])) {
-            $config[$file] = loadConfigWithHierarchy($file);
-        }
-
-        if (empty($segments)) {
-            return $config[$file];
-        }
-
-        $current = $config[$file];
-        foreach ($segments as $segment) {
-            if (!is_array($current) || !array_key_exists($segment, $current)) {
-                return $default;
-            }
-            $current = $current[$segment];
-        }
-
-        return $current;
+        return $context->getConfig($key, $default);
     }
 }
 
@@ -93,32 +66,34 @@ if (!function_exists('loadConfigWithHierarchy')) {
     /**
      * Load config file with framework + application hierarchy
      */
-    function loadConfigWithHierarchy(string $file): array
+    function loadConfigWithHierarchy(\Glueful\Bootstrap\ApplicationContext $context, string $file): array
     {
         $frameworkConfig = [];
         $applicationConfig = [];
 
-        // Get paths from ContainerBootstrap (set during initialization)
-        $configPaths = $GLOBALS['config_paths'] ?? [];
+        // Get paths from ApplicationContext
+        $configPaths = $context->getConfigPaths();
+        $frameworkPath = $configPaths['framework'] ?? ($configPaths[0] ?? null);
+        $applicationPath = $configPaths['application'] ?? ($configPaths[1] ?? null);
 
         // Load framework defaults first
-        if (isset($configPaths['framework'])) {
-            $frameworkFile = $configPaths['framework'] . "/{$file}.php";
+        if (is_string($frameworkPath) && $frameworkPath !== '') {
+            $frameworkFile = $frameworkPath . "/{$file}.php";
             if (file_exists($frameworkFile)) {
                 $frameworkConfig = require $frameworkFile;
             }
         }
 
         // Load application config (user overrides/additions)
-        if (isset($configPaths['application'])) {
-            $applicationFile = $configPaths['application'] . "/{$file}.php";
+        if (is_string($applicationPath) && $applicationPath !== '') {
+            $applicationFile = $applicationPath . "/{$file}.php";
             if (file_exists($applicationFile)) {
                 $applicationConfig = require $applicationFile;
             }
         }
 
         // Fallback to framework config if no paths configured (package-relative)
-        if (empty($configPaths)) {
+        if ($frameworkPath === null && $applicationPath === null) {
             $fallbackPath = dirname(__DIR__) . "/config/{$file}.php";
             if (file_exists($fallbackPath)) {
                 return require $fallbackPath;
@@ -215,16 +190,13 @@ if (!function_exists('app')) {
      * Returns the global DI container instance when called without arguments,
      * or resolves and returns a specific service when called with a class name.
      *
+     * @param \Glueful\Bootstrap\ApplicationContext $context Application context
      * @param string|null $abstract Service class name to resolve
      * @return mixed Container instance or resolved service
      */
-    function app(?string $abstract = null): mixed
+    function app(\Glueful\Bootstrap\ApplicationContext $context, ?string $abstract = null): mixed
     {
-        $container = $GLOBALS['container'] ?? null;
-
-        if (!$container) {
-            throw new \RuntimeException('DI container not initialized. Make sure framework bootstrap is complete.');
-        }
+        $container = $context->getContainer();
 
         if ($abstract === null) {
             return $container;
@@ -241,23 +213,12 @@ if (!function_exists('container')) {
      * Returns the global PSR-11 container instance once Framework bootstrap completes.
      * This provides access to all registered services.
      *
+     * @param \Glueful\Bootstrap\ApplicationContext $context Application context
      * @return \Psr\Container\ContainerInterface Container instance
      */
-    function container(): \Psr\Container\ContainerInterface
+    function container(\Glueful\Bootstrap\ApplicationContext $context): \Psr\Container\ContainerInterface
     {
-        // Simply return the global container - don't try to initialize
-        $container = $GLOBALS['container'] ?? null;
-
-        if (!$container) {
-            throw new \RuntimeException('DI container not initialized. Framework bootstrap must run first.');
-        }
-
-        // Prefer PSR-11 containers;
-        if ($container instanceof \Psr\Container\ContainerInterface) {
-            return $container;
-        }
-
-        throw new \RuntimeException('DI container is not PSR-11 compatible.');
+        return $context->getContainer();
     }
 }
 
@@ -318,12 +279,13 @@ if (!function_exists('service')) {
      * Convenience function to resolve services from the container.
      * Equivalent to container()->get($id).
      *
+     * @param \Glueful\Bootstrap\ApplicationContext $context Application context
      * @param string $id Service identifier
      * @return mixed Resolved service instance
      */
-    function service(string $id): mixed
+    function service(\Glueful\Bootstrap\ApplicationContext $context, string $id): mixed
     {
-        return app($id);
+        return app($context, $id);
     }
 }
 
@@ -334,16 +296,13 @@ if (!function_exists('parameter')) {
      * Retrieves a parameter value from the container configuration.
      * Parameters are typically configuration values injected into services.
      *
+     * @param \Glueful\Bootstrap\ApplicationContext $context Application context
      * @param string $name Parameter name
      * @return mixed Parameter value
      */
-    function parameter(string $name): mixed
+    function parameter(\Glueful\Bootstrap\ApplicationContext $context, string $name): mixed
     {
-        $container = $GLOBALS['container'] ?? null;
-
-        if (!$container) {
-            throw new \RuntimeException('DI container not initialized.');
-        }
+        $container = $context->getContainer();
 
         // Legacy Symfony-style parameter API if available
         if (is_object($container) && method_exists($container, 'getParameter')) {
@@ -369,11 +328,7 @@ if (!function_exists('parameter')) {
         }
 
         // Fallback: use config() helper if available
-        if (function_exists('config')) {
-            return config($name);
-        }
-
-        throw new \RuntimeException("Parameter '{$name}' not found");
+        return config($context, $name);
     }
 }
 
@@ -384,18 +339,17 @@ if (!function_exists('has_service')) {
      * Determines whether the specified service is registered
      * in the DI container without attempting to instantiate it.
      *
+     * @param \Glueful\Bootstrap\ApplicationContext $context Application context
      * @param string $id Service identifier
      * @return bool True if service exists
      */
-    function has_service(string $id): bool
+    function has_service(\Glueful\Bootstrap\ApplicationContext $context, string $id): bool
     {
-        $container = $GLOBALS['container'] ?? null;
-
-        if (!$container) {
+        if (!$context->hasContainer()) {
             return false;
         }
 
-        return $container->has($id);
+        return $context->getContainer()->has($id);
     }
 }
 
@@ -406,11 +360,12 @@ if (!function_exists('is_production')) {
      * Determines the current environment based on configuration.
      * Used for environment-specific behavior and optimizations.
      *
+     * @param \Glueful\Bootstrap\ApplicationContext $context Application context
      * @return bool True if production environment
      */
-    function is_production(): bool
+    function is_production(\Glueful\Bootstrap\ApplicationContext $context): bool
     {
-        return config('app.env', 'production') === 'production';
+        return config($context, 'app.env', 'production') === 'production';
     }
 }
 
@@ -421,11 +376,12 @@ if (!function_exists('is_debug')) {
      * Determines if the application is running in debug mode.
      * Debug mode enables additional logging, error reporting, and development features.
      *
+     * @param \Glueful\Bootstrap\ApplicationContext $context Application context
      * @return bool True if debug mode is enabled
      */
-    function is_debug(): bool
+    function is_debug(\Glueful\Bootstrap\ApplicationContext $context): bool
     {
-        return config('app.debug', false) === true;
+        return config($context, 'app.debug', false) === true;
     }
 }
 
@@ -460,12 +416,15 @@ if (!function_exists('image')) {
      * Convenience function to create and configure image processor instances.
      * Returns the ImageProcessorInterface for fluent image operations.
      *
+     * @param \Glueful\Bootstrap\ApplicationContext $context Application context
      * @param string $source Image source path or URL
      * @return \Glueful\Services\ImageProcessorInterface
      */
-    function image(string $source): \Glueful\Services\ImageProcessorInterface
-    {
-        $processor = app(\Glueful\Services\ImageProcessorInterface::class);
+    function image(
+        \Glueful\Bootstrap\ApplicationContext $context,
+        string $source
+    ): \Glueful\Services\ImageProcessorInterface {
+        $processor = app($context, \Glueful\Services\ImageProcessorInterface::class);
         return $processor::make($source);
     }
 }
@@ -477,12 +436,13 @@ if (!function_exists('storage_path')) {
      * Returns the absolute path to the storage directory or a specific file within it.
      * Creates the directory if it doesn't exist.
      *
+     * @param \Glueful\Bootstrap\ApplicationContext $context Application context
      * @param string $path Relative path within storage directory
      * @return string Absolute path to storage location
      */
-    function storage_path(string $path = ''): string
+    function storage_path(\Glueful\Bootstrap\ApplicationContext $context, string $path = ''): string
     {
-        $base = base_path('storage');
+        $base = base_path($context, 'storage');
 
         if ($path === '') {
             return $base;
@@ -507,12 +467,13 @@ if (!function_exists('resource_path')) {
      * Returns the absolute path to the resources directory or a specific file within it.
      * Resources typically contain assets, templates, and other non-code files.
      *
+     * @param \Glueful\Bootstrap\ApplicationContext $context Application context
      * @param string $path Relative path within resources directory
      * @return string Absolute path to resource location
      */
-    function resource_path(string $path = ''): string
+    function resource_path(\Glueful\Bootstrap\ApplicationContext $context, string $path = ''): string
     {
-        $base = base_path('resources');
+        $base = base_path($context, 'resources');
         return $path === '' ? $base : $base . '/' . ltrim($path, '/');
     }
 }
@@ -524,46 +485,14 @@ if (!function_exists('base_path')) {
      * Returns the absolute path to the application root directory or a specific file within it.
      * This is the directory where composer.json and main application files are located.
      *
+     * @param \Glueful\Bootstrap\ApplicationContext $context Application context
      * @param string $path Relative path within base directory
      * @return string Absolute path to base directory location
      */
-    function base_path(string $path = ''): string
+    function base_path(\Glueful\Bootstrap\ApplicationContext $context, string $path = ''): string
     {
-        static $basePath = null;
-
-        // Special reset mechanism for testing
-        if ($path === '__RESET__') {
-            $basePath = null;
-            return '';
-        }
-
-        if ($basePath === null) {
-            // Priority 1: Explicit global set by bootstrap
-            if (isset($GLOBALS['base_path'])) {
-                $basePath = $GLOBALS['base_path'];
-            }
-
-            // Priority 3: Intelligent path detection
-            if ($basePath === null) {
-                $basePath = dirname(__DIR__); // Default: framework src -> project root
-
-                // Try to detect if we're in a vendor directory
-                $composerPath = $basePath . '/composer.json';
-                if (!file_exists($composerPath)) {
-                    // We might be in vendor/glueful/framework/src, go up to project root
-                    $potentialRoot = dirname(dirname(dirname($basePath)));
-                    if (file_exists($potentialRoot . '/composer.json')) {
-                        $basePath = $potentialRoot;
-                    }
-                }
-            }
-        }
-
-        if (empty($path)) {
-            return $basePath;
-        }
-
-        return $basePath . '/' . ltrim($path, '/');
+        $basePath = $context->getBasePath();
+        return $path === '' ? $basePath : $basePath . '/' . ltrim($path, '/');
     }
 }
 
@@ -576,30 +505,15 @@ if (!function_exists('config_path')) {
      * 2. Framework config directory (if file exists there)
      * 3. Application config directory (default, even if file doesn't exist)
      *
+     * @param \Glueful\Bootstrap\ApplicationContext $context Application context
      * @param string $path Relative path within config directory
      * @return string Absolute path to config file or directory
      */
-    function config_path(string $path = ''): string
+    function config_path(\Glueful\Bootstrap\ApplicationContext $context, string $path = ''): string
     {
-        static $appConfigPath = null;
-
-        // Special reset mechanism for testing
-        if ($path === '__RESET__') {
-            $appConfigPath = null;
-            return '';
-        }
-
-        if ($appConfigPath === null) {
-            // Priority 1: Explicit global set by bootstrap
-            if (isset($GLOBALS['config_paths']['application'])) {
-                $appConfigPath = $GLOBALS['config_paths']['application'];
-            }
-
-            // Priority 3: Derive from base_path
-            if ($appConfigPath === null) {
-                $appConfigPath = base_path('config');
-            }
-        }
+        $configPaths = $context->getConfigPaths();
+        $frameworkConfigPath = $configPaths['framework'] ?? ($configPaths[0] ?? dirname(__DIR__) . '/config');
+        $appConfigPath = $configPaths['application'] ?? ($configPaths[1] ?? base_path($context, 'config'));
 
         // If no specific file requested, return app config directory
         if (empty($path)) {
@@ -607,7 +521,6 @@ if (!function_exists('config_path')) {
         }
 
         // For specific files, check both app and framework locations
-        $frameworkConfigPath = dirname(__DIR__) . '/config';
         $normalizedPath = ltrim($path, '/');
         $appFilePath = $appConfigPath . '/' . $normalizedPath;
         $frameworkFilePath = $frameworkConfigPath . '/' . $normalizedPath;
@@ -656,20 +569,23 @@ if (!function_exists('auth')) {
      * Provides Laravel-style auth() helper for consistent authentication access.
      * Returns a wrapper around Glueful's authentication system.
      *
+     * @param \Glueful\Bootstrap\ApplicationContext $context Application context
      * @param string|null $guard Guard name (currently unused, for future multi-guard support)
      * @return \Glueful\Auth\AuthenticationGuard|null
      */
-    function auth(?string $guard = null): ?\Glueful\Auth\AuthenticationGuard
-    {
+    function auth(
+        \Glueful\Bootstrap\ApplicationContext $context,
+        ?string $guard = null
+    ): ?\Glueful\Auth\AuthenticationGuard {
         try {
-            if (has_service(\Glueful\Auth\AuthenticationGuard::class)) {
-                return app(\Glueful\Auth\AuthenticationGuard::class);
+            if (has_service($context, \Glueful\Auth\AuthenticationGuard::class)) {
+                return app($context, \Glueful\Auth\AuthenticationGuard::class);
             }
 
             // Fallback: create guard from existing services
-            if (has_service(\Glueful\Auth\AuthenticationService::class)) {
+            if (has_service($context, \Glueful\Auth\AuthenticationService::class)) {
                 return new \Glueful\Auth\AuthenticationGuard(
-                    app(\Glueful\Auth\AuthenticationService::class)
+                    app($context, \Glueful\Auth\AuthenticationService::class)
                 );
             }
         } catch (\Throwable) {
@@ -720,13 +636,14 @@ if (!function_exists('api_url')) {
      * api_url();               // https://api.example.com/v1
      * ```
      *
+     * @param \Glueful\Bootstrap\ApplicationContext $context Application context
      * @param string $path Route path (e.g., '/auth/login')
      * @return string Full URL (e.g., 'https://api.example.com/v1/auth/login')
      */
-    function api_url(string $path = ''): string
+    function api_url(\Glueful\Bootstrap\ApplicationContext $context, string $path = ''): string
     {
-        $baseUrl = rtrim(config('app.urls.base', 'http://localhost'), '/');
-        $prefix = api_prefix();
+        $baseUrl = rtrim(config($context, 'app.urls.base', 'http://localhost'), '/');
+        $prefix = api_prefix($context);
 
         $url = $baseUrl . $prefix;
 
@@ -752,11 +669,12 @@ if (!function_exists('api_prefix')) {
      * - apply_prefix=true, version_in_path=false: '/api'
      * - apply_prefix=false, version_in_path=false: ''
      *
+     * @param \Glueful\Bootstrap\ApplicationContext $context Application context
      * @return string Prefix (e.g., '/api/v1' or '/v1' or '')
      */
-    function api_prefix(): string
+    function api_prefix(\Glueful\Bootstrap\ApplicationContext $context): string
     {
-        $versionConfig = config('api.versioning', []);
+        $versionConfig = config($context, 'api.versioning', []);
         $parts = [];
 
         // Add prefix if configured (e.g., "/api")
@@ -792,12 +710,13 @@ if (!function_exists('is_api_path')) {
      * is_api_path('/admin/dashboard');  // false
      * ```
      *
+     * @param \Glueful\Bootstrap\ApplicationContext $context Application context
      * @param string $path URL path to check
      * @return bool True if path is an API route
      */
-    function is_api_path(string $path): bool
+    function is_api_path(\Glueful\Bootstrap\ApplicationContext $context, string $path): bool
     {
-        $prefix = api_prefix();
+        $prefix = api_prefix($context);
 
         // If no prefix configured, all routes are considered API routes
         if (empty($prefix)) {

@@ -26,6 +26,8 @@
  *       composer require league/flysystem-ftp
  */
 
+$root = dirname(__DIR__);
+
 return [
     'default' => env('STORAGE_DEFAULT_DISK', env('STORAGE_DRIVER', 'uploads')),
 
@@ -33,10 +35,10 @@ return [
         // Local uploads disk
         'uploads' => [
             'driver' => 'local',
-            'root' => config('app.paths.uploads'),
+            'root' => $root . '/storage/uploads',
             'visibility' => 'private',
             // Used by UrlGenerator for public URLs
-            'base_url' => config('app.urls.cdn'),
+            'base_url' => env('CDN_URL'),
         ],
 
         // Optional S3-compatible disk

@@ -91,19 +91,21 @@ return [
 $userIdResolver = function (): ?string {
     try {
         // Priority 1: Request context (middleware-set user)
-        if (isset($GLOBALS['container'])) {
-            $container = $GLOBALS['container'];
+        if ($context->hasContainer()) {
+            $container = $context->getContainer();
             if ($container->has('request')) {
                 $request = $container->get('request');
-                if ($request && $request->attributes->has('user')) {
-                    $user = $request->attributes->get('user');
-                    if (is_object($user)) {
-                        // Try multiple user ID methods
-                        foreach (['getId', 'id', 'getUuid', 'uuid'] as $method) {
-                            if (method_exists($user, $method)) {
-                                $id = $user->$method();
-                                if (is_scalar($id)) {
-                                    return (string) $id;
+                if (is_object($request) && property_exists($request, 'attributes')) {
+                    if ($request->attributes->has('user')) {
+                        $user = $request->attributes->get('user');
+                        if (is_object($user)) {
+                            // Try multiple user ID methods
+                            foreach (['getId', 'id', 'getUuid', 'uuid'] as $method) {
+                                if (method_exists($user, $method)) {
+                                    $id = $user->$method();
+                                    if (is_scalar($id)) {
+                                        return (string) $id;
+                                    }
                                 }
                             }
                         }
@@ -113,8 +115,8 @@ $userIdResolver = function (): ?string {
         }
 
         // Priority 2: AuthenticationService current user
-        if (function_exists('has_service') && has_service(\Glueful\Auth\AuthenticationService::class)) {
-            $authService = app(\Glueful\Auth\AuthenticationService::class);
+        if (function_exists('has_service') && has_service($context, \Glueful\Auth\AuthenticationService::class)) {
+            $authService = app($context, \Glueful\Auth\AuthenticationService::class);
             if (method_exists($authService, 'getCurrentUser')) {
                 $user = $authService->getCurrentUser();
                 if ($user && method_exists($user, 'getId')) {
@@ -128,8 +130,8 @@ $userIdResolver = function (): ?string {
             $authHeader = $_SERVER['HTTP_AUTHORIZATION'];
             if (str_starts_with($authHeader, 'Bearer ')) {
                 $token = substr($authHeader, 7);
-                if (function_exists('has_service') && has_service(\Glueful\Auth\TokenManager::class)) {
-                    $tokenManager = app(\Glueful\Auth\TokenManager::class);
+                if (function_exists('has_service') && has_service($context, \Glueful\Auth\TokenManager::class)) {
+                    $tokenManager = app($context, \Glueful\Auth\TokenManager::class);
                     if (method_exists($tokenManager, 'validateToken')) {
                         $payload = $tokenManager->validateToken($token);
                         if (is_array($payload) && isset($payload['sub'])) {
@@ -184,17 +186,17 @@ if (!function_exists('auth')) {
      * @param string|null $guard Guard name (currently unused, for future multi-guard support)
      * @return \Glueful\Auth\AuthenticationGuard|null
      */
-    function auth(?string $guard = null): ?\Glueful\Auth\AuthenticationGuard
+    function auth(\Glueful\Bootstrap\ApplicationContext $context, ?string $guard = null): ?\Glueful\Auth\AuthenticationGuard
     {
         try {
-            if (has_service(\Glueful\Auth\AuthenticationGuard::class)) {
-                return app(\Glueful\Auth\AuthenticationGuard::class);
+            if (has_service($context, \Glueful\Auth\AuthenticationGuard::class)) {
+                return app($context, \Glueful\Auth\AuthenticationGuard::class);
             }
             
             // Fallback: create guard from existing services
-            if (has_service(\Glueful\Auth\AuthenticationService::class)) {
+            if (has_service($context, \Glueful\Auth\AuthenticationService::class)) {
                 return new \Glueful\Auth\AuthenticationGuard(
-                    app(\Glueful\Auth\AuthenticationService::class)
+                    app($context, \Glueful\Auth\AuthenticationService::class)
                 );
             }
         } catch (\Throwable) {

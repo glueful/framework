@@ -3,6 +3,7 @@
 namespace Glueful\Database;
 
 use PDO;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Driver\MySQLDriver;
 use Glueful\Database\Driver\PostgreSQLDriver;
 use Glueful\Database\Driver\SQLiteDriver;
@@ -94,6 +95,7 @@ class Connection implements DatabaseInterface
      * @var array<string, mixed> Database configuration
      */
     protected array $config;
+    private ?ApplicationContext $context;
 
     /**
      * @var ConnectionPool|null Active connection pool
@@ -122,15 +124,19 @@ class Connection implements DatabaseInterface
      * @param  array<string, mixed> $config Optional configuration override
      * @throws \Glueful\Exceptions\DatabaseException On connection failure or invalid configuration
      */
-    public function __construct(array $config = [])
+    public function __construct(array $config = [], ?ApplicationContext $context = null)
     {
+        $this->context = $context;
         $this->config = array_merge($this->loadConfig(), $config);
-        $this->engine = $this->config['engine'] ?? config('database.engine');
+        // Fallback to env() when config is not available (e.g., during CLI bootstrap)
+        $this->engine = $this->config['engine']
+            ?? $this->getConfig('database.engine')
+            ?? env('DB_DRIVER', 'sqlite');
 
         // Initialize pool manager if pooling is enabled
         $poolingEnabled = (bool) ($this->config['pooling']['enabled'] ?? false);
         if ($poolingEnabled === true) {
-            self::$poolManager ??= new ConnectionPoolManager();
+            self::$poolManager ??= new ConnectionPoolManager($this->context);
             $this->pool = self::$poolManager->getPool($this->engine);
         }
 
@@ -142,6 +148,88 @@ class Connection implements DatabaseInterface
         }
 
         // Note: Schema manager is initialized lazily when first accessed
+    }
+
+    /**
+     * Create a Connection instance from an ApplicationContext
+     *
+     * @param ApplicationContext|null $context The application context
+     * @param array<string, mixed> $config Optional configuration override
+     * @return self
+     */
+    public static function fromContext(?ApplicationContext $context, array $config = []): self
+    {
+        return new self($config, $context);
+    }
+
+    public function hasContext(): bool
+    {
+        return $this->context !== null;
+    }
+
+    public function getContext(): ?ApplicationContext
+    {
+        return $this->context;
+    }
+
+    /**
+     * Load database configuration
+     *
+     * Falls back to env() values when context/config is not available.
+     *
+     * @return array<string, mixed> Complete database configuration
+     */
+    private function loadConfig(): array
+    {
+        $config = $this->getConfig('database', []);
+
+        // If config is empty (no context), build from env() values
+        if ($config === [] || $config === null) {
+            $config = $this->buildConfigFromEnv();
+        }
+
+        return $config;
+    }
+
+    /**
+     * Build database configuration from environment variables
+     *
+     * Used as fallback when ApplicationContext is not available.
+     *
+     * @return array<string, mixed>
+     */
+    private function buildConfigFromEnv(): array
+    {
+        return [
+            'engine' => env('DB_DRIVER', 'sqlite'),
+
+            'mysql' => [
+                'host' => env('DB_HOST', env('DB_MYSQL_HOST', '127.0.0.1')),
+                'port' => (int) env('DB_PORT', env('DB_MYSQL_PORT', 3306)),
+                'db' => env('DB_DATABASE', env('DB_MYSQL_DATABASE', '')),
+                'user' => env('DB_USERNAME', env('DB_MYSQL_USERNAME', 'root')),
+                'pass' => env('DB_PASSWORD', env('DB_MYSQL_PASSWORD', '')),
+                'charset' => 'utf8mb4',
+                'strict' => true,
+            ],
+
+            'pgsql' => [
+                'host' => env('DB_PGSQL_HOST', env('DB_HOST', '127.0.0.1')),
+                'port' => (int) env('DB_PGSQL_PORT', env('DB_PORT', 5432)),
+                'db' => env('DB_PGSQL_DATABASE', env('DB_DATABASE', '')),
+                'user' => env('DB_PGSQL_USERNAME', env('DB_USERNAME', 'postgres')),
+                'pass' => env('DB_PGSQL_PASSWORD', env('DB_PASSWORD', '')),
+                'schema' => env('DB_PGSQL_SCHEMA', 'public'),
+            ],
+
+            'sqlite' => [
+                'primary' => env('DB_SQLITE_DATABASE', 'storage/database/glueful.sqlite'),
+            ],
+
+            'pooling' => [
+                'enabled' => (bool) env('DB_POOLING_ENABLED', false),
+            ],
+        ];
     }
 
     /**
@@ -158,22 +246,10 @@ class Connection implements DatabaseInterface
      * @return PDO Configured PDO instance
      * @throws \Glueful\Exceptions\DatabaseException On connection failure or invalid credentials
      */
-    /**
-     * Load database configuration
-     *
-     * @return array<string, mixed> Complete database configuration
-     */
-    private function loadConfig(): array
-    {
-        return config('database', []);
-    }
-
     private function createPDOConnection(string $engine): PDO
     {
-        // Get engine-specific configuration
-        $dbConfig = array_merge(
-            config("database.{$engine}") ?? [],
-        );
+        // Get engine-specific configuration from already-loaded config
+        $dbConfig = $this->config[$engine] ?? [];
 
         // Set common PDO options
         $options = [
@@ -241,18 +317,30 @@ class Connection implements DatabaseInterface
                 $config['charset'] ?? 'utf8mb4'
             ),
             'pgsql' => sprintf(
-                'pgsql:host=%s;dbname=%s;port=%d;sslmode=%s',
+                'pgsql:host=%s;port=%d;dbname=%s',
                 $config['host'] ?? '127.0.0.1',
-                $config['db'] ?? '',
                 $config['port'] ?? 5432,
-                $config['sslmode'] ?? 'prefer'
+                $config['db'] ?? 'postgres'
             ),
-            'sqlite' => $this->prepareSQLiteDSN($config['primary']),
+            'sqlite' => $this->prepareSQLiteDSN(
+                (isset($config['primary']) && is_string($config['primary']) && $config['primary'] !== '')
+                    ? $config['primary']
+                    : $this->resolveSQLitePath()
+            ),
             default => throw BusinessLogicException::operationNotAllowed(
                 'database_connection',
                 "Unsupported database engine: {$engine}"
             ),
         };
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 
     /**
@@ -271,6 +359,31 @@ class Connection implements DatabaseInterface
     {
         @mkdir(dirname($dbPath), 0755, true); // Ensure directory exists
         return "sqlite:{$dbPath}";
+    }
+
+    /**
+     * Resolve a fallback SQLite database path when config is not available.
+     */
+    private function resolveSQLitePath(): string
+    {
+        $path = function_exists('env')
+            ? env('DB_SQLITE_DATABASE', 'storage/database/glueful.sqlite')
+            : ($_ENV['DB_SQLITE_DATABASE'] ?? 'storage/database/glueful.sqlite');
+
+        if (!is_string($path) || $path === '') {
+            $path = 'storage/database/glueful.sqlite';
+        }
+
+        // If absolute, use as-is
+        if (
+            str_starts_with($path, '/') || str_starts_with($path, DIRECTORY_SEPARATOR) ||
+            (PHP_OS_FAMILY === 'Windows' && preg_match('/^[a-zA-Z]:/', $path))
+        ) {
+            return $path;
+        }
+
+        $basePath = $this->context?->getBasePath() ?? (getcwd() ?: dirname(__DIR__, 2));
+        return rtrim($basePath, '/') . '/' . ltrim($path, '/');
     }
 
     /**

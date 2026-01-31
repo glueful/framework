@@ -19,7 +19,7 @@ final class ImageProvider extends BaseServiceProvider
         $defs[\Intervention\Image\ImageManager::class] = new FactoryDefinition(
             \Intervention\Image\ImageManager::class,
             function () {
-                $driverType = function_exists('config') ? (string) config('image.driver', 'gd') : 'gd';
+                $driverType = function_exists('config') ? (string) config($this->context, 'image.driver', 'gd') : 'gd';
                 $driver = match ($driverType) {
                     'imagick' => (function () {
                         if (!extension_loaded('imagick') || !class_exists('\\Imagick')) {
@@ -46,8 +46,8 @@ final class ImageProvider extends BaseServiceProvider
         $defs[\Glueful\Services\ImageSecurityValidator::class] = new FactoryDefinition(
             \Glueful\Services\ImageSecurityValidator::class,
             function () {
-                $security = function_exists('config') ? (array) config('image.security', []) : [];
-                $limits = function_exists('config') ? (array) config('image.limits', []) : [];
+                $security = function_exists('config') ? (array) config($this->context, 'image.security', []) : [];
+                $limits = function_exists('config') ? (array) config($this->context, 'image.limits', []) : [];
                 return new \Glueful\Services\ImageSecurityValidator(array_merge($security, $limits));
             }
         );
@@ -56,14 +56,17 @@ final class ImageProvider extends BaseServiceProvider
         $defs[\Glueful\Services\ImageProcessorInterface::class] = new FactoryDefinition(
             \Glueful\Services\ImageProcessorInterface::class,
             function (\Psr\Container\ContainerInterface $c) {
+                $getConfig = fn(string $key) => function_exists('config')
+                    ? (array) config($this->context, $key, [])
+                    : [];
                 $config = [
-                    'optimization' => function_exists('config') ? (array) config('image.optimization', []) : [],
-                    'security' => function_exists('config') ? (array) config('image.security', []) : [],
-                    'cache' => function_exists('config') ? (array) config('image.cache', []) : [],
-                    'features' => function_exists('config') ? (array) config('image.features', []) : [],
-                    'defaults' => function_exists('config') ? (array) config('image.defaults', []) : [],
-                    'performance' => function_exists('config') ? (array) config('image.performance', []) : [],
-                    'monitoring' => function_exists('config') ? (array) config('image.monitoring', []) : [],
+                    'optimization' => $getConfig('image.optimization'),
+                    'security' => $getConfig('image.security'),
+                    'cache' => $getConfig('image.cache'),
+                    'features' => $getConfig('image.features'),
+                    'defaults' => $getConfig('image.defaults'),
+                    'performance' => $getConfig('image.performance'),
+                    'monitoring' => $getConfig('image.monitoring'),
                 ];
 
                 return new \Glueful\Services\ImageProcessor(

@@ -10,7 +10,7 @@ use Glueful\Container\Definition\DefinitionInterface;
  * ORM Service Provider
  *
  * Provides service definitions for the ORM/Active Record system.
- * The actual initialization (Model::setContainer) is done in Framework::initializeCoreServices()
+ * The actual initialization is handled via ApplicationContext-aware Model instances.
  * to ensure the container is fully built before the ORM is wired up.
  *
  * @package Glueful\Container\Providers

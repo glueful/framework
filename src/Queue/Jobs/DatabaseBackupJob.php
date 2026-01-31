@@ -74,7 +74,10 @@ class DatabaseBackupJob extends Job
             default => throw new \InvalidArgumentException("Unknown backup type: {$backupType}")
         };
 
-        app(LogManager::class)->info('Database backup completed', [
+        $logger = $this->context !== null
+            ? container($this->context)->get(LogManager::class)
+            : LogManager::getInstance();
+        $logger->info('Database backup completed', [
             'backup_type' => $backupType,
             'result' => $result
         ]);
@@ -90,7 +93,10 @@ class DatabaseBackupJob extends Job
         $backupType = $data['backupType'] ?? 'full';
         $options = $data['options'] ?? [];
 
-        app(LogManager::class)->critical('Database backup job failed', [
+        $logger = $this->context !== null
+            ? container($this->context)->get(LogManager::class)
+            : LogManager::getInstance();
+        $logger->critical('Database backup job failed', [
             'backup_type' => $backupType,
             'options' => $options,
             'error' => $exception->getMessage()

@@ -6,6 +6,7 @@ namespace Glueful\Support\Documentation;
 
 use Glueful\Extensions\ExtensionManager;
 use Glueful\Services\FileFinder;
+use Glueful\Bootstrap\ApplicationContext;
 
 /**
  * OpenAPI Generator
@@ -26,6 +27,8 @@ class OpenApiGenerator
     /** @var callable|null Progress callback */
     private $progressCallback = null;
 
+    private ApplicationContext $context;
+
     /**
      * Constructor
      *
@@ -34,17 +37,20 @@ class OpenApiGenerator
      * @param FileFinder|null $fileFinder File finder service
      * @param bool $runFromConsole Force console mode
      * @param ResourceRouteExpander|null $resourceExpander Resource route expander
+     * @param ApplicationContext $context Application context
      */
     public function __construct(
+        ApplicationContext $context,
         ?DocGenerator $docGenerator = null,
         ?CommentsDocGenerator $commentsGenerator = null,
         ?FileFinder $fileFinder = null,
         bool $runFromConsole = false,
         ?ResourceRouteExpander $resourceExpander = null
     ) {
+        $this->context = $context;
         $this->docGenerator = $docGenerator ?? new DocGenerator();
-        $this->commentsGenerator = $commentsGenerator ?? new CommentsDocGenerator();
-        $this->fileFinder = $fileFinder ?? container()->get(FileFinder::class);
+        $this->commentsGenerator = $commentsGenerator ?? new CommentsDocGenerator($context);
+        $this->fileFinder = $fileFinder ?? container($this->context)->get(FileFinder::class);
         $this->runFromConsole = $runFromConsole || $this->isConsole();
         $this->resourceExpander = $resourceExpander ?? new ResourceRouteExpander();
     }
@@ -131,7 +137,7 @@ class OpenApiGenerator
      */
     private function shouldIncludeResourceRoutes(): bool
     {
-        return (bool) config('documentation.options.include_resource_routes', true);
+        return (bool) config($this->context, 'documentation.options.include_resource_routes', true);
     }
 
     /**
@@ -155,7 +161,7 @@ class OpenApiGenerator
      */
     private function processCustomApiDocs(): void
     {
-        $definitionsDocPath = config('documentation.paths.output') . '/json-definitions/';
+        $definitionsDocPath = config($this->context, 'documentation.paths.output') . '/json-definitions/';
 
         if (!is_dir($definitionsDocPath)) {
             return;
@@ -184,8 +190,8 @@ class OpenApiGenerator
      */
     private function processExtensionAndRouteDocs(bool $force): void
     {
-        $extensionDocsDir = config('documentation.paths.extension_definitions');
-        $routesDocsDir = config('documentation.paths.route_definitions');
+        $extensionDocsDir = config($this->context, 'documentation.paths.extension_definitions');
+        $routesDocsDir = config($this->context, 'documentation.paths.route_definitions');
 
         // Ensure directories exist
         $this->ensureDirectory($extensionDocsDir);
@@ -228,7 +234,7 @@ class OpenApiGenerator
     {
         $this->log("Forcing generation of extension documentation...");
 
-        $extensionManager = container()->get(ExtensionManager::class);
+        $extensionManager = container($this->context)->get(ExtensionManager::class);
         $providers = $extensionManager->getProviders();
         $meta = $extensionManager->listMeta();
 
@@ -342,10 +348,10 @@ class OpenApiGenerator
      */
     private function forceGenerateRouteDocs(): void
     {
-        $routePaths = [config('documentation.sources.routes')];
+        $routePaths = [config($this->context, 'documentation.sources.routes')];
 
         // Include framework routes if enabled
-        if ((bool) config('documentation.sources.include_framework_routes', true)) {
+        if ((bool) config($this->context, 'documentation.sources.include_framework_routes', true)) {
             $frameworkRoutes = $this->resolveFrameworkRoutesPath();
             if ($frameworkRoutes !== null && is_dir($frameworkRoutes)) {
                 $routePaths[] = $frameworkRoutes;
@@ -378,7 +384,7 @@ class OpenApiGenerator
     private function resolveFrameworkRoutesPath(): ?string
     {
         // Check config override first
-        $configPath = config('documentation.sources.framework_routes');
+        $configPath = config($this->context, 'documentation.sources.framework_routes');
         if (is_string($configPath) && $configPath !== '' && is_dir($configPath)) {
             return $configPath;
         }
@@ -395,7 +401,7 @@ class OpenApiGenerator
         }
 
         // Check vendor directory
-        $vendorFramework = base_path('vendor/glueful/framework/routes');
+        $vendorFramework = base_path($this->context, 'vendor/glueful/framework/routes');
         if (is_dir($vendorFramework)) {
             return $vendorFramework;
         }
@@ -411,7 +417,7 @@ class OpenApiGenerator
     private function writeSwaggerJson(): string
     {
         $swaggerJson = $this->docGenerator->getSwaggerJson();
-        $outputPath = config('documentation.paths.openapi');
+        $outputPath = config($this->context, 'documentation.paths.openapi');
 
         $this->ensureDirectory(dirname($outputPath));
 

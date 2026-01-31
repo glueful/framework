@@ -160,10 +160,10 @@ class MiddlewareCommand extends BaseCommand
     private function getDefaultMiddlewarePath(): string
     {
         // Check if we're in an app context or framework context
-        $appPath = base_path('app/Http/Middleware');
-        $srcPath = base_path('src/Http/Middleware');
+        $appPath = base_path($this->getContext(), 'app/Http/Middleware');
+        $srcPath = base_path($this->getContext(), 'src/Http/Middleware');
 
-        if (is_dir(base_path('app'))) {
+        if (is_dir(base_path($this->getContext(), 'app'))) {
             return $appPath;
         }
 
@@ -270,7 +270,7 @@ PHP;
     private function buildNamespace(string $name): string
     {
         // Check if we're in an app or framework context
-        $baseNamespace = is_dir(base_path('app'))
+        $baseNamespace = is_dir(base_path($this->getContext(), 'app'))
             ? 'App\\Http\\Middleware'
             : 'Glueful\\Http\\Middleware';
 

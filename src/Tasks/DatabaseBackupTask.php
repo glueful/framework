@@ -2,6 +2,7 @@
 
 namespace Glueful\Tasks;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use Glueful\Helpers\ConfigManager;
 
@@ -19,17 +20,19 @@ class DatabaseBackupTask
     private Connection $connection;
     /** @var array<string, mixed> */
     private array $config;
+    private ?ApplicationContext $context;
 
-    public function __construct()
+    public function __construct(?ApplicationContext $context = null)
     {
-        $this->connection = new Connection();
+        $this->context = $context;
+        $this->connection = Connection::fromContext($this->context);
         $this->config = ConfigManager::get('database');
     }
 
     public function createBackup(): void
     {
         try {
-            $backupDir = config('app.paths.backups');
+            $backupDir = (string) $this->getConfig('app.paths.backups', './storage/backups');
 
             if (!is_dir($backupDir)) {
                 mkdir($backupDir, 0755, true);
@@ -133,7 +136,7 @@ class DatabaseBackupTask
     public function cleanOldBackups(int $retentionDays): void
     {
         try {
-            $backupDir = base_path('storage/backups');
+            $backupDir = $this->getBasePath('storage/backups');
 
             if (!is_dir($backupDir)) {
                 return;
@@ -174,7 +177,7 @@ class DatabaseBackupTask
             $message .= "Errors:\n- " . implode("\n- ", $this->stats['errors']) . "\n";
         }
 
-        $logFile = base_path('storage/logs/database-backup.log');
+        $logFile = $this->getBasePath('storage/logs/database-backup.log');
         $logDir = dirname($logFile);
 
         if (!is_dir($logDir)) {
@@ -194,6 +197,29 @@ class DatabaseBackupTask
         $i = floor(log($bytes, 1024));
 
         return round($bytes / (1024 ** $i), 2) . ' ' . $units[$i];
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
+    }
+
+    private function getBasePath(string $path = ''): string
+    {
+        if ($this->context !== null) {
+            return base_path($this->context, $path);
+        }
+
+        $root = getcwd() ?: '.';
+        if ($path === '') {
+            return $root;
+        }
+
+        return rtrim($root, '/') . '/' . ltrim($path, '/');
     }
 
     /**

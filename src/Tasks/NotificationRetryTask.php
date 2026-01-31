@@ -59,7 +59,7 @@ class NotificationRetryTask
         if ($notificationService === null) {
             $notificationRepository = new NotificationRepository();
             $channelManager = new ChannelManager();
-            $dispatcher = new NotificationDispatcher($channelManager, $logger);
+            $dispatcher = new NotificationDispatcher($channelManager, $logger, [], null);
             $this->notificationService = new NotificationService($dispatcher, $notificationRepository);
         } else {
             $this->notificationService = $notificationService;

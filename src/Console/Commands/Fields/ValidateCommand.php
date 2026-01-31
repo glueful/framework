@@ -372,7 +372,7 @@ class ValidateCommand extends BaseCommand
 
         // Use is_api_path helper if available
         $isApiRoute = function_exists('is_api_path')
-            ? is_api_path($path)
+            ? is_api_path($this->getContext(), $path)
             : (str_starts_with($path, '/api/') || str_contains($path, 'api.'));
 
         return $isApiRoute && in_array('GET', $methods, true);

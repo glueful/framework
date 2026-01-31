@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Helpers;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Services\FileFinder;
 
 /**
@@ -18,11 +19,17 @@ class ConfigManager
     private static array $config = [];
     private static bool $loaded = false;
     private static string $environment;
+    private static ?ApplicationContext $context = null;
     /** @var array<string> */
     private static array $requiredConfigs = [
         'app', 'database', 'security', 'cache'
     ];
     private static ?string $cacheFile = null;
+
+    public static function setContext(?ApplicationContext $context): void
+    {
+        self::$context = $context;
+    }
 
     public static function load(?string $configPath = null): void
     {
@@ -30,7 +37,7 @@ class ConfigManager
             return;
         }
 
-        $configPath = $configPath ?? base_path('config');
+        $configPath = $configPath ?? self::getBasePath('config');
 
         // Improved environment detection with fallbacks
         self::$environment = env('APP_ENV', 'production');
@@ -49,7 +56,7 @@ class ConfigManager
         }
 
         // Load remaining configurations using FileFinder
-        $fileFinder = container()->get(FileFinder::class);
+        $fileFinder = self::resolveFileFinder();
         $configFiles = $fileFinder->findConfigFiles($configPath);
 
         foreach ($configFiles as $file) {
@@ -272,7 +279,7 @@ class ConfigManager
 
         // Check if cache is stale (older than any config file)
         $cacheTime = filemtime(self::$cacheFile);
-        $fileFinder = container()->get(FileFinder::class);
+        $fileFinder = self::resolveFileFinder();
         $configFiles = $fileFinder->findConfigFiles($configPath);
 
         foreach ($configFiles as $file) {
@@ -333,5 +340,26 @@ class ConfigManager
             self::load();
         }
         return self::$environment;
+    }
+
+    private static function resolveFileFinder(): FileFinder
+    {
+        if (self::$context !== null) {
+            return container(self::$context)->get(FileFinder::class);
+        }
+
+        return new FileFinder();
+    }
+
+    private static function getBasePath(string $suffix = ''): string
+    {
+        if (self::$context !== null) {
+            return base_path(self::$context, $suffix);
+        }
+
+        $root = rtrim(dirname(__DIR__, 3), DIRECTORY_SEPARATOR);
+        return $suffix !== ''
+            ? $root . DIRECTORY_SEPARATOR . ltrim($suffix, DIRECTORY_SEPARATOR)
+            : $root;
     }
 }

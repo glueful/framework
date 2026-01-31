@@ -74,7 +74,7 @@ class RevokeTokensCommand extends BaseSecurityCommand
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         // Initialize database connection
-        $this->db = new Connection();
+        $this->db = Connection::fromContext($this->context);
         $userOption = $input->getOption('user');
         $user = $userOption !== null ? (string) $userOption : null;
         $all = (bool) $input->getOption('all');
@@ -109,10 +109,7 @@ class RevokeTokensCommand extends BaseSecurityCommand
         try {
             // Import required classes (following original pattern)
             $cacheStore = $this->getService(CacheStore::class);
-            $tokenManager = \Glueful\Auth\TokenManager::class;
-
-            // Initialize cache engine if not already initialized
-            $tokenManager::initialize();
+            $tokenManager = app($this->getContext(), \Glueful\Auth\TokenManager::class);
 
             // Step 1: Get all active sessions from database
             $this->info('📊 Retrieving all active sessions...');
@@ -178,11 +175,11 @@ class RevokeTokensCommand extends BaseSecurityCommand
             foreach ($activeSessions as $session) {
                 try {
                     // Revoke the session (this handles database update and audit logging)
-                    $result = $tokenManager::revokeSession($session['access_token']);
+                    $result = $tokenManager->revokeSession($session['access_token']);
 
                     if ($result > 0) {
                         // Remove token mapping from cache
-                        $tokenManager::removeTokenMapping($session['access_token']);
+                        $tokenManager->removeTokenMapping($session['access_token']);
                         $revokedCount++;
                     } else {
                         $failedCount++;

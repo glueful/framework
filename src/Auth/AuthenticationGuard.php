@@ -79,22 +79,7 @@ class AuthenticationGuard
     private function resolveUser(): ?object
     {
         try {
-            // Try request context first
-            if (isset($GLOBALS['container'])) {
-                $container = $GLOBALS['container'];
-                if ($container->has('request')) {
-                    $request = $container->get('request');
-                    if ($request && $request->attributes->has('user')) {
-                        $user = $request->attributes->get('user');
-                        if (is_object($user)) {
-                            return $user;
-                        }
-                    }
-                }
-            }
-
-            // Try authentication service
-             return $this->authService->getCurrentUser();
+            return $this->authService->getCurrentUser();
         } catch (\Throwable) {
             // Ignore resolution errors
         }

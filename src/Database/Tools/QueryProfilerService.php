@@ -3,6 +3,7 @@
 namespace Glueful\Database\Tools;
 
 use Psr\Log\LoggerInterface;
+use Glueful\Bootstrap\ApplicationContext;
 
 class QueryProfilerService
 {
@@ -11,9 +12,14 @@ class QueryProfilerService
     private float $sampling;
     /** @var array<mixed> */
     private array $profiles = [];
+    private ?ApplicationContext $context;
 
-    public function __construct(?float $threshold = null, ?LoggerInterface $logger = null)
-    {
+    public function __construct(
+        ?float $threshold = null,
+        ?LoggerInterface $logger = null,
+        ?ApplicationContext $context = null
+    ) {
+        $this->context = $context;
         $this->logger = $logger ?? \Glueful\Logging\LogManager::getInstance();
         $this->threshold = $threshold ?? $this->getConfig('threshold', 100); // ms
         $this->sampling = $this->getConfig('sampling_rate', 1.0);
@@ -28,9 +34,8 @@ class QueryProfilerService
      */
     private function getConfig(string $key, $default)
     {
-        // Try to get from config if it exists
-        if (function_exists('config')) {
-            return config("database.profiler.{$key}", $default);
+        if ($this->context !== null) {
+            return config($this->context, "database.profiler.{$key}", $default);
         }
 
         return $default;
@@ -99,7 +104,7 @@ class QueryProfilerService
         $this->profiles[] = $profile;
 
         // Limit the number of stored profiles to avoid memory issues
-        if (count($this->profiles) > config('database.profiler.max_profiles', 100)) {
+        if (count($this->profiles) > $this->getConfig('max_profiles', 100)) {
             array_shift($this->profiles);
         }
     }

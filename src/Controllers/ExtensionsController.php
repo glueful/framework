@@ -16,9 +16,10 @@ use Glueful\Extensions\ExtensionManager;
 class ExtensionsController extends BaseController
 {
     public function __construct(
+        \Glueful\Bootstrap\ApplicationContext $context,
         private ExtensionManager $extensionManager
     ) {
-        parent::__construct();
+        parent::__construct($context);
     }
 
     /**

@@ -158,7 +158,7 @@ class SeederCommand extends BaseCommand
      */
     private function getDefaultSeederPath(): string
     {
-        return base_path('database/seeders');
+        return base_path($this->getContext(), 'database/seeders');
     }
 
     /**
@@ -294,7 +294,7 @@ PHP;
     {
         return <<<PHP
         // Create records using the model
-        // {$modelName}::create([
+        // {$modelName}::create(\$this->getContext(), [
         //     'name' => 'Example',
         // ]);
 

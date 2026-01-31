@@ -22,7 +22,7 @@ final class StorageProvider extends BaseServiceProvider
             \Glueful\Storage\PathGuard::class,
             function (): \Glueful\Storage\PathGuard {
                 /** @var array<string,mixed> $cfg */
-                $cfg = (array) (\function_exists('config') ? \config('storage.path_guard', []) : []);
+                $cfg = (array) (\function_exists('config') ? \config($this->context, 'storage.path_guard', []) : []);
                 return new \Glueful\Storage\PathGuard($cfg);
             }
         );
@@ -32,7 +32,7 @@ final class StorageProvider extends BaseServiceProvider
             \Glueful\Storage\StorageManager::class,
             function (): \Glueful\Storage\StorageManager {
                 /** @var array<string,mixed> $cfg */
-                $cfg = (array) (\function_exists('config') ? \config('storage') : []);
+                $cfg = (array) (\function_exists('config') ? \config($this->context, 'storage') : []);
                 return new \Glueful\Storage\StorageManager($cfg, new \Glueful\Storage\PathGuard());
             }
         );
@@ -42,7 +42,7 @@ final class StorageProvider extends BaseServiceProvider
             \Glueful\Storage\Support\UrlGenerator::class,
             function (): \Glueful\Storage\Support\UrlGenerator {
                 /** @var array<string,mixed> $cfg */
-                $cfg = (array) (\function_exists('config') ? \config('storage') : []);
+                $cfg = (array) (\function_exists('config') ? \config($this->context, 'storage') : []);
                 return new \Glueful\Storage\Support\UrlGenerator($cfg, new \Glueful\Storage\PathGuard());
             }
         );

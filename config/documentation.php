@@ -7,6 +7,8 @@
  * Used by ResourceRouteExpander, DocGenerator, CommentsDocGenerator, and OpenApiGenerator.
  */
 
+$root = dirname(__DIR__);
+
 return [
     /*
     |--------------------------------------------------------------------------
@@ -82,7 +84,7 @@ return [
     'servers' => [
         [
             // Use base URL - route paths include their own prefixes
-            'url' => env('API_SERVER_URL', config('app.urls.base', env('APP_URL', 'http://localhost'))),
+            'url' => env('API_SERVER_URL', env('APP_URL', 'http://localhost')),
             'description' => env('API_SERVER_DESCRIPTION', 'API Server'),
         ],
     ],
@@ -98,16 +100,16 @@ return [
     */
     'paths' => [
         // Main documentation output directory
-        'output' => base_path('docs'),
+        'output' => $root . '/docs',
 
         // Final OpenAPI specification file location
-        'openapi' => base_path('docs/openapi.json'),
+        'openapi' => $root . '/docs/openapi.json',
 
         // JSON definitions for route-based documentation
-        'route_definitions' => base_path('docs/json-definitions/routes'),
+        'route_definitions' => $root . '/docs/json-definitions/routes',
 
         // JSON definitions for extension documentation
-        'extension_definitions' => base_path('docs/json-definitions/extensions'),
+        'extension_definitions' => $root . '/docs/json-definitions/extensions',
     ],
 
     /*
@@ -121,7 +123,7 @@ return [
     */
     'sources' => [
         // Directory containing project route files
-        'routes' => base_path('routes'),
+        'routes' => $root . '/routes',
 
         // Include framework routes in documentation generation
         'include_framework_routes' => env('API_DOCS_INCLUDE_FRAMEWORK_ROUTES', true),

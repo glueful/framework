@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Glueful\Support\Documentation;
 
+use Glueful\Bootstrap\ApplicationContext;
+
 /**
  * API Documentation Generator
  *
@@ -27,15 +29,18 @@ class DocGenerator
 
     /** @var string OpenAPI version to use */
     private string $openApiVersion;
+    private ?ApplicationContext $context;
 
     /**
      * Constructor
      *
      * @param string|null $openApiVersion OpenAPI version to use (defaults to config value)
      */
-    public function __construct(?string $openApiVersion = null)
+    public function __construct(?string $openApiVersion = null, ?ApplicationContext $context = null)
     {
-        $this->openApiVersion = $openApiVersion ?? config('documentation.openapi_version', '3.1.0');
+        $this->context = $context;
+        $this->openApiVersion = $openApiVersion
+            ?? $this->getConfig('documentation.openapi_version', '3.1.0');
     }
 
     /**
@@ -157,7 +162,7 @@ class DocGenerator
     public function generateFromExtensions(?string $extensionsPath = null): void
     {
         if ($extensionsPath === null) {
-            $extensionsPath = config('documentation.paths.extension_definitions');
+            $extensionsPath = $this->getConfig('documentation.paths.extension_definitions', '');
         }
 
         if (!is_dir($extensionsPath)) {
@@ -199,7 +204,7 @@ class DocGenerator
     public function generateFromRoutes(?string $routesPath = null): void
     {
         if ($routesPath === null) {
-            $routesPath = config('documentation.paths.route_definitions');
+            $routesPath = $this->getConfig('documentation.paths.route_definitions', '');
         }
 
         if (!is_dir($routesPath)) {
@@ -255,7 +260,7 @@ class DocGenerator
     private function addResourceEndpoints(string $tableName, array $schema): void
     {
         // Apply version prefix from config (resource routes are versioned)
-        $version = config('app.versioning.current', '1');
+        $version = $this->getConfig('app.versioning.current', '1');
         $basePath = "/v{$version}/{$tableName}";
         $isReadOnly = ($schema['x-access-mode'] ?? 'read-write') === 'read-only';
         $tag = "Table - {$tableName}";
@@ -605,12 +610,20 @@ class DocGenerator
      */
     public function getSwaggerJson(): string
     {
+        $baseUrl = '';
+        if ($this->context !== null && function_exists('api_url')) {
+            $baseUrl = api_url($this->context);
+        }
+        if ($baseUrl === '') {
+            $baseUrl = rtrim((string) $this->getConfig('app.urls.base', ''), '/');
+        }
+
         $swagger = [
             'openapi' => $this->openApiVersion,
             'info' => $this->buildInfoSection(),
-            'servers' => config('documentation.servers', [
+            'servers' => $this->getConfig('documentation.servers', [
                 [
-                    'url' => function_exists('api_url') ? api_url() : rtrim(config('app.urls.base', ''), '/'),
+                    'url' => $baseUrl,
                     'description' => 'API Server'
                 ]
             ]),
@@ -706,13 +719,22 @@ class DocGenerator
     private function buildInfoSection(): array
     {
         $info = [
-            'title' => config('documentation.info.title', config('app.name', 'API Documentation')),
-            'version' => config('documentation.info.version', config('app.version_full', '1.0.0')),
-            'description' => config('documentation.info.description', 'Auto-generated API documentation'),
+            'title' => $this->getConfig(
+                'documentation.info.title',
+                $this->getConfig('app.name', 'API Documentation')
+            ),
+            'version' => $this->getConfig(
+                'documentation.info.version',
+                $this->getConfig('app.version_full', '1.0.0')
+            ),
+            'description' => $this->getConfig(
+                'documentation.info.description',
+                'Auto-generated API documentation'
+            ),
         ];
 
         // Add contact info if provided
-        $contact = config('documentation.info.contact', []);
+        $contact = $this->getConfig('documentation.info.contact', []);
         $contactName = $contact['name'] ?? '';
         $contactEmail = $contact['email'] ?? '';
         $contactUrl = $contact['url'] ?? '';
@@ -721,7 +743,7 @@ class DocGenerator
         }
 
         // Add license info if provided
-        $license = config('documentation.info.license', []);
+        $license = $this->getConfig('documentation.info.license', []);
         $licenseName = $license['name'] ?? '';
         if ($licenseName !== '') {
             $licenseInfo = array_filter($license, fn($v) => $v !== '');
@@ -738,6 +760,15 @@ class DocGenerator
         }
 
         return $info;
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 
     /**

@@ -9,6 +9,7 @@ use Symfony\Component\HttpFoundation\{Request, Response, JsonResponse, StreamedR
 use Glueful\Routing\Internal\Psr15MiddlewareResolverTrait;
 use Psr\Http\Server\MiddlewareInterface as Psr15Middleware;
 use Glueful\Http\Response as ApiResponse;
+use Glueful\Bootstrap\ApplicationContext;
 
 class Router
 {
@@ -33,17 +34,24 @@ class Router
     private ?RouteCache $cache = null;
     private ContainerInterface $container;
     private ?AttributeRouteLoader $attributeLoader = null;
+    private bool $warnUnprefixedRoutes = false;
 
     public function __construct(ContainerInterface $container)
     {
         $this->container = $container;
-        $this->cache = new RouteCache();
+        if ($container->has(ApplicationContext::class)) {
+            $this->cache = new RouteCache($container->get(ApplicationContext::class));
+        } else {
+            $this->cache = null;
+        }
 
         // Try to load cached routes
-        $cached = $this->cache->load();
-        if ($cached !== null) {
-            $this->staticRoutes = $this->reconstructStaticRoutes($cached['static']);
-            $this->dynamicRoutes = $this->reconstructDynamicRoutes($cached['dynamic']);
+        if ($this->cache !== null) {
+            $cached = $this->cache->load();
+            if ($cached !== null) {
+                $this->staticRoutes = $this->reconstructStaticRoutes($cached['static']);
+                $this->dynamicRoutes = $this->reconstructDynamicRoutes($cached['dynamic']);
+            }
         }
     }
 
@@ -82,6 +90,7 @@ class Router
 
         // Apply group prefixes
         $path = $this->applyGroupPrefix($path);
+        $this->warnOnUnprefixedRoute($path);
 
         // Create route with back-reference for named route registration
         $route = new Route($this, $method, $path, $handler);
@@ -110,6 +119,44 @@ class Router
         }
 
         return $route;
+    }
+
+    public function enableUnprefixedRouteWarnings(bool $enabled): void
+    {
+        $this->warnUnprefixedRoutes = $enabled;
+    }
+
+    private function warnOnUnprefixedRoute(string $path): void
+    {
+        if (!$this->warnUnprefixedRoutes) {
+            return;
+        }
+
+        if ((bool) config($this->getContext(), 'app.dev_mode', false) !== true) {
+            return;
+        }
+
+        if (!function_exists('api_prefix')) {
+            return;
+        }
+
+        $prefix = api_prefix($this->getContext());
+        if ($prefix === '') {
+            return;
+        }
+
+        if ($path === $prefix || str_starts_with($path, rtrim($prefix, '/') . '/')) {
+            return;
+        }
+
+        if ((bool) config($this->getContext(), 'app.warn_unprefixed_routes', false) !== true) {
+            return;
+        }
+
+        error_log(
+            '[Router] Unprefixed route registered: ' . $path
+            . ' (expected prefix: ' . $prefix . ')'
+        );
     }
 
     // Apply group prefixes from nested groups
@@ -284,7 +331,7 @@ class Router
     {
         $version = ltrim($version, 'vV');
 
-        $config = function_exists('config') ? (array) config('api.versioning', []) : [];
+        $config = function_exists('config') ? (array) config($this->getContext(), 'api.versioning', []) : [];
         $strategy = (string) ($config['strategy'] ?? 'url_prefix');
         $apiPrefix = (string) ($config['prefix'] ?? '/api');
 
@@ -386,7 +433,7 @@ class Router
      */
     private function getCorsConfig(): array
     {
-        $config = config('cors', []);
+        $config = config($this->getContext(), 'cors', []);
 
         return array_merge([
             // Origins
@@ -741,7 +788,7 @@ class Router
         $instance = $this->container->get($name);
 
         // Attempt PSR-15 auto-adaptation if enabled
-        $httpConfig = (array) config('http', []);
+        $httpConfig = (array) config($this->getContext(), 'http', []);
         $maybe = $this->maybeWrapPsr15Middleware($instance, $httpConfig);
 
         if (is_callable($maybe)) {
@@ -1044,5 +1091,10 @@ class Router
         }
 
         return $reconstructed;
+    }
+
+    public function getContext(): ApplicationContext
+    {
+        return $this->container->get(ApplicationContext::class);
     }
 }

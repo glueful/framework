@@ -2,6 +2,7 @@
 
 namespace Glueful\Performance;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Glueful\Http\Client;
@@ -26,6 +27,7 @@ class MemoryAlertingService
      * @var array<string, mixed>
      */
     private array $config;
+    private ?ApplicationContext $context;
 
     /**
      * @var array<string, int>
@@ -43,11 +45,15 @@ class MemoryAlertingService
      * @param MemoryManager $memoryManager
      * @param LoggerInterface|null $logger
      */
-    public function __construct(MemoryManager $memoryManager, ?LoggerInterface $logger = null)
-    {
+    public function __construct(
+        MemoryManager $memoryManager,
+        ?LoggerInterface $logger = null,
+        ?ApplicationContext $context = null
+    ) {
         $this->memoryManager = $memoryManager;
         $this->logger = $logger ?? new NullLogger();
-        $this->config = config('app.performance.memory.alerting', [
+        $this->context = $context;
+        $this->config = $this->getConfig('app.performance.memory.alerting', [
             'enabled' => true,
             'cooldown' => 300, // 5 minutes between similar alerts
             'channels' => ['log', 'slack'],
@@ -231,7 +237,7 @@ class MemoryAlertingService
     private function sendSlackAlert(string $level, string $message, array $data): void
     {
         // Implementation depends on how Slack notifications are configured in the system
-        $slackConfig = config('notifications.slack', null);
+        $slackConfig = $this->getConfig('notifications.slack', null);
 
         if ($slackConfig === null || ($slackConfig['webhook_url'] ?? '') === '') {
             $this->logger->warning('Slack webhook URL not configured, could not send memory alert');
@@ -277,7 +283,7 @@ class MemoryAlertingService
 
         // Send the notification - in a production system, this would be queued
         try {
-            $container = function_exists('container') ? container() : null;
+            $container = $this->context !== null ? container($this->context) : null;
             if ($container === null) {
                 throw new \RuntimeException('Container not available');
             }
@@ -312,7 +318,7 @@ class MemoryAlertingService
     private function sendEmailAlert(string $level, string $message, array $data): void
     {
         // Implementation depends on how email notifications are configured in the system
-        $emailConfig = config('notifications.email', null);
+        $emailConfig = $this->getConfig('notifications.email', null);
 
         if ($emailConfig === null || ($emailConfig['to'] ?? '') === '') {
             $this->logger->warning('Email configuration missing, could not send memory alert');
@@ -333,7 +339,7 @@ class MemoryAlertingService
      */
     private function sendWebhookAlert(string $level, string $message, array $data): void
     {
-        $webhookConfig = config('notifications.webhook', null);
+        $webhookConfig = $this->getConfig('notifications.webhook', null);
 
         if ($webhookConfig === null || ($webhookConfig['url'] ?? '') === '') {
             $this->logger->warning('Webhook URL not configured, could not send memory alert');
@@ -349,7 +355,7 @@ class MemoryAlertingService
 
         // Send the notification
         try {
-            $container = function_exists('container') ? container() : null;
+            $container = $this->context !== null ? container($this->context) : null;
             if ($container === null) {
                 throw new \RuntimeException('Container not available');
             }
@@ -444,5 +450,14 @@ class MemoryAlertingService
         $bytes /= pow(1024, $pow);
 
         return round($bytes, 2) . ' ' . $units[$pow];
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 }

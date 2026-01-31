@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Routing\Middleware;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Routing\RouteMiddleware;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -17,7 +18,7 @@ use Glueful\Exceptions\SecurityException;
 use Glueful\Exceptions\AuthenticationException;
 use Glueful\Events\Security\AdminAccessEvent;
 use Glueful\Events\Security\AdminSecurityViolationEvent;
-use Glueful\Events\Event;
+use Glueful\Events\EventService;
 use Psr\Log\LoggerInterface;
 use Psr\Container\ContainerInterface;
 
@@ -72,6 +73,8 @@ use Psr\Container\ContainerInterface;
  */
 class AdminPermissionMiddleware implements RouteMiddleware
 {
+    private ?ApplicationContext $appContext;
+
     /** @var string Default admin permission */
     private const DEFAULT_ADMIN_PERMISSION = 'admin.access';
 
@@ -196,6 +199,7 @@ class AdminPermissionMiddleware implements RouteMiddleware
      * @param UserRepository|null $userRepository User repository instance
      * @param LoggerInterface|null $logger Logger instance
      * @param ContainerInterface|null $container DI Container instance
+     * @param ApplicationContext|null $appContext Application context
      */
     public function __construct(
         string $adminPermission = self::DEFAULT_ADMIN_PERMISSION,
@@ -212,8 +216,10 @@ class AdminPermissionMiddleware implements RouteMiddleware
         ?PermissionManager $permissionManager = null,
         ?UserRepository $userRepository = null,
         ?LoggerInterface $logger = null,
-        ?ContainerInterface $container = null
+        ?ContainerInterface $container = null,
+        ?ApplicationContext $appContext = null
     ) {
+        $this->appContext = $appContext;
         $this->adminPermission = $adminPermission;
         $this->resource = $resource;
         $this->context = $context;
@@ -230,7 +236,7 @@ class AdminPermissionMiddleware implements RouteMiddleware
 
         // Initialize dependencies
         $this->permissionManager = $permissionManager ?? $this->getPermissionManagerFromContainer();
-        $this->userRepository = $userRepository ?? new UserRepository();
+        $this->userRepository = $userRepository ?? new UserRepository(null, null, $this->appContext);
 
         // Try to get logger from container if not provided
         if ($this->logger === null && $this->container !== null) {
@@ -419,7 +425,7 @@ class AdminPermissionMiddleware implements RouteMiddleware
             $this->logSecurityEvent($request, 'admin_access_granted', $userUuid, $config['log_level'] ?? 'info');
 
             // Dispatch admin access event
-            Event::dispatch(new AdminAccessEvent(
+            $this->getEventService()?->dispatch(new AdminAccessEvent(
                 $userUuid,
                 $config['permission'],
                 $config['resource'],
@@ -471,7 +477,7 @@ class AdminPermissionMiddleware implements RouteMiddleware
                 'ADMIN_AUTHENTICATION_FAILED'
             );
         } catch (SecurityException $e) {
-            Event::dispatch(new AdminSecurityViolationEvent(
+            $this->getEventService()?->dispatch(new AdminSecurityViolationEvent(
                 $userUuid ?? 'unknown',
                 'security_exception',
                 $request,
@@ -734,19 +740,24 @@ class AdminPermissionMiddleware implements RouteMiddleware
     {
         try {
             // Try unified SessionStore first
-            try {
-                /** @var \Glueful\Auth\Interfaces\SessionStoreInterface $store */
-                $store = container()->get(\Glueful\Auth\Interfaces\SessionStoreInterface::class);
-                $sessionData = $store->getByAccessToken($token);
-                if ($sessionData !== null && isset($sessionData['user_uuid'])) {
-                    return $sessionData['user_uuid'];
+            if ($this->appContext !== null) {
+                try {
+                    /** @var \Glueful\Auth\Interfaces\SessionStoreInterface $store */
+                    $store = container($this->appContext)->get(\Glueful\Auth\Interfaces\SessionStoreInterface::class);
+                    $sessionData = $store->getByAccessToken($token);
+                    if ($sessionData !== null && isset($sessionData['user_uuid'])) {
+                        return $sessionData['user_uuid'];
+                    }
+                } catch (\Throwable) {
+                    // ignore and fallback
                 }
-            } catch (\Throwable) {
-                // ignore and fallback
             }
 
             // Try authentication service
-            $user = AuthenticationService::validateAccessToken($token);
+            $authService = $this->appContext !== null && $this->appContext->hasContainer()
+                ? container($this->appContext)->get(AuthenticationService::class)
+                : new AuthenticationService(context: $this->appContext);
+            $user = $authService->validateAccessToken($token, $this->appContext);
             if ($user !== null && isset($user['uuid'])) {
                 return $user['uuid'];
             }
@@ -1024,6 +1035,21 @@ class AdminPermissionMiddleware implements RouteMiddleware
         }
     }
 
+    private function getEventService(): ?EventService
+    {
+        if ($this->container !== null && $this->container->has(EventService::class)) {
+            $service = $this->container->get(EventService::class);
+            return $service instanceof EventService ? $service : null;
+        }
+
+        if ($this->appContext !== null && $this->appContext->hasContainer()) {
+            $service = $this->appContext->getContainer()->get(EventService::class);
+            return $service instanceof EventService ? $service : null;
+        }
+
+        return null;
+    }
+
     /**
      * Check admin permission with enhanced context
      *
@@ -1205,18 +1231,18 @@ class AdminPermissionMiddleware implements RouteMiddleware
      */
     private function getDefaultContainer(): ?ContainerInterface
     {
-        if (function_exists('container')) {
+        if ($this->appContext !== null && function_exists('container')) {
             try {
-                $c = container();
+                $c = container($this->appContext);
                 return $c;
             } catch (\Exception) {
                 return null;
             }
         }
 
-        if (function_exists('app')) {
+        if ($this->appContext !== null && function_exists('app')) {
             try {
-                $a = app();
+                $a = app($this->appContext);
                 return $a instanceof ContainerInterface ? $a : null;
             } catch (\Exception) {
                 return null;
@@ -1240,7 +1266,7 @@ class AdminPermissionMiddleware implements RouteMiddleware
         }
 
         // Fall back to singleton pattern
-        return PermissionManager::getInstance();
+        return PermissionManager::getInstance(null, $this->appContext);
     }
 
     /**

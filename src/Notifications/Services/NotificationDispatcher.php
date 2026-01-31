@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Notifications\Services;
 
 use DateTime;
-use Glueful\Events\Event;
+use Glueful\Events\EventService;
 use Glueful\Logging\LogManager;
 use Glueful\Notifications\Contracts\Notifiable;
 use Glueful\Notifications\Contracts\NotificationExtension;
@@ -55,7 +55,8 @@ class NotificationDispatcher
     public function __construct(
         ChannelManager $channelManager,
         ?LogManager $logger = null,
-        array $config = []
+        array $config = [],
+        private ?EventService $events = null
     ) {
         $this->channelManager = $channelManager;
         $this->logger = $logger;
@@ -401,7 +402,7 @@ class NotificationDispatcher
         ]);
 
         // Dispatch the event
-        Event::dispatch($event);
+        $this->events?->dispatch($event);
     }
 
     /**
@@ -440,7 +441,7 @@ class NotificationDispatcher
         ]);
 
         // Dispatch the event
-        Event::dispatch($event);
+        $this->events?->dispatch($event);
     }
 
     /**

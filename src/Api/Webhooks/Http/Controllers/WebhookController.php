@@ -29,13 +29,14 @@ use Symfony\Component\HttpFoundation\Request;
 class WebhookController extends BaseController
 {
     public function __construct(
+        \Glueful\Bootstrap\ApplicationContext $context,
         private ?WebhookDispatcherInterface $dispatcher = null
     ) {
-        parent::__construct();
+        parent::__construct($context);
 
         if ($this->dispatcher === null && function_exists('app')) {
-            if (app()->has(WebhookDispatcherInterface::class)) {
-                $this->dispatcher = app(WebhookDispatcherInterface::class);
+            if (app($this->getContext())->has(WebhookDispatcherInterface::class)) {
+                $this->dispatcher = app($this->getContext(), WebhookDispatcherInterface::class);
             }
         }
     }
@@ -54,7 +55,7 @@ class WebhookController extends BaseController
         $perPage = min((int) $request->query->get('per_page', 25), 100);
         $activeOnly = $request->query->get('active') === 'true';
 
-        $query = WebhookSubscription::query();
+        $query = WebhookSubscription::query($this->context);
 
         if ($activeOnly) {
             $query->where('is_active', true);
@@ -329,7 +330,7 @@ class WebhookController extends BaseController
         $status = $request->query->get('status');
         $subscriptionId = $request->query->get('subscription');
 
-        $query = WebhookDelivery::query();
+        $query = WebhookDelivery::query($this->context);
 
         if ($status !== null && $status !== '') {
             $query->where('status', $status);
@@ -504,7 +505,7 @@ class WebhookController extends BaseController
     private function requiresHttps(): bool
     {
         if (function_exists('config')) {
-            return (bool) config('api.webhooks.require_https', true);
+            return (bool) config($this->getContext(), 'api.webhooks.require_https', true);
         }
 
         return true;

@@ -23,7 +23,7 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
  * $dispatcher->addSubscriber(new WebhookEventListener($webhookDispatcher));
  *
  * // Now any event with #[Webhookable] or DispatchesWebhooks will trigger webhooks
- * Event::dispatch(new UserCreatedEvent($userData));
+ * app($context, \Glueful\Events\EventService::class)->dispatch(new UserCreatedEvent($userData));
  * ```
  */
 class WebhookEventListener implements EventSubscriberInterface

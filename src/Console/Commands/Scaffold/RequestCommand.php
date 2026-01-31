@@ -116,10 +116,10 @@ class RequestCommand extends BaseCommand
     private function getDefaultRequestPath(): string
     {
         // Check if we're in an app context or framework context
-        $appPath = base_path('app/Http/Requests');
-        $srcPath = base_path('src/Http/Requests');
+        $appPath = base_path($this->getContext(), 'app/Http/Requests');
+        $srcPath = base_path($this->getContext(), 'src/Http/Requests');
 
-        if (is_dir(base_path('app'))) {
+        if (is_dir(base_path($this->getContext(), 'app'))) {
             return $appPath;
         }
 
@@ -236,7 +236,7 @@ PHP;
     private function buildNamespace(string $name): string
     {
         // Check if we're in an app or framework context
-        $baseNamespace = is_dir(base_path('app'))
+        $baseNamespace = is_dir(base_path($this->getContext(), 'app'))
             ? 'App\\Http\\Requests'
             : 'Glueful\\Http\\Requests';
 
@@ -286,7 +286,7 @@ Usage in controllers:
       \$validatedData = \$request->validated();
 
       // Create user with validated data
-      \$user = User::create(\$validatedData);
+      \$user = User::create(\$this->getContext(), \$validatedData);
 
       return Response::created(\$user);
   }

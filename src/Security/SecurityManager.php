@@ -5,7 +5,7 @@ namespace Glueful\Security;
 use Glueful\Helpers\{ConfigManager, Utils};
 use Glueful\Exceptions\RateLimitExceededException;
 use Glueful\Events\Auth\RateLimitExceededEvent;
-use Glueful\Events\Event;
+use Glueful\Events\EventService;
 use Glueful\Exceptions\SecurityException;
 use Glueful\Cache\CacheStore;
 use Glueful\Helpers\CacheHelper;
@@ -45,6 +45,7 @@ class SecurityManager
 
     /** @var CacheStore<mixed> Cache driver instance */
     private CacheStore $cache;
+    private ?EventService $events;
 
 
     /**
@@ -55,10 +56,11 @@ class SecurityManager
      *
      * @param CacheStore<mixed>|null $cache Cache driver instance
      */
-    public function __construct(?CacheStore $cache = null)
+    public function __construct(?CacheStore $cache = null, ?EventService $events = null)
     {
         $this->config = ConfigManager::get('security', []);
         $this->cache = $cache ?? CacheHelper::createCacheInstance();
+        $this->events = $events;
 
         if ($this->cache === null) {
             throw new \RuntimeException(
@@ -427,7 +429,7 @@ class SecurityManager
         // Check if current request count exceeds the limit
         if ($current >= $limit) {
             // Dispatch rate limit exceeded event
-            Event::dispatch(new RateLimitExceededEvent(
+            $this->events?->dispatch(new RateLimitExceededEvent(
                 $ip,
                 'default_limit',
                 $current + 1, // Include the current request

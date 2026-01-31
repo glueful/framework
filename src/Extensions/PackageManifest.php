@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Glueful\Extensions;
 
+use Glueful\Bootstrap\ApplicationContext;
+
 /**
  * Discovers Glueful extensions from Composer's installed metadata.
  * Supports Composer 2 installed.php and installed.json (both shapes).
@@ -13,7 +15,7 @@ final class PackageManifest
     /** @var array<string, class-string> package name => provider FQCN */
     private array $providers;
 
-    public function __construct()
+    public function __construct(private ApplicationContext $context)
     {
         $this->providers = $this->discover();
     }
@@ -28,7 +30,7 @@ final class PackageManifest
     private function discover(): array
     {
         // Prefer installed.php — normalized and fast
-        $installedPhp = base_path('vendor/composer/installed.php');
+        $installedPhp = base_path($this->context, 'vendor/composer/installed.php');
         if (is_file($installedPhp)) {
             try {
                 /** @var array<string, mixed> $installed */
@@ -40,7 +42,7 @@ final class PackageManifest
         }
 
         // Fallback to installed.json (may be array-of-packages or {packages: [...]})
-        $installedJson = base_path('vendor/composer/installed.json');
+        $installedJson = base_path($this->context, 'vendor/composer/installed.json');
         if (!is_file($installedJson)) {
             return [];
         }

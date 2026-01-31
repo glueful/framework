@@ -217,11 +217,11 @@ class ContainerValidateCommand extends BaseCommand
 
         try {
             // Test container creation
-            $container = ContainerFactory::create(false);
+            $container = ContainerFactory::create($this->getContext(), false);
             $this->line('✓ Container creation successful');
 
             // Check environment configuration
-            $env = config('app.env');
+            $env = config($this->getContext(), 'app.env');
             if ($env === null || $env === '') {
                 $issues[] = 'APP_ENV not configured';
                 $status = 'warning';
@@ -232,7 +232,7 @@ class ContainerValidateCommand extends BaseCommand
             // Check required configuration
             $requiredConfigs = ['database.driver', 'cache.driver'];
             foreach ($requiredConfigs as $config) {
-                $value = config($config);
+                $value = config($this->getContext(), $config);
                 if ($value === null || $value === '') {
                     $issues[] = "Missing configuration: {$config}";
                     $status = 'warning';

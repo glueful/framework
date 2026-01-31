@@ -133,10 +133,10 @@ class ResourceCommand extends BaseCommand
     private function getDefaultResourcePath(): string
     {
         // Check if we're in an app context or framework context
-        $appPath = base_path('app/Http/Resources');
-        $srcPath = base_path('src/Http/Resources');
+        $appPath = base_path($this->getContext(), 'app/Http/Resources');
+        $srcPath = base_path($this->getContext(), 'src/Http/Resources');
 
-        if (is_dir(base_path('app'))) {
+        if (is_dir(base_path($this->getContext(), 'app'))) {
             return $appPath;
         }
 
@@ -353,7 +353,7 @@ PHP;
     private function buildNamespace(string $name): string
     {
         // Check if we're in an app or framework context
-        $baseNamespace = is_dir(base_path('app'))
+        $baseNamespace = is_dir(base_path($this->getContext(), 'app'))
             ? 'App\\Http\\Resources'
             : 'Glueful\\Http\\Resources';
 
@@ -453,14 +453,14 @@ Usage in controllers:
   // Single resource
   public function show(int \$id): Response
   {
-      \$user = User::find(\$id);
+      \$user = User::query(\$this->getContext())->find(\$id);
       return UserResource::make(\$user)->toResponse();
   }
 
   // Collection with pagination
   public function index(): Response
   {
-      \$result = User::query()->paginate(page: 1, perPage: 25);
+      \$result = User::query(\$this->getContext())->paginate(page: 1, perPage: 25);
       return UserResource::collection(\$result['data'])
           ->withPaginationFrom(\$result)
           ->toResponse();

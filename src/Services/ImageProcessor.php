@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Services;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Intervention\Image\ImageManager;
 use Intervention\Image\Interfaces\ImageInterface;
 use Intervention\Image\Encoders\AutoEncoder;
@@ -24,6 +25,8 @@ use Psr\Log\LoggerInterface;
  */
 class ImageProcessor implements ImageProcessorInterface
 {
+    private static ?ApplicationContext $defaultContext = null;
+
     private ImageManager $manager;
     private ImageInterface $image;
     /** @var CacheStore<mixed> */
@@ -58,9 +61,14 @@ class ImageProcessor implements ImageProcessorInterface
      * Static Factory Methods
      */
 
-    public static function make(string $source): self
+    public static function setContext(?ApplicationContext $context): void
     {
-        $instance = app(self::class);
+        self::$defaultContext = $context;
+    }
+
+    public static function make(string $source, ?ApplicationContext $context = null): self
+    {
+        $instance = app(self::resolveContext($context), self::class);
 
         try {
             // Validate source security
@@ -89,9 +97,12 @@ class ImageProcessor implements ImageProcessorInterface
     /**
      * @param array<string, mixed> $options
      */
-    public static function fromUrl(string $url, array $options = []): self
-    {
-        $instance = app(self::class);
+    public static function fromUrl(
+        string $url,
+        array $options = [],
+        ?ApplicationContext $context = null
+    ): self {
+        $instance = app(self::resolveContext($context), self::class);
         $instance->security->validateUrl($url);
 
         try {
@@ -123,9 +134,9 @@ class ImageProcessor implements ImageProcessorInterface
         }
     }
 
-    public static function fromUpload(UploadedFileInterface $file): self
+    public static function fromUpload(UploadedFileInterface $file, ?ApplicationContext $context = null): self
     {
-        $instance = app(self::class);
+        $instance = app(self::resolveContext($context), self::class);
 
         if ($file->getError() !== UPLOAD_ERR_OK) {
             throw BusinessLogicException::operationNotAllowed(
@@ -155,9 +166,13 @@ class ImageProcessor implements ImageProcessorInterface
         }
     }
 
-    public static function create(int $width, int $height, string $background = 'ffffff'): self
-    {
-        $instance = app(self::class);
+    public static function create(
+        int $width,
+        int $height,
+        string $background = 'ffffff',
+        ?ApplicationContext $context = null
+    ): self {
+        $instance = app(self::resolveContext($context), self::class);
 
         // Validate dimensions
         $instance->security->validateDimensions($width, $height);
@@ -202,6 +217,16 @@ class ImageProcessor implements ImageProcessorInterface
         }
 
         return $this;
+    }
+
+    private static function resolveContext(?ApplicationContext $context): ApplicationContext
+    {
+        $resolved = $context ?? self::$defaultContext;
+        if ($resolved === null) {
+            throw new \RuntimeException('ApplicationContext is required for ImageProcessor factories.');
+        }
+
+        return $resolved;
     }
 
     public function crop(int $width, int $height, ?int $x = null, ?int $y = null): self

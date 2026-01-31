@@ -1,5 +1,7 @@
 <?php
 
+$root = dirname(__DIR__);
+
 /**
  * Image Processing Configuration
  *
@@ -179,9 +181,9 @@ return [
     |
     */
     'paths' => [
-        'cache_dir' => env('IMAGE_CACHE_DIR', storage_path('cache/images')),
+        'cache_dir' => env('IMAGE_CACHE_DIR', $root . '/storage/cache/images'),
         'temp_dir' => env('IMAGE_TEMP_DIR', sys_get_temp_dir()),
-        'watermark_dir' => env('IMAGE_WATERMARK_DIR', resource_path('images/watermarks')),
+        'watermark_dir' => env('IMAGE_WATERMARK_DIR', $root . '/resources/images/watermarks'),
     ],
 
     /*
@@ -211,7 +213,7 @@ return [
     'development' => [
         'debug_mode' => env('IMAGE_DEBUG', env('APP_DEBUG', false)),
         'save_debug_images' => env('IMAGE_SAVE_DEBUG', false),
-        'debug_output_dir' => env('IMAGE_DEBUG_DIR', storage_path('debug/images')),
+        'debug_output_dir' => env('IMAGE_DEBUG_DIR', $root . '/storage/debug/images'),
         'benchmark_operations' => env('IMAGE_BENCHMARK', false),
     ],
 ];

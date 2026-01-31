@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace Glueful\Auth;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Cache\CacheStore;
 use Glueful\Interfaces\Permission\PermissionProviderInterface;
 use Glueful\Interfaces\Permission\RbacPermissionProviderInterface;
 use Glueful\Queue\QueueManager;
-use Glueful\Events\Event;
+use Glueful\Events\EventService;
 use Glueful\Events\Auth\SessionCachedEvent;
 
 /**
@@ -68,17 +69,20 @@ class SessionCacheManager
 
     /** @var QueueManager|null Queue service */
     private ?QueueManager $queueService = null;
+    private ?ApplicationContext $context;
 
     /**
      * Constructor
      *
      * @param CacheStore<mixed> $cache Cache driver service
+     * @param ApplicationContext|null $context
      */
-    public function __construct(CacheStore $cache)
+    public function __construct(CacheStore $cache, ?ApplicationContext $context = null)
     {
         $this->cache = $cache;
-        $this->ttl = (int)config('session.access_token_lifetime', self::DEFAULT_TTL);
-        $this->providerConfigs = config('security.authentication_providers', []);
+        $this->context = $context;
+        $this->ttl = (int) $this->getConfig('session.access_token_lifetime', self::DEFAULT_TTL);
+        $this->providerConfigs = (array) $this->getConfig('security.authentication_providers', []);
         $this->initializeServices();
     }
 
@@ -89,8 +93,8 @@ class SessionCacheManager
     {
         try {
             // Try to get services from DI container using the container() helper
-            if (function_exists('container')) {
-                $container = container();
+            $container = $this->getContainer();
+            if ($container !== null) {
                 if ($container->has(QueueManager::class)) {
                     $this->queueService = $container->get(QueueManager::class);
                 }
@@ -194,7 +198,9 @@ class SessionCacheManager
             // modify the payload, persist changes back to cache with the same TTL.
             try {
                 $event = new SessionCachedEvent($token, $sessionId, $provider ?? 'jwt', $sessionData);
-                Event::dispatch($event);
+                if ($this->context !== null) {
+                    app($this->context, EventService::class)->dispatch($event);
+                }
                 $updated = $event->getPayload();
                 if ($updated !== $sessionData) {
                     $this->cache->set(self::SESSION_PREFIX . $sessionId, $updated, $sessionTtl);
@@ -527,7 +533,7 @@ class SessionCacheManager
      */
     public function getCurrentSession(?string $provider = null): ?array
     {
-        $token = TokenManager::extractTokenFromRequest();
+        $token = $this->getTokenManager()->extractTokenFromRequest();
         if ($token === null || $token === '') {
             return null;
         }
@@ -663,7 +669,10 @@ class SessionCacheManager
             // 2. Fallback to direct RBAC repository access if service not available
             if (function_exists('container')) {
                 try {
-                    $container = container();
+                    $container = $this->getContainer();
+                    if ($container === null) {
+                        return [];
+                    }
                     if ($container->has('rbac.repository.user_permission')) {
                         $userPermRepo = $container->get('rbac.repository.user_permission');
                         if (method_exists($userPermRepo, 'getUserPermissions')) {
@@ -700,7 +709,10 @@ class SessionCacheManager
             // 2. Try RBAC role service directly (preferred - includes caching)
             if (function_exists('container')) {
                 try {
-                    $container = container();
+                    $container = $this->getContainer();
+                    if ($container === null) {
+                        return [];
+                    }
                     if ($container->has('rbac.role_service')) {
                         $roleService = $container->get('rbac.role_service');
                         if (method_exists($roleService, 'getUserRoles')) {
@@ -720,7 +732,10 @@ class SessionCacheManager
             // 3. Try RBAC role repository (fallback only if RoleService failed)
             if (function_exists('container')) {
                 try {
-                    $container = container();
+                    $container = $this->getContainer();
+                    if ($container === null) {
+                        return [];
+                    }
                     if ($container->has('rbac.repository.user_role')) {
                         $userRoleRepo = $container->get('rbac.repository.user_role');
                         if (method_exists($userRoleRepo, 'getUserRoles')) {
@@ -965,7 +980,11 @@ class SessionCacheManager
         try {
             // Prefer SessionStore listByUser to avoid cache-shape coupling
             try {
-                $store = container()->get(SessionStore::class);
+                $container = $this->getContainer();
+                if ($container === null) {
+                    return [];
+                }
+                $store = $container->get(SessionStore::class);
                 $fromStore = $store->listByUser($userUuid);
                 if (is_array($fromStore) && $fromStore !== []) {
                     return $fromStore;
@@ -1391,5 +1410,32 @@ class SessionCacheManager
             $transaction->rollback();
             throw $e;
         }
+    }
+
+    private function getTokenManager(): TokenManager
+    {
+        if ($this->context !== null && $this->context->hasContainer()) {
+            return $this->context->getContainer()->get(TokenManager::class);
+        }
+
+        return new TokenManager($this->context);
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if (function_exists('config') && $this->context !== null) {
+            return config($this->context, $key, $default);
+        }
+
+        return $default;
+    }
+
+    private function getContainer(): ?\Psr\Container\ContainerInterface
+    {
+        if ($this->context === null) {
+            return null;
+        }
+
+        return container($this->context);
     }
 }

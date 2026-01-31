@@ -6,6 +6,7 @@ namespace Glueful\Database;
 
 use Glueful\Services\HealthService;
 use Glueful\Exceptions\DatabaseException;
+use Glueful\Bootstrap\ApplicationContext;
 
 /**
  * Database Connection Validator
@@ -39,10 +40,11 @@ class ConnectionValidator
      * Validate database connection on startup
      *
      * @param  bool $throwOnFailure Whether to throw exception on failure
+     * @param  ApplicationContext|null $context Application context for config loading
      * @return bool True if database is available
      * @throws DatabaseException If validation fails and throwOnFailure is true
      */
-    public static function validateOnStartup(bool $throwOnFailure = false): bool
+    public static function validateOnStartup(bool $throwOnFailure = false, ?ApplicationContext $context = null): bool
     {
         if (!self::$validationEnabled) {
             return true;
@@ -63,7 +65,7 @@ class ConnectionValidator
         $errorMessage = null;
 
         try {
-            $health = HealthService::checkDatabase();
+            $health = HealthService::checkDatabase($context);
             $isAvailable = $health['status'] === 'ok';
             $healthData = $health;
 
@@ -145,14 +147,15 @@ class ConnectionValidator
 
     /**
      * Perform periodic connection health check
+     * @param  ApplicationContext|null $context Application context for config loading
      * @return array<string, mixed>
      */
-    public static function performHealthCheck(): array
+    public static function performHealthCheck(?ApplicationContext $context = null): array
     {
         $startTime = microtime(true);
 
         try {
-            $health = HealthService::checkDatabase();
+            $health = HealthService::checkDatabase($context);
             $responseTime = (microtime(true) - $startTime) * 1000; // Convert to milliseconds
 
             $result = [

@@ -30,7 +30,7 @@ final class VersionListCommand extends BaseCommand
         $this->io->title('API Versions');
 
         // Get configuration
-        $config = (array) config('api.versioning', []);
+        $config = (array) config($this->getContext(), 'api.versioning', []);
         $supported = (array) ($config['supported'] ?? []);
         $deprecated = (array) ($config['deprecated'] ?? []);
         $default = (string) ($config['default'] ?? '1');

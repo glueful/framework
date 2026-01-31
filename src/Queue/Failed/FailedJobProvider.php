@@ -2,6 +2,7 @@
 
 namespace Glueful\Queue\Failed;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use Glueful\Helpers\Utils;
 use Glueful\Security\SecureSerializer;
@@ -36,6 +37,7 @@ class FailedJobProvider
 
     /** @var int Days to keep failed jobs */
     private int $retentionDays;
+    private ?ApplicationContext $context;
 
     /**
      * Create failed job provider
@@ -49,9 +51,11 @@ class FailedJobProvider
         ?Connection $connection = null,
         string $table = 'queue_failed_jobs',
         int $maxRetries = 5,
-        int $retentionDays = 30
+        int $retentionDays = 30,
+        ?ApplicationContext $context = null
     ) {
-        $this->db = $connection ?? new Connection();
+        $this->context = $context;
+        $this->db = $connection ?? Connection::fromContext($this->context);
         $this->table = $table;
         $this->maxRetries = $maxRetries;
         $this->retentionDays = $retentionDays;

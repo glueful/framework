@@ -10,13 +10,7 @@ parameters:
         - src
         - config
     excludePaths:
-        - src/bootstrap.php  # Legacy bootstrap file
-        - src/index.php      # Entry point with global state
-        - src/_denyDirectAccess.php  # Security file
-        - src/version.php    # Simple version constants
-        - src/helpers.php    # Global helper functions
-        - src/apiDefinitionLoader.php  # API definition loader
-        - src/api-json-definitions/  # API definitions
+        - src/helpers.php  # Global helper functions with dynamic signatures
     
     # Enable proper autoloading
     bootstrapFiles:
@@ -93,4 +87,3 @@ parameters:
         - '#Foreach overwrites \$class with its value variable\.#'
         # Short ternary in helper functions
         - '#Short ternary operator is not allowed.*#'
-        

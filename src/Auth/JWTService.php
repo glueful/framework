@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Glueful\Auth;
 
+use Glueful\Bootstrap\ApplicationContext;
+
 /**
  * JWT (JSON Web Token) Service
  *
@@ -17,6 +19,7 @@ class JWTService
 
     /** @var string Default hashing algorithm */
     private static string $algorithm = 'HS256';
+    private static ?ApplicationContext $context = null;
 
     /**
      * Initialize JWT service
@@ -28,12 +31,20 @@ class JWTService
     private static function initialize(): void
     {
         if (!isset(self::$key)) {
-            $configured = config('session.jwt_key');
+            if (self::$context === null) {
+                throw new \RuntimeException('JWT key not configured');
+            }
+            $configured = config(self::$context, 'session.jwt_key');
             if (!is_string($configured) || $configured === '') {
                 throw new \RuntimeException('JWT key not configured');
             }
             self::$key = $configured;
         }
+    }
+
+    public static function setContext(ApplicationContext $context): void
+    {
+        self::$context = $context;
     }
 
     /**

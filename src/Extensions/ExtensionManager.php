@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Extensions;
 
 use Psr\Container\ContainerInterface;
+use Glueful\Bootstrap\ApplicationContext;
 
 /**
  * Discovers, registers, boots extension providers.
@@ -23,6 +24,11 @@ final class ExtensionManager
 
     public function __construct(private ContainerInterface $container)
     {
+    }
+
+    private function getContext(): ApplicationContext
+    {
+        return $this->container->get(ApplicationContext::class);
     }
 
     /**
@@ -62,10 +68,11 @@ final class ExtensionManager
             return;
         }
 
+        $context = $this->getContext();
         foreach ($this->providers as $providerClass => $provider) {
             try {
                 if (method_exists($provider, 'boot')) {
-                    $provider->boot();
+                    $provider->boot($context);
                 }
             } catch (\Throwable $e) {
                 $this->log(
@@ -83,7 +90,8 @@ final class ExtensionManager
      */
     private function loadAllProviders(): void
     {
-        foreach (ProviderLocator::all() as $providerClass) {
+        $context = $this->container->get(ApplicationContext::class);
+        foreach (ProviderLocator::all($context) as $providerClass) {
             $this->addProvider($providerClass);
         }
     }
@@ -116,10 +124,11 @@ final class ExtensionManager
 
     private function registerProviders(): void
     {
+        $context = $this->getContext();
         foreach ($this->providers as $providerClass => $provider) {
             try {
                 if (method_exists($provider, 'register')) {
-                    $provider->register();
+                    $provider->register($context);
                 }
             } catch (\Throwable $e) {
                 $this->log(
@@ -139,7 +148,7 @@ final class ExtensionManager
         static $composerLoader = null;
 
         if ($composerLoader === null) {
-            $composerLoader = require base_path('vendor/autoload.php');
+            $composerLoader = require base_path($this->getContext(), 'vendor/autoload.php');
         }
 
         if ($composerLoader instanceof \Composer\Autoload\ClassLoader) {
@@ -246,7 +255,7 @@ final class ExtensionManager
      */
     private function loadFromCache(): ?array
     {
-        $cacheFile = base_path('bootstrap/cache/extensions.php');
+        $cacheFile = base_path($this->getContext(), 'bootstrap/cache/extensions.php');
 
         if (!file_exists($cacheFile)) {
             return null;
@@ -284,7 +293,7 @@ final class ExtensionManager
      */
     private function saveToCache(): void
     {
-        $cacheFile = base_path('bootstrap/cache/extensions.php');
+        $cacheFile = base_path($this->getContext(), 'bootstrap/cache/extensions.php');
         $dir = dirname($cacheFile);
 
         if (!is_dir($dir)) {
@@ -315,7 +324,8 @@ final class ExtensionManager
     {
         // Rebuild internal providers list deterministically
         $this->providers = [];
-        $classes = $providerClasses ?? ProviderLocator::all();
+        $context = $this->container->get(ApplicationContext::class);
+        $classes = $providerClasses ?? ProviderLocator::all($context);
         foreach ($classes as $cls) {
             $this->addProvider($cls);
         }

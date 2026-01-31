@@ -7,6 +7,7 @@ namespace Glueful\Extensions;
 use Psr\Container\ContainerInterface;
 use Glueful\Database\Migrations\MigrationManager;
 use Glueful\Routing\Router;
+use Glueful\Bootstrap\ApplicationContext;
 
 /**
  * API-first base provider (PSR-11 compliant).
@@ -31,7 +32,7 @@ abstract class ServiceProvider
     }
 
     /** Register runtime configuration and setup. */
-    public function register(): void
+    public function register(ApplicationContext $context): void
     {
         /*
          * Extensions can safely do config merging, route registration, etc. here.
@@ -41,7 +42,7 @@ abstract class ServiceProvider
     }
 
     /** Boot after all providers are registered. */
-    public function boot(): void
+    public function boot(ApplicationContext $context): void
     {
  /* optional */
     }
@@ -189,16 +190,10 @@ abstract class ServiceProvider
 
             $resp = new \Symfony\Component\HttpFoundation\BinaryFileResponse($requested);
             $resp->headers->set('Content-Type', $mime);
-            $resp->headers->set('X-Content-Type-Options', 'nosniff');
-            $resp->headers->set('Cross-Origin-Resource-Policy', 'same-origin'); // Prevent passive leaks via <img src>
             // Basic hardening headers (safe defaults; override in app as needed)
-            $resp->headers->set(
-                'Content-Security-Policy',
-                "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:;"
-            );
-            $resp->headers->set('Referrer-Policy', 'no-referrer');
-            $resp->headers->set('X-Frame-Options', 'SAMEORIGIN');
-            $resp->headers->set('X-XSS-Protection', '0'); // Modern browsers rely on CSP
+            foreach (\Glueful\Security\SecurityHeaders::defaultStaticAssetHeaders() as $header => $value) {
+                $resp->headers->set($header, $value);
+            }
             $resp->setPublic();
             $resp->headers->set(
                 'Cache-Control',

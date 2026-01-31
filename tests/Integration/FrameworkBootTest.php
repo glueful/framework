@@ -6,7 +6,6 @@ namespace Glueful\Tests\Integration;
 
 use Glueful\Application;
 use Glueful\Framework;
-use Glueful\Configuration\ConfigRepositoryInterface;
 use Psr\Log\LoggerInterface;
 use PHPUnit\Framework\TestCase;
 
@@ -14,17 +13,10 @@ final class FrameworkBootTest extends TestCase
 {
     private string $testAppPath;
     private string $testConfigPath;
-    private mixed $originalContainer = null;
 
     protected function setUp(): void
     {
         parent::setUp();
-
-        // Save the original container before framework boot
-        $this->originalContainer = $GLOBALS['container'] ?? null;
-
-        // Clear any cached configuration from previous tests
-        \Glueful\Bootstrap\ConfigurationCache::clear();
 
         $this->testAppPath = sys_get_temp_dir() . '/glueful-test-' . uniqid();
         $this->testConfigPath = $this->testAppPath . '/config';
@@ -62,11 +54,6 @@ final class FrameworkBootTest extends TestCase
             $this->recursiveRemoveDirectory($this->testAppPath);
         }
 
-        // Restore the original container after framework tests
-        if ($this->originalContainer !== null) {
-            $GLOBALS['container'] = $this->originalContainer;
-        }
-
         parent::tearDown();
     }
 
@@ -101,8 +88,8 @@ final class FrameworkBootTest extends TestCase
         $framework = Framework::create($this->testAppPath)->withConfigDir($customConfigPath);
         $this->assertSame($customConfigPath, $framework->getConfigPath());
 
-        $framework->boot(allowReboot: true);
-        $this->assertTrue((bool) config('app.custom'));
+        $app = $framework->boot(allowReboot: true);
+        $this->assertTrue((bool) config($app->getContext(), 'app.custom'));
     }
 
     public function testContainerServicesRegistered(): void

@@ -144,7 +144,7 @@ class ControllerCommand extends BaseCommand
         bool $api,
         bool $force
     ): string {
-        $controllersDir = base_path('api/Controllers');
+        $controllersDir = base_path($this->getContext(), 'api/Controllers');
         $fileName = $controllerName . '.php';
         $filePath = $controllersDir . '/' . $fileName;
 
@@ -724,7 +724,7 @@ PHP;
             'disks' => [
                 'local' => [
                     'driver' => 'local',
-                    'root' => base_path()
+                    'root' => base_path($this->getContext())
                 ]
             ]
         ], new PathGuard());

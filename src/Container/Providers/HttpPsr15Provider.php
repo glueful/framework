@@ -15,7 +15,7 @@ final class HttpPsr15Provider extends BaseServiceProvider
     {
         $defs = [];
 
-        $cfg = (array) (\function_exists('config') ? config('http.psr15', []) : []);
+        $cfg = (array) (\function_exists('config') ? config($this->context, 'http.psr15', []) : []);
         if (($cfg['enabled'] ?? true) === false) {
             return $defs;
         }

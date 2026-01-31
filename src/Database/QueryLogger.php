@@ -2,6 +2,7 @@
 
 namespace Glueful\Database;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Monolog\Level;
 use Psr\Log\LoggerInterface;
 
@@ -76,6 +77,7 @@ class QueryLogger
      * @var array<string,mixed> Framework logging configuration
      */
     protected array $config;
+    private ?ApplicationContext $context;
 
 
     /**
@@ -83,22 +85,23 @@ class QueryLogger
      *
      * @param LoggerInterface|null $logger Framework logger instance
      */
-    public function __construct(?LoggerInterface $logger = null)
+    public function __construct(?LoggerInterface $logger = null, ?ApplicationContext $context = null)
     {
+        $this->context = $context;
         $this->logger = $logger;
 
         // Load framework logging configuration
-        $this->config = config(
+        $this->config = $this->getConfig(
             'logging.framework.slow_queries',
             [
-            'enabled' => true,
-            'threshold_ms' => 200,
-            'log_level' => 'warning'
+                'enabled' => true,
+                'threshold_ms' => 200,
+                'log_level' => 'warning'
             ]
         );
 
         // Default configuration based on application settings
-        $this->debugMode = config('app.debug');
+        $this->debugMode = (bool) $this->getConfig('app.debug', false);
         $this->enableTiming = $this->debugMode;
     }
 
@@ -159,6 +162,15 @@ class QueryLogger
     public function getStatistics(): array
     {
         return $this->stats;
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 
     /**
@@ -295,7 +307,7 @@ class QueryLogger
 
         // Emit QueryExecutedEvent for application-level logging
         // Applications can listen to this event for business-specific query logging
-        if (class_exists('\\Glueful\\Events\\Event')) {
+        if ($this->context !== null) {
             $metadata = [];
             if ($error !== null) {
                 $metadata['error'] = [
@@ -315,7 +327,7 @@ class QueryLogger
                 $metadata['tables'] = $tables;
             }
 
-            \Glueful\Events\Event::dispatch(
+            app($this->context, \Glueful\Events\EventService::class)->dispatch(
                 new \Glueful\Events\Database\QueryExecutedEvent(
                     $sql,
                     $params,

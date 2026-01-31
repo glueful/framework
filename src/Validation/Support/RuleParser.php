@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Validation\Support;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Validation\Contracts\Rule;
 use Glueful\Validation\Rules;
 use InvalidArgumentException;
@@ -22,6 +23,13 @@ use InvalidArgumentException;
  */
 class RuleParser
 {
+    private ?ApplicationContext $context;
+
+    public function __construct(?ApplicationContext $context = null)
+    {
+        $this->context = $context;
+    }
+
     /**
      * Rule class mappings
      *
@@ -372,10 +380,13 @@ class RuleParser
         }
 
         // Check DI container if available
-        if (function_exists('app') && app()->has("validation.rules.{$name}")) {
-            $rule = app()->get("validation.rules.{$name}");
-            if ($rule instanceof Rule) {
-                return $rule;
+        if ($this->context !== null) {
+            $container = container($this->context);
+            if ($container->has("validation.rules.{$name}")) {
+                $rule = $container->get("validation.rules.{$name}");
+                if ($rule instanceof Rule) {
+                    return $rule;
+                }
             }
         }
 

@@ -87,7 +87,7 @@ final class WhyCommand extends BaseCommand
             }
 
             // Also check all discoverable providers via ProviderLocator
-            foreach (ProviderLocator::all() as $providerClass) {
+            foreach (ProviderLocator::all($this->getContext()) as $providerClass) {
                 $className = basename(str_replace('\\', '/', $providerClass));
                 if (stripos($className, $needle) !== false) {
                     return $providerClass;
@@ -103,13 +103,13 @@ final class WhyCommand extends BaseCommand
         $output->writeln('<info>Discovery Analysis:</info>');
 
         // Check enabled config
-        $enabled = (array) config('extensions.enabled', []);
+        $enabled = (array) config($this->getContext(), 'extensions.enabled', []);
         if (in_array($needle, $enabled, true)) {
             $output->writeln('✓ Found in: extensions.enabled config');
         }
 
         // Check dev_only config
-        $devOnly = (array) config('extensions.dev_only', []);
+        $devOnly = (array) config($this->getContext(), 'extensions.dev_only', []);
         if (in_array($needle, $devOnly, true)) {
             $appEnv = $_ENV['APP_ENV'] ?? (getenv('APP_ENV') !== false ? getenv('APP_ENV') : 'production');
             if ($appEnv !== 'production') {
@@ -120,9 +120,9 @@ final class WhyCommand extends BaseCommand
         }
 
         // Check Composer packages
-        $scanComposer = config('extensions.scan_composer', true);
+        $scanComposer = config($this->getContext(), 'extensions.scan_composer', true);
         if ($scanComposer === true) {
-            $manifest = new PackageManifest();
+            $manifest = new PackageManifest($this->getContext());
             $composerProviders = $manifest->getGluefulProviders();
             $composerProvider = array_search($needle, $composerProviders, true);
             if ($composerProvider !== false) {
@@ -135,7 +135,7 @@ final class WhyCommand extends BaseCommand
         // Check local scan
         $appEnv = $_ENV['APP_ENV'] ?? (getenv('APP_ENV') !== false ? getenv('APP_ENV') : 'production');
         if ($appEnv !== 'production') {
-            $localPath = config('extensions.local_path');
+            $localPath = config($this->getContext(), 'extensions.local_path');
             if ($localPath !== null) {
                 $localProviders = $this->scanLocalExtensions($localPath);
                 if (in_array($needle, $localProviders, true)) {
@@ -156,7 +156,7 @@ final class WhyCommand extends BaseCommand
         $output->writeln('<info>Configuration Impact:</info>');
 
         // Check allow-list mode
-        $only = config('extensions.only');
+        $only = config($this->getContext(), 'extensions.only');
         if ($only !== null) {
             $onlyArray = (array) $only;
             if (in_array($needle, $onlyArray, true)) {
@@ -168,7 +168,7 @@ final class WhyCommand extends BaseCommand
         }
 
         // Check blacklist
-        $disabled = (array) config('extensions.disabled', []);
+        $disabled = (array) config($this->getContext(), 'extensions.disabled', []);
         if (in_array($needle, $disabled, true)) {
             $output->writeln('✗ Reason: Listed in extensions.disabled (blacklisted)');
         } elseif (count($disabled) > 0) {
@@ -235,7 +235,7 @@ final class WhyCommand extends BaseCommand
     private function scanLocalExtensions(string $path): array
     {
         $providers = [];
-        $extensionsPath = base_path($path);
+        $extensionsPath = base_path($this->getContext(), $path);
 
         if (!is_dir($extensionsPath)) {
             return [];

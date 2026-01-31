@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Support\Documentation;
 
 use ReflectionClass;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Extensions\ExtensionManager;
 use Glueful\Services\FileFinder;
 use phpDocumentor\Reflection\DocBlockFactory;
@@ -39,6 +40,9 @@ class CommentsDocGenerator
     /** @var ExtensionManager Extensions manager for checking enabled extensions */
     private ExtensionManager $extensionsManager;
 
+    /** @var ApplicationContext */
+    private ApplicationContext $context;
+
     /** @var array<string, array{mtime: int, data: array<string, mixed>}> File parse cache */
     private array $parseCache = [];
 
@@ -53,20 +57,28 @@ class CommentsDocGenerator
      * @param string|null $routesPath Custom path to routes directory
      * @param string|null $routesOutputPath Custom output path for routes documentation
      * @param ExtensionManager|null $extensionsManager Extensions manager instance
+     * @param ApplicationContext $context Application context
      */
     public function __construct(
+        ApplicationContext $context,
         ?string $localExtensionsPath = null,
         ?string $outputPath = null,
         ?string $routesPath = null,
         ?string $routesOutputPath = null,
         ?ExtensionManager $extensionsManager = null
     ) {
+        $this->context = $context;
         // Local extensions path is optional - only used as fallback when reflection fails
-        $this->localExtensionsPath = $localExtensionsPath ?? config('app.paths.project_extensions');
-        $this->outputPath = $outputPath ?? config('documentation.paths.extension_definitions');
-        $this->routesPath = $routesPath ?? config('documentation.sources.routes');
-        $this->routesOutputPath = $routesOutputPath ?? config('documentation.paths.route_definitions');
-        $this->extensionsManager = $extensionsManager ?? container()->get(ExtensionManager::class);
+        $this->localExtensionsPath = $localExtensionsPath
+            ?? config($this->context, 'app.paths.project_extensions');
+        $this->outputPath = $outputPath
+            ?? config($this->context, 'documentation.paths.extension_definitions');
+        $this->routesPath = $routesPath
+            ?? config($this->context, 'documentation.sources.routes');
+        $this->routesOutputPath = $routesOutputPath
+            ?? config($this->context, 'documentation.paths.route_definitions');
+        $this->extensionsManager = $extensionsManager
+            ?? container($this->context)->get(ExtensionManager::class);
         $this->docBlockFactory = DocBlockFactory::createInstance();
     }
 
@@ -307,7 +319,7 @@ class CommentsDocGenerator
         }
 
         // Get all route files in the routes directory using FileFinder
-        $fileFinder = container()->get(FileFinder::class);
+        $fileFinder = container($this->context)->get(FileFinder::class);
         $routeFiles = $fileFinder->findRouteFiles([$this->routesPath]);
 
         foreach ($routeFiles as $routeFileObj) {
@@ -362,7 +374,7 @@ class CommentsDocGenerator
         $paths = [];
 
         // Get route prefix from config
-        $routePrefixes = config('documentation.sources.route_prefixes', []);
+        $routePrefixes = config($this->context, 'documentation.sources.route_prefixes', []);
         $routeFileName = strtolower($routeName) . '.php';
         $pathPrefix = $routePrefixes[$routeFileName] ?? '';
 
@@ -410,16 +422,9 @@ class CommentsDocGenerator
                 'responses' => $route['responses']
             ];
 
-            // Add request body if present
+            // Add request body if present (auto-detects multipart/form-data for file uploads)
             if (($route['requestBody'] ?? []) !== []) {
-                $operation['requestBody'] = [
-                    'required' => true,
-                    'content' => [
-                        'application/json' => [
-                            'schema' => $route['requestBody']
-                        ]
-                    ]
-                ];
+                $operation['requestBody'] = $this->buildRequestBody($route['requestBody']);
             }
 
             // Add security requirement if authentication is required
@@ -442,11 +447,11 @@ class CommentsDocGenerator
             'info' => [
                 'title' => $formattedRouteName . ' Routes',
                 'description' => 'API documentation for ' . $formattedRouteName . ' routes',
-                'version' => config('app.version_full', '1.0.0')
+                'version' => config($this->context, 'app.version_full', '1.0.0')
             ],
-            'servers' => config('documentation.servers', [
+            'servers' => config($this->context, 'documentation.servers', [
                 [
-                    'url' => rtrim(config('app.urls.base', 'http://localhost'), '/'),
+                    'url' => rtrim(config($this->context, 'app.urls.base', 'http://localhost'), '/'),
                     'description' => 'API Server'
                 ]
             ]),
@@ -725,22 +730,37 @@ class CommentsDocGenerator
             $requestBodyStr = str_replace($reqMatches[0], '', $requestBodyStr);
         }
 
-        // Parse fields - updated pattern to handle the actual format from files.php
+        // Parse fields - supports: name:type, name:type[], name:type[enum], name:type="desc"
+        // Array syntax: name:type[] means array of that type (e.g., media:file[] = array of files)
         $properties = [];
-        $pattern = '/(\w+):(file|string|integer|number|boolean|array|object)(?:\[([^\]]*)\])?(?:="([^"]*)")?/';
+        $pattern = '/(\w+):(file|string|integer|number|boolean|array|object)(\[\])?(?:\[([^\]]*)\])?(?:="([^"]*)")?/';
 
         preg_match_all($pattern, $requestBodyStr, $fieldMatches, PREG_SET_ORDER);
 
         foreach ($fieldMatches as $match) {
             $name = $match[1];
             $type = $match[2];
-            $enum = isset($match[3]) && $match[3] !== '' ? array_map('trim', explode(',', $match[3])) : null;
-            $description = $match[4] ?? '';
+            // Check if [] suffix was captured (indicates array type)
+            $arraySuffix = $match[3] ?? '';
+            $isArray = $arraySuffix !== '';
+            $enum = isset($match[4]) && $match[4] !== '' ? array_map('trim', explode(',', $match[4])) : null;
+            $description = $match[5] ?? '';
 
-            $property = ['type' => $type];
+            // Build the base property
+            $itemProperty = ['type' => $type];
 
             if ($enum !== null) {
-                $property['enum'] = $enum;
+                $itemProperty['enum'] = $enum;
+            }
+
+            // Wrap in array if [] suffix was used
+            if ($isArray) {
+                $property = [
+                    'type' => 'array',
+                    'items' => $itemProperty
+                ];
+            } else {
+                $property = $itemProperty;
             }
 
             if ($description !== '') {
@@ -1075,6 +1095,122 @@ class CommentsDocGenerator
     }
 
     /**
+     * Check if a request body schema contains file fields
+     *
+     * Detects both single file fields and arrays of files.
+     *
+     * @param array<string, mixed> $schema Request body schema
+     * @return bool True if file fields are present
+     */
+    private function hasFileFields(array $schema): bool
+    {
+        if (!isset($schema['properties']) || !is_array($schema['properties'])) {
+            return false;
+        }
+
+        foreach ($schema['properties'] as $property) {
+            if (is_array($property)) {
+                // Check for file type (before conversion)
+                if (isset($property['type']) && $property['type'] === 'file') {
+                    return true;
+                }
+                // Check for binary format (after conversion)
+                if (isset($property['format']) && $property['format'] === 'binary') {
+                    return true;
+                }
+                // Check for array of files
+                if (isset($property['type']) && $property['type'] === 'array' && isset($property['items'])) {
+                    $items = $property['items'];
+                    if (is_array($items)) {
+                        if (isset($items['type']) && $items['type'] === 'file') {
+                            return true;
+                        }
+                        if (isset($items['format']) && $items['format'] === 'binary') {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Convert file fields in schema to proper OpenAPI binary format
+     *
+     * OpenAPI 3.0 represents file uploads as: type: string, format: binary
+     * Handles both single file fields and arrays of files.
+     *
+     * @param array<string, mixed> $schema Request body schema
+     * @return array<string, mixed> Schema with file fields converted
+     */
+    private function convertFileFieldsToOpenApi(array $schema): array
+    {
+        if (!isset($schema['properties']) || !is_array($schema['properties'])) {
+            return $schema;
+        }
+
+        foreach ($schema['properties'] as $name => $property) {
+            if (!is_array($property)) {
+                continue;
+            }
+
+            // Convert single file field
+            if (isset($property['type']) && $property['type'] === 'file') {
+                $schema['properties'][$name]['type'] = 'string';
+                $schema['properties'][$name]['format'] = 'binary';
+            }
+
+            // Convert array of files
+            if (isset($property['type']) && $property['type'] === 'array' && isset($property['items'])) {
+                $items = $property['items'];
+                if (is_array($items) && isset($items['type']) && $items['type'] === 'file') {
+                    $schema['properties'][$name]['items']['type'] = 'string';
+                    $schema['properties'][$name]['items']['format'] = 'binary';
+                }
+            }
+        }
+
+        return $schema;
+    }
+
+    /**
+     * Get the appropriate content type for a request body
+     *
+     * Returns multipart/form-data if the schema contains file fields,
+     * otherwise returns application/json.
+     *
+     * @param array<string, mixed> $schema Request body schema
+     * @return string Content type
+     */
+    private function getRequestBodyContentType(array $schema): string
+    {
+        return $this->hasFileFields($schema) ? 'multipart/form-data' : 'application/json';
+    }
+
+    /**
+     * Build the request body OpenAPI structure with appropriate content type
+     *
+     * @param array<string, mixed> $schema Request body schema
+     * @return array<string, mixed> OpenAPI requestBody structure
+     */
+    private function buildRequestBody(array $schema): array
+    {
+        $contentType = $this->getRequestBodyContentType($schema);
+        $convertedSchema = $this->convertFileFieldsToOpenApi($schema);
+
+        return [
+            'required' => true,
+            'content' => [
+                $contentType => [
+                    'schema' => $convertedSchema
+                ]
+            ]
+        ];
+    }
+
+    /**
      * Get standard description for HTTP status code
      *
      * @param string $statusCode HTTP status code
@@ -1149,16 +1285,9 @@ class CommentsDocGenerator
                 'responses' => $route['responses']
             ];
 
-            // Add request body if present
+            // Add request body if present (auto-detects multipart/form-data for file uploads)
             if (($route['requestBody'] ?? []) !== []) {
-                $operation['requestBody'] = [
-                    'required' => true,
-                    'content' => [
-                        'application/json' => [
-                            'schema' => $route['requestBody']
-                        ]
-                    ]
-                ];
+                $operation['requestBody'] = $this->buildRequestBody($route['requestBody']);
             }
 
             // Add security requirement if authentication is required
@@ -1181,11 +1310,11 @@ class CommentsDocGenerator
             'info' => [
                 'title' => $formattedExtName . ' API',
                 'description' => 'API documentation for ' . $formattedExtName . ' extension',
-                'version' => config('app.version_full', '1.0.0')
+                'version' => config($this->context, 'app.version_full', '1.0.0')
             ],
-            'servers' => config('documentation.servers', [
+            'servers' => config($this->context, 'documentation.servers', [
                 [
-                    'url' => rtrim(config('app.urls.base', 'http://localhost'), '/'),
+                    'url' => rtrim(config($this->context, 'app.urls.base', 'http://localhost'), '/'),
                     'description' => 'API Server'
                 ]
             ]),

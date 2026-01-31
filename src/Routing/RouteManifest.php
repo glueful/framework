@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Glueful\Routing;
 
+use Glueful\Bootstrap\ApplicationContext;
+
 /**
  * Route manifest for managing framework and application routes
  *
@@ -53,7 +55,7 @@ class RouteManifest
      * then public routes. This ensures application-specific routes like /parps/{uuid}
      * are matched before generic framework routes like /{resource}/{uuid}.
      */
-    public static function load(Router $router): void
+    public static function load(Router $router, ApplicationContext $context): void
     {
         // Prevent double-loading routes
         if (self::$loaded) {
@@ -65,36 +67,49 @@ class RouteManifest
         $frameworkPath = dirname(dirname(__DIR__));
 
         // Get API prefix from helper (uses consolidated versioning config)
-        $fullPrefix = function_exists('api_prefix') ? api_prefix() : self::buildPrefixFromConfig();
+        $fullPrefix = function_exists('api_prefix')
+            ? api_prefix($context)
+            : self::buildPrefixFromConfig($context);
 
         // Load application core routes FIRST (highest priority)
         // These are loaded without automatic prefix - app controls its own prefixing
         // This ensures app routes like /parps/{uuid} match before generic /{resource}/{uuid}
+        $router->enableUnprefixedRouteWarnings(true);
         foreach ($manifest['core_routes'] as $file) {
-            if (file_exists(base_path($file))) {
-                require base_path($file);
+            if (file_exists(base_path($context, $file))) {
+                self::requireRouteFile(base_path($context, $file), $router, $context);
             }
         }
+        $router->enableUnprefixedRouteWarnings(false);
 
         // Load framework API routes with prefix (lower priority, acts as fallback)
         if (count($manifest['api_routes']) > 0) {
-            $router->group(['prefix' => $fullPrefix], function (Router $router) use ($manifest, $frameworkPath) {
+            $callback = function (Router $r) use ($manifest, $frameworkPath, $context) {
                 foreach ($manifest['api_routes'] as $file) {
                     $frameworkFile = $frameworkPath . $file;
                     if (file_exists($frameworkFile)) {
-                        require $frameworkFile;
+                        self::requireRouteFile($frameworkFile, $r, $context);
                     }
                 }
-            });
+            };
+            $router->group(['prefix' => $fullPrefix], $callback);
         }
 
         // Load public routes WITHOUT API prefix (health, docs)
         foreach ($manifest['public_routes'] as $file) {
             $frameworkFile = $frameworkPath . $file;
             if (file_exists($frameworkFile)) {
-                require $frameworkFile;
+                self::requireRouteFile($frameworkFile, $router, $context);
             }
         }
+    }
+
+    /**
+     * Require a route file with $router and $context available in scope
+     */
+    private static function requireRouteFile(string $file, Router $router, ApplicationContext $context): void
+    {
+        require $file;
     }
 
     /**
@@ -118,10 +133,10 @@ class RouteManifest
      *
      * Fallback for early bootstrap when helpers.php hasn't been loaded yet.
      */
-    private static function buildPrefixFromConfig(): string
+    private static function buildPrefixFromConfig(ApplicationContext $context): string
     {
         /** @var array<string, mixed> $versionConfig */
-        $versionConfig = function_exists('config') ? config('api.versioning', []) : [];
+        $versionConfig = function_exists('config') ? config($context, 'api.versioning', []) : [];
         $parts = [];
 
         // Add prefix if configured (e.g., "/api")

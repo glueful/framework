@@ -6,6 +6,7 @@ namespace Glueful\Database\Factory;
 
 use Glueful\Database\ORM\Model;
 use Glueful\Database\ORM\Collection;
+use Glueful\Bootstrap\ApplicationContext;
 
 /**
  * Base Factory Class
@@ -81,6 +82,8 @@ abstract class Factory
      */
     protected array $afterMaking = [];
 
+    protected ?ApplicationContext $context = null;
+
     /**
      * Models to recycle for relationships
      *
@@ -106,9 +109,10 @@ abstract class Factory
      * @param object|null $faker Faker\Generator instance or null to auto-load
      * @throws \RuntimeException if Faker is not installed
      */
-    public function __construct(?object $faker = null)
+    public function __construct(?object $faker = null, ?ApplicationContext $context = null)
     {
         $this->faker = $faker ?? FakerBridge::getInstance();
+        $this->context = $context;
     }
 
     /**
@@ -124,10 +128,10 @@ abstract class Factory
      * @param class-string<TModel>|null $model
      * @return static
      */
-    public static function new(?string $model = null): static
+    public static function new(?string $model = null, ?ApplicationContext $context = null): static
     {
         /** @phpstan-ignore-next-line Static factory with generics */
-        $factory = new static();
+        $factory = new static(context: $context);
 
         if ($model !== null) {
             $factory->model = $model;
@@ -256,7 +260,7 @@ abstract class Factory
             $modelAttributes = $this->resolveAttributes($attributes);
 
             /** @var TModel $model */
-            $model = $this->model::create($modelAttributes);
+            $model = $this->model::create($this->requireContext(), $modelAttributes);
 
             // Run afterCreating callbacks
             foreach ($this->afterCreating as $callback) {
@@ -267,6 +271,15 @@ abstract class Factory
         }
 
         return $models;
+    }
+
+    private function requireContext(): ApplicationContext
+    {
+        if ($this->context === null) {
+            throw new \RuntimeException('ApplicationContext is required to create models.');
+        }
+
+        return $this->context;
     }
 
     /**

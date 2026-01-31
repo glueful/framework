@@ -4,6 +4,154 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.22.0] - 2026-01-30 — Achernar
+
+Major refactoring release replacing global state with explicit dependency injection via `ApplicationContext`. This release improves testability, enables multi-app support, and prepares the framework for long-running server environments (Swoole, RoadRunner).
+
+### Added
+
+#### Console Command Auto-Discovery
+- **Automatic command registration**: Commands are now auto-discovered from `src/Console/Commands/` directory
+  - Scans for classes with `#[AsCommand]` attribute
+  - Skips abstract classes automatically
+  - No manual registration required - just create a command file
+- **Production caching**: Cached manifest for fast startup in production
+  - Auto-generated on first production run
+  - Zero overhead after initial cache
+- **New CLI command**: `commands:cache` for cache management
+  - `php glueful commands:cache` - Generate cache
+  - `php glueful commands:cache --clear` - Clear cache
+  - `php glueful commands:cache --status` - Show cache info
+- **Removed duplication**: Eliminated duplicate command lists from `Application.php` and `ConsoleProvider.php`
+
+#### ApplicationContext Dependency Injection
+- **Explicit context parameter**: All helper functions now require `ApplicationContext` as first parameter:
+  - `config($context, $key, $default)` - Get configuration values
+  - `app($context, $id)` - Resolve services from container
+  - `base_path($context, $path)` - Get base path
+  - `storage_path($context, $path)` - Get storage path
+  - `container($context)` - Get DI container
+  - `auth($context)` - Get authentication guard
+  - `image($context, $source)` - Get image processor
+
+- **QueueContextHolder** (`src/Events/QueueContextHolder.php`): New class to hold queue context, replacing deprecated static trait properties (PHP 8.3 compatibility)
+
+- **PHPStan banned_code rule**: Added rule in `phpstan.neon` to prevent `$GLOBALS` usage in new code
+
+#### Service Provider Updates
+- **ServiceProvider interface**: `register()` and `boot()` methods now receive `ApplicationContext` parameter
+- **BaseExtension**: Extension `boot()` method receives `ApplicationContext` for proper DI access
+
+### Changed
+
+#### Authentication Services
+- **AuthenticationService**: Refactored to use `ApplicationContext` for all container and config access
+- **SessionStore**: Updated to resolve dependencies via context injection
+- **TokenManager**: Converted static caches to instance-based with context support
+- **JwtAuthenticationProvider**: Added context-aware configuration loading
+- **SessionCacheManager**: Updated for explicit context dependency
+
+#### Core Services
+- **ResolvesSessionStore trait**: Simplified to provide default `getContext()` method, removing redundant `method_exists()` checks
+- **CacheFactory**: Updated Redis/Memcached configuration to use context
+- **CoreProvider**: Refactored logging and service registration for context injection
+- **ImageProvider**: Simplified config loading with helper closure pattern
+
+#### Console Commands
+- All scaffold and system commands updated to use `$this->getContext()` for configuration access
+- Improved output formatting in Database/StatusCommand, Extensions/ListCommand, and others
+
+#### Routes
+- Route files (`auth.php`, `docs.php`, `health.php`, `resource.php`) updated to receive and use `ApplicationContext`
+
+### Fixed
+
+#### PHP 8.3 Compatibility
+- **InteractsWithQueue trait**: Fixed deprecated static trait method/property access by moving context storage to `QueueContextHolder` class
+
+#### PHPStan Errors
+- **ErrorResponseDTO**: Fixed duplicate `$context` property declaration, renamed array context to `$errorContext`
+- **SendNotification job**: Fixed visibility mismatch (`private` → `protected`) for `$context` property
+- **AuthFailureTracker**: Added missing return statement in `createCacheInstance()` method
+
+#### PHPCS Line Length Violations
+- Fixed 25+ files with lines exceeding 120 characters:
+  - `CacheFactory.php`, `CoreProvider.php`, `ImageProvider.php`
+  - `JwtAuthenticationProvider.php`, `RouteManifest.php`
+  - `helpers.php`, `Database/StatusCommand.php`
+  - `Extensions/ListCommand.php`, `Extensions/ClearCommand.php`
+  - `OpenApiDocsCommand.php`, `ModelCommand.php`, `CreateListenerCommand.php`
+
+#### Test Suite
+- **ServiceProviderTest**: Updated `TestServiceProvider` method signatures to match parent class
+- **RouterTest**: Added `ApplicationContext` initialization for `RouteCache`
+- **AttributeRouteLoaderTest**: Fixed test container to provide `ApplicationContext`
+- **RouterIntegrationTest**: Proper context setup for route cache testing
+- **CliIntegrationTest**: Skip tests gracefully when database not configured
+
+### Removed
+
+- **ConfigurationCache static class**: Functionality moved to `ApplicationContext::getConfig()`
+- **Legacy phpstan.neon excludes**: Removed references to non-existent files (`bootstrap.php`, `index.php`, `apiDefinitionLoader.php`, etc.)
+
+### Migration Guide
+
+#### Updating Helper Function Calls
+
+```php
+// Before (1.21.x)
+$value = config('app.name');
+$service = app(MyService::class);
+$path = base_path('storage');
+
+// After (1.22.0)
+$value = config($context, 'app.name');
+$service = app($context, MyService::class);
+$path = base_path($context, 'storage');
+```
+
+#### Updating Service Providers
+
+```php
+// Before (1.21.x)
+class MyProvider extends ServiceProvider
+{
+    public function register(): void { }
+    public function boot(): void { }
+}
+
+// After (1.22.0)
+class MyProvider extends ServiceProvider
+{
+    public function register(ApplicationContext $context): void { }
+    public function boot(ApplicationContext $context): void { }
+}
+```
+
+#### Updating Extensions
+
+```php
+// Before (1.21.x)
+class MyExtension extends BaseExtension
+{
+    public function boot(): void
+    {
+        $setting = config('my.setting');
+    }
+}
+
+// After (1.22.0)
+class MyExtension extends BaseExtension
+{
+    public function boot(ApplicationContext $context): void
+    {
+        $setting = config($context, 'my.setting');
+    }
+}
+```
+
+---
+
 ## [1.21.0] - 2026-01-24 — Mira
 
 Feature release refactoring the file upload system with improved architecture, pure PHP media metadata extraction, and enhanced configurability.

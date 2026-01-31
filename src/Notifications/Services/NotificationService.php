@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Notifications\Services;
 
 use DateTime;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Helpers\Utils;
 use Glueful\Extensions\ExtensionManager;
 use Glueful\Notifications\Contracts\Notifiable;
@@ -55,6 +56,10 @@ class NotificationService implements ConfigurableInterface
      */
     private $idGenerator;
 
+    /**
+     * @var ApplicationContext|null Application context for container access
+     */
+    private ?ApplicationContext $context;
 
     /**
      * NotificationService constructor
@@ -64,17 +69,20 @@ class NotificationService implements ConfigurableInterface
      * @param TemplateManager|null $templateManager Template manager
      * @param NotificationMetricsService|null $metricsService Metrics service
      * @param array<string, mixed> $config Configuration options
+     * @param ApplicationContext|null $context Application context
      */
     public function __construct(
         NotificationDispatcher $dispatcher,
         NotificationRepository $repository,
         ?TemplateManager $templateManager = null,
         ?NotificationMetricsService $metricsService = null,
-        array $config = []
+        array $config = [],
+        ?ApplicationContext $context = null
     ) {
         $this->dispatcher = $dispatcher;
         $this->repository = $repository;
         $this->templateManager = $templateManager;
+        $this->context = $context;
 
         // Resolve and validate configuration
         $this->resolveOptions($config);
@@ -694,8 +702,12 @@ class NotificationService implements ConfigurableInterface
      */
     protected function resolveNotifiableEntityThroughExtensions(string $type, string $id): ?Notifiable
     {
+        if ($this->context === null) {
+            return null;
+        }
+
         // Get all loaded extensions through ExtensionManager
-        $extensionManager = container()->get(ExtensionManager::class);
+        $extensionManager = container($this->context)->get(ExtensionManager::class);
         $extensions = $extensionManager->getLoadedExtensions();
 
         // Look for extensions that might support this type of notifiable entity

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Repository;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use Glueful\Repository\Interfaces\RepositoryInterface;
 use Glueful\Repository\Traits\TransactionTrait;
@@ -11,7 +12,7 @@ use Glueful\Helpers\Utils;
 use Glueful\Exceptions\DatabaseException;
 use Glueful\Events\Database\EntityCreatedEvent;
 use Glueful\Events\Database\EntityUpdatedEvent;
-use Glueful\Events\Event;
+use Glueful\Events\EventService;
 
 /**
  * Base Repository
@@ -45,6 +46,7 @@ abstract class BaseRepository implements RepositoryInterface
     /** @var bool Whether this table has updated_at timestamp column */
     protected bool $hasUpdatedAt = true;
 
+    protected ?ApplicationContext $context = null;
 
     /** @var Connection|null Shared database connection across all repositories */
     private static ?Connection $sharedConnection = null;
@@ -57,9 +59,18 @@ abstract class BaseRepository implements RepositoryInterface
      *
      * @return Connection The shared database connection
      */
-    protected static function getSharedConnection(): Connection
+    protected static function getSharedConnection(?ApplicationContext $context = null): Connection
     {
-        return self::$sharedConnection ??= new Connection();
+        if (self::$sharedConnection === null) {
+            self::$sharedConnection = Connection::fromContext($context);
+            return self::$sharedConnection;
+        }
+
+        if ($context !== null && self::$sharedConnection->hasContext() === false) {
+            self::$sharedConnection = Connection::fromContext($context);
+        }
+
+        return self::$sharedConnection;
     }
 
     /**
@@ -70,9 +81,9 @@ abstract class BaseRepository implements RepositoryInterface
      *
      * @return Connection The shared database connection
      */
-    protected static function getSharedDb(): Connection
+    protected static function getSharedDb(?ApplicationContext $context = null): Connection
     {
-        return self::getSharedConnection();
+        return self::getSharedConnection($context);
     }
 
     /**
@@ -82,13 +93,14 @@ abstract class BaseRepository implements RepositoryInterface
      *
      * @param Connection|null $connection Optional connection override
      */
-    public function __construct(?Connection $connection = null)
+    public function __construct(?Connection $connection = null, ?ApplicationContext $context = null)
     {
+        $this->context = $context;
         if ($connection !== null) {
             self::$sharedConnection = $connection;
         }
 
-        $this->db = self::getSharedDb();
+        $this->db = self::getSharedDb($context);
         $this->table = $this->getTableName();
     }
 
@@ -238,7 +250,7 @@ abstract class BaseRepository implements RepositoryInterface
         $uuid = $data[$this->primaryKey];
 
         // Dispatch entity created event
-        Event::dispatch(new EntityCreatedEvent($data, $this->table, [
+        $this->dispatchEvent(new EntityCreatedEvent($data, $this->table, [
             'entity_id' => $uuid,
             'timestamp' => time(),
             'primary_key' => $this->primaryKey,
@@ -273,7 +285,7 @@ abstract class BaseRepository implements RepositoryInterface
             // Construct entity data with ID for the event
             $entityData = array_merge($data, [$this->primaryKey => $uuid]);
 
-            Event::dispatch(new EntityUpdatedEvent($entityData, $this->table, $data, [
+            $this->dispatchEvent(new EntityUpdatedEvent($entityData, $this->table, $data, [
                 'entity_id' => $uuid,
                 'timestamp' => time(),
                 'primary_key' => $this->primaryKey,
@@ -309,6 +321,19 @@ abstract class BaseRepository implements RepositoryInterface
         }
 
         return $success;
+    }
+
+    private function dispatchEvent(object $event): void
+    {
+        if ($this->context === null) {
+            return;
+        }
+
+        try {
+            app($this->context, EventService::class)->dispatch($event);
+        } catch (\Throwable) {
+            // best-effort only
+        }
     }
 
     /**

@@ -196,7 +196,7 @@ class ModelCommand extends BaseCommand
         ?string $table,
         bool $force
     ): string {
-        $modelsDir = base_path('api/Models');
+        $modelsDir = base_path($this->getContext(), 'api/Models');
         $fileName = $modelName . '.php';
         $filePath = $modelsDir . '/' . $fileName;
 
@@ -436,7 +436,7 @@ PHP;
         $migrationName = "create_{$tableName}_table";
         $fileName = "{$timestamp}_{$migrationName}.php";
 
-        $migrationsDir = base_path('migrations');
+        $migrationsDir = base_path($this->getContext(), 'migrations');
 
         // Ensure directory exists
         if (!is_dir($migrationsDir)) {
@@ -512,13 +512,14 @@ PHP;
         $this->line('');
         $this->info('Example usage:');
         $this->line("  // Find by ID");
-        $this->line("  \${$this->camelCase($modelName)} = {$modelName}::find(1);");
+        $this->line("  \${$this->camelCase($modelName)} = {$modelName}::find(\$this->getContext(), 1);");
         $this->line('');
         $this->line("  // Query builder");
         $this->line("  \$items = {$modelName}::where('status', 'active')->get();");
         $this->line('');
         $this->line("  // Create new record");
-        $this->line("  \${$this->camelCase($modelName)} = {$modelName}::create(['name' => 'Example']);");
+        $varName = $this->camelCase($modelName);
+        $this->line("  \${$varName} = {$modelName}::create(\$ctx, ['name' => 'Example']);");
         $this->line('');
     }
 

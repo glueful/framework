@@ -76,7 +76,10 @@ class NotificationRetryJob extends Job
             default => throw new \InvalidArgumentException("Unknown retry type: {$retryType}")
         };
 
-        app(LogManager::class)->info('Notification retry completed', [
+        $logger = $this->context !== null
+            ? container($this->context)->get(LogManager::class)
+            : LogManager::getInstance();
+        $logger->info('Notification retry completed', [
             'retry_type' => $retryType,
             'processed' => $result['processed'] ?? 0,
             'successful' => $result['successful'] ?? 0,
@@ -95,7 +98,10 @@ class NotificationRetryJob extends Job
         $retryType = $data['retryType'] ?? 'process';
         $options = $data['options'] ?? [];
 
-        app(LogManager::class)->error('Notification retry job failed', [
+        $logger = $this->context !== null
+            ? container($this->context)->get(LogManager::class)
+            : LogManager::getInstance();
+        $logger->error('Notification retry job failed', [
             'retry_type' => $retryType,
             'options' => $options,
             'error' => $exception->getMessage()

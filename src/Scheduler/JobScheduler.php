@@ -4,6 +4,7 @@ namespace Glueful\Scheduler;
 
 use Cron\CronExpression;
 use DateTime;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use Glueful\Helpers\Utils;
 use Glueful\Lock\LockManagerInterface;
@@ -72,19 +73,21 @@ class JobScheduler
     /** @var LockManagerInterface|null Lock manager for preventing concurrent executions */
     protected ?LockManagerInterface $lockManager;
 
+    private ?ApplicationContext $context;
+
     /**
      * Constructor
      */
-    public function __construct(?LockManagerInterface $lockManager = null)
+    public function __construct(?LockManagerInterface $lockManager = null, ?ApplicationContext $context = null)
     {
-        $this->db = new Connection();
+        $this->context = $context;
+        $this->db = Connection::fromContext($this->context);
 
         // Get lock manager from container if not provided
         if ($lockManager !== null) {
             $this->lockManager = $lockManager;
         } else {
-            global $container;
-            $this->lockManager = $container?->get(LockManagerInterface::class) ?? null;
+            $this->lockManager = $this->getLockManagerFromContainer();
         }
 
         // Ensure required database tables exist before trying to use them
@@ -106,8 +109,7 @@ class JobScheduler
     protected function ensureTablesExist(): void
     {
         try {
-            $connection = new Connection();
-            $schema = $connection->getSchemaBuilder();
+            $schema = $this->db->getSchemaBuilder();
 
             // Create Scheduled Jobs Table
             if (!$schema->hasTable('scheduled_jobs')) {
@@ -170,6 +172,21 @@ class JobScheduler
             $schema->execute();
         } catch (\Exception $e) {
             $this->log("Failed to ensure table existence: " . $e->getMessage(), 'error');
+        }
+    }
+
+    private function getLockManagerFromContainer(): ?LockManagerInterface
+    {
+        if ($this->context === null || !function_exists('container')) {
+            return null;
+        }
+
+        try {
+            $container = container($this->context);
+            $manager = $container->get(LockManagerInterface::class);
+            return $manager instanceof LockManagerInterface ? $manager : null;
+        } catch (\Throwable) {
+            return null;
         }
     }
 
@@ -481,7 +498,9 @@ class JobScheduler
 
     public function loadCoreJobsFromConfig(): void
     {
-        $configFile = config_path('schedule.php');
+        $configFile = $this->context !== null
+            ? config_path($this->context, 'schedule.php')
+            : 'config/schedule.php';
         if (!file_exists($configFile)) {
             return;
         }

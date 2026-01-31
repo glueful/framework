@@ -40,7 +40,7 @@ trait ResponseCachingTrait
     protected function getCacheStore(): CacheStore
     {
         try {
-            return container()->get(CacheStore::class);
+            return container($this->getContext())->get(CacheStore::class);
         } catch (\Exception $e) {
             throw new \RuntimeException('CacheStore is required for response caching: ' . $e->getMessage());
         }
@@ -387,7 +387,7 @@ trait ResponseCachingTrait
         int $ttl = 3600
     ): Response {
         // Add edge cache headers based on route pattern
-        $edgeService = new EdgeCacheService();
+        $edgeService = container($this->getContext())->get(EdgeCacheService::class);
         $contentType = $this->request->headers->get('Accept', 'application/json');
         $headers = $edgeService->generateCacheHeaders($pattern, $contentType);
 

@@ -10,6 +10,7 @@ use Glueful\Interfaces\Permission\PermissionStandards;
 use Glueful\Permissions\Exceptions\PermissionException;
 use Glueful\Permissions\Exceptions\ProviderNotFoundException;
 use Glueful\Auth\AuthenticationService;
+use Glueful\Bootstrap\ApplicationContext;
 
 /**
  * Permission Manager
@@ -44,6 +45,7 @@ class PermissionManager implements PermissionManagerInterface
 
     /** @var \Glueful\Auth\SessionCacheManager|null Session cache manager instance */
     private ?\Glueful\Auth\SessionCacheManager $sessionCacheManager = null;
+    private ?ApplicationContext $context = null;
 
 
 /** @var \Glueful\Permissions\Gate|null */
@@ -606,15 +608,21 @@ class PermissionManager implements PermissionManagerInterface
     {
         try {
             // Try to get session from SessionStore
+            if ($this->context === null) {
+                return null;
+            }
             /** @var \Glueful\Auth\Interfaces\SessionStoreInterface $store */
-            $store = container()->get(\Glueful\Auth\Interfaces\SessionStoreInterface::class);
+            $store = container($this->context)->get(\Glueful\Auth\Interfaces\SessionStoreInterface::class);
             $sessionData = $store->getByAccessToken($token);
             if ($sessionData !== null && isset($sessionData['user_uuid'])) {
                 return $sessionData['user_uuid'];
             }
 
             // Fallback: try direct token validation
-            $user = AuthenticationService::validateAccessToken($token);
+            $authService = $this->context->hasContainer()
+                ? container($this->context)->get(AuthenticationService::class)
+                : new AuthenticationService(context: $this->context);
+            $user = $authService->validateAccessToken($token, $this->context);
             if ($user !== null && isset($user['uuid'])) {
                 return $user['uuid'];
             }
@@ -708,9 +716,12 @@ class PermissionManager implements PermissionManagerInterface
      *
      * @param \Glueful\Auth\SessionCacheManager|null $sessionCacheManager Optional session cache manager
      */
-    public function __construct(?\Glueful\Auth\SessionCacheManager $sessionCacheManager = null)
-    {
+    public function __construct(
+        ?\Glueful\Auth\SessionCacheManager $sessionCacheManager = null,
+        ?ApplicationContext $context = null
+    ) {
         $this->sessionCacheManager = $sessionCacheManager;
+        $this->context = $context;
     }
 
     /**
@@ -720,11 +731,13 @@ class PermissionManager implements PermissionManagerInterface
      *                                                                    for new instance
      * @return self
      */
-    public static function getInstance(?\Glueful\Auth\SessionCacheManager $sessionCacheManager = null): self
-    {
+    public static function getInstance(
+        ?\Glueful\Auth\SessionCacheManager $sessionCacheManager = null,
+        ?ApplicationContext $context = null
+    ): self {
         static $instance = null;
         if ($instance === null) {
-            $instance = new self($sessionCacheManager);
+            $instance = new self($sessionCacheManager, $context);
         }
         return $instance;
     }

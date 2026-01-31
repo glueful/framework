@@ -41,6 +41,18 @@ class RequestContext
         $this->attributes = $request->getAttributes();
     }
 
+    public function reset(?ServerRequestInterface $request = null): void
+    {
+        $request = $request ?? ServerRequestFactory::fromGlobals();
+        $this->request = $request;
+        $this->serverParams = $request->getServerParams();
+        $this->cookieParams = $request->getCookieParams();
+        $this->queryParams = $request->getQueryParams();
+        $this->parsedBody = (array) $request->getParsedBody();
+        $this->uploadedFiles = $request->getUploadedFiles();
+        $this->attributes = $request->getAttributes();
+    }
+
     /**
      * Get client IP address
      *

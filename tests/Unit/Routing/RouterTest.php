@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Glueful\Tests\Unit\Routing;
 
 use PHPUnit\Framework\TestCase;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Routing\Router;
+use Glueful\Routing\RouteCache;
 use Psr\Container\ContainerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -21,8 +23,11 @@ class RouterTest extends TestCase
     {
         parent::setUp();
 
+        // Create ApplicationContext for testing
+        $context = new ApplicationContext(sys_get_temp_dir() . '/router_test_' . uniqid());
+
         // Clear route cache to ensure clean test state
-        $cache = new \Glueful\Routing\RouteCache();
+        $cache = new RouteCache($context);
         $cache->clear();
 
         // Minimal PSR-11 test container
@@ -32,11 +37,11 @@ class RouterTest extends TestCase
             public function has(string $id): bool { return array_key_exists($id, $this->services); }
             public function get(string $id): mixed {
                 if ($this->has($id)) { return $this->services[$id]; }
-                if (class_exists($id)) { return $this->services[$id] = new $id(); }
                 throw new class("Service '".$id."' not found") extends \RuntimeException implements \Psr\Container\NotFoundExceptionInterface {};
             }
             public function set(string $id, mixed $service): void { $this->services[$id] = $service; }
         };
+        $this->container->set(ApplicationContext::class, $context);
         $this->router = new Router($this->container);
     }
 

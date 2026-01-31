@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Glueful\Database;
 
+use Glueful\Bootstrap\ApplicationContext;
+
 /**
  * Query Hasher
  *
@@ -12,6 +14,12 @@ namespace Glueful\Database;
  */
 class QueryHasher
 {
+    private ?ApplicationContext $context;
+
+    public function __construct(?ApplicationContext $context = null)
+    {
+        $this->context = $context;
+    }
     /**
      * Generate a normalized hash key for a query and its parameters
      *
@@ -50,7 +58,7 @@ class QueryHasher
         $hash = $this->hash($query, $params);
 
         // Determine connection and db name if not provided
-        $connection = $connection !== '' ? $connection : (string)config('database.engine', 'mysql');
+        $connection = $connection !== '' ? $connection : (string) $this->getConfig('database.engine', 'mysql');
         $dbName = $dbName !== '' ? $dbName : $this->getDatabaseName($connection);
 
         // Combine all components into a cache key with query type prefix
@@ -132,11 +140,20 @@ class QueryHasher
     {
         if ($connection === 'sqlite') {
             // For SQLite, use the database file path
-            return config('database.sqlite.primary', 'sqlite');
+            return (string) $this->getConfig('database.sqlite.primary', 'sqlite');
         }
 
         // For MySQL and PostgreSQL, use the database name
-        return config("database.{$connection}.db", $connection);
+        return (string) $this->getConfig("database.{$connection}.db", $connection);
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 
     /**

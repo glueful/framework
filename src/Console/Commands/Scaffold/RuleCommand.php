@@ -188,10 +188,10 @@ class RuleCommand extends BaseCommand
     private function getDefaultRulePath(): string
     {
         // Check if we're in an app context or framework context
-        $appPath = base_path('app/Validation/Rules');
-        $srcPath = base_path('src/Validation/Rules');
+        $appPath = base_path($this->getContext(), 'app/Validation/Rules');
+        $srcPath = base_path($this->getContext(), 'src/Validation/Rules');
 
-        if (is_dir(base_path('app'))) {
+        if (is_dir(base_path($this->getContext(), 'app'))) {
             return $appPath;
         }
 
@@ -376,7 +376,7 @@ PHP;
     private function buildNamespace(string $name): string
     {
         // Check if we're in an app or framework context
-        $baseNamespace = is_dir(base_path('app'))
+        $baseNamespace = is_dir(base_path($this->getContext(), 'app'))
             ? 'App\\Validation\\Rules'
             : 'Glueful\\Validation\\Rules';
 

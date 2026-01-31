@@ -2,6 +2,7 @@
 
 namespace Glueful\Queue\Jobs;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Queue\Job;
 use Glueful\Exceptions\BusinessLogicException;
 
@@ -34,6 +35,8 @@ use Glueful\Exceptions\BusinessLogicException;
  */
 class SendNotification extends Job
 {
+    protected ?ApplicationContext $context;
+
     /** @var array<int, string> Supported notification types */
     private const SUPPORTED_TYPES = [
         'email',
@@ -50,6 +53,12 @@ class SendNotification extends Job
      * @return void
      * @throws \Exception If notification sending fails
      */
+    public function __construct(array $data = [], ?ApplicationContext $context = null)
+    {
+        parent::__construct($data);
+        $this->context = $context;
+    }
+
     public function handle(): void
     {
         $data = $this->getData();
@@ -267,7 +276,10 @@ class SendNotification extends Job
         $channelManager = null;
         $dispatcher = null;
         try {
-            $c = container();
+            $c = $this->context !== null ? container($this->context) : null;
+            if ($c === null) {
+                throw new \RuntimeException('Container unavailable without ApplicationContext.');
+            }
             if ($c->has(\Glueful\Notifications\Services\NotificationDispatcher::class)) {
                 /** @var \Glueful\Notifications\Services\NotificationDispatcher $diDispatcher */
                 $diDispatcher = $c->get(\Glueful\Notifications\Services\NotificationDispatcher::class);
@@ -279,7 +291,21 @@ class SendNotification extends Job
         }
         if ($dispatcher === null || $channelManager === null) {
             $channelManager = new \Glueful\Notifications\Services\ChannelManager();
-            $dispatcher = new \Glueful\Notifications\Services\NotificationDispatcher($channelManager);
+            $events = null;
+            try {
+                $c = $this->context !== null ? container($this->context) : null;
+                if ($c !== null && $c->has(\Glueful\Events\EventService::class)) {
+                    $events = $c->get(\Glueful\Events\EventService::class);
+                }
+            } catch (\Throwable) {
+                $events = null;
+            }
+            $dispatcher = new \Glueful\Notifications\Services\NotificationDispatcher(
+                $channelManager,
+                null,
+                [],
+                $events instanceof \Glueful\Events\EventService ? $events : null
+            );
         }
 
         // Initialize EmailNotificationProvider if available
@@ -291,7 +317,10 @@ class SendNotification extends Job
             // Only register channel manually when not using DI-driven boot wiring
             $usingDi = false;
             try {
-                $c = container();
+                $c = $this->context !== null ? container($this->context) : null;
+                if ($c === null) {
+                    throw new \RuntimeException('Container unavailable without ApplicationContext.');
+                }
                 $usingDi = $c->has(\Glueful\Notifications\Services\NotificationDispatcher::class);
             } catch (\Throwable $e) {
                 $usingDi = false;
@@ -313,7 +342,11 @@ class SendNotification extends Job
 
         // Initialize NotificationService with required dispatcher and repository
         $notificationRepository = new \Glueful\Repository\NotificationRepository();
-        return new \Glueful\Notifications\Services\NotificationService($dispatcher, $notificationRepository);
+        return new \Glueful\Notifications\Services\NotificationService(
+            $dispatcher,
+            $notificationRepository,
+            context: $this->context
+        );
     }
 
     /**

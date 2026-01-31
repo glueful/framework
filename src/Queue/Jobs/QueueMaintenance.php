@@ -2,6 +2,7 @@
 
 namespace Glueful\Queue\Jobs;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Queue\QueueManager;
 use Glueful\Queue\Monitoring\WorkerMonitor;
 use Glueful\Queue\Failed\FailedJobProvider;
@@ -35,15 +36,17 @@ class QueueMaintenance
 
     /** @var array<string, mixed> Maintenance statistics */
     private array $stats = [];
+    private ?ApplicationContext $context;
 
     /**
      * Create queue maintenance job
      */
-    public function __construct()
+    public function __construct(?ApplicationContext $context = null)
     {
-        $this->queueManager = new QueueManager();
-        $this->workerMonitor = new WorkerMonitor();
-        $this->failedJobProvider = new FailedJobProvider();
+        $this->context = $context;
+        $this->queueManager = new QueueManager([], $this->context);
+        $this->workerMonitor = new WorkerMonitor(null, true, $this->context);
+        $this->failedJobProvider = new FailedJobProvider(null, 'queue_failed_jobs', 5, 30, $this->context);
         $this->stats = [
             'start_time' => time(),
             'cleaned_workers' => 0,
@@ -397,8 +400,8 @@ class QueueMaintenance
     private function getConfig(string $key, $default = null)
     {
         // Try different methods to get config
-        if (function_exists('config')) {
-            return config($key, $default);
+        if ($this->context !== null) {
+            return config($this->context, $key, $default);
         }
 
         // Fallback to environment variables

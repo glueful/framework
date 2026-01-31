@@ -94,7 +94,10 @@ class LogCleanupJob extends Job
             default => throw new \InvalidArgumentException("Unknown cleanup type: {$cleanupType}")
         };
 
-        app(LogManager::class)->info('Log cleanup completed', [
+        $logger = $this->context !== null
+            ? container($this->context)->get(LogManager::class)
+            : LogManager::getInstance();
+        $logger->info('Log cleanup completed', [
             'cleanup_type' => $cleanupType,
             'deleted_files' => $result['deleted_files'] ?? 0,
             'deleted_db_logs' => $result['deleted_db_logs'] ?? 0,
@@ -112,7 +115,10 @@ class LogCleanupJob extends Job
         $cleanupType = $data['cleanupType'] ?? 'all';
         $options = $data['options'] ?? [];
 
-        app(LogManager::class)->error('Log cleanup job failed', [
+        $logger = $this->context !== null
+            ? container($this->context)->get(LogManager::class)
+            : LogManager::getInstance();
+        $logger->error('Log cleanup job failed', [
             'cleanup_type' => $cleanupType,
             'options' => $options,
             'error' => $exception->getMessage()

@@ -2,6 +2,7 @@
 
 namespace Glueful\Services\Archive;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use Glueful\Database\Schema\Interfaces\SchemaBuilderInterface;
 use Glueful\Security\RandomStringGenerator;
@@ -39,6 +40,7 @@ class ArchiveService implements ArchiveServiceInterface
     private string $disk = 'archive';
 
     private Connection $db;
+    private ?ApplicationContext $context;
 
     /**
      * @param array<string, mixed> $config
@@ -47,13 +49,15 @@ class ArchiveService implements ArchiveServiceInterface
         ?Connection $connection = null,
         private ?SchemaBuilderInterface $schemaManager = null,
         private ?RandomStringGenerator $randomGenerator = null,
-        array $config = []
+        array $config = [],
+        ?ApplicationContext $context = null
     ) {
-        $this->db = $connection ?? new Connection();
+        $this->context = $context;
+        $this->db = $connection ?? Connection::fromContext($this->context);
         $this->schemaManager = $this->schemaManager ?? $this->db->getSchemaBuilder();
         $this->randomGenerator = $this->randomGenerator ?? new RandomStringGenerator();
         $this->config = array_merge([
-            'storage_path' => config('archive.storage.path'),
+            'storage_path' => $this->getConfig('archive.storage.path', './storage/archive'),
             'encryption_key' => $_ENV['ARCHIVE_ENCRYPTION_KEY'] ?? null,
             'compression' => 'gzip',
             'chunk_size' => 10000,
@@ -84,6 +88,15 @@ class ArchiveService implements ArchiveServiceInterface
             ],
         ];
         $this->storage = new StorageManager($storageConfig, new PathGuard());
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 
     public function archiveTable(string $table, \DateTime $cutoffDate): ArchiveResult

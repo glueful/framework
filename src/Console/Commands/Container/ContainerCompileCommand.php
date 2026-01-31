@@ -132,7 +132,7 @@ class ContainerCompileCommand extends BaseCommand
 
         // Create a test container to validate configuration
         try {
-            ContainerFactory::create(false); // Non-production for validation
+            ContainerFactory::create($this->getContext(), false); // Non-production for validation
             $this->line('✓ Container configuration is valid');
         } catch (\Exception $e) {
             throw new \RuntimeException('Container validation failed: ' . $e->getMessage());
@@ -201,7 +201,7 @@ class ContainerCompileCommand extends BaseCommand
             // Step 1: Build container definitions
             $progressBar->setMessage('Building container definition...');
             // Build a dev container to extract definitions for compilation
-            $runtime = ContainerFactory::create(false);
+            $runtime = ContainerFactory::create($this->getContext(), false);
             // Extract definitions via reflection from runtime container
             $ref = new \ReflectionClass($runtime);
             $prop = $ref->getProperty('definitions');
@@ -294,8 +294,8 @@ class ContainerCompileCommand extends BaseCommand
         // Create metadata file
         $metadata = [
             'compiled_at' => date('c'),
-            'environment' => config('app.env'),
-            'debug' => config('app.debug'),
+            'environment' => config($this->getContext(), 'app.env'),
+            'debug' => config($this->getContext(), 'app.debug'),
             'version' => '1.0.0'
         ];
 
@@ -345,8 +345,8 @@ class ContainerCompileCommand extends BaseCommand
             ['Output Directory', $outputDir],
             ['Container File Size', $this->formatFileSize($fileSize)],
             ['Optimization Level', $optimize ? 'Maximum' : 'Standard'],
-            ['Environment', config('app.env', 'unknown')],
-            ['Debug Mode', (bool) config('app.debug', false) ? 'Enabled' : 'Disabled']
+            ['Environment', config($this->getContext(), 'app.env', 'unknown')],
+            ['Debug Mode', (bool) config($this->getContext(), 'app.debug', false) ? 'Enabled' : 'Disabled']
         ]);
 
         $this->line('');

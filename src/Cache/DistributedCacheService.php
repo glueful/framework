@@ -6,6 +6,7 @@ namespace Glueful\Cache;
 
 use Glueful\Cache\CacheStore;
 use Glueful\Cache\Health\HealthMonitoringService;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Helpers\CacheHelper;
 
 /**
@@ -32,6 +33,7 @@ class DistributedCacheService implements CacheStore
 
     /** @var HealthMonitoringService|null Health monitoring service */
     private ?HealthMonitoringService $healthMonitor = null;
+    private ?ApplicationContext $context;
 
 
 
@@ -42,8 +44,12 @@ class DistributedCacheService implements CacheStore
      * @param CacheStore<mixed>|null $primaryCache Primary cache store
      * @param array<string, mixed> $config Configuration parameters
      */
-    public function __construct(?CacheStore $primaryCache = null, array $config = [])
-    {
+    public function __construct(
+        ?CacheStore $primaryCache = null,
+        array $config = [],
+        ?ApplicationContext $context = null
+    ) {
+        $this->context = $context;
         // Set up cache - try provided instance or get from container
         $this->primaryCache = $primaryCache ?? $this->createCacheInstance();
 
@@ -86,7 +92,10 @@ class DistributedCacheService implements CacheStore
     private function createCacheInstance(): ?CacheStore
     {
         try {
-            return container()->get(CacheStore::class);
+            if ($this->context !== null) {
+                return container($this->context)->get(CacheStore::class);
+            }
+            throw new \RuntimeException('Container unavailable without ApplicationContext.');
         } catch (\Exception) {
             // Try using CacheHelper as fallback
             return CacheHelper::createCacheInstance();

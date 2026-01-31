@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Glueful\Bootstrap;
 
+use Psr\Log\LoggerInterface;
+
 class BootProfiler
 {
     /** @var array<string, array<string, mixed>> */
@@ -11,10 +13,16 @@ class BootProfiler
     /** @var array<string, array<string, float>> */
     private array $phases = [];
     private float $startTime;
+    private ?LoggerInterface $logger = null;
 
     public function __construct()
     {
         $this->startTime = microtime(true);
+    }
+
+    public function setLogger(LoggerInterface $logger): void
+    {
+        $this->logger = $logger;
     }
 
     /**
@@ -125,26 +133,20 @@ class BootProfiler
 
         // Try to log through the framework logger if available
         try {
-            if (isset($GLOBALS['container'])) {
-                $container = $GLOBALS['container'];
-                if (
-                    $container instanceof \Glueful\Container\Container
-                    && $container->has(\Psr\Log\LoggerInterface::class)
-                ) {
-                    $logger = $container->get(\Psr\Log\LoggerInterface::class);
-                    if ($logger instanceof \Psr\Log\LoggerInterface) {
-                        match ($level) {
-                            'debug' => $logger->debug('Framework boot completed', $summary),
-                            'info' => $logger->info('Framework boot completed', $summary),
-                            'warning' => $logger->warning('Framework boot completed', $summary),
-                        };
-                    }
-                }
+            if ($this->logger instanceof LoggerInterface) {
+                match ($level) {
+                    'debug' => $this->logger->debug('Framework boot completed', $summary),
+                    'info' => $this->logger->info('Framework boot completed', $summary),
+                    'warning' => $this->logger->warning('Framework boot completed', $summary),
+                };
+                return;
             }
         } catch (\Throwable) {
-            // Fallback to error_log if framework logging fails
-            error_log("Framework boot: " . json_encode($summary));
+            // ignore and fall back
         }
+
+        // Fallback to error_log if framework logging fails or not available
+        error_log("Framework boot: " . json_encode($summary));
     }
 
     private function recordPhase(string $phase, float $start, float $end, ?\Throwable $exception = null): void

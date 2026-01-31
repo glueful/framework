@@ -60,7 +60,7 @@ final class ContainerMapCommand extends BaseCommand
 
         if ($rows === []) {
             // Fallback: build from runtime container (dev or when manifest absent)
-            $container = ContainerFactory::create(false);
+            $container = ContainerFactory::create($this->getContext(), false);
             $ref = new \ReflectionClass($container);
             $prop = $ref->getProperty('definitions');
             $prop->setAccessible(true);

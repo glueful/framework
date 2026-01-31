@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Auth;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Cache\CacheStore;
 use Glueful\Helpers\CacheHelper;
 
@@ -36,6 +37,7 @@ class SessionTransaction
     private string $transactionId;
     private float $startTime;
     private SessionCacheManager $sessionCacheManager;
+    private ?ApplicationContext $context;
     /**
      * @var CacheStore<mixed>
      */
@@ -44,17 +46,28 @@ class SessionTransaction
     /**
      * @param SessionCacheManager|null $sessionCacheManager
      * @param CacheStore<mixed>|null $cache
+     * @param ApplicationContext|null $context
      */
-    public function __construct(?SessionCacheManager $sessionCacheManager = null, ?CacheStore $cache = null)
-    {
-        $this->transactionId = uniqid('session_tx_', true);
-        $this->startTime = microtime(true);
-        $this->sessionCacheManager = $sessionCacheManager ?? container()->get(SessionCacheManager::class);
+    public function __construct(
+        ?SessionCacheManager $sessionCacheManager = null,
+        ?CacheStore $cache = null,
+        ?ApplicationContext $context = null
+    ) {
+        $this->context = $context;
         $this->cache = $cache ?? CacheHelper::createCacheInstance();
         if ($this->cache === null) {
             throw new \RuntimeException(
                 'CacheStore is required for SessionTransaction: Unable to create cache instance.'
             );
+        }
+        $this->transactionId = uniqid('session_tx_', true);
+        $this->startTime = microtime(true);
+        if ($sessionCacheManager !== null) {
+            $this->sessionCacheManager = $sessionCacheManager;
+        } elseif ($this->context !== null) {
+            $this->sessionCacheManager = container($this->context)->get(SessionCacheManager::class);
+        } else {
+            $this->sessionCacheManager = new SessionCacheManager($this->cache, $this->context);
         }
     }
 
@@ -134,6 +147,15 @@ class SessionTransaction
             $this->errors[] = 'Rollback failed: ' . $e->getMessage();
             return false;
         }
+    }
+
+    private function getTokenManager(): TokenManager
+    {
+        if ($this->context !== null && $this->context->hasContainer()) {
+            return $this->context->getContainer()->get(TokenManager::class);
+        }
+
+        return new TokenManager($this->context);
     }
 
     /**
@@ -303,7 +325,7 @@ class SessionTransaction
             foreach ($sessionsData as $sessionData) {
                 $userData = $sessionData['user'] ?? [];
                 if (!isset($sessionData['token'])) {
-                    $tokenPair = TokenManager::generateTokenPair($userData);
+                    $tokenPair = $this->getTokenManager()->generateTokenPair($userData);
                     $token = $tokenPair['access_token'];
                 } else {
                     $token = $sessionData['token'];

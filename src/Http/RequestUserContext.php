@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Http;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Auth\TokenManager;
 use Glueful\Auth\SessionCacheManager;
 use Glueful\Models\User;
@@ -25,6 +26,12 @@ use Glueful\Models\User;
  */
 class RequestUserContext
 {
+    private static ?ApplicationContext $context = null;
+
+    public static function setContext(?ApplicationContext $context): void
+    {
+        self::$context = $context;
+    }
 /** @var \Glueful\Permissions\Gate|null */
     private ?\Glueful\Permissions\Gate $gate = null;
 
@@ -126,7 +133,7 @@ class RequestUserContext
 
         try {
             // Extract token once per request
-            $this->token = TokenManager::extractTokenFromRequest();
+            $this->token = $this->getTokenManager()->extractTokenFromRequest();
             if ($this->token !== null) {
                 // Get optimized session data with context-aware caching
                 $context = [
@@ -134,7 +141,10 @@ class RequestUserContext
                 'ip_address' => $this->requestMetadata['ip_address'],
                 'user_agent' => $this->requestMetadata['user_agent']
                 ];
-                $sessionCacheManager = app(SessionCacheManager::class);
+                if (self::$context === null) {
+                    return $this;
+                }
+                $sessionCacheManager = container(self::$context)->get(SessionCacheManager::class);
                 $this->sessionData = $sessionCacheManager->getOptimizedSession($this->token, $context);
                 if ($this->sessionData) {
                     // If session has complete user data, use it
@@ -238,7 +248,7 @@ class RequestUserContext
                 $userData = $user->toArray();
 
                 // Get AuthenticationManager instance
-                $authManager = \Glueful\Auth\AuthBootstrap::getManager();
+                $authManager = app($this->context, \Glueful\Auth\AuthenticationManager::class);
                 $this->permissionCache[$cacheKey] = $authManager->isAdmin($userData);
             }
         }
@@ -698,6 +708,15 @@ class RequestUserContext
         ];
     }
 
+    private function getTokenManager(): \Glueful\Auth\TokenManager
+    {
+        if ($this->context !== null && $this->context->hasContainer()) {
+            return $this->context->getContainer()->get(\Glueful\Auth\TokenManager::class);
+        }
+
+        return new \Glueful\Auth\TokenManager($this->context);
+    }
+
     /**
      * Cleanup request-scoped instances
      *
@@ -714,10 +733,19 @@ class RequestUserContext
     public function __destruct()
     {
         // Log cache performance for monitoring
-        if (config('app.debug', false) === true) {
+        if (self::getConfig('app.debug', false) === true) {
             $stats = $this->getCacheStats();
             error_log("RequestUserContext stats: " . json_encode($stats));
         }
+    }
+
+    private static function getConfig(string $key, mixed $default = null): mixed
+    {
+        if (self::$context === null) {
+            return $default;
+        }
+
+        return config(self::$context, $key, $default);
     }
 
 

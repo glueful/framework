@@ -23,11 +23,12 @@ class HealthController extends BaseController
      * @param Request|null $request
      */
     public function __construct(
+        \Glueful\Bootstrap\ApplicationContext $context,
         ?RepositoryFactory $repositoryFactory = null,
         ?AuthenticationManager $authManager = null,
         ?Request $request = null
     ) {
-        parent::__construct($repositoryFactory, $authManager, $request);
+        parent::__construct($context, $repositoryFactory, $authManager, $request);
     }
     /**
      * Get overall system health status
@@ -41,7 +42,7 @@ class HealthController extends BaseController
         // Cache response with short TTL for monitoring tools
         $response = $this->cacheResponse('health_overall', function () {
 
-            $health = HealthService::getOverallHealth();
+            $health = HealthService::getOverallHealth($this->context);
 
             if ($health['status'] === 'error') {
                 return [
@@ -83,7 +84,7 @@ class HealthController extends BaseController
      */
     public function database()
     {
-        $health = HealthService::checkDatabase();
+        $health = HealthService::checkDatabase($this->context);
 
         if ($health['status'] === 'error') {
             return Response::error(
@@ -107,7 +108,7 @@ class HealthController extends BaseController
      */
     public function cache()
     {
-        $health = HealthService::checkCache();
+        $health = HealthService::checkCache($this->context);
 
         if ($health['status'] === 'error') {
             return Response::error(
@@ -133,9 +134,9 @@ class HealthController extends BaseController
      */
     public function readiness(): Response
     {
-        $db = HealthService::checkDatabase();
-        $cache = HealthService::checkCache();
-        $config = HealthService::checkConfiguration();
+        $db = HealthService::checkDatabase($this->context);
+        $cache = HealthService::checkCache($this->context);
+        $config = HealthService::checkConfiguration($this->context);
 
         $checks = [
             'database' => $db,
@@ -332,7 +333,7 @@ class HealthController extends BaseController
     private function getResponseApiPerformance(): array
     {
         try {
-            $metricsService = container()->get(ApiMetricsService::class);
+            $metricsService = container($this->getContext())->get(ApiMetricsService::class);
             $metrics = $metricsService->getApiMetrics();
 
             $currentHour = date('Y-m-d-H');
@@ -359,7 +360,7 @@ class HealthController extends BaseController
     private function getAverageResponseTime(): array
     {
         try {
-            $cache = container()->get(CacheStore::class);
+            $cache = container($this->getContext())->get(CacheStore::class);
             $currentHour = 'response_metrics:' . date('Y-m-d-H');
             $metrics = $cache->get($currentHour, ['global' => []]);
 
@@ -383,7 +384,7 @@ class HealthController extends BaseController
     private function getErrorRate(): array
     {
         try {
-            $cache = container()->get(CacheStore::class);
+            $cache = container($this->getContext())->get(CacheStore::class);
             $currentHour = 'response_metrics:' . date('Y-m-d-H');
             $metrics = $cache->get($currentHour, ['global' => []]);
 
@@ -408,7 +409,7 @@ class HealthController extends BaseController
     private function getResponseCacheHits(): array
     {
         try {
-            $cache = container()->get(CacheStore::class);
+            $cache = container($this->getContext())->get(CacheStore::class);
 
             // Try to get cache statistics if available
             if (method_exists($cache, 'getStats')) {
@@ -457,7 +458,7 @@ class HealthController extends BaseController
     // Helper methods (implement based on available services)
     private function getApplicationVersion(): string
     {
-        return config('app.version', '1.0.0');
+        return config($this->getContext(), 'app.version', '1.0.0');
     }
 
     private function getUptime(): string
@@ -693,8 +694,8 @@ class HealthController extends BaseController
     private function getQueueHealth(): array
     {
         try {
-            $queueManager = container()->get(\Glueful\Queue\QueueManager::class);
-            $workerMonitor = container()->get(\Glueful\Queue\Monitoring\WorkerMonitor::class);
+            $queueManager = container($this->getContext())->get(\Glueful\Queue\QueueManager::class);
+            $workerMonitor = container($this->getContext())->get(\Glueful\Queue\Monitoring\WorkerMonitor::class);
 
             // Aggregate queue stats (all queues)
             $stats = $queueManager->getStats();
@@ -772,7 +773,7 @@ class HealthController extends BaseController
      */
     private function getDiskUsage(): array
     {
-        $path = realpath(base_path('storage'));
+        $path = realpath(base_path($this->getContext(), 'storage'));
         $totalSpace = disk_total_space($path);
         $freeSpace = disk_free_space($path);
         $usedSpace = $totalSpace - $freeSpace;

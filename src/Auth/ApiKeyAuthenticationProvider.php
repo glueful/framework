@@ -7,6 +7,7 @@ namespace Glueful\Auth;
 use Symfony\Component\HttpFoundation\Request;
 use Glueful\Repository\UserRepository;
 use Glueful\Auth\Interfaces\AuthenticationProviderInterface;
+use Glueful\Bootstrap\ApplicationContext;
 
 // PermissionHelper no longer directly used; admin check delegates to manager
 
@@ -24,13 +25,20 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
 
     /** @var UserRepository|null User repository for looking up API keys */
     private ?UserRepository $userRepository = null;
+    private ?ApplicationContext $context = null;
+    private ?AuthenticationManager $authManager = null;
 
     /**
      * Create a new API key authentication provider
      */
-    public function __construct()
+    public function __construct(?ApplicationContext $context = null)
     {
-        // Defer UserRepository initialization until needed
+        $this->context = $context;
+    }
+
+    public function setAuthManager(AuthenticationManager $authManager): void
+    {
+        $this->authManager = $authManager;
     }
 
     /**
@@ -39,7 +47,7 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
     private function getUserRepository(): UserRepository
     {
         if ($this->userRepository === null) {
-            $this->userRepository = new UserRepository();
+            $this->userRepository = new UserRepository(null, null, $this->context);
         }
         return $this->userRepository;
     }
@@ -96,13 +104,17 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
     {
         // Delegate to the central AuthenticationManager to avoid duplication
         try {
-            $manager = AuthBootstrap::getManager();
-            return $manager->isAdmin($userData);
+            if ($this->authManager !== null) {
+                return $this->authManager->isAdmin($userData);
+            }
         } catch (\Throwable) {
             // Conservative fallback to original heuristic
             $user = $userData['user'] ?? $userData;
             return (bool)($user['is_admin'] ?? false);
         }
+
+        $user = $userData['user'] ?? $userData;
+        return (bool)($user['is_admin'] ?? false);
     }
 
     /**

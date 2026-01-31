@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Routing\Middleware;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Routing\RouteMiddleware;
 use Glueful\Exceptions\SecurityException;
 use Symfony\Component\HttpFoundation\Request;
@@ -54,6 +55,8 @@ use Psr\Container\ContainerInterface;
  */
 class LockdownMiddleware implements RouteMiddleware
 {
+    private ?ApplicationContext $context;
+
     /** @var LoggerInterface Logger instance */
     private LoggerInterface $logger;
 
@@ -71,11 +74,14 @@ class LockdownMiddleware implements RouteMiddleware
      *
      * @param LoggerInterface|null $logger Logger instance
      * @param ContainerInterface|null $container DI Container instance
+     * @param ApplicationContext|null $context Application context
      */
     public function __construct(
         ?LoggerInterface $logger = null,
-        ?ContainerInterface $container = null
+        ?ContainerInterface $container = null,
+        ?ApplicationContext $context = null
     ) {
+        $this->context = $context;
         $this->container = $container ?? $this->getDefaultContainer();
         $this->logger = $logger ?? $this->getLogger();
         $this->environment = $this->detectEnvironment();
@@ -399,7 +405,7 @@ class LockdownMiddleware implements RouteMiddleware
         $path = $this->getRequestPath($request);
 
         // Use helper to check if this is an API path (uses configured prefix)
-        if (function_exists('is_api_path') && is_api_path($path)) {
+        if ($this->context !== null && function_exists('is_api_path') && is_api_path($this->context, $path)) {
             return false;
         }
 
@@ -771,7 +777,7 @@ HTML;
     private function loadLockdownConfig(): array
     {
         try {
-            return config('lockdown', []);
+            return $this->getConfig('lockdown', []);
         } catch (\Exception) {
             // Return default configuration if config loading fails
             return [
@@ -805,7 +811,7 @@ HTML;
     private function getStoragePath(): string
     {
         try {
-            $path = config('app.paths.storage', './storage/');
+            $path = $this->getConfig('app.paths.storage', './storage/');
             return rtrim($path, '/') . '/';
         } catch (\Exception) {
             return './storage/';
@@ -894,18 +900,18 @@ HTML;
      */
     private function getDefaultContainer(): ?ContainerInterface
     {
-        if (function_exists('container')) {
+        if ($this->context !== null && function_exists('container')) {
             try {
-                $c = container();
+                $c = container($this->context);
                 return $c;
             } catch (\Exception) {
                 return null;
             }
         }
 
-        if (function_exists('app')) {
+        if ($this->context !== null && function_exists('app')) {
             try {
-                $a = app();
+                $a = app($this->context);
                 return $a instanceof ContainerInterface ? $a : null;
             } catch (\Exception) {
                 return null;
@@ -913,6 +919,15 @@ HTML;
         }
 
         return null;
+    }
+
+    private function getConfig(string $key, mixed $default = null): mixed
+    {
+        if ($this->context === null) {
+            return $default;
+        }
+
+        return config($this->context, $key, $default);
     }
 
     /**

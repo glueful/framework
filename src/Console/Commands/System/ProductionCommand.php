@@ -191,7 +191,7 @@ class ProductionCommand extends BaseCommand
         // Step 1: Current status check
         $this->io->text('Step 1: Checking current configuration...');
         $validation = SecurityManager::validateProductionEnvironment();
-        $health = HealthService::getOverallHealth();
+        $health = HealthService::getOverallHealth($this->getContext());
 
         if (count($validation['warnings']) > 0 || $health['status'] !== 'ok') {
             $this->io->warning('Issues detected in current configuration.');
@@ -234,7 +234,7 @@ class ProductionCommand extends BaseCommand
         $this->io->section('🔍 Production Readiness Check');
 
         $validation = SecurityManager::validateProductionEnvironment();
-        $health = HealthService::getOverallHealth();
+        $health = HealthService::getOverallHealth($this->getContext());
 
         if (!(bool)$validation['is_production']) {
             $this->io->warning("⚠️ Current environment is not set to production");
@@ -410,8 +410,8 @@ class ProductionCommand extends BaseCommand
         $force = $input->getOption('force');
         $backup = $this->shouldCreateBackup($input);
 
-        $templatePath = base_path('.env.production');
-        $envPath = base_path('.env');
+        $templatePath = base_path($this->getContext(), '.env.production');
+        $envPath = base_path($this->getContext(), '.env');
 
         if (!file_exists($templatePath)) {
             $this->io->error('Production template (.env.production) not found.');
@@ -502,7 +502,7 @@ class ProductionCommand extends BaseCommand
     {
         $timestamp = date('Y-m-d H:i:s T');
         $validation = SecurityManager::validateProductionEnvironment();
-        $health = HealthService::getOverallHealth();
+        $health = HealthService::getOverallHealth($this->getContext());
         $score = SecurityManager::getProductionReadinessScore();
 
         $report = $this->buildAuditReport($timestamp, $validation, $health, $score);
@@ -656,7 +656,7 @@ class ProductionCommand extends BaseCommand
 
     private function createBackup(): bool
     {
-        $envPath = base_path('.env');
+        $envPath = base_path($this->getContext(), '.env');
 
         if (!file_exists($envPath)) {
             return false;
@@ -674,7 +674,7 @@ class ProductionCommand extends BaseCommand
 
     private function updateEnvValue(string $key, string $value): bool
     {
-        $envPath = base_path('.env');
+        $envPath = base_path($this->getContext(), '.env');
 
         if (!file_exists($envPath)) {
             return false;

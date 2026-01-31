@@ -33,6 +33,26 @@ jobs:
         run: composer install --prefer-dist --no-progress
       - name: PHP syntax check
         run: find . -name "*.php" -not -path "./vendor/*" -print0 | xargs -0 -n1 php -l
+      - name: Enforce no globals or Event facade
+        run: |
+          set +e
+          # Check for $GLOBALS usage
+          GLOBALS_MATCHES=$(grep -r '\$GLOBALS\[' src/ tests/ --include="*.php" 2>/dev/null || true)
+          if [ -n "$GLOBALS_MATCHES" ]; then
+            echo "ERROR: \$GLOBALS usage detected. Use ApplicationContext instead."
+            echo "$GLOBALS_MATCHES"
+            exit 1
+          fi
+          # Check for static Event facade usage (Event::dispatch, Event::listen, etc.)
+          # Excludes: *Event::class (class constants), use statements, comments
+          EVENT_MATCHES=$(grep -rn '[^a-zA-Z]Event::' src/ tests/ --include="*.php" 2>/dev/null || true)
+          EVENT_MATCHES=$(echo "$EVENT_MATCHES" | grep -v 'Event::class' | grep -v ':use ' | grep -v ':\s*//' | grep -v '#\[' || true)
+          if [ -n "$EVENT_MATCHES" ]; then
+            echo "ERROR: Static Event facade usage detected."
+            echo "$EVENT_MATCHES"
+            exit 1
+          fi
+          echo "OK: No \$GLOBALS or Event:: facade usage found"
       - name: Check coding standards (PSR-12)
         run: |
           if [ -f vendor/bin/phpcs ]; then
