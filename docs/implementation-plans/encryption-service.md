@@ -1,9 +1,10 @@
 # Encryption Service Implementation Plan
 
 **Version:** 1.22.0+
-**Status:** Proposed
+**Status:** Implemented
 **Author:** Framework Team
 **Date:** 2026-01-30
+**Completed:** 2026-01-31
 
 ---
 
@@ -809,56 +810,56 @@ class KeyNotFoundException extends EncryptionException {}
 ### Unit Tests
 
 **Core Encryption:**
-- [ ] `testEncryptReturnsFormattedString`
-- [ ] `testDecryptReturnsOriginalValue`
-- [ ] `testEncryptDecryptRoundTrip`
-- [ ] `testEncryptProducesDifferentOutputEachTime` (random nonce)
-- [ ] `testDecryptFailsWithWrongKey`
-- [ ] `testDecryptFailsWithTamperedData`
-- [ ] `testDecryptFailsWithInvalidFormat`
-- [ ] `testIsEncryptedDetectsEncryptedStrings`
-- [ ] `testOutputContainsKeyId`
+- [x] `testEncryptReturnsFormattedString`
+- [x] `testDecryptReturnsOriginalValue`
+- [x] `testEncryptDecryptRoundTrip`
+- [x] `testEncryptProducesDifferentOutputEachTime` (random nonce)
+- [x] `testDecryptFailsWithWrongKey`
+- [x] `testDecryptFailsWithTamperedData`
+- [x] `testDecryptFailsWithInvalidFormat`
+- [x] `testIsEncryptedDetectsEncryptedStrings`
+- [x] `testOutputContainsKeyId`
 
 **AAD (Additional Authenticated Data):**
-- [ ] `testEncryptWithAadDecryptsWithSameAad`
-- [ ] `testDecryptFailsWithWrongAad`
-- [ ] `testDecryptFailsWithMissingAadWhenRequired`
-- [ ] `testAadPreventsContextSwapping`
+- [x] `testEncryptWithAadDecryptsWithSameAad`
+- [x] `testDecryptFailsWithWrongAad`
+- [x] `testDecryptFailsWithMissingAadWhenRequired`
+- [x] `testAadPreventsContextSwapping`
 
 **Key Validation:**
-- [ ] `testThrowsOnMissingKey`
-- [ ] `testThrowsOnKeyTooShort`
-- [ ] `testThrowsOnKeyTooLong`
-- [ ] `testAcceptsBase64PrefixedKey`
-- [ ] `testThrowsOnInvalidBase64Key`
+- [x] `testThrowsOnMissingKey`
+- [x] `testThrowsOnKeyTooShort`
+- [x] `testThrowsOnKeyTooLong`
+- [x] `testAcceptsBase64PrefixedKey`
+- [x] `testThrowsOnInvalidBase64Key`
 
 **Binary Handling:**
-- [ ] `testEncryptBinaryHandlesNonUtf8`
-- [ ] `testEncryptThrowsOnNonUtf8Input`
-- [ ] `testDecryptBinaryReturnsRawBytes`
+- [x] `testEncryptBinaryHandlesNonUtf8`
+- [x] `testEncryptThrowsOnNonUtf8Input`
+- [x] `testDecryptBinaryReturnsRawBytes`
 
 **Key Rotation:**
-- [ ] `testDecryptWithPreviousKeyViaKeyId`
-- [ ] `testKeyIdEnablesDirectLookup`
-- [ ] `testDecryptFailsWhenKeyIdNotFound`
+- [x] `testDecryptWithPreviousKeyViaKeyId`
+- [x] `testKeyIdEnablesDirectLookup`
+- [x] `testDecryptFailsWhenKeyIdNotFound`
 
 **File Encryption:**
-- [ ] `testEncryptFileCreatesEncryptedOutput`
-- [ ] `testDecryptFileRestoresOriginal`
-- [ ] `testFileEncryptionHandlesLargeFiles`
-- [ ] `testFileEncryptionStreamingMemoryEfficient`
+- [x] `testEncryptFileCreatesEncryptedOutput`
+- [x] `testDecryptFileRestoresOriginal`
+- [x] `testFileEncryptionHandlesLargeFiles`
+- [ ] `testFileEncryptionStreamingMemoryEfficient` (streaming API not yet implemented)
 
 **Error Handling:**
-- [ ] `testThrowsOnMissingKey`
-- [ ] `testThrowsOnInvalidKeyLength`
-- [ ] `testThrowsOnCorruptedCiphertext`
+- [x] `testThrowsOnMissingKey`
+- [x] `testThrowsOnInvalidKeyLength`
+- [x] `testThrowsOnCorruptedCiphertext`
 
 ### Integration Tests (Core)
 
-- [ ] Full encrypt → decrypt round-trip
-- [ ] Key rotation without data loss
-- [ ] File encrypt → decrypt round-trip
-- [ ] Large file streaming encryption (memory efficiency)
+- [x] Full encrypt → decrypt round-trip
+- [x] Key rotation without data loss
+- [x] File encrypt → decrypt round-trip
+- [ ] Large file streaming encryption (memory efficiency) (streaming API not yet implemented)
 
 ### Extension Tests (separate packages)
 

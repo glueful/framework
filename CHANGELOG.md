@@ -4,6 +4,105 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.24.0] - 2026-01-31 — Alpheratz
+
+Comprehensive encryption service providing secure, easy-to-use AES-256-GCM encryption for strings, files, and database fields with key rotation support.
+
+### Added
+
+#### Encryption Service Core
+- **EncryptionService** (`src/Encryption/EncryptionService.php`):
+  - AES-256-GCM authenticated encryption (industry standard)
+  - Random 12-byte nonce per encryption (prevents ciphertext repetition)
+  - 16-byte authentication tag (tamper detection)
+  - Key ID in output format for O(1) key lookup during rotation
+  - Self-identifying output format: `$glueful$v1$<key_id>$<nonce>$<ciphertext>$<tag>`
+
+- **String encryption methods**:
+  - `encrypt($value, $aad)` - Encrypt UTF-8 strings with optional AAD
+  - `decrypt($encrypted, $aad)` - Decrypt with AAD validation
+  - `encryptBinary($bytes, $aad)` - Encrypt arbitrary binary data
+  - `decryptBinary($encrypted, $aad)` - Decrypt binary data
+  - `isEncrypted($value)` - Detect encrypted strings by format
+
+- **File encryption methods**:
+  - `encryptFile($source, $dest)` - Encrypt entire files
+  - `decryptFile($source, $dest)` - Decrypt encrypted files
+  - `encryptStream($inputStream)` - Stream-based encryption
+
+- **Key management**:
+  - `rotateKey($newKey)` - Rotate to a new encryption key
+  - `encryptWithKey($value, $key, $aad)` - Encrypt with specific key
+  - `decryptWithKey($encrypted, $key, $aad)` - Decrypt with specific key
+
+#### AAD (Additional Authenticated Data) Support
+- Context binding prevents cross-field attacks
+- Encrypting with `aad: 'user.ssn'` requires same AAD for decryption
+- Prevents copying encrypted SSN to API key field (AAD mismatch = decryption failure)
+
+#### Key Rotation Support
+- **Previous keys configuration**: `encryption.previous_keys` array in config
+- **O(1) key lookup**: Key ID in ciphertext enables direct lookup (no trial decryption)
+- **Seamless migration**: Old data decrypts with previous keys, new data uses current key
+
+#### Exception Classes
+- **EncryptionException** (`src/Encryption/Exceptions/EncryptionException.php`): Base exception class
+- **DecryptionException**: Decryption failures (wrong key, tampered data, invalid format)
+- **InvalidKeyException**: Key validation errors (wrong length, invalid base64)
+- **KeyNotFoundException**: Missing or unconfigured encryption key
+
+#### Base64 Key Support
+- Keys can use `base64:` prefix for safe storage in environment files
+- Example: `APP_KEY=base64:AbCdEfGhIjKlMnOpQrStUvWxYz012345678901234=`
+- Automatically decoded during service initialization
+
+#### CLI Commands
+- **`encryption:test`** (`src/Console/Commands/Encryption/TestCommand.php`):
+  - Verifies encryption service is working correctly
+  - Runs 6 self-tests: basic encryption, binary, AAD binding, tamper detection, random nonce, isEncrypted detection
+  - Clear pass/fail output with error details
+
+- **`encryption:file`** (`src/Console/Commands/Encryption/FileCommand.php`):
+  - Encrypt or decrypt files from command line
+  - Usage: `php glueful encryption:file encrypt /path/to/file`
+  - Options: `--force` (overwrite), `--delete-source` (remove original)
+  - Auto-generates destination with `.enc` extension
+
+- **`encryption:rotate`** (`src/Console/Commands/Encryption/RotateCommand.php`):
+  - Re-encrypt database columns with current key
+  - Usage: `php glueful encryption:rotate --table=users --columns=ssn,api_secret`
+  - Options: `--batch-size` (default 100), `--dry-run` (preview changes), `--primary-key`
+  - Progress reporting with summary statistics
+
+#### Configuration
+- **`config/encryption.php`**:
+  - `key` - Primary encryption key (from `APP_KEY` env)
+  - `cipher` - Algorithm (AES-256-GCM only)
+  - `previous_keys` - Array of old keys for rotation (from `APP_PREVIOUS_KEYS` env)
+  - `files.chunk_size` - Streaming chunk size (default 64KB)
+  - `files.extension` - Encrypted file extension (default `.enc`)
+
+#### Test Coverage
+- **EncryptionServiceTest** (`tests/Unit/Encryption/EncryptionServiceTest.php`): 32 tests covering:
+  - Core encryption format and round-trip validation
+  - Random nonce generation (different output each time)
+  - Wrong key and tampered data detection
+  - Invalid format handling
+  - AAD binding (same AAD, wrong AAD, missing AAD, context swapping prevention)
+  - Key validation (missing, too short, too long, base64 prefixed, invalid base64)
+  - Binary data handling (non-UTF8 bytes, UTF8 rejection)
+  - Key rotation (previous key via key ID, key not found, rotate method)
+  - File encryption (create output, restore original, large files, missing source)
+  - Custom key encryption methods
+  - Error handling for corrupted ciphertext
+
+### Documentation
+
+- **Implementation plan**: `docs/implementation-plans/encryption-service.md` marked as Implemented
+- Comprehensive API documentation with usage examples
+- Key rotation workflow documentation
+- Database column sizing guide for encrypted fields
+
 ## [1.23.0] - 2026-01-31 — Aldebaran
 
 Enhanced blob storage system with visibility controls, signed URLs for secure temporary access, and comprehensive test coverage.

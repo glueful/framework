@@ -307,9 +307,9 @@ if (!function_exists('parameter')) {
         // Legacy Symfony-style parameter API if available
         if (is_object($container) && method_exists($container, 'getParameter')) {
             try {
-                /** @var mixed $val */
-                $val = $container->getParameter($name);
-                return $val;
+                /** @var callable $callback */
+                $callback = [$container, 'getParameter'];
+                return $callback($name);
             } catch (\Throwable) {
                 // fall through to other sources
             }
@@ -724,5 +724,83 @@ if (!function_exists('is_api_path')) {
         }
 
         return str_starts_with($path, $prefix);
+    }
+}
+
+if (!function_exists('encrypt')) {
+    /**
+     * Encrypt a UTF-8 string with the framework encryption service.
+     */
+    function encrypt(
+        \Glueful\Bootstrap\ApplicationContext $context,
+        string $value,
+        ?string $aad = null,
+        ?string $key = null
+    ): string {
+        $service = app($context, \Glueful\Encryption\EncryptionService::class);
+        return $key !== null
+            ? $service->encryptWithKey($value, $key, $aad)
+            : $service->encrypt($value, $aad);
+    }
+}
+
+if (!function_exists('decrypt')) {
+    /**
+     * Decrypt a UTF-8 string with the framework encryption service.
+     */
+    function decrypt(
+        \Glueful\Bootstrap\ApplicationContext $context,
+        string $encrypted,
+        ?string $aad = null,
+        ?string $key = null
+    ): string {
+        $service = app($context, \Glueful\Encryption\EncryptionService::class);
+        return $key !== null
+            ? $service->decryptWithKey($encrypted, $key, $aad)
+            : $service->decrypt($encrypted, $aad);
+    }
+}
+
+if (!function_exists('encrypt_binary')) {
+    /**
+     * Encrypt raw bytes with the framework encryption service.
+     */
+    function encrypt_binary(
+        \Glueful\Bootstrap\ApplicationContext $context,
+        string $bytes,
+        ?string $aad = null,
+        ?string $key = null
+    ): string {
+        $service = app($context, \Glueful\Encryption\EncryptionService::class);
+        return $key !== null
+            ? $service->encryptBinaryWithKey($bytes, $key, $aad)
+            : $service->encryptBinary($bytes, $aad);
+    }
+}
+
+if (!function_exists('decrypt_binary')) {
+    /**
+     * Decrypt raw bytes with the framework encryption service.
+     */
+    function decrypt_binary(
+        \Glueful\Bootstrap\ApplicationContext $context,
+        string $encrypted,
+        ?string $aad = null,
+        ?string $key = null
+    ): string {
+        $service = app($context, \Glueful\Encryption\EncryptionService::class);
+        return $key !== null
+            ? $service->decryptBinaryWithKey($encrypted, $key, $aad)
+            : $service->decryptBinary($encrypted, $aad);
+    }
+}
+
+if (!function_exists('is_encrypted')) {
+    /**
+     * Check whether a string looks like Glueful encrypted payload.
+     */
+    function is_encrypted(string $value): bool
+    {
+        return str_starts_with($value, '$glueful$v1$');
     }
 }

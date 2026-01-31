@@ -21,6 +21,29 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.24.0 — Alpheratz (Released 2026-01-31)
+- **Encryption Service**: Comprehensive AES-256-GCM encryption for strings, files, and database fields.
+  - `EncryptionService` with authenticated encryption (random nonce, 16-byte auth tag).
+  - Self-identifying output format: `$glueful$v1$<key_id>$<nonce>$<ciphertext>$<tag>`.
+  - Key ID in output enables O(1) key lookup during rotation (no trial decryption).
+  - `encrypt()`, `decrypt()`, `encryptBinary()`, `decryptBinary()`, `isEncrypted()` methods.
+  - `encryptFile()`, `decryptFile()` for file encryption.
+- **AAD (Additional Authenticated Data)**: Context binding prevents cross-field attacks.
+  - Encrypting with `aad: 'user.ssn'` requires same AAD for decryption.
+  - Prevents copying encrypted data between different fields.
+- **Key Rotation Support**: Seamless migration to new encryption keys.
+  - `encryption.previous_keys` config array for old keys.
+  - O(1) key lookup via key ID embedded in ciphertext.
+  - Old data decrypts with previous keys; new data uses current key.
+- **Exception Classes**: `InvalidKeyException`, `KeyNotFoundException` for clear error handling.
+- **Base64 Key Support**: Keys can use `base64:` prefix for safe env file storage.
+- **CLI Commands**: `encryption:test`, `encryption:file`, `encryption:rotate`.
+  - `encryption:test` verifies encryption is working correctly.
+  - `encryption:file encrypt/decrypt /path/to/file` for file operations.
+  - `encryption:rotate --table=users --columns=ssn` for key rotation.
+- **Test Coverage**: 32 tests covering core encryption, AAD, key validation, binary handling, rotation, files.
+- Notes: No breaking changes. Encryption is opt-in and additive. Uses `APP_KEY` by default.
+
 ### 1.23.0 — Aldebaran (Released 2026-01-31)
 - **Blob Visibility Support**: Per-blob `public`/`private` visibility controls.
   - Upload requests accept `visibility` parameter (`public` or `private`).
