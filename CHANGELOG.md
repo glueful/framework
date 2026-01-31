@@ -4,6 +4,43 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.25.0] - 2026-01-31 — Ankaa
+
+Enhanced RouteManifest with automatic discovery of multiple application route files, enabling domain-driven route organization.
+
+### Added
+
+#### Multi-File Route Discovery
+- **Auto-discovery**: All `*.php` files in the application's `routes/` directory are automatically discovered and loaded
+- **Alphabetical loading**: Route files are sorted and loaded in alphabetical order for deterministic behavior
+- **Exclusion patterns**: Files starting with underscore (`_helpers.php`, `_shared.php`) are excluded as partials/includes
+- **Double-load prevention**: Tracks loaded files to prevent duplicate route registration
+
+#### Route Loading Priority
+- **Application routes first**: App routes load before framework routes for highest priority matching
+- **Framework fallback**: Generic framework routes (e.g., `/{resource}/{uuid}`) act as fallbacks
+- **Flexible prefixing**: Application controls its own route prefixes (no auto-wrapping)
+
+#### Domain-Driven Route Organization
+Applications can now split large route files into domain-specific files:
+```
+routes/
+├── api.php           # Main/shared routes
+├── identity.php      # Auth, profile, preferences
+├── parps.php         # Domain-specific routes
+├── social.php        # Follow, block
+├── engagement.php    # Reactions, comments
+└── _helpers.php      # Shared helpers (excluded)
+```
+
+### Changed
+
+- **RouteManifest::generate()**: Now returns `app_routes_dir` and `app_routes_exclude` instead of `core_routes`
+- **RouteManifest::load()**: Calls new `loadAppRoutes()` method for auto-discovery
+- **RouteManifest::reset()**: Now clears loaded files tracking for test isolation
+
+---
+
 ## [1.24.0] - 2026-01-31 — Alpheratz
 
 Comprehensive encryption service providing secure, easy-to-use AES-256-GCM encryption for strings, files, and database fields with key rotation support.

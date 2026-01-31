@@ -62,13 +62,17 @@ $app->terminate($request, $response);
 
 ## Highlights
 
-- Next‑gen Router (fast static/dynamic matching, groups, named routes, PSR‑15 middleware bridge)
-- Clean DI over Symfony Container, service providers, lazy services
-- Structured config with environment layering and caching
-- Observability: logging, metrics, tracing hooks
-- Cache drivers (array/file/redis/memcached) with tagging and warmup utilities
-- Security: rate limiting, CSRF, headers, lockdown, permission system hooks
-- Queues, scheduling, console commands
+- **High-Performance Router**: O(1) static route lookup, dynamic route bucketing, attribute-based routing, middleware pipeline
+- **Dependency Injection**: Symfony Container with service providers, lazy services, ApplicationContext injection
+- **Authentication**: JWT, LDAP, SAML SSO, API keys with session analytics
+- **Encryption**: AES-256-GCM authenticated encryption with key rotation support
+- **File Uploads**: Blob storage with visibility controls, signed URLs, thumbnail generation, media metadata
+- **Caching**: Multi-driver support (Redis/Memcached/File) with tagging and distributed caching
+- **Queue System**: Job processing with Redis/Database backends, auto-scaling workers
+- **Security**: Enhanced rate limiting, CSRF protection, security headers, lockdown mode
+- **Database**: Query builder, migrations, connection pooling (MySQL, PostgreSQL, SQLite)
+- **Extensions**: Modular extension system with lifecycle management
+- **CLI Tools**: Comprehensive scaffold commands, migrations, cache management
 
 ## API Skeleton (recommended to start)
 
