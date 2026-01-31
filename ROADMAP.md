@@ -21,6 +21,16 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.26.0 — Atria (Released 2026-01-31)
+- **Extension Discovery Fixes**: Improved reliability of Composer-based extension discovery.
+  - `PackageManifest` now falls back to `installed.json` when `installed.php` lacks provider metadata.
+  - Composer's `installed.php` may omit the `extra` field; `installed.json` has complete package data.
+- **ExtensionManager Lazy Discovery**: CLI commands that create their own container now auto-discover extensions.
+  - `getProviders()` triggers discovery if not yet run, fixing empty provider lists in CLI tools.
+- **Discovery Efficiency**: Added `$discovered` flag to ensure discovery runs exactly once.
+  - Prevents redundant discovery when zero extensions are legitimately installed.
+- Notes: No breaking changes. Fixes edge cases in extension discovery for CLI and documentation generation.
+
 ### 1.25.0 — Ankaa (Released 2026-01-31)
 - **Multi-File Route Discovery**: RouteManifest enhanced with automatic app route file discovery.
   - All `*.php` files in the application's `routes/` directory are auto-discovered.

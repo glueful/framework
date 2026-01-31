@@ -149,9 +149,16 @@ class ExtensionManagerTest extends TestCase
         $providers = ['Test\\Provider' => $provider];
 
         $reflection = new \ReflectionClass($this->manager);
+
+        // Set providers
         $property = $reflection->getProperty('providers');
         $property->setAccessible(true);
         $property->setValue($this->manager, $providers);
+
+        // Mark as discovered to prevent auto-discovery
+        $discoveredProperty = $reflection->getProperty('discovered');
+        $discoveredProperty->setAccessible(true);
+        $discoveredProperty->setValue($this->manager, true);
 
         $result = $this->manager->getProviders();
         $this->assertSame($providers, $result);

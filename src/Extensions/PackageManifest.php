@@ -29,19 +29,23 @@ final class PackageManifest
     /** @return array<string, class-string> */
     private function discover(): array
     {
-        // Prefer installed.php — normalized and fast
+        // Try installed.php first — normalized and fast
         $installedPhp = base_path($this->context, 'vendor/composer/installed.php');
         if (is_file($installedPhp)) {
             try {
                 /** @var array<string, mixed> $installed */
                 $installed = require $installedPhp;
-                return $this->extractFromInstalledPhp($installed);
+                $providers = $this->extractFromInstalledPhp($installed);
+                // Only return if we found providers; installed.php may not have 'extra' field
+                if ($providers !== []) {
+                    return $providers;
+                }
             } catch (\Throwable $e) {
                 error_log('[Extensions] installed.php load failed: ' . $e->getMessage());
             }
         }
 
-        // Fallback to installed.json (may be array-of-packages or {packages: [...]})
+        // Fallback to installed.json which has complete package metadata including 'extra'
         $installedJson = base_path($this->context, 'vendor/composer/installed.json');
         if (!is_file($installedJson)) {
             return [];
