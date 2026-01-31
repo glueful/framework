@@ -19,6 +19,7 @@ final class ExtensionManager
     /** @var array<class-string<ServiceProvider>, ServiceProvider> */
     private array $providers = [];
 
+    private bool $discovered = false;
     private bool $booted = false;
     private bool $cacheUsed = false;
 
@@ -36,6 +37,12 @@ final class ExtensionManager
      */
     public function discover(): void
     {
+        // Prevent redundant discovery
+        if ($this->discovered) {
+            return;
+        }
+        $this->discovered = true;
+
         // Try cache first
         $cached = $this->loadFromCache();
         if ($cached !== null) {
@@ -164,12 +171,18 @@ final class ExtensionManager
 
     /**
      * Get all registered providers
+     *
+     * Auto-discovers if not yet done (lazy initialization).
      */
     /**
      * @return array<class-string, object>
      */
     public function getProviders(): array
     {
+        // Auto-discover if not yet done (handles case when discover() wasn't explicitly called)
+        if (!$this->discovered) {
+            $this->discover();
+        }
         return $this->providers;
     }
 

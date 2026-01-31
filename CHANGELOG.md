@@ -4,6 +4,32 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.26.0] - 2026-01-31 — Atria
+
+Fixed extension discovery reliability and improved ExtensionManager efficiency.
+
+### Fixed
+
+#### Extension Discovery Fallback
+- **PackageManifest**: Now falls back to `installed.json` when `installed.php` doesn't yield providers
+  - Composer's `installed.php` is optimized for speed but may omit the `extra` field in some configurations
+  - `installed.json` contains complete package metadata including the `glueful.provider` specification
+  - Discovery now tries `installed.php` first, falls back to `installed.json` if no providers found
+
+#### ExtensionManager Lazy Discovery
+- **getProviders()**: Added lazy auto-discovery for CLI commands that create their own container
+  - Commands calling `getProviders()` without explicit `discover()` now auto-discover extensions
+  - Prevents empty provider lists in documentation generation and other CLI tools
+
+### Changed
+
+- **ExtensionManager**: Added `$discovered` flag to prevent redundant discovery
+  - `discover()` now sets flag immediately to ensure it runs exactly once
+  - `getProviders()` checks `!$this->discovered` instead of checking empty providers array
+  - Prevents unnecessary re-discovery when zero extensions are legitimately installed
+
+---
+
 ## [1.25.0] - 2026-01-31 — Ankaa
 
 Enhanced RouteManifest with automatic discovery of multiple application route files, enabling domain-driven route organization.
