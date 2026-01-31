@@ -12,10 +12,17 @@ use Glueful\Bootstrap\ApplicationContext;
  * Handles loading routes with proper API prefixing based on configuration.
  * Separates API routes (which get versioned prefix) from public routes
  * (health checks, docs) that don't need the prefix.
+ *
+ * Application routes are auto-discovered from the app's routes/ directory.
+ * Files are loaded in alphabetical order for deterministic behavior.
+ * Files starting with underscore (_) are excluded (convention for partials).
  */
 class RouteManifest
 {
     private static bool $loaded = false;
+
+    /** @var array<string> Track loaded files to prevent double-loading */
+    private static array $loadedFiles = [];
 
     /**
      * Generate the route manifest
@@ -23,28 +30,29 @@ class RouteManifest
      * @return array{
      *     api_routes: array<string>,
      *     public_routes: array<string>,
-     *     core_routes: array<string>,
+     *     app_routes_dir: string,
+     *     app_routes_exclude: array<string>,
      *     generated_at: int
      * }
      */
     public static function generate(): array
     {
         return [
-            // Routes that get the API prefix (e.g., /api/v1/auth/login)
+            // Framework routes that get the API prefix (e.g., /api/v1/auth/login)
             'api_routes' => [
                 '/routes/auth.php',
                 '/routes/blobs.php',
                 '/routes/resource.php',
             ],
-            // Routes that don't get the API prefix (public endpoints)
+            // Framework routes that don't get the API prefix (public endpoints)
             'public_routes' => [
                 '/routes/health.php',
                 '/routes/docs.php',
             ],
-            // Application routes (loaded without automatic prefix - app controls its own prefixing)
-            'core_routes' => [
-                '/routes/api.php',
-            ],
+            // Application routes directory (all *.php files are auto-discovered)
+            'app_routes_dir' => '/routes',
+            // Exclusion patterns for app routes (underscore prefix = partials/includes)
+            'app_routes_exclude' => ['_*.php'],
             'generated_at' => time(),
         ];
     }
@@ -55,6 +63,9 @@ class RouteManifest
      * Loads application routes FIRST (highest priority), then framework API routes,
      * then public routes. This ensures application-specific routes like /parps/{uuid}
      * are matched before generic framework routes like /{resource}/{uuid}.
+     *
+     * Application routes are auto-discovered from the routes/ directory and loaded
+     * in alphabetical order. Files starting with underscore are excluded.
      */
     public static function load(Router $router, ApplicationContext $context): void
     {
@@ -72,15 +83,11 @@ class RouteManifest
             ? api_prefix($context)
             : self::buildPrefixFromConfig($context);
 
-        // Load application core routes FIRST (highest priority)
+        // Load ALL app route files from routes/ directory FIRST (highest priority)
         // These are loaded without automatic prefix - app controls its own prefixing
         // This ensures app routes like /parps/{uuid} match before generic /{resource}/{uuid}
         $router->enableUnprefixedRouteWarnings(true);
-        foreach ($manifest['core_routes'] as $file) {
-            if (file_exists(base_path($context, $file))) {
-                self::requireRouteFile(base_path($context, $file), $router, $context);
-            }
-        }
+        self::loadAppRoutes($router, $context, $manifest);
         $router->enableUnprefixedRouteWarnings(false);
 
         // Load framework API routes with prefix (lower priority, acts as fallback)
@@ -106,6 +113,81 @@ class RouteManifest
     }
 
     /**
+     * Load all app route files from the routes directory
+     *
+     * Files are loaded in alphabetical order for deterministic behavior.
+     * This means api.php loads before identity.php, parps.php, social.php, etc.
+     *
+     * Exclusion convention:
+     * - Files starting with underscore (_) are excluded
+     * - Use _helpers.php, _shared.php for partials that are included by other route files
+     *
+     * @param array<string, mixed> $manifest
+     */
+    private static function loadAppRoutes(
+        Router $router,
+        ApplicationContext $context,
+        array $manifest
+    ): void {
+        /** @var string $routesDirRelative */
+        $routesDirRelative = $manifest['app_routes_dir'] ?? '/routes';
+        $routesDir = base_path($context, $routesDirRelative);
+
+        if (!is_dir($routesDir)) {
+            return;
+        }
+
+        /** @var array<string> $excludePatterns */
+        $excludePatterns = $manifest['app_routes_exclude'] ?? ['_*.php'];
+
+        // Get all PHP files in routes directory
+        $files = glob($routesDir . '/*.php');
+        if ($files === false || $files === []) {
+            return;
+        }
+
+        // Sort alphabetically for deterministic loading order
+        sort($files);
+
+        foreach ($files as $file) {
+            $filename = basename($file);
+
+            // Skip excluded files (e.g., _helpers.php, _partials.php)
+            if (self::isExcluded($filename, $excludePatterns)) {
+                continue;
+            }
+
+            // Skip already loaded files
+            $realpath = realpath($file);
+            if ($realpath !== false && in_array($realpath, self::$loadedFiles, true)) {
+                continue;
+            }
+
+            self::requireRouteFile($file, $router, $context);
+
+            // Track loaded file
+            if ($realpath !== false) {
+                self::$loadedFiles[] = $realpath;
+            }
+        }
+    }
+
+    /**
+     * Check if filename matches any exclusion pattern
+     *
+     * @param array<string> $patterns
+     */
+    private static function isExcluded(string $filename, array $patterns): bool
+    {
+        foreach ($patterns as $pattern) {
+            if (fnmatch($pattern, $filename)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Require a route file with $router and $context available in scope
      */
     private static function requireRouteFile(string $file, Router $router, ApplicationContext $context): void
@@ -119,6 +201,7 @@ class RouteManifest
     public static function reset(): void
     {
         self::$loaded = false;
+        self::$loadedFiles = [];
     }
 
     /**

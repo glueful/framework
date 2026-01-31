@@ -21,6 +21,16 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.25.0 — Ankaa (Released 2026-01-31)
+- **Multi-File Route Discovery**: RouteManifest enhanced with automatic app route file discovery.
+  - All `*.php` files in the application's `routes/` directory are auto-discovered.
+  - Alphabetical loading order for deterministic behavior.
+  - Exclusion patterns: files starting with underscore (`_helpers.php`) are excluded as partials.
+  - Double-load prevention tracks loaded files to avoid duplicate route registration.
+- **Route Loading Priority**: Application routes load first (highest priority), framework routes act as fallback.
+- **Domain-Driven Organization**: Enables splitting large route files into domain-specific files (e.g., `identity.php`, `social.php`, `engagement.php`).
+- Notes: No breaking changes. Backward compatible with single `routes/api.php` files.
+
 ### 1.24.0 — Alpheratz (Released 2026-01-31)
 - **Encryption Service**: Comprehensive AES-256-GCM encryption for strings, files, and database fields.
   - `EncryptionService` with authenticated encryption (random nonce, 16-byte auth tag).
