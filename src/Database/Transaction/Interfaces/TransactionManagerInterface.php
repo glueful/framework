@@ -52,4 +52,30 @@ interface TransactionManagerInterface
      * Get current max retry attempts
      */
     public function getMaxRetries(): int;
+
+    /**
+     * Register a callback to execute after the transaction commits.
+     *
+     * Callbacks are executed only when the outermost transaction commits.
+     * For nested transactions (savepoints), callbacks are promoted to the
+     * parent level on commit and discarded on rollback.
+     *
+     * If not in a transaction, the callback is executed immediately.
+     *
+     * @param callable $callback The callback to execute after commit
+     */
+    public function afterCommit(callable $callback): void;
+
+    /**
+     * Register a callback to execute after the transaction rolls back.
+     *
+     * Callbacks are executed when the outermost transaction rolls back.
+     * For nested transactions, callbacks at that level are discarded
+     * (not promoted to parent).
+     *
+     * If not in a transaction, the callback is ignored.
+     *
+     * @param callable $callback The callback to execute after rollback
+     */
+    public function afterRollback(callable $callback): void;
 }

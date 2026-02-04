@@ -13,13 +13,13 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.26.0';
+    public const VERSION = '1.27.0';
 
     /** Release code name */
-    public const NAME = 'Atria';
+    public const NAME = 'Avior';
 
     /** Release date */
-    public const RELEASE_DATE = '2026-01-31';
+    public const RELEASE_DATE = '2026-02-04';
 
     /** Minimum required PHP version */
     public const MIN_PHP_VERSION = '8.3.0';

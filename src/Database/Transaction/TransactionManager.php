@@ -6,6 +6,7 @@ namespace Glueful\Database\Transaction;
 
 use PDO;
 use Exception;
+use Throwable;
 use Glueful\Database\Transaction\Interfaces\TransactionManagerInterface;
 use Glueful\Database\Transaction\Interfaces\SavepointManagerInterface;
 use Glueful\Database\QueryLogger;
@@ -13,7 +14,9 @@ use Glueful\Database\QueryLogger;
 /**
  * TransactionManager
  *
- * Handles database transaction management with deadlock retry and nested transaction support.
+ * Handles database transaction management with deadlock retry, nested transaction support,
+ * and after-commit/after-rollback callbacks.
+ *
  * Extracted from the monolithic QueryBuilder to follow Single Responsibility Principle.
  */
 class TransactionManager implements TransactionManagerInterface
@@ -23,6 +26,20 @@ class TransactionManager implements TransactionManagerInterface
     protected QueryLogger $logger;
     protected int $transactionLevel = 0;
     protected int $maxRetries = 3;
+
+    /**
+     * Callbacks to execute after transaction commits, indexed by transaction level.
+     *
+     * @var array<int, callable[]>
+     */
+    protected array $commitCallbacks = [];
+
+    /**
+     * Callbacks to execute after transaction rolls back, indexed by transaction level.
+     *
+     * @var array<int, callable[]>
+     */
+    protected array $rollbackCallbacks = [];
 
     public function __construct(
         PDO $pdo,
@@ -133,16 +150,24 @@ class TransactionManager implements TransactionManagerInterface
             return;
         }
 
-        if ($this->transactionLevel === 1) {
+        $level = $this->transactionLevel;
+
+        if ($level === 1) {
+            // Outermost transaction - actually commit to database
             $this->pdo->commit();
             $this->logger->logEvent("Transaction committed", ['level' => 1], 'debug');
-        } else {
-            // For savepoints, we don't need to explicitly release them
-            // They are automatically released when the parent transaction commits
-            $this->logger->logEvent("Savepoint committed", ['level' => $this->transactionLevel], 'debug');
-        }
+            $this->transactionLevel = 0;
 
-        $this->transactionLevel = max(0, $this->transactionLevel - 1);
+            // Execute after-commit callbacks
+            $this->executeCallbacks($this->commitCallbacks[$level] ?? []);
+            $this->clearCallbacks($level);
+        } else {
+            // Nested transaction (savepoint) - promote callbacks to parent level
+            // They are automatically released when the parent transaction commits
+            $this->logger->logEvent("Savepoint committed", ['level' => $level], 'debug');
+            $this->promoteCallbacks($level);
+            $this->transactionLevel--;
+        }
     }
 
     /**
@@ -155,16 +180,26 @@ class TransactionManager implements TransactionManagerInterface
             return;
         }
 
-        if ($this->transactionLevel === 1) {
+        $level = $this->transactionLevel;
+
+        if ($level === 1) {
+            // Outermost transaction - actually rollback
             $this->pdo->rollBack();
             $this->logger->logEvent("Transaction rolled back", ['level' => 1], 'debug');
-        } else {
-            // Rollback to the previous savepoint
-            $this->savepointManager->rollbackTo($this->transactionLevel - 1);
-            $this->logger->logEvent("Rolled back to savepoint", ['level' => $this->transactionLevel - 1], 'debug');
-        }
+            $this->transactionLevel = 0;
 
-        $this->transactionLevel = max(0, $this->transactionLevel - 1);
+            // Execute after-rollback callbacks
+            $this->executeCallbacks($this->rollbackCallbacks[$level] ?? []);
+            $this->clearCallbacks($level);
+        } else {
+            // Nested transaction (savepoint) - rollback to previous savepoint
+            $this->savepointManager->rollbackTo($level - 1);
+            $this->logger->logEvent("Rolled back to savepoint", ['level' => $level - 1], 'debug');
+            $this->transactionLevel--;
+
+            // Discard callbacks for this level (not promoted on rollback)
+            $this->clearCallbacks($level);
+        }
     }
 
     /**
@@ -209,5 +244,138 @@ class TransactionManager implements TransactionManagerInterface
         $deadlockCodes = ['1213', '1205', '40001'];
 
         return in_array((string) $e->getCode(), $deadlockCodes, true);
+    }
+
+    /**
+     * Register a callback to execute after the transaction commits.
+     *
+     * If not currently in a transaction, the callback is executed immediately.
+     * For nested transactions, callbacks are promoted to the parent level on
+     * commit and only fire when the outermost transaction commits.
+     *
+     * @param callable $callback The callback to execute after commit
+     */
+    public function afterCommit(callable $callback): void
+    {
+        if ($this->transactionLevel === 0) {
+            // Not in a transaction - execute immediately
+            try {
+                $callback();
+            } catch (Throwable $e) {
+                $this->logger->logEvent(
+                    "Immediate after-commit callback failed",
+                    ['error' => $e->getMessage()],
+                    'error'
+                );
+            }
+            return;
+        }
+
+        // Store callback at current transaction level
+        $this->commitCallbacks[$this->transactionLevel][] = $callback;
+    }
+
+    /**
+     * Register a callback to execute after the transaction rolls back.
+     *
+     * If not currently in a transaction, the callback is ignored.
+     * For nested transactions, callbacks are discarded if the nested
+     * transaction is rolled back (not promoted to parent).
+     *
+     * @param callable $callback The callback to execute after rollback
+     */
+    public function afterRollback(callable $callback): void
+    {
+        if ($this->transactionLevel === 0) {
+            // Not in a transaction - ignore
+            return;
+        }
+
+        // Store callback at current transaction level
+        $this->rollbackCallbacks[$this->transactionLevel][] = $callback;
+    }
+
+    /**
+     * Execute an array of callbacks, catching and logging any exceptions.
+     *
+     * @param callable[] $callbacks The callbacks to execute
+     */
+    protected function executeCallbacks(array $callbacks): void
+    {
+        foreach ($callbacks as $callback) {
+            try {
+                $callback();
+            } catch (Throwable $e) {
+                $this->logger->logEvent(
+                    "Transaction callback failed",
+                    ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()],
+                    'error'
+                );
+                // Continue executing remaining callbacks
+            }
+        }
+    }
+
+    /**
+     * Promote callbacks from a nested transaction level to the parent level.
+     *
+     * When a savepoint commits, its callbacks should fire when the parent
+     * transaction commits, so we move them up one level.
+     *
+     * @param int $level The level to promote callbacks from
+     */
+    protected function promoteCallbacks(int $level): void
+    {
+        $parentLevel = $level - 1;
+
+        // Promote commit callbacks
+        foreach ($this->commitCallbacks[$level] ?? [] as $callback) {
+            $this->commitCallbacks[$parentLevel][] = $callback;
+        }
+        unset($this->commitCallbacks[$level]);
+
+        // Promote rollback callbacks
+        foreach ($this->rollbackCallbacks[$level] ?? [] as $callback) {
+            $this->rollbackCallbacks[$parentLevel][] = $callback;
+        }
+        unset($this->rollbackCallbacks[$level]);
+    }
+
+    /**
+     * Clear all callbacks for a given transaction level.
+     *
+     * @param int $level The level to clear callbacks for
+     */
+    protected function clearCallbacks(int $level): void
+    {
+        unset($this->commitCallbacks[$level], $this->rollbackCallbacks[$level]);
+    }
+
+    /**
+     * Get the count of pending commit callbacks (for testing/debugging).
+     *
+     * @return int Total number of pending commit callbacks across all levels
+     */
+    public function getPendingCommitCallbackCount(): int
+    {
+        $count = 0;
+        foreach ($this->commitCallbacks as $callbacks) {
+            $count += count($callbacks);
+        }
+        return $count;
+    }
+
+    /**
+     * Get the count of pending rollback callbacks (for testing/debugging).
+     *
+     * @return int Total number of pending rollback callbacks across all levels
+     */
+    public function getPendingRollbackCallbackCount(): int
+    {
+        $count = 0;
+        foreach ($this->rollbackCallbacks as $callbacks) {
+            $count += count($callbacks);
+        }
+        return $count;
     }
 }

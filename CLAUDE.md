@@ -8,6 +8,54 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Glueful Framework** is a high-performance PHP 8.3+ API framework designed for enterprise applications. It provides a comprehensive set of features including authentication, caching, queuing, database management, extensions, and advanced security features.
 
+## Important: This is NOT Laravel
+
+**Glueful is its own framework with its own conventions and APIs.** Do not assume Laravel patterns, syntax, or method names apply here.
+
+### Guidelines for Working with Glueful
+
+1. **Always verify methods exist**: Before using any method, search the framework codebase to confirm it exists and understand its signature. Do not assume methods like `DB::transaction()`, `Model::create()`, or other Laravel-style APIs are available.
+
+2. **Check helpers.php for convenience functions**: Common helpers are defined in `src/helpers.php`. Examples:
+   - `app($context, ServiceClass::class)` - Resolve from container
+   - `db($context)` - Get database connection
+   - `config($context, 'key', $default)` - Get configuration value
+   - `container($context)` - Get the DI container
+
+3. **Context is required**: Most Glueful methods require `ApplicationContext` as the first parameter. This is different from Laravel's static facades.
+
+4. **Common Glueful patterns** (NOT Laravel):
+   ```php
+   // Database transactions
+   db($context)->transaction(function () use ($context) {
+       // ... transactional code
+   });
+
+   // After-commit callbacks
+   db($context)->afterCommit(function () {
+       // ... runs after commit
+   });
+
+   // Resolving services
+   $service = app($context, MyService::class);
+
+   // Models require context
+   $user = User::find($context, $id);
+   $users = User::query($context)->where('status', 'active')->get();
+
+   // Creating models
+   $post = new Post(['title' => 'Hello'], $context);
+   $post->save();
+   ```
+
+5. **If a convenient method doesn't exist**:
+   - First, search thoroughly to make sure it really doesn't exist
+   - If it genuinely doesn't exist and would be valuable, propose adding it to the framework
+   - Document the proposed addition with rationale and implementation approach
+   - Do not invent or assume methods that don't exist
+
+6. **When in doubt, explore**: Use Grep/Glob to search the `src/` directory for existing implementations before writing code that depends on framework features.
+
 ## Development Commands
 
 ### Testing and Quality Assurance
@@ -51,6 +99,7 @@ composer run optimize    # Optimize autoloader for production
 ```bash
 # Start development server
 php glueful serve
+php glueful dev:server
 
 # Generate application key
 php glueful generate:key
@@ -87,6 +136,11 @@ php glueful extensions:disable <name>     # Disable extension
 
 # System utilities
 php glueful system:check                  # System health check
+php glueful doctor                        # Quick local health checks
+php glueful env:sync                      # Sync .env.example from config
+php glueful route:debug                   # Dump resolved routes
+php glueful cache:inspect                 # Inspect cache driver + extensions
+php glueful test:watch                    # Run tests on file changes
 php glueful help                          # List all available commands
 ```
 
@@ -128,6 +182,12 @@ php glueful scaffold:test UserApiTest --feature        # Feature test
 php glueful scaffold:test PaymentTest --methods=testCharge,testRefund
 php glueful scaffold:test Services/UserServiceTest --class=App\\Services\\UserService
 ```
+
+## Deployment Notes
+
+- For long-running servers (RoadRunner, Swoole, FrankenPHP), set `APP_LONG_RUNNING=true` to enable worker-safe lifecycle handling.
+- If your deploy process preserves file mtimes and you see stale routing, clear the route cache as part of deploy:
+  - `php glueful route:cache:clear`
 
 ## Architecture Overview
 
@@ -487,10 +547,24 @@ class MyExtension extends ServiceProvider
     // Boot after all providers registered
     public function boot(ApplicationContext $context): void
     {
-        // Optional initialization
+        // Auto-discover CLI commands from Console/ directory
+        // Commands must have #[AsCommand] attribute
+        $this->discoverCommands(
+            'MyVendor\\MyExtension\\Console',
+            __DIR__ . '/Console'
+        );
     }
 }
 ```
+
+**Available ServiceProvider Methods:**
+- `loadRoutesFrom(string $path)` - Load route definitions from file
+- `loadMigrationsFrom(string $dir)` - Register migrations directory
+- `mergeConfig(string $key, array $defaults)` - Merge extension config with app config
+- `discoverCommands(string $namespace, string $dir)` - Auto-discover CLI commands with `#[AsCommand]`
+- `commands(array $classes)` - Manually register CLI command classes
+- `mountStatic(string $mount, string $dir)` - Serve static assets at `/extensions/{mount}/`
+- `loadMessageCatalogs(string $dir, string $domain)` - Register translation catalogs
 
 ### GraphQL-Style Field Selection
 

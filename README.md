@@ -74,6 +74,12 @@ $app->terminate($request, $response);
 - **Extensions**: Modular extension system with lifecycle management
 - **CLI Tools**: Comprehensive scaffold commands, migrations, cache management
 
+## Deployment Notes
+
+- For long-running servers (RoadRunner, Swoole, FrankenPHP), set `APP_LONG_RUNNING=true` to enable worker-safe lifecycle handling.
+- If your deploy process preserves file mtimes and you see stale routing, clear the route cache as part of deploy:
+  - `php glueful route:cache:clear`
+
 ## API Skeleton (recommended to start)
 
 For a ready‑to‑run project scaffold, use the API skeleton and follow its README. It wires this framework, public entrypoints, config, and examples:

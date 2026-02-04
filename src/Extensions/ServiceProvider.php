@@ -8,6 +8,8 @@ use Psr\Container\ContainerInterface;
 use Glueful\Database\Migrations\MigrationManager;
 use Glueful\Routing\Router;
 use Glueful\Bootstrap\ApplicationContext;
+use Symfony\Component\Console\Attribute\AsCommand;
+use ReflectionClass;
 
 /**
  * API-first base provider (PSR-11 compliant).
@@ -252,6 +254,161 @@ abstract class ServiceProvider
         $console = $this->app->get('console.application');
         foreach ($commands as $class) {
             $console->add($this->app->get($class));
+        }
+    }
+
+    /**
+     * Auto-discover and register console commands from a directory.
+     *
+     * Scans the given directory recursively for command classes that:
+     * - Have the #[AsCommand] Symfony attribute
+     * - Are not abstract classes
+     *
+     * This provides zero-config command registration for extensions,
+     * matching the framework's command discovery behavior.
+     *
+     * Usage in extension provider:
+     * ```php
+     * public function boot(ApplicationContext $context): void
+     * {
+     *     $this->discoverCommands(
+     *         'Glueful\\Extensions\\Meilisearch\\Console',
+     *         __DIR__ . '/Console'
+     *     );
+     * }
+     * ```
+     *
+     * @param string $namespace Base namespace for command classes (e.g., 'Vendor\\Extension\\Console')
+     * @param string $directory Directory path to scan for command classes
+     */
+    protected function discoverCommands(string $namespace, string $directory): void
+    {
+        if (!$this->runningInConsole() || !$this->app->has('console.application')) {
+            return;
+        }
+
+        $realDir = realpath($directory);
+        if ($realDir === false || !is_dir($realDir)) {
+            return;
+        }
+
+        $commands = $this->scanForCommands($namespace, $realDir);
+
+        if ($commands === []) {
+            return;
+        }
+
+        $console = $this->app->get('console.application');
+
+        foreach ($commands as $class) {
+            try {
+                // Resolve from container to get dependency injection
+                if ($this->app->has($class)) {
+                    $command = $this->app->get($class);
+                } else {
+                    // Fallback: instantiate directly if not in container
+                    $command = new $class();
+                }
+                $console->add($command);
+            } catch (\Throwable $e) {
+                // Log and continue - don't break extension loading for one bad command
+                error_log("[Extensions] Failed to register command {$class}: " . $e->getMessage());
+            }
+        }
+    }
+
+    /**
+     * Scan a directory recursively for valid command classes.
+     *
+     * @param string $namespace Base namespace for the directory
+     * @param string $directory Resolved directory path
+     * @return array<string> List of fully qualified command class names
+     */
+    private function scanForCommands(string $namespace, string $directory): array
+    {
+        $commands = [];
+
+        // Normalize namespace (ensure no trailing backslash)
+        $namespace = rtrim($namespace, '\\');
+
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS)
+        );
+
+        foreach ($iterator as $file) {
+            /** @var \SplFileInfo $file */
+            if ($file->getExtension() !== 'php') {
+                continue;
+            }
+
+            $className = $this->fileToClassName($file->getPathname(), $directory, $namespace);
+
+            if ($className === null || !class_exists($className)) {
+                continue;
+            }
+
+            if (!$this->isValidCommand($className)) {
+                continue;
+            }
+
+            $commands[] = $className;
+        }
+
+        // Sort for consistent ordering
+        sort($commands);
+
+        return $commands;
+    }
+
+    /**
+     * Convert a file path to a fully qualified class name.
+     *
+     * @param string $filePath Full path to the PHP file
+     * @param string $baseDir Base directory being scanned
+     * @param string $namespace Base namespace for the directory
+     * @return string|null Fully qualified class name or null if invalid
+     */
+    private function fileToClassName(string $filePath, string $baseDir, string $namespace): ?string
+    {
+        $relativePath = str_replace($baseDir . DIRECTORY_SEPARATOR, '', $filePath);
+        $relativePath = str_replace(DIRECTORY_SEPARATOR, '\\', $relativePath);
+        $relativePath = preg_replace('/\.php$/', '', $relativePath);
+
+        if ($relativePath === null || $relativePath === '') {
+            return null;
+        }
+
+        return $namespace . '\\' . $relativePath;
+    }
+
+    /**
+     * Check if a class is a valid console command.
+     *
+     * A valid command must:
+     * - Not be abstract
+     * - Have the #[AsCommand] Symfony attribute
+     *
+     * @param string $className Fully qualified class name to check
+     * @return bool True if valid command, false otherwise
+     */
+    private function isValidCommand(string $className): bool
+    {
+        try {
+            $reflection = new ReflectionClass($className);
+
+            // Skip abstract classes
+            if ($reflection->isAbstract()) {
+                return false;
+            }
+
+            // Must have #[AsCommand] attribute
+            if ($reflection->getAttributes(AsCommand::class) === []) {
+                return false;
+            }
+
+            return true;
+        } catch (\ReflectionException) {
+            return false;
         }
     }
 

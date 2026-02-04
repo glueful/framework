@@ -143,10 +143,12 @@ class Framework
      */
     private function initializeEnvironment(ApplicationContext $context): void
     {
-        // Load .env file if not already loaded
-        if (file_exists($this->basePath . '/.env') && !isset($_ENV['APP_ENV'])) {
+        // Load .env file if present. Dotenv immutable won't override existing vars.
+        if (file_exists($this->basePath . '/.env') && !isset($_ENV['DOTENV_LOADED'])) {
             $dotenv = \Dotenv\Dotenv::createImmutable($this->basePath);
             $dotenv->load();
+            $_ENV['DOTENV_LOADED'] = '1';
+            $_SERVER['DOTENV_LOADED'] = '1';
         }
 
         // Production security validation
@@ -336,8 +338,8 @@ class Framework
                 $attributeLoader->scanDirectory($this->basePath . '/app/Controllers');
             }
 
-            // Cache routes in production
-            if ($this->environment === 'production') {
+            // Cache routes for consistent behavior across environments
+            if ((bool) env('ROUTE_CACHE', true)) {
                 $cache = $this->container->get(\Glueful\Routing\RouteCache::class);
                 $cache->save($router);
             }
@@ -517,6 +519,21 @@ class Framework
      */
     private function scheduleBackgroundTasks(): void
     {
+        if ($this->isLongRunningServer()) {
+            try {
+                if ($this->container !== null && $this->container->has(RequestLifecycle::class)) {
+                    /** @var RequestLifecycle $lifecycle */
+                    $lifecycle = $this->container->get(RequestLifecycle::class);
+                    $lifecycle->onEndRequest(function (): void {
+                        $this->runBackgroundTasks();
+                    });
+                }
+            } catch (\Throwable) {
+                // Best-effort only
+            }
+            return;
+        }
+
         if (function_exists('fastcgi_finish_request')) {
             register_shutdown_function(function () {
                 if (function_exists('fastcgi_finish_request')) {
@@ -540,6 +557,43 @@ class Framework
             // Log but don't fail the application
             error_log("Background task initialization failed: " . $e->getMessage());
         }
+    }
+
+    private function isLongRunningServer(): bool
+    {
+        if ((bool) env('APP_LONG_RUNNING', false)) {
+            return true;
+        }
+
+        $server = $_SERVER['SERVER_SOFTWARE'] ?? '';
+        if ($server !== '') {
+            foreach (['roadrunner', 'swoole', 'frankenphp'] as $needle) {
+                if (stripos($server, $needle) !== false) {
+                    $this->warnMissingLongRunningFlag($server);
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function warnMissingLongRunningFlag(string $server): void
+    {
+        if ((bool) env('APP_LONG_RUNNING', false)) {
+            return;
+        }
+
+        static $warned = false;
+        if ($warned) {
+            return;
+        }
+        $warned = true;
+
+        error_log(
+            '[runtime] Detected long-running server (' . $server . ') without APP_LONG_RUNNING=true. ' .
+            'Set APP_LONG_RUNNING=true to ensure correct request lifecycle handling.'
+        );
     }
 
     /**

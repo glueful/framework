@@ -4,6 +4,97 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.27.0] - 2026-02-04 — Avior
+
+Developer experience improvements: new CLI commands, route cache signatures, transaction callbacks, and extension management.
+
+### Added
+
+#### New CLI Commands
+- **`doctor`** (`System/DoctorCommand.php`): Quick health checks for local development
+  - Checks environment, app key, cache, database, route cache, and storage permissions
+  - Provides pass/fail status with detailed messages
+
+- **`env:sync`** (`System/EnvSyncCommand.php`): Sync `.env.example` from config
+  - Scans `config/*.php` for `env()` usage
+  - Updates `.env.example` with discovered variables
+  - `--apply` option creates/updates `.env` with missing keys
+
+- **`route:debug`** (`Route/DebugCommand.php`): Dump resolved routes
+  - Lists all routes with middleware and handlers
+  - Filter by `--method`, `--path`, or `--name`
+
+- **`route:cache:clear`** (`Route/CacheClearCommand.php`): Clear route cache
+- **`route:cache:status`** (`Route/CacheStatusCommand.php`): Show route cache status and signature
+
+- **`cache:inspect`** (`Cache/InspectCommand.php`): Inspect cache driver and extension status
+  - Shows driver configuration, PHP extension availability, and runtime stats
+
+- **`test:watch`** (`Test/WatchCommand.php`): Run tests on file changes
+  - File watcher with configurable polling interval
+  - `--command` to specify test command (default: `composer test`)
+
+- **`dev:server`** (`Dev/ServerCommand.php`): Development server alias
+
+#### Database Transaction Callbacks
+- **`Connection::afterCommit(callable)`**: Register callback to execute after transaction commits
+  - Use cases: search index updates, cache invalidation, event dispatching
+  - Callbacks promoted to parent level for nested transactions (savepoints)
+  - Executes immediately if not in transaction
+
+- **`Connection::afterRollback(callable)`**: Register callback to execute after rollback
+  - Callbacks discarded if nested transaction rolls back
+
+- **Shared TransactionManager**: `Connection::getTransactionManager()` returns shared instance
+  - Ensures transaction state and callbacks tracked across all QueryBuilders
+
+### Changed
+
+#### Extensions Enable/Disable Commands
+- **EnableCommand**: Now edits `config/extensions.php` instead of only printing instructions
+  - Resolves extension by slug or FQCN using ExtensionManager metadata
+  - Inserts provider class into the `'enabled'` array using regex-based editing
+  - Idempotent: no-op with message if already enabled
+  - Warns if `'only'` mode is configured (enabled list ignored)
+  - Development-only: blocks execution in production environment
+
+- **DisableCommand**: Comments out provider line instead of removing it
+  - Safer approach preserves trailing commas and prevents empty array issues
+  - Detects already-commented entries to avoid double-commenting
+
+- **New options**: `--dry-run` (preview), `--backup` (create .bak file)
+
+#### Route Cache Improvements
+- **Signature-based invalidation**: Replaced TTL-based caching with content-hash signatures
+  - SHA-256 hash of route file paths, mtimes, and sizes
+  - Cache invalidates when any source file changes
+  - Works consistently across all environments
+
+- **RouteCache API additions**:
+  - `getSignature()`: Get current computed signature
+  - `getCachedSignature()`: Get signature from cache file
+  - `getSourceFiles()`: List all route source files
+  - `getCacheFilePath()`: Get cache file path
+
+- **RouteCompiler**: Now includes signature in compiled cache output
+
+#### Application Lifecycle
+- **RequestLifecycle integration**: `Application` now calls `beginRequest()` and `endRequest()`
+  - Enables proper cleanup for long-running servers (RoadRunner, Swoole)
+
+- **Framework improvements**:
+  - Dotenv loading uses `DOTENV_LOADED` flag to prevent double-loading
+  - Route caching controlled by `ROUTE_CACHE` env var (default: true)
+  - No longer production-only
+
+### Notes
+
+- All new commands use `#[AsCommand]` attribute for auto-discovery
+- Transaction callbacks are compatible with the Meilisearch extension's `afterCommit()` pattern
+- Route cache signature ensures deploy-time invalidation without manual cache clearing
+
+---
+
 ## [1.26.0] - 2026-01-31 — Atria
 
 Fixed extension discovery reliability and improved ExtensionManager efficiency.
