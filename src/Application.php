@@ -37,6 +37,7 @@ class Application
     {
         $startTime = microtime(true);
         $requestId = $this->getRequestId();
+        $this->beginRequestLifecycle();
 
         try {
             // Dispatch via Next-Gen Router
@@ -70,6 +71,8 @@ class Application
      */
     public function terminate(Request $request, HttpResponse $response): void
     {
+        $this->endRequestLifecycle();
+
         // Minimal cleanup - background tasks handled by Framework
         $this->logger->debug('Request terminated', [
             'method' => $request->getMethod(),
@@ -101,5 +104,23 @@ class Application
 
         // Fallback request ID generation
         return uniqid('req_', true);
+    }
+
+    private function beginRequestLifecycle(): void
+    {
+        if ($this->container->has(\Glueful\Bootstrap\RequestLifecycle::class)) {
+            /** @var \Glueful\Bootstrap\RequestLifecycle $lifecycle */
+            $lifecycle = $this->container->get(\Glueful\Bootstrap\RequestLifecycle::class);
+            $lifecycle->beginRequest();
+        }
+    }
+
+    private function endRequestLifecycle(): void
+    {
+        if ($this->container->has(\Glueful\Bootstrap\RequestLifecycle::class)) {
+            /** @var \Glueful\Bootstrap\RequestLifecycle $lifecycle */
+            $lifecycle = $this->container->get(\Glueful\Bootstrap\RequestLifecycle::class);
+            $lifecycle->endRequest();
+        }
     }
 }

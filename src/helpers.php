@@ -222,6 +222,40 @@ if (!function_exists('container')) {
     }
 }
 
+if (!function_exists('db')) {
+    /**
+     * Get the database connection instance
+     *
+     * Provides convenient access to the database Connection with transaction
+     * management capabilities including afterCommit/afterRollback callbacks.
+     *
+     * Usage:
+     *   // Get the connection
+     *   $connection = db($context);
+     *
+     *   // Execute a query
+     *   $users = db($context)->table('users')->where('active', 1)->get();
+     *
+     *   // Transaction with after-commit callback
+     *   db($context)->transaction(function() use ($context, $model) {
+     *       $model->save();
+     *       db($context)->afterCommit(fn() => $model->searchableSync());
+     *   });
+     *
+     *   // Check transaction state
+     *   if (db($context)->withinTransaction()) {
+     *       db($context)->afterCommit($callback);
+     *   }
+     *
+     * @param \Glueful\Bootstrap\ApplicationContext $context Application context
+     * @return \Glueful\Database\Connection Database connection instance
+     */
+    function db(\Glueful\Bootstrap\ApplicationContext $context): \Glueful\Database\Connection
+    {
+        return app($context, \Glueful\Database\Connection::class);
+    }
+}
+
 if (!function_exists('dump')) {
     /**
      * Dump the given variables using Symfony VarDumper

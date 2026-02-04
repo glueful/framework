@@ -107,6 +107,10 @@ class Connection implements DatabaseInterface
      */
     private ?PooledConnection $pooledConnection = null;
 
+    /**
+     * @var \Glueful\Database\Transaction\TransactionManager|null Transaction manager (initialized lazily)
+     */
+    private ?\Glueful\Database\Transaction\TransactionManager $transactionManager = null;
 
     /**
      * Initialize database connection with optional pooling
@@ -600,15 +604,8 @@ class Connection implements DatabaseInterface
             $updateBuilder
         );
 
-        // SavepointManager for TransactionManager
-        $savepointManager = new \Glueful\Database\Transaction\SavepointManager($this->getPDO());
-
-        // TransactionManager needs PDO, SavepointManager, and QueryLogger
-        $transactionManager = new \Glueful\Database\Transaction\TransactionManager(
-            $this->getPDO(),  // Use getPDO() to leverage connection pooling
-            $savepointManager,
-            $queryLogger
-        );
+        // Get shared TransactionManager (lazy-initialized)
+        $transactionManager = $this->getTransactionManager();
 
         // PaginationBuilder needs executor and logger
         $paginationBuilder = new \Glueful\Database\Features\PaginationBuilder(
@@ -634,6 +631,112 @@ class Connection implements DatabaseInterface
             $queryValidator,
             $queryPurpose
         );
+    }
+
+    /**
+     * Get the shared TransactionManager instance.
+     *
+     * Lazily initializes the TransactionManager on first access. The same instance
+     * is shared across all QueryBuilders created from this connection to ensure
+     * transaction state and callbacks are properly tracked.
+     *
+     * @return \Glueful\Database\Transaction\TransactionManager
+     */
+    public function getTransactionManager(): \Glueful\Database\Transaction\TransactionManager
+    {
+        if ($this->transactionManager === null) {
+            $savepointManager = new \Glueful\Database\Transaction\SavepointManager($this->getPDO());
+            $queryLogger = new \Glueful\Database\QueryLogger();
+
+            $this->transactionManager = new \Glueful\Database\Transaction\TransactionManager(
+                $this->getPDO(),
+                $savepointManager,
+                $queryLogger
+            );
+        }
+
+        return $this->transactionManager;
+    }
+
+    /**
+     * Register a callback to execute after the current transaction commits.
+     *
+     * If not currently in a transaction, the callback is executed immediately.
+     * For nested transactions (savepoints), callbacks are promoted to the parent
+     * level and only fire when the outermost transaction commits.
+     *
+     * Use cases:
+     * - Search index updates (only index committed data)
+     * - Cache invalidation (only invalidate after data is persisted)
+     * - Event dispatching (only dispatch when changes are final)
+     * - Sending notifications (only notify after successful commit)
+     *
+     * @param callable $callback The callback to execute after commit
+     * @return $this For method chaining
+     */
+    public function afterCommit(callable $callback): self
+    {
+        $this->getTransactionManager()->afterCommit($callback);
+        return $this;
+    }
+
+    /**
+     * Register a callback to execute after the current transaction rolls back.
+     *
+     * If not currently in a transaction, the callback is ignored.
+     * For nested transactions, callbacks are discarded if the nested
+     * transaction is rolled back (not promoted to parent).
+     *
+     * @param callable $callback The callback to execute after rollback
+     * @return $this For method chaining
+     */
+    public function afterRollback(callable $callback): self
+    {
+        $this->getTransactionManager()->afterRollback($callback);
+        return $this;
+    }
+
+    /**
+     * Check if currently inside a database transaction.
+     *
+     * Alias for getTransactionManager()->isActive().
+     *
+     * @return bool True if a transaction is active
+     */
+    public function withinTransaction(): bool
+    {
+        return $this->getTransactionManager()->isActive();
+    }
+
+    /**
+     * Get the current transaction nesting level.
+     *
+     * Returns 0 if no transaction is active. For nested transactions using
+     * savepoints, returns the depth of nesting (1 for outermost, 2 for first
+     * nested savepoint, etc.).
+     *
+     * Alias for getTransactionManager()->getLevel().
+     *
+     * @return int Current transaction nesting level
+     */
+    public function transactionLevel(): int
+    {
+        return $this->getTransactionManager()->getLevel();
+    }
+
+    /**
+     * Execute a callback within a database transaction.
+     *
+     * Convenience method that delegates to the TransactionManager.
+     * Supports automatic retry on deadlock and nested transactions via savepoints.
+     *
+     * @param callable $callback The callback to execute within the transaction
+     * @return mixed The return value of the callback
+     * @throws \Exception If the transaction fails after max retries or callback throws
+     */
+    public function transaction(callable $callback): mixed
+    {
+        return $this->getTransactionManager()->transaction($callback);
     }
 
     /**

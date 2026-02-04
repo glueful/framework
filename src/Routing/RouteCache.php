@@ -9,7 +9,6 @@ use Glueful\Bootstrap\ApplicationContext;
 class RouteCache
 {
     private string $cacheDir;
-    private int $devTtl = 5; // 5 seconds in dev
     private ApplicationContext $context;
 
     public function __construct(ApplicationContext $context)
@@ -32,27 +31,29 @@ class RouteCache
             return null;
         }
 
-        // Development: check TTL and file changes
-        if ($this->isDevelopment()) {
-            $age = time() - filemtime($cacheFile);
-            if ($age > $this->devTtl) {
-                return null;
-            }
-
-            // Check if route files changed
-            if ($this->routeFilesChanged(filemtime($cacheFile))) {
-                unlink($cacheFile);
-                return null;
-            }
+        $data = include $cacheFile;
+        if (!is_array($data)) {
+            return null;
         }
 
-        return include $cacheFile;
+        if (!isset($data['signature']) || !is_string($data['signature'])) {
+            return null;
+        }
+
+        $currentSignature = $this->computeSignature();
+        if (!hash_equals($data['signature'], $currentSignature)) {
+            @unlink($cacheFile);
+            return null;
+        }
+
+        return $data;
     }
 
     public function save(Router $router): bool
     {
         $compiler = new RouteCompiler();
-        $code = $compiler->compile($router);
+        $signature = $this->computeSignature();
+        $code = $compiler->compile($router, $signature);
 
         $cacheFile = $this->getCacheFile();
         $tmpFile = $cacheFile . '.tmp';
@@ -84,30 +85,152 @@ class RouteCache
         return $this->cacheDir . "/routes_{$env}.php";
     }
 
+    public function getCacheFilePath(): string
+    {
+        return $this->getCacheFile();
+    }
+
     private function isDevelopment(): bool
     {
         return $this->context->getEnvironment() !== 'production';
     }
 
-    private function routeFilesChanged(int $cacheTime): bool
+    public function getSignature(): string
     {
-        // App route files
-        $appGlob = glob(base_path($this->context, 'routes/*.php'));
-        $appFiles = $appGlob !== false ? $appGlob : [];
+        return $this->computeSignature();
+    }
 
-        // Framework route files (under src/routes)
-        $frameworkRoutesPath = dirname(__DIR__) . '/routes/*.php';
-        $frameworkGlob = glob($frameworkRoutesPath);
-        $frameworkFiles = $frameworkGlob !== false ? $frameworkGlob : [];
+    /**
+     * @return array<int, string>
+     */
+    public function getSourceFiles(): array
+    {
+        return $this->getRouteSourceFiles();
+    }
 
-        $files = array_merge($appFiles, $frameworkFiles);
+    public function getCachedSignature(): ?string
+    {
+        $cacheFile = $this->getCacheFile();
+        if (!file_exists($cacheFile)) {
+            return null;
+        }
 
+        $data = include $cacheFile;
+        if (!is_array($data)) {
+            return null;
+        }
+
+        return isset($data['signature']) && is_string($data['signature'])
+            ? $data['signature']
+            : null;
+    }
+
+    /**
+     * Build a stable signature based on route sources and relevant config.
+     */
+    private function computeSignature(): string
+    {
+        $files = $this->getRouteSourceFiles();
+        sort($files);
+
+        $ctx = hash_init('sha256');
         foreach ($files as $file) {
-            if (@filemtime($file) > $cacheTime) {
-                return true;
+            if (!is_file($file)) {
+                continue;
+            }
+            $stat = @stat($file);
+            if ($stat === false) {
+                continue;
+            }
+            hash_update($ctx, $file);
+            hash_update($ctx, (string) ($stat['mtime'] ?? 0));
+            hash_update($ctx, (string) ($stat['size'] ?? 0));
+        }
+
+        return hash_final($ctx);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function getRouteSourceFiles(): array
+    {
+        $files = [];
+
+        // App route files
+        $appRoutes = glob(base_path($this->context, 'routes/*.php')) ?: [];
+        $files = array_merge($files, $appRoutes);
+
+        // Framework route files
+        $frameworkRoutes = glob(dirname(__DIR__) . '/routes/*.php') ?: [];
+        $files = array_merge($files, $frameworkRoutes);
+
+        // App controllers for attribute routing
+        $appControllers = base_path($this->context, 'app/Controllers');
+        $files = array_merge($files, $this->collectPhpFiles($appControllers));
+
+        // Framework controllers (if any attribute routes are used)
+        $frameworkControllers = dirname(__DIR__) . '/Controllers';
+        $files = array_merge($files, $this->collectPhpFiles($frameworkControllers));
+
+        // Config files (routing/versioning can depend on config)
+        $whitelist = $this->getConfigWhitelist();
+        if ($whitelist !== null) {
+            foreach ($whitelist as $name) {
+                $files[] = base_path($this->context, 'config/' . $name);
+                $files[] = dirname(__DIR__) . '/config/' . $name;
+            }
+        } else {
+            $appConfig = glob(base_path($this->context, 'config/*.php')) ?: [];
+            $files = array_merge($files, $appConfig);
+
+            $frameworkConfig = glob(dirname(__DIR__) . '/config/*.php') ?: [];
+            $files = array_merge($files, $frameworkConfig);
+        }
+
+        return array_values(array_unique($files));
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function collectPhpFiles(string $directory): array
+    {
+        if (!is_dir($directory)) {
+            return [];
+        }
+
+        $files = [];
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS)
+        );
+        foreach ($iterator as $file) {
+            if ($file->isFile() && strtolower($file->getExtension()) === 'php') {
+                $files[] = $file->getPathname();
             }
         }
 
-        return false;
+        return $files;
+    }
+
+    /**
+     * @return array<int, string>|null
+     */
+    private function getConfigWhitelist(): ?array
+    {
+        $value = env('ROUTE_CACHE_CONFIG_WHITELIST', '');
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $value = trim($value);
+        if ($value === '') {
+            return null;
+        }
+
+        $parts = array_map('trim', explode(',', $value));
+        $parts = array_values(array_filter($parts, static fn(string $p): bool => $p !== ''));
+
+        return $parts === [] ? null : $parts;
     }
 }

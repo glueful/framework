@@ -12,7 +12,7 @@ class RouteCompiler
      * This method ensures consistent serialization of all handler types
      * and prevents cache corruption from closures or other non-serializable handlers.
      */
-    public function compile(Router $router): string
+    public function compile(Router $router, string $signature): string
     {
         $static = $router->getStaticRoutes();
         $dynamic = $router->getDynamicRoutes();
@@ -22,6 +22,7 @@ class RouteCompiler
         $code .= "// Auto-generated route cache - DO NOT EDIT\n";
         $code .= "// Generated: " . date('Y-m-d H:i:s') . "\n\n";
         $code .= "return [\n";
+        $code .= "    'signature' => " . var_export($signature, true) . ",\n";
 
         // Export static routes with normalized handlers
         $code .= "    'static' => [\n";

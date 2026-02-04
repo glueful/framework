@@ -51,6 +51,7 @@ class Router
             if ($cached !== null) {
                 $this->staticRoutes = $this->reconstructStaticRoutes($cached['static']);
                 $this->dynamicRoutes = $this->reconstructDynamicRoutes($cached['dynamic']);
+                $this->rebuildRouteBuckets();
             }
         }
     }
@@ -198,6 +199,21 @@ class Router
         $segment = strtok($trimmed, '/');
         // Parameterized first segment goes to wildcard bucket
         return (str_contains($segment, '{') ? '*' : $segment);
+    }
+
+    /**
+     * Rebuild dynamic route buckets from current dynamic routes.
+     */
+    private function rebuildRouteBuckets(): void
+    {
+        $this->routeBuckets = [];
+
+        foreach ($this->dynamicRoutes as $method => $routes) {
+            foreach ($routes as $route) {
+                $firstSegment = $this->firstSegment($route->getPath()) ?? '*';
+                $this->routeBuckets[$method][$firstSegment][] = $route;
+            }
+        }
     }
 
     // Fast route matching with proper HTTP semantics
