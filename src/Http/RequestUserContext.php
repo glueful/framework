@@ -248,7 +248,7 @@ class RequestUserContext
                 $userData = $user->toArray();
 
                 // Get AuthenticationManager instance
-                $authManager = app($this->context, \Glueful\Auth\AuthenticationManager::class);
+                $authManager = app(self::$context, \Glueful\Auth\AuthenticationManager::class);
                 $this->permissionCache[$cacheKey] = $authManager->isAdmin($userData);
             }
         }
@@ -710,11 +710,11 @@ class RequestUserContext
 
     private function getTokenManager(): \Glueful\Auth\TokenManager
     {
-        if ($this->context !== null && $this->context->hasContainer()) {
-            return $this->context->getContainer()->get(\Glueful\Auth\TokenManager::class);
+        if (self::$context !== null && self::$context->hasContainer()) {
+            return self::$context->getContainer()->get(\Glueful\Auth\TokenManager::class);
         }
 
-        return new \Glueful\Auth\TokenManager($this->context);
+        return new \Glueful\Auth\TokenManager(self::$context);
     }
 
     /**

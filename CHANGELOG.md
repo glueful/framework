@@ -4,6 +4,67 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.28.0] - 2026-02-05 — Bellatrix
+
+Route caching support: Refactored controllers to use cacheable route syntax.
+
+### Changed
+
+#### ResourceController Refactoring
+- **Removed wrapper methods**: Eliminated redundant wrapper pattern for cleaner code
+  - Removed: `listResources`, `showResource`, `createResource`, `updateResource`, `deleteResource`, `bulkDeleteResources`, `bulkUpdateResources`
+
+- **Renamed methods to RESTful conventions**:
+  - `get()` → `index()` - List resources with pagination
+  - `getSingle()` → `show()` - Get single resource by UUID
+  - `post()` → `store()` - Create new resource
+  - `put()` → `update()` - Update existing resource
+  - `delete()` → `destroy()` - Delete resource
+  - New: `destroyBulk()` - Bulk delete resources
+  - New: `updateBulk()` - Bulk update resources
+
+- **Methods now accept Request directly**: All public methods accept `Symfony\Component\HttpFoundation\Request` and extract parameters from `$request->attributes`
+
+- **Added imports**: `Glueful\Helpers\RequestHelper` and `Symfony\Component\HttpFoundation\Request`
+
+#### Route Definitions (resource.php)
+- Updated all routes to use controller syntax `[Controller::class, 'method']` instead of closures
+- Routes are now fully cacheable for improved performance
+
+### Breaking Changes
+
+- **Method signature changes**: If you extended `ResourceController` and overrode methods, update to new signatures:
+  ```php
+  // Before
+  public function get(array $params, array $queryParams)
+
+  // After
+  public function index(Request $request): Response
+  ```
+
+- **Route handler references**: Any code referencing old method names must be updated
+
+#### Route Caching Infrastructure
+- **RouteCompiler validation methods**: Added handler validation to detect non-cacheable routes
+  - `validateHandlers()`: Validates all routes for caching compatibility
+  - `hasClosures()`: Checks if validation issues contain closure handlers
+  - `getClosureRoutes()`: Returns list of routes using closure handlers
+  - Warns developers about closure handlers that prevent caching
+
+- **RouteCache closure detection**: Enhanced cache management with closure awareness
+  - `cacheContainsClosures()`: Detects closures in cached routes
+  - Automatically invalidates cache when closures are detected
+  - Logs warnings to help identify routes needing conversion
+
+### Notes
+
+- Controller methods now follow Laravel-style naming conventions (index, show, store, update, destroy)
+- The `BulkOperationsTrait` methods (`bulkDelete`, `bulkUpdate`) remain unchanged as internal helpers
+- Route caching can significantly improve application performance by avoiding route file parsing on each request
+- Use `./glueful route:debug` to identify routes still using closure syntax
+
+---
+
 ## [1.27.0] - 2026-02-04 — Avior
 
 Developer experience improvements: new CLI commands, route cache signatures, transaction callbacks, and extension management.

@@ -222,6 +222,25 @@ class AuthController
     }
 
     /**
+     * Get CSRF token for form/AJAX protection
+     *
+     * Generates a CSRF token that should be included in subsequent requests
+     * to protect against cross-site request forgery attacks.
+     *
+     * @param SymfonyRequest $request The HTTP request
+     * @return mixed HTTP response with CSRF token data
+     */
+    public function csrfToken(SymfonyRequest $request)
+    {
+        try {
+            $tokenData = \Glueful\Helpers\Utils::csrfTokenData($request);
+            return Response::success($tokenData, 'CSRF token retrieved successfully');
+        } catch (\Exception $e) {
+            return Response::error('Failed to generate CSRF token: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
      * Verify email for registration/password reset
      *
      * @return mixed HTTP response

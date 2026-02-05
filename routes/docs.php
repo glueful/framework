@@ -1,22 +1,14 @@
 <?php
 
 use Glueful\Routing\Router;
-use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Controllers\DocsController;
-use Symfony\Component\HttpFoundation\Request;
 
 /**
  * @var Router $router Router instance injected by RouteManifest::load()
- * @var ApplicationContext $context
  */
 
-/** @var ApplicationContext|null $context */
-$context = (isset($context) && $context instanceof ApplicationContext)
-    ? $context
-    : $router->getContext();
-
 // Documentation routes - serves OpenAPI spec and interactive UI
-$router->group(['prefix' => '/docs'], function (Router $router) use ($context) {
+$router->group(['prefix' => '/docs'], function (Router $router) {
     /**
      * @route GET /docs
      * @summary API Documentation UI
@@ -28,10 +20,7 @@ $router->group(['prefix' => '/docs'], function (Router $router) use ($context) {
      *   message:string="Documentation not generated. Run: php glueful generate:openapi --ui"
      * }
      */
-    $router->get('/', function (Request $request) use ($context) {
-        $controller = container($context)->get(DocsController::class);
-        return $controller->index($request);
-    });
+    $router->get('/', [DocsController::class, 'index']);
 
     /**
      * @route GET /docs/openapi.json
@@ -49,8 +38,5 @@ $router->group(['prefix' => '/docs'], function (Router $router) use ($context) {
      *   message:string="OpenAPI specification not generated. Run: php glueful generate:openapi"
      * }
      */
-    $router->get('/openapi.json', function (Request $request) use ($context) {
-        $controller = container($context)->get(DocsController::class);
-        return $controller->openapi($request);
-    });
+    $router->get('/openapi.json', [DocsController::class, 'openapi']);
 });

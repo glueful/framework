@@ -8,6 +8,9 @@ use Glueful\Http\Response;
 use Glueful\Auth\PasswordHasher;
 use Glueful\Repository\RepositoryFactory;
 use Glueful\Constants\ErrorCodes;
+use Glueful\Controllers\Traits\BulkOperationsTrait;
+use Glueful\Helpers\RequestHelper;
+use Symfony\Component\HttpFoundation\Request;
 
 /**
  * ResourceController - RESTful CRUD API Controller
@@ -16,11 +19,11 @@ use Glueful\Constants\ErrorCodes;
  * resource table with performance-first design and optional security features.
  *
  * CRUD Operations:
- * - GET    /resource/{table}     -> get() method (Read multiple/paginated)
- * - GET    /resource/{table}/{id} -> getSingle() method (Read single record)
- * - POST   /resource/{table}     -> post() method (Create new record)
- * - PUT    /resource/{table}/{id} -> put() method (Update existing record)
- * - DELETE /resource/{table}/{id} -> delete() method (Delete record)
+ * - GET    /data/{table}      -> index() method (Read multiple/paginated)
+ * - GET    /data/{table}/{id} -> show() method (Read single record)
+ * - POST   /data/{table}      -> store() method (Create new record)
+ * - PUT    /data/{table}/{id} -> update() method (Update existing record)
+ * - DELETE /data/{table}/{id} -> destroy() method (Delete record)
  *
  * Performance-First Design:
  * - Minimal overhead by default
@@ -39,6 +42,8 @@ use Glueful\Constants\ErrorCodes;
  */
 class ResourceController extends BaseController
 {
+    use BulkOperationsTrait;
+
     /**
      * Security feature toggles - can be overridden in child classes
      */
@@ -77,13 +82,13 @@ class ResourceController extends BaseController
     /**
      * Get resource list with pagination
      *
-     * @param array<string, mixed> $params Route parameters
-     * @param array<string, mixed> $queryParams Query string parameters
-     * @return mixed HTTP response
+     * @route GET /data/{table}
      */
-    public function get(array $params, array $queryParams)
+    public function index(Request $request): Response
     {
-        $table = $params['resource'];
+        $table = $request->attributes->get('table', '');
+        $queryParams = $request->query->all();
+
         // Apply optional table access control
         $this->applyTableAccessControl($table);
 
@@ -130,13 +135,12 @@ class ResourceController extends BaseController
     /**
      * Get single resource by UUID
      *
-     * @param array<string, mixed> $params Route parameters
-     * @param array<string, mixed> $queryParams Query string parameters
-     * @return mixed HTTP response
+     * @route GET /data/{table}/{uuid}
      */
-    public function getSingle(array $params, array $queryParams)
+    public function show(Request $request): Response
     {
-        $table = $params['resource'];
+        $table = $request->attributes->get('table', '');
+        $uuid = $request->attributes->get('uuid', '');
 
         // Apply optional table access control
         $this->applyTableAccessControl($table);
@@ -152,8 +156,8 @@ class ResourceController extends BaseController
 
         // Cache single resource reads
         $result = $this->cacheByPermission(
-            "resource:{$table}:read:{$params['uuid']}",
-            fn() => $repository->find($params['uuid']),
+            "resource:{$table}:read:{$uuid}",
+            fn() => $repository->find($uuid),
             300 // 5 minutes
         );
 
@@ -162,11 +166,10 @@ class ResourceController extends BaseController
         }
 
         // Apply optional ownership validation
-        $this->applyOwnershipValidation($table, $params['uuid'], $result);
+        $this->applyOwnershipValidation($table, $uuid, $result);
 
         // Apply optional field-level permissions
         $result = $this->applyFieldPermissions($result, $table, 'read');
-
 
         return Response::success($result);
     }
@@ -174,13 +177,12 @@ class ResourceController extends BaseController
     /**
      * Create new resource
      *
-     * @param array<string, mixed> $params Route parameters
-     * @param array<string, mixed> $postData POST data
-     * @return mixed HTTP response
+     * @route POST /data/{table}
      */
-    public function post(array $params, array $postData)
+    public function store(Request $request): Response
     {
-        $table = $params['resource'];
+        $table = $request->attributes->get('table', '');
+        $postData = RequestHelper::getRequestData();
 
         // Apply optional table access control
         $this->applyTableAccessControl($table);
@@ -208,7 +210,6 @@ class ResourceController extends BaseController
         // Invalidate cache after creation
         $this->invalidateTableCache($table);
 
-
         $result = [
             'uuid' => $uuid,
             'success' => true,
@@ -221,14 +222,13 @@ class ResourceController extends BaseController
     /**
      * Update existing resource
      *
-     * @param array<string, mixed> $params Route parameters
-     * @param array<string, mixed> $putData PUT data
-     * @return mixed HTTP response
+     * @route PUT /data/{table}/{uuid}
      */
-    public function put(array $params, array $putData)
+    public function update(Request $request): Response
     {
-        $table = $params['resource'];
-        $uuid = $params['uuid'];
+        $table = $request->attributes->get('table', '');
+        $uuid = $request->attributes->get('uuid', '');
+        $putData = RequestHelper::getPutData();
 
         // Apply optional table access control
         $this->applyTableAccessControl($table);
@@ -254,13 +254,13 @@ class ResourceController extends BaseController
         $updateData = $putData['data'] ?? $putData;
         unset($updateData['uuid']); // Remove UUID from update data
 
-        // check if postData contains 'password' and hash it
+        // check if putData contains 'password' and hash it
         $passwordHasher = new PasswordHasher();
         if (isset($updateData['password'])) {
             $updateData['password'] = $passwordHasher->hash($updateData['password']);
         }
 
-        $success = $repository->update($params['uuid'], $updateData);
+        $success = $repository->update($uuid, $updateData);
 
         if (!$success) {
             return Response::error('Record not found or update failed', ErrorCodes::NOT_FOUND);
@@ -268,7 +268,6 @@ class ResourceController extends BaseController
 
         // Invalidate cache after update
         $this->invalidateTableCache($table, $uuid);
-
 
         $result = [
             'affected' => 1,
@@ -282,13 +281,12 @@ class ResourceController extends BaseController
     /**
      * Delete resource
      *
-     * @param array<string, mixed> $params Route parameters
-     * @return mixed HTTP response
+     * @route DELETE /data/{table}/{uuid}
      */
-    public function delete(array $params)
+    public function destroy(Request $request): Response
     {
-        $table = $params['resource'];
-        $uuid = $params['uuid'];
+        $table = $request->attributes->get('table', '');
+        $uuid = $request->attributes->get('uuid', '');
 
         // Apply optional table access control
         $this->applyTableAccessControl($table);
@@ -310,7 +308,7 @@ class ResourceController extends BaseController
         // Apply optional ownership validation
         $this->applyOwnershipValidation($table, $uuid, $existing);
 
-        $success = $repository->delete($params['uuid']);
+        $success = $repository->delete($uuid);
 
         if (!$success) {
             return Response::error('Record not found or delete failed', ErrorCodes::NOT_FOUND);
@@ -318,7 +316,6 @@ class ResourceController extends BaseController
 
         // Invalidate cache after deletion
         $this->invalidateTableCache($table, $uuid);
-
 
         $result = [
             'affected' => 1,
@@ -467,5 +464,33 @@ class ResourceController extends BaseController
         }
 
         return array_map('trim', explode(',', $fields));
+    }
+
+    // =========================================================================
+    // Bulk Operations (delegates to BulkOperationsTrait)
+    // =========================================================================
+
+    /**
+     * Bulk delete resources
+     *
+     * @route DELETE /data/{table}/bulk
+     */
+    public function destroyBulk(Request $request): Response
+    {
+        $params = ['resource' => $request->attributes->get('table', '')];
+        $deleteData = RequestHelper::getRequestData();
+        return $this->bulkDelete($params, $deleteData);
+    }
+
+    /**
+     * Bulk update resources
+     *
+     * @route PUT /data/{table}/bulk
+     */
+    public function updateBulk(Request $request): Response
+    {
+        $params = ['resource' => $request->attributes->get('table', '')];
+        $updateData = RequestHelper::getRequestData();
+        return $this->bulkUpdate($params, $updateData);
     }
 }
