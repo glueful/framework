@@ -21,6 +21,26 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.28.0 — Bellatrix (Released 2026-02-05)
+- **Route Caching Support**: Refactored controllers to use cacheable route syntax.
+  - ResourceController methods renamed to RESTful conventions (index, show, store, update, destroy).
+  - Removed wrapper methods pattern for cleaner, more maintainable code.
+  - All routes now use `[Controller::class, 'method']` syntax instead of closures.
+  - Methods accept `Request` directly and extract parameters from attributes.
+- **Route Caching Infrastructure**: Added validation tools for cache compatibility.
+  - RouteCompiler: `validateHandlers()`, `hasClosures()`, `getClosureRoutes()` for detecting non-cacheable routes.
+  - RouteCache: `cacheContainsClosures()` auto-invalidates cache and logs warnings when closures detected.
+  - Helps developers identify routes needing conversion to controller syntax.
+- **Breaking Changes**: Method signatures changed for ResourceController extensions.
+- Notes: Enables route caching for improved performance. Use `route:debug` to find closure-based routes.
+
+### 1.27.0 — Avior (Released 2026-02-04)
+- **New CLI Commands**: `doctor`, `env:sync`, `route:debug`, `route:cache:clear`, `route:cache:status`, `cache:inspect`, `test:watch`, `dev:server`.
+- **Database Transaction Callbacks**: `afterCommit()` and `afterRollback()` on Connection class.
+- **Route Cache Improvements**: Signature-based invalidation with SHA-256 hash.
+- **Extensions Enable/Disable**: Commands now edit config directly with `--dry-run` and `--backup` options.
+- Notes: No breaking changes. DX improvements for development workflow.
+
 ### 1.26.0 — Atria (Released 2026-01-31)
 - **Extension Discovery Fixes**: Improved reliability of Composer-based extension discovery.
   - `PackageManifest` now falls back to `installed.json` when `installed.php` lacks provider metadata.

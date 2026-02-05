@@ -46,8 +46,8 @@ trait BulkOperationsTrait
     /**
      * Bulk delete resources
      *
-     * @param array $params Route parameters
-     * @param array $deleteData DELETE data containing UUIDs
+     * @param array<string, mixed> $params Route parameters
+     * @param array<string, mixed> $deleteData DELETE data containing UUIDs
      * @return mixed HTTP response
      */
     public function bulkDelete(array $params, array $deleteData)
@@ -60,7 +60,7 @@ trait BulkOperationsTrait
         $uuids = $deleteData['uuids'] ?? [];
 
         // Validate bulk operation
-        if (empty($uuids) || !is_array($uuids)) {
+        if (!is_array($uuids) || $uuids === []) {
             return Response::error('No UUIDs provided for bulk delete', Response::HTTP_BAD_REQUEST);
         }
 
@@ -98,7 +98,7 @@ trait BulkOperationsTrait
         foreach ($uuids as $uuid) {
             try {
                 // Skip if ownership validation failed
-                if (!in_array($uuid, $validUuids)) {
+                if (!in_array($uuid, $validUuids, true)) {
                     $failed[] = ['uuid' => $uuid, 'reason' => 'Access denied: ownership validation failed'];
                     continue;
                 }
@@ -112,8 +112,6 @@ trait BulkOperationsTrait
                 // Perform deletion
                 if ($repository->delete($uuid)) {
                     $deleted++;
-                    // Log individual deletions
-                    $this->logResourceAccess('bulk_delete_item', $table, $uuid);
                 } else {
                     $failed[] = ['uuid' => $uuid, 'reason' => 'Delete operation failed'];
                 }
@@ -124,9 +122,6 @@ trait BulkOperationsTrait
 
         // Invalidate cache after bulk deletion
         $this->invalidateTableCache($table);
-
-        // Log the bulk operation
-        $this->logResourceAccess('bulk_delete', $table, null);
 
         $result = [
             'deleted' => $deleted,
@@ -142,8 +137,8 @@ trait BulkOperationsTrait
     /**
      * Bulk update resources
      *
-     * @param array $params Route parameters
-     * @param array $updateData UPDATE data containing updates array
+     * @param array<string, mixed> $params Route parameters
+     * @param array<string, mixed> $updateData UPDATE data containing updates array
      * @return mixed HTTP response
      */
     public function bulkUpdate(array $params, array $updateData)
@@ -156,7 +151,7 @@ trait BulkOperationsTrait
         $updates = $updateData['updates'] ?? [];
 
         // Validate bulk operation
-        if (empty($updates) || !is_array($updates)) {
+        if (!is_array($updates) || $updates === []) {
             return Response::error('No updates provided for bulk update', Response::HTTP_BAD_REQUEST);
         }
 
@@ -196,14 +191,14 @@ trait BulkOperationsTrait
             $uuid = $update['uuid'] ?? null;
             $data = $update['data'] ?? [];
 
-            if (!$uuid || empty($data)) {
+            if ($uuid === null || !is_array($data) || $data === []) {
                 $failed[] = ['uuid' => $uuid, 'reason' => 'Missing UUID or data'];
                 continue;
             }
 
             try {
                 // Skip if ownership validation failed
-                if (!in_array($uuid, $validUuids)) {
+                if (!in_array($uuid, $validUuids, true)) {
                     $failed[] = ['uuid' => $uuid, 'reason' => 'Access denied: ownership validation failed'];
                     continue;
                 }
@@ -223,8 +218,6 @@ trait BulkOperationsTrait
                 // Perform update
                 if ($repository->update($uuid, $data)) {
                     $updated++;
-                    // Log individual updates
-                    $this->logResourceAccess('bulk_update_item', $table, $uuid);
                 } else {
                     $failed[] = ['uuid' => $uuid, 'reason' => 'Update operation failed'];
                 }
@@ -235,9 +228,6 @@ trait BulkOperationsTrait
 
         // Invalidate cache after bulk update
         $this->invalidateTableCache($table);
-
-        // Log the bulk operation
-        $this->logResourceAccess('bulk_update', $table, null);
 
         $result = [
             'updated' => $updated,
@@ -252,6 +242,10 @@ trait BulkOperationsTrait
 
     /**
      * Validate ownership for multiple records (batch operation for performance)
+     *
+     * @param string $table Table name
+     * @param array<int, string> $uuids UUIDs to validate
+     * @return array<int, string> Valid UUIDs that passed ownership check
      */
     protected function validateBulkOwnership(string $table, array $uuids): array
     {
@@ -261,12 +255,12 @@ trait BulkOperationsTrait
         }
 
         // If table doesn't require ownership validation, allow all
-        if (!in_array($table, ['profiles', 'blobs'])) {
+        if (!in_array($table, ['profiles', 'blobs'], true)) {
             return $uuids;
         }
 
         // If user is admin, allow all
-        if (!$this->currentUser || $this->can('admin.access')) {
+        if ($this->currentUser === null || $this->can('admin.access')) {
             return $uuids;
         }
 
@@ -300,13 +294,15 @@ trait BulkOperationsTrait
     /**
      * Get bulk operation limits
      * Override this method to customize limits
+     *
+     * @return array<string, int>
      */
     protected function getBulkLimits(): array
     {
         // Allow configuration override
         $configLimits = config($this->getContext(), 'resource.bulk_limits', []);
 
-        if (!empty($configLimits)) {
+        if (is_array($configLimits) && $configLimits !== []) {
             return $configLimits;
         }
 

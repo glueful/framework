@@ -126,6 +126,17 @@ class HealthController extends BaseController
     }
 
     /**
+     * Liveness probe for orchestrators (K8s / load balancers)
+     *
+     * Simple check that the service is running. Returns 200 if the process
+     * is alive and able to respond. No dependency checks - just "am I alive?"
+     */
+    public function liveness(): Response
+    {
+        return new Response(['status' => 'ok']);
+    }
+
+    /**
      * Readiness probe for orchestrators (K8s / load balancers)
      *
      * Performs lightweight checks on critical dependencies and returns 200 when

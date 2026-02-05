@@ -16,7 +16,6 @@ class RouteCompiler
     {
         $static = $router->getStaticRoutes();
         $dynamic = $router->getDynamicRoutes();
-        $named = $router->getNamedRoutes();
 
         $code = "<?php\n\n";
         $code .= "// Auto-generated route cache - DO NOT EDIT\n";
@@ -178,14 +177,14 @@ class RouteCompiler
      *
      * Call this before caching to catch problematic handlers early
      *
-     * @return array<string>
+     * @return array<int, array{type: string, severity: string, route: string, message: string}>
      */
     public function validateHandlers(Router $router): array
     {
         $issues = [];
 
         foreach ($router->getStaticRoutes() as $key => $route) {
-            $issue = $this->validateHandler($route->getHandler(), "static route: {$key}");
+            $issue = $this->validateHandler($route->getHandler(), $key);
             if ($issue !== null) {
                 $issues[] = $issue;
             }
@@ -194,7 +193,7 @@ class RouteCompiler
         foreach ($router->getDynamicRoutes() as $method => $routes) {
             foreach ($routes as $route) {
                 $path = $route->getPath();
-                $issue = $this->validateHandler($route->getHandler(), "dynamic route: {$method} {$path}");
+                $issue = $this->validateHandler($route->getHandler(), "{$method} {$path}");
                 if ($issue !== null) {
                     $issues[] = $issue;
                 }
@@ -205,25 +204,74 @@ class RouteCompiler
     }
 
     /**
-     * Validate individual handler for caching compatibility
+     * Check if validation issues contain any closures
+     *
+     * @param array<int, array{type: string, severity: string, route: string, message: string}> $issues
      */
-    private function validateHandler(mixed $handler, string $context): ?string
+    public function hasClosures(array $issues): bool
+    {
+        foreach ($issues as $issue) {
+            if ($issue['type'] === 'closure') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Get routes with closure handlers from validation issues
+     *
+     * @param array<int, array{type: string, severity: string, route: string, message: string}> $issues
+     * @return array<int, string>
+     */
+    public function getClosureRoutes(array $issues): array
+    {
+        $routes = [];
+        foreach ($issues as $issue) {
+            if ($issue['type'] === 'closure') {
+                $routes[] = $issue['route'];
+            }
+        }
+        return $routes;
+    }
+
+    /**
+     * Validate individual handler for caching compatibility
+     *
+     * @return array{type: string, severity: string, route: string, message: string}|null
+     */
+    private function validateHandler(mixed $handler, string $route): ?array
     {
         if ($handler instanceof \Closure) {
-            return "Warning: {$context} uses closure which cannot be cached reliably. " .
-                   "Consider using array callable [Class::class, 'method'] instead.";
+            return [
+                'type' => 'closure',
+                'severity' => 'warning',
+                'route' => $route,
+                'message' => 'Route uses closure handler which cannot be cached. ' .
+                    "Consider using [Controller::class, 'method'] syntax.",
+            ];
         }
 
         if (is_array($handler)) {
             if (!class_exists($handler[0]) || !method_exists($handler[0], $handler[1])) {
-                return "Error: {$context} references non-existent method {$handler[0]}::{$handler[1]}";
+                return [
+                    'type' => 'missing_method',
+                    'severity' => 'error',
+                    'route' => $route,
+                    'message' => "References non-existent method {$handler[0]}::{$handler[1]}",
+                ];
             }
         }
 
         if (is_string($handler) && str_contains($handler, '::')) {
             [$class, $method] = explode('::', $handler, 2);
             if (!class_exists($class) || !method_exists($class, $method)) {
-                return "Error: {$context} references non-existent method {$handler}";
+                return [
+                    'type' => 'missing_method',
+                    'severity' => 'error',
+                    'route' => $route,
+                    'message' => "References non-existent method {$handler}",
+                ];
             }
         }
 

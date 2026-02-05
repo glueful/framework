@@ -46,12 +46,77 @@ class RouteCache
             return null;
         }
 
+        // Check if cache contains closures (which can't be reconstructed)
+        if ($this->cacheContainsClosures($data)) {
+            @unlink($cacheFile);
+            return null;
+        }
+
         return $data;
+    }
+
+    /**
+     * Check if cached route data contains any closure handlers.
+     * Closures cannot be reliably reconstructed from cache.
+     *
+     * @param array<string, mixed> $data
+     */
+    private function cacheContainsClosures(array $data): bool
+    {
+        // Check static routes
+        if (isset($data['static']) && is_array($data['static'])) {
+            foreach ($data['static'] as $routeData) {
+                if (isset($routeData['handler']['type']) && $routeData['handler']['type'] === 'closure') {
+                    return true;
+                }
+            }
+        }
+
+        // Check dynamic routes
+        if (isset($data['dynamic']) && is_array($data['dynamic'])) {
+            foreach ($data['dynamic'] as $methodRoutes) {
+                if (!is_array($methodRoutes)) {
+                    continue;
+                }
+                foreach ($methodRoutes as $routeData) {
+                    if (isset($routeData['handler']['type']) && $routeData['handler']['type'] === 'closure') {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     public function save(Router $router): bool
     {
         $compiler = new RouteCompiler();
+
+        // Check for closures - they can't be cached reliably
+        $issues = $compiler->validateHandlers($router);
+
+        if ($compiler->hasClosures($issues)) {
+            // Don't cache routes with closures - they'll work fine without caching
+            // Clear any existing cache to prevent stale closure placeholders
+            $this->clear();
+
+            // Log warning so teams know why caching isn't happening
+            $closureRoutes = $compiler->getClosureRoutes($issues);
+            $routeList = implode(', ', array_slice($closureRoutes, 0, 5));
+            if (count($closureRoutes) > 5) {
+                $routeList .= sprintf(' (and %d more)', count($closureRoutes) - 5);
+            }
+            error_log(sprintf(
+                '[RouteCache] Skipping route caching: %d route(s) use closure handlers which cannot be cached. Routes: %s. ' .
+                'Convert to [Controller::class, "method"] syntax to enable caching.',
+                count($closureRoutes),
+                $routeList
+            ));
+
+            return false;
+        }
+
         $signature = $this->computeSignature();
         $code = $compiler->compile($router, $signature);
 
