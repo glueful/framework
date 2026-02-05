@@ -108,8 +108,8 @@ class RouteCache
                 $routeList .= sprintf(' (and %d more)', count($closureRoutes) - 5);
             }
             error_log(sprintf(
-                '[RouteCache] Skipping route caching: %d route(s) use closure handlers which cannot be cached. Routes: %s. ' .
-                'Convert to [Controller::class, "method"] syntax to enable caching.',
+                '[RouteCache] Skipping cache: %d route(s) use closure handlers. Routes: %s. ' .
+                'Convert to [Controller::class, "method"] syntax.',
                 count($closureRoutes),
                 $routeList
             ));
