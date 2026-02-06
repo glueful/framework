@@ -4,6 +4,25 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.28.1] - 2026-02-06 — Bellatrix (Patch)
+
+Route stability fixes: Resolved route prefix leakage across extensions and cache-aware route registration.
+
+### Fixed
+
+- **Router group stack cleanup**: `Router::group()` now uses `try/finally` to ensure `groupStack` and `middlewareStack` are always cleaned up, even when exceptions occur inside group callbacks. Previously, an exception inside a nested route group would leave stale prefixes on the stack, causing all subsequent route registrations to inherit incorrect path prefixes.
+
+- **Cache-aware static route registration**: Router now tracks when routes were pre-loaded from cache and allows extensions to overwrite cached route entries instead of throwing `LogicException("Route already defined")`. The `RouteCache` signature does not include extension route files, so extensions must re-register their routes on every request — this fix prevents the duplicate detection from blocking that re-registration.
+
+- **Dynamic route cache deduplication**: When routes are loaded from cache, dynamic route re-registration now replaces the cached entry in both `dynamicRoutes` and `routeBuckets` instead of appending a duplicate, preventing stale handlers from taking priority and eliminating performance overhead from doubled route entries.
+
+### Notes
+
+- No breaking changes. Stability patch for applications using route caching with extensions.
+- Root cause was a combination of: (1) missing `try/finally` in `Router::group()`, and (2) `RouteCache` not tracking extension route files in its signature, causing extensions to conflict with cached routes on subsequent requests.
+
+---
+
 ## [1.28.0] - 2026-02-05 — Bellatrix
 
 Route caching support: Refactored controllers to use cacheable route syntax.
@@ -11,6 +30,7 @@ Route caching support: Refactored controllers to use cacheable route syntax.
 ### Changed
 
 #### ResourceController Refactoring
+
 - **Removed wrapper methods**: Eliminated redundant wrapper pattern for cleaner code
   - Removed: `listResources`, `showResource`, `createResource`, `updateResource`, `deleteResource`, `bulkDeleteResources`, `bulkUpdateResources`
 
@@ -28,12 +48,14 @@ Route caching support: Refactored controllers to use cacheable route syntax.
 - **Added imports**: `Glueful\Helpers\RequestHelper` and `Symfony\Component\HttpFoundation\Request`
 
 #### Route Definitions (resource.php)
+
 - Updated all routes to use controller syntax `[Controller::class, 'method']` instead of closures
 - Routes are now fully cacheable for improved performance
 
 ### Breaking Changes
 
 - **Method signature changes**: If you extended `ResourceController` and overrode methods, update to new signatures:
+
   ```php
   // Before
   public function get(array $params, array $queryParams)
@@ -45,6 +67,7 @@ Route caching support: Refactored controllers to use cacheable route syntax.
 - **Route handler references**: Any code referencing old method names must be updated
 
 #### Route Caching Infrastructure
+
 - **RouteCompiler validation methods**: Added handler validation to detect non-cacheable routes
   - `validateHandlers()`: Validates all routes for caching compatibility
   - `hasClosures()`: Checks if validation issues contain closure handlers
@@ -72,6 +95,7 @@ Developer experience improvements: new CLI commands, route cache signatures, tra
 ### Added
 
 #### New CLI Commands
+
 - **`doctor`** (`System/DoctorCommand.php`): Quick health checks for local development
   - Checks environment, app key, cache, database, route cache, and storage permissions
   - Provides pass/fail status with detailed messages
@@ -98,6 +122,7 @@ Developer experience improvements: new CLI commands, route cache signatures, tra
 - **`dev:server`** (`Dev/ServerCommand.php`): Development server alias
 
 #### Database Transaction Callbacks
+
 - **`Connection::afterCommit(callable)`**: Register callback to execute after transaction commits
   - Use cases: search index updates, cache invalidation, event dispatching
   - Callbacks promoted to parent level for nested transactions (savepoints)
@@ -112,6 +137,7 @@ Developer experience improvements: new CLI commands, route cache signatures, tra
 ### Changed
 
 #### Extensions Enable/Disable Commands
+
 - **EnableCommand**: Now edits `config/extensions.php` instead of only printing instructions
   - Resolves extension by slug or FQCN using ExtensionManager metadata
   - Inserts provider class into the `'enabled'` array using regex-based editing
@@ -126,6 +152,7 @@ Developer experience improvements: new CLI commands, route cache signatures, tra
 - **New options**: `--dry-run` (preview), `--backup` (create .bak file)
 
 #### Route Cache Improvements
+
 - **Signature-based invalidation**: Replaced TTL-based caching with content-hash signatures
   - SHA-256 hash of route file paths, mtimes, and sizes
   - Cache invalidates when any source file changes
@@ -140,6 +167,7 @@ Developer experience improvements: new CLI commands, route cache signatures, tra
 - **RouteCompiler**: Now includes signature in compiled cache output
 
 #### Application Lifecycle
+
 - **RequestLifecycle integration**: `Application` now calls `beginRequest()` and `endRequest()`
   - Enables proper cleanup for long-running servers (RoadRunner, Swoole)
 
@@ -163,12 +191,14 @@ Fixed extension discovery reliability and improved ExtensionManager efficiency.
 ### Fixed
 
 #### Extension Discovery Fallback
+
 - **PackageManifest**: Now falls back to `installed.json` when `installed.php` doesn't yield providers
   - Composer's `installed.php` is optimized for speed but may omit the `extra` field in some configurations
   - `installed.json` contains complete package metadata including the `glueful.provider` specification
   - Discovery now tries `installed.php` first, falls back to `installed.json` if no providers found
 
 #### ExtensionManager Lazy Discovery
+
 - **getProviders()**: Added lazy auto-discovery for CLI commands that create their own container
   - Commands calling `getProviders()` without explicit `discover()` now auto-discover extensions
   - Prevents empty provider lists in documentation generation and other CLI tools
@@ -189,18 +219,22 @@ Enhanced RouteManifest with automatic discovery of multiple application route fi
 ### Added
 
 #### Multi-File Route Discovery
+
 - **Auto-discovery**: All `*.php` files in the application's `routes/` directory are automatically discovered and loaded
 - **Alphabetical loading**: Route files are sorted and loaded in alphabetical order for deterministic behavior
 - **Exclusion patterns**: Files starting with underscore (`_helpers.php`, `_shared.php`) are excluded as partials/includes
 - **Double-load prevention**: Tracks loaded files to prevent duplicate route registration
 
 #### Route Loading Priority
+
 - **Application routes first**: App routes load before framework routes for highest priority matching
 - **Framework fallback**: Generic framework routes (e.g., `/{resource}/{uuid}`) act as fallbacks
 - **Flexible prefixing**: Application controls its own route prefixes (no auto-wrapping)
 
 #### Domain-Driven Route Organization
+
 Applications can now split large route files into domain-specific files:
+
 ```
 routes/
 ├── api.php           # Main/shared routes
@@ -226,6 +260,7 @@ Comprehensive encryption service providing secure, easy-to-use AES-256-GCM encry
 ### Added
 
 #### Encryption Service Core
+
 - **EncryptionService** (`src/Encryption/EncryptionService.php`):
   - AES-256-GCM authenticated encryption (industry standard)
   - Random 12-byte nonce per encryption (prevents ciphertext repetition)
@@ -251,27 +286,32 @@ Comprehensive encryption service providing secure, easy-to-use AES-256-GCM encry
   - `decryptWithKey($encrypted, $key, $aad)` - Decrypt with specific key
 
 #### AAD (Additional Authenticated Data) Support
+
 - Context binding prevents cross-field attacks
 - Encrypting with `aad: 'user.ssn'` requires same AAD for decryption
 - Prevents copying encrypted SSN to API key field (AAD mismatch = decryption failure)
 
 #### Key Rotation Support
+
 - **Previous keys configuration**: `encryption.previous_keys` array in config
 - **O(1) key lookup**: Key ID in ciphertext enables direct lookup (no trial decryption)
 - **Seamless migration**: Old data decrypts with previous keys, new data uses current key
 
 #### Exception Classes
+
 - **EncryptionException** (`src/Encryption/Exceptions/EncryptionException.php`): Base exception class
 - **DecryptionException**: Decryption failures (wrong key, tampered data, invalid format)
 - **InvalidKeyException**: Key validation errors (wrong length, invalid base64)
 - **KeyNotFoundException**: Missing or unconfigured encryption key
 
 #### Base64 Key Support
+
 - Keys can use `base64:` prefix for safe storage in environment files
 - Example: `APP_KEY=base64:AbCdEfGhIjKlMnOpQrStUvWxYz012345678901234=`
 - Automatically decoded during service initialization
 
 #### CLI Commands
+
 - **`encryption:test`** (`src/Console/Commands/Encryption/TestCommand.php`):
   - Verifies encryption service is working correctly
   - Runs 6 self-tests: basic encryption, binary, AAD binding, tamper detection, random nonce, isEncrypted detection
@@ -290,6 +330,7 @@ Comprehensive encryption service providing secure, easy-to-use AES-256-GCM encry
   - Progress reporting with summary statistics
 
 #### Configuration
+
 - **`config/encryption.php`**:
   - `key` - Primary encryption key (from `APP_KEY` env)
   - `cipher` - Algorithm (AES-256-GCM only)
@@ -298,6 +339,7 @@ Comprehensive encryption service providing secure, easy-to-use AES-256-GCM encry
   - `files.extension` - Encrypted file extension (default `.enc`)
 
 #### Test Coverage
+
 - **EncryptionServiceTest** (`tests/Unit/Encryption/EncryptionServiceTest.php`): 32 tests covering:
   - Core encryption format and round-trip validation
   - Random nonce generation (different output each time)
@@ -325,6 +367,7 @@ Enhanced blob storage system with visibility controls, signed URLs for secure te
 ### Added
 
 #### Blob Visibility Support
+
 - **Per-blob visibility**: Blobs can now be marked as `public` or `private` individually
   - Upload requests accept `visibility` parameter (`public` or `private`)
   - Defaults to configured `uploads.default_visibility` (private by default)
@@ -334,6 +377,7 @@ Enhanced blob storage system with visibility controls, signed URLs for secure te
 - **BlobRepository**: Updated default fields to include `visibility` and `storage_type`
 
 #### Signed URL Support
+
 - **SignedUrl helper class** (`src/Support/SignedUrl.php`):
   - HMAC-based URL signing with configurable secret and algorithm
   - Time-limited access with customizable TTL (default 1 hour, max 7 days)
@@ -347,12 +391,14 @@ Enhanced blob storage system with visibility controls, signed URLs for secure te
 - **Automatic validation**: Private blob retrieval accepts signed URLs as alternative to auth
 
 #### Configuration Options
+
 - **uploads.default_visibility**: Set default visibility for new uploads (`public` or `private`)
 - **uploads.signed_urls.enabled**: Enable/disable signed URL generation (default: true)
 - **uploads.signed_urls.secret**: Dedicated secret for URL signing (falls back to APP_KEY)
 - **uploads.signed_urls.ttl**: Default TTL in seconds (default: 3600)
 
 #### Test Coverage
+
 - **SignedUrlTest** (`tests/Unit/Support/SignedUrlTest.php`): 17 tests covering:
   - URL generation and validation
   - Expiration handling
@@ -390,6 +436,7 @@ Major refactoring release replacing global state with explicit dependency inject
 ### Added
 
 #### Console Command Auto-Discovery
+
 - **Automatic command registration**: Commands are now auto-discovered from `src/Console/Commands/` directory
   - Scans for classes with `#[AsCommand]` attribute
   - Skips abstract classes automatically
@@ -404,6 +451,7 @@ Major refactoring release replacing global state with explicit dependency inject
 - **Removed duplication**: Eliminated duplicate command lists from `Application.php` and `ConsoleProvider.php`
 
 #### ApplicationContext Dependency Injection
+
 - **Explicit context parameter**: All helper functions now require `ApplicationContext` as first parameter:
   - `config($context, $key, $default)` - Get configuration values
   - `app($context, $id)` - Resolve services from container
@@ -418,12 +466,14 @@ Major refactoring release replacing global state with explicit dependency inject
 - **PHPStan banned_code rule**: Added rule in `phpstan.neon` to prevent `$GLOBALS` usage in new code
 
 #### Service Provider Updates
+
 - **ServiceProvider interface**: `register()` and `boot()` methods now receive `ApplicationContext` parameter
 - **BaseExtension**: Extension `boot()` method receives `ApplicationContext` for proper DI access
 
 ### Changed
 
 #### Authentication Services
+
 - **AuthenticationService**: Refactored to use `ApplicationContext` for all container and config access
 - **SessionStore**: Updated to resolve dependencies via context injection
 - **TokenManager**: Converted static caches to instance-based with context support
@@ -431,29 +481,35 @@ Major refactoring release replacing global state with explicit dependency inject
 - **SessionCacheManager**: Updated for explicit context dependency
 
 #### Core Services
+
 - **ResolvesSessionStore trait**: Simplified to provide default `getContext()` method, removing redundant `method_exists()` checks
 - **CacheFactory**: Updated Redis/Memcached configuration to use context
 - **CoreProvider**: Refactored logging and service registration for context injection
 - **ImageProvider**: Simplified config loading with helper closure pattern
 
 #### Console Commands
+
 - All scaffold and system commands updated to use `$this->getContext()` for configuration access
 - Improved output formatting in Database/StatusCommand, Extensions/ListCommand, and others
 
 #### Routes
+
 - Route files (`auth.php`, `docs.php`, `health.php`, `resource.php`) updated to receive and use `ApplicationContext`
 
 ### Fixed
 
 #### PHP 8.3 Compatibility
+
 - **InteractsWithQueue trait**: Fixed deprecated static trait method/property access by moving context storage to `QueueContextHolder` class
 
 #### PHPStan Errors
+
 - **ErrorResponseDTO**: Fixed duplicate `$context` property declaration, renamed array context to `$errorContext`
 - **SendNotification job**: Fixed visibility mismatch (`private` → `protected`) for `$context` property
 - **AuthFailureTracker**: Added missing return statement in `createCacheInstance()` method
 
 #### PHPCS Line Length Violations
+
 - Fixed 25+ files with lines exceeding 120 characters:
   - `CacheFactory.php`, `CoreProvider.php`, `ImageProvider.php`
   - `JwtAuthenticationProvider.php`, `RouteManifest.php`
@@ -462,6 +518,7 @@ Major refactoring release replacing global state with explicit dependency inject
   - `OpenApiDocsCommand.php`, `ModelCommand.php`, `CreateListenerCommand.php`
 
 #### Test Suite
+
 - **ServiceProviderTest**: Updated `TestServiceProvider` method signatures to match parent class
 - **RouterTest**: Added `ApplicationContext` initialization for `RouteCache`
 - **AttributeRouteLoaderTest**: Fixed test container to provide `ApplicationContext`
@@ -667,6 +724,7 @@ Minor release focusing on framework simplification by removing unused subsystems
 ### Changed
 
 #### Resource Routes URL Structure
+
 - **Added `/data` prefix** to generic CRUD routes to avoid conflicts with custom application routes:
   - `GET /api/v1/{resource}` → `GET /api/v1/data/{table}`
   - `GET /api/v1/{resource}/{uuid}` → `GET /api/v1/data/{table}/{uuid}`
@@ -679,6 +737,7 @@ Minor release focusing on framework simplification by removing unused subsystems
 - **Updated OpenAPI annotations** with new paths and "Data" tag
 
 #### Rate Limiting Consolidation
+
 - **Consolidated to single rate limiting system**: Removed basic rate limiting in favor of enhanced system
 - **Enhanced system features**: Tier-based limits, multiple algorithms (sliding/fixed/token bucket), IETF-compliant headers
 - **Updated `rate_limit` middleware alias** to point to `EnhancedRateLimiterMiddleware`
@@ -686,6 +745,7 @@ Minor release focusing on framework simplification by removing unused subsystems
 ### Removed
 
 #### Async/Fiber System
+
 - **Removed entire `src/Async/` directory** (~30 files):
   - `FiberScheduler` - Cooperative task scheduler
   - `Promise` - Promise-style async wrapper
@@ -702,6 +762,7 @@ Minor release focusing on framework simplification by removing unused subsystems
 - **Removed async documentation** from docs site
 
 #### Basic Rate Limiting System
+
 - **Removed `src/Security/RateLimiter.php`** and related classes:
   - `AdaptiveRateLimiter`, `RateLimiterRule`, `RateLimiterDistributor`
 - **Removed `RateLimiterMiddleware`** (basic version)
@@ -712,12 +773,14 @@ Minor release focusing on framework simplification by removing unused subsystems
   - `ResourceController`, `BulkOperationsTrait`
 
 #### Unused Configuration
+
 - **Removed `ENABLE_AUDIT`** from `.env.example` (audit logging uses activity_logs table directly)
 - **Removed pagination config** from `.env.example` and `config/app.php` (unused, PaginationBuilder uses hardcoded defaults)
 
 ### Migration
 
 #### Resource Routes
+
 Update any client code or documentation referencing the old resource URLs:
 
 ```diff
@@ -732,6 +795,7 @@ Update any client code or documentation referencing the old resource URLs:
 ```
 
 #### Rate Limiting
+
 If you were using the basic rate limiting trait methods in custom controllers, remove the calls:
 
 ```diff
@@ -750,7 +814,9 @@ $router->get('/endpoint', $handler)->middleware(['rate_limit:100,60']);
 ```
 
 #### Async System
+
 If you were using the async helpers (unlikely as they weren't integrated into core), migrate to:
+
 - **Guzzle Promises** for async HTTP requests
 - **Queue system** for background job processing
 
@@ -763,6 +829,7 @@ Patch release consolidating ValidationException classes, improving SQL query bui
 ### Changed
 
 #### ValidationException Consolidation
+
 - **Removed Legacy ValidationException**: Consolidated from 3 classes to 1:
   - Removed `Glueful\Exceptions\ValidationException` (legacy)
   - Removed `Glueful\Uploader\ValidationException` (empty class)
@@ -771,6 +838,7 @@ Patch release consolidating ValidationException classes, improving SQL query bui
 - **Static Factory Pattern**: All validation throws now use `ValidationException::forField()`, `forFields()`, or `withErrors()`
 
 #### Database Query Building Improvements
+
 - **PaginationBuilder**: Improved regex patterns for ORDER BY and LIMIT removal:
   - Handles `LIMIT ?`, `LIMIT 10, 20` (MySQL offset syntax), `LIMIT ? OFFSET ?`
   - ORDER BY regex now safely stops at LIMIT, OFFSET, FOR UPDATE, or end of query
@@ -782,6 +850,7 @@ Patch release consolidating ValidationException classes, improving SQL query bui
   - Invalid NULL comparisons (`column > NULL`) now throw clear exceptions
 
 #### Documentation Improvements
+
 - **ParameterBinder**: Updated comment to reflect cross-database compatibility (not just PostgreSQL)
 - **QueryBuilder**: Updated GROUP BY comment to reflect SQL standard compliance (not just PostgreSQL-specific)
 - **WhereClause**: Cleaned up duplicate PHPDoc blocks
@@ -853,6 +922,7 @@ Update your `.env` file:
 ```
 
 For production with API on subdomain:
+
 ```env
 BASE_URL=https://api.example.com
 API_VERSION=1
@@ -1162,29 +1232,29 @@ $isValid = WebhookSignature::verify(
 
 ```json
 {
-    "id": "wh_evt_01HXYZ123456789ABCDEF",
-    "event": "user.created",
-    "created_at": "2026-01-22T12:00:00+00:00",
-    "data": {
-        "user": {
-            "id": "usr_01HXYZ987654321FEDCBA",
-            "email": "john@example.com",
-            "name": "John Doe"
-        }
+  "id": "wh_evt_01HXYZ123456789ABCDEF",
+  "event": "user.created",
+  "created_at": "2026-01-22T12:00:00+00:00",
+  "data": {
+    "user": {
+      "id": "usr_01HXYZ987654321FEDCBA",
+      "email": "john@example.com",
+      "name": "John Doe"
     }
+  }
 }
 ```
 
 ### Webhook Headers
 
-| Header | Description | Example |
-|--------|-------------|---------|
-| `X-Webhook-ID` | Unique delivery ID | `wh_del_01HXYZ...` |
-| `X-Webhook-Event` | Event name | `user.created` |
-| `X-Webhook-Timestamp` | Unix timestamp | `1706011200` |
-| `X-Webhook-Signature` | HMAC signature | `t=1706011200,v1=abc...` |
-| `Content-Type` | Always JSON | `application/json` |
-| `User-Agent` | Glueful identifier | `Glueful-Webhooks/1.0` |
+| Header                | Description        | Example                  |
+| --------------------- | ------------------ | ------------------------ |
+| `X-Webhook-ID`        | Unique delivery ID | `wh_del_01HXYZ...`       |
+| `X-Webhook-Event`     | Event name         | `user.created`           |
+| `X-Webhook-Timestamp` | Unix timestamp     | `1706011200`             |
+| `X-Webhook-Signature` | HMAC signature     | `t=1706011200,v1=abc...` |
+| `Content-Type`        | Always JSON        | `application/json`       |
+| `User-Agent`          | Glueful identifier | `Glueful-Webhooks/1.0`   |
 
 ### Documentation
 
@@ -1455,6 +1525,7 @@ Feature release introducing Real-Time Development Server with file watching, col
 ### Added
 
 #### Real-Time Development Server
+
 - **FileWatcher Class**: New `Glueful\Development\Watcher\FileWatcher` for automatic file change detection:
   - Polling-based watching for cross-platform compatibility
   - Configurable directories, extensions, and ignore patterns
@@ -1484,6 +1555,7 @@ Feature release introducing Real-Time Development Server with file watching, col
   - `isSlow(float $thresholdMs)` - Check if request was slow
 
 #### Enhanced ServeCommand
+
 - **File Watching**: New `--watch` / `-w` option for auto-restart on code changes:
   - Watches `api/`, `src/`, `config/`, `routes/` directories
   - Monitors `.php`, `.env`, `.json`, `.yaml`, `.yml` files
@@ -1505,6 +1577,7 @@ Feature release introducing Real-Time Development Server with file watching, col
   - Clean, formatted output for development
 
 ### Changed
+
 - **ServeCommand**: Completely rewritten with new features:
   - Added `--watch` / `-w` for file watching
   - Added `--queue` / `-q` for queue worker integration
@@ -1514,10 +1587,12 @@ Feature release introducing Real-Time Development Server with file watching, col
   - Improved signal handling for graceful shutdown
 
 ### Documentation
+
 - Updated `docs/implementation-plans/priority-2/README.md` marking Real-Time Dev Server as complete.
 - Updated `docs/implementation-plans/priority-2/04-realtime-dev-server.md` with implementation status.
 
 ### Notes
+
 - **Cross-Platform**: File watcher uses polling strategy for compatibility with all operating systems.
 - **Performance**: Default poll interval is 500ms, configurable via `--poll-interval`.
 - **Directories**: Default watched directories are `api/`, `src/`, `config/`, `routes/`.
@@ -1529,6 +1604,7 @@ Feature release introducing Interactive CLI Wizards for enhanced developer exper
 ### Added
 
 #### Interactive CLI System
+
 - **Prompter Class**: New `Glueful\Console\Interactive\Prompter` class providing fluent API for CLI prompts:
   - `ask(string $question, ?string $default, ?callable $validator)` - Text input with validation
   - `askRequired(string $question, ?string $default)` - Required text input
@@ -1554,6 +1630,7 @@ Feature release introducing Interactive CLI Wizards for enhanced developer exper
   - Success, error, warning, and info completion states
 
 #### BaseCommand Enhancements
+
 - **Interactive Helpers**: Added to `Glueful\Console\BaseCommand`:
   - `getPrompter()` - Get Prompter instance
   - `isInteractive()` - Check if running in interactive mode
@@ -1568,6 +1645,7 @@ Feature release introducing Interactive CLI Wizards for enhanced developer exper
   - `confirmDestructive(string)` - Confirmation for destructive operations
 
 #### Scaffold Command Improvements
+
 - **scaffold:model**: Now supports interactive mode:
   - Prompts for model name when not provided as argument
   - Interactive option selection for migration, soft-deletes, fillable fields
@@ -1575,13 +1653,16 @@ Feature release introducing Interactive CLI Wizards for enhanced developer exper
   - Maintains full CLI compatibility with `--no-interaction`
 
 ### Changed
+
 - **BaseCommand**: Added `$prompter` property and interactive helper methods.
 - **ModelCommand**: Changed 'name' argument from REQUIRED to OPTIONAL for interactive support.
 
 ### Documentation
+
 - Updated `docs/implementation-plans/priority-2/README.md` marking Interactive CLI Wizards as complete.
 
 ### Notes
+
 - **Non-Interactive Mode**: All interactive prompts gracefully fallback to defaults when `--no-interaction` flag is used (CI/CD friendly).
 - **Existing Commands**: Destructive commands (db:reset, migrate:rollback, cache:clear, etc.) already have proper confirmation dialogs.
 
@@ -1592,6 +1673,7 @@ Feature release introducing Enhanced Scaffold Commands and Database Factories & 
 ### Added
 
 #### Enhanced Scaffold Commands
+
 - **scaffold:middleware**: New command to generate route middleware classes implementing `RouteMiddleware` interface with options:
   - `--force` / `-f` - Overwrite existing files
   - `--path` / `-p` - Custom output path
@@ -1612,6 +1694,7 @@ Feature release introducing Enhanced Scaffold Commands and Database Factories & 
   - `--methods` - Methods to generate test stubs for (comma-separated)
 
 #### Database Factories & Seeders
+
 - **Factory**: New `Glueful\Database\Factory\Factory` base class for test data generation:
   - `definition()` - Define default model attributes
   - `count(int $n)` - Set number of models to create
@@ -1641,6 +1724,7 @@ Feature release introducing Enhanced Scaffold Commands and Database Factories & 
   - Auto-resolves factory class from model name convention
 
 #### Console Commands
+
 - **db:seed**: New command to run database seeders with options:
   - `[class]` - Specific seeder class to run (default: DatabaseSeeder)
   - `--force` / `-f` - Required to run in production environment
@@ -1657,10 +1741,12 @@ Feature release introducing Enhanced Scaffold Commands and Database Factories & 
   - Special handling for DatabaseSeeder (main orchestrator)
 
 ### Changed
+
 - **Console**: All new commands registered in `ConsoleProvider` and `Application` command list.
 - **Application.php**: Added `SeedCommand`, `FactoryCommand`, `SeederCommand`, `MiddlewareCommand`, `JobCommand`, `RuleCommand`, `TestCommand` to command registry.
 
 ### Documentation
+
 - New `docs/FACTORIES.md` with comprehensive usage guide covering:
   - Factory creation and definition
   - Factory states and sequences
@@ -1671,6 +1757,7 @@ Feature release introducing Enhanced Scaffold Commands and Database Factories & 
 - Updated `docs/implementation-plans/priority-2/README.md` marking enhanced scaffold commands and factories/seeders as complete.
 
 ### Notes
+
 - **Faker Dependency**: Factories require `fakerphp/faker` as a dev dependency. Install with `composer require --dev fakerphp/faker`.
 - **Production Safety**: The `db:seed` command requires `--force` flag in production environments.
 - **Generated Files**: Factories are created in `database/factories/`, seeders in `database/seeders/`.
@@ -1682,6 +1769,7 @@ Feature release introducing API Resource Transformers, completing all Priority 1
 ### Added
 
 #### API Resource Transformers
+
 - **JsonResource**: New base class for transforming data into consistent JSON API responses with property delegation and nested resource resolution.
 - **ModelResource**: New ORM-aware resource class extending JsonResource with model-specific helpers:
   - `attribute()` / `hasAttribute()` - Attribute access with defaults
@@ -1717,6 +1805,7 @@ Feature release introducing API Resource Transformers, completing all Priority 1
   - `CollectsResources` - Collection transformation logic
 
 #### Console Commands
+
 - **Scaffold**: New `scaffold:resource` command to generate API resource classes with options:
   - `--model` / `-m` - Generate ModelResource with ORM integration
   - `--collection` / `-c` - Generate ResourceCollection class
@@ -1724,9 +1813,11 @@ Feature release introducing API Resource Transformers, completing all Priority 1
   - `--path` / `-p` - Custom output path
 
 ### Changed
+
 - **Console**: `ResourceCommand` registered in `ConsoleProvider` and `Application` command list.
 
 ### Documentation
+
 - New `docs/RESOURCES.md` with comprehensive usage guide covering:
   - Basic usage and resource creation
   - Conditional attributes and relationships
@@ -1737,6 +1828,7 @@ Feature release introducing API Resource Transformers, completing all Priority 1
 - Updated `docs/implementation-plans/03-api-resource-transformers.md` with implementation status.
 
 ### Tests
+
 - New test suite in `tests/Unit/Http/Resources/`:
   - `JsonResourceTest.php` - Base resource transformation
   - `ResourceCollectionTest.php` - Collection handling
@@ -1752,6 +1844,7 @@ Feature release introducing the ORM/Active Record system, completing the data la
 ### Added
 
 #### ORM / Active Record
+
 - **Model**: New `Model` base class implementing Active Record pattern with CRUD operations, mass assignment protection, and attribute handling.
 - **Builder**: New `Builder` class wrapping QueryBuilder with model-aware query functionality, eager loading, and scope support.
 - **Collection**: New `Collection` class for model results with rich iteration, filtering, and transformation methods.
@@ -1789,6 +1882,7 @@ Feature release introducing the ORM/Active Record system, completing the data la
 - **Provider**: New `ORMProvider` service provider for DI container registration.
 
 #### Console Commands
+
 - **Scaffold**: New `scaffold:model` command to generate ORM model classes with options:
   - `--migration` / `-m` - Generate accompanying migration
   - `--soft-deletes` / `-s` - Include SoftDeletes trait
@@ -1800,16 +1894,19 @@ Feature release introducing the ORM/Active Record system, completing the data la
   - `generate:controller` → `scaffold:controller`
 
 ### Changed
+
 - **Framework**: ORM initialization added to `Framework::initializeCoreServices()` via `Model::setContainer()`.
 - **Container**: `ORMProvider` registered in `ContainerFactory` provider list.
 - **CI**: GitHub Actions workflow jobs now run sequentially (lint → tests → coverage → static → security) for better debugging and resource usage.
 
 ### Documentation
+
 - New `docs/ORM.md` with comprehensive usage guide covering models, relationships, eager loading, events, and casts.
 - Updated `docs/implementation-plans/README.md` marking ORM as complete.
 - Updated `docs/implementation-plans/01-orm-active-record.md` with implementation status.
 
 ### Tests
+
 - New test suite in `tests/Unit/Database/ORM/`:
   - `ModelTest.php` - Model base functionality
   - `HasAttributesTest.php` - Attribute handling and casting
@@ -1825,6 +1922,7 @@ Feature release introducing centralized exception handling and declarative reque
 ### Added
 
 #### Exception Handler
+
 - **Exceptions**: New `ExceptionHandlerInterface` contract for customizable exception handling implementations.
 - **Exceptions**: New `RenderableException` interface for exceptions that can render themselves to responses.
 - **Exceptions**: New `HttpException` base class for all HTTP-related exceptions with status codes and context.
@@ -1851,6 +1949,7 @@ Feature release introducing centralized exception handling and declarative reque
   - `TokenExpiredException` - JWT/session token expired
 
 #### Request Validation
+
 - **Validation**: New `#[Validate]` attribute for declarative validation on controller methods.
 - **Validation**: New `FormRequest` base class for complex validation with authorization, custom messages, and data preparation hooks.
 - **Validation**: New `ValidatedRequest` wrapper for type-safe access to validated data.
@@ -1872,11 +1971,13 @@ Feature release introducing centralized exception handling and declarative reque
 - **Console**: New `make:request` command to generate FormRequest classes.
 
 ### Changed
+
 - **Validation**: `ValidationException` now extends `ApiException` and returns proper 422 HTTP responses with structured error format.
 - **Validation**: `DbUnique` rule updated to support both PDO injection and string-based syntax from `RuleParser`.
 - **Application**: Request dispatch now uses centralized exception handling via `ExceptionMiddleware`.
 
 ### Documentation
+
 - Updated implementation plans to mark Exception Handler and Request Validation as complete.
 - Added implementation status indicators to architecture diagrams.
 
@@ -1885,6 +1986,7 @@ Feature release introducing centralized exception handling and declarative reque
 Patch release with OpenAPI 3.1 support, automatic resource route expansion from database schemas, and documentation UI improvements.
 
 ### Added
+
 - **Documentation**: New `ResourceRouteExpander` class that automatically expands `{resource}` routes to table-specific endpoints with full database schemas.
 - **Documentation**: OpenAPI 3.1.0 support with proper JSON Schema draft 2020-12 alignment:
   - Nullable types use array syntax (`type: ["string", "null"]`)
@@ -1894,16 +1996,19 @@ Patch release with OpenAPI 3.1 support, automatic resource route expansion from 
 - **Documentation**: Tags in documentation sidebar are now sorted alphabetically.
 
 ### Changed
+
 - **Documentation**: Default OpenAPI version changed from 3.0.0 to 3.1.0.
 - **Documentation**: Renamed output file from `swagger.json` to `openapi.json` (modern naming convention).
 - **Documentation**: Resource route tags renamed from "Resources - {table}" to "Table - {table}" for clarity.
 - **Documentation**: Config key `paths.swagger` renamed to `paths.openapi`.
 
 ### Removed
+
 - **Documentation**: Removed `TableDefinitionGenerator` class - resource routes now expand directly from database schemas without intermediate JSON files.
 - **Documentation**: Removed `--database` and `--table` options from `generate:openapi` command (no longer needed).
 
 ### Fixed
+
 - **Database**: Fixed `SchemaBuilder::getTableColumns()` returning empty arrays due to incorrect `array_is_list()` check on associative column data.
 
 ## [1.9.1] - 2026-01-19 — Castor
@@ -1911,6 +2016,7 @@ Patch release with OpenAPI 3.1 support, automatic resource route expansion from 
 Patch release with a major refactor of the OpenAPI documentation system, adding interactive UI generation and improved PHPDoc parsing.
 
 ### Added
+
 - **Documentation**: New `DocumentationUIGenerator` class for generating interactive API documentation HTML pages supporting:
   - Scalar (default) - Modern, beautiful API documentation
   - Swagger UI - Classic OpenAPI documentation interface
@@ -1922,6 +2028,7 @@ Patch release with a major refactor of the OpenAPI documentation system, adding 
 - **Validation**: New `Regex` rule for validating values against regular expression patterns.
 
 ### Changed
+
 - **Documentation**: Renamed `ApiDefinitionsCommand` to `OpenApiDocsCommand` with enhanced options and better UX.
 - **Documentation**: `CommentsDocGenerator` now uses `phpDocumentor/ReflectionDocBlock` for robust PHPDoc parsing instead of regex patterns.
 - **Documentation**: `CommentsDocGenerator` now discovers extension routes via `ExtensionManager::getProviders()` for Composer-installed extensions.
@@ -1932,9 +2039,11 @@ Patch release with a major refactor of the OpenAPI documentation system, adding 
 - **Dependencies**: Added `phpdocumentor/reflection-docblock: ^6.0` for PHPDoc parsing.
 
 ### Removed
+
 - **Documentation**: Removed `ApiDefinitionGenerator` class (replaced by `OpenApiGenerator`).
 
 ### Fixed
+
 - **Console**: Fixed `Application` to use `add()` instead of undefined `addCommand()` method for Symfony Console 7.x compatibility.
 
 ## [1.9.0] - 2026-01-17 — Betelgeuse
@@ -1942,19 +2051,23 @@ Patch release with a major refactor of the OpenAPI documentation system, adding 
 Minor release raising the minimum PHP version to 8.3 and addressing compatibility with Symfony Console 7.3.
 
 ### Breaking Changes
+
 - **PHP**: Minimum required PHP version is now 8.3 (up from 8.2). Update your environment before upgrading.
 
 ### Fixed
+
 - **Console**: Renamed `Application::addCommand(string)` to `Application::registerCommandClass(string)` to resolve method signature conflict with Symfony Console 7.3's new `addCommand(Command|callable)` method.
 - **Routing**: `RouteManifest::load()` now prevents double-loading routes during framework initialization, eliminating "Route already defined" warnings in CLI commands.
 - **Security**: Fixed PHPStan strict boolean check in `CSRFMiddleware` for cookie token validation.
 - **Tests**: Added missing PSR-4 namespace declarations to async test files (`AsyncStreamHelpersTest`, `SchedulerTimerCancellationTest`, `HttpStreamingClientTest`, `HttpPoolingConfigTest`, `RaceSemanticsTest`).
 
 ### Changed
+
 - **CI**: Test matrix now targets PHP 8.3 and 8.4 (dropped PHP 8.2 support).
 - **Routing**: Added `RouteManifest::reset()` and `RouteManifest::isLoaded()` helper methods for testing scenarios.
 
 ### Upgrade Guide
+
 1. Ensure your environment runs PHP 8.3 or higher.
 2. If you called `$app->addCommand(MyCommand::class)` directly, rename to `$app->registerCommandClass(MyCommand::class)`.
 3. Run `composer update` to refresh dependencies.
@@ -1964,9 +2077,11 @@ Minor release raising the minimum PHP version to 8.3 and addressing compatibilit
 Small patch release tightening password policy options and improving async stream helper ergonomics for buffered I/O callers.
 
 ### Added
+
 - Helpers/Security: `Utils::validatePassword()` gained a `$requireLowercase` flag so applications can explicitly enforce mixed-case passwords alongside numbers, symbols, and uppercase requirements.
 
 ### Fixed
+
 - Async/IO: `async_stream()` now accepts raw resources, `AsyncStream`, or `BufferedAsyncStream` instances and normalizes them before wrapping. This ensures buffered streams always reference a canonical async transport, respects configured buffer sizes, and keeps static analysis annotations accurate.
 
 ## [1.8.0] - 2025-11-13 — Spica
@@ -1974,6 +2089,7 @@ Small patch release tightening password policy options and improving async strea
 Feature release adding first-class session and login response events, enabling safe enrichment of cached session payloads and login responses without modifying framework code.
 
 ### Added
+
 - Events/Auth:
   - `SessionCachedEvent`: Dispatched after a session is written to cache (and DB). Listeners can augment the cached payload (e.g., `user.organization`) or warm related caches. Implemented at `src/Auth/SessionCacheManager.php` after successful `cache->set` in `storeSession()`.
   - `LoginResponseBuildingEvent`: Dispatched just before returning the login JSON. Provides a mutable response map so apps can extend the payload (e.g., `context.organization`).
@@ -1982,10 +2098,12 @@ Feature release adding first-class session and login response events, enabling s
   - `AuthController::login()`: Pre-return response enrichment hook wired using the new login response events.
 
 ### Changed
+
 - Docs:
   - `docs/SESSION_EVENTS_PROPOSAL.md` updated to reflect final implementation (paths under `src/...`), setter-based mutation (no PHP by-ref promotion), dispatch locations, and a concrete listener example.
 
 ### Notes
+
 - Backward compatible: No behavior change unless listeners are registered.
 - Performance: Events are synchronous; heavy listeners should offload to queues.
 - Guidance: Prefer adding app-specific data under a `context.*` key to avoid collisions with reserved fields.
@@ -1995,12 +2113,15 @@ Feature release adding first-class session and login response events, enabling s
 Patch release adding a minimal, configurable account‑status gate to authentication and new docs for writing migrations that create views/functions.
 
 ### Added
+
 - Auth: Optional status policy in `AuthenticationService::authenticate()` and refresh‑token flow. Users must have a status in `security.auth.allowed_login_statuses` (default: `['active']`) to log in or refresh.
 
 ### Changed
+
 - Config: Introduced `security.auth.allowed_login_statuses` under `config/security.php` and read it in authentication flows. This centralizes auth policy under security.
 
 ### Notes
+
 - Behavior is secure by default and silent on failure (prevents account enumeration). Override the allowed statuses in your app’s `config/security.php` as needed.
 - If you previously added an `auth.allowed_login_statuses` key during development, move it to `security.auth.allowed_login_statuses`.
 
@@ -2009,12 +2130,14 @@ Patch release adding a minimal, configurable account‑status gate to authentica
 Patch release fixing QueryBuilder 2‑argument where/orWhere handling and further improving dev‑server log clarity.
 
 ### Fixed
+
 - Database/QueryBuilder: Normalize 2‑argument `where($column, $value)` and `orWhere($column, $value)` to
   use the `=` operator internally. This resolves a `TypeError` where non‑string values (e.g., integers)
   were interpreted as the operator and passed to `WhereClause::add()`.
   - Improves portability for boolean filters across PostgreSQL/MySQL/SQLite.
 
 ### Improved
+
 - CLI: `serve` command further refines classification of PHP built‑in server access/lifecycle lines written to STDERR
   (e.g., “Accepted”, “Closed without sending a request”, “[200]: GET /…”) as normal output, while preserving real errors.
 
@@ -2023,11 +2146,13 @@ Patch release fixing QueryBuilder 2‑argument where/orWhere handling and furthe
 Patch release improving route loading resilience and dev-server log clarity.
 
 ### Fixed
+
 - Extensions: `ServiceProvider::loadRoutesFrom()` is now idempotent and exception-safe.
   - Prevents duplicate route registration if the same routes file is loaded more than once.
   - Catches exceptions from route files; logs and continues in production, rethrows in non‑production for fast feedback.
 
 ### Improved
+
 - CLI: `serve` command log handling reclassifies PHP built‑in server access/startup lines from STDERR as normal output, reducing false `[ERROR]` noise while preserving real error reporting.
 
 ## [1.7.1] - 2025-10-21 — Canopus
@@ -2035,6 +2160,7 @@ Patch release improving route loading resilience and dev-server log clarity.
 Patch release addressing extension discovery/boot sequencing so extensions reliably load at runtime.
 
 ### Fixed
+
 - Extensions: Call `ExtensionManager::discover()` before `::boot()` during framework initialization
   (`src/Framework.php`). This resolves a bug where enabled extensions appeared as
   “EXCLUDED from final provider list” and their `boot()` never ran.
@@ -2044,6 +2170,7 @@ Patch release addressing extension discovery/boot sequencing so extensions relia
   diagnostics when extensions are enabled via config or Composer discovery.
 
 ### Impact
+
 - Applications that previously saw “No pending migrations found” for extension migrations should now
   see those migrations once the provider is enabled. No config changes are required.
 
@@ -2052,6 +2179,7 @@ Patch release addressing extension discovery/boot sequencing so extensions relia
 Major async/concurrency subsystem. Introduces a fiber-based scheduler, async HTTP client with streaming, buffered I/O, cooperative cancellation, metrics instrumentation, and a Promise-style wrapper for ergonomic chaining. Includes centralized async configuration and DI wiring.
 
 ### Added
+
 - Async/Concurrency: Fiber-based `Glueful\Async\FiberScheduler` with `spawn`, `all`, `race`, and `sleep` semantics.
 - Tasks: `FiberTask`, `ClosureTask`, `CompletedTask`, `FailedTask`, `DelayedTask`, `RepeatingTask`, `TimeoutTask`.
 - Helpers: `scheduler()`, `async()`, `await()`, `await_all()`, `await_race()`, `async_sleep()`, `async_sleep_default()`, `async_stream()`, `cancellation_token()`.
@@ -2064,19 +2192,24 @@ Major async/concurrency subsystem. Introduces a fiber-based scheduler, async HTT
 - DI: `AsyncProvider` wires `Metrics`, `Scheduler`, `HttpClient`, and registers `AsyncMiddleware` (alias `"async"`).
 
 ### Changed
+
 - Scheduler: Resource limit enforcement (max concurrent tasks, per-task execution time, optional memory and file-descriptor caps); timer handling via min-heap; richer metrics hooks.
 - HTTP: Refactored `CurlMultiHttpClient` to use a shared `curl_multi` pump and optional `max_concurrent` cap; retry knobs exposed via config.
 
 ### Fixed
+
 - Cancellation and timeouts are honored during sleeps and I/O waits across scheduler and async streams.
 
 ### Documentation
+
 - High-level async docs added to the site (API reference and troubleshooting); extensive PHPDoc across async packages.
 
 ### Tests
+
 - New unit/integration coverage for async scheduler, HTTP client, streaming, timers, and helpers (see `tests/Unit/Async/*`, `tests/Integration/Async/*`).
 
 ### Migration Notes
+
 - New `config/async.php`. Defaults are backward-compatible (limits disabled when set to 0). No changes required unless opting into limits or tuning.
 - To use async within routes, add `AsyncMiddleware` (alias `async`) or use the helpers (`async()`, `await_all()`, etc.).
 
@@ -2085,6 +2218,7 @@ Major async/concurrency subsystem. Introduces a fiber-based scheduler, async HTT
 Template configuration responsibility moved to the Email Notification extension.
 
 ### Changed
+
 - Mail/Templates: The primary templates directory is now controlled by the Email Notification
   extension configuration. The framework no longer sets a default `services.mail.templates.path`.
   Applications can still provide this key in their own config if desired; otherwise the extension’s
@@ -2093,6 +2227,7 @@ Template configuration responsibility moved to the Email Notification extension.
   variables remain supported at the framework level.
 
 ### Migration Notes
+
 - If you previously relied on the framework’s default `templates.path`, set your preferred primary
   directory via the extension config (`email-notification.templates.extension_path`) or add your own
   `services.mail.templates.path` in application config.
@@ -2102,6 +2237,7 @@ Template configuration responsibility moved to the Email Notification extension.
 JWT RS256 signing support.
 
 ### Added
+
 - Auth/JWT: RS256 signing support via `JWTService::signRS256(array $claims, string $privateKey)`
   for generating JWTs using an RSA private key. Requires the `openssl` extension.
 
@@ -2110,6 +2246,7 @@ JWT RS256 signing support.
 Minor features and DX improvements.
 
 ### Added
+
 - DI/Compile: emit `services.json` manifest during container compile at
   `storage/cache/container/services.json` containing `shared`, `tags`, `provider`, `type`, and `alias_of`.
 - CLI: `di:container:map` now prefers the compiled `services.json` in production to avoid reflection.
@@ -2121,9 +2258,11 @@ Minor features and DX improvements.
 - Docs: `docs/roadmap-1.6-status.md` tracking 1.6 implementation status.
 
 ### Changed
+
 - `di:container:compile` writes both the compiled container PHP and the `services.json` manifest.
 
 ### Fixed
+
 - Removed redundant string casts flagged by PHPStan in container boot/loader paths.
 
 ## [1.5.0] - 2025-10-13 — Orion
@@ -2131,10 +2270,12 @@ Minor features and DX improvements.
 Notification system wiring improvements and safer email verification flow.
 
 ### Added
+
 - DI provider for notifications: `Glueful\Container\Providers\NotificationsProvider` registers
   `ChannelManager` and `NotificationDispatcher` as shared services.
 
 ### Changed
+
 - EmailVerification and SendNotification now prefer DI-resolved `NotificationDispatcher`/`ChannelManager`
   with a safe fallback when DI isn’t available. This enables extensions to self‑register channels/hooks
   during boot without ad‑hoc construction.
@@ -2146,10 +2287,12 @@ Notification system wiring improvements and safer email verification flow.
   configuration namespace.
 
 ### Fixed
+
 - Resolved namespace and escaping issues in SendNotification; addressed static analysis warnings and
   long‑line formatting in EmailVerification diagnostics.
 
 ### Developer Notes
+
 - If an Email Notification extension is installed and enabled, it will be able to register its email
   channel and hooks against the shared dispatcher during boot. Existing fallback paths remain for
   environments without DI.
@@ -2159,9 +2302,11 @@ Notification system wiring improvements and safer email verification flow.
 Dev-only tidy-ups and documentation sync. No runtime changes.
 
 ### Fixed
+
 - PSR-4 autoloading for tests: corrected namespace in `tests/Unit/Permissions/AttributeMiddlewareTest.php` to `Glueful\Tests\...`, removing Composer warnings during autoload generation.
 
 ### Documentation
+
 - Updated ROADMAP and site release notes to reflect the 1.4.1 install flow improvements and guidance.
 
 ---
@@ -2171,19 +2316,23 @@ Dev-only tidy-ups and documentation sync. No runtime changes.
 Installation flow hardening and SQLite-first defaults. Improves non-interactive installs and avoids fragile checks during initial setup.
 
 ### Added
+
 - Post-install guidance on switching databases and running migrations after install.
 - Quiet/non-interactive support propagated to install sub-commands:
   - `migrate:run` and `cache:clear` honor `--no-interaction` and `--quiet` in install `--quiet` mode.
 
 ### Changed
+
 - InstallCommand runs migrations with `--force` by default (equivalent to `-f`).
 - Install process is SQLite-only; other engines are skipped during install and can be configured afterwards.
 - `cache:clear` during install now passes `--force` (and non-interactive flags when quiet) to avoid confirmation prompts.
 
 ### Removed
+
 - Database connection health check during install (SQLite does not require a network connection and migrations surface real issues).
 
 ### Fixed
+
 - Eliminated redundant sqlite comparison that triggered a phpstan strict-comparison warning.
 - `php glueful install --quiet` no longer prompts interactively when clearing cache or running migrations.
 
@@ -2192,12 +2341,14 @@ Installation flow hardening and SQLite-first defaults. Improves non-interactive 
 Rigel release — consolidates session management behind a single, testable API and removes legacy token storage. This refactor simplifies dependency wiring, unifies TTL policy, and improves cache‑key safety for tokens.
 
 ### Added
+
 - SessionStoreInterface and default SessionStore implementation as the canonical session API (create/update/revoke/lookup/health).
 - TTL helpers on the store: `getAccessTtl()` and `getRefreshTtl()` with provider + remember‑me support.
 - SessionStoreResolver utility and ResolvesSessionStore trait to consistently resolve the store via DI with a safe fallback.
 - End‑to‑end smoke script for local validation: `tools/test_session_refactor.php` (temporary; remove as needed).
 
 ### Changed
+
 - TokenManager now defers TTL policy to SessionStore and persists sessions via the store. Static resolver unified through SessionStoreResolver.
 - JwtAuthenticationProvider and SessionCacheManager resolve the store via the new trait; reduced ad‑hoc instantiation.
 - SessionAnalytics prefers the store for listing sessions (falls back to cache query when needed).
@@ -2206,24 +2357,27 @@ Rigel release — consolidates session management behind a single, testable API 
 - JWTService cleaned up; in‑memory invalidation removed; DB‑backed revocation relied upon.
 
 ### Removed
+
 - Legacy TokenStorageService and TokenStorageInterface (all usages migrated to SessionStore).
 - Deprecated code paths and comments tied to the legacy storage/invalidation.
 
 ### Fixed
+
 - Base64URL decoding uses URL‑safe decode paths in session flows.
 - Cache key sanitization for tokens prevents invalid‑character failures across cache backends.
-
 
 ## [1.3.1] - 2025-10-10 — Altair
 
 Altair patch — improves CI/automation ergonomics for initial installs and cleans up static analysis.
 
 ### Changed
+
 - Console: `install` command is now truly non-interactive when any of these flags are present: `--quiet`, `--no-interaction`, or `--force`.
   - Skips the confirmation prompt about environment variables in these modes, enabling fully unattended setup in CI/CD.
   - Keeps informative output; for silent runs use Symfony’s global `-q` as usual.
 
 ### Fixed
+
 - Console: removed redundant `method_exists()` guard around `InputInterface::isInteractive()` to satisfy PHPStan (the method is guaranteed by the interface).
 - Minor DX polish in the install flow messaging.
 
@@ -2232,12 +2386,14 @@ Altair patch — improves CI/automation ergonomics for initial installs and clea
 Deneb release — refines the HTTP client with first‑class, configurable retries via Symfony’s retry system, improving resilience and clarity for API integrations.
 
 ### Added
+
 - HTTP client retry support using Symfony `RetryableHttpClient` with `GenericRetryStrategy`.
 - `Client::withRetry(array $config)` to wrap any configured client with retries.
 - `ApiClientBuilder` retry configuration via `retries(...)`, `buildWithRetries()`, and `getRetryConfig()`.
 - Sensible defaults and presets in builders (e.g., payments/external service) for common retry scenarios.
 
 ### Changed
+
 - Refactored client retry behavior to Symfony’s strategy-based approach (status codes, backoff, jitter, max retries), replacing custom retry handling for a more robust and testable implementation.
 
 ## [1.2.0] - 2025-09-23 — Vega
@@ -2245,6 +2401,7 @@ Deneb release — refines the HTTP client with first‑class, configurable retri
 Vega release — introduces robust task management architecture and enhanced testing reliability. Named after one of the brightest stars in the night sky, this release brings enhanced reliability and clarity to task execution and framework testing infrastructure.
 
 ### Added
+
 - **Tasks/Jobs Architecture**: Complete separation of business logic (Tasks) from queue execution (Jobs)
   - New `src/Tasks/` directory with business logic classes
   - New `src/Queue/Jobs/` wrappers for reliable queue integration
@@ -2267,16 +2424,19 @@ Vega release — introduces robust task management architecture and enhanced tes
   - Fixed test interference issues and container state management
 
 ### Changed
+
 - **Architecture Migration**: Migrated from `src/Cron/` to `src/Tasks/` + `src/Queue/Jobs/` pattern
 - **Service Registration**: Tasks and Jobs now properly registered in DI container via `TasksProvider`
 - **Testing Infrastructure**: Enhanced test bootstrap for better reliability and container management
 
 ### Removed
+
 - **Legacy Cron Classes**: Removed all classes from `src/Cron/` directory
   - `CacheMaintenance.php`, `DatabaseBackup.php`, `LogCleaner.php`
   - `NotificationRetryProcessor.php`, `SessionCleaner.php`
 
 ### Fixed
+
 - **Test Infrastructure**: Resolved integration test failures and DI container initialization issues
 - **Code Quality**: Fixed PHP CodeSniffer violations across test files and bootstrap
 - **Container Management**: Fixed test state interference between unit and integration tests
@@ -2286,6 +2446,7 @@ Vega release — introduces robust task management architecture and enhanced tes
 Polaris release — introduces comprehensive testing infrastructure and enhanced documentation to guide framework development. Like the North Star that guides navigation, this release provides developers with the tools and knowledge to build robust applications with confidence.
 
 ### Added
+
 - Testing utilities with `TestCase` base class for application testing
 - Comprehensive event system documentation covering all framework events
 - Support for framework state reset in testing environments
@@ -2293,10 +2454,12 @@ Polaris release — introduces comprehensive testing infrastructure and enhanced
 - Event system abstraction layer with `BaseEvent` class
 
 ### Updated
+
 - Enhanced event system documentation with complete examples and best practices
 - Improved testing infrastructure for better framework integration
 
 ### Changed
+
 - Event system now provides clear abstraction layer over PSR-14 implementation
 
 ## [1.0.0] - 2025-09-20 — Aurora
@@ -2304,6 +2467,7 @@ Polaris release — introduces comprehensive testing infrastructure and enhanced
 Aurora release — the first stable release of the split Glueful Framework package (formerly part of glueful/glueful). This version establishes the framework runtime as a standalone library with comprehensive features and sets a clear baseline for future 1.x releases.
 
 ### Added
+
 - Comprehensive permissions and authorization system.
 - Alias support for services and improved provider bootstrapping.
 - Core and Console service providers for out-of-the-box wiring.
@@ -2340,6 +2504,7 @@ Aurora release — the first stable release of the split Glueful Framework packa
   - Cookbook expanded, with setup (`docs/cookbook/00-setup.md`) and uploads (`docs/cookbook/23-file-uploads.md`).
 
 ### Changed
+
 - Dependency Injection: replaced Symfony DI with a lightweight, custom container optimized for Glueful.
 - Events: migrated to PSR-14 with a custom dispatcher implementation.
 - Storage: migrated to Flysystem; updated configuration structure and options.
@@ -2358,12 +2523,14 @@ Aurora release — the first stable release of the split Glueful Framework packa
 - ExceptionHandler removed from Composer autoload "files"; PSR‑4 autoload only.
 
 Breaking changes:
+
 - DI container swap may affect service definitions, compiler passes, and container-aware utilities.
 - Event system changes require updating listener/subscriber registration to PSR-14.
 - Storage configuration keys and adapters changed to Flysystem-based configuration.
 - Config and validation refactors may require updating custom rules, schemas, and boot code.
 
 ### Removed
+
 - Legacy LDAP/SAML authentication integration.
 - Queue configuration management classes.
 - Custom config and serialization modules superseded by the new configuration approach.
@@ -2373,10 +2540,12 @@ Breaking changes:
 - Old monolithic CI workflow and split test workflows (replaced by single `php-ci`).
 
 ### Fixed
+
 - Documentation updates and cleanup in the database and storage guides.
 - S3 bucket config typos in `S3Storage` (`services.storage.s3.bucket`).
 - PHPStan short‑ternary warnings in `RouteCache` and `FileUploader`; safer file read fallbacks.
 - Numerous type‑safety and strictness improvements across cache, auth, console, and DI layers.
 
 ### Security
+
 - Allow‑listed health/readiness endpoints; expanded security checks and CLI audits.

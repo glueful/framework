@@ -21,6 +21,11 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.28.1 — Bellatrix (Patch, Released 2026-02-06)
+- **Router Group Stack Fix**: `Router::group()` now uses `try/finally` to always clean up `groupStack` and `middlewareStack`, preventing prefix leakage across extensions when exceptions occur inside group callbacks.
+- **Cache-Aware Route Registration**: Router allows extensions to overwrite routes pre-loaded from cache instead of throwing duplicate route errors. Handles both static and dynamic routes.
+- Notes: Stability patch. No breaking changes. Fixes cascading route failures when extensions are used with route caching.
+
 ### 1.28.0 — Bellatrix (Released 2026-02-05)
 - **Route Caching Support**: Refactored controllers to use cacheable route syntax.
   - ResourceController methods renamed to RESTful conventions (index, show, store, update, destroy).
