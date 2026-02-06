@@ -35,6 +35,7 @@ class Router
     private ContainerInterface $container;
     private ?AttributeRouteLoader $attributeLoader = null;
     private bool $warnUnprefixedRoutes = false;
+    private bool $routesLoadedFromCache = false;
 
     public function __construct(ContainerInterface $container)
     {
@@ -52,6 +53,7 @@ class Router
                 $this->staticRoutes = $this->reconstructStaticRoutes($cached['static']);
                 $this->dynamicRoutes = $this->reconstructDynamicRoutes($cached['dynamic']);
                 $this->rebuildRouteBuckets();
+                $this->routesLoadedFromCache = true;
             }
         }
     }
@@ -107,16 +109,28 @@ class Router
             // Static route - O(1) lookup with duplicate protection
             $key = $method . ':' . $path;
             if (isset($this->staticRoutes[$key])) {
+                if ($this->routesLoadedFromCache) {
+                    // Routes were pre-loaded from cache; allow extensions and
+                    // route files to overwrite with the fresh definition.
+                    $this->staticRoutes[$key] = $route;
+                    return $route;
+                }
                 throw new \LogicException("Route already defined for {$key}");
             }
             $this->staticRoutes[$key] = $route;
         } else {
             // Dynamic route - requires pattern matching with bucketing
-            $this->dynamicRoutes[$method][] = $route;
+            if ($this->routesLoadedFromCache) {
+                // Replace any cached route with the same method+path so the
+                // fresh definition wins and no duplicates accumulate.
+                $this->replaceDynamicRoute($method, $path, $route);
+            } else {
+                $this->dynamicRoutes[$method][] = $route;
 
-            // Add to performance buckets
-            $firstSegment = $this->firstSegment($path) ?? '*';
-            $this->routeBuckets[$method][$firstSegment][] = $route;
+                // Add to performance buckets
+                $firstSegment = $this->firstSegment($path) ?? '*';
+                $this->routeBuckets[$method][$firstSegment][] = $route;
+            }
         }
 
         return $route;
@@ -186,6 +200,43 @@ class Router
             $middleware = array_merge($middleware, (array) $groupMiddleware);
         }
         return $middleware;
+    }
+
+    /**
+     * Replace a cached dynamic route with a fresh definition, or append if new.
+     */
+    private function replaceDynamicRoute(string $method, string $path, Route $route): void
+    {
+        $replaced = false;
+        foreach ($this->dynamicRoutes[$method] ?? [] as $i => $existing) {
+            if ($existing->getPath() === $path) {
+                $this->dynamicRoutes[$method][$i] = $route;
+                $replaced = true;
+                break;
+            }
+        }
+        if (!$replaced) {
+            $this->dynamicRoutes[$method][] = $route;
+        }
+
+        // Rebuild the affected bucket
+        $firstSegment = $this->firstSegment($path) ?? '*';
+        if (isset($this->routeBuckets[$method][$firstSegment])) {
+            $bucket = &$this->routeBuckets[$method][$firstSegment];
+            $bucketReplaced = false;
+            foreach ($bucket as $i => $existing) {
+                if ($existing->getPath() === $path) {
+                    $bucket[$i] = $route;
+                    $bucketReplaced = true;
+                    break;
+                }
+            }
+            if (!$bucketReplaced) {
+                $bucket[] = $route;
+            }
+        } else {
+            $this->routeBuckets[$method][$firstSegment][] = $route;
+        }
     }
 
     // Get first segment for route bucketing performance optimization
@@ -327,10 +378,12 @@ class Router
             $this->middlewareStack[] = [];
         }
 
-        $callback($this);
-
-        array_pop($this->groupStack);
-        array_pop($this->middlewareStack);
+        try {
+            $callback($this);
+        } finally {
+            array_pop($this->groupStack);
+            array_pop($this->middlewareStack);
+        }
     }
 
     /**
