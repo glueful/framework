@@ -42,6 +42,9 @@ final class ContainerFactory
 
         $container = new Container($defs);
 
+        // Self-register so autowiring can inject the container (e.g. into CLI commands)
+        $container->load([ContainerInterface::class => new ValueDefinition(ContainerInterface::class, $container)]);
+
         if ($prod) {
             // Prefer precompiled container dumped by CLI
             $precompiled = self::loadPrecompiledIfAvailable();

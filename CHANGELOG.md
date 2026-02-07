@@ -4,6 +4,31 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.28.2] - 2026-02-07 — Bellatrix (Patch)
+
+CLI migration commands now properly discover extension migrations. PostgreSQL schema introspection is now schema-safe.
+
+### Fixed
+
+- **Container self-registration**: `ContainerFactory::create()` now registers the built container under `ContainerInterface` so that autowiring can inject it into CLI commands. Previously, CLI commands that received the container via constructor DI could not resolve `ContainerInterface` from the container itself.
+
+- **Migration command DI wiring**: `RunCommand`, `StatusCommand`, and `RollbackCommand` constructors now accept optional `ContainerInterface` and `ApplicationContext` parameters and forward them to `BaseCommand`. When the framework boots these commands via the DI container, they receive the fully-configured container (with extension-registered migration paths) instead of creating a fresh one.
+
+- **PostgreSQL schema-safe introspection**: `PostgreSQLSqlGenerator` no longer hardcodes `public` schema. All introspection queries now follow the active schema via `current_schema()`:
+  - `tableExistsQuery()`, `columnExistsQuery()`, `getTableSchemaQuery()`, `getTablesQuery()` filter by `current_schema()`
+  - `getTableColumns()` information_schema query scoped with `table_schema = current_schema()`
+  - Primary key and unique constraint queries (`pg_constraint`/`pg_class`) join `pg_namespace` and filter `nspname = current_schema()`
+  - Index query (`pg_index`) joins `pg_namespace` and filters `current_schema()`
+  - Foreign key query scoped with schema-aware joins (`kcu.constraint_schema`, `rc.constraint_schema`, `ccu.constraint_schema`) and `table_schema = current_schema()`
+
+### Notes
+
+- No breaking changes. Fixes `php glueful migrate:run`, `migrate:status`, and `migrate:rollback` not seeing migrations registered by extensions via `loadMigrationsFrom()`.
+- Root cause: CLI commands were constructing a new container in `BaseCommand::__construct()` when no container was injected, losing the migration paths that extensions had registered during boot.
+- PostgreSQL fix enables correct behavior in multi-tenant setups and any deployment using non-`public` schemas.
+
+---
+
 ## [1.28.1] - 2026-02-06 — Bellatrix (Patch)
 
 Route stability fixes: Resolved route prefix leakage across extensions and cache-aware route registration.

@@ -2,8 +2,10 @@
 
 namespace Glueful\Console\Commands\Migrate;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Console\BaseCommand;
 use Glueful\Database\Migrations\MigrationManager;
+use Psr\Container\ContainerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -25,9 +27,9 @@ class StatusCommand extends BaseCommand
 {
     private MigrationManager $migrationManager;
 
-    public function __construct()
+    public function __construct(?ContainerInterface $container = null, ?ApplicationContext $context = null)
     {
-        parent::__construct();
+        parent::__construct($container, $context);
         $this->migrationManager = $this->getService(MigrationManager::class);
     }
 
