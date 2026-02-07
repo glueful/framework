@@ -4,6 +4,24 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.28.3] - 2026-02-07 — Bellatrix (Patch)
+
+Fix CLI option shortcut collision with Symfony Console's reserved `-q` (`--quiet`).
+
+### Fixed
+
+- **Queue WorkCommand `-q` shortcut collision**: `--queue` option used `-q` as shortcut, which conflicts with Symfony Console's built-in `--quiet` global option. Changed shortcut to `null`. This caused `LogicException: An option with shortcut "q" already exists` when running `php glueful queue:work`.
+
+- **Dev ServerCommand `-q` shortcut collision**: Same `-q` conflict on the `--queue` option. Changed shortcut to `null`.
+
+- **Cache MaintenanceCommand `-q` shortcut collision**: Same `-q` conflict on the `--queue` option. Changed shortcut to `null`.
+
+### Notes
+
+- No breaking changes. Users who were passing `--queue` by full name are unaffected. The `-q` shortcut was never usable because it always collided with Symfony's `--quiet`.
+
+---
+
 ## [1.28.2] - 2026-02-07 — Bellatrix (Patch)
 
 CLI migration commands now properly discover extension migrations. PostgreSQL schema introspection is now schema-safe.

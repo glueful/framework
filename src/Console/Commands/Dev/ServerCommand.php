@@ -22,7 +22,7 @@ class ServerCommand extends BaseCommand
             ->setHelp('Wraps the serve command with watch enabled by default.')
             ->addOption('port', 'p', InputOption::VALUE_REQUIRED, 'Port to run the server on')
             ->addOption('host', 'H', InputOption::VALUE_REQUIRED, 'Host to bind the server to')
-            ->addOption('queue', 'q', InputOption::VALUE_NONE, 'Start queue worker alongside server')
+            ->addOption('queue', null, InputOption::VALUE_NONE, 'Start queue worker alongside server')
             ->addOption('open', 'o', InputOption::VALUE_NONE, 'Open the server URL in default browser')
             ->addOption('no-watch', null, InputOption::VALUE_NONE, 'Disable file watching');
     }

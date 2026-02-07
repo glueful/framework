@@ -55,7 +55,7 @@ class WorkCommand extends BaseQueueCommand
              )
              ->addOption(
                  'queue',
-                 'q',
+                 null,
                  InputOption::VALUE_REQUIRED,
                  'Queue(s) to process (comma-separated)',
                  'default'
