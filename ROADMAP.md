@@ -21,6 +21,10 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.28.3 — Bellatrix (Patch, Released 2026-02-07)
+- **CLI `-q` Shortcut Fix**: Removed `-q` shortcut from `--queue` option in `WorkCommand`, `ServerCommand`, and `MaintenanceCommand` to avoid collision with Symfony Console's reserved `--quiet` (`-q`).
+- Notes: Fixes `LogicException: An option with shortcut "q" already exists` when running queue commands. No breaking changes.
+
 ### 1.28.2 — Bellatrix (Patch, Released 2026-02-07)
 - **Container Self-Registration**: `ContainerFactory::create()` registers the container under `ContainerInterface` for autowiring into CLI commands.
 - **Migration Command DI**: `RunCommand`, `StatusCommand`, `RollbackCommand` accept container/context via constructor, receiving the booted container with extension migration paths.

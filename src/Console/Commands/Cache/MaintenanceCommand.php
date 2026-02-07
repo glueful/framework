@@ -17,7 +17,7 @@ class MaintenanceCommand extends BaseCommand
     protected function configure(): void
     {
         $this->addOption('operation', 'o', InputOption::VALUE_REQUIRED, 'Operation to perform', 'clearExpiredKeys')
-             ->addOption('queue', 'q', InputOption::VALUE_NONE, 'Enqueue the operation instead of running immediately');
+             ->addOption('queue', null, InputOption::VALUE_NONE, 'Enqueue instead of running immediately');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
