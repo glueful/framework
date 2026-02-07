@@ -21,6 +21,12 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.28.2 — Bellatrix (Patch, Released 2026-02-07)
+- **Container Self-Registration**: `ContainerFactory::create()` registers the container under `ContainerInterface` for autowiring into CLI commands.
+- **Migration Command DI**: `RunCommand`, `StatusCommand`, `RollbackCommand` accept container/context via constructor, receiving the booted container with extension migration paths.
+- **PostgreSQL Schema-Safe Introspection**: All `PostgreSQLSqlGenerator` introspection queries now use `current_schema()` instead of hardcoding `public`. Covers `information_schema`, `pg_constraint`, `pg_index`, and foreign key lookups with proper `pg_namespace` joins.
+- Notes: Fixes `migrate:run/status/rollback` not discovering extension migrations. PostgreSQL introspection now works correctly with non-`public` schemas. No breaking changes.
+
 ### 1.28.1 — Bellatrix (Patch, Released 2026-02-06)
 - **Router Group Stack Fix**: `Router::group()` now uses `try/finally` to always clean up `groupStack` and `middlewareStack`, preventing prefix leakage across extensions when exceptions occur inside group callbacks.
 - **Cache-Aware Route Registration**: Router allows extensions to overwrite routes pre-loaded from cache instead of throwing duplicate route errors. Handles both static and dynamic routes.

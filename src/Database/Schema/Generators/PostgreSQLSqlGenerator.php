@@ -560,7 +560,7 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
     public function tableExistsQuery(string $table): string
     {
         return "SELECT COUNT(*) FROM information_schema.tables " .
-               "WHERE table_schema = 'public' AND table_name = " . $this->quoteValue($table);
+               "WHERE table_schema = current_schema() AND table_name = " . $this->quoteValue($table);
     }
 
     /**
@@ -573,7 +573,7 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
     public function columnExistsQuery(string $table, string $column): string
     {
         return "SELECT COUNT(*) FROM information_schema.columns " .
-               "WHERE table_schema = 'public' AND table_name = " . $this->quoteValue($table) .
+               "WHERE table_schema = current_schema() AND table_name = " . $this->quoteValue($table) .
                " AND column_name = " . $this->quoteValue($column);
     }
 
@@ -586,7 +586,7 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
     public function getTableSchemaQuery(string $table): string
     {
         return "SELECT * FROM information_schema.columns " .
-               "WHERE table_schema = 'public' AND table_name = " . $this->quoteValue($table) .
+               "WHERE table_schema = current_schema() AND table_name = " . $this->quoteValue($table) .
                " ORDER BY ordinal_position";
     }
 
@@ -598,7 +598,7 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
     public function getTablesQuery(): string
     {
         return "SELECT table_name FROM information_schema.tables " .
-               "WHERE table_schema = 'public' ORDER BY table_name";
+               "WHERE table_schema = current_schema() ORDER BY table_name";
     }
 
     // ===========================================
@@ -823,6 +823,7 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
                 is_generated
             FROM information_schema.columns 
             WHERE table_name = :table
+              AND table_schema = current_schema()
             ORDER BY ordinal_position
         ";
         $columnStmt = $pdo->prepare($columnQuery);
@@ -858,8 +859,10 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
                 FROM pg_constraint c
                 JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
                 JOIN pg_class t ON t.oid = c.conrelid
+                JOIN pg_namespace n ON n.oid = t.relnamespace
                 WHERE c.contype = 'p' 
                   AND t.relname = :table
+                  AND n.nspname = current_schema()
             ";
             $pkStmt = $pdo->prepare($pkQuery);
             $pkStmt->execute(['table' => $table]);
@@ -883,8 +886,10 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
                 FROM pg_constraint c
                 JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
                 JOIN pg_class t ON t.oid = c.conrelid
+                JOIN pg_namespace n ON n.oid = t.relnamespace
                 WHERE c.contype = 'u' 
                   AND t.relname = :table
+                  AND n.nspname = current_schema()
             ";
             $uniqueStmt = $pdo->prepare($uniqueQuery);
             $uniqueStmt->execute(['table' => $table]);
@@ -911,7 +916,9 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
                 JOIN pg_class t ON t.oid = ix.indrelid
                 JOIN pg_class i ON i.oid = ix.indexrelid
                 JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
+                JOIN pg_namespace n ON n.oid = t.relnamespace
                 WHERE t.relname = :table
+                  AND n.nspname = current_schema()
                   AND NOT ix.indisprimary
             ";
             $indexStmt = $pdo->prepare($indexQuery);
@@ -946,13 +953,18 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
                 FROM information_schema.key_column_usage kcu
                 JOIN information_schema.referential_constraints rc 
                     ON kcu.constraint_name = rc.constraint_name
+                   AND kcu.constraint_schema = rc.constraint_schema
                 JOIN information_schema.constraint_column_usage ccu 
                     ON rc.unique_constraint_name = ccu.constraint_name
+                   AND rc.unique_constraint_schema = ccu.constraint_schema
                 WHERE kcu.table_name = :table
+                  AND kcu.table_schema = current_schema()
+                  AND rc.constraint_schema = current_schema()
                   AND kcu.constraint_name IN (
                       SELECT constraint_name 
                       FROM information_schema.table_constraints 
-                      WHERE constraint_type = 'FOREIGN KEY'
+                      WHERE table_schema = current_schema()
+                        AND constraint_type = 'FOREIGN KEY'
                   )
             ";
             $fkStmt = $pdo->prepare($fkQuery);
