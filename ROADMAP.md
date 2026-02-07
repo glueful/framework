@@ -21,6 +21,16 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.29.0 — Capella (Released 2026-02-07)
+- **Leaf Worker Mode**: `queue:work process` action for direct in-process job execution. Spawned workers no longer recursively invoke the manager.
+- **ProcessManager Wiring**: Config key normalization (`max_workers` / `max_workers_global`), new `stop()` API, manager-routed stop path in WorkCommand.
+- **AutoScaleCommand Config**: Normalized config propagation to ProcessManager and AutoScaler with env-driven defaults.
+- **Status Runtime Fix**: `getStatus()` now includes worker runtime for display formatting.
+- **Distributed Lock Fix**: Lock key changed from host-scoped to shared queue-scoped for correct multi-host coordination.
+- **Queue Presets**: Seven env-driven queue configurations (`critical`, `maintenance`, `default`, `high`, `emails`, `reports`, `notifications`) with per-queue autoscale toggle.
+- **Schedule Queue Env Vars**: Hardcoded queue names in `schedule.php` replaced with `SCHEDULE_QUEUE_*` env vars.
+- Notes: No breaking changes. Auto-scaling default-off for all presets.
+
 ### 1.28.3 — Bellatrix (Patch, Released 2026-02-07)
 - **CLI `-q` Shortcut Fix**: Removed `-q` shortcut from `--queue` option in `WorkCommand`, `ServerCommand`, and `MaintenanceCommand` to avoid collision with Symfony Console's reserved `--quiet` (`-q`).
 - Notes: Fixes `LogicException: An option with shortcut "q" already exists` when running queue commands. No breaking changes.

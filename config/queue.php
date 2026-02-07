@@ -227,6 +227,24 @@ return [
         | Per-queue worker settings for fine-tuned control.
         */
         'queues' => [
+            'critical' => [
+                'workers' => env('CRITICAL_QUEUE_WORKERS', 2),
+                'max_workers' => env('CRITICAL_QUEUE_MAX_WORKERS', 6),
+                'priority' => 20,
+                'memory_limit' => env('CRITICAL_QUEUE_MEMORY', 256), // MB
+                'timeout' => env('CRITICAL_QUEUE_TIMEOUT', 30), // seconds
+                'max_jobs' => env('CRITICAL_QUEUE_MAX_JOBS', 1000),
+                'auto_scale' => env('CRITICAL_QUEUE_AUTO_SCALE', false),
+            ],
+            'maintenance' => [
+                'workers' => env('MAINTENANCE_QUEUE_WORKERS', 1),
+                'max_workers' => env('MAINTENANCE_QUEUE_MAX_WORKERS', 2),
+                'priority' => 3,
+                'memory_limit' => env('MAINTENANCE_QUEUE_MEMORY', 128), // MB
+                'timeout' => env('MAINTENANCE_QUEUE_TIMEOUT', 300), // seconds
+                'max_jobs' => env('MAINTENANCE_QUEUE_MAX_JOBS', 500),
+                'auto_scale' => env('MAINTENANCE_QUEUE_AUTO_SCALE', false),
+            ],
             'default' => [
                 'workers' => env('DEFAULT_QUEUE_WORKERS', 2),
                 'max_workers' => env('DEFAULT_QUEUE_MAX_WORKERS', 5),
@@ -234,7 +252,7 @@ return [
                 'memory_limit' => env('DEFAULT_QUEUE_MEMORY', 128), // MB
                 'timeout' => env('DEFAULT_QUEUE_TIMEOUT', 60), // seconds
                 'max_jobs' => env('DEFAULT_QUEUE_MAX_JOBS', 1000),
-                'auto_scale' => true,
+                'auto_scale' => env('DEFAULT_QUEUE_AUTO_SCALE', false),
             ],
             'high' => [
                 'workers' => env('HIGH_QUEUE_WORKERS', 3),
@@ -243,7 +261,7 @@ return [
                 'memory_limit' => env('HIGH_QUEUE_MEMORY', 256), // MB
                 'timeout' => env('HIGH_QUEUE_TIMEOUT', 30), // seconds
                 'max_jobs' => env('HIGH_QUEUE_MAX_JOBS', 500),
-                'auto_scale' => true,
+                'auto_scale' => env('HIGH_QUEUE_AUTO_SCALE', false),
             ],
             'emails' => [
                 'workers' => env('EMAIL_QUEUE_WORKERS', 2),
@@ -252,7 +270,7 @@ return [
                 'memory_limit' => env('EMAIL_QUEUE_MEMORY', 64), // MB
                 'timeout' => env('EMAIL_QUEUE_TIMEOUT', 120), // seconds
                 'max_jobs' => env('EMAIL_QUEUE_MAX_JOBS', 2000),
-                'auto_scale' => false,
+                'auto_scale' => env('EMAIL_QUEUE_AUTO_SCALE', false),
             ],
             'reports' => [
                 'workers' => env('REPORTS_QUEUE_WORKERS', 1),
@@ -261,7 +279,16 @@ return [
                 'memory_limit' => env('REPORTS_QUEUE_MEMORY', 512), // MB
                 'timeout' => env('REPORTS_QUEUE_TIMEOUT', 600), // 10 minutes
                 'max_jobs' => env('REPORTS_QUEUE_MAX_JOBS', 50),
-                'auto_scale' => false,
+                'auto_scale' => env('REPORTS_QUEUE_AUTO_SCALE', false),
+            ],
+            'notifications' => [
+                'workers' => env('NOTIFICATIONS_QUEUE_WORKERS', 2),
+                'max_workers' => env('NOTIFICATIONS_QUEUE_MAX_WORKERS', 4),
+                'priority' => 8,
+                'memory_limit' => env('NOTIFICATIONS_QUEUE_MEMORY', 128), // MB
+                'timeout' => env('NOTIFICATIONS_QUEUE_TIMEOUT', 60), // seconds
+                'max_jobs' => env('NOTIFICATIONS_QUEUE_MAX_JOBS', 1000),
+                'auto_scale' => env('NOTIFICATIONS_QUEUE_AUTO_SCALE', false),
             ],
         ],
 

@@ -6,6 +6,7 @@ namespace Glueful\Console\Commands\Queue;
 
 use Glueful\Queue\Process\ProcessManager;
 use Glueful\Queue\Process\ProcessFactory;
+use Glueful\Queue\QueueManager;
 use Glueful\Queue\WorkerOptions;
 use Glueful\Queue\Monitoring\WorkerMonitor;
 use Glueful\Lock\LockManagerInterface;
@@ -43,7 +44,7 @@ class WorkCommand extends BaseQueueCommand
              ->addArgument(
                  'action',
                  InputArgument::OPTIONAL,
-                 'Action to perform (work, spawn, scale, status, stop, restart, health)',
+                 'Action to perform (work, process, spawn, scale, status, stop, restart, health)',
                  'work'
              )
              ->addOption(
@@ -119,10 +120,43 @@ class WorkCommand extends BaseQueueCommand
                  'Auto-refresh interval in seconds (for status action)'
              )
              ->addOption(
+                 'sleep',
+                 null,
+                 InputOption::VALUE_REQUIRED,
+                 'Sleep duration in seconds when no job is available (process mode)',
+                 '3'
+             )
+             ->addOption(
+                 'max-runtime',
+                 null,
+                 InputOption::VALUE_REQUIRED,
+                 'Maximum worker runtime in seconds before exit (0 = unlimited)',
+                 '0'
+             )
+             ->addOption(
+                 'max-attempts',
+                 null,
+                 InputOption::VALUE_REQUIRED,
+                 'Maximum retry attempts for failed jobs in process mode',
+                 '3'
+             )
+             ->addOption(
                  'stop-when-empty',
                  null,
                  InputOption::VALUE_NONE,
                  'Stop when queue is empty'
+             )
+             ->addOption(
+                 'with-monitoring',
+                 null,
+                 InputOption::VALUE_NONE,
+                 'Emit worker monitoring lines to stdout'
+             )
+             ->addOption(
+                 'emit-heartbeat',
+                 null,
+                 InputOption::VALUE_NONE,
+                 'Emit periodic heartbeat messages to stdout'
              );
     }
 
@@ -135,6 +169,7 @@ class WorkCommand extends BaseQueueCommand
         try {
             return match ($action) {
                 'work' => $this->executeWork($input),
+                'process' => $this->executeProcess($input),
                 'spawn' => $this->executeSpawn($input),
                 'scale' => $this->executeScale($input),
                 'status' => $this->executeStatus($input),
@@ -205,6 +240,115 @@ class WorkCommand extends BaseQueueCommand
         // Monitor workers if not in daemon mode
         if ($daemon !== true) {
             return $this->monitorWorkers();
+        }
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * Process queue jobs directly in the current process (leaf worker mode).
+     *
+     * This mode is used by ProcessFactory spawned workers to avoid recursive
+     * queue manager spawning.
+     */
+    private function executeProcess(InputInterface $input): int
+    {
+        $queues = $this->parseQueues($input->getOption('queue'));
+        $sleep = max(1, (int) $input->getOption('sleep'));
+        $maxJobs = max(0, (int) $input->getOption('max-jobs'));
+        $maxRuntime = max(0, (int) $input->getOption('max-runtime'));
+        $maxAttempts = max(1, (int) $input->getOption('max-attempts'));
+        $stopWhenEmpty = (bool) $input->getOption('stop-when-empty');
+        $withMonitoring = (bool) $input->getOption('with-monitoring');
+        $emitHeartbeat = (bool) $input->getOption('emit-heartbeat');
+
+        /** @var QueueManager $queueManager */
+        $queueManager = $this->getService(QueueManager::class);
+        $driver = $queueManager->connection();
+
+        $workerId = (string) ($_ENV['WORKER_ID'] ?? gethostname() ?: 'worker');
+        $startedAt = time();
+        $processedJobs = 0;
+        $running = true;
+        $lastHeartbeatAt = 0;
+
+        if (function_exists('pcntl_signal')) {
+            pcntl_signal(SIGTERM, function () use (&$running): void {
+                $running = false;
+            });
+            pcntl_signal(SIGINT, function () use (&$running): void {
+                $running = false;
+            });
+        }
+
+        while ($running) {
+            if ($emitHeartbeat && (time() - $lastHeartbeatAt) >= 15) {
+                $lastHeartbeatAt = time();
+                echo '[HEARTBEAT] worker=' . $workerId . ' ts=' . date('c') . PHP_EOL;
+            }
+
+            $jobProcessedInCycle = false;
+            foreach ($queues as $queue) {
+                $queue = trim($queue);
+                if ($queue === '') {
+                    continue;
+                }
+
+                $job = $driver->pop($queue);
+                if ($job === null) {
+                    continue;
+                }
+
+                $jobProcessedInCycle = true;
+
+                try {
+                    $job->fire();
+                    $processedJobs++;
+
+                    if ($withMonitoring) {
+                        echo '[JOB_COMPLETED] worker=' . $workerId .
+                             ' queue=' . $queue .
+                             ' uuid=' . $job->getUuid() . PHP_EOL;
+                        echo '[METRICS] memory=' . memory_get_usage(true) . ' cpu=0.0' . PHP_EOL;
+                    }
+                } catch (\Throwable $e) {
+                    if ($job->getAttempts() < min($job->getMaxAttempts(), $maxAttempts)) {
+                        $job->release($sleep);
+                    } else {
+                        $job->failed($e instanceof \Exception ? $e : new \RuntimeException($e->getMessage(), 0, $e));
+                    }
+
+                    if ($withMonitoring) {
+                        $this->error(sprintf(
+                            'Job failed (queue=%s, uuid=%s, attempts=%d): %s',
+                            $queue,
+                            $job->getUuid(),
+                            $job->getAttempts(),
+                            $e->getMessage()
+                        ));
+                    }
+                }
+
+                if ($maxJobs > 0 && $processedJobs >= $maxJobs) {
+                    return self::SUCCESS;
+                }
+            }
+
+            if ($maxRuntime > 0 && (time() - $startedAt) >= $maxRuntime) {
+                return self::SUCCESS;
+            }
+
+            if ($stopWhenEmpty && !$jobProcessedInCycle) {
+                return self::SUCCESS;
+            }
+
+            if (!$jobProcessedInCycle) {
+                sleep($sleep);
+            }
+
+            if (function_exists('pcntl_signal_dispatch')) {
+                pcntl_signal_dispatch();
+            }
         }
 
         return self::SUCCESS;
@@ -285,9 +429,7 @@ class WorkCommand extends BaseQueueCommand
         } elseif ($workerId !== false && $workerId !== null) {
             $workerId = (string) $workerId;
             $this->info("🛑 Stopping worker: {$workerId}");
-            $worker = $this->processManager->getWorker($workerId);
-            if ($worker !== null) {
-                $worker->stop($timeout);
+            if ($this->processManager->stop($workerId, $timeout)) {
                 $this->success("Worker stopped");
             } else {
                 $this->error("Worker not found: {$workerId}");
@@ -467,12 +609,13 @@ class WorkCommand extends BaseQueueCommand
     private function createWorkerOptionsFromInput(InputInterface $input): WorkerOptions
     {
         return new WorkerOptions(
-            sleep: 3,
+            sleep: (int) $input->getOption('sleep'),
             memory: (int) $input->getOption('memory'),
             timeout: (int) $input->getOption('timeout'),
             maxJobs: (int) $input->getOption('max-jobs'),
-            stopWhenEmpty: $input->getOption('stop-when-empty'),
-            maxAttempts: 3
+            stopWhenEmpty: (bool) $input->getOption('stop-when-empty'),
+            maxAttempts: (int) $input->getOption('max-attempts'),
+            maxRuntime: (int) $input->getOption('max-runtime')
         );
     }
 
@@ -489,7 +632,7 @@ class WorkCommand extends BaseQueueCommand
     {
         $this->error("Unknown action: {$action}");
         $this->line();
-        $this->info("Available actions: work, spawn, scale, status, stop, restart, health");
+        $this->info("Available actions: work, process, spawn, scale, status, stop, restart, health");
         $this->line();
         $this->info("💡 The queue command now defaults to multi-worker mode.");
         $this->info("   Use 'php glueful queue:work' to start with 2 workers by default.");
@@ -504,7 +647,7 @@ class WorkCommand extends BaseQueueCommand
      */
     private function spawnWorkersWithLock(string $queue, int $workerCount, WorkerOptions $workerOptions): void
     {
-        $lockResource = "queue:manager:{$queue}:" . gethostname();
+        $lockResource = "queue:manager:{$queue}";
         $lockTtl = 60.0; // 1 minute TTL for worker spawning
 
         $this->lockManager->executeWithLock($lockResource, function () use ($queue, $workerCount, $workerOptions) {

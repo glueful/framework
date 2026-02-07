@@ -194,19 +194,48 @@ class AutoScaleCommand extends BaseQueueCommand
 
     private function initializeServices(): void
     {
-        $this->config = config($this->getContext(), 'queue.workers', []);
+        $workersConfig = config($this->getContext(), 'queue.workers', []);
+        $this->config = $workersConfig;
 
         $logger = $this->getService(LoggerInterface::class);
         $queueManager = $this->getService(QueueManager::class);
         $workerMonitor = $this->getService(WorkerMonitor::class);
         $basePath = base_path($this->getContext());
 
-        $processFactory = new ProcessFactory($logger, $basePath);
-        $this->processManager = new ProcessManager($processFactory, $workerMonitor, $logger, $this->config);
+        $processConfig = $workersConfig['process'] ?? [];
+        $autoScalingConfig = $workersConfig['auto_scaling'] ?? [];
 
-        $this->autoScaler = new AutoScaler($this->processManager, $queueManager, $logger, $this->config);
+        $processManagerConfig = array_merge($processConfig, [
+            'max_workers' => $processConfig['max_workers']
+                ?? $processConfig['max_workers_global']
+                ?? 10,
+        ]);
+
+        $autoScalerConfig = [
+            'enabled' => (bool) ($autoScalingConfig['enabled'] ?? false),
+            'queues' => $workersConfig['queues'] ?? [],
+            'auto_scale' => [
+                'scale_up_threshold' => (int) ($autoScalingConfig['scale_up_threshold'] ?? 100),
+                'scale_down_threshold' => (int) ($autoScalingConfig['scale_down_threshold'] ?? 10),
+                'scale_up_step' => (int) ($autoScalingConfig['scale_up_step'] ?? 2),
+                'scale_down_step' => (int) ($autoScalingConfig['scale_down_step'] ?? 1),
+                'cooldown_period' => (int) ($autoScalingConfig['cooldown_period'] ?? 300),
+            ],
+            'limits' => [
+                'max_workers_per_queue' => (int) (
+                    $processConfig['max_workers_per_queue']
+                    ?? $processConfig['max_workers']
+                    ?? 10
+                ),
+            ],
+        ];
+
+        $processFactory = new ProcessFactory($logger, $basePath);
+        $this->processManager = new ProcessManager($processFactory, $workerMonitor, $logger, $processManagerConfig);
+
+        $this->autoScaler = new AutoScaler($this->processManager, $queueManager, $logger, $autoScalerConfig);
         $this->scheduledScaler = new ScheduledScaler($this->processManager, $logger);
-        $this->resourceMonitor = new ResourceMonitor($logger, $this->config);
+        $this->resourceMonitor = new ResourceMonitor($logger, $workersConfig);
         $this->streamingMonitor = new StreamingMonitor($this->processManager, $logger);
     }
 

@@ -108,10 +108,11 @@ class ProcessFactory
             $phpBinary,
             'glueful',
             'queue:work',
+            'process',
             '--queue=' . $queue,
         ];
 
-        // Add worker options to command
+        // Add worker options supported by queue:work process mode
         if ($options->sleep > 0) {
             $command[] = '--sleep=' . $options->sleep;
         }
@@ -140,7 +141,7 @@ class ProcessFactory
             $command[] = '--stop-when-empty';
         }
 
-        // Add process monitoring flags
+        // Enable monitoring output for parent process tracking
         $command[] = '--with-monitoring';
         $command[] = '--emit-heartbeat';
 
