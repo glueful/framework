@@ -31,11 +31,21 @@ class ProcessManager
         $this->factory = $factory;
         $this->monitor = $monitor;
         $this->logger = $logger;
+
+        $resolvedMaxWorkers = (int) (
+            $config['max_workers']
+            ?? $config['max_workers_global']
+            ?? 10
+        );
+
         $this->config = array_merge([
-            'max_workers' => 10,
+            'max_workers' => $resolvedMaxWorkers,
             'restart_delay' => 5,
             'health_check_interval' => 30,
         ], $config);
+
+        // Normalize legacy/newer config keys to a single canonical key.
+        $this->config['max_workers'] = $resolvedMaxWorkers;
     }
 
     public function spawn(string $queue, WorkerOptions $options): WorkerProcess
@@ -161,6 +171,27 @@ class ProcessManager
         $this->spawn($queue, $options);
     }
 
+    public function stop(string $workerId, int $timeout = 30): bool
+    {
+        if (!isset($this->workers[$workerId])) {
+            return false;
+        }
+
+        $worker = $this->workers[$workerId];
+        try {
+            $worker->stop($timeout);
+        } catch (\Exception $e) {
+            $this->logger->error('Failed to stop worker gracefully', [
+                'worker_id' => $workerId,
+                'error' => $e->getMessage(),
+            ]);
+            $worker->forceStop();
+        }
+
+        unset($this->workers[$workerId]);
+        return true;
+    }
+
     /**
      * @return array<int, array<string, mixed>>
      */
@@ -177,6 +208,7 @@ class ProcessManager
                 'memory_usage' => $worker->getMemoryUsage(),
                 'cpu_usage' => $worker->getCpuUsage(),
                 'jobs_processed' => $worker->getJobsProcessed(),
+                'runtime' => $worker->getRuntime(),
                 'started_at' => $worker->getStartedAt(),
                 'last_heartbeat' => $worker->getLastHeartbeat(),
             ];

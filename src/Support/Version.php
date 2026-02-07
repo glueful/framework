@@ -13,10 +13,10 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.28.3';
+    public const VERSION = '1.29.0';
 
     /** Release code name */
-    public const NAME = 'Bellatrix';
+    public const NAME = 'Capella';
 
     /** Release date */
     public const RELEASE_DATE = '2026-02-07';

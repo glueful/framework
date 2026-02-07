@@ -4,6 +4,38 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.29.0] - 2026-02-07 — Capella
+
+Queue system overhaul: leaf worker mode, config normalization, distributed lock fix, and env-driven queue presets.
+
+### Added
+
+- **Leaf worker mode** (`queue:work process`): Spawned workers now execute jobs directly in-process via a dedicated `process` action instead of recursively invoking the manager. Supports `--sleep`, `--max-jobs`, `--max-runtime`, `--max-attempts`, `--stop-when-empty`, `--with-monitoring`, and `--emit-heartbeat` options.
+- **ProcessManager `stop()` API**: New `stop(string $workerId, int $timeout = 30): bool` method for stopping and removing a worker from manager state in a single call.
+- **Queue presets**: Seven env-driven queue configurations in `config/queue.php` — `critical`, `maintenance`, `default`, `high`, `emails`, `reports`, `notifications` — each with tunable workers, memory, timeout, max jobs, priority, and per-queue autoscale toggle.
+- **Schedule queue env vars**: `schedule.php` now uses `SCHEDULE_QUEUE_CRITICAL`, `SCHEDULE_QUEUE_MAINTENANCE`, `SCHEDULE_QUEUE_NOTIFICATIONS`, `SCHEDULE_QUEUE_SYSTEM` instead of hardcoded queue names.
+- **Top-level queue env toggles**: `QUEUE_PROCESS_ENABLED` and `QUEUE_AUTO_SCALING` added to `.env.example` for operator control.
+
+### Changed
+
+- **ProcessFactory leaf command**: `buildWorkerCommand()` now spawns `php glueful queue:work process --queue=...` instead of recursively calling the manager action.
+- **ProcessManager config normalization**: Constructor resolves `max_workers` from `max_workers` or `max_workers_global` with fallback to `10`, then forces the canonical key.
+- **AutoScaleCommand config wiring**: `initializeServices()` builds normalized config objects for both `ProcessManager` and `AutoScaler` — top-level `enabled` from `auto_scaling.enabled`, structured `auto_scale.*` thresholds, and `limits.max_workers_per_queue` from process config.
+- **WorkCommand stop path**: `executeStop()` now calls `ProcessManager::stop()` instead of reaching into `WorkerProcess` directly, keeping the manager's internal state consistent.
+
+### Fixed
+
+- **Status payload missing runtime**: `ProcessManager::getStatus()` now includes `'runtime' => $worker->getRuntime()`, fixing the `formatDuration()` display in worker status output.
+- **Distributed lock scoped per-host**: Lock key changed from `queue:manager:{queue}:{hostname}` to `queue:manager:{queue}` so the lock is truly shared across hosts in distributed deployments.
+- **Queue naming inconsistency**: Hardcoded queue names in `schedule.php` replaced with env-backed variables matching `queue.php` presets. `emails` and `reports` queue `auto_scale` changed from hardcoded `false` to `env()` wrappers for consistency.
+
+### Notes
+
+- No breaking changes. Existing `queue:work` (manager mode) behavior is unchanged — it now spawns leaf workers internally.
+- Auto-scaling is default-off for all queue presets. Enable per-queue via `*_QUEUE_AUTO_SCALE=true` env vars.
+
+---
+
 ## [1.28.3] - 2026-02-07 — Bellatrix (Patch)
 
 Fix CLI option shortcut collision with Symfony Console's reserved `-q` (`--quiet`).

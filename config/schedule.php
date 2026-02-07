@@ -7,6 +7,11 @@
  * Enhanced with better error handling and monitoring.
  */
 
+$criticalQueue = env('SCHEDULE_QUEUE_CRITICAL', 'critical');
+$maintenanceQueue = env('SCHEDULE_QUEUE_MAINTENANCE', 'maintenance');
+$notificationsQueue = env('SCHEDULE_QUEUE_NOTIFICATIONS', 'notifications');
+$systemQueue = env('SCHEDULE_QUEUE_SYSTEM', 'system');
+
 return [
     'jobs' => [
         [
@@ -16,7 +21,7 @@ return [
             'parameters' => ['cleanupType' => 'expired'],
             'description' => 'Clean up expired user sessions',
             'enabled' => env('SESSION_CLEANER_ENABLED', true),
-            'queue' => 'maintenance',
+            'queue' => $maintenanceQueue,
             'timeout' => 300,
             'retry_attempts' => 3,
         ],
@@ -29,7 +34,7 @@ return [
             ],
             'description' => 'Clean up old log files',
             'enabled' => env('LOG_CLEANUP_ENABLED', true),
-            'queue' => 'maintenance',
+            'queue' => $maintenanceQueue,
             'timeout' => 600,
             'retry_attempts' => 2,
         ],
@@ -45,7 +50,7 @@ return [
             ],
             'enabled' => env('DB_BACKUP_ENABLED', env('APP_ENV') === 'production'),
             'description' => 'Create automated database backups',
-            'queue' => 'critical',
+            'queue' => $criticalQueue,
             'timeout' => 1800,
             'retry_attempts' => 1,
         ],
@@ -58,7 +63,7 @@ return [
             ],
             'description' => 'Perform cache maintenance',
             'enabled' => env('CACHE_MAINTENANCE_ENABLED', true),
-            'queue' => 'maintenance',
+            'queue' => $maintenanceQueue,
             'timeout' => 600,
             'retry_attempts' => 2,
         ],
@@ -69,7 +74,7 @@ return [
             'parameters' => ['limit' => 50],
             'description' => 'Process queued notification retries',
             'enabled' => env('NOTIFICATION_RETRIES_ENABLED', true),
-            'queue' => 'notifications',
+            'queue' => $notificationsQueue,
             'timeout' => 300,
             'retry_attempts' => 2,
         ],
@@ -87,9 +92,9 @@ return [
     ],
 
     'queue_mapping' => [
-        'critical' => ['database_backup'],
-        'maintenance' => ['session_cleaner', 'log_cleanup', 'cache_maintenance'],
-        'notifications' => ['notification_retry_processor'],
-        'system' => ['queue_maintenance'],
+        $criticalQueue => ['database_backup'],
+        $maintenanceQueue => ['session_cleaner', 'log_cleanup', 'cache_maintenance'],
+        $notificationsQueue => ['notification_retry_processor'],
+        $systemQueue => ['queue_maintenance'],
     ],
 ];
