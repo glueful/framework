@@ -3,10 +3,10 @@
 namespace Glueful\Security;
 
 use Glueful\Helpers\{ConfigManager, Utils};
-use Glueful\Exceptions\RateLimitExceededException;
+use Glueful\Http\Exceptions\Client\TooManyRequestsException;
 use Glueful\Events\Auth\RateLimitExceededEvent;
 use Glueful\Events\EventService;
-use Glueful\Exceptions\SecurityException;
+use Glueful\Http\Exceptions\Domain\SecurityException;
 use Glueful\Cache\CacheStore;
 use Glueful\Helpers\CacheHelper;
 use Symfony\Component\HttpFoundation\Request;
@@ -402,7 +402,7 @@ class SecurityManager
      * - window_seconds: Time window for rate limit calculation
      *
      * @param string $ip The IP address to check rate limits for
-     * @throws RateLimitExceededException When the rate limit is exceeded
+     * @throws TooManyRequestsException When the rate limit is exceeded
      * @return void
      */
     public function enforceRateLimit(string $ip): void
@@ -438,7 +438,7 @@ class SecurityManager
                 ['rule' => 'default_limit', 'triggered_at' => time()]
             ));
 
-            throw new RateLimitExceededException("Rate limit exceeded for IP: $ip", $window);
+            throw new TooManyRequestsException((int) $window, "Rate limit exceeded for IP: $ip");
         }
 
         // Increment the counter for this IP with TTL equal to the window

@@ -13,13 +13,13 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.29.0';
+    public const VERSION = '1.30.0';
 
     /** Release code name */
-    public const NAME = 'Capella';
+    public const NAME = 'Diphda';
 
     /** Release date */
-    public const RELEASE_DATE = '2026-02-07';
+    public const RELEASE_DATE = '2026-02-09';
 
     /** Minimum required PHP version */
     public const MIN_PHP_VERSION = '8.3.0';

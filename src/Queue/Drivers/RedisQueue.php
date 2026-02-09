@@ -8,8 +8,8 @@ use Glueful\Queue\Contracts\DriverInfo;
 use Glueful\Queue\Contracts\HealthStatus;
 use Glueful\Queue\Jobs\RedisJob;
 use Glueful\Helpers\Utils;
-use Glueful\Exceptions\BusinessLogicException;
-use Glueful\Exceptions\DatabaseException;
+use Glueful\Http\Exceptions\Domain\BusinessLogicException;
+use Glueful\Http\Exceptions\Domain\DatabaseException;
 
 /**
  * Redis Queue Driver

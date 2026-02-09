@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Services;
 
-use Glueful\Exceptions\BusinessLogicException;
+use Glueful\Http\Exceptions\Domain\BusinessLogicException;
 
 /**
  * Image Security Validator

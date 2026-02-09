@@ -2,43 +2,53 @@
 
 declare(strict_types=1);
 
-namespace Glueful\Exceptions;
+namespace Glueful\Http\Exceptions\Domain;
+
+use Glueful\Http\Exceptions\HttpException;
+use Throwable;
 
 /**
  * Database Exception
  *
- * Thrown when database operations fail or validation errors occur.
- * Now extends ApiException for consistent HTTP response handling.
+ * Thrown when database operations fail, including connection failures,
+ * query errors, constraint violations, and CRUD operation failures.
+ *
+ * @example
+ * throw DatabaseException::connectionFailed('Connection refused');
+ *
+ * @example
+ * throw DatabaseException::constraintViolation('users_email_unique');
  */
-class DatabaseException extends ApiException
+class DatabaseException extends HttpException
 {
     /**
      * Create a new database exception
      *
      * @param string $message Exception message
      * @param int $statusCode HTTP status code (defaults to 500)
-     * @param array<string, mixed>|null $data Additional error data
-     * @param \Throwable|null $previous Previous exception
+     * @param array<string, mixed>|null $context Additional error context
+     * @param Throwable|null $previous Previous exception
      */
     public function __construct(
-        string $message = "Database operation failed",
+        string $message = 'Database operation failed',
         int $statusCode = 500,
-        ?array $data = null,
-        ?\Throwable $previous = null
+        ?array $context = null,
+        ?Throwable $previous = null
     ) {
-        parent::__construct($message, $statusCode, $data, $previous);
+        parent::__construct($statusCode, $message, [], 0, $previous);
+        $this->context = $context;
     }
 
     /**
      * Create exception for connection failure
      *
      * @param string $reason Connection failure reason
-     * @param \Throwable|null $previous Previous exception
-     * @return self
+     * @param Throwable|null $previous Previous exception
+     * @return static
      */
-    public static function connectionFailed(string $reason, ?\Throwable $previous = null): self
+    public static function connectionFailed(string $reason, ?Throwable $previous = null): static
     {
-        return new self(
+        return new static(
             "Database connection failed: $reason",
             500,
             ['connection_error' => true, 'reason' => $reason],
@@ -51,12 +61,12 @@ class DatabaseException extends ApiException
      *
      * @param string $operation Database operation (SELECT, INSERT, etc.)
      * @param string $reason Failure reason
-     * @param \Throwable|null $previous Previous exception
-     * @return self
+     * @param Throwable|null $previous Previous exception
+     * @return static
      */
-    public static function queryFailed(string $operation, string $reason, ?\Throwable $previous = null): self
+    public static function queryFailed(string $operation, string $reason, ?Throwable $previous = null): static
     {
-        return new self(
+        return new static(
             "Database $operation operation failed: $reason",
             500,
             ['query_error' => true, 'operation' => $operation, 'reason' => $reason],
@@ -68,12 +78,12 @@ class DatabaseException extends ApiException
      * Create exception for constraint violation
      *
      * @param string $constraint Constraint name
-     * @param \Throwable|null $previous Previous exception
-     * @return self
+     * @param Throwable|null $previous Previous exception
+     * @return static
      */
-    public static function constraintViolation(string $constraint, ?\Throwable $previous = null): self
+    public static function constraintViolation(string $constraint, ?Throwable $previous = null): static
     {
-        return new self(
+        return new static(
             "Database constraint violation: $constraint",
             409,
             ['constraint_violation' => true, 'constraint' => $constraint],
@@ -85,12 +95,12 @@ class DatabaseException extends ApiException
      * Create exception for record creation failures
      *
      * @param string $table Table name
-     * @param \Throwable|null $previous Previous exception
-     * @return self
+     * @param Throwable|null $previous Previous exception
+     * @return static
      */
-    public static function createFailed(string $table, ?\Throwable $previous = null): self
+    public static function createFailed(string $table, ?Throwable $previous = null): static
     {
-        return new self(
+        return new static(
             "Failed to create record in {$table}",
             500,
             ['create_error' => true, 'table' => $table],
@@ -103,12 +113,12 @@ class DatabaseException extends ApiException
      *
      * @param string $table Table name
      * @param string $identifier Record identifier
-     * @param \Throwable|null $previous Previous exception
-     * @return self
+     * @param Throwable|null $previous Previous exception
+     * @return static
      */
-    public static function updateFailed(string $table, string $identifier, ?\Throwable $previous = null): self
+    public static function updateFailed(string $table, string $identifier, ?Throwable $previous = null): static
     {
-        return new self(
+        return new static(
             "Failed to update record in {$table}: {$identifier}",
             500,
             ['update_error' => true, 'table' => $table, 'identifier' => $identifier],
@@ -121,12 +131,12 @@ class DatabaseException extends ApiException
      *
      * @param string $table Table name
      * @param string $identifier Record identifier
-     * @param \Throwable|null $previous Previous exception
-     * @return self
+     * @param Throwable|null $previous Previous exception
+     * @return static
      */
-    public static function deleteFailed(string $table, string $identifier, ?\Throwable $previous = null): self
+    public static function deleteFailed(string $table, string $identifier, ?Throwable $previous = null): static
     {
-        return new self(
+        return new static(
             "Failed to delete record from {$table}: {$identifier}",
             500,
             ['delete_error' => true, 'table' => $table, 'identifier' => $identifier],

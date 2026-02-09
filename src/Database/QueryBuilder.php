@@ -325,7 +325,7 @@ class QueryBuilder implements QueryBuilderInterface
      * @param  string|null $path        Optional JSON path to search within (e.g., '$.address.city')
      * @return static Returns this QueryBuilder instance for method chaining
      * @throws \InvalidArgumentException If column name is invalid or path syntax is malformed
-     * @throws \Glueful\Exceptions\DatabaseException If JSON operations are not supported by database
+     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException If JSON operations are not supported by database
      * @throws \RuntimeException If the JSON search query cannot be constructed
      */
     public function whereJsonContains(string $column, string $searchValue, ?string $path = null): static
@@ -646,7 +646,7 @@ class QueryBuilder implements QueryBuilderInterface
      * @param  array<int,string>|array<string,mixed> $updateColumns Update columns
      * @return int Number of affected rows (1 for insert, 2 for update in MySQL)
      * @throws \InvalidArgumentException If data array is empty or contains invalid columns
-     * @throws \Glueful\Exceptions\DatabaseException If no table is set or database operation fails
+     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException If no table is set or database operation fails
      * @throws \RuntimeException If upsert is not supported by the current database driver
      */
     public function upsert(array $data, array $updateColumns): int
@@ -840,7 +840,7 @@ class QueryBuilder implements QueryBuilderInterface
      * @param  string $sql      Raw SQL query to execute
      * @param  array<mixed>  $bindings Parameter bindings for placeholders in the SQL
      * @return array<mixed> Array of result rows as associative arrays
-     * @throws \Glueful\Exceptions\DatabaseException If query execution fails
+     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException If query execution fails
      * @throws \PDOException If database connection or SQL syntax errors occur
      * @throws \InvalidArgumentException If SQL is empty or bindings are malformed
      */
@@ -862,7 +862,7 @@ class QueryBuilder implements QueryBuilderInterface
      * @param  string $sql      Raw SQL query to execute
      * @param  array<mixed>  $bindings Parameter bindings for placeholders in the SQL
      * @return array<string,mixed>|null First result row as associative array, or null if no results
-     * @throws \Glueful\Exceptions\DatabaseException If query execution fails
+     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException If query execution fails
      * @throws \PDOException If database connection or SQL syntax errors occur
      * @throws \InvalidArgumentException If SQL is empty or bindings are malformed
      * @see    executeRaw() For detailed security warnings and usage examples
@@ -901,7 +901,7 @@ class QueryBuilder implements QueryBuilderInterface
      * @param  string $sql      Raw SQL modification query to execute
      * @param  array<mixed>  $bindings Parameter bindings for placeholders in the SQL
      * @return int Number of affected rows
-     * @throws \Glueful\Exceptions\DatabaseException If query execution fails
+     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException If query execution fails
      * @throws \PDOException If database connection or SQL syntax errors occur
      * @throws \InvalidArgumentException If SQL is empty or bindings are malformed
      * @see    executeRaw() For detailed security warnings and more examples

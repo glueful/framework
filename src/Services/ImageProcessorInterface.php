@@ -23,7 +23,7 @@ interface ImageProcessorInterface
      *
      * @param string $source Local file path or remote URL
      * @return self
-     * @throws \Glueful\Exceptions\BusinessLogicException If source is invalid
+     * @throws \Glueful\Http\Exceptions\Domain\BusinessLogicException If source is invalid
      */
     public static function make(string $source): self;
 
@@ -33,7 +33,7 @@ interface ImageProcessorInterface
      * @param string $url Remote image URL
      * @param array<string, mixed> $options HTTP options (timeout, headers, etc.)
      * @return self
-     * @throws \Glueful\Exceptions\BusinessLogicException If URL is invalid or unreachable
+     * @throws \Glueful\Http\Exceptions\Domain\BusinessLogicException If URL is invalid or unreachable
      */
     public static function fromUrl(string $url, array $options = []): self;
 
@@ -42,7 +42,7 @@ interface ImageProcessorInterface
      *
      * @param UploadedFileInterface $file Uploaded file instance
      * @return self
-     * @throws \Glueful\Exceptions\BusinessLogicException If file is invalid
+     * @throws \Glueful\Http\Exceptions\Domain\BusinessLogicException If file is invalid
      */
     public static function fromUpload(UploadedFileInterface $file): self;
 
@@ -156,7 +156,7 @@ interface ImageProcessorInterface
      *
      * @param string $path Target file path
      * @return bool True if saved successfully
-     * @throws \Glueful\Exceptions\BusinessLogicException If save fails
+     * @throws \Glueful\Http\Exceptions\Domain\BusinessLogicException If save fails
      */
     public function save(string $path): bool;
 

@@ -2,25 +2,32 @@
 
 declare(strict_types=1);
 
-namespace Glueful\Exceptions;
+namespace Glueful\Http\Exceptions\Domain;
+
+use Glueful\Http\Exceptions\HttpException;
 
 /**
  * HTTP Protocol Exception
  *
- * Exception class for HTTP protocol violations and malformed requests.
- * Used by the framework to represent protocol-level errors such as
+ * Thrown for HTTP protocol violations and malformed requests such as
  * malformed JSON, missing required headers, and other HTTP standard violations.
+ *
+ * @example
+ * throw HttpProtocolException::malformedJson('Unexpected token at position 42');
+ *
+ * @example
+ * throw HttpProtocolException::requestTooLarge(1048576, 5242880);
  */
-class HttpProtocolException extends ApiException
+class HttpProtocolException extends HttpException
 {
     /** @var string|null The error code for categorizing protocol violations */
-    private ?string $errorCode = null;
+    protected ?string $errorCode = null;
 
     /** @var array<string, mixed> Additional context about the protocol violation */
-    private array $protocolContext = [];
+    protected array $protocolContext = [];
 
     /**
-     * Constructor
+     * Create a new HTTP protocol exception
      *
      * @param string $message Error message
      * @param int $statusCode HTTP status code (typically 400)
@@ -33,10 +40,10 @@ class HttpProtocolException extends ApiException
         ?string $errorCode = null,
         array $protocolContext = []
     ) {
-        parent::__construct($message, $statusCode, ['error_code' => $errorCode]);
-
+        parent::__construct($statusCode, $message);
         $this->errorCode = $errorCode;
         $this->protocolContext = $protocolContext;
+        $this->context = ['error_code' => $errorCode];
     }
 
     /**
@@ -63,11 +70,11 @@ class HttpProtocolException extends ApiException
      * Create exception for malformed JSON
      *
      * @param string $jsonError JSON error description
-     * @return self
+     * @return static
      */
-    public static function malformedJson(string $jsonError = 'Invalid JSON format'): self
+    public static function malformedJson(string $jsonError = 'Invalid JSON format'): static
     {
-        return new self(
+        return new static(
             'Malformed JSON request body',
             400,
             'JSON_PARSE_ERROR',
@@ -79,11 +86,11 @@ class HttpProtocolException extends ApiException
      * Create exception for missing required header
      *
      * @param string $headerName The missing header name
-     * @return self
+     * @return static
      */
-    public static function missingHeader(string $headerName): self
+    public static function missingHeader(string $headerName): static
     {
-        return new self(
+        return new static(
             "Missing required header: {$headerName}",
             400,
             'MISSING_HEADER',
@@ -96,11 +103,11 @@ class HttpProtocolException extends ApiException
      *
      * @param string $expected Expected content type
      * @param string $actual Actual content type
-     * @return self
+     * @return static
      */
-    public static function invalidContentType(string $expected, string $actual): self
+    public static function invalidContentType(string $expected, string $actual): static
     {
-        return new self(
+        return new static(
             "Invalid content type. Expected {$expected}, got {$actual}",
             400,
             'INVALID_CONTENT_TYPE',
@@ -113,11 +120,11 @@ class HttpProtocolException extends ApiException
      *
      * @param int $maxSize Maximum allowed size
      * @param int $actualSize Actual request size
-     * @return self
+     * @return static
      */
-    public static function requestTooLarge(int $maxSize, int $actualSize): self
+    public static function requestTooLarge(int $maxSize, int $actualSize): static
     {
-        return new self(
+        return new static(
             "Request body too large. Maximum {$maxSize} bytes allowed",
             413,
             'REQUEST_TOO_LARGE',

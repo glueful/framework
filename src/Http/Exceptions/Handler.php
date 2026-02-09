@@ -23,6 +23,12 @@ use Glueful\Http\Exceptions\Domain\ModelNotFoundException;
 use Glueful\Http\Exceptions\Domain\AuthenticationException;
 use Glueful\Http\Exceptions\Domain\AuthorizationException;
 use Glueful\Http\Exceptions\Domain\TokenExpiredException;
+use Glueful\Http\Exceptions\Domain\BusinessLogicException;
+use Glueful\Http\Exceptions\Domain\DatabaseException;
+use Glueful\Http\Exceptions\Domain\SecurityException;
+use Glueful\Http\Exceptions\Domain\HttpAuthException;
+use Glueful\Http\Exceptions\Domain\HttpProtocolException;
+use Glueful\Http\Exceptions\Domain\ExtensionException;
 use Glueful\Validation\ValidationException;
 use Glueful\Events\EventService;
 use Glueful\Events\Http\ExceptionEvent;
@@ -42,27 +48,14 @@ use Throwable;
  * - Exception reporting to PSR-3 loggers and custom reporters
  * - Custom exception rendering via RenderableException interface
  * - Configurable "don't report" list for expected exceptions
- *
- * @example
- * // Basic usage with DI
- * $handler = new Handler($logger, debug: false);
- * $response = $handler->handle($exception, $request);
- *
- * @example
- * // Configure don't report list
- * $handler->dontReport(BusinessRuleException::class);
- *
- * @example
- * // Add custom reporter (e.g., Sentry)
- * $handler->reportUsing(fn($e, $req) => Sentry::captureException($e));
+ * - Channel-based log routing for exception classification
+ * - Optimized context building (lightweight for high-frequency exceptions)
+ * - Test mode for capturing responses without output
  */
 class Handler implements ExceptionHandlerInterface
 {
     /**
      * Exceptions that should not be reported
-     *
-     * These exceptions are considered "expected" and don't need to be
-     * logged or reported to external monitoring services.
      *
      * @var array<class-string<Throwable>>
      */
@@ -82,13 +75,16 @@ class Handler implements ExceptionHandlerInterface
         TooManyRequestsException::class,
         TokenExpiredException::class,
         PermissionUnauthorizedException::class,
+        BusinessLogicException::class,
+        DatabaseException::class,
+        SecurityException::class,
+        HttpAuthException::class,
+        HttpProtocolException::class,
+        ExtensionException::class,
     ];
 
     /**
      * Exception to HTTP status code mapping
-     *
-     * Maps exception class names to their corresponding HTTP status codes.
-     * The handler checks this mapping to determine the response status.
      *
      * @var array<class-string<Throwable>, int>
      */
@@ -107,18 +103,40 @@ class Handler implements ExceptionHandlerInterface
         ConflictException::class => 409,
         ValidationException::class => 422,
         UnprocessableEntityException::class => 422,
+        BusinessLogicException::class => 422,
         TooManyRequestsException::class => 429,
 
         // Server errors (5xx)
+        DatabaseException::class => 500,
         InternalServerException::class => 500,
         ServiceUnavailableException::class => 503,
         GatewayTimeoutException::class => 504,
     ];
 
     /**
-     * Custom exception renderers
+     * Exception class to log channel mapping
      *
-     * Allows registering custom rendering logic for specific exception types.
+     * @var array<string, string>
+     */
+    protected array $channelMap = [
+        ValidationException::class => 'validation',
+        AuthenticationException::class => 'auth',
+        NotFoundException::class => 'http',
+        DatabaseException::class => 'database',
+        SecurityException::class => 'security',
+        TooManyRequestsException::class => 'ratelimit',
+        ExtensionException::class => 'extensions',
+        HttpProtocolException::class => 'http',
+        HttpAuthException::class => 'auth',
+        BusinessLogicException::class => 'api',
+        HttpClientException::class => 'http_client',
+        \Glueful\Permissions\Exceptions\PermissionException::class => 'permissions',
+        \Glueful\Permissions\Exceptions\UnauthorizedException::class => 'auth',
+        \Glueful\Permissions\Exceptions\ProviderNotFoundException::class => 'permissions',
+    ];
+
+    /**
+     * Custom exception renderers
      *
      * @var array<class-string<Throwable>, callable(Throwable, ?Request): Response>
      */
@@ -126,9 +144,6 @@ class Handler implements ExceptionHandlerInterface
 
     /**
      * Exception reporters
-     *
-     * Callbacks that are invoked when an exception is reported.
-     * Useful for integration with external monitoring services.
      *
      * @var array<callable(Throwable, ?Request): void>
      */
@@ -140,10 +155,38 @@ class Handler implements ExceptionHandlerInterface
     protected bool $debug;
 
     /**
+     * Whether to build verbose context (request headers, memory, timing)
+     */
+    protected bool $verboseContext = true;
+
+    /**
+     * Whether test mode is enabled (captures response instead of outputting)
+     */
+    protected bool $testMode = false;
+
+    /**
+     * Captured response in test mode
+     *
+     * @var array<string, mixed>|null
+     */
+    protected ?array $testResponse = null;
+
+    /**
+     * Exception types that get lightweight context (high-frequency, low-priority)
+     *
+     * @var array<class-string<Throwable>>
+     */
+    protected array $lightweightContextExceptions = [
+        ValidationException::class,
+        NotFoundException::class,
+    ];
+
+    /**
      * Create a new exception handler
      *
      * @param LoggerInterface|null $logger PSR-3 logger for exception reporting
      * @param bool $debug Enable debug mode (overrides environment detection)
+     * @param EventService|null $events Event service for dispatching exception events
      */
     public function __construct(
         protected ?LoggerInterface $logger = null,
@@ -203,9 +246,6 @@ class Handler implements ExceptionHandlerInterface
     /**
      * Determine if the exception should be reported
      *
-     * Exceptions in the dontReport list are considered expected
-     * and won't be logged or sent to external services.
-     *
      * @param Throwable $e The exception to check
      * @return bool True if the exception should be reported
      */
@@ -223,29 +263,20 @@ class Handler implements ExceptionHandlerInterface
     /**
      * Report an exception
      *
-     * Logs the exception and calls any registered reporters.
+     * Logs the exception with channel-based routing and optimized context,
+     * then calls any registered reporters.
      *
      * @param Throwable $e The exception to report
      * @param Request|null $request The current request for context
      */
     public function report(Throwable $e, ?Request $request = null): void
     {
-        // Build log context
-        $context = [
-            'exception' => get_class($e),
-            'file' => $e->getFile(),
-            'line' => $e->getLine(),
-            'trace' => $e->getTraceAsString(),
-        ];
+        $channel = $this->resolveLogChannel($e);
+        $isFramework = $this->isFrameworkException($e);
 
-        // Add request context if available
-        if ($request !== null) {
-            $context['request'] = [
-                'method' => $request->getMethod(),
-                'uri' => $request->getRequestUri(),
-                'ip' => $request->getClientIp(),
-            ];
-        }
+        $context = $this->buildReportContext($e, $request);
+        $context['channel'] = $channel;
+        $context['type'] = $isFramework ? 'framework_exception' : 'application_exception';
 
         // Log the exception
         $this->logger?->error($e->getMessage(), $context);
@@ -261,10 +292,178 @@ class Handler implements ExceptionHandlerInterface
     }
 
     /**
-     * Render an exception into an HTTP response
+     * Log an exception directly (convenience for callers outside the middleware pipeline)
      *
-     * Checks for custom renderers, renderable exceptions, and falls back
-     * to default rendering based on exception type.
+     * @param Throwable $e The exception to log
+     * @param array<string, mixed> $extraContext Additional context to merge
+     */
+    public function logError(Throwable $e, array $extraContext = []): void
+    {
+        $channel = $this->resolveLogChannel($e);
+        $isFramework = $this->isFrameworkException($e);
+
+        $context = [
+            'type' => $isFramework ? 'framework_exception' : 'application_exception',
+            'exception' => get_class($e),
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+            'trace' => $e->getTraceAsString(),
+            'channel' => $channel,
+            'timestamp' => date('c'),
+        ];
+
+        if (count($extraContext) > 0) {
+            $context = array_merge($context, $extraContext);
+        }
+
+        try {
+            $this->logger?->error($e->getMessage(), $context);
+        } catch (Throwable $logEx) {
+            error_log("Error logging exception: {$e->getMessage()} - {$logEx->getMessage()}");
+        }
+    }
+
+    /**
+     * Resolve the log channel for an exception based on its type
+     *
+     * @param Throwable $e The exception
+     * @return string Log channel name
+     */
+    protected function resolveLogChannel(Throwable $e): string
+    {
+        if ($this->isFrameworkException($e)) {
+            return 'framework';
+        }
+
+        foreach ($this->channelMap as $exceptionClass => $channel) {
+            if ($e instanceof $exceptionClass) {
+                return $channel;
+            }
+        }
+
+        return 'error';
+    }
+
+    /**
+     * Build optimized context for reporting
+     *
+     * Uses lightweight context for high-frequency exceptions (validation, 404)
+     * and full context with request/memory/timing for others.
+     *
+     * @param Throwable $e The exception
+     * @param Request|null $request The current request
+     * @return array<string, mixed>
+     */
+    protected function buildReportContext(Throwable $e, ?Request $request = null): array
+    {
+        $context = [
+            'exception' => get_class($e),
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+            'trace' => $e->getTraceAsString(),
+            'timestamp' => date('c'),
+        ];
+
+        // Lightweight context for high-frequency exceptions
+        if ($this->shouldUseLightweightContext($e)) {
+            if ($request !== null) {
+                $context['request'] = [
+                    'method' => $request->getMethod(),
+                    'uri' => $request->getRequestUri(),
+                    'ip' => $request->getClientIp(),
+                ];
+            }
+            $context['lightweight'] = true;
+            return $context;
+        }
+
+        // Full context
+        if ($request !== null) {
+            $context['request'] = [
+                'method' => $request->getMethod(),
+                'uri' => $request->getRequestUri(),
+                'ip' => $request->getClientIp(),
+                'user_agent' => $request->headers->get('User-Agent', 'unknown'),
+            ];
+
+            if ($this->verboseContext) {
+                $context['request']['query_string'] = $request->getQueryString();
+                $context['request']['content_type'] = $request->getContentTypeFormat();
+            }
+        }
+
+        if ($this->verboseContext) {
+            $context['memory_usage'] = memory_get_usage(true);
+            $context['peak_memory'] = memory_get_peak_usage(true);
+            $context['processing_time'] = isset($_SERVER['REQUEST_TIME_FLOAT'])
+                ? (microtime(true) - (float) $_SERVER['REQUEST_TIME_FLOAT'])
+                : null;
+        }
+
+        return $context;
+    }
+
+    /**
+     * Determine if lightweight context should be used for this exception
+     */
+    protected function shouldUseLightweightContext(Throwable $e): bool
+    {
+        foreach ($this->lightweightContextExceptions as $type) {
+            if ($e instanceof $type) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Classify whether an exception originates from the framework
+     */
+    protected function isFrameworkException(Throwable $e): bool
+    {
+        $frameworkTypes = [
+            \ErrorException::class,
+            \Error::class,
+            \ParseError::class,
+            \TypeError::class,
+            \ArgumentCountError::class,
+            HttpProtocolException::class,
+            HttpAuthException::class,
+        ];
+
+        if (in_array(get_class($e), $frameworkTypes, true)) {
+            return true;
+        }
+
+        // Path-based: files within framework src/ are framework exceptions
+        $file = $e->getFile();
+        if ($file === '') {
+            return false;
+        }
+
+        $fileReal = realpath($file) !== false ? realpath($file) : $file;
+        $frameworkSrc = realpath(dirname(__DIR__, 2));
+
+        if ($frameworkSrc !== false) {
+            if (strncmp($fileReal, $frameworkSrc . DIRECTORY_SEPARATOR, strlen($frameworkSrc) + 1) === 0) {
+                return true;
+            }
+        }
+
+        // Namespace-based fallback
+        foreach ($e->getTrace() as $frame) {
+            if (isset($frame['class']) && is_string($frame['class'])) {
+                if (strncmp($frame['class'], 'Glueful\\', 8) === 0) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Render an exception into an HTTP response
      *
      * @param Throwable $e The exception to render
      * @param Request|null $request The current request
@@ -295,9 +494,6 @@ class Handler implements ExceptionHandlerInterface
 
     /**
      * Render a validation exception
-     *
-     * @param ValidationException $e The validation exception
-     * @return Response JSON response with validation errors
      */
     protected function renderValidationException(ValidationException $e): Response
     {
@@ -310,9 +506,6 @@ class Handler implements ExceptionHandlerInterface
 
     /**
      * Render an HTTP exception
-     *
-     * @param HttpException $e The HTTP exception
-     * @return Response JSON response with error details
      */
     protected function renderHttpException(HttpException $e): Response
     {
@@ -321,21 +514,21 @@ class Handler implements ExceptionHandlerInterface
 
         $message = $e->getMessage();
 
+        $error = $this->buildErrorDetails($e, $statusCode);
+
+        if ($this->debug && $e->getContext() !== null) {
+            $error['context'] = $e->getContext();
+        }
+
         return new Response([
             'success' => false,
             'message' => $message !== '' ? $message : $this->getDefaultMessage($statusCode),
-            'error' => $this->buildErrorDetails($e, $statusCode),
+            'error' => $error,
         ], $statusCode, $headers);
     }
 
     /**
      * Render a permission unauthorized exception
-     *
-     * Always shows the user-friendly message since permission exceptions
-     * are designed to be safe to display to users.
-     *
-     * @param PermissionUnauthorizedException $e The permission exception
-     * @return Response JSON response with 403 status
      */
     protected function renderPermissionException(PermissionUnauthorizedException $e): Response
     {
@@ -349,12 +542,6 @@ class Handler implements ExceptionHandlerInterface
 
     /**
      * Render a generic exception
-     *
-     * For non-HTTP exceptions, determines the status code and builds
-     * an appropriate response with environment-aware detail exposure.
-     *
-     * @param Throwable $e The exception
-     * @return Response JSON response
      */
     protected function renderGenericException(Throwable $e): Response
     {
@@ -371,11 +558,6 @@ class Handler implements ExceptionHandlerInterface
     /**
      * Build error details for the response
      *
-     * In debug mode, includes exception class, file, line, and trace.
-     * In production, only includes minimal information.
-     *
-     * @param Throwable $e The exception
-     * @param int $statusCode The HTTP status code
      * @return array<string, mixed>
      */
     protected function buildErrorDetails(Throwable $e, int $statusCode): array
@@ -399,12 +581,6 @@ class Handler implements ExceptionHandlerInterface
 
     /**
      * Get the HTTP status code for an exception
-     *
-     * Checks the httpMapping, exception methods, and exception code
-     * to determine the appropriate status code.
-     *
-     * @param Throwable $e The exception
-     * @return int HTTP status code
      */
     protected function getStatusCode(Throwable $e): int
     {
@@ -434,9 +610,6 @@ class Handler implements ExceptionHandlerInterface
 
     /**
      * Get default message for a status code
-     *
-     * @param int $statusCode HTTP status code
-     * @return string Human-readable error message
      */
     protected function getDefaultMessage(int $statusCode): string
     {
@@ -459,9 +632,6 @@ class Handler implements ExceptionHandlerInterface
     /**
      * Format exception trace for debug output
      *
-     * Limits trace to first 10 frames and extracts key information.
-     *
-     * @param Throwable $e The exception
      * @return array<array{file: string, line: int, function: string, class?: string|null}>
      */
     protected function formatTrace(Throwable $e): array
@@ -482,20 +652,13 @@ class Handler implements ExceptionHandlerInterface
 
     /**
      * Get the current request ID
-     *
-     * Uses the request_id() helper if available, otherwise checks
-     * server variables or generates a new ID.
-     *
-     * @return string Request ID
      */
     protected function getRequestId(): string
     {
-        // Use global helper if available
         if (function_exists('request_id')) {
             return request_id();
         }
 
-        // Check server variables
         if (isset($_SERVER['HTTP_X_REQUEST_ID'])) {
             return $_SERVER['HTTP_X_REQUEST_ID'];
         }
@@ -504,17 +667,15 @@ class Handler implements ExceptionHandlerInterface
             return $_SERVER['REQUEST_ID'];
         }
 
-        // Generate a new ID
         return 'req_' . bin2hex(random_bytes(6));
     }
+
+    // ===== Configuration API =====
 
     /**
      * Add an exception type to the don't report list
      *
-     * Exceptions in this list won't be logged or reported to
-     * external monitoring services.
-     *
-     * @param class-string<Throwable> $exception Exception class name
+     * @param class-string<Throwable> $exception
      * @return static
      */
     public function dontReport(string $exception): static
@@ -527,11 +688,8 @@ class Handler implements ExceptionHandlerInterface
     /**
      * Register a custom exception renderer
      *
-     * The renderer callback receives the exception and request,
-     * and should return a Response instance.
-     *
-     * @param class-string<Throwable> $exception Exception class name
-     * @param callable(Throwable, ?Request): Response $renderer Renderer callback
+     * @param class-string<Throwable> $exception
+     * @param callable(Throwable, ?Request): Response $renderer
      * @return static
      */
     public function renderable(string $exception, callable $renderer): static
@@ -544,10 +702,7 @@ class Handler implements ExceptionHandlerInterface
     /**
      * Register an exception reporter
      *
-     * Reporters are called for all exceptions that should be reported.
-     * Useful for integrating with services like Sentry or Bugsnag.
-     *
-     * @param callable(Throwable, ?Request): void $reporter Reporter callback
+     * @param callable(Throwable, ?Request): void $reporter
      * @return static
      */
     public function reportUsing(callable $reporter): static
@@ -560,7 +715,7 @@ class Handler implements ExceptionHandlerInterface
     /**
      * Map an exception type to an HTTP status code
      *
-     * @param class-string<Throwable> $exception Exception class name
+     * @param class-string<Throwable> $exception
      * @param int $statusCode HTTP status code (400-599)
      * @return static
      */
@@ -572,9 +727,94 @@ class Handler implements ExceptionHandlerInterface
     }
 
     /**
-     * Check if debug mode is enabled
+     * Register a custom channel mapping for an exception class
      *
-     * @return bool
+     * @param class-string<Throwable> $exceptionClass
+     * @param string $channel Log channel name
+     * @return static
+     */
+    public function mapChannel(string $exceptionClass, string $channel): static
+    {
+        $this->channelMap[$exceptionClass] = $channel;
+
+        return $this;
+    }
+
+    /**
+     * Enable or disable verbose context building
+     */
+    public function setVerboseContext(bool $enabled): static
+    {
+        $this->verboseContext = $enabled;
+
+        return $this;
+    }
+
+    /**
+     * Enable or disable test mode
+     *
+     * In test mode, handle() captures the response array instead of outputting it.
+     */
+    public function setTestMode(bool $enabled): void
+    {
+        $this->testMode = $enabled;
+        $this->testResponse = null;
+    }
+
+    /**
+     * Get the captured test response
+     *
+     * @return array<string, mixed>|null
+     */
+    public function getTestResponse(): ?array
+    {
+        return $this->testResponse;
+    }
+
+    /**
+     * Handle an exception in test mode, capturing the response as an array
+     *
+     * Used by the bootstrap shim (ExceptionHandler) when in test mode.
+     *
+     * @param Throwable $e The exception to handle
+     */
+    public function handleForTest(Throwable $e): void
+    {
+        // Report if appropriate
+        if ($this->shouldReport($e)) {
+            $this->report($e);
+        }
+
+        $response = $this->render($e);
+        $statusCode = $response->getStatusCode();
+
+        $this->testResponse = [
+            'success' => $statusCode < 400 ? true : false,
+            'message' => $this->extractMessage($response),
+            'code' => $statusCode,
+        ];
+    }
+
+    /**
+     * Extract the message from a response for test capture
+     */
+    private function extractMessage(Response $response): string
+    {
+        $content = $response->getContent();
+        if ($content === false) {
+            return 'An error occurred';
+        }
+
+        $decoded = json_decode($content, true);
+        if (is_array($decoded) && isset($decoded['message']) && is_string($decoded['message'])) {
+            return $decoded['message'];
+        }
+
+        return 'An error occurred';
+    }
+
+    /**
+     * Check if debug mode is enabled
      */
     public function isDebug(): bool
     {
@@ -584,7 +824,6 @@ class Handler implements ExceptionHandlerInterface
     /**
      * Set debug mode
      *
-     * @param bool $debug Enable or disable debug mode
      * @return static
      */
     public function setDebug(bool $debug): static

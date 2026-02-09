@@ -4,6 +4,49 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.30.0] - 2026-02-09 — Diphda
+
+Unified exception handling: consolidated two overlapping exception handlers into a single source of truth.
+
+### Changed
+
+- **Exception handler consolidation**: The modern `Handler` (`src/Http/Exceptions/Handler.php`) is now the single source of truth for exception rendering, reporting, and event dispatch. The legacy `ExceptionHandler` (`src/Exceptions/ExceptionHandler.php`) has been reduced from 1041 lines to a ~250-line thin bootstrap shim that registers PHP's global handlers and delegates to the DI-managed `Handler`.
+
+- **Channel-based log routing**: `Handler::report()` now routes exceptions to named log channels (`auth`, `database`, `security`, `http`, `ratelimit`, `extensions`, `api`, `http_client`, `permissions`, `framework`) via `resolveLogChannel()`. Previously this logic was duplicated in both handlers.
+
+- **Optimized report context**: `Handler::buildReportContext()` produces lightweight context (URI, method, IP only) for high-frequency exceptions (validation, 404) and full context (headers, memory, timing) for others. Replaces the legacy handler's three separate context-building methods.
+
+- **Framework boot wiring**: `ExceptionHandler::register()` is now called at the top of `Framework::boot()` (before Phase 1) so PHP errors during early bootstrap are caught. After the container is built, `ExceptionHandler::setHandler()` wires the DI instance into the global handlers. The previous `setContext()` call is removed.
+
+### Added
+
+- **`Handler::logError()`**: Convenience method for callers outside the middleware pipeline (used by `SecureErrorResponse`). Logs with channel routing and framework/application classification.
+- **`Handler::handleForTest()`**: Renders an exception and captures the response array for test assertions without producing output.
+- **`Handler::mapChannel()`**: Public API for registering custom exception-to-channel mappings.
+- **`Handler::setVerboseContext()`**: Toggle between full and lightweight context building.
+- **`Handler::setTestMode()` / `getTestResponse()`**: Test infrastructure moved from the legacy handler to the modern Handler.
+- **`ExceptionHandler::setHandler()`**: Static method to inject the DI-managed Handler into the global bootstrap shim.
+- **`ExceptionHandler::minimalResponse()`**: Fallback JSON response for errors that occur before the Handler is available.
+
+### Removed
+
+- **Legacy rendering chain**: The `ExceptionHandler::handleException()` method no longer contains its own if/elseif chain for 10+ exception types — all rendering delegates to `Handler`.
+- **Duplicate context building**: `buildContextFromRequest()`, `getOptimizedContext()`, `getLightweightContext()`, `buildBasicContext()`, `getFilteredHeaders()`, `getRateLimitInfo()`, `getRequestBodyInfo()` removed from legacy handler (absorbed into `Handler::buildReportContext()`).
+- **Duplicate classification**: `isFrameworkException()` and `$channelMap` removed from legacy handler (moved to `Handler`).
+- **`ExceptionHandler::setContext()`**: Now a no-op — Handler receives dependencies via DI.
+- **`ExceptionHandler::setEventDispatcher()`**: Removed — Handler gets events via DI constructor.
+- **`sanitizeErrorMessage()`**: Removed from legacy handler — modern Handler's render paths handle message safety.
+- **`outputJsonResponse()`**: Removed — Handler returns `Response` objects.
+- **`getCurrentUserFromRequest()`**: Removed — audit logging belongs in a reporter callback.
+
+### Notes
+
+- No breaking changes to the public API. `ExceptionHandler::logError()`, `setTestMode()`, `getTestResponse()`, `setLogger()` remain as static methods and delegate internally.
+- `ExceptionHandler::setContext()` is now a no-op. Code calling it will continue to work but can be removed.
+- Extension imports updated: payvia, email-notification, entrada, and aegis extensions migrated from deleted `Glueful\Exceptions\*` bridge classes to modern `Glueful\Http\Exceptions\*` namespaces.
+
+---
+
 ## [1.29.0] - 2026-02-07 — Capella
 
 Queue system overhaul: leaf worker mode, config normalization, distributed lock fix, and env-driven queue presets.

@@ -12,7 +12,7 @@ use Intervention\Image\Encoders\JpegEncoder;
 use Intervention\Image\Encoders\PngEncoder;
 use Intervention\Image\Encoders\GifEncoder;
 use Intervention\Image\Encoders\WebpEncoder;
-use Glueful\Exceptions\BusinessLogicException;
+use Glueful\Http\Exceptions\Domain\BusinessLogicException;
 use Glueful\Cache\CacheStore;
 use Psr\Http\Message\UploadedFileInterface;
 use Psr\Log\LoggerInterface;

@@ -41,6 +41,9 @@ use Throwable;
  */
 class HttpException extends Exception
 {
+    /** @var array<string, mixed>|null Additional context data for error details */
+    protected ?array $context = null;
+
     /**
      * Create a new HTTP exception
      *
@@ -131,5 +134,28 @@ class HttpException extends Exception
     public function getHeader(string $name, ?string $default = null): ?string
     {
         return $this->headers[$name] ?? $default;
+    }
+
+    /**
+     * Get additional context data
+     *
+     * @return array<string, mixed>|null
+     */
+    public function getContext(): ?array
+    {
+        return $this->context;
+    }
+
+    /**
+     * Set additional context data
+     *
+     * @param array<string, mixed> $context
+     * @return static
+     */
+    public function withContext(array $context): static
+    {
+        $this->context = $context;
+
+        return $this;
     }
 }

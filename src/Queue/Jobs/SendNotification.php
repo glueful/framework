@@ -4,7 +4,7 @@ namespace Glueful\Queue\Jobs;
 
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Queue\Job;
-use Glueful\Exceptions\BusinessLogicException;
+use Glueful\Http\Exceptions\Domain\BusinessLogicException;
 
 /**
  * Send Notification Job

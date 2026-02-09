@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Repository\Traits;
 
-use Glueful\Exceptions\DatabaseException;
+use Glueful\Http\Exceptions\Domain\DatabaseException;
 use Glueful\Database\Connection;
 
 /**

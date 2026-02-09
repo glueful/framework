@@ -8,7 +8,7 @@ use Glueful\Services\Archive\ArchiveServiceInterface;
 use Glueful\Services\Archive\DTOs\ArchiveSearchQuery;
 use Glueful\Services\Archive\ArchiveHealthChecker;
 use Glueful\Services\FileFinder;
-use Glueful\Exceptions\BusinessLogicException;
+use Glueful\Http\Exceptions\Domain\BusinessLogicException;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Glueful\Console\BaseCommand;

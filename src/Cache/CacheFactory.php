@@ -9,8 +9,8 @@ use Glueful\Cache\Drivers\{RedisCacheDriver, MemcachedCacheDriver, ArrayCacheDri
 use Glueful\Services\FileFinder;
 use Redis;
 use Memcached;
-use Glueful\Exceptions\BusinessLogicException;
-use Glueful\Exceptions\DatabaseException;
+use Glueful\Http\Exceptions\Domain\BusinessLogicException;
+use Glueful\Http\Exceptions\Domain\DatabaseException;
 
 /**
  * Cache Factory
@@ -29,8 +29,8 @@ class CacheFactory
      * @param string $driverOverride Optional driver override
      * @param ApplicationContext|null $context Application context for config/container access
      * @return CacheStore<mixed> Configured cache driver
-     * @throws \Glueful\Exceptions\DatabaseException If connection fails
-     * @throws \Glueful\Exceptions\BusinessLogicException If cache type is not supported
+     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException If connection fails
+     * @throws \Glueful\Http\Exceptions\Domain\BusinessLogicException If cache type is not supported
      */
     public static function create(string $driverOverride = '', ?ApplicationContext $context = null): CacheStore
     {

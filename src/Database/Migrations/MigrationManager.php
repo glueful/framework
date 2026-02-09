@@ -7,8 +7,8 @@ namespace Glueful\Database\Migrations;
 use Glueful\Database\Migrations\MigrationInterface;
 use Glueful\Database\Schema\Interfaces\SchemaBuilderInterface;
 use Glueful\Database\Connection;
-use Glueful\Exceptions\DatabaseException;
-use Glueful\Exceptions\BusinessLogicException;
+use Glueful\Http\Exceptions\Domain\DatabaseException;
+use Glueful\Http\Exceptions\Domain\BusinessLogicException;
 use Glueful\Services\FileFinder;
 use Glueful\Bootstrap\ApplicationContext;
 
@@ -82,7 +82,7 @@ class MigrationManager
      *
      * @param  string|null           $migrationsPath    Custom path to migrations directory
      * @param  FileFinder|null       $fileFinder        File finder service instance
-     * @throws \Glueful\Exceptions\DatabaseException If database connection fails
+     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException If database connection fails
      */
     public function __construct(
         ?string $migrationsPath = null,

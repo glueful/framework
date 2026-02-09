@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events\Http;
 
-use Glueful\Exceptions\HttpException;
+use Glueful\Http\Exceptions\HttpClientException;
 use Glueful\Events\Contracts\BaseEvent;
 
 /**
@@ -20,14 +20,14 @@ class HttpClientFailureEvent extends BaseEvent
      *
      * @param string $method HTTP method (GET, POST, etc.)
      * @param string $url The URL that failed
-     * @param HttpException $exception The exception that occurred
+     * @param HttpClientException $exception The exception that occurred
      * @param string $failureReason Reason for failure (connection_failed, request_failed, etc.)
      * @param array<string, mixed> $context Additional context data
      */
     public function __construct(
         public readonly string $method,
         public readonly string $url,
-        public readonly HttpException $exception,
+        public readonly HttpClientException $exception,
         public readonly string $failureReason,
         public readonly array $context = []
     ) {

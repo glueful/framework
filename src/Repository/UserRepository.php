@@ -7,7 +7,7 @@ namespace Glueful\Repository;
 use Glueful\DTOs\{UsernameDTO, EmailDTO};
 use Glueful\Validation\Validator;
 use Glueful\Database\Connection;
-use Glueful\Exceptions\DatabaseException;
+use Glueful\Http\Exceptions\Domain\DatabaseException;
 use Glueful\Bootstrap\ApplicationContext;
 
 /**
@@ -415,7 +415,7 @@ class UserRepository extends BaseRepository
      *
      * @param array<string, mixed> $userData User data extracted from SAML attributes (email required)
      * @return array<string, mixed>|null User data array with updated provider info, or null on failure
-     * @throws \Glueful\Exceptions\DatabaseException If user creation or update fails
+     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException If user creation or update fails
      * @throws \InvalidArgumentException If required SAML attributes are missing
      * @throws \RuntimeException If transaction operations fail
      */

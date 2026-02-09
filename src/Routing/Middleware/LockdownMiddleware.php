@@ -6,7 +6,7 @@ namespace Glueful\Routing\Middleware;
 
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Routing\RouteMiddleware;
-use Glueful\Exceptions\SecurityException;
+use Glueful\Http\Exceptions\Domain\SecurityException;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\JsonResponse;

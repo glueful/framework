@@ -6,7 +6,7 @@ use Glueful\Bootstrap\ApplicationContext;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Glueful\Http\Client;
-use Glueful\Exceptions\HttpException;
+use Glueful\Http\Exceptions\HttpClientException;
 
 /**
  * Service for monitoring memory usage and triggering alerts
@@ -300,7 +300,7 @@ class MemoryAlertingService
                     'response' => $response->getBody()
                 ]);
             }
-        } catch (HttpException $e) {
+        } catch (HttpClientException $e) {
             $this->logger->error('Failed to send Slack alert', [
                 'error' => $e->getMessage()
             ]);
@@ -375,7 +375,7 @@ class MemoryAlertingService
                     'response' => $response->getBody()
                 ]);
             }
-        } catch (HttpException $e) {
+        } catch (HttpClientException $e) {
             $this->logger->error('Failed to send webhook alert', [
                 'error' => $e->getMessage()
             ]);

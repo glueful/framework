@@ -16,8 +16,8 @@ use Glueful\Services\Archive\DTOs\ArchiveSummary;
 use Glueful\Services\Archive\DTOs\ExportResult;
 use Glueful\Services\Archive\DTOs\ArchiveFile;
 use Glueful\Helpers\Utils;
-use Glueful\Exceptions\DatabaseException;
-use Glueful\Exceptions\BusinessLogicException;
+use Glueful\Http\Exceptions\Domain\DatabaseException;
+use Glueful\Http\Exceptions\Domain\BusinessLogicException;
 use Glueful\Storage\StorageManager;
 use Glueful\Storage\PathGuard;
 

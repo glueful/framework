@@ -102,6 +102,10 @@ class Framework
             ],
         );
 
+        // Register global error/exception handlers early so PHP errors
+        // during Phase 1-3 are caught (Handler wired after container build)
+        ExceptionHandler::register();
+
         // Phase 1: Environment & Globals (0-2ms)
         $profiler->time('environment', fn() => $this->initializeEnvironment($this->context));
 
@@ -111,6 +115,9 @@ class Framework
         // Phase 3: Container (5-8ms) - Now config() will work during container build
         $profiler->time('container', fn() => $this->buildContainer($this->context));
         $this->configureProfilerLogger($profiler);
+
+        // Wire the DI-managed Handler into the global exception handler shim
+        $this->wireExceptionHandler();
 
         // Phase 4: Core Services (8-10ms)
         $profiler->time('core', fn() => $this->initializeCoreServices());
@@ -285,16 +292,27 @@ class Framework
     }
 
     /**
+     * Wire the DI-managed Handler into the global ExceptionHandler shim
+     */
+    private function wireExceptionHandler(): void
+    {
+        try {
+            if ($this->container !== null && $this->container->has(\Glueful\Http\Exceptions\Handler::class)) {
+                $handler = $this->container->get(\Glueful\Http\Exceptions\Handler::class);
+                if ($handler instanceof \Glueful\Http\Exceptions\Handler) {
+                    ExceptionHandler::setHandler($handler);
+                }
+            }
+        } catch (\Throwable) {
+            // Best-effort: the global handler falls back to minimal response
+        }
+    }
+
+    /**
      * Phase 4: Initialize core services
      */
     private function initializeCoreServices(): void
     {
-        // Register exception handler
-        if ($this->context !== null) {
-            ExceptionHandler::setContext($this->context);
-        }
-        ExceptionHandler::register();
-
         // Initialize Cache Driver
         Utils::initializeCacheDriver();
 

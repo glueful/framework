@@ -6,8 +6,8 @@ use Glueful\Queue\Contracts\JobInterface;
 use Glueful\Queue\Contracts\QueueDriverInterface;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Helpers\Utils;
-use Glueful\Exceptions\BusinessLogicException;
-use Glueful\Exceptions\DatabaseException;
+use Glueful\Http\Exceptions\Domain\BusinessLogicException;
+use Glueful\Http\Exceptions\Domain\DatabaseException;
 use Glueful\Security\SecureSerializer;
 
 /**
