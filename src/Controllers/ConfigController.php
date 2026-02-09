@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Glueful\Controllers;
 
 use Glueful\Helpers\ConfigManager;
-use Glueful\Exceptions\SecurityException;
-use Glueful\Exceptions\BusinessLogicException;
+use Glueful\Http\Exceptions\Domain\SecurityException;
+use Glueful\Http\Exceptions\Domain\BusinessLogicException;
 use Glueful\Validation\ValidationException;
 use Glueful\Helpers\ValidationHelper;
 use Glueful\Http\Response;

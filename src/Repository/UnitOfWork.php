@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Repository;
 
 use Glueful\Database\Connection;
-use Glueful\Exceptions\DatabaseException;
+use Glueful\Http\Exceptions\Domain\DatabaseException;
 
 /**
  * Unit of Work Implementation

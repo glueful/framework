@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Database;
 
 use PDO;
-use Glueful\Exceptions\DatabaseException;
+use Glueful\Http\Exceptions\Domain\DatabaseException;
 
 /**
  * PooledConnection

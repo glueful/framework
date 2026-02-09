@@ -142,7 +142,7 @@ class TokenManager
      *         Token pair with 'access_token' and 'refresh_token' keys
      * @throws \InvalidArgumentException If userData is empty or missing required fields
      * @throws \RuntimeException If JWT key is not configured or token generation fails
-     * @throws \Glueful\Exceptions\AuthenticationException If token encoding fails
+     * @throws \Glueful\Http\Exceptions\Domain\AuthenticationException If token encoding fails
      */
     public function generateTokenPair(
         array $userData,
@@ -270,8 +270,8 @@ class TokenManager
      * @param RequestContext|null $requestContext Request context for session tracking
      * @return array<string, mixed>|null New token pair with 'access_token' and 'refresh_token', or null if invalid
      * @throws \InvalidArgumentException If refresh token format is invalid
-     * @throws \Glueful\Exceptions\DatabaseException If session lookup or update fails
-     * @throws \Glueful\Exceptions\AuthenticationException If token refresh fails
+     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException If session lookup or update fails
+     * @throws \Glueful\Http\Exceptions\Domain\AuthenticationException If token refresh fails
      * @throws \RuntimeException If specified authentication provider is unavailable
      */
     public function refreshTokens(
@@ -481,8 +481,8 @@ class TokenManager
      * @param string|null $provider Authentication provider name ('ldap', 'saml', 'oauth2', etc.)
      * @return array OIDC-compliant session data with tokens and user info, or empty array on failure
      * @throws \InvalidArgumentException If user data is invalid or missing required fields
-     * @throws \Glueful\Exceptions\DatabaseException If session storage fails
-     * @throws \Glueful\Exceptions\AuthenticationException If token generation fails
+     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException If session storage fails
+     * @throws \Glueful\Http\Exceptions\Domain\AuthenticationException If token generation fails
      * @throws \RuntimeException If authentication provider is not available
      */
     /**

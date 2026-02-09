@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Validation;
 
-use Glueful\Exceptions\ApiException;
+use Glueful\Http\Exceptions\Client\ForbiddenException;
 use Glueful\Validation\Contracts\Rule;
 use Glueful\Validation\Support\RuleParser;
 use Symfony\Component\HttpFoundation\Request;
@@ -139,18 +139,18 @@ abstract class FormRequest
     /**
      * Handle a failed authorization attempt
      *
-     * @throws ApiException
+     * @throws ForbiddenException
      */
     protected function failedAuthorization(): void
     {
-        throw new ApiException('This action is unauthorized.', 403);
+        throw new ForbiddenException('This action is unauthorized.');
     }
 
     /**
      * Validate the request
      *
      * @throws ValidationException
-     * @throws ApiException
+     * @throws ForbiddenException
      */
     public function validate(): void
     {

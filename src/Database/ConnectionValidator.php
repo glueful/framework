@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Database;
 
 use Glueful\Services\HealthService;
-use Glueful\Exceptions\DatabaseException;
+use Glueful\Http\Exceptions\Domain\DatabaseException;
 use Glueful\Bootstrap\ApplicationContext;
 
 /**

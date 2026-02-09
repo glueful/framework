@@ -6,6 +6,7 @@ namespace Glueful\Tests\Core;
 
 use PHPUnit\Framework\TestCase;
 use Glueful\Exceptions\ExceptionHandler;
+use Glueful\Http\Exceptions\Handler;
 use Psr\Log\LoggerInterface;
 
 final class ExceptionHandlerTest extends TestCase
@@ -53,8 +54,9 @@ final class ExceptionHandlerTest extends TestCase
 
     public function testJsonErrorResponseCapturedInTestMode(): void
     {
+        $handler = new Handler($this->fakeLogger(), debug: false);
+        ExceptionHandler::setHandler($handler);
         ExceptionHandler::setTestMode(true);
-        ExceptionHandler::setLogger($this->fakeLogger());
 
         ExceptionHandler::handleException(new \RuntimeException('boom'));
         $resp = ExceptionHandler::getTestResponse();

@@ -8,8 +8,8 @@ use Glueful\Queue\Registry\DriverRegistry;
 use Glueful\Queue\Plugins\PluginManager;
 use Glueful\Queue\Exceptions\DriverNotFoundException;
 use Glueful\Queue\Exceptions\InvalidConfigurationException;
-use Glueful\Exceptions\BusinessLogicException;
-use Glueful\Exceptions\DatabaseException;
+use Glueful\Http\Exceptions\Domain\BusinessLogicException;
+use Glueful\Http\Exceptions\Domain\DatabaseException;
 
 /**
  * Queue Manager

@@ -11,7 +11,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Glueful\Security\RandomStringGenerator;
 use Glueful\Cache\CacheStore;
-use Glueful\Exceptions\SecurityException;
+use Glueful\Http\Exceptions\Domain\SecurityException;
 use Psr\Container\ContainerInterface;
 use Glueful\Events\Security\CSRFViolationEvent;
 use Glueful\Events\EventService;

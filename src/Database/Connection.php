@@ -17,7 +17,7 @@ use Glueful\Database\Schema\Interfaces\SchemaBuilderInterface;
 use Glueful\Database\Schema\Interfaces\SqlGeneratorInterface;
 use Glueful\Database\ConnectionPoolManager;
 use Glueful\Database\PooledConnection;
-use Glueful\Exceptions\BusinessLogicException;
+use Glueful\Http\Exceptions\Domain\BusinessLogicException;
 
 /**
  * Database Connection Manager
@@ -126,7 +126,7 @@ class Connection implements DatabaseInterface
      * 4. Initialize driver and schema manager
      *
      * @param  array<string, mixed> $config Optional configuration override
-     * @throws \Glueful\Exceptions\DatabaseException On connection failure or invalid configuration
+     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException On connection failure or invalid configuration
      */
     public function __construct(array $config = [], ?ApplicationContext $context = null)
     {
@@ -248,7 +248,7 @@ class Connection implements DatabaseInterface
      *
      * @param  string $engine Target database engine
      * @return PDO Configured PDO instance
-     * @throws \Glueful\Exceptions\DatabaseException On connection failure or invalid credentials
+     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException On connection failure or invalid credentials
      */
     private function createPDOConnection(string $engine): PDO
     {
@@ -305,7 +305,7 @@ class Connection implements DatabaseInterface
      * @param  string $engine Database engine type
      * @param  array  $config Engine-specific configuration
      * @return string Formatted DSN string
-     * @throws \Glueful\Exceptions\BusinessLogicException For unsupported engines
+     * @throws \Glueful\Http\Exceptions\Domain\BusinessLogicException For unsupported engines
      */
     /**
      * @param array<string, mixed> $config
@@ -357,7 +357,7 @@ class Connection implements DatabaseInterface
      *
      * @param  string $dbPath Target database file path
      * @return string SQLite connection string
-     * @throws \Glueful\Exceptions\BusinessLogicException If path is invalid or inaccessible
+     * @throws \Glueful\Http\Exceptions\Domain\BusinessLogicException If path is invalid or inaccessible
      */
     private function prepareSQLiteDSN(string $dbPath): string
     {
@@ -398,7 +398,7 @@ class Connection implements DatabaseInterface
      *
      * @param  string $engine Target database engine
      * @return DatabaseDriver Initialized driver instance
-     * @throws \Glueful\Exceptions\BusinessLogicException For unsupported engines
+     * @throws \Glueful\Http\Exceptions\Domain\BusinessLogicException For unsupported engines
      */
     private function resolveDriver(string $engine): DatabaseDriver
     {
@@ -421,7 +421,7 @@ class Connection implements DatabaseInterface
      *
      * @param  string $engine Target database engine
      * @return SqlGeneratorInterface Initialized SQL generator
-     * @throws \Glueful\Exceptions\BusinessLogicException For unsupported engines
+     * @throws \Glueful\Http\Exceptions\Domain\BusinessLogicException For unsupported engines
      */
     private function resolveSqlGenerator(string $engine): SqlGeneratorInterface
     {
@@ -443,7 +443,7 @@ class Connection implements DatabaseInterface
      * PDO connection is available. Returns the new fluent schema builder.
      *
      * @return SchemaBuilderInterface Fluent schema builder
-     * @throws \Glueful\Exceptions\DatabaseException If schema builder initialization fails
+     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException If schema builder initialization fails
      */
     public function getSchemaBuilder(): SchemaBuilderInterface
     {
@@ -461,7 +461,7 @@ class Connection implements DatabaseInterface
      * otherwise falls back to legacy connection.
      *
      * @return PDO Active database connection
-     * @throws \Glueful\Exceptions\DatabaseException If connection lost
+     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException If connection lost
      */
     public function getPDO(): PDO
     {
@@ -493,7 +493,7 @@ class Connection implements DatabaseInterface
      * Returns engine-specific driver instance.
      *
      * @return DatabaseDriver Active database driver
-     * @throws \Glueful\Exceptions\DatabaseException If driver not initialized
+     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException If driver not initialized
      */
     public function getDriver(): DatabaseDriver
     {
@@ -532,7 +532,7 @@ class Connection implements DatabaseInterface
      * @param  string $table The table name to query
      * @return QueryBuilder Configured QueryBuilder instance ready for query building
      * @throws \InvalidArgumentException If table name is empty, contains invalid characters, or SQL injection patterns
-     * @throws \Glueful\Exceptions\DatabaseException If connection or QueryBuilder initialization fails
+     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException If connection or QueryBuilder initialization fails
      * @throws \RuntimeException If any required QueryBuilder component cannot be instantiated
      */
     public function table(string $table): QueryBuilder
@@ -565,7 +565,7 @@ class Connection implements DatabaseInterface
      * - Configures soft delete functionality
      *
      * @return QueryBuilder Fully configured QueryBuilder instance ready for use
-     * @throws \Glueful\Exceptions\DatabaseException If connection or driver initialization fails
+     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException If connection or driver initialization fails
      * @throws \RuntimeException If any required component cannot be instantiated
      */
     private function createQueryBuilder(): QueryBuilder

@@ -9,7 +9,7 @@ use Glueful\Database\Connection;
 use Glueful\Repository\Interfaces\RepositoryInterface;
 use Glueful\Repository\Traits\TransactionTrait;
 use Glueful\Helpers\Utils;
-use Glueful\Exceptions\DatabaseException;
+use Glueful\Http\Exceptions\Domain\DatabaseException;
 use Glueful\Events\Database\EntityCreatedEvent;
 use Glueful\Events\Database\EntityUpdatedEvent;
 use Glueful\Events\EventService;

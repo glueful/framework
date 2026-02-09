@@ -8,8 +8,8 @@ use PDO;
 use Glueful\Database\Exceptions\ConnectionPoolException;
 use Glueful\Database\PooledConnection;
 use Glueful\Database\Driver\DatabaseDriver;
-use Glueful\Exceptions\DatabaseException;
-use Glueful\Exceptions\BusinessLogicException;
+use Glueful\Http\Exceptions\Domain\DatabaseException;
+use Glueful\Http\Exceptions\Domain\BusinessLogicException;
 
 /**
  * ConnectionPool

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Validation;
 
-use Glueful\Exceptions\ApiException;
+use Glueful\Http\Exceptions\HttpException;
 
 /**
  * Validation Exception
@@ -18,7 +18,7 @@ use Glueful\Exceptions\ApiException;
  *     'password' => ['The password must be at least 8 characters.'],
  * ]);
  */
-class ValidationException extends ApiException
+class ValidationException extends HttpException
 {
     /**
      * @param array<string, array<string>> $errors Validation errors by field
@@ -30,7 +30,8 @@ class ValidationException extends ApiException
         private array $customMessages = [],
         string $message = 'The given data was invalid.'
     ) {
-        parent::__construct($message, 422, $this->formatErrors());
+        parent::__construct(422, $message);
+        $this->context = $this->formatErrors();
     }
 
     /**

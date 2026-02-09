@@ -9,7 +9,7 @@ use Glueful\Http\Response;
 use Glueful\Helpers\RequestHelper;
 use Glueful\Security\EmailVerification;
 use Glueful\Auth\AuthenticationService;
-use Glueful\Exceptions\AuthenticationException;
+use Glueful\Http\Exceptions\Domain\AuthenticationException;
 use Glueful\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
 use Glueful\Events\EventService;
@@ -110,7 +110,7 @@ class AuthController
      * ```
      *
      * @return mixed HTTP response with authentication tokens and user data
-     * @throws \Glueful\Exceptions\AuthenticationException If credentials are invalid
+     * @throws \Glueful\Http\Exceptions\Domain\AuthenticationException If credentials are invalid
      * @throws \Glueful\Validation\ValidationException If request data is malformed
      * @throws \RuntimeException If authentication system initialization fails
      */
@@ -201,7 +201,7 @@ class AuthController
      *
      * @return mixed HTTP response confirming successful logout
      * @throws \Glueful\Validation\ValidationException If no token provided in request
-     * @throws \Glueful\Exceptions\AuthenticationException If logout operation fails
+     * @throws \Glueful\Http\Exceptions\Domain\AuthenticationException If logout operation fails
      */
     public function logout(SymfonyRequest $request)
     {
@@ -497,7 +497,7 @@ class AuthController
      *
      * @return mixed HTTP response confirming password reset
      * @throws \Glueful\Validation\ValidationException If email/password missing or user not found
-     * @throws \Glueful\Exceptions\AuthenticationException If password update fails
+     * @throws \Glueful\Http\Exceptions\Domain\AuthenticationException If password update fails
      */
     public function resetPassword(SymfonyRequest $request)
     {
@@ -576,7 +576,7 @@ class AuthController
      *
      * @return mixed HTTP response with new authentication tokens
      * @throws \Glueful\Validation\ValidationException If refresh token missing from request
-     * @throws \Glueful\Exceptions\AuthenticationException If refresh token invalid or expired
+     * @throws \Glueful\Http\Exceptions\Domain\AuthenticationException If refresh token invalid or expired
      */
     public function refreshToken(SymfonyRequest $request)
     {

@@ -9,8 +9,8 @@ use Glueful\Database\Schema\Interfaces\SchemaBuilderInterface;
 use Glueful\Helpers\Utils;
 use Glueful\Helpers\CacheHelper;
 use Exception;
-use Glueful\Exceptions\BusinessLogicException;
-use Glueful\Exceptions\DatabaseException;
+use Glueful\Http\Exceptions\Domain\BusinessLogicException;
+use Glueful\Http\Exceptions\Domain\DatabaseException;
 
 /**
  * Service for collecting and analyzing API metrics

@@ -12,7 +12,7 @@ use Glueful\Auth\AuthenticationManager;
 use Glueful\Auth\JwtAuthenticationProvider;
 use Glueful\Auth\TokenManager;
 use Psr\Container\ContainerInterface;
-use Glueful\Exceptions\AuthenticationException;
+use Glueful\Http\Exceptions\Domain\AuthenticationException;
 use Glueful\Permissions\Exceptions\UnauthorizedException as PermissionUnauthorizedException;
 use Glueful\Events\Http\HttpAuthFailureEvent;
 use Glueful\Events\Http\HttpAuthSuccessEvent;
@@ -375,7 +375,7 @@ class AuthMiddleware implements RouteMiddleware
             $this->dispatchAuthFailureEvent('token_expired', $request);
 
             // Check if refresh is available
-            $context = $e->getData();
+            $context = $e->getContext();
             $refreshAvailable = (bool)($context['refresh_available'] ?? false);
 
             return $refreshAvailable === true ? $this->tokenExpired(true) : $this->sessionExpired();

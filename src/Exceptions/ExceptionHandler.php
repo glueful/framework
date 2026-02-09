@@ -1,33 +1,26 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Glueful\Exceptions;
 
-use Glueful\Validation\ValidationException;
-use Glueful\Exceptions\AuthenticationException;
-use Glueful\Exceptions\NotFoundException;
-use Glueful\Exceptions\ApiException;
-use Glueful\Exceptions\HttpProtocolException;
-use Glueful\Exceptions\HttpAuthException;
-use Glueful\Events\Http\ExceptionEvent;
+use Glueful\Http\Exceptions\Handler;
 use Psr\Log\LoggerInterface;
-use Glueful\Events\EventService;
-use Symfony\Component\EventDispatcher\EventDispatcherInterface;
-use Glueful\Events\ListenerProvider as PsrListenerProvider;
-use Glueful\Bootstrap\ApplicationContext;
 
+/**
+ * Bootstrap Exception Handler (global safety net)
+ *
+ * Thin shim that registers PHP's global error/exception/shutdown handlers
+ * and delegates to the DI-managed Handler instance once the container is built.
+ *
+ * Before the Handler is available (early bootstrap), a minimal fallback response
+ * is produced. After Framework wires the Handler via setHandler(), all rendering,
+ * reporting, and event dispatch flow through a single code path.
+ */
 class ExceptionHandler
 {
-    /**
-     * @var LoggerInterface|null PSR-3 compliant logger
-     */
+    private static ?Handler $handler = null;
     private static ?LoggerInterface $logger = null;
-    private static ?ApplicationContext $context = null;
-    private static ?EventService $eventService = null;
-
-
-    /**
-     * @var bool Flag to disable exit for testing
-     */
     private static bool $testMode = false;
 
     /**
@@ -35,135 +28,53 @@ class ExceptionHandler
      */
     private static ?array $testResponse = null;
 
-
-
     /**
      * @var array<string, int> Error response rate limits by IP
      */
     private static array $errorResponseLimits = [];
 
-    /**
-     * @var int Maximum error responses per IP per minute
-     */
     private static int $maxErrorResponsesPerMinute = 60;
 
     /**
-     * @var array<string, array<string, mixed>> Cache for request context to avoid repeated calculations
+     * Inject the DI-managed Handler so the global handlers delegate to it.
      */
-    private static array $contextCache = [];
-
-    /**
-     * @var bool Flag to enable/disable verbose context building
-     */
-    private static bool $verboseContext = true;
-
-    /**
-     * @var array<string, mixed> Lightweight context for high-frequency errors
-     */
-    private static array $lightweightContext = [];
-
-    /**
-     * Map of exception types to log channels
-     * @var array<string, string>
-     */
-    private static array $channelMap = [
-        ValidationException::class => 'validation',
-        AuthenticationException::class => 'auth',
-        NotFoundException::class => 'http',
-        ApiException::class => 'api',
-        DatabaseException::class => 'database',
-        SecurityException::class => 'security',
-        RateLimitExceededException::class => 'ratelimit',
-        HttpException::class => 'http_client',
-        ExtensionException::class => 'extensions',
-        \Glueful\Permissions\Exceptions\PermissionException::class => 'permissions',
-        \Glueful\Permissions\Exceptions\UnauthorizedException::class => 'auth',
-        \Glueful\Permissions\Exceptions\ProviderNotFoundException::class => 'permissions',
-        'default' => 'error',
-    ];
-
-    /**
-     * Enable or disable test mode (disables exit calls)
-     *
-     * @param bool $enabled
-     * @return void
-     */
-    public static function setTestMode(bool $enabled): void
+    public static function setHandler(Handler $handler): void
     {
-        self::$testMode = $enabled;
-        self::$testResponse = null; // Reset test response
+        self::$handler = $handler;
     }
 
     /**
-     * Get the last captured response in test mode
-     *
-     * @return array<string, mixed>|null
-     */
-    public static function getTestResponse(): ?array
-    {
-        return self::$testResponse;
-    }
-
-    /**
-     * Register the exception handler for global exception and error handling
-     *
-     * This method sets up the global exception and error handlers to ensure
-     * all uncaught exceptions and PHP errors are processed consistently.
-     *
-     * @return void
+     * Register PHP's global exception, error, and shutdown handlers.
      */
     public static function register(): void
     {
-        // Register exception handler for uncaught exceptions
         set_exception_handler([self::class, 'handleException']);
-
-        // Register error handler to convert PHP errors to exceptions
         set_error_handler([self::class, 'handleError']);
-
-        // Register shutdown handler for fatal errors
         register_shutdown_function([self::class, 'handleShutdown']);
     }
 
     /**
-     * Handle PHP errors by converting them to exceptions
+     * Convert PHP errors to ErrorException.
      *
-     * This allows PHP errors (warnings, notices, etc.) to be handled
-     * by the same exception handling system for consistency.
-     *
-     * @param int $severity Error severity level
-     * @param string $message Error message
-     * @param string $filename File where error occurred
-     * @param int $lineno Line number where error occurred
-     * @return bool Returns true to prevent PHP's internal error handler from running
-     * @throws \ErrorException Throws to convert error to exception for consistency
+     * @throws \ErrorException
      */
     public static function handleError(int $severity, string $message, string $filename, int $lineno): bool
     {
-        // Check if error should be reported based on error_reporting setting
         if ((error_reporting() & $severity) === 0) {
-            // This error code is not included in error_reporting, so let PHP handle it
             return false;
         }
 
-        // Convert PHP error to ErrorException so it can be handled by handleException
         throw new \ErrorException($message, 0, $severity, $filename, $lineno);
     }
 
     /**
-     * Handle fatal errors during shutdown
-     *
-     * Catches fatal errors that occur during script execution and
-     * provides a consistent error response even for fatal errors.
-     *
-     * @return void
+     * Catch fatal errors during shutdown.
      */
     public static function handleShutdown(): void
     {
         $error = error_get_last();
 
-        // Check if this was a fatal error
         if ($error !== null && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
-            // Create an exception from the fatal error
             $exception = new \ErrorException(
                 $error['message'],
                 0,
@@ -172,754 +83,113 @@ class ExceptionHandler
                 $error['line']
             );
 
-            // Handle it like any other exception
             self::handleException($exception);
         }
     }
 
     /**
-     * Extract current user UUID from request for audit logging
+     * Handle an uncaught exception.
      *
-     * Attempts to get the current user context through multiple methods:
-     * 1. Session data (if available)
-     * 2. Authentication headers (JWT/API Key)
-     *
-     * @return string|null User UUID if found, null otherwise
+     * Delegates to the Handler when available; uses a minimal fallback otherwise.
      */
-    private static function getCurrentUserFromRequest(): ?string
+    public static function handleException(\Throwable $exception): void
     {
-        // Try session first (fastest method)
-        if (isset($_SESSION['user_uuid'])) {
-            return $_SESSION['user_uuid'];
+        // Rate-limit the global handler path to prevent abuse
+        if (!self::checkErrorRateLimit()) {
+            self::minimalResponse(429, 'Too many error requests');
+            return;
         }
 
-        // Try extracting from authentication headers
-        try {
-            $request = \Symfony\Component\HttpFoundation\Request::createFromGlobals();
-            $authManager = self::$context !== null
-                ? container(self::$context)->get(\Glueful\Auth\AuthenticationManager::class)
-                : null;
-            $userData = $authManager->authenticateWithProviders(['jwt', 'api_key'], $request);
-
-            if ($userData !== null) {
-                // Check common UUID locations in auth data
-                return $userData['user_uuid'] ?? $userData['uuid'] ?? $userData['user']['uuid'] ?? null;
+        if (self::$handler !== null) {
+            // Test mode: capture response array without output
+            if (self::$testMode) {
+                self::$handler->handleForTest($exception);
+                self::$testResponse = self::$handler->getTestResponse();
+                return;
             }
-        } catch (\Throwable) {
-            // Silently fail during exception handling - we don't want to throw
-            // exceptions while handling exceptions
+
+            // Normal mode: delegate fully to the Handler
+            $response = self::$handler->handle($exception);
+            $response->send();
+            return;
         }
 
-        return null;
+        // Fallback: Handler not yet available (early bootstrap)
+        self::fallbackLog($exception);
+        self::minimalResponse(500, 'Internal server error');
     }
 
+    // ===== Backward-compatible static API =====
+
     /**
-     * Build comprehensive context for error logging
+     * Log an exception via the Handler (or fallback).
      *
-     * Creates a context array with request information, user data,
-     * and system state for comprehensive error tracking.
-     *
-     * @param string|null $userUuid User UUID if available
-     * @return array Context array for logging
+     * @param array<string, mixed> $context
      */
-    /**
-     * @return array<string, mixed>
-     */
-    private static function buildContextFromRequest(?string $userUuid = null): array
+    public static function logError(\Throwable $exception, array $context = []): void
     {
-        $context = [
-            // User context
-            'user_uuid' => $userUuid,
-            'session_id' => session_id() !== false ? session_id() : null,
-
-            // Request context
-            'request_uri' => $_SERVER['REQUEST_URI'] ?? 'unknown',
-            'request_method' => $_SERVER['REQUEST_METHOD'] ?? 'unknown',
-            'query_string' => $_SERVER['QUERY_STRING'] ?? null,
-            'request_protocol' => $_SERVER['SERVER_PROTOCOL'] ?? 'unknown',
-            'request_scheme' => $_SERVER['REQUEST_SCHEME'] ?? ($_SERVER['HTTPS'] ?? false ? 'https' : 'http'),
-            'request_host' => $_SERVER['HTTP_HOST'] ?? 'unknown',
-            'request_port' => $_SERVER['SERVER_PORT'] ?? null,
-
-            // Client context
-            'ip_address' => self::getRealIpAddress(),
-            'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
-            'accept_language' => $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? null,
-            'accept_encoding' => $_SERVER['HTTP_ACCEPT_ENCODING'] ?? null,
-            'content_type' => $_SERVER['CONTENT_TYPE'] ?? null,
-            'content_length' => $_SERVER['CONTENT_LENGTH'] ?? null,
-            'referer' => $_SERVER['HTTP_REFERER'] ?? null,
-
-            // Authentication context
-            'auth_header' => isset($_SERVER['HTTP_AUTHORIZATION']) ? 'present' : 'missing',
-            'api_key_header' => isset($_SERVER['HTTP_X_API_KEY']) ? 'present' : 'missing',
-
-            // Request timing
-            'timestamp' => date('c'), // ISO 8601 format
-            'request_time' => $_SERVER['REQUEST_TIME_FLOAT'] ?? microtime(true),
-            'processing_time' => (microtime(true) - ($_SERVER['REQUEST_TIME_FLOAT'] ?? microtime(true))),
-
-            // System context
-            'memory_usage' => memory_get_usage(true),
-            'peak_memory' => memory_get_peak_usage(true),
-            'memory_limit' => ini_get('memory_limit'),
-            'php_version' => PHP_VERSION,
-            'server_software' => $_SERVER['SERVER_SOFTWARE'] ?? 'unknown',
-            'environment' => env('APP_ENV', 'unknown'),
-
-            // Request body info (without actual content for security) - lazy loaded
-            'request_body_info' => self::getRequestBodyInfo(),
-
-            // Additional server context
-            'server_name' => $_SERVER['SERVER_NAME'] ?? 'unknown',
-            'document_root' => $_SERVER['DOCUMENT_ROOT'] ?? 'unknown',
-            'script_name' => $_SERVER['SCRIPT_NAME'] ?? 'unknown',
-            'request_id' => self::generateRequestId()
-        ];
-
-        // Add request headers (filtered for security)
-        $context['request_headers'] = self::getFilteredHeaders();
-
-        // Add rate limiting context if available
-        $context['rate_limit_info'] = self::getRateLimitInfo();
-
-        return $context;
-    }
-
-    /**
-     * Get the real IP address of the client
-     *
-     * @return string Client IP address
-     */
-    private static function getRealIpAddress(): string
-    {
-        // Check for various proxy headers
-        $ipHeaders = [
-            'HTTP_X_REAL_IP',
-            'HTTP_X_FORWARDED_FOR',
-            'HTTP_X_FORWARDED',
-            'HTTP_X_CLUSTER_CLIENT_IP',
-            'HTTP_CLIENT_IP',
-            'REMOTE_ADDR'
-        ];
-
-        foreach ($ipHeaders as $header) {
-            if (isset($_SERVER[$header]) && $_SERVER[$header] !== '' && $_SERVER[$header] !== '0') {
-                $ip = $_SERVER[$header];
-
-                // Handle comma-separated IPs (X-Forwarded-For can have multiple)
-                if (strpos($ip, ',') !== false) {
-                    $ip = trim(explode(',', $ip)[0]);
-                }
-
-                // Validate IP address
-                if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-                    return $ip;
-                }
-            }
+        if (self::$handler !== null) {
+            self::$handler->logError($exception, $context);
+            return;
         }
 
-        return $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+        // Fallback when Handler is not yet wired
+        self::fallbackLog($exception);
+    }
+
+    public static function setTestMode(bool $enabled): void
+    {
+        self::$testMode = $enabled;
+        self::$testResponse = null;
+
+        self::$handler?->setTestMode($enabled);
     }
 
     /**
-     * Get filtered request headers (excluding sensitive information)
-     *
-     * @return array Filtered headers
+     * @return array<string, mixed>|null
      */
-    /**
-     * @return array<string, mixed>
-     */
-    private static function getFilteredHeaders(): array
+    public static function getTestResponse(): ?array
     {
-        $headers = [];
-        $sensitiveHeaders = [
-            'authorization',
-            'x-api-key',
-            'cookie',
-            'x-csrf-token',
-            'x-auth-token'
-        ];
-
-        foreach ($_SERVER as $key => $value) {
-            if (strpos($key, 'HTTP_') === 0) {
-                $headerName = strtolower(str_replace(['HTTP_', '_'], ['', '-'], $key));
-
-                if (in_array($headerName, $sensitiveHeaders, true)) {
-                    $headers[$headerName] = 'redacted';
-                } else {
-                    $headers[$headerName] = $value;
-                }
-            }
+        if (self::$handler !== null) {
+            return self::$handler->getTestResponse();
         }
 
-        return $headers;
+        return self::$testResponse;
     }
 
     /**
-     * Generate a unique request ID for tracking
-     *
-     * @return string Unique request ID
-     */
-    private static function generateRequestId(): string
-    {
-        return uniqid('req_', true);
-    }
-
-    /**
-     * Get rate limiting information if available
-     *
-     * @return array Rate limit context
-     */
-    /**
-     * @return array<string, mixed>
-     */
-    private static function getRateLimitInfo(): array
-    {
-        $info = [];
-
-        // Check if we have error response rate limit data
-        if (count(self::$errorResponseLimits) > 0) {
-            $clientIp = self::getRealIpAddress();
-            $currentTime = time();
-            $windowStart = $currentTime - 60;
-
-            $recentRequests = array_filter(
-                self::$errorResponseLimits,
-                fn($timestamp, $key) => strpos($key, $clientIp) === 0 && $timestamp > $windowStart,
-                ARRAY_FILTER_USE_BOTH
-            );
-
-            $info['error_requests_in_window'] = count($recentRequests);
-            $info['error_limit'] = self::$maxErrorResponsesPerMinute;
-            $info['window_remaining'] = 60 - ($currentTime % 60);
-        }
-
-        return $info;
-    }
-
-    /**
-     * Get optimized context based on exception type and frequency
-     *
-     * @param string|null $userUuid User UUID
-     * @param \Throwable $exception Exception being handled
-     * @return array Optimized context array
-     */
-    /**
-     * @return array<string, mixed>
-     */
-    private static function getOptimizedContext(?string $userUuid, \Throwable $exception): array
-    {
-        // Use lightweight context for high-frequency, low-priority exceptions
-        if (self::shouldUseLightweightContext($exception)) {
-            return self::getLightweightContext($userUuid);
-        }
-
-        // Use cached context if available and recent
-        $cacheKey = 'context_' . ($userUuid ?? 'anonymous');
-        if (isset(self::$contextCache[$cacheKey])) {
-            $cached = self::$contextCache[$cacheKey];
-            // Use cached context if it's less than 30 seconds old
-            if ((microtime(true) - $cached['_cache_time']) < 30) {
-                $cached['user_uuid'] = $userUuid; // Update user UUID
-                unset($cached['_cache_time']); // Remove cache metadata
-                return $cached;
-            }
-        }
-
-        // Build full context and cache it
-        $context = self::$verboseContext
-            ? self::buildContextFromRequest($userUuid)
-            : self::buildBasicContext($userUuid);
-
-        $context['_cache_time'] = microtime(true);
-        self::$contextCache[$cacheKey] = $context;
-
-        // Clean up cache if it gets too large
-        if (count(self::$contextCache) > 10) {
-            self::$contextCache = array_slice(self::$contextCache, -5, null, true);
-        }
-
-        unset($context['_cache_time']);
-        return $context;
-    }
-
-    /**
-     * Determine if lightweight context should be used
-     *
-     * @param \Throwable $exception Exception being handled
-     * @return bool True if lightweight context should be used
-     */
-    private static function shouldUseLightweightContext(\Throwable $exception): bool
-    {
-        // Use lightweight context for validation errors and other frequent exceptions
-        $lightweightExceptions = [
-            ValidationException::class,
-            NotFoundException::class,
-        ];
-
-        $exceptionClass = get_class($exception);
-        return in_array($exceptionClass, $lightweightExceptions, true);
-    }
-
-    /**
-     * Get lightweight context for high-frequency exceptions
-     *
-     * @param string|null $userUuid User UUID
-     * @return array Lightweight context
-     */
-    /**
-     * @return array<string, mixed>
-     */
-    private static function getLightweightContext(?string $userUuid): array
-    {
-        // Cache lightweight context to avoid repeated calculations
-        if (count(self::$lightweightContext) > 0) {
-            $context = self::$lightweightContext;
-            $context['user_uuid'] = $userUuid;
-            $context['timestamp'] = date('c');
-            return $context;
-        }
-
-        self::$lightweightContext = [
-            'request_uri' => $_SERVER['REQUEST_URI'] ?? 'unknown',
-            'request_method' => $_SERVER['REQUEST_METHOD'] ?? 'unknown',
-            'ip_address' => self::getRealIpAddress(),
-            'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
-            'environment' => env('APP_ENV', 'unknown'),
-            'request_id' => self::generateRequestId(),
-            'lightweight' => true
-        ];
-
-        $context = self::$lightweightContext;
-        $context['user_uuid'] = $userUuid;
-        $context['timestamp'] = date('c');
-
-        return $context;
-    }
-
-    /**
-     * Build basic context (less detailed than full context)
-     *
-     * @param string|null $userUuid User UUID
-     * @return array Basic context
-     */
-    /**
-     * @return array<string, mixed>
-     */
-    private static function buildBasicContext(?string $userUuid): array
-    {
-        return [
-            'user_uuid' => $userUuid,
-            'session_id' => session_id() !== false ? session_id() : null,
-            'request_uri' => $_SERVER['REQUEST_URI'] ?? 'unknown',
-            'request_method' => $_SERVER['REQUEST_METHOD'] ?? 'unknown',
-            'ip_address' => self::getRealIpAddress(),
-            'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
-            'timestamp' => date('c'),
-            'memory_usage' => memory_get_usage(true),
-            'environment' => env('APP_ENV', 'unknown'),
-            'request_id' => self::generateRequestId(),
-            'context_level' => 'basic'
-        ];
-    }
-
-    /**
-     * Enable or disable verbose context building
-     *
-     * @param bool $enabled Whether to use verbose context
-     */
-    public static function setVerboseContext(bool $enabled): void
-    {
-        self::$verboseContext = $enabled;
-    }
-
-    /**
-     * Clear context cache (useful for testing or memory management)
-     */
-    public static function clearContextCache(): void
-    {
-        self::$contextCache = [];
-        self::$lightweightContext = [];
-    }
-
-    /**
-     * Get context cache statistics
-     *
-     * @return array Cache statistics
-     */
-    /**
-     * @return array<string, mixed>
-     */
-    public static function getContextCacheStats(): array
-    {
-        return [
-            'cache_size' => count(self::$contextCache),
-            'lightweight_cached' => count(self::$lightweightContext) > 0,
-            'verbose_mode' => self::$verboseContext
-        ];
-    }
-
-    /**
-     * Get request body information with caching to avoid multiple reads
-     *
-     * @return array Request body information
-     */
-    /**
-     * @return array<string, mixed>
-     */
-    private static function getRequestBodyInfo(): array
-    {
-        static $bodyInfo = null;
-
-        if ($bodyInfo === null) {
-            $input = file_get_contents('php://input') !== false ? file_get_contents('php://input') : '';
-            $bodyInfo = [
-                'has_request_body' => $input !== '' && $input !== '0',
-                'request_body_size' => strlen($input),
-                'content_length_header' => $_SERVER['CONTENT_LENGTH'] ?? null
-            ];
-        }
-
-        return $bodyInfo;
-    }
-
-    /**
-     * Set the logger instance for testing
-     *
-     * @param LoggerInterface|null $logger
+     * @deprecated Use DI to inject Handler with a logger instead.
      */
     public static function setLogger(?LoggerInterface $logger): void
     {
         self::$logger = $logger;
     }
 
-    public static function setContext(?ApplicationContext $context): void
+    /**
+     * @deprecated No longer needed — Handler receives context via DI.
+     */
+    public static function setContext(mixed $context): void
     {
-        self::$context = $context;
+        // No-op: kept for backward compatibility during migration.
     }
 
-    /**
-     * Set the event dispatcher instance for testing
-     *
-     * @param EventDispatcherInterface|null $eventDispatcher
-     */
-    public static function setEventDispatcher(?EventDispatcherInterface $eventDispatcher): void
-    {
-        if ($eventDispatcher === null) {
-            self::$eventService = null;
-            return;
-        }
+    // ===== Internal helpers =====
 
-        $provider = new PsrListenerProvider();
-        self::$eventService = new EventService($eventDispatcher, $provider);
-    }
-
-
-
-
-
-
-    /**
-     * Get the PSR-3 logger instance
-     *
-     * @return LoggerInterface
-     */
-    private static function getLogger(): LoggerInterface
-    {
-        if (self::$logger === null) {
-            if (self::$context !== null) {
-                self::$logger = container(self::$context)->get(LoggerInterface::class);
-            } else {
-                self::$logger = new \Psr\Log\NullLogger();
-            }
-        }
-
-        return self::$logger;
-    }
-
-    private static function getEventService(): ?EventService
-    {
-        if (self::$eventService !== null) {
-            return self::$eventService;
-        }
-
-        if (self::$context === null) {
-            return null;
-        }
-
-        try {
-            $service = container(self::$context)->get(EventService::class);
-            return $service instanceof EventService ? $service : null;
-        } catch (\Throwable) {
-            return null;
-        }
-    }
-
-    /**
-     * Handle uncaught exceptions with comprehensive coverage
-     *
-     * Processes all types of exceptions with proper status codes, logging,
-     * and user context extraction for audit trails.
-     *
-     * @param \Throwable $exception The exception to handle
-     * @return void
-     */
-    public static function handleException(\Throwable $exception): void
-    {
-        // Check rate limiting for error responses
-        if (!self::checkErrorRateLimit()) {
-            // If rate limited, return a generic error without detailed logging
-            self::outputJsonResponse(429, 'Too many error requests', ['retry_after' => 60]);
-            return;
-        }
-
-        // Get user context for enhanced logging (with performance optimization)
-        $userUuid = self::getCurrentUserFromRequest();
-        $context = self::getOptimizedContext($userUuid, $exception);
-
-        // Log the error with enhanced context
-        self::logError($exception, $context);
-
-        // NEW: Emit event for application business logic
-        try {
-            $request = \Symfony\Component\HttpFoundation\Request::createFromGlobals();
-            $event = new ExceptionEvent(
-                $request,
-                $exception,
-                $context
-            );
-            self::getEventService()?->dispatch($event);
-        } catch (\Throwable $eventException) {
-            // Don't let event dispatching errors break exception handling
-            error_log("Failed to dispatch exception event: " . $eventException->getMessage());
-        }
-
-
-        // Determine appropriate status code, message, and data based on exception type
-        $statusCode = 500;
-        $message = 'Internal server error';
-        $data = null;
-
-        // Handle all exception types with proper status codes and messages
-        if ($exception instanceof ValidationException) {
-            $statusCode = 422;
-            $message = $exception->getMessage();
-            $data = $exception->errors();
-        } elseif ($exception instanceof AuthenticationException) {
-            $statusCode = 401;
-            $message = $exception->getMessage();
-        } elseif ($exception instanceof \Glueful\Permissions\Exceptions\UnauthorizedException) {
-            $statusCode = 403;
-            $message = $exception->getMessage();
-        } elseif ($exception instanceof NotFoundException) {
-            $statusCode = 404;
-            $message = $exception->getMessage();
-        } elseif ($exception instanceof RateLimitExceededException) {
-            $statusCode = 429;
-            $message = $exception->getMessage();
-            $data = $exception->getData(); // Contains retry_after
-        } elseif ($exception instanceof SecurityException) {
-            $statusCode = $exception->getStatusCode();
-            $message = $exception->getMessage();
-        } elseif ($exception instanceof HttpException) {
-            $statusCode = $exception->getStatusCode();
-            $message = $exception->getMessage();
-            $data = $exception->getData();
-        } elseif ($exception instanceof DatabaseException) {
-            $statusCode = 500;
-            $message = 'Database operation failed';
-            // Don't expose database details in production
-            $data = self::shouldShowErrorDetails() ?
-                ['error' => self::sanitizeErrorMessage($exception->getMessage())] : null;
-        } elseif ($exception instanceof ExtensionException) {
-            $statusCode = $exception->getStatusCode();
-            $message = $exception->getMessage();
-            $data = $exception->getData();
-        } elseif ($exception instanceof \Glueful\Permissions\Exceptions\PermissionException) {
-            $statusCode = 403;
-            $message = 'Permission denied';
-            $data = self::shouldShowErrorDetails() ? ['context' => $exception->getContext()] : null;
-        } elseif ($exception instanceof \Glueful\Permissions\Exceptions\ProviderNotFoundException) {
-            $statusCode = 500;
-            $message = 'Permission system unavailable';
-        } elseif ($exception instanceof ApiException) {
-            // Handle general ApiException (should come after specific ones)
-            $statusCode = $exception->getStatusCode();
-            $message = $exception->getMessage();
-            $data = $exception->getData();
-        } elseif ($exception instanceof \ErrorException) {
-            // Handle converted PHP errors
-            $statusCode = 500;
-            $message = 'System error occurred';
-            $data = self::shouldShowErrorDetails() ? [
-                'error' => self::sanitizeErrorMessage($exception->getMessage()),
-                'file' => basename($exception->getFile()),
-                'line' => $exception->getLine()
-            ] : null;
-        } else {
-            // Handle any other throwable (Error, Exception)
-            $statusCode = 500;
-            $message = 'Unexpected error occurred';
-            $data = self::shouldShowErrorDetails() ? [
-                'type' => get_class($exception),
-                'error' => self::sanitizeErrorMessage($exception->getMessage())
-            ] : null;
-        }
-
-        // Output the JSON response using Response class
-        self::outputJsonResponse($statusCode, $message, $data);
-    }
-
-    /**
-     * Check if error details should be shown based on environment
-     *
-     * @return bool True if detailed errors should be shown
-     */
-    private static function shouldShowErrorDetails(): bool
-    {
-        $environment = env('APP_ENV', 'production');
-        $debugMode = self::getConfig('app.debug', false);
-
-        // Only show detailed errors in development environment with debug enabled
-        return (bool)$debugMode && ($environment === 'development' || $environment === 'local');
-    }
-
-    /**
-     * Log an exception to the appropriate channel
-     *
-     * @param \Throwable $exception
-     * @param array $customContext Optional additional context for the log
-     * @return void
-     */
-    /**
-     * @param array<string, mixed> $customContext
-     */
-    public static function logError(\Throwable $exception, array $customContext = []): void
-    {
-        // Determine if this is a framework-level exception
-        $isFrameworkException = self::isFrameworkException($exception);
-
-        // Get the appropriate log channel based on exception type
-        if ($isFrameworkException) {
-            $channel = 'framework';
-        } else {
-            $channel = self::$channelMap['default'];
-            foreach (self::$channelMap as $exceptionClass => $mappedChannel) {
-                if ($exceptionClass === 'default') {
-                    continue;
-                }
-                if ($exception instanceof $exceptionClass) {
-                    $channel = $mappedChannel;
-                    break;
-                }
-            }
-        }
-
-        // Add framework-specific context for framework exceptions
-        $context = [
-            'type' => $isFrameworkException ? 'framework_exception' : 'application_exception',
-            'exception' => get_class($exception),
-            'file' => $exception->getFile(),
-            'line' => $exception->getLine(),
-            'trace' => $exception->getTraceAsString(),
-            'timestamp' => date('c')
-        ];
-
-        // Merge custom context if provided
-        if (count($customContext) > 0) {
-            $context = array_merge($context, $customContext);
-        }
-
-        try {
-            // Get PSR-3 logger and log the exception
-            $logger = self::getLogger();
-
-            // Add channel to context for framework vs application logging distinction
-            $context['channel'] = $channel;
-
-            $logger->error($exception->getMessage(), $context);
-        } catch (\Throwable $e) {
-            // Fallback to error_log if logging fails
-            error_log("Error logging exception: {$exception->getMessage()} - {$e->getMessage()}");
-            error_log($exception->getTraceAsString());
-        }
-    }
-
-    /**
-     * Determine if exception is framework-level vs application-level
-     *
-     * @param \Throwable $exception
-     * @return bool
-     */
-    private static function isFrameworkException(\Throwable $exception): bool
-    {
-        // Framework exceptions: unhandled errors, ErrorException (converted PHP errors)
-        $frameworkExceptions = [
-            \ErrorException::class,
-            \Error::class,
-            \ParseError::class,
-            \TypeError::class,
-            \ArgumentCountError::class,
-            HttpProtocolException::class,
-            HttpAuthException::class
-        ];
-
-        if (in_array(get_class($exception), $frameworkExceptions, true)) {
-            return true;
-        }
-
-        // Path-based classification: consider files within this framework's src directory as framework code
-        $file = $exception->getFile();
-        if ($file === '') {
-            return false;
-        }
-
-        // Resolve real paths for robust comparison
-        $fileReal = realpath($file) !== false ? realpath($file) : $file;
-        $frameworkSrc = realpath(dirname(__DIR__)); // path to framework/src
-
-        if ($frameworkSrc !== false) {
-            // Use strncmp to avoid PHP version differences for str_starts_with
-            if (strncmp($fileReal, $frameworkSrc . DIRECTORY_SEPARATOR, strlen($frameworkSrc) + 1) === 0) {
-                return true;
-            }
-        }
-
-        // As a secondary signal, classify by namespace if available (Glueful\* treated as framework)
-        $trace = $exception->getTrace();
-        foreach ($trace as $frame) {
-            if (isset($frame['class']) && is_string($frame['class'])) {
-                if (strncmp($frame['class'], 'Glueful\\', 8) === 0) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Check error response rate limit for the current IP
-     *
-     * @return bool True if within rate limit, false if rate limited
-     */
     private static function checkErrorRateLimit(): bool
     {
         $clientIp = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
         $currentTime = time();
-        $windowStart = $currentTime - 60; // 1-minute window
+        $windowStart = $currentTime - 60;
 
-        // Clean up old entries
         self::$errorResponseLimits = array_filter(
             self::$errorResponseLimits,
             fn($timestamp) => $timestamp > $windowStart
         );
 
-        // Count current IP's requests in the window
+        $ipKey = $clientIp . '_';
         $ipRequests = array_filter(
             self::$errorResponseLimits,
-            fn($timestamp, $ip) => $ip === $clientIp && $timestamp > $windowStart,
+            fn($timestamp, $key) => str_starts_with($key, $ipKey) && $timestamp > $windowStart,
             ARRAY_FILTER_USE_BOTH
         );
 
@@ -927,120 +197,53 @@ class ExceptionHandler
             return false;
         }
 
-        // Record this request
-        self::$errorResponseLimits[$clientIp . '_' . $currentTime] = $currentTime;
+        self::$errorResponseLimits[$clientIp . '_' . $currentTime . '_' . mt_rand()] = $currentTime;
         return true;
     }
 
-    /**
-     * Sanitize error message to prevent information leakage
-     *
-     * @param string $message Original error message
-     * @return string Sanitized error message
-     */
-    private static function sanitizeErrorMessage(string $message): string
+    private static function fallbackLog(\Throwable $exception): void
     {
-        $environment = env('APP_ENV', 'production');
-
-        // Always sanitize sensitive information unless in development/local
-        if (!in_array($environment, ['development', 'local'], true) || !(bool) self::getConfig('app.debug', false)) {
-            // Remove all file paths (both Unix and Windows)
-            $message = preg_replace('/[\/\\\\][^\s]*\.php/', '[file]', $message);
-            $message = preg_replace('/[\/\\\\][^\s]*\.inc/', '[file]', $message);
-
-            // Remove database connection details
-            $message = preg_replace('/password\s*=\s*[^\s;,)]+/i', 'password=[REDACTED]', $message);
-            $message = preg_replace('/pwd\s*=\s*[^\s;,)]+/i', 'pwd=[REDACTED]', $message);
-            $message = preg_replace('/host\s*=\s*[^\s;,)]+/i', 'host=[REDACTED]', $message);
-            $message = preg_replace('/server\s*=\s*[^\s;,)]+/i', 'server=[REDACTED]', $message);
-            $message = preg_replace('/database\s*=\s*[^\s;,)]+/i', 'database=[REDACTED]', $message);
-            $message = preg_replace('/dbname\s*=\s*[^\s;,)]+/i', 'dbname=[REDACTED]', $message);
-
-            // Remove full namespaces and class paths
-            $message = preg_replace('/\\\\[A-Za-z\\\\]+\\\\[A-Za-z]+/', '[class]', $message);
-            $message = preg_replace('/[A-Za-z\\\\]+\\\\[A-Za-z]+::[A-Za-z]+/', '[method]', $message);
-
-            // Sanitize common database errors
-            if (stripos($message, 'SQLSTATE') !== false) {
-                $message = 'Database operation failed';
-            }
-            if (stripos($message, 'duplicate entry') !== false) {
-                $message = 'Data already exists';
-            }
-            if (stripos($message, 'foreign key constraint') !== false) {
-                $message = 'Data constraint violation';
-            }
-            if (stripos($message, 'table') !== false && stripos($message, "doesn't exist") !== false) {
-                $message = 'Resource not found';
-            }
-
-            // Remove internal configuration details
-            $message = preg_replace('/\.env.*/', '[config]', $message);
-            $message = preg_replace('/config\/.*\.php/', '[config]', $message);
-
-            // Remove stack trace indicators
-            $message = preg_replace('/Stack trace:.*$/s', '', $message);
-            $message = preg_replace('/#\d+.*$/m', '', $message);
-
-            // Sanitize common authentication errors
-            if (stripos($message, 'token') !== false && stripos($message, 'invalid') !== false) {
-                $message = 'Authentication failed';
-            }
-
-            // Generic fallback for remaining technical details
-            if (strlen($message) > 200) {
-                $message = 'An internal error occurred';
+        if (self::$logger !== null) {
+            try {
+                self::$logger->error($exception->getMessage(), [
+                    'exception' => get_class($exception),
+                    'file' => $exception->getFile(),
+                    'line' => $exception->getLine(),
+                ]);
+                return;
+            } catch (\Throwable) {
+                // Fall through to error_log
             }
         }
 
-        return trim($message);
+        error_log(sprintf(
+            '[ExceptionHandler] %s: %s in %s:%d',
+            get_class($exception),
+            $exception->getMessage(),
+            $exception->getFile(),
+            $exception->getLine()
+        ));
     }
 
-    private static function getConfig(string $key, mixed $default = null): mixed
-    {
-        if (self::$context === null) {
-            return $default;
-        }
-
-        return config(self::$context, $key, $default);
-    }
-
-
-    /**
-     * Output a JSON response using Response class for consistency
-     *
-     * @param int $statusCode HTTP status code
-     * @param string $message Error message
-     * @param mixed $data Additional error data
-     * @return void
-     */
-    private static function outputJsonResponse(int $statusCode, string $message, $data = null): void
+    private static function minimalResponse(int $statusCode, string $message): void
     {
         if (self::$testMode) {
-            // In test mode, capture the response in Glueful format
             self::$testResponse = [
-                'success' => $statusCode < 400,
+                'success' => false,
                 'message' => $message,
-                'code' => $statusCode
+                'code' => $statusCode,
             ];
-
-            if ($data !== null) {
-                self::$testResponse['data'] = $data;
-            }
-
-            return; // Don't output or exit
+            return;
         }
 
-        // Use Response class for consistent output format
-        if ($statusCode >= 400) {
-            // Create error response
-            $response = \Glueful\Http\Response::error($message, $statusCode, $data);
-        } else {
-            // Success response (shouldn't happen in exception handler, but for completeness)
-            $response = \Glueful\Http\Response::success($data, $message);
+        if (!headers_sent()) {
+            header('Content-Type: application/json', true, $statusCode);
         }
 
-        // Send the response
-        $response->send();
+        echo json_encode([
+            'success' => false,
+            'message' => $message,
+            'code' => $statusCode,
+        ], JSON_THROW_ON_ERROR);
     }
 }
