@@ -21,6 +21,11 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.31.0 — Enif (Released 2026-02-09)
+- **Centralized Context Propagation**: Framework boot now sets `ApplicationContext` on core services (`Model`, `Utils`, `CacheHelper`, `SecureErrorResponse`, `RoutesManager`, `ImageProcessor`, `ConfigManager`, `Webhook`) and auth services (`RequestUserContext`), eliminating scattered manual `setContext()` calls.
+- **ORM Default Context**: `Model::setDefaultContext()` enables static model calls (`User::find($id)`) without explicitly passing context after boot. `__callStatic` falls back to the default context when no explicit context is provided.
+- Notes: No breaking changes. Explicit context passing continues to work. Default context only available after `Framework::boot()`.
+
 ### 1.30.1 — Diphda (Patch, Released 2026-02-09)
 - **JWTService Context Fix**: `AuthBootstrap::initialize()` now sets `JWTService::setContext()` before creating authentication providers, ensuring JWT operations have access to the application context.
 - Notes: Patch release. No breaking changes.

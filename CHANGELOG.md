@@ -4,6 +4,27 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.31.0] - 2026-02-09 — Enif
+
+Centralized context propagation: core services and ORM receive application context during framework boot, eliminating manual `setContext()` calls scattered across the codebase.
+
+### Added
+
+- **`Model::setDefaultContext()`**: Static method that sets a default `ApplicationContext` for ORM static calls. When set, `Model::__callStatic()` uses this context as a fallback if no explicit context is passed as the first argument. Enables `User::find($id)` without requiring `User::find($context, $id)` after boot.
+- **Framework context propagation**: `Framework::initializeCoreServices()` now sets application context on `Model`, `Utils`, `CacheHelper`, `SecureErrorResponse`, `RoutesManager`, and `ImageProcessor`. `initializeHttpLayer()` sets context on `Webhook`. `loadConfiguration()` sets context on `ConfigManager`.
+
+### Changed
+
+- **`AuthBootstrap::initialize()`**: Now also calls `RequestUserContext::setContext()` alongside `JWTService::setContext()` before creating authentication providers, ensuring request user resolution has access to the application context.
+- **`Model::__callStatic()`**: Updated to check for an explicit `ApplicationContext` first argument, then fall back to `self::$defaultContext`, then throw. Previously always required the context as the first argument.
+
+### Notes
+
+- No breaking changes. Existing code passing `ApplicationContext` explicitly continues to work unchanged.
+- The default context fallback is only available after `Framework::boot()` completes. Code running before boot (e.g. in service provider constructors) must still pass context explicitly.
+
+---
+
 ## [1.30.1] - 2026-02-09 — Diphda
 
 ### Fixed

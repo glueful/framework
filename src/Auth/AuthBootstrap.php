@@ -6,6 +6,7 @@ namespace Glueful\Auth;
 
 use Glueful\Auth\Interfaces\AuthenticationProviderInterface;
 use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Http\RequestUserContext;
 
 /**
  * Authentication Bootstrapper
@@ -35,8 +36,9 @@ class AuthBootstrap
             return $this->manager;
         }
 
-        // Ensure JWTService has access to the application context
+        // Ensure auth services have access to the application context
         JWTService::setContext($this->context);
+        RequestUserContext::setContext($this->context);
 
         // Create default authentication providers
         $jwtProvider = new JwtAuthenticationProvider($this->context);

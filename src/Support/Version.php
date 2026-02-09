@@ -13,10 +13,10 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.30.0';
+    public const VERSION = '1.31.0';
 
     /** Release code name */
-    public const NAME = 'Diphda';
+    public const NAME = 'Enif';
 
     /** Release date */
     public const RELEASE_DATE = '2026-02-09';
