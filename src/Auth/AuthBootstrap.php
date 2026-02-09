@@ -35,6 +35,9 @@ class AuthBootstrap
             return $this->manager;
         }
 
+        // Ensure JWTService has access to the application context
+        JWTService::setContext($this->context);
+
         // Create default authentication providers
         $jwtProvider = new JwtAuthenticationProvider($this->context);
         $apiKeyProvider = new ApiKeyAuthenticationProvider($this->context);
