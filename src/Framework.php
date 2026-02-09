@@ -27,6 +27,13 @@ use Psr\Log\LoggerInterface;
 use Glueful\Auth\SessionStore;
 use Glueful\Auth\TokenManager;
 use Glueful\Http\RequestContext;
+use Glueful\Database\ORM\Model;
+use Glueful\Api\Webhooks\Webhook;
+use Glueful\Helpers\CacheHelper;
+use Glueful\Helpers\ConfigManager;
+use Glueful\Helpers\RoutesManager;
+use Glueful\Http\SecureErrorResponse;
+use Glueful\Services\ImageProcessor;
 
 /**
  * Consolidated Framework class - handles all bootstrapping logic
@@ -207,6 +214,9 @@ class Framework
         $loader = new ConfigurationLoader($this->basePath, $this->environment, $this->configPath);
 
         $context->setConfigLoader($loader);
+
+        // Set context for config-dependent helpers
+        ConfigManager::setContext($context);
     }
 
     /**
@@ -313,6 +323,14 @@ class Framework
      */
     private function initializeCoreServices(): void
     {
+        // Set application context for core services
+        Model::setDefaultContext($this->context);
+        Utils::setContext($this->context);
+        CacheHelper::setContext($this->context);
+        SecureErrorResponse::setContext($this->context);
+        RoutesManager::setContext($this->context);
+        ImageProcessor::setContext($this->context);
+
         // Initialize Cache Driver
         Utils::initializeCacheDriver();
 
@@ -342,6 +360,9 @@ class Framework
     private function initializeHttpLayer(): void
     {
         try {
+            // Set webhook context for API webhook operations
+            Webhook::setContext($this->context);
+
             // Get the Next-Gen Router instance
             $router = $this->container->get(\Glueful\Routing\Router::class);
 

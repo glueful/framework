@@ -73,6 +73,11 @@ abstract class Model implements ModelInterface, JsonSerializable
     protected ?ApplicationContext $context = null;
 
     /**
+     * Default application context for static calls
+     */
+    private static ?ApplicationContext $defaultContext = null;
+
+    /**
      * The table associated with the model
      */
     protected string $table = '';
@@ -171,6 +176,14 @@ abstract class Model implements ModelInterface, JsonSerializable
                 forward_static_call([$class, $method]);
             }
         }
+    }
+
+    /**
+     * Set the default application context for static model calls
+     */
+    public static function setDefaultContext(ApplicationContext $context): void
+    {
+        self::$defaultContext = $context;
     }
 
     public function setContext(ApplicationContext $context): void
@@ -886,12 +899,14 @@ abstract class Model implements ModelInterface, JsonSerializable
      */
     public static function __callStatic(string $method, array $parameters): mixed
     {
-        if (!($parameters[0] ?? null) instanceof ApplicationContext) {
+        if (($parameters[0] ?? null) instanceof ApplicationContext) {
+            $context = array_shift($parameters);
+        } elseif (self::$defaultContext !== null) {
+            $context = self::$defaultContext;
+        } else {
             throw new \RuntimeException('ApplicationContext is required for static model calls.');
         }
 
-        /** @var ApplicationContext $context */
-        $context = array_shift($parameters);
         return (new static([], $context))->$method(...$parameters);
     }
 
