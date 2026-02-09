@@ -21,6 +21,10 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.30.1 — Diphda (Patch, Released 2026-02-09)
+- **JWTService Context Fix**: `AuthBootstrap::initialize()` now sets `JWTService::setContext()` before creating authentication providers, ensuring JWT operations have access to the application context.
+- Notes: Patch release. No breaking changes.
+
 ### 1.30.0 — Diphda (Released 2026-02-09)
 - **Exception Handler Consolidation**: Unified two overlapping exception handlers into a single source of truth. Modern `Handler` absorbs channel-based log routing, context optimization, framework/app classification, and test mode. Legacy `ExceptionHandler` reduced from 1041 to ~250 lines — a thin bootstrap shim that registers PHP global handlers and delegates to the DI-managed `Handler`.
 - **Boot Wiring Reorder**: Global error handlers registered at the top of `Framework::boot()` (before Phase 1). Handler wired into shim after container build via `ExceptionHandler::setHandler()`.

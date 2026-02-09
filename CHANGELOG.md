@@ -4,6 +4,18 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.30.1] - 2026-02-09 — Diphda
+
+### Fixed
+
+- **JWTService context initialization**: `AuthBootstrap::initialize()` now calls `JWTService::setContext()` before creating authentication providers, ensuring the JWT service has access to the application context during token operations.
+
+### Notes
+
+- Patch release. No breaking changes.
+
+---
+
 ## [1.30.0] - 2026-02-09 — Diphda
 
 Unified exception handling: consolidated two overlapping exception handlers into a single source of truth.
