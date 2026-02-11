@@ -21,6 +21,11 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.32.0 — Fomalhaut (Released 2026-02-11)
+- **Schema Builder `alterTable` Callback API**: `alterTable()` now accepts an optional callback parameter, mirroring the `createTable` dual-mode pattern. Without a callback, returns a fluent `TableBuilder` (unchanged). With a callback, applies alterations and auto-executes, returning `$this` for chaining.
+- **ColumnBuilder Finalization Fix**: `gc_collect_cycles()` called before execute to ensure `ColumnBuilder` destructors register columns via `finalizeColumn()` before ALTER SQL is generated.
+- Notes: No breaking changes. Existing callers (including convenience methods) use the no-callback path and are unaffected.
+
 ### 1.31.0 — Enif (Released 2026-02-09)
 - **Centralized Context Propagation**: Framework boot now sets `ApplicationContext` on core services (`Model`, `Utils`, `CacheHelper`, `SecureErrorResponse`, `RoutesManager`, `ImageProcessor`, `ConfigManager`, `Webhook`) and auth services (`RequestUserContext`), eliminating scattered manual `setContext()` calls.
 - **ORM Default Context**: `Model::setDefaultContext()` enables static model calls (`User::find($id)`) without explicitly passing context after boot. `__callStatic` falls back to the default context when no explicit context is provided.

@@ -52,10 +52,14 @@ interface SchemaBuilderInterface
     /**
      * Alter an existing table
      *
-     * @param  string $name Table name
-     * @return TableBuilderInterface Fluent table builder for alterations
+     * When called with only a name, returns a fluent table builder for alterations
+     * When called with a callback, applies the alterations immediately and auto-executes
+     *
+     * @param  string        $name     Table name
+     * @param  callable|null $callback Optional table alteration callback
+     * @return TableBuilderInterface|self Fluent table builder or self for chaining
      */
-    public function alterTable(string $name): TableBuilderInterface;
+    public function alterTable(string $name, ?callable $callback = null): TableBuilderInterface|self;
 
     /**
      * Drop a table
