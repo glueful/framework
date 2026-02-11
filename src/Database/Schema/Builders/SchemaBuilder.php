@@ -112,12 +112,34 @@ class SchemaBuilder implements SchemaBuilderInterface
     /**
      * Alter an existing table
      *
-     * @param  string $name Table name
-     * @return TableBuilderInterface Fluent table builder for alterations
+     * When called with only a name, returns a fluent table builder for alterations
+     * When called with a callback, applies the alterations immediately and auto-executes
+     *
+     * @param  string        $name     Table name
+     * @param  callable|null $callback Optional table alteration callback
+     * @return TableBuilderInterface|self Fluent table builder or self for chaining
      */
-    public function alterTable(string $name): TableBuilderInterface
+    public function alterTable(string $name, ?callable $callback = null): TableBuilderInterface|self
     {
-        return new TableBuilder($this, $this->sqlGenerator, $name, true);
+        $tableBuilder = new TableBuilder($this, $this->sqlGenerator, $name, true);
+
+        if ($callback === null) {
+            return $tableBuilder;
+        }
+
+        $callback($tableBuilder);
+
+        // Force finalization of any column builders created in the callback
+        // ColumnBuilder relies on __destruct() to register columns, but PHP
+        // may not destroy temporaries until after execute() is called.
+        gc_collect_cycles();
+
+        $tableBuilder->execute();
+
+        // Flush pending operations to the database (mirrors createTable behavior)
+        $this->execute();
+
+        return $this;
     }
 
     /**

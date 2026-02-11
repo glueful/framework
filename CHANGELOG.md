@@ -4,6 +4,22 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.32.0] - 2026-02-11 — Fomalhaut
+
+Schema builder `alterTable` now supports the same callback-style API as `createTable`, enabling concise inline table alterations with automatic execution.
+
+### Changed
+
+- **`SchemaBuilderInterface::alterTable()` signature**: Now accepts an optional `?callable $callback` parameter and returns `TableBuilderInterface|self`. Without a callback, returns a fluent `TableBuilder` (existing behavior unchanged). With a callback, passes the builder to the callback, executes, and returns `$this` for chaining — mirroring the `createTable` dual-mode API.
+- **`SchemaBuilder::alterTable()` implementation**: Callback path calls `gc_collect_cycles()` before `$tableBuilder->execute()` to force `ColumnBuilder` destructors to run, ensuring `finalizeColumn()` registers columns before the ALTER SQL is generated. Then calls `$this->execute()` to flush pending operations to the database, matching `createTable` behavior.
+
+### Notes
+
+- No breaking changes. All existing callers (including the convenience methods `addColumn`, `dropColumn`, `addIndex`, `dropIndex`, `addForeignKey`, `dropForeignKey`) use the no-callback path and continue to work unchanged.
+- The `gc_collect_cycles()` call is necessary because `ColumnBuilder` uses `__destruct()` to finalize columns, and PHP may defer destruction of temporaries created inside the callback until after `execute()` reads them.
+
+---
+
 ## [1.31.0] - 2026-02-09 — Enif
 
 Centralized context propagation: core services and ORM receive application context during framework boot, eliminating manual `setContext()` calls scattered across the codebase.
