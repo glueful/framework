@@ -63,6 +63,9 @@ interface SessionStoreInterface
      */
     public function listByUser(string $userUuid): array;
 
+    /** Clear per-request caches (e.g. to prevent N+1 lookups within the same request) */
+    public function resetRequestCache(): void;
+
     /**
      * Canonical TTL helpers
      */

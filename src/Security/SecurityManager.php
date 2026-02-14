@@ -7,6 +7,7 @@ use Glueful\Http\Exceptions\Client\TooManyRequestsException;
 use Glueful\Events\Auth\RateLimitExceededEvent;
 use Glueful\Events\EventService;
 use Glueful\Http\Exceptions\Domain\SecurityException;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Cache\CacheStore;
 use Glueful\Helpers\CacheHelper;
 use Symfony\Component\HttpFoundation\Request;
@@ -48,6 +49,8 @@ class SecurityManager
     private ?EventService $events;
 
 
+    private ?ApplicationContext $context;
+
     /**
      * Initialize the Security Manager
      *
@@ -56,8 +59,12 @@ class SecurityManager
      *
      * @param CacheStore<mixed>|null $cache Cache driver instance
      */
-    public function __construct(?CacheStore $cache = null, ?EventService $events = null)
-    {
+    public function __construct(
+        ?CacheStore $cache = null,
+        ?EventService $events = null,
+        ?ApplicationContext $context = null
+    ) {
+        $this->context = $context;
         $this->config = ConfigManager::get('security', []);
         $this->cache = $cache ?? CacheHelper::createCacheInstance();
         $this->events = $events;
@@ -473,7 +480,14 @@ class SecurityManager
         // Check for empty $request and use fallback if needed
         // This ensures the method always has a valid request object to work with
         if ($request === '' || $request === null) {
-            $request = Request::createFromGlobals();
+            if ($this->context !== null && $this->context->hasContainer()) {
+                $request = $this->context->getContainer()->get(Request::class);
+            } else {
+                throw new \RuntimeException(
+                    'SecurityManager::validateRequest requires a Request instance '
+                    . 'or ApplicationContext with a container.'
+                );
+            }
         }
 
         $method = $request->getMethod();

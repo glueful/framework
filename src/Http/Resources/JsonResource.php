@@ -47,6 +47,11 @@ class JsonResource implements JsonSerializable, ArrayAccess
     use DelegatesToResource;
 
     /**
+     * The HTTP request associated with this resource (set by middleware)
+     */
+    public ?\Symfony\Component\HttpFoundation\Request $request = null;
+
+    /**
      * The resource instance being transformed
      *
      * @var TResource

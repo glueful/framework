@@ -254,10 +254,12 @@ final class CoreProvider extends BaseServiceProvider
             )
         );
 
-        // HTTP request
+        // HTTP request — delegate to RequestProvider's shared definition
         $defs['request'] = new FactoryDefinition(
             'request',
-            fn() => \Symfony\Component\HttpFoundation\Request::createFromGlobals()
+            fn(\Psr\Container\ContainerInterface $c) => $c->get(
+                \Symfony\Component\HttpFoundation\Request::class
+            )
         );
 
         // Permission services

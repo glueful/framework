@@ -4,6 +4,40 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.33.0] - 2026-02-14 — Gacrux
+
+Eliminated all `fromGlobals()` / `createFromGlobals()` fallbacks from service code, enforcing container-based request resolution throughout the framework. This fixes unbounded memory growth on high-header requests (PSR-7 `MessageTrait` crash at 512MB) and makes the framework compatible with long-running servers where `$_SERVER` superglobals become stale.
+
+### Changed
+
+- **Auth services resolve `RequestContext` from DI container**: `TokenManager`, `JwtAuthenticationProvider`, `SessionStore`, and `EmailVerification` no longer fall back to `RequestContext::fromGlobals()`. All four resolve `RequestContext` from `ApplicationContext`'s container when not explicitly provided. Throws `\RuntimeException` if neither a direct parameter nor a container is available.
+- **`AuthenticationService` uses container-resolved request**: Five locations that called `Request::createFromGlobals()` for IP/User-Agent tracking, `checkAuth()`, `checkAdminAuth()`, and `getCurrentUser()` now resolve from the container. The fallback `new JwtAuthenticationProvider()` (without context) on line 96 now passes `$this->context`.
+- **`AuthController` passes context to dependencies**: `new EmailVerification()` and `new AuthenticationService()` fallback constructors now receive `$this->context` for proper container resolution.
+- **`SessionStoreResolver::resolve()` fails fast**: Removed silent `new SessionStore()` catch fallback. Container resolution failure is now a `\RuntimeException` instead of a silently degraded store with stale globals.
+- **`TokenManager::getSessionStore()` propagates errors**: The catch block no longer swallows exceptions with `new SessionStore()`. Container resolution failures surface immediately.
+- **`EmailVerification::sendPasswordResetEmail()` signature**: Now accepts an optional `?ApplicationContext $context` parameter to resolve `RequestContext` from the container instead of calling `fromGlobals()`.
+- **Static helpers use container**: `RequestHelper` (3 methods), `Utils::getSession()`, and `Utils::getUser()` resolve `Request`/`RequestContext` from the static `$context` container instead of `createFromGlobals()` / `getallheaders()` / `$_SERVER` superglobals.
+- **`Cors::handle()` resolves from container**: Falls back to container-resolved `Request` instead of `createFromGlobals()` when no request parameter is provided.
+- **`ConditionallyLoadsAttributes::getRequest()` returns `null` instead of creating from globals**: The trait now checks for an explicit `$request` property (set by middleware) and returns `null` when unavailable. `whenRequested()` already handles null gracefully by including all fields.
+- **`SpaManager` resolves from container**: Three `createFromGlobals()` calls in `checkAccess()` and `validateCsrfToken()` replaced with container resolution via `$this->container`.
+- **`UserRepository::getCurrentUser()` uses `RequestContext`**: Extracts bearer token via `RequestContext::getBearerToken()` from the container instead of creating a Symfony request from globals.
+- **`SecurityManager` accepts `ApplicationContext`**: New `?ApplicationContext $context` constructor parameter. `validateRequest()` resolves `Request` from container when none is provided.
+- **`CoreProvider` request alias deduplicated**: The `'request'` service definition now delegates to `RequestProvider`'s shared `Request::class` factory instead of independently calling `createFromGlobals()`, eliminating a duplicate request construction.
+
+### Added
+
+- **`SessionStoreInterface::resetRequestCache()`**: Method added to the interface (previously only on `SessionStore` implementation). `TokenManager::resetRequestCache()` no longer needs a `method_exists()` guard.
+- **`JsonResource::$request` property**: Nullable `Request` property that middleware can set on resources, enabling `ConditionallyLoadsAttributes::getRequest()` to access the current request without globals.
+
+### Notes
+
+- **No breaking changes** for callers that instantiate services via the container (the standard path). Callers that construct services directly with `new` and pass `null` for both `RequestContext` and `ApplicationContext` will now receive a `\RuntimeException` with a clear message instead of silently using stale globals.
+- `RequestContext::fromGlobals()` and `ServerRequestFactory::fromGlobals()` remain available as public methods for CLI commands and bootstrap code that legitimately cannot use the container.
+- `RequestProvider.php` remains the single source of truth for request creation during HTTP handling.
+- `getallheaders()` / `apache_request_headers()` remain as secondary fallbacks in `TokenManager::extractTokenFromRequest()` and `JwtAuthenticationProvider::extractTokenFromRequest()` for Apache compatibility, but only after `RequestContext` is already resolved from the container.
+
+---
+
 ## [1.32.0] - 2026-02-11 — Fomalhaut
 
 Schema builder `alterTable` now supports the same callback-style API as `createTable`, enabling concise inline table alterations with automatic execution.

@@ -53,12 +53,12 @@ class AuthController
     public function __construct(ApplicationContext $context)
     {
         $this->context = $context;
-        $this->verifier = new EmailVerification();
+        $this->verifier = new EmailVerification(context: $this->context);
         try {
             $this->authService = container($this->context)->get(AuthenticationService::class);
         } catch (\Throwable) {
-            // Fallback to direct construction (will self-resolve dependencies)
-            $this->authService = new AuthenticationService();
+            // Fallback to direct construction with context for proper DI resolution
+            $this->authService = new AuthenticationService(context: $this->context);
         }
 
         // Initialize the authentication system
@@ -455,7 +455,7 @@ class AuthController
         }
 
         // Send verification email
-        $result = EmailVerification::sendPasswordResetEmail($postData['email']);
+        $result = EmailVerification::sendPasswordResetEmail($postData['email'], $this->context);
         if (!$result['success']) {
             $errorMsg = $result['message'] ?? 'Failed to send reset email';
             throw ValidationException::forField('email', $errorMsg);

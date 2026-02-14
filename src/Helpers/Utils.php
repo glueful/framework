@@ -131,17 +131,16 @@ class Utils
      */
     public static function getSession(): ?array
     {
-        if (self::$context === null) {
+        if (self::$context === null || !self::$context->hasContainer()) {
             return null;
         }
 
-        $token = $_SERVER['HTTP_AUTHORIZATION'] ?? null;
-        if (!$token) {
+        $requestContext = self::$context->getContainer()->get(\Glueful\Http\RequestContext::class);
+        $token = $requestContext->getBearerToken();
+        if ($token === null || $token === '') {
             return null;
         }
 
-        // Remove 'Bearer ' if present
-        $token = str_replace('Bearer ', '', $token);
         $sessionCacheManager = container(self::$context)->get(SessionCacheManager::class);
         return $sessionCacheManager->getSession($token);
     }
@@ -211,10 +210,10 @@ class Utils
     public static function getUser(?string $token = null): ?array
     {
         if ($token === null || $token === '') {
-            // Try to get token from Authorization header
-            $headers = getallheaders();
-            if (isset($headers['Authorization'])) {
-                $token = str_replace('Bearer ', '', $headers['Authorization']);
+            // Try to get token from container-resolved RequestContext
+            if (self::$context !== null && self::$context->hasContainer()) {
+                $requestContext = self::$context->getContainer()->get(\Glueful\Http\RequestContext::class);
+                $token = $requestContext->getBearerToken();
             }
         }
 

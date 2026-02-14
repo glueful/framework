@@ -643,19 +643,15 @@ class UserRepository extends BaseRepository
     public function getCurrentUser(): ?array
     {
         try {
-            // Get current request
-            $request = \Symfony\Component\HttpFoundation\Request::createFromGlobals();
-
-            // Extract token from the Authorization header
-            $authHeader = $request->headers->get('Authorization');
-            if ($authHeader === null) {
+            // Extract token via container-resolved RequestContext
+            if ($this->context === null || !$this->context->hasContainer()) {
                 return null;
             }
 
-            // Remove 'Bearer ' prefix if present
-            $token = (strpos($authHeader, 'Bearer ') === 0) ? substr($authHeader, 7) : $authHeader;
+            $requestContext = $this->context->getContainer()->get(\Glueful\Http\RequestContext::class);
+            $token = $requestContext->getBearerToken();
 
-            if ($token === '') {
+            if ($token === null || $token === '') {
                 return null;
             }
 

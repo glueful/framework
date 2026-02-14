@@ -53,6 +53,18 @@ class SpaManager
     }
 
     /**
+     * Resolve Request from the DI container.
+     */
+    private function resolveRequest(): Request
+    {
+        if ($this->container !== null && $this->container->has(Request::class)) {
+            return $this->container->get(Request::class);
+        }
+
+        throw new \RuntimeException('SpaManager requires Request from DI container.');
+    }
+
+    /**
      * Register SPA configurations from an extension
      *
      * @param string $extensionClass Extension class name
@@ -222,7 +234,7 @@ class SpaManager
             }
 
             // Check if user is authenticated via session or token
-            $request = Request::createFromGlobals();
+            $request = $this->resolveRequest();
             try {
                 // Extract credentials from request
                 $credentials = $this->extractCredentialsFromRequest($request);
@@ -250,7 +262,7 @@ class SpaManager
             }
 
             // Check user permissions
-            $request = Request::createFromGlobals();
+            $request = $this->resolveRequest();
             try {
                 // Extract credentials from request
                 $credentials = $this->extractCredentialsFromRequest($request);
@@ -347,7 +359,7 @@ class SpaManager
         }
 
         try {
-            $request = Request::createFromGlobals();
+            $request = $this->resolveRequest();
             // The CSRFMiddleware will handle the validation internally
             // For now, we'll do a basic check
             $token = $request->headers->get('X-CSRF-Token')

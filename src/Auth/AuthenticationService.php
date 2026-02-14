@@ -93,7 +93,7 @@ class AuthenticationService
         } elseif ($this->context !== null && $this->context->hasContainer()) {
             $this->authManager = $this->context->getContainer()->get(AuthenticationManager::class);
         } else {
-            $this->authManager = new AuthenticationManager(new JwtAuthenticationProvider());
+            $this->authManager = new AuthenticationManager(new JwtAuthenticationProvider($this->context));
         }
 
         if ($tokenManager !== null) {
@@ -207,11 +207,16 @@ class AuthenticationService
 
         // Update user tracking fields in the database
         try {
-            // Get request information for tracking
-            $request = \Symfony\Component\HttpFoundation\Request::createFromGlobals();
-            $clientIp = $request->getClientIp() ?? 'unknown';
-            $userAgent = $request->headers->get('User-Agent') ?? 'unknown';
-            $xForwardedFor = $request->headers->get('X-Forwarded-For') ?? null;
+            // Get request information for tracking via container
+            $clientIp = 'unknown';
+            $userAgent = 'unknown';
+            $xForwardedFor = null;
+            if ($this->context !== null && $this->context->hasContainer()) {
+                $requestContext = $this->context->getContainer()->get(\Glueful\Http\RequestContext::class);
+                $clientIp = $requestContext->getClientIp();
+                $userAgent = $requestContext->getUserAgent();
+                $xForwardedFor = $requestContext->getServerParam('HTTP_X_FORWARDED_FOR');
+            }
             // Update user record with tracking information
             $this->userRepository->update($userData['uuid'], [
                 'ip_address' => $clientIp,
@@ -649,8 +654,11 @@ class AuthenticationService
     {
         // Ensure we're working with a Request object
         if (!($request instanceof Request)) {
-            // Convert global variables to a Request object
-            $request = Request::createFromGlobals();
+            if ($this->context !== null && $this->context->hasContainer()) {
+                $request = $this->context->getContainer()->get(Request::class);
+            } else {
+                return false;
+            }
         }
 
         // Use the authentication manager
@@ -672,8 +680,11 @@ class AuthenticationService
     {
         // Ensure we're working with a Request object
         if (!($request instanceof Request)) {
-            // Convert global variables to a Request object
-            $request = Request::createFromGlobals();
+            if ($this->context !== null && $this->context->hasContainer()) {
+                $request = $this->context->getContainer()->get(Request::class);
+            } else {
+                return false;
+            }
         }
 
         // Use the authentication manager
@@ -737,12 +748,7 @@ class AuthenticationService
                 }
             }
 
-            // Fallback to global request
-            $request = Request::createFromGlobals();
-            $userData = self::authenticateWithProviders($request);
-            if ($userData !== null && isset($userData['user'])) {
-                return (object) $userData['user'];
-            }
+            // Container request already checked above; no global fallback
         } catch (\Throwable) {
             // Ignore errors to prevent auth system disruption
         }

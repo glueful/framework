@@ -291,8 +291,14 @@ trait ConditionallyLoadsAttributes
      */
     protected function getRequest(): ?\Symfony\Component\HttpFoundation\Request
     {
-        // Create request from PHP globals
-        // This follows the same pattern as Glueful\Helpers\RequestHelper
-        return \Symfony\Component\HttpFoundation\Request::createFromGlobals();
+        // Use explicit request if set on the resource (property defined on JsonResource)
+        /** @var \Symfony\Component\HttpFoundation\Request|null $req */
+        $req = $this->request ?? null;
+        if ($req !== null) {
+            return $req;
+        }
+
+        // Return null instead of creating from globals; whenRequested() handles null gracefully
+        return null;
     }
 }
