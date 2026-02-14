@@ -100,7 +100,9 @@ class DriverRegistry
      */
     public function getDriver(string $name, array $config = []): QueueDriverInterface
     {
-        $cacheKey = $name . ':' . md5(serialize($config));
+        $cacheKey = $name . ':' . md5((string) json_encode(
+            array_filter($config, fn($v) => is_scalar($v) || is_array($v) || $v === null)
+        ));
 
         if (isset($this->instances[$cacheKey])) {
             return $this->instances[$cacheKey];

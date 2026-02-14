@@ -21,6 +21,15 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.34.0 — Hamal (Released 2026-02-14)
+- **Auth Middleware Exception Isolation**: `$next($request)` moved outside the auth `try/catch` so downstream controller/middleware exceptions propagate correctly instead of being swallowed as 401 "Authentication error occurred".
+- **`Utils::getUser()` Modernization**: No longer requires legacy `role`/`info` JWT claims (only `uuid` required). Checks request attributes from auth middleware before falling back to token decoding.
+- **Symfony Request Token Fallback**: `AuthMiddleware` and `JwtAuthenticationProvider` fall back to extracting Bearer token from the Symfony Request when `RequestContext`-based extraction returns null.
+- **`UploadController` + `FileUploader` DI Registration**: Both registered in `StorageProvider` with config-driven factory definitions, fixing container resolution failures on blob upload routes.
+- **Queue Serialization Fix**: `DriverRegistry` cache key generation replaced `serialize()` with `json_encode()` to avoid Closure serialization crashes.
+- **Login Tracking Cleanup**: Removed legacy column updates (`ip_address`, `user_agent`, `x_forwarded_for_ip_address`, `last_login_date`) from `AuthenticationService` — already tracked in `auth_sessions`.
+- Notes: No breaking changes. All fixes backward-compatible.
+
 ### 1.33.0 — Gacrux (Released 2026-02-14)
 - **Container-Enforced Request Resolution**: Eliminated all `fromGlobals()` / `createFromGlobals()` fallbacks from 15 service files. Auth services (`TokenManager`, `JwtAuthenticationProvider`, `SessionStore`, `EmailVerification`, `AuthenticationService`) and utility services (`RequestHelper`, `Utils`, `Cors`, `SpaManager`, `UserRepository`, `SecurityManager`) now resolve `RequestContext`/`Request` from the DI container's shared singleton.
 - **Memory Safety**: Fixes unbounded memory growth on high-header requests where multiple independent `fromGlobals()` calls each reconstructed PSR-7 request objects from `$_SERVER` superglobals.

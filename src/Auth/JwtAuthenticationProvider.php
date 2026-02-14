@@ -48,6 +48,14 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
         try {
             $token = $this->extractTokenFromRequest();
 
+            // Fallback: extract from the Symfony Request directly
+            if ($token === null || $token === '') {
+                $authHeader = $request->headers->get('Authorization', '');
+                if ($authHeader !== '' && preg_match('/Bearer\s+(.+)/i', $authHeader, $matches) === 1) {
+                    $token = trim($matches[1]);
+                }
+            }
+
             if ($token === null || $token === '') {
                 $this->lastError = 'No authentication token provided';
                 return null;
