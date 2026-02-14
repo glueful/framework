@@ -87,13 +87,18 @@ class BlobRepository extends BaseRepository
      */
     public function findByUuidWithDeleteFilter(string $uuid, bool $includeDeleted = false): ?array
     {
-        $conditions = ['uuid' => $uuid];
+        $query = $this->db->table($this->getTableName())
+            ->select($this->defaultFields)
+            ->where('uuid', '=', $uuid);
 
         if (!$includeDeleted) {
-            $conditions['status'] = ['!=', 'deleted'];
+            $query->where('status', '!=', 'deleted');
         }
 
-        return $this->findWhere($conditions, [], 1)[0] ?? null;
+        $query->limit(1);
+        $results = $query->get();
+
+        return $results[0] ?? null;
     }
 
     /**

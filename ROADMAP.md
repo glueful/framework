@@ -21,6 +21,13 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.35.0 — Izar (Released 2026-02-14)
+- **Cloud Storage Direct Write**: `FlysystemStorage::store()` bypasses the atomic temp+move pattern for S3/R2/GCS/Azure disks, writing directly via `writeStream()`. Fixes `io_move_failed` CopyObject failures on Cloudflare R2 and compatible stores. Local disks retain the atomic pattern for crash safety.
+- **Blob Lookup Fix**: `BlobRepository::findByUuidWithDeleteFilter()` rewritten to use explicit three-parameter `where('status', '!=', 'deleted')` instead of array-format `['!=', 'deleted']` which the query builder treated as `=`.
+- **Storage Error Propagation**: `FlysystemStorage` now always includes the underlying exception message in upload errors, replacing the generic "Storage write failed" for non-Flysystem exceptions.
+- **Base64 Upload File Extensions**: Base64 uploads now produce correct file extensions (`.png`, `.jpg`, etc.) derived from the MIME type instead of always defaulting to `.bin`.
+- Notes: No breaking changes. Fixes blob 404s, S3-compatible upload failures, and base64 file naming.
+
 ### 1.34.0 — Hamal (Released 2026-02-14)
 - **Auth Middleware Exception Isolation**: `$next($request)` moved outside the auth `try/catch` so downstream controller/middleware exceptions propagate correctly instead of being swallowed as 401 "Authentication error occurred".
 - **`Utils::getUser()` Modernization**: No longer requires legacy `role`/`info` JWT claims (only `uuid` required). Checks request attributes from auth middleware before falling back to token decoding.

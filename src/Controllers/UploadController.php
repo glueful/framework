@@ -71,8 +71,8 @@ class UploadController extends BaseController
                 }
 
                 $tempFile = $this->uploader->handleBase64Upload($base64);
-                $filename = (string) ($payload['filename'] ?? 'upload.bin');
                 $mime = (string) ($payload['mime_type'] ?? $this->detectMime($tempFile));
+                $filename = (string) ($payload['filename'] ?? ('upload.' . $this->extensionFromMime($mime)));
                 $size = filesize($tempFile) ?: 0;
 
                 $fileInput = [
@@ -700,6 +700,24 @@ class UploadController extends BaseController
         $finfo = new \finfo(FILEINFO_MIME_TYPE);
         $mime = $finfo->file($path);
         return is_string($mime) && $mime !== '' ? $mime : 'application/octet-stream';
+    }
+
+    private function extensionFromMime(string $mime): string
+    {
+        return match ($mime) {
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/gif' => 'gif',
+            'image/webp' => 'webp',
+            'video/mp4' => 'mp4',
+            'video/quicktime' => 'mov',
+            'video/webm' => 'webm',
+            'audio/mpeg' => 'mp3',
+            'audio/mp4' => 'm4a',
+            'audio/wav' => 'wav',
+            'application/pdf' => 'pdf',
+            default => 'bin',
+        };
     }
 
     private function formatToMime(?string $format): string
