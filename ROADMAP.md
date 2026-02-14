@@ -21,6 +21,12 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.36.0 — Jabbah (Released 2026-02-14)
+- **Model Event Isolation**: `HasEvents::$modelEventCallbacks` now keyed by `[className][event]` instead of flat `[$event]`. Prevents event callbacks registered in one model (e.g., `EntityType::creating`) from firing on unrelated models (e.g., `Entity`).
+- **Boot-safe Event Registration**: `registerModelEvent()` no longer calls `new static()` to validate event names. Eliminates "No database connection" errors when models boot without `ApplicationContext`.
+- **Base64 Upload File Extensions**: Base64 uploads now produce correct file extensions (`.png`, `.jpg`, etc.) derived from the MIME type instead of always defaulting to `.bin`.
+- Notes: No breaking changes. Fixes cross-model event leaking and boot-time DB errors.
+
 ### 1.35.0 — Izar (Released 2026-02-14)
 - **Cloud Storage Direct Write**: `FlysystemStorage::store()` bypasses the atomic temp+move pattern for S3/R2/GCS/Azure disks, writing directly via `writeStream()`. Fixes `io_move_failed` CopyObject failures on Cloudflare R2 and compatible stores. Local disks retain the atomic pattern for crash safety.
 - **Blob Lookup Fix**: `BlobRepository::findByUuidWithDeleteFilter()` rewritten to use explicit three-parameter `where('status', '!=', 'deleted')` instead of array-format `['!=', 'deleted']` which the query builder treated as `=`.
