@@ -21,6 +21,21 @@ class RequestHelper
     {
         self::$context = $context;
     }
+
+    /**
+     * Resolve Request from the DI container instead of creating from globals.
+     */
+    private static function resolveRequest(): Request
+    {
+        if (self::$context !== null && self::$context->hasContainer()) {
+            return self::$context->getContainer()->get(Request::class);
+        }
+
+        throw new \RuntimeException(
+            'Request cannot be resolved without ApplicationContext. '
+            . 'Call RequestHelper::setContext() first.'
+        );
+    }
     /**
      * Get request data (POST/PUT/PATCH) with automatic JSON parsing
      *
@@ -29,7 +44,7 @@ class RequestHelper
      */
     public static function getRequestData(?Request $request = null): array
     {
-        $request = $request ?? Request::createFromGlobals();
+        $request = $request ?? self::resolveRequest();
         $contentType = $request->headers->get('Content-Type', '');
 
         if (str_contains($contentType, 'application/json')) {
@@ -48,7 +63,7 @@ class RequestHelper
      */
     public static function getPutData(?Request $request = null): array
     {
-        $request = $request ?? Request::createFromGlobals();
+        $request = $request ?? self::resolveRequest();
         $contentType = $request->headers->get('Content-Type', '');
 
         if (str_contains($contentType, 'application/json')) {
@@ -70,7 +85,7 @@ class RequestHelper
      */
     public static function isAdminRequest(?Request $request = null, ?ApplicationContext $context = null): bool
     {
-        $request = $request ?? Request::createFromGlobals();
+        $request = $request ?? self::resolveRequest();
         $requestUri = $request->getRequestUri();
 
         // Check if URL path contains /admin segment

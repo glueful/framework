@@ -21,6 +21,14 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.33.0 — Gacrux (Released 2026-02-14)
+- **Container-Enforced Request Resolution**: Eliminated all `fromGlobals()` / `createFromGlobals()` fallbacks from 15 service files. Auth services (`TokenManager`, `JwtAuthenticationProvider`, `SessionStore`, `EmailVerification`, `AuthenticationService`) and utility services (`RequestHelper`, `Utils`, `Cors`, `SpaManager`, `UserRepository`, `SecurityManager`) now resolve `RequestContext`/`Request` from the DI container's shared singleton.
+- **Memory Safety**: Fixes unbounded memory growth on high-header requests where multiple independent `fromGlobals()` calls each reconstructed PSR-7 request objects from `$_SERVER` superglobals.
+- **Long-Running Server Compatibility**: Services no longer read stale `$_SERVER` globals — all request data comes from the container-managed singleton that is reset between requests.
+- **Silent Fallback Removal**: `SessionStoreResolver` and `TokenManager::getSessionStore()` no longer silently construct bare `SessionStore()` instances on container failure — errors surface immediately with clear messages.
+- **`SessionStoreInterface::resetRequestCache()`**: Added to interface; removes `method_exists()` guard in `TokenManager`.
+- Notes: No breaking changes for container-wired services. Direct instantiation without context now throws `\RuntimeException` instead of silently degrading.
+
 ### 1.32.0 — Fomalhaut (Released 2026-02-11)
 - **Schema Builder `alterTable` Callback API**: `alterTable()` now accepts an optional callback parameter, mirroring the `createTable` dual-mode pattern. Without a callback, returns a fluent `TableBuilder` (unchanged). With a callback, applies alterations and auto-executes, returning `$this` for chaining.
 - **ColumnBuilder Finalization Fix**: `gc_collect_cycles()` called before execute to ensure `ColumnBuilder` destructors register columns via `finalizeColumn()` before ALTER SQL is generated.

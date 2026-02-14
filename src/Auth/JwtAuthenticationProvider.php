@@ -156,9 +156,24 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
         }
     }
 
+    /**
+     * Resolve RequestContext from the DI container.
+     */
+    private function resolveRequestContext(): RequestContext
+    {
+        if ($this->context !== null && $this->context->hasContainer()) {
+            return $this->context->getContainer()->get(RequestContext::class);
+        }
+
+        throw new \RuntimeException(
+            'RequestContext cannot be resolved: ApplicationContext or container unavailable. '
+            . 'Ensure JwtAuthenticationProvider is instantiated with a valid ApplicationContext.'
+        );
+    }
+
     private function extractTokenFromRequest(?RequestContext $requestContext = null): ?string
     {
-        $requestContext = $requestContext ?? RequestContext::fromGlobals();
+        $requestContext = $requestContext ?? $this->resolveRequestContext();
         $authorization_header = $requestContext->getAuthorizationHeader();
 
         if (($authorization_header === null || $authorization_header === '') && function_exists('getallheaders')) {

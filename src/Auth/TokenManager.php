@@ -11,7 +11,6 @@ use Glueful\Helpers\CacheHelper;
 use Glueful\Http\RequestContext;
 use Glueful\Auth\Interfaces\AuthenticationProviderInterface;
 use Glueful\Auth\Interfaces\SessionStoreInterface;
-use Glueful\Auth\Utils\SessionStoreResolver;
 
 /**
  * Token Management System
@@ -91,8 +90,12 @@ class TokenManager
                 throw new \RuntimeException('Container unavailable without ApplicationContext.');
             }
             return $store;
-        } catch (\Throwable) {
-            return new SessionStore();
+        } catch (\Throwable $e) {
+            throw new \RuntimeException(
+                'SessionStore could not be resolved from container: ' . $e->getMessage(),
+                0,
+                $e
+            );
         }
     }
 
@@ -101,10 +104,7 @@ class TokenManager
      */
     public function resetRequestCache(): void
     {
-        $store = $this->getSessionStore();
-        if (method_exists($store, 'resetRequestCache')) {
-            $store->resetRequestCache();
-        }
+        $this->getSessionStore()->resetRequestCache();
     }
 
     /**
@@ -193,7 +193,7 @@ class TokenManager
         ?string $provider = null,
         ?RequestContext $requestContext = null
     ): bool {
-        $requestContext = $requestContext ?? RequestContext::fromGlobals();
+        $requestContext = $requestContext ?? $this->resolveRequestContext();
 
         // Get the authentication manager instance
         $authManager = $this->getAuthManager();
@@ -279,7 +279,7 @@ class TokenManager
         ?string $provider = null,
         ?RequestContext $requestContext = null
     ): ?array {
-        $requestContext = $requestContext ?? RequestContext::fromGlobals();
+        $requestContext = $requestContext ?? $this->resolveRequestContext();
         // Get session data from refresh token
         $sessionData = $this->getSessionFromRefreshToken($refreshToken);
 
@@ -646,7 +646,7 @@ class TokenManager
      */
     public function extractTokenFromRequest(?RequestContext $requestContext = null): ?string
     {
-        $requestContext = $requestContext ?? RequestContext::fromGlobals();
+        $requestContext = $requestContext ?? $this->resolveRequestContext();
         $authorization_header = $requestContext->getAuthorizationHeader();
 
         // Fallback to getallheaders() (case-insensitive)
@@ -780,6 +780,24 @@ class TokenManager
         }
 
         return $providers;
+    }
+
+    /**
+     * Resolve RequestContext from the DI container.
+     *
+     * Replaces the previous fallback to RequestContext::fromGlobals() which
+     * rebuilt PSR-7 requests from superglobals on every call.
+     */
+    private function resolveRequestContext(): RequestContext
+    {
+        if ($this->context !== null && $this->context->hasContainer()) {
+            return $this->context->getContainer()->get(RequestContext::class);
+        }
+
+        throw new \RuntimeException(
+            'RequestContext cannot be resolved: ApplicationContext or container unavailable. '
+            . 'Ensure TokenManager is instantiated with a valid ApplicationContext.'
+        );
     }
 
     private function getConfig(string $key, mixed $default = null): mixed

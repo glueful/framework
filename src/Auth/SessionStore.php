@@ -51,7 +51,19 @@ class SessionStore implements SessionStoreInterface
         $this->context = $context;
         $this->cache = $cache ?? CacheHelper::createCacheInstance();
         $this->db = $db ?? Connection::fromContext($context);
-        $this->requestContext = $requestContext ?? RequestContext::fromGlobals();
+
+        // Resolve RequestContext: prefer explicit param, then container, then fail
+        if ($requestContext !== null) {
+            $this->requestContext = $requestContext;
+        } elseif ($context !== null && $context->hasContainer()) {
+            $this->requestContext = $context->getContainer()->get(RequestContext::class);
+        } else {
+            throw new \RuntimeException(
+                'RequestContext is required for SessionStore. '
+                . 'Provide it directly or ensure ApplicationContext has a booted container.'
+            );
+        }
+
         $this->useTransactions = $useTransactions;
         $this->cacheDefaultTtl = (int) $this->getConfig('session.access_token_lifetime', 900);
     }

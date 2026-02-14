@@ -181,9 +181,15 @@ class Cors
      */
     public function handle($request = null): bool
     {
-       // Check for empty $request and use fallback if needed
+       // Resolve request from container if not provided
         if ($request === null) {
-            $request = Request::createFromGlobals();
+            if ($this->context !== null && $this->context->hasContainer()) {
+                $request = $this->context->getContainer()->get(Request::class);
+            } else {
+                throw new \RuntimeException(
+                    'CORS handler requires a Request instance or ApplicationContext with a container.'
+                );
+            }
         }
         $origin = $request->headers->get('Origin', '');
 

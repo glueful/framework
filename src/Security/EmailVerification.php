@@ -68,7 +68,18 @@ class EmailVerification
         ?ApplicationContext $context = null
     ) {
         $this->context = $context;
-        $this->requestContext = $requestContext ?? RequestContext::fromGlobals();
+
+        // Resolve RequestContext: prefer explicit param, then container
+        if ($requestContext !== null) {
+            $this->requestContext = $requestContext;
+        } elseif ($context !== null && $context->hasContainer()) {
+            $this->requestContext = $context->getContainer()->get(RequestContext::class);
+        } else {
+            throw new \RuntimeException(
+                'RequestContext is required for EmailVerification. '
+                . 'Provide it directly or ensure ApplicationContext has a booted container.'
+            );
+        }
         $this->cache = $cache ?? CacheHelper::createCacheInstance();
 
         if ($this->cache === null) {
@@ -471,13 +482,13 @@ class EmailVerification
      * Handles password reset flow with verification using notification system.
      *
      * @param string $email User email address
+     * @param ApplicationContext|null $context Application context for container resolution
      * @return array{success: bool, message: string, error_code?: string} Operation result with status
      */
-    public static function sendPasswordResetEmail(string $email): array
+    public static function sendPasswordResetEmail(string $email, ?ApplicationContext $context = null): array
     {
         try {
-            $requestContext = RequestContext::fromGlobals();
-            $verifier = new self($requestContext, CacheHelper::createCacheInstance());
+            $verifier = new self(context: $context);
 
             if (!$verifier->isValidEmail($email)) {
                 return [
