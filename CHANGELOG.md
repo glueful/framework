@@ -4,6 +4,29 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.35.0] - 2026-02-14 — Izar
+
+Cloud storage compatibility and blob retrieval fixes. Resolves S3/R2 upload failures caused by the atomic temp-file-then-move write pattern, fixes blob lookup returning false 404s due to incorrect query builder operator handling, and surfaces storage error details in API responses.
+
+### Fixed
+
+- **S3/R2 upload failures (`io_move_failed`)**: `FlysystemStorage::store()` now writes directly via `writeStream()` for cloud disks (S3, GCS, Azure) instead of using the atomic temp+move pattern (`putStream`). The move step performs a CopyObject operation that fails on Cloudflare R2 and some S3-compatible stores. Local disks continue to use the atomic pattern for crash safety.
+- **`BlobRepository::findByUuidWithDeleteFilter` returning null for existing blobs**: The method passed `['status' => ['!=', 'deleted']]` to `findWhere()`, but the query builder's array-format `where()` always uses the `=` operator — the `['!=', 'deleted']` array value was compared with `=` instead of `!=`, producing no results. Rewritten to use explicit three-parameter format: `->where('status', '!=', 'deleted')`.
+- **Storage error messages hidden in API responses**: `FlysystemStorage::store()` now always includes the underlying exception message in the `UploadException` (`Storage write failed: <details>`). Previously, non-`FilesystemException` errors returned a generic "Storage write failed" with no diagnostic information.
+- **Base64 uploads producing `.bin` file extensions**: `UploadController` hardcoded the default filename as `upload.bin` for base64 uploads without an explicit `filename`. The `generateSecureFilename()` method extracted `bin` as a valid extension and never fell back to the MIME type lookup. Now the MIME type is resolved first and used to derive the correct extension (e.g., `image/png` → `.png`).
+
+### Added
+
+- **`FlysystemStorage::isCloudDisk()` helper**: Checks the disk driver config to determine whether to use direct writes (cloud) or atomic temp+move (local). Supports `s3`, `gcs`, and `azure` drivers.
+- **`UploadController::extensionFromMime()` helper**: Maps common MIME types (`image/png`, `image/jpeg`, `video/mp4`, `audio/mpeg`, `application/pdf`, etc.) to their proper file extensions for base64 uploads.
+
+### Notes
+
+- No breaking changes. Cloud uploads that previously failed with `io_move_failed` now succeed.
+- The `BlobRepository` fix affects any code using `findByUuidWithDeleteFilter()` — blobs that were incorrectly returning 404 will now resolve correctly.
+
+---
+
 ## [1.34.0] - 2026-02-14 — Hamal
 
 Hardened the authentication pipeline and DI wiring for blob uploads, queue serialization, and user resolution. Fixes a critical bug where the auth middleware swallowed downstream controller exceptions as 401 "Authentication error occurred", and resolves multiple DI registration gaps that prevented `UploadController` from being constructed.

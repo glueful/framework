@@ -26,15 +26,30 @@ class FlysystemStorage implements StorageInterface
         }
 
         try {
-            $this->storage->putStream($destinationPath, $stream, $this->disk);
-        } catch (\Throwable $e) {
-            if ($e instanceof FilesystemException) {
-                throw new UploadException('Storage write failed: ' . $e->getMessage(), 0, $e);
+            if ($this->isCloudDisk()) {
+                // Cloud storage (S3/R2/GCS): write directly — atomic temp+move
+                // pattern causes CopyObject failures on some S3-compatible stores
+                $this->storage->disk($this->disk)->writeStream($destinationPath, $stream);
+            } else {
+                // Local storage: use atomic temp+move for crash safety
+                $this->storage->putStream($destinationPath, $stream, $this->disk);
             }
-            throw new UploadException('Storage write failed', 0, $e);
+        } catch (\Throwable $e) {
+            throw new UploadException('Storage write failed: ' . $e->getMessage(), 0, $e);
+        } finally {
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
         }
 
         return $destinationPath;
+    }
+
+    private function isCloudDisk(): bool
+    {
+        $cfg = $this->urls->diskConfig($this->disk);
+        $driver = $cfg['driver'] ?? 'local';
+        return in_array($driver, ['s3', 'gcs', 'azure'], true);
     }
 
     public function storeContent(string $content, string $destinationPath): string
