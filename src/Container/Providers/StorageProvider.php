@@ -50,6 +50,35 @@ final class StorageProvider extends BaseServiceProvider
         // String alias for convenience
         $defs['storage'] = new AliasDefinition('storage', \Glueful\Storage\StorageManager::class);
 
+        // FileUploader with config-driven defaults
+        $defs[\Glueful\Uploader\FileUploader::class] = new FactoryDefinition(
+            \Glueful\Uploader\FileUploader::class,
+            function (): \Glueful\Uploader\FileUploader {
+                $uploadsDir = (string) (\function_exists('config')
+                    ? \config($this->context, 'uploads.path_prefix', 'uploads')
+                    : 'uploads');
+                $cdnBaseUrl = (string) (\function_exists('config')
+                    ? \config($this->context, 'uploads.cdn_base_url', '')
+                    : '');
+                $disk = (string) (\function_exists('config')
+                    ? \config($this->context, 'uploads.disk', 'uploads')
+                    : 'uploads');
+                return new \Glueful\Uploader\FileUploader($uploadsDir, $cdnBaseUrl, $disk, $this->context);
+            }
+        );
+
+        // UploadController
+        $defs[\Glueful\Controllers\UploadController::class] = new FactoryDefinition(
+            \Glueful\Controllers\UploadController::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Controllers\UploadController(
+                $c->get(\Glueful\Bootstrap\ApplicationContext::class),
+                $c->get(\Glueful\Uploader\FileUploader::class),
+                $c->get(\Glueful\Repository\BlobRepository::class),
+                $c->get(\Glueful\Storage\StorageManager::class),
+                $c->get(\Glueful\Storage\Support\UrlGenerator::class)
+            )
+        );
+
         return $defs;
     }
 }

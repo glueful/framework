@@ -4,6 +4,34 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.34.0] - 2026-02-14 — Hamal
+
+Hardened the authentication pipeline and DI wiring for blob uploads, queue serialization, and user resolution. Fixes a critical bug where the auth middleware swallowed downstream controller exceptions as 401 "Authentication error occurred", and resolves multiple DI registration gaps that prevented `UploadController` from being constructed.
+
+### Fixed
+
+- **Auth middleware no longer swallows controller exceptions**: `$next($request)` moved outside the `try/catch(\Exception)` block in `AuthMiddleware::handle()`. Previously, any exception thrown by downstream middleware or the controller (e.g., missing DI binding, storage error) was caught by the generic handler and returned as `"Authentication error occurred"` with a misleading 401 status. Controller exceptions now propagate correctly to the framework's exception handler.
+- **`Utils::getUser()` no longer requires legacy `role`/`info` JWT claims**: The method previously returned `null` when the JWT payload lacked `role` and `info` fields (check: `isset($payload['uuid'], $payload['role'], $payload['info'])`). Now only `uuid` is required; `role` defaults to `null` and `info` defaults to `[]`. This fixes `UploadController` and other controllers returning false "Authentication required" after successful middleware auth.
+- **`Utils::getUser()` checks request attributes first**: Before decoding the JWT, the method now checks if the auth middleware already set the authenticated user on the Symfony Request's attributes (`$request->attributes->get('user')`). This avoids redundant token extraction via `RequestContext` which could fail on certain server configurations.
+- **Auth token extraction falls back to Symfony Request**: Both `AuthMiddleware::extractAuthenticationCredentials()` and `JwtAuthenticationProvider::authenticate()` now fall back to extracting the Bearer token from the Symfony `Request` object when `TokenManager`/`RequestContext`-based extraction returns null. Fixes authentication failures on server configurations where the PSR-7 `RequestContext` doesn't capture the `Authorization` header (e.g., certain Apache CGI/FastCGI + multipart combinations).
+- **Queue `DriverRegistry` serialization crash**: `DriverRegistry::getDriver()` used `serialize($config)` to build a cache key, which threw `"Serialization of 'Closure' is not allowed"` when queue config contained connection factories. Replaced with `json_encode()` filtered to scalar/array values.
+- **`AuthMiddleware::logAccess` error handling**: Changed `catch (\Error)` to `catch (\Throwable)` around the `$this->authManager->logAccess()` call, preventing `\Exception` subclasses from bubbling up as auth errors.
+
+### Changed
+
+- **`AuthenticationService` removed user tracking columns**: Removed `ip_address`, `user_agent`, `x_forwarded_for_ip_address`, and `last_login_date` UPDATE on the `users` table during login. This tracking data is already stored in `auth_sessions` via `createUserSession()`. Eliminates `SQLSTATE[42703]: Undefined column` errors on databases without these legacy columns.
+
+### Added
+
+- **`UploadController` DI registration**: `StorageProvider` now registers `FileUploader` and `UploadController` as factory definitions in the container, with config-driven constructor parameters (`uploads.path_prefix`, `uploads.cdn_base_url`, `uploads.disk`). Fixes `"Service 'Glueful\Controllers\UploadController' not found"` when the autowirer couldn't resolve `FileUploader`'s string constructor parameters.
+
+### Notes
+
+- No breaking changes. All fixes are backward-compatible.
+- The `Utils::getUser()` change means code relying on `$user['role']` or `$user['info']` being non-null should use null-safe access (`$user['role'] ?? 'default'`).
+
+---
+
 ## [1.33.0] - 2026-02-14 — Gacrux
 
 Eliminated all `fromGlobals()` / `createFromGlobals()` fallbacks from service code, enforcing container-based request resolution throughout the framework. This fixes unbounded memory growth on high-header requests (PSR-7 `MessageTrait` crash at 512MB) and makes the framework compatible with long-running servers where `$_SERVER` superglobals become stale.

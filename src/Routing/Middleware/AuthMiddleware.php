@@ -153,11 +153,9 @@ class AuthMiddleware implements RouteMiddleware
             // Log access if auth manager supports it
             try {
                 $this->authManager->logAccess($user, $request);
-            } catch (\Error) {
-                // Method doesn't exist, ignore silently
+            } catch (\Throwable) {
+                // Method doesn't exist or logging failed, ignore silently
             }
-
-            return $next($request);
         } catch (AuthenticationException $e) {
             return $this->handleAuthenticationException($e, $request, $requestId);
         } catch (PermissionUnauthorizedException $e) {
@@ -167,6 +165,11 @@ class AuthMiddleware implements RouteMiddleware
             $this->logError('Unexpected error in auth middleware', $e, $request, $requestId);
             return $this->unauthorized('Authentication error occurred');
         }
+
+        // Call next middleware/controller OUTSIDE the auth try/catch
+        // so downstream exceptions propagate correctly instead of being
+        // swallowed as "Authentication error occurred"
+        return $next($request);
     }
 
     /**
@@ -179,10 +182,15 @@ class AuthMiddleware implements RouteMiddleware
     {
         // Use TokenManager for consistent token extraction across framework
         if (class_exists('\\Glueful\\Auth\\TokenManager')) {
-            return $this->getTokenManager()->extractTokenFromRequest();
+            $token = $this->getTokenManager()->extractTokenFromRequest();
+            if ($token !== null) {
+                return $token;
+            }
         }
 
-        // Fallback for environments without TokenManager (shouldn't happen in normal usage)
+        // Fallback: extract directly from the Symfony Request
+        // This handles cases where the PSR-7 RequestContext doesn't have
+        // the Authorization header (e.g., certain server configurations)
         return $this->extractTokenFallback($request);
     }
 

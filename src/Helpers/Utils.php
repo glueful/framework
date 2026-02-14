@@ -7,8 +7,6 @@ namespace Glueful\Helpers;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Security\RandomStringGenerator;
 use Glueful\Cache\CacheStore;
-use PDO;
-use PDOException;
 use Glueful\Auth\SessionCacheManager;
 use Glueful\Auth\JWTService;
 
@@ -209,6 +207,28 @@ class Utils
      */
     public static function getUser(?string $token = null): ?array
     {
+        // First check if the auth middleware already set the user on the request
+        if (self::$context !== null && self::$context->hasContainer()) {
+            try {
+                $container = self::$context->getContainer();
+                if ($container->has('request')) {
+                    $request = $container->get('request');
+                    if ($request instanceof \Symfony\Component\HttpFoundation\Request) {
+                        $user = $request->attributes->get('user');
+                        if (is_array($user) && isset($user['uuid'])) {
+                            return [
+                                'uuid' => $user['uuid'],
+                                'role' => $user['role'] ?? null,
+                                'info' => $user['info'] ?? [],
+                            ];
+                        }
+                    }
+                }
+            } catch (\Throwable) {
+                // Fall through to token-based extraction
+            }
+        }
+
         if ($token === null || $token === '') {
             // Try to get token from container-resolved RequestContext
             if (self::$context !== null && self::$context->hasContainer()) {
@@ -225,14 +245,14 @@ class Utils
             // Decode token
             $payload = JWTService::decode($token);
 
-            if (!isset($payload['uuid'], $payload['role'], $payload['info'])) {
+            if (!isset($payload['uuid'])) {
                 return null;
             }
 
             return [
                 'uuid' => $payload['uuid'],
-                'role' => $payload['role'],
-                'info' => $payload['info']
+                'role' => $payload['role'] ?? null,
+                'info' => $payload['info'] ?? [],
             ];
         } catch (\Exception $e) {
             return null;

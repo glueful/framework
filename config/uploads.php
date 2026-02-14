@@ -16,7 +16,7 @@ return [
     'max_size' => env('UPLOADS_MAX_SIZE', 10 * 1024 * 1024),
 
     // Storage path prefix
-    'path_prefix' => env('UPLOADS_PATH_PREFIX', 'uploads'),
+    'path_prefix' => env('UPLOADS_PATH_PREFIX', ''),
 
     // Access control mode:
     // - true/'private': Auth required for upload AND retrieval

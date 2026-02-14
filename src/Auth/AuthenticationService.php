@@ -205,31 +205,6 @@ class AuthenticationService
         // Pass through remember_me preference from credentials
         $userData['remember_me'] = $credentials['remember_me'] ?? false;
 
-        // Update user tracking fields in the database
-        try {
-            // Get request information for tracking via container
-            $clientIp = 'unknown';
-            $userAgent = 'unknown';
-            $xForwardedFor = null;
-            if ($this->context !== null && $this->context->hasContainer()) {
-                $requestContext = $this->context->getContainer()->get(\Glueful\Http\RequestContext::class);
-                $clientIp = $requestContext->getClientIp();
-                $userAgent = $requestContext->getUserAgent();
-                $xForwardedFor = $requestContext->getServerParam('HTTP_X_FORWARDED_FOR');
-            }
-            // Update user record with tracking information
-            $this->userRepository->update($userData['uuid'], [
-                'ip_address' => $clientIp,
-                'user_agent' => substr($userAgent, 0, 512), // Limit to field size
-                'x_forwarded_for_ip_address' => ($xForwardedFor !== null && $xForwardedFor !== '')
-                    ? substr($xForwardedFor, 0, 40) : null,
-                'last_login_date' => date('Y-m-d H:i:s')
-            ]);
-        } catch (\Exception $e) {
-            // Log the error but don't fail authentication
-            error_log("Failed to update user tracking fields: " . $e->getMessage());
-        }
-
         // Add any custom provider preference from credentials
         $preferredProvider = $providerName ?? ($credentials['provider'] ?? 'jwt');
 
