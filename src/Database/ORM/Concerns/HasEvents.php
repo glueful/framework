@@ -36,9 +36,9 @@ use Glueful\Events\EventService;
 trait HasEvents
 {
     /**
-     * User registered model events using closures
+     * User registered model events using closures, keyed by class name and event.
      *
-     * @var array<string, array<callable>>
+     * @var array<string, array<string, array<callable>>>
      */
     protected static array $modelEventCallbacks = [];
 
@@ -90,10 +90,9 @@ trait HasEvents
             return false;
         }
 
-        if (isset(static::$modelEventCallbacks[$event])) {
-            foreach (static::$modelEventCallbacks[$event] as $callback) {
-                $callback($this);
-            }
+        $classCallbacks = static::$modelEventCallbacks[static::class][$event] ?? [];
+        foreach ($classCallbacks as $callback) {
+            $callback($this);
         }
 
         return true;
@@ -325,13 +324,16 @@ trait HasEvents
      */
     protected static function registerModelEvent(string $event, callable $callback): void
     {
-        $eventClass = (new static())->getEventClass($event);
+        $validEvents = [
+            'retrieved', 'creating', 'created', 'updating', 'updated',
+            'saving', 'saved', 'deleting', 'deleted',
+        ];
 
-        if ($eventClass === null) {
+        if (!in_array($event, $validEvents, true)) {
             return;
         }
 
-        static::$modelEventCallbacks[$event][] = $callback;
+        static::$modelEventCallbacks[static::class][$event][] = $callback;
     }
 
     /**

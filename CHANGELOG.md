@@ -4,6 +4,27 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.36.0] - 2026-02-14 — Jabbah
+
+Model event isolation and base64 upload file extension fix. Resolves a critical bug where ORM model event callbacks leaked across unrelated model classes, and removes an unnecessary model instantiation during event registration that caused "No database connection" errors at boot time.
+
+### Fixed
+
+- **Model event callbacks leaking across classes**: `HasEvents::$modelEventCallbacks` was a flat `[$event => [callbacks]]` array shared by all Model subclasses. A `creating` callback registered in `EntityType::boot()` (type-hinted for `EntityType`) would also fire when `Entity` was created, causing a `TypeError`. Callbacks are now keyed by `[className][event]` so each model only fires its own listeners.
+- **`registerModelEvent` instantiating model without DB context**: The method called `new static()` to validate the event name via `getEventClass()`, which triggered the model constructor and could fail with "No database connection available" when no `ApplicationContext` was set. Replaced with a simple `in_array` check against known event names — no model instantiation needed.
+- **Base64 uploads producing `.bin` file extensions**: `UploadController` hardcoded the default filename as `upload.bin` for base64 uploads without an explicit `filename`. The `generateSecureFilename()` method extracted `bin` as a valid extension and never fell back to the MIME type lookup. Now the MIME type is resolved first and used to derive the correct extension (e.g., `image/png` → `.png`).
+
+### Added
+
+- **`UploadController::extensionFromMime()` helper**: Maps common MIME types (`image/png`, `image/jpeg`, `video/mp4`, `audio/mpeg`, `application/pdf`, etc.) to their proper file extensions for base64 uploads.
+
+### Notes
+
+- No breaking changes. The event scoping fix is backwards-compatible — models that only register their own events see no behavior change.
+- The base64 extension fix applies to all new uploads; existing blobs with `.bin` extensions are unaffected.
+
+---
+
 ## [1.35.0] - 2026-02-14 — Izar
 
 Cloud storage compatibility and blob retrieval fixes. Resolves S3/R2 upload failures caused by the atomic temp-file-then-move write pattern, fixes blob lookup returning false 404s due to incorrect query builder operator handling, and surfaces storage error details in API responses.
