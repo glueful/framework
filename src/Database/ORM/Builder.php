@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Database\ORM;
 
 use Closure;
+use Glueful\Database\ORM\Contracts\ExtendsBuilder;
 use Glueful\Database\ORM\Contracts\Scope;
 use Glueful\Database\QueryBuilder;
 use Glueful\Http\Exceptions\Domain\ModelNotFoundException;
@@ -86,7 +87,7 @@ class Builder
     /**
      * Set the model instance being queried
      *
-     * @param TModel $model
+     * @param Model $model
      * @return static
      */
     public function setModel(Model $model): static
@@ -96,8 +97,7 @@ class Builder
 
         // Extend the builder with global scope methods (macros)
         foreach ($model::getGlobalScopes() as $scope) {
-            if ($scope instanceof Scope && method_exists($scope, 'extend')) {
-                /** @phpstan-ignore-next-line Scope::extend is optional, checked via method_exists */
+            if ($scope instanceof ExtendsBuilder) {
                 $scope->extend($this);
             }
         }
@@ -108,7 +108,7 @@ class Builder
     /**
      * Get the model instance being queried
      *
-     * @return TModel
+     * @return Model
      */
     public function getModel(): Model
     {
@@ -129,7 +129,7 @@ class Builder
      * Execute the query and get all results as a collection
      *
      * @param array<string> $columns
-     * @return Collection<TModel>
+     * @return Collection<Model>
      */
     public function get(array $columns = ['*']): Collection
     {
@@ -157,7 +157,7 @@ class Builder
      * Execute the query and get the first result
      *
      * @param array<string> $columns
-     * @return TModel|null
+     * @return Model|null
      */
     public function first(array $columns = ['*']): ?Model
     {
@@ -168,7 +168,7 @@ class Builder
      * Execute the query and get the first result or throw an exception
      *
      * @param array<string> $columns
-     * @return TModel
+     * @return Model
      * @throws ModelNotFoundException
      */
     public function firstOrFail(array $columns = ['*']): Model
@@ -188,7 +188,7 @@ class Builder
      *
      * @param mixed $id
      * @param array<string> $columns
-     * @return TModel|null
+     * @return Model|null
      */
     public function find(mixed $id, array $columns = ['*']): ?Model
     {
@@ -204,7 +204,7 @@ class Builder
      *
      * @param array<mixed> $ids
      * @param array<string> $columns
-     * @return Collection<TModel>
+     * @return Collection
      */
     public function findMany(array $ids, array $columns = ['*']): Collection
     {
@@ -220,7 +220,7 @@ class Builder
      *
      * @param mixed $id
      * @param array<string> $columns
-     * @return TModel
+     * @return Model
      * @throws ModelNotFoundException
      */
     public function findOrFail(mixed $id, array $columns = ['*']): Model
@@ -240,7 +240,7 @@ class Builder
      *
      * @param mixed $id
      * @param array<string> $columns
-     * @return TModel
+     * @return Model
      */
     public function findOrNew(mixed $id, array $columns = ['*']): Model
     {
@@ -254,7 +254,7 @@ class Builder
      *
      * @param array<string, mixed> $attributes
      * @param array<string, mixed> $values
-     * @return TModel
+     * @return Model
      */
     public function firstOrCreate(array $attributes, array $values = []): Model
     {
@@ -275,7 +275,7 @@ class Builder
      *
      * @param array<string, mixed> $attributes
      * @param array<string, mixed> $values
-     * @return TModel
+     * @return Model
      */
     public function firstOrNew(array $attributes, array $values = []): Model
     {
@@ -293,7 +293,7 @@ class Builder
      *
      * @param array<string, mixed> $attributes
      * @param array<string, mixed> $values
-     * @return TModel
+     * @return Model
      */
     public function updateOrCreate(array $attributes, array $values = []): Model
     {
@@ -314,7 +314,7 @@ class Builder
      * Create a new model instance with the given attributes
      *
      * @param array<string, mixed> $attributes
-     * @return TModel
+     * @return Model
      */
     public function create(array $attributes = []): Model
     {
@@ -393,7 +393,7 @@ class Builder
      * Hydrate an array of database results into models
      *
      * @param array<array<string, mixed>> $results
-     * @return array<TModel>
+     * @return array<Model>
      */
     public function hydrate(array $results): array
     {
@@ -409,8 +409,8 @@ class Builder
     /**
      * Eager load the relationships for the models
      *
-     * @param array<TModel> $models
-     * @return array<TModel>
+     * @param array<Model> $models
+     * @return array<Model>
      */
     protected function eagerLoadRelations(array $models): array
     {
@@ -449,10 +449,10 @@ class Builder
     /**
      * Eagerly load a single relation for models
      *
-     * @param array<TModel> $models
+     * @param array<Model> $models
      * @param string $name
      * @param Closure|null $constraints
-     * @return array<TModel>
+     * @return array<Model>
      */
     protected function eagerLoadRelation(array $models, string $name, ?Closure $constraints): array
     {
@@ -484,10 +484,10 @@ class Builder
     /**
      * Eagerly load a nested relation
      *
-     * @param array<TModel> $models
+     * @param array<Model> $models
      * @param array<string> $parts
      * @param Closure|null $constraints
-     * @return array<TModel>
+     * @return array<Model>
      */
     protected function eagerLoadNestedRelation(array $models, array $parts, ?Closure $constraints): array
     {
@@ -872,7 +872,7 @@ class Builder
     /**
      * Eager load relations for an array of models (called from Collection)
      *
-     * @param array<TModel> $models
+     * @param array<Model> $models
      * @param array<string> $relations
      * @return void
      */
@@ -1228,7 +1228,7 @@ class Builder
      */
     public function forPage(int $page, int $perPage = 15): static
     {
-        return $this->offset(($page - 1) * $perPage)->limit($perPage);
+        return $this->limit($perPage)->offset(($page - 1) * $perPage);
     }
 
     /**

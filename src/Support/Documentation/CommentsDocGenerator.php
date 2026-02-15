@@ -772,7 +772,7 @@ class CommentsDocGenerator
 
         $schema = [
             'type' => 'object',
-            'properties' => $properties
+            'properties' => $properties === [] ? new \stdClass() : $properties
         ];
 
         if ($required !== []) {
@@ -1012,7 +1012,7 @@ class CommentsDocGenerator
 
         return [
             'type' => $type,
-            'properties' => $properties
+            'properties' => $properties === [] ? new \stdClass() : $properties
         ];
     }
 

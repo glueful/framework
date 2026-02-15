@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Database\ORM\Scopes;
 
 use Glueful\Database\ORM\Builder;
+use Glueful\Database\ORM\Contracts\ExtendsBuilder;
 use Glueful\Database\ORM\Contracts\Scope;
 use Glueful\Database\ORM\Contracts\SoftDeletable;
 use Glueful\Database\ORM\Model;
@@ -16,7 +17,7 @@ use Glueful\Database\ORM\Model;
  * from query results. This scope is applied to all models using the
  * SoftDeletes trait.
  */
-class SoftDeletingScope implements Scope
+class SoftDeletingScope implements Scope, ExtendsBuilder
 {
     /**
      * All of the extensions to be added to the builder

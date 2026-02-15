@@ -614,7 +614,8 @@ final class CoreProvider extends BaseServiceProvider
             \Glueful\Api\Webhooks\WebhookDispatcher::class,
             fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Api\Webhooks\WebhookDispatcher(
                 $c->get('database'),
-                $c->get(\Glueful\Api\Webhooks\Contracts\WebhookPayloadInterface::class)
+                $c->get(\Glueful\Api\Webhooks\Contracts\WebhookPayloadInterface::class),
+                $this->context
             )
         );
 

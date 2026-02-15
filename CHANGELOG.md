@@ -4,6 +4,38 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.37.0] - 2026-02-15 — Kaus
+
+Deferred extension commands, ORM Builder fixes, webhook DI wiring, and documentation generation improvements. Resolves extension CLI commands silently failing when registered before the console application exists, fixes OFFSET-without-LIMIT query errors in the ORM Builder, and hardens the OpenAPI documentation pipeline for CLI usage.
+
+### Fixed
+
+- **ORM `Builder::forPage()` OFFSET-without-LIMIT error**: Changed `offset()->limit()` to `limit()->offset()` so `QueryValidator` no longer throws "OFFSET requires LIMIT" when paginating ORM queries.
+- **Extension CLI commands silently dropped**: `ServiceProvider::commands()` and `discoverCommands()` previously returned silently when `console.application` wasn't in the container. Extension commands registered during `boot()` before the console app was created were lost. Now deferred into a static `$deferredCommands` array and picked up by `ConsoleApplication`.
+- **WebhookDispatcher missing `ApplicationContext`**: The `CoreProvider` factory for `WebhookDispatcher` was missing `$this->context` as the 3rd constructor argument, causing "ApplicationContext is required for webhook dispatch" errors.
+- **OpenAPI generator failing in CLI**: `OpenApiGenerator` passed no context when constructing `DocGenerator`, causing `api_url()` to fail. Now passes `context: $context`.
+- **`DocGenerator` server URL blank in CLI**: Added a fallback chain for the server URL: `api_url()` → `app.urls.base` config → discovered URL from merged definition files → `"/"`.
+- **Empty properties rendered as `[]` instead of `{}` in OpenAPI JSON**: `CommentsDocGenerator` now outputs `new \stdClass()` for empty `$properties` arrays in two locations (`extractSimplifiedRequestBody` and `parseSimplifiedSchema`), producing valid `{}` in JSON output.
+
+### Added
+
+- **`ExtendsBuilder` interface** (`src/Database/ORM/Contracts/ExtendsBuilder.php`): Contract for scopes that add macros or behaviors to the ORM Builder. Replaces `method_exists($scope, 'extend')` checks with a proper interface.
+- **`ServiceProvider::flushDeferredCommands()`**: Static method for the console application to retrieve and clear extension command classes that were registered before the console app existed.
+- **`DocGenerator::$discoveredServerUrl`**: Captures the first server URL from merged definition files as a fallback when `api_url()` and config are unavailable.
+
+### Changed
+
+- **`SoftDeletingScope` implements `ExtendsBuilder`**: Now declares the `ExtendsBuilder` interface instead of relying on duck-typing for the `extend()` method.
+- **`Builder::setModel()` uses `ExtendsBuilder` interface**: Checks `$scope instanceof ExtendsBuilder` instead of `method_exists($scope, 'extend')` for registering scope macros.
+- **`ConsoleApplication` registers deferred commands**: Constructor now calls `registerDeferredExtensionCommands()` which flushes deferred commands from `ServiceProvider` and registers them with the console.
+
+### Notes
+
+- No breaking changes. Extension commands that were silently dropped now register correctly.
+- The `ExtendsBuilder` interface is opt-in — scopes without it continue to work as global scopes, they just won't extend the builder with macros.
+
+---
+
 ## [1.36.0] - 2026-02-14 — Jabbah
 
 Model event isolation and base64 upload file extension fix. Resolves a critical bug where ORM model event callbacks leaked across unrelated model classes, and removes an unnecessary model instantiation during event registration that caused "No database connection" errors at boot time.
