@@ -248,13 +248,20 @@ abstract class ServiceProvider
      */
     protected function commands(array $commands): void
     {
-        if (!$this->runningInConsole() || !$this->app->has('console.application')) {
+        if (!$this->runningInConsole()) {
             return;
         }
-        $console = $this->app->get('console.application');
-        foreach ($commands as $class) {
-            $console->add($this->app->get($class));
+
+        if ($this->app->has('console.application')) {
+            $console = $this->app->get('console.application');
+            foreach ($commands as $class) {
+                $console->add($this->app->get($class));
+            }
+            return;
         }
+
+        // Console app not yet created — defer command classes for later pickup
+        $this->deferCommandClasses($commands);
     }
 
     /**
@@ -283,7 +290,7 @@ abstract class ServiceProvider
      */
     protected function discoverCommands(string $namespace, string $directory): void
     {
-        if (!$this->runningInConsole() || !$this->app->has('console.application')) {
+        if (!$this->runningInConsole()) {
             return;
         }
 
@@ -298,23 +305,26 @@ abstract class ServiceProvider
             return;
         }
 
-        $console = $this->app->get('console.application');
+        if ($this->app->has('console.application')) {
+            $console = $this->app->get('console.application');
 
-        foreach ($commands as $class) {
-            try {
-                // Resolve from container to get dependency injection
-                if ($this->app->has($class)) {
-                    $command = $this->app->get($class);
-                } else {
-                    // Fallback: instantiate directly if not in container
-                    $command = new $class();
+            foreach ($commands as $class) {
+                try {
+                    if ($this->app->has($class)) {
+                        $command = $this->app->get($class);
+                    } else {
+                        $command = new $class();
+                    }
+                    $console->add($command);
+                } catch (\Throwable $e) {
+                    error_log("[Extensions] Failed to register command {$class}: " . $e->getMessage());
                 }
-                $console->add($command);
-            } catch (\Throwable $e) {
-                // Log and continue - don't break extension loading for one bad command
-                error_log("[Extensions] Failed to register command {$class}: " . $e->getMessage());
             }
+            return;
         }
+
+        // Console app not yet created — defer command classes for later pickup
+        $this->deferCommandClasses($commands);
     }
 
     /**
@@ -410,6 +420,38 @@ abstract class ServiceProvider
         } catch (\ReflectionException) {
             return false;
         }
+    }
+
+    /**
+     * Store command classes for deferred registration.
+     *
+     * When extensions boot before the ConsoleApplication is created,
+     * command classes are stored here and picked up later by
+     * ConsoleApplication::registerDeferredExtensionCommands().
+     *
+     * @param array<string> $classes
+     */
+    private function deferCommandClasses(array $classes): void
+    {
+        self::$deferredCommands = array_merge(self::$deferredCommands, $classes);
+    }
+
+    /** @var array<string> Command class names waiting for ConsoleApplication */
+    private static array $deferredCommands = [];
+
+    /**
+     * Get and clear all deferred extension command classes.
+     *
+     * Called by ConsoleApplication to register commands that were
+     * discovered during extension boot before the console app existed.
+     *
+     * @return array<string>
+     */
+    public static function flushDeferredCommands(): array
+    {
+        $commands = self::$deferredCommands;
+        self::$deferredCommands = [];
+        return $commands;
     }
 
     protected function runningInConsole(): bool

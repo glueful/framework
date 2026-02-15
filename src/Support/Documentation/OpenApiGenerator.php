@@ -48,7 +48,7 @@ class OpenApiGenerator
         ?ResourceRouteExpander $resourceExpander = null
     ) {
         $this->context = $context;
-        $this->docGenerator = $docGenerator ?? new DocGenerator();
+        $this->docGenerator = $docGenerator ?? new DocGenerator(context: $context);
         $this->commentsGenerator = $commentsGenerator ?? new CommentsDocGenerator($context);
         $this->fileFinder = $fileFinder ?? container($this->context)->get(FileFinder::class);
         $this->runFromConsole = $runFromConsole || $this->isConsole();

@@ -21,6 +21,14 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.37.0 — Kaus (Released 2026-02-15)
+- **Deferred Extension Commands**: `ServiceProvider::commands()` and `discoverCommands()` no longer silently drop commands when the console application isn't yet created. Commands are stored in a static `$deferredCommands` array and picked up by `ConsoleApplication` on construction via `flushDeferredCommands()`.
+- **ORM Builder `forPage()` Fix**: Changed `offset()->limit()` to `limit()->offset()` so `QueryValidator` doesn't throw "OFFSET requires LIMIT" during pagination.
+- **`ExtendsBuilder` Interface**: New contract (`Contracts\ExtendsBuilder`) for scopes that add macros to the ORM Builder, replacing duck-typed `method_exists()` checks. `SoftDeletingScope` implements it.
+- **WebhookDispatcher DI Fix**: `CoreProvider` factory now passes `ApplicationContext` as the 3rd argument.
+- **OpenAPI Documentation Hardening**: `DocGenerator` receives context from `OpenApiGenerator` for CLI usage. Server URL fallback chain: `api_url()` → config → discovered URL → `"/"`. Empty properties now render as `{}` instead of `[]` in generated JSON.
+- Notes: No breaking changes. Extension CLI commands that were previously lost now register correctly.
+
 ### 1.36.0 — Jabbah (Released 2026-02-14)
 - **Model Event Isolation**: `HasEvents::$modelEventCallbacks` now keyed by `[className][event]` instead of flat `[$event]`. Prevents event callbacks registered in one model (e.g., `EntityType::creating`) from firing on unrelated models (e.g., `Entity`).
 - **Boot-safe Event Registration**: `registerModelEvent()` no longer calls `new static()` to validate event names. Eliminates "No database connection" errors when models boot without `ApplicationContext`.

@@ -5,6 +5,7 @@ namespace Glueful\Console;
 use Symfony\Component\Console\Application as BaseApplication;
 use Symfony\Component\Console\Command\Command;
 use Psr\Container\ContainerInterface;
+use Glueful\Extensions\ServiceProvider;
 use Glueful\Support\Version;
 
 /**
@@ -44,6 +45,7 @@ class Application extends BaseApplication
 
         $this->container = $container;
         $this->registerCommands();
+        $this->registerDeferredExtensionCommands();
         $this->configureApplication();
     }
 
@@ -68,6 +70,33 @@ class Application extends BaseApplication
                 if ($command instanceof Command) {
                     $this->addCommand($command);
                 }
+            }
+        }
+    }
+
+    /**
+     * Register Extension Commands
+     *
+     * Picks up command classes that extensions discovered during boot()
+     * before this ConsoleApplication was created. Extensions store them
+     * via ServiceProvider::flushDeferredCommands().
+     *
+     * @return void
+     */
+    private function registerDeferredExtensionCommands(): void
+    {
+        foreach (ServiceProvider::flushDeferredCommands() as $class) {
+            try {
+                if ($this->container->has($class)) {
+                    $command = $this->container->get($class);
+                } else {
+                    $command = new $class();
+                }
+                if ($command instanceof Command) {
+                    $this->addCommand($command);
+                }
+            } catch (\Throwable $e) {
+                error_log("[Extensions] Failed to register deferred command {$class}: " . $e->getMessage());
             }
         }
     }

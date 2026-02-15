@@ -24,6 +24,9 @@ class DocGenerator
     /** @var array<string, mixed> Extension tags storage */
     private array $extensionTags = [];
 
+    /** @var string|null Server URL discovered from merged definition files */
+    private ?string $discoveredServerUrl = null;
+
     /** @var ResourceRouteExpander|null Resource route expander for {resource} expansion */
     private ?ResourceRouteExpander $resourceExpander = null;
 
@@ -599,6 +602,15 @@ class DocGenerator
                 $this->extensionTags[] = $tag;
             }
         }
+
+        // Capture server URL from definition files as fallback
+        if ($this->discoveredServerUrl === null
+            && isset($definition['servers'][0]['url'])
+            && is_string($definition['servers'][0]['url'])
+            && $definition['servers'][0]['url'] !== ''
+        ) {
+            $this->discoveredServerUrl = $definition['servers'][0]['url'];
+        }
     }
 
     /**
@@ -616,6 +628,12 @@ class DocGenerator
         }
         if ($baseUrl === '') {
             $baseUrl = rtrim((string) $this->getConfig('app.urls.base', ''), '/');
+        }
+        if ($baseUrl === '' && $this->discoveredServerUrl !== null) {
+            $baseUrl = $this->discoveredServerUrl;
+        }
+        if ($baseUrl === '') {
+            $baseUrl = '/';
         }
 
         $swagger = [
