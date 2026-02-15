@@ -604,7 +604,8 @@ class DocGenerator
         }
 
         // Capture server URL from definition files as fallback
-        if ($this->discoveredServerUrl === null
+        if (
+            $this->discoveredServerUrl === null
             && isset($definition['servers'][0]['url'])
             && is_string($definition['servers'][0]['url'])
             && $definition['servers'][0]['url'] !== ''
