@@ -494,6 +494,12 @@ class AuthenticationService
      */
     public function refreshTokens(string $refreshToken): ?array
     {
+        // Resolve session once so downstream steps can reuse request-level cache.
+        $session = $this->sessionStore->getByRefreshToken($refreshToken);
+        if ($session === null) {
+            return null;
+        }
+
         // Get new token pair from TokenManager
         $tokens = $this->tokenManager->refreshTokens($refreshToken);
 
@@ -501,8 +507,8 @@ class AuthenticationService
             return null;
         }
 
-        // Get user data from refresh token
-        $userData = $this->getUserDataFromRefreshToken($refreshToken);
+        // Get user data from session user UUID
+        $userData = $this->getUserDataByUuid((string) ($session['user_uuid'] ?? ''));
 
         if ($userData === null) {
             return null;
@@ -551,48 +557,29 @@ class AuthenticationService
     }
 
     /**
-     * Get user data from refresh token
+     * Get user data from user UUID
      *
-     * Retrieves user information associated with a refresh token by querying
-     * the auth_sessions table for an active session, then fetching the full
-     * user profile from the users table.
+     * Retrieves full user information for token refresh response payload.
      *
      * **Security considerations:**
-     * - Only active sessions are considered valid
-     * - Refresh tokens are unique and securely generated
      * - User data is sanitized before return
      *
      * **Process:**
-     * 1. Query auth_sessions for active session with refresh token
-     * 2. Extract user_uuid from session record
-     * 3. Fetch complete user profile from users table
-     * 4. Return sanitized user data
+     * 1. Fetch complete user profile from users table
+     * 2. Return sanitized user data
      *
-     * @param string $refreshToken The refresh token to look up
+     * @param string $userUuid User UUID from validated session
      * @return array<string, mixed>|null User data array with profile information, or null if token is invalid/expired
-     * @throws \Glueful\Exceptions\DatabaseException If database query fails
-     * @throws \PDOException If database connection fails
-     * @throws \InvalidArgumentException If refresh token format is invalid
      */
     /**
      * @return array<string, mixed>|null
      */
-    private function getUserDataFromRefreshToken(string $refreshToken): ?array
+    private function getUserDataByUuid(string $userUuid): ?array
     {
-        // Use existing database connection with fluent interface
-        $db = new \Glueful\Database\Connection();
-
-        $result = $db->table('auth_sessions')
-            ->select(['user_uuid'])
-            ->where(['refresh_token' => $refreshToken, 'status' => 'active'])
-            ->limit(1)
-            ->get();
-
-        if ($result === []) {
+        if ($userUuid === '') {
             return null;
         }
 
-        $userUuid = $result[0]['user_uuid'];
         $user = $this->userRepository->findByUuid($userUuid);
 
         if ($user === null || $user === []) {

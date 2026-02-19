@@ -21,6 +21,12 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.38.0 — Lesath (Released 2026-02-17)
+- **Token-Refresh DB Lookup Reduction**: `TokenManager::getSessionFromRefreshToken()` now fetches `provider` and `remember_me` in the initial query, eliminating two subsequent `auth_sessions` lookups that re-fetched these fields during token refresh.
+- **AuthenticationService DI Cleanup**: `refreshTokens()` resolves the session via `SessionStore::getByRefreshToken()` up front instead of querying `auth_sessions` independently. Removed direct `new Connection()` instantiation in favour of the injected `UserRepository`.
+- **Request-Level Refresh-Token Cache**: `SessionStore::getByRefreshToken()` now caches results in `$requestCache` (keyed by `refresh:{hash}`), matching the existing `getByAccessToken()` pattern.
+- Notes: No breaking changes. All modified methods are private/internal to the auth subsystem.
+
 ### 1.37.0 — Kaus (Released 2026-02-15)
 - **Deferred Extension Commands**: `ServiceProvider::commands()` and `discoverCommands()` no longer silently drop commands when the console application isn't yet created. Commands are stored in a static `$deferredCommands` array and picked up by `ConsoleApplication` on construction via `flushDeferredCommands()`.
 - **ORM Builder `forPage()` Fix**: Changed `offset()->limit()` to `limit()->offset()` so `QueryValidator` doesn't throw "OFFSET requires LIMIT" during pagination.
