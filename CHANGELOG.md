@@ -4,6 +4,27 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.38.0] - 2026-02-17 — Lesath
+
+Auth token-refresh performance optimization. Eliminates redundant `auth_sessions` database lookups during token refresh by reusing session metadata from the initial query, removes direct `new Connection()` instantiation in favour of DI-resolved services, and adds request-level caching for refresh-token session lookups.
+
+### Changed
+
+- **`TokenManager::getSessionFromRefreshToken()` fetches `provider` and `remember_me`**: The initial session lookup now selects `provider` and `remember_me` alongside `user_uuid`, `created_at`, and `refresh_expires_at`. Two subsequent `auth_sessions` queries that re-fetched these fields are removed.
+- **`AuthenticationService::refreshTokens()` resolves session up front**: Calls `SessionStore::getByRefreshToken()` at the top of the method and early-returns on `null`. Downstream `getUserDataByUuid()` receives the `user_uuid` directly from the cached session instead of querying `auth_sessions` again.
+- **`AuthenticationService::getUserDataFromRefreshToken()` renamed to `getUserDataByUuid()`**: Accepts a `user_uuid` string instead of a refresh token. Eliminates the third redundant `auth_sessions` lookup and removes direct `new Connection()` instantiation in favour of the injected `UserRepository`.
+
+### Added
+
+- **Request-level caching for `SessionStore::getByRefreshToken()`**: Mirrors the existing `getByAccessToken()` pattern — results are stored in `$requestCache` keyed by `refresh:{hash}` so repeated calls within the same request hit memory instead of the database.
+
+### Notes
+
+- No breaking changes. All modified methods are `private` or internal to the auth subsystem.
+- The composite index `idx_auth_sessions_refresh_status` on `(refresh_token, status)` should be added to production databases to complement these lookup optimizations.
+
+---
+
 ## [1.37.0] - 2026-02-15 — Kaus
 
 Deferred extension commands, ORM Builder fixes, webhook DI wiring, and documentation generation improvements. Resolves extension CLI commands silently failing when registered before the console application exists, fixes OFFSET-without-LIMIT query errors in the ORM Builder, and hardens the OpenAPI documentation pipeline for CLI usage.

@@ -301,16 +301,10 @@ class TokenManager
             }
         }
 
-        // If no explicit provider but we have stored provider in session
+        // If no explicit provider but we have a provider stored in session
         if ($tokens === null) {
-            $db = $this->getDb();
-            $result = $db->table('auth_sessions')
-                ->select(['provider'])
-                ->where(['refresh_token' => $refreshToken])
-                ->get();
-
-            if ($result !== [] && isset($result[0]['provider']) && $result[0]['provider'] !== 'jwt') {
-                $storedProvider = $result[0]['provider'];
+            $storedProvider = (string) ($sessionData['provider'] ?? 'jwt');
+            if ($storedProvider !== 'jwt') {
                 if ($authManager !== null) {
                     $authProvider = $authManager->getProvider($storedProvider);
                     if ($authProvider !== null) {
@@ -322,14 +316,8 @@ class TokenManager
 
         // Default to standard JWT token generation for backward compatibility
         if ($tokens === null) {
-            // Get remember_me and provider to determine token lifetime via SessionStore
-            $db = $this->getDb();
-            $sessionResult = $db->table('auth_sessions')
-                ->select(['remember_me', 'provider'])
-                ->where(['refresh_token' => $refreshToken])
-                ->get();
-            $rememberMe = (bool)($sessionResult[0]['remember_me'] ?? false);
-            $providerName = (string)($sessionResult[0]['provider'] ?? 'jwt');
+            $rememberMe = (bool) ($sessionData['remember_me'] ?? false);
+            $providerName = (string) ($sessionData['provider'] ?? 'jwt');
             $store = $this->getSessionStore();
             $accessTokenLifetime = $store->getAccessTtl($providerName, $rememberMe);
             $refreshTokenLifetime = $store->getRefreshTtl($providerName, $rememberMe);
@@ -349,14 +337,14 @@ class TokenManager
      * @return array|null Session data or null if invalid
      */
     /**
-     * @return array{uuid: string, created_at: string}|null
+     * @return array{uuid: string, created_at: string, remember_me?: bool, provider?: string}|null
      */
     private function getSessionFromRefreshToken(string $refreshToken): ?array
     {
         $db = $this->getDb();
 
         $result = $db->table('auth_sessions')
-            ->select(['user_uuid', 'access_token', 'created_at', 'refresh_expires_at'])
+            ->select(['user_uuid', 'created_at', 'refresh_expires_at', 'provider', 'remember_me'])
             ->where(['refresh_token' => $refreshToken, 'status' => 'active'])
             ->get();
 
@@ -377,7 +365,9 @@ class TokenManager
 
         return [
             'uuid' => $session['user_uuid'],
-            'created_at' => $session['created_at']
+            'created_at' => $session['created_at'],
+            'provider' => (string) ($session['provider'] ?? 'jwt'),
+            'remember_me' => (bool) ($session['remember_me'] ?? false),
         ];
     }
 

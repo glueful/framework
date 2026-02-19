@@ -253,11 +253,18 @@ class SessionStore implements SessionStoreInterface
 
     public function getByRefreshToken(string $refreshToken): ?array
     {
+        $requestCacheKey = 'refresh:' . $this->hashToken($refreshToken);
+        if (array_key_exists($requestCacheKey, $this->requestCache)) {
+            return $this->requestCache[$requestCacheKey];
+        }
+
         if ($this->cache !== null) {
             $tokenKey = $this->hashToken($refreshToken);
             $cached = $this->resolveCacheReference("session_refresh_{$tokenKey}");
             if ($cached !== null) {
-                return json_decode($cached, true);
+                $session = json_decode($cached, true);
+                $this->requestCache[$requestCacheKey] = $session;
+                return $session;
             }
         }
         $result = $this->db->table($this->sessionTable)
@@ -265,18 +272,21 @@ class SessionStore implements SessionStoreInterface
             ->where(['refresh_token' => $refreshToken, 'status' => 'active'])
             ->get();
         if ($result === []) {
+            $this->requestCache[$requestCacheKey] = null;
             return null;
         }
         $session = $result[0];
         if (isset($session['refresh_expires_at'])) {
             $expiresAt = strtotime((string) $session['refresh_expires_at']);
             if ($expiresAt !== false && $expiresAt < time()) {
+                $this->requestCache[$requestCacheKey] = null;
                 return null;
             }
         }
         if ($this->cache !== null) {
             $this->cacheSessionData($session, null, $refreshToken);
         }
+        $this->requestCache[$requestCacheKey] = $session;
         return $session;
     }
 
