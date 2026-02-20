@@ -18,7 +18,8 @@ return [
     'jwt_key' => env('JWT_KEY'),        // REQUIRED: Strong random key for JWT signing
 
     // JWT Settings
-    'jwt_algorithm' => env('JWT_ALGORITHM', 'HS256'),  // JWT signing algorithm
+    // Allowed algorithms: HS256, HS384, HS512
+    'jwt_algorithm' => env('JWT_ALGORITHM', 'HS256'),
 
     // Session Cleanup Settings
     // Common Retention Periods:
@@ -30,6 +31,8 @@ return [
     'cleanup_batch_size' => env('SESSION_CLEANUP_BATCH_SIZE', 1000),       // Batch size for cleanup operations
     'cleanup' => [
         'revoked_retention_days' => env('REVOKED_SESSION_RETENTION_DAYS', 14),  // How long to keep revoked sessions
+        // How long to keep consumed/revoked refresh rows
+        'refresh_token_retention_days' => env('REFRESH_TOKEN_RETENTION_DAYS', 30),
     ],
     'providers' => [
         // 'jwt' => [

@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Glueful\Http;
 
 use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Auth\AuthenticatedUser;
 use Glueful\Auth\TokenManager;
 use Glueful\Auth\SessionCacheManager;
-use Glueful\Models\User;
 
 /**
  * Request User Context
@@ -65,8 +65,8 @@ class RequestUserContext
     /** @var array<string, mixed>|null Cached session data */
     private ?array $sessionData = null; // @phpstan-var AuthSessionPayload|null
 
-    /** @var User|null Cached user object */
-    private ?User $user = null;
+    /** @var AuthenticatedUser|null Cached user object */
+    private ?AuthenticatedUser $user = null;
 
     /** @var array<string, bool> Cached permission results */
     private array $permissionCache = [];
@@ -147,21 +147,19 @@ class RequestUserContext
                 $sessionCacheManager = container(self::$context)->get(SessionCacheManager::class);
                 $this->sessionData = $sessionCacheManager->getOptimizedSession($this->token, $context);
                 if ($this->sessionData) {
-                    // If session has complete user data, use it
-                    if (isset($this->sessionData['user']) && isset($this->sessionData['user']['username'])) {
-                        $this->user = User::fromArray($this->sessionData['user']);
-                    } else {
-                        // Extract user data from JWT token
-                        $userData = $this->extractUserDataFromToken($this->token);
-                        if ($userData !== null) {
-                            $this->user = User::fromArray($userData);
-                        }
-                    }
+                    // Session is the source of truth for runtime user context.
+                    $this->user = $this->buildUserFromSession($this->sessionData);
 
                     if ($this->user !== null) {
                         $this->isAuthenticated = true;
                         // Pre-cache user capabilities with enhanced permission data
                         $this->loadUserCapabilities();
+                    }
+                } else {
+                    // Last-resort fallback when session lookup is unavailable.
+                    $this->user = $this->buildUserFromToken($this->token);
+                    if ($this->user !== null) {
+                        $this->isAuthenticated = true;
                     }
                 }
             }
@@ -177,9 +175,9 @@ class RequestUserContext
     /**
      * Get authenticated user
      *
-     * @return User|null Authenticated user or null
+     * @return AuthenticatedUser|null Authenticated user or null
      */
-    public function getUser(): ?User
+    public function getUser(): ?AuthenticatedUser
     {
         $this->initialize();
         return $this->user;
@@ -566,16 +564,32 @@ class RequestUserContext
         $this->userCapabilities = array_merge($this->userCapabilities, $capabilities);
     }
 
-    /**
-     * Extract user data from JWT token
-     *
-     * @param string $token JWT token
-     * @return array<string, mixed>|null User data or null if extraction fails
-     */
-    /**
-     * @return array<string, mixed>|null
-     */
-    private function extractUserDataFromToken(string $token): ?array
+    /** @param array<string, mixed> $sessionData */
+    private function buildUserFromSession(array $sessionData): ?AuthenticatedUser
+    {
+        $sessionUser = is_array($sessionData['user'] ?? null) ? $sessionData['user'] : [];
+        $userUuid = isset($sessionUser['uuid'])
+            ? (string) $sessionUser['uuid']
+            : (string) ($sessionData['user_uuid'] ?? '');
+        if ($userUuid === '') {
+            return null;
+        }
+
+        $roles = is_array($sessionUser['roles'] ?? null) ? $sessionUser['roles'] : [];
+        $permissions = is_array($sessionUser['permissions'] ?? null) ? $sessionUser['permissions'] : [];
+
+        return new AuthenticatedUser(
+            uuid: $userUuid,
+            sessionUuid: isset($sessionData['id']) ? (string) $sessionData['id'] : null,
+            provider: isset($sessionData['provider']) ? (string) $sessionData['provider'] : null,
+            username: isset($sessionUser['username']) ? (string) $sessionUser['username'] : null,
+            email: isset($sessionUser['email']) ? (string) $sessionUser['email'] : null,
+            roles: $roles,
+            permissions: $permissions
+        );
+    }
+
+    private function buildUserFromToken(string $token): ?AuthenticatedUser
     {
         try {
             $jwtPayload = \Glueful\Auth\JWTService::decode($token);
@@ -583,31 +597,18 @@ class RequestUserContext
                 return null;
             }
 
-            // Map JWT payload to User model fields
-            return [
-            'uuid' => $jwtPayload['uuid'],
-            'id' => $jwtPayload['id'] ?? $jwtPayload['uuid'],
-            'username' => $jwtPayload['username'],
-            'email' => $jwtPayload['email'],
-            'email_verified' => ($jwtPayload['email_verified_at'] ?? null) !== null,
-            'locale' => 'en-US', // Default locale
-            'name' => isset($jwtPayload['profile'])
-                ? trim(($jwtPayload['profile']['first_name'] ?? '') . ' ' .
-                        ($jwtPayload['profile']['last_name'] ?? ''))
-                : null,
-                'given_name' => $jwtPayload['profile']['first_name'] ?? null,
-                'family_name' => $jwtPayload['profile']['last_name'] ?? null,
-                'picture' => $jwtPayload['profile']['photo_url'] ?? null,
-                'status' => $jwtPayload['status'] ?? 'active',
-                'last_login' => $jwtPayload['last_login'] ?? null,
-                'updated_at' => isset($jwtPayload['created_at']) ? strtotime($jwtPayload['created_at']) : time(),
-                'remember_me' => $jwtPayload['remember_me'] ?? false,
-                'created_at' => $jwtPayload['created_at'] ?? null,
-                'profile' => $jwtPayload['profile'] ?? [],
-                'roles' => $jwtPayload['roles'] ?? []
-            ];
+            $userUuid = isset($jwtPayload['sub']) ? (string) $jwtPayload['sub'] : (string) ($jwtPayload['uuid'] ?? '');
+            if ($userUuid === '') {
+                return null;
+            }
+
+            return new AuthenticatedUser(
+                uuid: $userUuid,
+                sessionUuid: isset($jwtPayload['sid']) ? (string) $jwtPayload['sid'] : null,
+                provider: null
+            );
         } catch (\Exception $e) {
-            error_log("Failed to extract user data from token: " . $e->getMessage());
+            error_log("Failed to build user from token: " . $e->getMessage());
             return null;
         }
     }

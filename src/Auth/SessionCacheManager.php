@@ -497,12 +497,11 @@ class SessionCacheManager
         $store = $this->getSessionStore();
         $newTokens = [
             'access_token' => $newToken,
-            'refresh_token' => $currentSession['refresh_token'], // Keep existing refresh token
             'expires_in' => $store->getAccessTtl($sessionProvider)
         ];
 
         // Update session tokens via SessionStore
-        $success = $sessionStore->updateTokens($currentSession['refresh_token'], $newTokens);
+        $success = $sessionStore->updateTokens((string) $currentSession['uuid'], $newTokens);
 
         if ($success) {
             // Update cache session data

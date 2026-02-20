@@ -36,6 +36,8 @@ class AuthenticationService
     private PasswordHasher $passwordHasher;
     private AuthenticationManager $authManager;
     private TokenManager $tokenManager;
+    private RefreshTokenStore $refreshTokenStore;
+    private RefreshService $refreshService;
     private SessionStoreInterface $sessionStore;
     private SessionCacheManager $sessionCacheManager;
     private ?ApplicationContext $context;
@@ -72,7 +74,8 @@ class AuthenticationService
         ?PasswordHasher $passwordHasher = null,
         ?ApplicationContext $context = null,
         ?AuthenticationManager $authManager = null,
-        ?TokenManager $tokenManager = null
+        ?TokenManager $tokenManager = null,
+        ?RefreshService $refreshService = null
     ) {
         $this->context = $context;
         // Resolve SessionStore via trait helper (container with fallback)
@@ -102,6 +105,29 @@ class AuthenticationService
             $this->tokenManager = $this->context->getContainer()->get(TokenManager::class);
         } else {
             $this->tokenManager = new TokenManager($this->context, null, $this->authManager);
+        }
+
+        if ($this->context !== null && $this->context->hasContainer()) {
+            $this->refreshTokenStore = $this->context->getContainer()->get(RefreshTokenStore::class);
+        } else {
+            $this->refreshTokenStore = new RefreshTokenStore(null, $this->context);
+        }
+
+        if ($refreshService !== null) {
+            $this->refreshService = $refreshService;
+        } elseif ($this->context !== null && $this->context->hasContainer()) {
+            $this->refreshService = $this->context->getContainer()->get(RefreshService::class);
+        } else {
+            $this->refreshService = new RefreshService(
+                new RefreshTokenRepository($this->refreshTokenStore),
+                new SessionRepository(null, $this->context),
+                new AccessTokenIssuer($this->tokenManager),
+                new ProviderTokenIssuer($this->tokenManager),
+                new SessionStateCache($this->sessionStore),
+                $this->sessionStore,
+                $this->userRepository,
+                $this->context
+            );
         }
     }
 
@@ -494,66 +520,7 @@ class AuthenticationService
      */
     public function refreshTokens(string $refreshToken): ?array
     {
-        // Resolve session once so downstream steps can reuse request-level cache.
-        $session = $this->sessionStore->getByRefreshToken($refreshToken);
-        if ($session === null) {
-            return null;
-        }
-
-        // Get new token pair from TokenManager
-        $tokens = $this->tokenManager->refreshTokens($refreshToken);
-
-        if ($tokens === null || $tokens === []) {
-            return null;
-        }
-
-        // Get user data from session user UUID
-        $userData = $this->getUserDataByUuid((string) ($session['user_uuid'] ?? ''));
-
-        if ($userData === null) {
-            return null;
-        }
-
-        // Update session with new tokens using SessionStore (atomic DB + cache update)
-        $success = $this->sessionStore->updateTokens($refreshToken, $tokens);
-
-        if ($success === false) {
-            return null;
-        }
-
-        // Build OIDC-compliant user object (same as login response)
-        $oidcUser = [
-            'id' => $userData['uuid'],
-            'email' => $userData['email'] ?? null,
-            'email_verified' => (bool)($userData['email_verified_at'] ?? false),
-            'username' => $userData['username'] ?? null,
-            'locale' => $userData['locale'] ?? 'en-US',
-            'updated_at' => isset($userData['updated_at']) ? strtotime($userData['updated_at']) : time()
-        ];
-
-        // Add name fields if profile exists
-        if (isset($userData['profile'])) {
-            $firstName = $userData['profile']['first_name'] ?? '';
-            $lastName = $userData['profile']['last_name'] ?? '';
-
-            if ($firstName !== '' || $lastName !== '') {
-                $oidcUser['name'] = trim($firstName . ' ' . $lastName);
-                $oidcUser['given_name'] = ($firstName !== '' ? $firstName : null);
-                $oidcUser['family_name'] = ($lastName !== '' ? $lastName : null);
-            }
-
-            if (isset($userData['profile']['photo_url']) && $userData['profile']['photo_url'] !== '') {
-                $oidcUser['picture'] = $userData['profile']['photo_url'];
-            }
-        }
-
-        return [
-            'access_token' => $tokens['access_token'],
-            'refresh_token' => $tokens['refresh_token'],
-            'expires_in' => $tokens['expires_in'],
-            'token_type' => 'Bearer',
-            'user' => $oidcUser
-        ];
+        return $this->refreshService->refresh($refreshToken);
     }
 
     /**

@@ -6,7 +6,7 @@ namespace Glueful\Controllers\Traits;
 
 use Glueful\Permissions\Exceptions\UnauthorizedException;
 use Glueful\Permissions\PermissionManager;
-use Glueful\Models\User;
+use Glueful\Auth\AuthenticatedUser;
 use Glueful\Permissions\Helpers\PermissionHelper;
 use Glueful\Permissions\PermissionContext;
 use Symfony\Component\HttpFoundation\Request;
@@ -140,9 +140,9 @@ trait AuthorizationTrait
     /**
      * Get current authenticated user data
      *
-     * @return User|null Current user data
+     * @return AuthenticatedUser|null Current user data
      */
-    protected function getCurrentUser(): ?User
+    protected function getCurrentUser(): ?AuthenticatedUser
     {
         // Use cached user from CachedUserContextTrait for consistency
         return $this->getCachedUser();

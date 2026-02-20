@@ -31,6 +31,7 @@ class SessionStore implements SessionStoreInterface
     private string $sessionTable = 'auth_sessions';
     private int $cacheDefaultTtl;
     private ?ApplicationContext $context;
+    private RefreshTokenStore $refreshTokenStore;
 
     /**
      * Request-level cache to prevent N+1 queries within the same request
@@ -66,11 +67,12 @@ class SessionStore implements SessionStoreInterface
 
         $this->useTransactions = $useTransactions;
         $this->cacheDefaultTtl = (int) $this->getConfig('session.access_token_lifetime', 900);
+        $this->refreshTokenStore = new RefreshTokenStore($this->db, $context);
     }
 
     /**
      * @param array<string, mixed> $user
-     * @param array{access_token: string, refresh_token: string, expires_in?: int} $tokens
+     * @param array{access_token: string, refresh_token?: string, expires_in?: int} $tokens
      */
     public function create(array $user, array $tokens, string $provider, bool $rememberMe = false): bool
     {
@@ -85,25 +87,20 @@ class SessionStore implements SessionStoreInterface
             } else {
                 $accessExpiresAt = date('Y-m-d H:i:s', time() + (int)($tokens['expires_in'] ?? $this->cacheDefaultTtl));
             }
-            $refreshExpiresAt = date('Y-m-d H:i:s', time() + $this->getRefreshTtl($provider, $rememberMe));
-
             // Prepare DB row
             $sessionUuid = $user['session_id'] ?? Utils::generateNanoID();
             $dbSessionData = [
                 'uuid' => $sessionUuid,
                 'user_uuid' => $user['uuid'],
-                'access_token' => $tokens['access_token'],
-                'refresh_token' => $tokens['refresh_token'],
-                'access_expires_at' => $accessExpiresAt,
-                'refresh_expires_at' => $refreshExpiresAt,
+                'expires_at' => $accessExpiresAt,
                 'provider' => $provider,
                 'user_agent' => $this->requestContext?->getUserAgent(),
                 'ip_address' => $this->requestContext?->getClientIp(),
                 'status' => 'active',
                 'created_at' => date('Y-m-d H:i:s'),
                 'updated_at' => date('Y-m-d H:i:s'),
-                'last_token_refresh' => date('Y-m-d H:i:s'),
-                'token_fingerprint' => hash('sha256', $tokens['access_token']),
+                'last_seen_at' => date('Y-m-d H:i:s'),
+                'session_version' => 1,
                 'remember_me' => $rememberMe ? 1 : 0
             ];
 
@@ -114,7 +111,7 @@ class SessionStore implements SessionStoreInterface
 
             // Cache
             if ($this->cache !== null) {
-                $this->cacheSessionData($dbSessionData, $tokens['access_token'], $tokens['refresh_token']);
+                $this->cacheSessionData($dbSessionData, $tokens['access_token']);
             }
 
             if ($this->useTransactions) {
@@ -138,44 +135,33 @@ class SessionStore implements SessionStoreInterface
     }
 
     /**
-     * @param array{access_token: string, refresh_token: string, expires_in?: int} $tokens
+     * @param array{access_token: string, refresh_token?: string, expires_in?: int} $tokens
      */
-    public function updateTokens(string $sessionIdOrRefreshToken, array $tokens): bool
+    public function updateTokens(string $sessionUuid, array $tokens): bool
     {
         try {
             if ($this->useTransactions) {
                 $this->db->getPDO()->beginTransaction();
             }
 
-            $existing = $this->getByRefreshToken($sessionIdOrRefreshToken);
+            $existing = $this->getBySessionUuid($sessionUuid);
             if ($existing === null) {
                 throw new \RuntimeException('Session not found');
             }
-            if (isset($existing['refresh_expires_at'])) {
-                $expiresAt = strtotime((string) $existing['refresh_expires_at']);
-                if ($expiresAt !== false && $expiresAt < time()) {
-                    throw new \RuntimeException('Refresh token expired');
-                }
-            }
 
             $remember = (bool)($existing['remember_me'] ?? false);
-            $provider = (string)($existing['provider'] ?? 'jwt');
             $accessExpiresAt = $remember
                 ? $this->getJwtTokenExpiration($tokens['access_token'])
                 : date('Y-m-d H:i:s', time() + (int)($tokens['expires_in'] ?? $this->cacheDefaultTtl));
-            $refreshExpiresAt = date('Y-m-d H:i:s', time() + $this->getRefreshTtl($provider, $remember));
 
             $updateData = [
-                'access_token' => $tokens['access_token'],
-                'refresh_token' => $tokens['refresh_token'],
-                'access_expires_at' => $accessExpiresAt,
-                'refresh_expires_at' => $refreshExpiresAt,
-                'last_token_refresh' => date('Y-m-d H:i:s'),
-                'token_fingerprint' => hash('sha256', $tokens['access_token'])
+                'expires_at' => $accessExpiresAt,
+                'last_seen_at' => date('Y-m-d H:i:s'),
+                'updated_at' => date('Y-m-d H:i:s')
             ];
 
             $result = $this->db->table($this->sessionTable)
-                ->where(['refresh_token' => $sessionIdOrRefreshToken, 'status' => 'active'])
+                ->where(['uuid' => $sessionUuid, 'status' => 'active'])
                 ->update($updateData);
 
             if ($result <= 0) {
@@ -185,11 +171,9 @@ class SessionStore implements SessionStoreInterface
             if ($this->cache !== null) {
                 $updated = $existing;
                 $updated['access_token'] = $tokens['access_token'];
-                $updated['refresh_token'] = $tokens['refresh_token'];
-                $updated['access_expires_at'] = $accessExpiresAt;
-                $updated['refresh_expires_at'] = $refreshExpiresAt;
+                $updated['expires_at'] = $accessExpiresAt;
                 $this->clearSessionCache($existing);
-                $this->cacheSessionData($updated, $tokens['access_token'], $tokens['refresh_token']);
+                $this->cacheSessionData($updated, $tokens['access_token']);
             }
 
             if ($this->useTransactions) {
@@ -224,20 +208,30 @@ class SessionStore implements SessionStoreInterface
             }
         }
 
-        // DB fallback with expiration check
-        $now = date('Y-m-d H:i:s');
-        $result = $this->db->table($this->sessionTable)
-            ->select(['*'])
-            ->where(['access_token' => $accessToken, 'status' => 'active'])
-            ->where('access_expires_at', '>', $now)
-            ->get();
-        if ($result === []) {
+        // DB fallback via JWT session claims (sid/ver)
+        $sessionUuid = $this->extractSessionIdFromAccessToken($accessToken);
+        if ($sessionUuid === null || $sessionUuid === '') {
             $this->requestCache[$requestCacheKey] = null;
             return null;
         }
-        $session = $result[0];
+
+        $session = $this->getBySessionUuid($sessionUuid);
+        if ($session === null) {
+            $this->requestCache[$requestCacheKey] = null;
+            return null;
+        }
+
+        $now = date('Y-m-d H:i:s');
+        if (isset($session['expires_at']) && (string) $session['expires_at'] <= $now) {
+            $this->requestCache[$requestCacheKey] = null;
+            return null;
+        }
+        if (!$this->matchesSessionClaims($accessToken, $session)) {
+            $this->requestCache[$requestCacheKey] = null;
+            return null;
+        }
         if ($this->cache !== null) {
-            $this->cacheSessionData($session, $accessToken, null);
+            $this->cacheSessionData($session, $accessToken);
         }
         $this->requestCache[$requestCacheKey] = $session;
         return $session;
@@ -258,34 +252,19 @@ class SessionStore implements SessionStoreInterface
             return $this->requestCache[$requestCacheKey];
         }
 
-        if ($this->cache !== null) {
-            $tokenKey = $this->hashToken($refreshToken);
-            $cached = $this->resolveCacheReference("session_refresh_{$tokenKey}");
-            if ($cached !== null) {
-                $session = json_decode($cached, true);
-                $this->requestCache[$requestCacheKey] = $session;
-                return $session;
-            }
-        }
-        $result = $this->db->table($this->sessionTable)
-            ->select(['*'])
-            ->where(['refresh_token' => $refreshToken, 'status' => 'active'])
-            ->get();
-        if ($result === []) {
+        $refreshSession = $this->refreshTokenStore->getActiveSessionByRefreshToken($refreshToken);
+        if ($refreshSession === null) {
             $this->requestCache[$requestCacheKey] = null;
             return null;
         }
-        $session = $result[0];
-        if (isset($session['refresh_expires_at'])) {
-            $expiresAt = strtotime((string) $session['refresh_expires_at']);
-            if ($expiresAt !== false && $expiresAt < time()) {
-                $this->requestCache[$requestCacheKey] = null;
-                return null;
-            }
+
+        $sessionUuid = (string) ($refreshSession['session_uuid'] ?? '');
+        $session = $sessionUuid !== '' ? $this->getBySessionUuid($sessionUuid) : null;
+        if ($session === null) {
+            $this->requestCache[$requestCacheKey] = null;
+            return null;
         }
-        if ($this->cache !== null) {
-            $this->cacheSessionData($session, null, $refreshToken);
-        }
+
         $this->requestCache[$requestCacheKey] = $session;
         return $session;
     }
@@ -297,15 +276,21 @@ class SessionStore implements SessionStoreInterface
                 $this->db->getPDO()->beginTransaction();
             }
 
-            // Locate session by refresh or access token
-            $session = $this->getByRefreshToken($sessionIdOrToken) ?? $this->getByAccessToken($sessionIdOrToken);
+            // Locate session by UUID, access token, or refresh token.
+            $session = $this->getBySessionUuid($sessionIdOrToken)
+                ?? $this->getByAccessToken($sessionIdOrToken)
+                ?? $this->getByRefreshToken($sessionIdOrToken);
             if ($session === null) {
                 return false;
             }
 
             $result = $this->db->table($this->sessionTable)
                 ->where(['uuid' => $session['uuid']])
-                ->update(['status' => 'revoked']);
+                ->update([
+                    'status' => 'revoked',
+                    'revoked_at' => date('Y-m-d H:i:s'),
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ]);
 
             if ($result <= 0) {
                 throw new \RuntimeException('Failed to revoke session');
@@ -320,7 +305,7 @@ class SessionStore implements SessionStoreInterface
             }
 
             $this->dispatchEvent(new SessionDestroyedEvent(
-                $session['access_token'] ?? $sessionIdOrToken,
+                (string) ($session['uuid'] ?? $sessionIdOrToken),
                 $session['user_uuid'] ?? null,
                 'revoked',
                 [
@@ -385,13 +370,13 @@ class SessionStore implements SessionStoreInterface
         try {
             $expiredSessions = $this->db->table($this->sessionTable)
                 ->select(['*'])
-                ->where('refresh_expires_at', '<', $now)
+                ->where('expires_at', '<', $now)
                 ->where(['status' => 'active'])
                 ->get();
             if ($expiredSessions !== []) {
                 $ids = array_column($expiredSessions, 'uuid');
                 $placeholders = str_repeat('?,', count($ids) - 1) . '?';
-                $sql = "UPDATE {$this->sessionTable} SET status = 'expired', expired_at = ? "
+                $sql = "UPDATE {$this->sessionTable} SET status = 'expired', updated_at = ? "
                      . "WHERE uuid IN ({$placeholders})";
                 $params = array_merge([$now], $ids);
                 $stmt = $this->db->getPDO()->prepare($sql);
@@ -481,8 +466,8 @@ class SessionStore implements SessionStoreInterface
             if ($dbSession === null || $cacheSession === null) {
                 return false;
             }
-            return $dbSession['access_token'] === $cacheSession['access_token']
-                && $dbSession['refresh_token'] === $cacheSession['refresh_token'];
+            return (string) ($dbSession['uuid'] ?? '') === (string) ($cacheSession['uuid'] ?? '')
+                && (int) ($dbSession['session_version'] ?? 1) === (int) ($cacheSession['session_version'] ?? 1);
         } catch (\Throwable $e) {
             return false;
         }
@@ -608,11 +593,9 @@ class SessionStore implements SessionStoreInterface
      */
     private function clearSessionCache(array $session): void
     {
-        if (isset($session['access_token'])) {
-            $this->cache?->delete("session_token_" . $this->hashToken((string)$session['access_token']));
-        }
-        if (isset($session['refresh_token'])) {
-            $this->cache?->delete("session_refresh_" . $this->hashToken((string)$session['refresh_token']));
+        // Refresh-token cache entries are managed by RefreshTokenStore lifecycle.
+        if (isset($session['access_token']) && is_string($session['access_token'])) {
+            $this->cache?->delete("session_token_" . $this->hashToken($session['access_token']));
         }
         if (isset($session['uuid'])) {
             $this->cache?->delete("session_data_{$session['uuid']}");
@@ -626,16 +609,42 @@ class SessionStore implements SessionStoreInterface
     {
         $result = $this->db->table($this->sessionTable)
             ->select(['*'])
-            ->where(['refresh_token' => $sessionIdentifier, 'status' => 'active'])
-            ->get();
-        if ($result !== []) {
-            return $result[0];
-        }
-        $result = $this->db->table($this->sessionTable)
-            ->select(['*'])
-            ->where(['access_token' => $sessionIdentifier, 'status' => 'active'])
+            ->where(['uuid' => $sessionIdentifier, 'status' => 'active'])
             ->get();
         return $result !== [] ? $result[0] : null;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function getBySessionUuid(string $sessionUuid): ?array
+    {
+        if ($sessionUuid === '') {
+            return null;
+        }
+
+        $result = $this->db->table($this->sessionTable)
+            ->select(['*'])
+            ->where(['uuid' => $sessionUuid, 'status' => 'active'])
+            ->limit(1)
+            ->get();
+
+        return $result !== [] ? $result[0] : null;
+    }
+
+    private function extractSessionIdFromAccessToken(string $accessToken): ?string
+    {
+        if (substr_count($accessToken, '.') !== 2) {
+            return null;
+        }
+
+        $claims = JWTService::getPayloadWithoutValidation($accessToken);
+        if (!is_array($claims)) {
+            return null;
+        }
+
+        $sid = $claims['sid'] ?? null;
+        return is_string($sid) && $sid !== '' ? $sid : null;
     }
 
     private function getJwtTokenExpiration(string $jwtToken): string
@@ -666,5 +675,28 @@ class SessionStore implements SessionStoreInterface
     private function hashToken(string $token): string
     {
         return hash('sha256', $token);
+    }
+
+    /**
+     * Ensure access token claims match server-side session versioning.
+     *
+     * @param array<string, mixed> $session
+     */
+    private function matchesSessionClaims(string $accessToken, array $session): bool
+    {
+        $claims = JWTService::getPayloadWithoutValidation($accessToken);
+        if (!is_array($claims)) {
+            return true;
+        }
+
+        $sid = isset($claims['sid']) ? (string) $claims['sid'] : '';
+        $ver = isset($claims['ver']) ? (int) $claims['ver'] : 0;
+        if ($sid === '' || $ver <= 0) {
+            return false;
+        }
+
+        $sessionUuid = (string) ($session['uuid'] ?? '');
+        $sessionVersion = (int) ($session['session_version'] ?? 1);
+        return $sid === $sessionUuid && $ver === $sessionVersion;
     }
 }

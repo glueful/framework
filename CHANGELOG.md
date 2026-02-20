@@ -4,6 +4,51 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.39.0] - 2026-02-20 — Menkent
+
+Token and session management reimplementation. Replaces the legacy token/session model with a security-first architecture: hash-only refresh tokens with one-time-use rotation, session versioning for instant access-token invalidation, replay detection with session-scope revocation, and a clean service decomposition.
+
+### Added
+
+- **`RefreshService`**: Orchestrates refresh token rotation, session revalidation, replay detection, and provider dispatch in a single transactional flow.
+- **`AccessTokenIssuer`**: Lightweight wrapper for issuing access token pairs via `TokenManager` with `sid`/`ver`/`jti` JWT claims.
+- **`ProviderTokenIssuer`**: Handles non-JWT provider token refresh (LDAP, SAML adapters) during the rotation flow.
+- **`SessionRepository`**: Session state read/write/revoke/version-bump operations against `auth_sessions`.
+- **`RefreshTokenRepository`**: Repository facade over `RefreshTokenStore` for hash lookup, one-time rotation, and family revocation.
+- **`RefreshTokenStore`**: Hash-only refresh token persistence with `SELECT ... FOR UPDATE` transactional rotation, replay detection, and configurable idempotency window support.
+- **`SessionStateCache`**: Cache adapter with invalidation hooks for session state — `persistRotatedSession()` and `invalidateSession()` on revoke/version-bump.
+- **`AuthenticatedUser`**: Minimal runtime identity value object (`uuid`, `sessionUuid`, `provider`, `username`, `email`, `roles`, `permissions`) used across auth/permission checks.
+- **`tests/Integration/Auth/RefreshTokenStoreIntegrationTest.php`**: Integration tests for hash-only token persistence, one-time rotation, and replay detection using in-memory SQLite.
+- **`tests/Integration/Auth/TokenManagerSessionVersionTest.php`**: Integration tests for `sid`/`ver` claim validation and token invalidation on session version bump.
+- **`docs/TOKEN_SESSION_REIMPLEMENTATION_PLAN.md`**: Comprehensive design document covering schema contracts, runtime flows, security requirements, cache invalidation contract, cleanup policy, and blast radius estimate.
+
+### Changed
+
+- **`TokenManager`**: Issues JWT access tokens with `sid` (session UUID), `ver` (session version), and `jti` (unique token ID) claims. Validates access tokens against server-side session state and version instead of relying on fat JWT payload assumptions.
+- **`SessionStore`**: Initializes `session_version` to 1 on session creation. Adds session version validation logic for JWT claim verification.
+- **`JwtAuthenticationProvider`**: Extracts `sid`, `ver`, `jti` claims from JWT payload for session-state-based validation.
+- **`AuthProvider`**: Registers new services (`RefreshService`, `AccessTokenIssuer`, `ProviderTokenIssuer`) in the DI container.
+- **`AuthMiddleware`**: Enforces access-token validation against session state and version.
+- **`BaseController`**: `$currentUser` property typed as `AuthenticatedUser|null`.
+- **`CachedUserContextTrait`**: Imports and uses `AuthenticatedUser` with request-level caching.
+- **`RequestUserContext`**: Simplified to session-first identity hydration — extracts `sessionUuid` from JWT `sid` claim.
+- **`SessionCleanupTask`**: Expanded to clean both `auth_sessions` (expired/revoked retention) and `auth_refresh_tokens` (consumed/expired/revoked rows older than retention window).
+- **`AuthorizationTrait`**, **`FieldLevelPermissionsTrait`**, **`QueryRestrictionsTrait`**: Updated to work with new session-based auth model.
+- **`config/session.php`**: Added `cleanup_batch_size`, `revoked_retention_days`, `refresh_token_retention_days` settings.
+- **`.env.example`**: Added `JWT_KEY`, `ACCESS_TOKEN_LIFETIME`, `REFRESH_TOKEN_LIFETIME`, `TOKEN_SALT`, `JWT_ALGORITHM` entries.
+- **`JWTService`**: Generates `jti` claim for audit/tracing correlation.
+
+### Notes
+
+- **Breaking change**: Existing sessions and tokens become invalid at cutover. All users must re-authenticate after deployment.
+- The `auth_refresh_tokens` table must be created via migration. Schema contracts are documented in `docs/TOKEN_SESSION_REIMPLEMENTATION_PLAN.md`.
+- Legacy token columns (`access_token`, `refresh_token`, `access_expires_at`, `refresh_expires_at`, `last_token_refresh`, `token_fingerprint`) should be dropped from `auth_sessions` via migration.
+- Refresh tokens are stored as SHA-256 hashes only — no raw tokens at rest.
+- Replay detection revokes the entire session scope (all active refresh tokens for that `session_uuid`).
+- `jti` is used for audit/tracing only; no blocklist is required in this release.
+
+---
+
 ## [1.38.0] - 2026-02-17 — Lesath
 
 Auth token-refresh performance optimization. Eliminates redundant `auth_sessions` database lookups during token refresh by reusing session metadata from the initial query, removes direct `new Connection()` instantiation in favour of DI-resolved services, and adds request-level caching for refresh-token session lookups.

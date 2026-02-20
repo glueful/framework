@@ -39,6 +39,16 @@ class JWTService
                 throw new \RuntimeException('JWT key not configured');
             }
             self::$key = $configured;
+
+            $configuredAlgorithm = config(self::$context, 'session.jwt_algorithm', 'HS256');
+            if (!is_string($configuredAlgorithm)) {
+                throw new \RuntimeException('JWT algorithm is invalid');
+            }
+            $normalizedAlgorithm = strtoupper($configuredAlgorithm);
+            if (!in_array($normalizedAlgorithm, ['HS256', 'HS384', 'HS512'], true)) {
+                throw new \RuntimeException('Unsupported JWT algorithm. Allowed: HS256, HS384, HS512');
+            }
+            self::$algorithm = $normalizedAlgorithm;
         }
     }
 
@@ -73,12 +83,8 @@ class JWTService
         $headerEncoded = self::base64UrlEncode(json_encode($header));
         $payloadEncoded = self::base64UrlEncode(json_encode($payload));
 
-        $signature = hash_hmac(
-            'sha256',
-            $headerEncoded . '.' . $payloadEncoded,
-            self::$key,
-            true
-        );
+        $data = $headerEncoded . '.' . $payloadEncoded;
+        $signature = hash_hmac(self::getHmacAlgorithm(self::$algorithm), $data, self::$key, true);
 
         $signatureEncoded = self::base64UrlEncode($signature);
 
@@ -106,9 +112,19 @@ class JWTService
 
         [$headerEncoded, $payloadEncoded, $signatureEncoded] = $parts;
 
+        $header = json_decode(self::base64UrlDecode($headerEncoded), true);
+        if (!is_array($header)) {
+            return null;
+        }
+
+        $headerAlgorithm = isset($header['alg']) ? strtoupper((string) $header['alg']) : '';
+        if ($headerAlgorithm !== self::$algorithm) {
+            return null;
+        }
+
         // Verify signature
         $signature = hash_hmac(
-            'sha256',
+            self::getHmacAlgorithm(self::$algorithm),
             $headerEncoded . '.' . $payloadEncoded,
             self::$key,
             true
@@ -265,5 +281,14 @@ class JWTService
 
         $signatureEncoded = self::base64UrlEncode($signature);
         return $headerEncoded . '.' . $payloadEncoded . '.' . $signatureEncoded;
+    }
+
+    private static function getHmacAlgorithm(string $jwtAlgorithm): string
+    {
+        return match ($jwtAlgorithm) {
+            'HS384' => 'sha384',
+            'HS512' => 'sha512',
+            default => 'sha256',
+        };
     }
 }

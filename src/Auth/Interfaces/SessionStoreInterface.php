@@ -16,16 +16,16 @@ interface SessionStoreInterface
      * Create a new session
      *
      * @param array<string, mixed> $user User data (must include 'uuid')
-     * @param array{access_token: string, refresh_token: string, expires_in?: int} $tokens Token pair
+     * @param array{access_token: string, refresh_token?: string, expires_in?: int} $tokens Token pair
      */
     public function create(array $user, array $tokens, string $provider, bool $rememberMe = false): bool;
 
     /**
      * Update session tokens
      *
-     * @param array{access_token: string, refresh_token: string, expires_in?: int} $tokens
+     * @param array{access_token: string, refresh_token?: string, expires_in?: int} $tokens
      */
-    public function updateTokens(string $sessionIdOrRefreshToken, array $tokens): bool;
+    public function updateTokens(string $sessionUuid, array $tokens): bool;
 
     /** @return array<string, mixed>|null */
     public function getByAccessToken(string $accessToken): ?array;

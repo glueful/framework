@@ -103,8 +103,7 @@ trait QueryRestrictionsTrait
             ],
             'auth_sessions' => [
                 'ip_address' => 'admin.sessions.search_by_ip',
-                'user_agent' => 'admin.sessions.search_by_agent',
-                'token_fingerprint' => 'admin.sessions.view_tokens'
+                'user_agent' => 'admin.sessions.search_by_agent'
             ],
             'activity_logs' => [
                 'context' => 'admin.logs.search_context',

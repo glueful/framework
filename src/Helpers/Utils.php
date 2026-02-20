@@ -245,12 +245,13 @@ class Utils
             // Decode token
             $payload = JWTService::decode($token);
 
-            if (!isset($payload['uuid'])) {
+            $userUuid = isset($payload['sub']) ? (string) $payload['sub'] : (string) ($payload['uuid'] ?? '');
+            if ($userUuid === '') {
                 return null;
             }
 
             return [
-                'uuid' => $payload['uuid'],
+                'uuid' => $userUuid,
                 'role' => $payload['role'] ?? null,
                 'info' => $payload['info'] ?? [],
             ];
