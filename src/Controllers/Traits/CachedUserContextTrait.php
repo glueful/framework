@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Controllers\Traits;
 
 use Glueful\Http\RequestUserContext;
-use Glueful\Models\User;
+use Glueful\Auth\AuthenticatedUser;
 use Glueful\Permissions\Exceptions\UnauthorizedException;
 
 /**
@@ -60,9 +60,9 @@ trait CachedUserContextTrait
     /**
      * Get cached authenticated user
      *
-     * @return User|null Authenticated user or null
+     * @return AuthenticatedUser|null Authenticated user or null
      */
-    protected function getCachedUser(): ?User
+    protected function getCachedUser(): ?AuthenticatedUser
     {
         return $this->getUserContext()->getUser();
     }

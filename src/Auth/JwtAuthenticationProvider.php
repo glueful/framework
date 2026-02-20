@@ -76,14 +76,26 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
                 return null;
             }
 
-            // Use the JWT payload as user data since it contains all user information
-            $userData = $payload;
-            $userData['session_uuid'] = $sessionData['uuid'];
-            $userData['provider'] = $sessionData['provider'] ?? 'jwt';
+            // Build user context from server-side session state (minimal JWT claims only).
+            $userUuid = (string) ($payload['sub'] ?? $sessionData['user_uuid'] ?? '');
+            if ($userUuid === '') {
+                $this->lastError = 'Token missing subject claim';
+                return null;
+            }
+
+            $userData = [
+                'uuid' => $userUuid,
+                'sub' => $userUuid,
+                'sid' => (string) ($payload['sid'] ?? $sessionData['uuid'] ?? ''),
+                'ver' => (int) ($payload['ver'] ?? $sessionData['session_version'] ?? 1),
+                'jti' => (string) ($payload['jti'] ?? ''),
+                'session_uuid' => (string) ($sessionData['uuid'] ?? ''),
+                'provider' => (string) ($sessionData['provider'] ?? 'jwt'),
+            ];
 
             // Store authentication info in request attributes for middleware
             $request->attributes->set('authenticated', true);
-            $request->attributes->set('user_id', $userData['uuid'] ?? null);
+            $request->attributes->set('user_id', $userUuid);
             $request->attributes->set('user_data', $userData);
 
             return $userData;

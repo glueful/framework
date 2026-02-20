@@ -244,22 +244,12 @@ class AuthMiddleware implements RouteMiddleware
         $now = time();
 
         // Check access token expiration
-        if (isset($user['access_expires_at'])) {
-            $accessExpiresAt = is_string($user['access_expires_at'])
-                ? strtotime($user['access_expires_at'])
-                : $user['access_expires_at'];
+        if (isset($user['expires_at'])) {
+            $accessExpiresAt = is_string($user['expires_at'])
+                ? strtotime($user['expires_at'])
+                : $user['expires_at'];
 
             if ($accessExpiresAt !== false && $accessExpiresAt < $now) {
-                // Check if refresh token is available and valid
-                if (isset($user['refresh_expires_at'])) {
-                    $refreshExpiresAt = is_string($user['refresh_expires_at'])
-                        ? strtotime($user['refresh_expires_at'])
-                        : $user['refresh_expires_at'];
-
-                    if ($refreshExpiresAt !== false && $refreshExpiresAt > $now) {
-                        return $this->tokenExpired(true);
-                    }
-                }
                 return $this->sessionExpired();
             }
         }
@@ -269,7 +259,7 @@ class AuthMiddleware implements RouteMiddleware
             if (class_exists('\\Glueful\\Auth\\JWTService')) {
                 try {
                     if (call_user_func(['\\Glueful\\Auth\\JWTService', 'isExpired'], $user['access_token'])) {
-                        return $this->tokenExpired(isset($user['refresh_token']));
+                        return $this->tokenExpired(false);
                     }
                 } catch (\Exception $e) {
                     $this->logError('JWT validation failed', $e, $request);

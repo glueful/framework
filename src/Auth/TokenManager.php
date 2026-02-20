@@ -147,7 +147,8 @@ class TokenManager
     public function generateTokenPair(
         array $userData,
         ?int $accessTokenLifetime = null,
-        ?int $refreshTokenLifetime = null
+        ?int $refreshTokenLifetime = null,
+        ?string $providedRefreshToken = null
     ): array {
         if ($this->ttl === null) {
             $this->ttl = (int) $this->getConfig('session.access_token_lifetime', self::DEFAULT_TTL);
@@ -158,14 +159,17 @@ class TokenManager
         $refreshTokenLifetime = $refreshTokenLifetime ??
         $this->getConfig('session.refresh_token_lifetime', 30 * 24 * 3600); // Default 30 days
 
-        // Add remember-me indicator to token payload if applicable
-        $tokenPayload = $userData;
-        if (isset($userData['remember_me']) && (bool)$userData['remember_me'] === true) {
-            $tokenPayload['persistent'] = true;
-        }
+        // Minimal JWT by design: keep only stable identity/session claims.
+        $tokenPayload = [
+            'sub' => (string) ($userData['uuid'] ?? ''),
+            'sid' => (string) ($userData['sid'] ?? ''),
+            'ver' => (int) ($userData['ver'] ?? 0),
+        ];
 
         $accessToken = JWTService::generate($tokenPayload, $accessTokenLifetime);
-        $refreshToken = bin2hex(random_bytes(32)); // 64 character random string
+        $refreshToken = ($providedRefreshToken !== null && $providedRefreshToken !== '')
+            ? $providedRefreshToken
+            : bin2hex(random_bytes(32)); // 64 character random string
 
         // Skip audit logging for token generation - login success is sufficient
 
@@ -220,7 +224,11 @@ class TokenManager
         }
 
 
-        return $isValid;
+        if (!$isValid) {
+            return false;
+        }
+
+        return $this->validateSessionClaims($token);
     }
 
     /**
@@ -268,6 +276,8 @@ class TokenManager
      * @param string $refreshToken The current refresh token to exchange
      * @param string|null $provider Authentication provider name to use for refresh
      * @param RequestContext|null $requestContext Request context for session tracking
+     * @param array{uuid: string, created_at: string, provider?: string, remember_me?: bool}|null $sessionDataOverride
+     *     Optional session payload override for trusted internal refresh flows
      * @return array<string, mixed>|null New token pair with 'access_token' and 'refresh_token', or null if invalid
      * @throws \InvalidArgumentException If refresh token format is invalid
      * @throws \Glueful\Http\Exceptions\Domain\DatabaseException If session lookup or update fails
@@ -277,11 +287,12 @@ class TokenManager
     public function refreshTokens(
         string $refreshToken,
         ?string $provider = null,
-        ?RequestContext $requestContext = null
+        ?RequestContext $requestContext = null,
+        ?array $sessionDataOverride = null
     ): ?array {
         $requestContext = $requestContext ?? $this->resolveRequestContext();
         // Get session data from refresh token
-        $sessionData = $this->getSessionFromRefreshToken($refreshToken);
+        $sessionData = $sessionDataOverride ?? $this->getSessionFromRefreshToken($refreshToken);
 
         $isValid = $sessionData !== null;
 
@@ -341,31 +352,14 @@ class TokenManager
      */
     private function getSessionFromRefreshToken(string $refreshToken): ?array
     {
-        $db = $this->getDb();
-
-        $result = $db->table('auth_sessions')
-            ->select(['user_uuid', 'created_at', 'refresh_expires_at', 'provider', 'remember_me'])
-            ->where(['refresh_token' => $refreshToken, 'status' => 'active'])
-            ->get();
-
-        if ($result === []) {
+        $session = $this->getRefreshTokenStore()->getActiveSessionByRefreshToken($refreshToken);
+        if ($session === null) {
             return null;
-        }
-
-        // Return basic session data with user UUID
-        // The calling method will handle fetching full user data
-        // Note: We exclude access_token to prevent token wrapping
-        $session = $result[0];
-        if (isset($session['refresh_expires_at'])) {
-            $expiresAt = strtotime((string) $session['refresh_expires_at']);
-            if ($expiresAt !== false && $expiresAt < time()) {
-                return null;
-            }
         }
 
         return [
             'uuid' => $session['user_uuid'],
-            'created_at' => $session['created_at'],
+            'created_at' => $session['session_created_at'],
             'provider' => (string) ($session['provider'] ?? 'jwt'),
             'remember_me' => (bool) ($session['remember_me'] ?? false),
         ];
@@ -489,6 +483,12 @@ class TokenManager
         // Normalize user data to ensure consistent structure
         $user = $this->normalizeUserData($user, $provider);
 
+        // Generate session ID once and include session claims in JWT payload.
+        $sessionId = Utils::generateNanoID();
+        $user['session_id'] = $sessionId;
+        $user['sid'] = $sessionId;
+        $user['ver'] = 1;
+
         // Adjust token lifetime using canonical policy in SessionStore
         $rememberMe = (bool)($user['remember_me'] ?? false);
         $providerName = $provider ?? 'jwt';
@@ -513,16 +513,29 @@ class TokenManager
 
         // Store session using SessionStore for unified database/cache management
         $user['refresh_token'] = $tokens['refresh_token'];
-        $user['session_id'] = Utils::generateNanoID(); // Generate session ID once
         $user['provider'] = $provider ?? 'jwt';
         $user['remember_me'] = $user['remember_me'] ?? false;
 
-        $this->getSessionStore()->create(
+        $created = $this->getSessionStore()->create(
             $user,
             $tokens,
             $user['provider'],
             (bool)$user['remember_me']
         );
+        if ($created === false) {
+            return [];
+        }
+
+        $issued = $this->getRefreshTokenStore()->issue(
+            $user['session_id'],
+            (string) $user['uuid'],
+            (string) $tokens['refresh_token'],
+            $refreshTokenLifetime
+        );
+        if ($issued === false) {
+            $this->getRefreshTokenStore()->revokeSessionScope($user['session_id']);
+            return [];
+        }
 
         // Also store in cache for quick lookup
         $sessionCacheManager = $this->getSessionCacheManager();
@@ -571,6 +584,46 @@ class TokenManager
         ];
     }
 
+    private function validateSessionClaims(string $token): bool
+    {
+        if (substr_count($token, '.') !== 2) {
+            return true;
+        }
+
+        $claims = JWTService::getPayloadWithoutValidation($token);
+        if (!is_array($claims)) {
+            return true;
+        }
+
+        $sessionUuid = isset($claims['sid']) ? (string) $claims['sid'] : '';
+        $sessionVersion = isset($claims['ver']) ? (int) $claims['ver'] : 0;
+
+        if ($sessionUuid === '' || $sessionVersion <= 0) {
+            return false;
+        }
+
+        $result = $this->getDb()->table('auth_sessions')
+            ->select(['uuid'])
+            ->where([
+                'uuid' => $sessionUuid,
+                'status' => 'active',
+                'session_version' => $sessionVersion,
+            ])
+            ->limit(1)
+            ->get();
+
+        return $result !== [];
+    }
+
+    private function getRefreshTokenStore(): RefreshTokenStore
+    {
+        if ($this->context !== null && $this->context->hasContainer()) {
+            return container($this->context)->get(RefreshTokenStore::class);
+        }
+
+        return new RefreshTokenStore(null, $this->context);
+    }
+
 
 
     /**
@@ -585,12 +638,23 @@ class TokenManager
     {
         $db = $this->getDb();
 
+        $claims = JWTService::getPayloadWithoutValidation($token);
+        if (!is_array($claims)) {
+            return false;
+        }
+
+        $sessionUuid = isset($claims['sid']) ? (string) $claims['sid'] : '';
+        if ($sessionUuid === '') {
+            return false;
+        }
+
         $result = $db->table('auth_sessions')
             ->select(['status'])
-            ->where(['access_token' => $token])
+            ->where(['uuid' => $sessionUuid])
+            ->limit(1)
             ->get();
 
-        return $result !== [] && $result[0]['status'] === "revoked";
+        return $result !== [] && (string) ($result[0]['status'] ?? '') === 'revoked';
     }
 
     /**
@@ -603,7 +667,7 @@ class TokenManager
      */
     public function generateTokenFingerprint(string $token): string
     {
-        return hash('sha256', $token . $this->getConfig('session.fingerprint_salt', ''));
+        return hash('sha256', $token . $this->getConfig('session.token_salt', ''));
     }
 
     /**

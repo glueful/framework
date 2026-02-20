@@ -21,6 +21,15 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.39.0 — Menkent (Released 2026-02-20)
+- **Token/Session Reimplementation**: Full replacement of the token/session model with hash-only refresh tokens, one-time-use rotation in a single DB transaction, and session versioning for instant access-token invalidation.
+- **New Service Architecture**: `RefreshService`, `AccessTokenIssuer`, `ProviderTokenIssuer`, `SessionRepository`, `RefreshTokenRepository`, `RefreshTokenStore`, `SessionStateCache` decompose the monolithic auth flow into single-responsibility units.
+- **`AuthenticatedUser` Value Object**: Minimal runtime identity object used across controllers, traits, and middleware for auth/permission checks.
+- **Replay Detection**: Consumed/revoked refresh token presentation triggers session-scope revocation of all active tokens for that session.
+- **Session-First Identity Hydration**: `RequestUserContext` simplified to extract `sessionUuid` from JWT `sid` claim instead of relying on fat JWT payload assumptions.
+- **Cleanup Task Expansion**: `SessionCleanupTask` now cleans both `auth_sessions` and `auth_refresh_tokens` with configurable retention windows.
+- Notes: Breaking change — existing sessions/tokens become invalid at cutover; users must re-authenticate.
+
 ### 1.38.0 — Lesath (Released 2026-02-17)
 - **Token-Refresh DB Lookup Reduction**: `TokenManager::getSessionFromRefreshToken()` now fetches `provider` and `remember_me` in the initial query, eliminating two subsequent `auth_sessions` lookups that re-fetched these fields during token refresh.
 - **AuthenticationService DI Cleanup**: `refreshTokens()` resolves the session via `SessionStore::getByRefreshToken()` up front instead of querying `auth_sessions` independently. Removed direct `new Connection()` instantiation in favour of the injected `UserRepository`.
