@@ -21,6 +21,9 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.40.1 — Alnair (Patch, Released 2026-02-21)
+- **Config Merge Fix**: `mergeConfig()` in `helpers.php` no longer applies `array_unique()` to nested associative arrays. True lists are list-merged with dedup; associative arrays are deep-merged recursively. Fixes "Array to string conversion" warnings on config keys like `session.providers`.
+
 ### 1.40.0 — Alnair (Released 2026-02-21)
 - **Notification Split Delivery**: `NotificationService::sendSplit()` provides first-class sync/async channel separation. `send()` now supports `sync_channels`, `async_channels`, `channel_failure_policy` (`any_success`/`require_critical`/`all`), and `critical_channels`.
 - **Notification Idempotency**: Dedicated `notifications.idempotency_key` column with indexed DB lookup replaces the previous `_meta` JSON scan. Channel-level idempotency via `notification_deliveries` unique key on `(notification_uuid, channel)`.

@@ -4,6 +4,19 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.40.1] - 2026-02-21 — Alnair (Patch)
+
+### Fixed
+
+- **Config merge `array_unique()` on nested arrays**: `mergeConfig()` in `helpers.php` was applying `array_unique()` to merged arrays containing nested associative arrays (e.g., `session.providers` config blocks), causing "Array to string conversion" warnings. The merge now distinguishes true lists from associative arrays — `array_unique()` only applies when both sides are sequential lists; associative arrays are deep-merged recursively instead.
+- **Dead list-key logic removed**: Cleaned up now-unused list-key handling in the same merge function.
+
+### Notes
+
+- Patch release. No breaking changes. Fixes a regression in config merging for any config key containing nested associative arrays.
+
+---
+
 ## [1.40.0] - 2026-02-21 — Alnair
 
 Notification delivery orchestration and provisioning error semantics improvements.

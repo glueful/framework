@@ -115,10 +115,6 @@ if (!function_exists('mergeConfigs')) {
      */
     function mergeConfigs(array $framework, array $application): array
     {
-        $listKeys = [
-            'middleware', 'providers', 'extensions', 'routes', 'listeners', 'handlers'
-        ];
-
         $isAssoc = static function (array $arr): bool {
             if ($arr === []) {
                 return false;
@@ -126,14 +122,15 @@ if (!function_exists('mergeConfigs')) {
             return array_keys($arr) !== range(0, count($arr) - 1);
         };
 
-        $merge = function (array $a, array $b, array $path = []) use (&$merge, $listKeys, $isAssoc): array {
+        $merge = function (array $a, array $b, array $path = []) use (&$merge, $isAssoc): array {
             foreach ($b as $key => $value) {
                 $currentPath = array_merge($path, [$key]);
-                $treatAsList = in_array((string)$key, $listKeys, true);
 
                 if (array_key_exists($key, $a)) {
                     if (is_array($a[$key]) && is_array($value)) {
-                        if ($treatAsList || (!$isAssoc($a[$key]) && !$isAssoc($value))) {
+                        // Only apply list semantics to actual lists; associative arrays
+                        // under list-like keys (e.g. session.providers) should merge deeply.
+                        if (!$isAssoc($a[$key]) && !$isAssoc($value)) {
                             $a[$key] = array_values(array_unique(array_merge($a[$key], $value)));
                         } else {
                             $a[$key] = $merge($a[$key], $value, $currentPath);
