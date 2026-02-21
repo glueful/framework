@@ -12,6 +12,8 @@ use Glueful\Notifications\Contracts\Notifiable;
 use Glueful\Notifications\Models\Notification;
 use Glueful\Notifications\Models\NotificationPreference;
 use Glueful\Notifications\Templates\TemplateManager;
+use Glueful\Queue\Jobs\DispatchNotificationChannels;
+use Glueful\Queue\QueueManager;
 use Glueful\Repository\NotificationRepository;
 use InvalidArgumentException;
 use Glueful\Logging\LogManager;
@@ -113,66 +115,137 @@ class NotificationService implements ConfigurableInterface
         array $data = [],
         array $options = []
     ): array {
-        // Create the notification
-        $notification = $this->create($type, $notifiable, $subject, $data, $options);
-        // Save to database first
+        $idempotencyKey = $this->resolveIdempotencyKey($data, $options);
+        if ($idempotencyKey !== null && (bool)$this->getOption('idempotency_enabled') === true) {
+            $existing = $this->repository->findRecentByIdempotencyKey(
+                $notifiable->getNotifiableType(),
+                $notifiable->getNotifiableId(),
+                $type,
+                $idempotencyKey,
+                (int)$this->getOption('idempotency_ttl_seconds')
+            );
+
+            if ($existing !== null) {
+                return [
+                    'status' => 'duplicate',
+                    'idempotent' => true,
+                    'notification_uuid' => $existing->getUuid(),
+                    'notification_id' => $existing->getId(),
+                    'message' => 'Notification already processed for this idempotency key'
+                ];
+            }
+        }
+
+        $enrichedData = $this->withNotificationMeta($data, $idempotencyKey);
+        $notification = $this->create($type, $notifiable, $subject, $enrichedData, $options);
         $this->repository->save($notification);
 
-        // Track notification creation time for metrics
-        $channels = $options['channels'] ?? $this->getDefaultChannels();
-        foreach ($channels as $channel) {
+        $syncChannels = $this->resolveSyncChannels($options);
+        $asyncChannels = $this->resolveAsyncChannels($options, $syncChannels);
+        $trackedChannels = array_values(array_unique(array_merge($syncChannels, $asyncChannels)));
+        $notificationUuid = ($notification->getUuid() ?? '');
+        if ($notificationUuid !== '' && $trackedChannels !== []) {
+            $this->repository->ensureDeliveryRecords($notificationUuid, $trackedChannels);
+        }
+        foreach ($trackedChannels as $channel) {
             $this->metricsService->setNotificationCreationTime($notification->getUuid(), $channel);
         }
 
-        // Send it immediately unless scheduled for later
         if (!isset($options['schedule']) || $options['schedule'] == null) {
-            $result = $this->dispatcher->send(
-                $notification,
-                $notifiable,
-                $options['channels'] ?? null
-            );
-
-            // Update notification in database after sending
-            if ($result['status'] === 'success') {
-                $notification->markAsSent();
-                $this->repository->save($notification);
-
-                // Track successful delivery metrics for each channel
-                if (isset($result['channels'])) {
-                    foreach ($result['channels'] as $channel => $channelResult) {
-                        if ($channelResult['status'] === 'success') {
-                            // Calculate delivery time if applicable
-                            $creationTime = $this->metricsService->getNotificationCreationTime(
-                                $notification->getUuid(),
-                                $channel
-                            );
-                            if ($creationTime !== null) {
-                                $deliveryTime = time() - $creationTime;
-                                $this->metricsService->trackDeliveryTime(
-                                    $notification->getUuid(),
-                                    $channel,
-                                    $deliveryTime
-                                );
-                            }
-
-                            // Update success metrics
-                            $this->metricsService->updateSuccessRateMetrics($channel, true);
-
-                            // Clean up individual notification metrics
-                            $this->metricsService->cleanupNotificationMetrics($notification->getUuid(), $channel);
+            $syncResult = null;
+            if ($syncChannels !== []) {
+                $syncResult = $this->dispatcher->send($notification, $notifiable, $syncChannels);
+                if ($notificationUuid !== '' && isset($syncResult['channels']) && is_array($syncResult['channels'])) {
+                    foreach ($syncResult['channels'] as $channel => $channelResult) {
+                        if (!is_array($channelResult)) {
+                            continue;
                         }
+                        $status = ($channelResult['status'] ?? 'failed') === 'success' ? 'sent' : 'failed';
+                        $error = isset($channelResult['message']) && is_string($channelResult['message'])
+                            ? $channelResult['message']
+                            : (isset($channelResult['reason']) ? (string)$channelResult['reason'] : null);
+                        $this->repository->recordDeliveryAttempt($notificationUuid, (string)$channel, $status, $error);
                     }
                 }
             }
 
-            return $result;
+            $policy = $this->resolveChannelPolicy($options);
+            $criticalChannels = $this->resolveCriticalChannels($options);
+            $syncSucceeded = $syncResult === null
+                ? false
+                : $this->isDispatchSuccessfulByPolicy($syncResult, $policy, $criticalChannels);
+
+            if ($syncSucceeded) {
+                $notification->markAsSent();
+                $this->repository->save($notification);
+                $this->trackSuccessfulMetrics($notification, $syncResult);
+            }
+
+            $queuedJobUuid = null;
+            if ($asyncChannels !== []) {
+                $queuedJobUuid = $this->queueAsyncDispatch($notification->getUuid(), $asyncChannels, [
+                    'channel_failure_policy' => $policy,
+                    'critical_channels' => $criticalChannels,
+                ]);
+            }
+
+            if ($syncResult === null && $queuedJobUuid !== null) {
+                return [
+                    'status' => 'queued',
+                    'notification_uuid' => $notification->getUuid(),
+                    'notification_id' => $notification->getId(),
+                    'queued_job_uuid' => $queuedJobUuid,
+                    'queued_channels' => $asyncChannels
+                ];
+            }
+
+            $responseStatus = $syncSucceeded ? 'success' : 'failed';
+            if (!$syncSucceeded && $queuedJobUuid !== null) {
+                $responseStatus = 'partial';
+            }
+
+            return [
+                'status' => $responseStatus,
+                'notification_uuid' => $notification->getUuid(),
+                'notification_id' => $notification->getId(),
+                'sync' => $syncResult,
+                'queued_job_uuid' => $queuedJobUuid,
+                'queued_channels' => $asyncChannels
+            ];
         }
 
         return [
             'status' => 'scheduled',
+            'notification_uuid' => $notification->getUuid(),
             'notification_id' => $notification->getId(),
             'scheduled_at' => $notification->getScheduledAt()->format('Y-m-d H:i:s')
         ];
+    }
+
+    /**
+     * Persist immediately, dispatch critical channels now, and queue non-critical channels.
+     *
+     * @param string $type
+     * @param Notifiable $notifiable
+     * @param string $subject
+     * @param array<string, mixed> $data
+     * @param array<string> $persistNowChannels
+     * @param array<string> $dispatchAsyncChannels
+     * @param array<string, mixed> $options
+     * @return array<string, mixed>
+     */
+    public function sendSplit(
+        string $type,
+        Notifiable $notifiable,
+        string $subject,
+        array $data,
+        array $persistNowChannels,
+        array $dispatchAsyncChannels = [],
+        array $options = []
+    ): array {
+        $options['sync_channels'] = $persistNowChannels;
+        $options['async_channels'] = $dispatchAsyncChannels;
+        return $this->send($type, $notifiable, $subject, $data, $options);
     }
 
     /**
@@ -259,31 +332,76 @@ class NotificationService implements ConfigurableInterface
             $options['subject'] = ucfirst(str_replace('_', ' ', $type));
         }
 
-        // Create notification
-        $notification = $this->create(
+        return $this->send(
             $type,
             $notifiable,
-            $options['subject'],
+            (string)$options['subject'],
             ['template_data' => $templateData, 'template_name' => $templateName],
             $options
         );
+    }
 
-        // Save to database
-        $this->repository->save($notification);
-
-        // Send notification
-        $result = $this->dispatcher->send(
-            $notification,
-            $notifiable,
-            $options['channels'] ?? null
-        );
-
-        // Update notification in database after sending
-        if ($result['status'] === 'success') {
-            $notification->markAsSent();
-            $this->repository->save($notification);
+    /**
+     * Dispatch a persisted notification by UUID.
+     *
+     * @param string $notificationUuid Notification UUID
+     * @param array<string> $channels Channels to dispatch on
+     * @param array<string, mixed> $options Dispatch policy options
+     * @return array<string, mixed>
+     */
+    public function dispatchStoredNotification(
+        string $notificationUuid,
+        array $channels = [],
+        array $options = []
+    ): array {
+        $notification = $this->repository->findByUuid($notificationUuid);
+        if ($notification === null) {
+            return ['status' => 'failed', 'reason' => 'notification_not_found'];
         }
 
+        $notifiable = $this->getNotifiableEntity($notification->getNotifiableType(), $notification->getNotifiableId());
+        if ($notifiable === null) {
+            return ['status' => 'failed', 'reason' => 'notifiable_not_found'];
+        }
+
+        $requestedChannels = $channels !== [] ? $channels : $this->getDefaultChannels();
+        $channelsToUse = $this->repository->getChannelsNeedingDispatch($notificationUuid, $requestedChannels);
+        if ($channelsToUse === []) {
+            return [
+                'status' => 'success',
+                'notification_uuid' => $notificationUuid,
+                'channels' => [],
+                'failed_channels' => [],
+                'message' => 'All requested channels already delivered',
+            ];
+        }
+
+        $result = $this->dispatcher->send($notification, $notifiable, $channelsToUse);
+        if (isset($result['channels']) && is_array($result['channels'])) {
+            foreach ($result['channels'] as $channel => $channelResult) {
+                if (!is_array($channelResult)) {
+                    continue;
+                }
+                $status = ($channelResult['status'] ?? 'failed') === 'success' ? 'sent' : 'failed';
+                $error = isset($channelResult['message']) && is_string($channelResult['message'])
+                    ? $channelResult['message']
+                    : (isset($channelResult['reason']) ? (string)$channelResult['reason'] : null);
+                $this->repository->recordDeliveryAttempt($notificationUuid, (string)$channel, $status, $error);
+            }
+        }
+        $failedChannels = $this->repository->getFailedDeliveryChannels($notificationUuid, $channelsToUse);
+
+        $policy = $this->resolveChannelPolicy($options);
+        $criticalChannels = $this->resolveCriticalChannels($options);
+        $succeeded = $this->isDispatchSuccessfulByPolicy($result, $policy, $criticalChannels);
+
+        if ($succeeded) {
+            $notification->markAsSent();
+            $this->repository->save($notification);
+            $this->trackSuccessfulMetrics($notification, $result);
+        }
+
+        $result['failed_channels'] = $failedChannels;
         return $result;
     }
 
@@ -803,6 +921,190 @@ class NotificationService implements ConfigurableInterface
     }
 
     /**
+     * @param array<string, mixed> $data
+     * @param string|null $idempotencyKey
+     * @return array<string, mixed>
+     */
+    protected function withNotificationMeta(array $data, ?string $idempotencyKey): array
+    {
+        $meta = is_array($data['_meta'] ?? null) ? $data['_meta'] : [];
+        if ($idempotencyKey !== null) {
+            $meta['idempotency_key'] = $idempotencyKey;
+        }
+        $meta['created_at_unix'] = time();
+        $data['_meta'] = $meta;
+        return $data;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @param array<string, mixed> $options
+     */
+    protected function resolveIdempotencyKey(array $data, array $options): ?string
+    {
+        $key = $options['idempotency_key'] ?? $data['idempotency_key'] ?? null;
+        if (!is_string($key) || trim($key) === '') {
+            return null;
+        }
+        return trim($key);
+    }
+
+    /**
+     * @param array<string, mixed> $options
+     * @return array<string>
+     */
+    protected function resolveSyncChannels(array $options): array
+    {
+        $channels = $options['sync_channels'] ?? $options['channels'] ?? $this->getDefaultChannels();
+        if (!is_array($channels)) {
+            return $this->getDefaultChannels();
+        }
+        return array_values(array_unique(array_filter($channels, static fn($v) => is_string($v) && $v !== '')));
+    }
+
+    /**
+     * @param array<string, mixed> $options
+     * @param array<string> $syncChannels
+     * @return array<string>
+     */
+    protected function resolveAsyncChannels(array $options, array $syncChannels): array
+    {
+        $channels = $options['async_channels'] ?? [];
+        if (!is_array($channels)) {
+            return [];
+        }
+        $channels = array_values(array_unique(array_filter($channels, static fn($v) => is_string($v) && $v !== '')));
+        return array_values(array_diff($channels, $syncChannels));
+    }
+
+    /**
+     * @param array<string, mixed> $options
+     * @return string
+     */
+    protected function resolveChannelPolicy(array $options): string
+    {
+        $policy = $options['channel_failure_policy'] ?? $this->getOption('channel_failure_policy');
+        if (!is_string($policy)) {
+            return 'any_success';
+        }
+        return $policy;
+    }
+
+    /**
+     * @param array<string, mixed> $options
+     * @return array<string>
+     */
+    protected function resolveCriticalChannels(array $options): array
+    {
+        $channels = $options['critical_channels'] ?? $this->getOption('critical_channels');
+        if (!is_array($channels)) {
+            return [];
+        }
+        return array_values(array_unique(array_filter($channels, static fn($v) => is_string($v) && $v !== '')));
+    }
+
+    /**
+     * @param array<string, mixed> $dispatchResult
+     * @param string $policy
+     * @param array<string> $criticalChannels
+     */
+    protected function isDispatchSuccessfulByPolicy(
+        array $dispatchResult,
+        string $policy,
+        array $criticalChannels
+    ): bool {
+        $channelResults = isset($dispatchResult['channels']) && is_array($dispatchResult['channels'])
+            ? $dispatchResult['channels']
+            : [];
+
+        if ($channelResults === []) {
+            return ($dispatchResult['status'] ?? 'failed') === 'success';
+        }
+
+        $successByChannel = [];
+        foreach ($channelResults as $channel => $result) {
+            if (!is_array($result)) {
+                continue;
+            }
+            $successByChannel[(string)$channel] = (($result['status'] ?? 'failed') === 'success');
+        }
+
+        return match ($policy) {
+            'all' => count($successByChannel) > 0
+                && count(array_filter($successByChannel, static fn(bool $s): bool => $s)) === count($successByChannel),
+            'require_critical' => $criticalChannels !== []
+                ? count(array_filter(
+                    $criticalChannels,
+                    static fn(string $c): bool => ($successByChannel[$c] ?? false) === true
+                )) === count($criticalChannels)
+                : in_array(true, $successByChannel, true),
+            default => in_array(true, $successByChannel, true),
+        };
+    }
+
+    /**
+     * @param array<string, mixed> $dispatchResult
+     */
+    protected function trackSuccessfulMetrics(Notification $notification, array $dispatchResult): void
+    {
+        if (!isset($dispatchResult['channels']) || !is_array($dispatchResult['channels'])) {
+            return;
+        }
+
+        foreach ($dispatchResult['channels'] as $channel => $channelResult) {
+            if (!is_array($channelResult) || ($channelResult['status'] ?? 'failed') !== 'success') {
+                continue;
+            }
+
+            $creationTime = $this->metricsService->getNotificationCreationTime($notification->getUuid(), $channel);
+            if ($creationTime !== null) {
+                $deliveryTime = time() - $creationTime;
+                $this->metricsService->trackDeliveryTime($notification->getUuid(), $channel, $deliveryTime);
+            }
+
+            $this->metricsService->updateSuccessRateMetrics($channel, true);
+            $this->metricsService->cleanupNotificationMetrics($notification->getUuid(), $channel);
+        }
+    }
+
+    /**
+     * @param string|null $notificationUuid
+     * @param array<string> $channels
+     * @param array<string, mixed> $options
+     */
+    protected function queueAsyncDispatch(?string $notificationUuid, array $channels, array $options): ?string
+    {
+        if ($notificationUuid === null || $notificationUuid === '' || $channels === []) {
+            return null;
+        }
+
+        $payload = [
+            'notification_uuid' => $notificationUuid,
+            'channels' => $channels,
+            'options' => $options,
+        ];
+
+        if ($this->context !== null) {
+            $queueConfig = function_exists('loadConfigWithHierarchy')
+                ? loadConfigWithHierarchy($this->context, 'queue')
+                : [];
+            $manager = new QueueManager($queueConfig, $this->context);
+            return $manager->push(
+                DispatchNotificationChannels::class,
+                $payload,
+                (string)$this->getOption('async_queue')
+            );
+        }
+
+        $manager = QueueManager::createDefault();
+        return $manager->push(
+            DispatchNotificationChannels::class,
+            $payload,
+            (string)$this->getOption('async_queue')
+        );
+    }
+
+    /**
      * Configure notification service options
      *
      * @param OptionsResolver $resolver Options resolver instance
@@ -820,6 +1122,11 @@ class NotificationService implements ConfigurableInterface
             'rate_limit_per_minute' => 1000,
             'enable_analytics' => true,
             'template_cache_ttl' => 3600,
+            'idempotency_enabled' => true,
+            'idempotency_ttl_seconds' => 300,
+            'channel_failure_policy' => 'any_success',
+            'critical_channels' => [],
+            'async_queue' => 'notifications',
         ]);
 
         $resolver->setAllowedTypes('id_generator', 'callable');
@@ -830,6 +1137,11 @@ class NotificationService implements ConfigurableInterface
         $resolver->setAllowedTypes('rate_limit_per_minute', 'int');
         $resolver->setAllowedTypes('enable_analytics', 'bool');
         $resolver->setAllowedTypes('template_cache_ttl', 'int');
+        $resolver->setAllowedTypes('idempotency_enabled', 'bool');
+        $resolver->setAllowedTypes('idempotency_ttl_seconds', 'int');
+        $resolver->setAllowedTypes('channel_failure_policy', 'string');
+        $resolver->setAllowedTypes('critical_channels', 'array');
+        $resolver->setAllowedTypes('async_queue', 'string');
 
         // Validate default channels array
         $resolver->setNormalizer('default_channels', function ($options, $value) {
@@ -851,6 +1163,19 @@ class NotificationService implements ConfigurableInterface
             }
 
             return array_unique($value);
+        });
+
+        $resolver->setNormalizer('critical_channels', function ($options, $value) {
+            unset($options);
+            $normalized = [];
+            foreach ($value as $channel) {
+                if (!is_string($channel) || $channel === '') {
+                    throw new \InvalidArgumentException('All critical channel names must be non-empty strings');
+                }
+                $normalized[] = $channel;
+            }
+
+            return array_values(array_unique($normalized));
         });
 
         // Validate retry attempts
@@ -877,6 +1202,12 @@ class NotificationService implements ConfigurableInterface
         $resolver->setAllowedValues('template_cache_ttl', function ($value) {
             return $value >= 60 && $value <= 86400; // 1 minute to 24 hours
         });
+
+        $resolver->setAllowedValues('idempotency_ttl_seconds', function ($value) {
+            return $value >= 1 && $value <= 86400;
+        });
+
+        $resolver->setAllowedValues('channel_failure_policy', ['any_success', 'require_critical', 'all']);
 
         // Validate ID generator
         $resolver->setNormalizer('id_generator', function ($options, $value) {

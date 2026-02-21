@@ -4,6 +4,37 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.40.0] - 2026-02-21 — Alnair
+
+Notification delivery orchestration and provisioning error semantics improvements.
+
+### Added
+
+- **`NotificationService::sendSplit()`**: First-class split-delivery API for `persist now + dispatch async channels`.
+- **Async dispatch job**: Added `src/Queue/Jobs/DispatchNotificationChannels.php` to dispatch persisted notifications by UUID on queued channels.
+- **Idempotency in notifications**: Added idempotent notification send support via a dedicated `notifications.idempotency_key` schema contract and indexed lookup in `NotificationRepository::findRecentByIdempotencyKey()`.
+- **Per-channel delivery state tracking**: Added `notification_deliveries` persistence model and repository APIs (`ensureDeliveryRecords`, `recordDeliveryAttempt`, `getChannelsNeedingDispatch`, `getFailedDeliveryChannels`) to track delivery lifecycle per channel.
+- **Channel-level idempotency marker**: Added `_meta.delivery_idempotency_key` (`{notification_uuid}:{channel}`) on dispatch payloads for safer provider-side deduplication.
+- **Provisioning exception type**: Added `ProvisioningException` (`src/Http/Exceptions/Domain/ProvisioningException.php`) for account setup/provisioning failures that are not authentication failures.
+
+### Changed
+
+- **`NotificationService::send()` refactor**:
+  - Supports sync/async split with `sync_channels` and `async_channels`.
+  - Supports channel policy evaluation with `channel_failure_policy` (`any_success`, `require_critical`, `all`) and `critical_channels`.
+  - Queues async channel dispatch on the configured queue (`async_queue`, default `notifications`).
+  - Persists notification metadata in `_meta` including idempotency metadata when present.
+- **Top-level idempotency lookup path**: `NotificationRepository::findRecentByIdempotencyKey()` now uses `notifications.idempotency_key` directly (no `_meta` scan fallback).
+- **`NotificationService::dispatchStoredNotification()`** now dispatches only channels that still need work (`pending`/`failed`), records per-channel outcomes, and returns `failed_channels` for targeted retry handling.
+- **`DispatchNotificationChannels` retry behavior** now fails only when unresolved failed channels remain, so queue retries naturally target failed channels instead of re-sending already delivered ones.
+- **`NotificationService::sendWithTemplate()`** now routes through `send()` so idempotency, split delivery, and policy semantics are applied consistently.
+- **`NotificationsProvider`** now registers `NotificationService` in DI as a shared service.
+- **`Http\Exceptions\Handler`** maps `ProvisioningException` to HTTP `500` and routes it to the `api` log channel.
+
+### Notes
+
+- This release introduces non-backward-compatible response and flow behavior for notification sending to standardize split delivery, failure policy handling, and channel-scoped retry semantics.
+
 ## [1.39.0] - 2026-02-20 — Menkent
 
 Token and session management reimplementation. Replaces the legacy token/session model with a security-first architecture: hash-only refresh tokens with one-time-use rotation, session versioning for instant access-token invalidation, replay detection with session-scope revocation, and a clean service decomposition.

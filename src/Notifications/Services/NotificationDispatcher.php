@@ -140,6 +140,9 @@ class NotificationDispatcher
 
                 // Get notification data
                 $data = $notification->getData() ?? [];
+                $meta = is_array($data['_meta'] ?? null) ? $data['_meta'] : [];
+                $meta['delivery_idempotency_key'] = ($notification->getUuid() ?? '') . ':' . $channelName;
+                $data['_meta'] = $meta;
 
                 // Process notification through extensions
                 $data = $this->processBeforeSend($data, $notifiable, $channelName, $notification->getType());
