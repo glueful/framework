@@ -361,8 +361,11 @@ class NotificationRepository extends BaseRepository
      * @param string $initialStatus
      * @return void
      */
-    public function ensureDeliveryRecords(string $notificationUuid, array $channels, string $initialStatus = 'pending'): void
-    {
+    public function ensureDeliveryRecords(
+        string $notificationUuid,
+        array $channels,
+        string $initialStatus = 'pending'
+    ): void {
         $normalized = array_values(array_unique(array_filter($channels, static function ($channel): bool {
             return is_string($channel) && $channel !== '';
         })));
