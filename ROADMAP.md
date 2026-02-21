@@ -21,6 +21,9 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.40.4 — Alnair (Patch, Released 2026-02-21)
+- **PHPCS Line Length Fix**: Extracted long error message in `WhereClause::getConditionsArray()` to comply with 120-character line limit. Code style only — no runtime changes.
+
 ### 1.40.3 — Alnair (Patch, Released 2026-02-21)
 - **Mutation WHERE Operator Support**: `WhereClause`, `UpdateBuilder`, and `DeleteBuilder` now handle comparison and null operators (`<`, `<=`, `>`, `>=`, `!=`, `LIKE`, `IN`, `IS NULL`, `IS NOT NULL`) instead of crashing on non-equality conditions.
 - **Queue Config String Coercion**: `DriverRegistry` validates numeric-string ints/ports and boolean-like strings from `.env`, fixing Redis config rejection in production.

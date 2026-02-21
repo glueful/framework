@@ -4,6 +4,19 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.40.4] - 2026-02-21 — Alnair (Patch)
+
+### Fixed
+
+- **PHPCS line length in `WhereClause`**: Extracted long error message string in `getConditionsArray()` to stay within the 120-character line limit.
+
+### Notes
+
+- Patch release. No breaking changes. Drop-in replacement for 1.40.3.
+- Code style fix only — no runtime behavior changes.
+
+---
+
 ## [1.40.3] - 2026-02-21 — Alnair (Patch)
 
 ### Fixed
