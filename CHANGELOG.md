@@ -4,6 +4,19 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.40.2] - 2026-02-21 — Alnair (Patch)
+
+### Fixed
+
+- **Config merge crashes on lists containing nested arrays**: The 1.40.1 fix gated `array_unique()` to true lists vs associative arrays, but did not handle lists *containing* nested array/object items (e.g., `queue.monitoring.alert_rules`). `array_unique()` internally stringifies values with `SORT_STRING`, triggering "Array to string conversion" warnings on non-scalar list items. Replaced with a hash-based dedup that uses `json_encode()` (fallback `serialize()`) for complex items and `var_export()` for scalars, eliminating the conversion entirely.
+
+### Notes
+
+- Patch release. No breaking changes. Drop-in replacement for 1.40.1.
+- This was the root cause of 500 errors on endpoints that dispatch events loading merged config with nested list items (e.g., comment creation triggering queue/webhook listeners).
+
+---
+
 ## [1.40.1] - 2026-02-21 — Alnair (Patch)
 
 ### Fixed
