@@ -21,6 +21,9 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.40.2 — Alnair (Patch, Released 2026-02-21)
+- **Config Merge Safe Dedup for Nested Lists**: Replaced `array_unique()` with hash-based dedup (`json_encode`/`serialize` for complex items, `var_export` for scalars) so list merges containing nested arrays/objects no longer trigger "Array to string conversion" warnings. Fixes 500 errors on event-driven flows that load merged config with nested list items.
+
 ### 1.40.1 — Alnair (Patch, Released 2026-02-21)
 - **Config Merge Fix**: `mergeConfig()` in `helpers.php` no longer applies `array_unique()` to nested associative arrays. True lists are list-merged with dedup; associative arrays are deep-merged recursively. Fixes "Array to string conversion" warnings on config keys like `session.providers`.
 

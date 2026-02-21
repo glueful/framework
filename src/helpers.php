@@ -131,7 +131,33 @@ if (!function_exists('mergeConfigs')) {
                         // Only apply list semantics to actual lists; associative arrays
                         // under list-like keys (e.g. session.providers) should merge deeply.
                         if (!$isAssoc($a[$key]) && !$isAssoc($value)) {
-                            $a[$key] = array_values(array_unique(array_merge($a[$key], $value)));
+                            // Merge list values while safely de-duplicating nested arrays.
+                            // array_unique() converts arrays to strings and triggers warnings.
+                            $mergedList = array_merge($a[$key], $value);
+                            $seen = [];
+                            $deduped = [];
+
+                            foreach ($mergedList as $item) {
+                                if (is_scalar($item) || $item === null) {
+                                    $hash = 'scalar:' . var_export($item, true);
+                                } else {
+                                    $encoded = json_encode(
+                                        $item,
+                                        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                                    );
+                                    if ($encoded === false) {
+                                        $encoded = serialize($item);
+                                    }
+                                    $hash = 'complex:' . $encoded;
+                                }
+
+                                if (!isset($seen[$hash])) {
+                                    $seen[$hash] = true;
+                                    $deduped[] = $item;
+                                }
+                            }
+
+                            $a[$key] = array_values($deduped);
                         } else {
                             $a[$key] = $merge($a[$key], $value, $currentPath);
                         }
