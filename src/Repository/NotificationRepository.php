@@ -68,6 +68,19 @@ class NotificationRepository extends BaseRepository
     {
         $data = $notification->toArray();
 
+        $payloadForIdempotency = $data['data'] ?? null;
+        if (is_string($payloadForIdempotency)) {
+            $payloadForIdempotency = json_decode($payloadForIdempotency, true);
+        }
+        $data['idempotency_key'] = null;
+        if (is_array($payloadForIdempotency)) {
+            $meta = $payloadForIdempotency['_meta'] ?? null;
+            $metaIdempotencyKey = $meta['idempotency_key'] ?? null;
+            if (is_array($meta) && is_string($metaIdempotencyKey) && $metaIdempotencyKey !== '') {
+                $data['idempotency_key'] = $meta['idempotency_key'];
+            }
+        }
+
         // Convert data field to JSON
         if (isset($data['data']) && is_array($data['data'])) {
             $data['data'] = json_encode($data['data']);
@@ -300,6 +313,222 @@ class NotificationRepository extends BaseRepository
         }
 
         return $notifications;
+    }
+
+    /**
+     * Find an existing notification by idempotency key in a recent time window.
+     *
+     * @param string $notifiableType Recipient type
+     * @param string $notifiableId Recipient ID
+     * @param string $type Notification type
+     * @param string $idempotencyKey Idempotency key
+     * @param int $windowSeconds Lookback window in seconds
+     * @return Notification|null The matched notification or null if not found
+     */
+    public function findRecentByIdempotencyKey(
+        string $notifiableType,
+        string $notifiableId,
+        string $type,
+        string $idempotencyKey,
+        int $windowSeconds
+    ): ?Notification {
+        $windowStart = (new DateTime())->modify("-{$windowSeconds} seconds")->format('Y-m-d H:i:s');
+
+        $result = $this->db->table($this->table)
+            ->select(['*'])
+            ->where([
+                'notifiable_type' => $notifiableType,
+                'notifiable_id' => $notifiableId,
+                'type' => $type,
+                'idempotency_key' => $idempotencyKey
+            ])
+            ->where('created_at', '>=', $windowStart)
+            ->orderBy(['created_at' => 'DESC'])
+            ->first();
+
+        if ($result === null || $result === []) {
+            return null;
+        }
+
+        return Notification::fromArray($result);
+    }
+
+    /**
+     * Ensure delivery rows exist for a notification/channels set.
+     *
+     * @param string $notificationUuid
+     * @param array<string> $channels
+     * @param string $initialStatus
+     * @return void
+     */
+    public function ensureDeliveryRecords(
+        string $notificationUuid,
+        array $channels,
+        string $initialStatus = 'pending'
+    ): void {
+        $normalized = array_values(array_unique(array_filter($channels, static function ($channel): bool {
+            return is_string($channel) && $channel !== '';
+        })));
+
+        foreach ($normalized as $channel) {
+            $existing = $this->db->table('notification_deliveries')
+                ->select(['id'])
+                ->where([
+                    'notification_uuid' => $notificationUuid,
+                    'channel' => $channel,
+                ])
+                ->limit(1)
+                ->get();
+
+            if ($existing !== []) {
+                continue;
+            }
+
+            $this->db->table('notification_deliveries')->insert([
+                'notification_uuid' => $notificationUuid,
+                'channel' => $channel,
+                'status' => $initialStatus,
+                'attempt_count' => 0,
+                'created_at' => (new DateTime())->format('Y-m-d H:i:s'),
+                'updated_at' => (new DateTime())->format('Y-m-d H:i:s'),
+            ]);
+        }
+    }
+
+    /**
+     * Filter requested channels down to channels that still need dispatch.
+     *
+     * A channel needs dispatch if it has no row yet or is currently pending/failed.
+     *
+     * @param string $notificationUuid
+     * @param array<string> $requestedChannels
+     * @return array<string>
+     */
+    public function getChannelsNeedingDispatch(string $notificationUuid, array $requestedChannels): array
+    {
+        $normalized = array_values(array_unique(array_filter($requestedChannels, static function ($channel): bool {
+            return is_string($channel) && $channel !== '';
+        })));
+
+        if ($normalized === []) {
+            return [];
+        }
+
+        $rows = $this->db->table('notification_deliveries')
+            ->select(['channel', 'status'])
+            ->where('notification_uuid', '=', $notificationUuid)
+            ->get();
+
+        $statusByChannel = [];
+        foreach ($rows as $row) {
+            $statusByChannel[(string)($row['channel'] ?? '')] = (string)($row['status'] ?? 'pending');
+        }
+
+        $dispatchable = [];
+        foreach ($normalized as $channel) {
+            $status = $statusByChannel[$channel] ?? null;
+            if ($status === null || $status === 'pending' || $status === 'failed') {
+                $dispatchable[] = $channel;
+            }
+        }
+
+        return $dispatchable;
+    }
+
+    /**
+     * Update per-channel delivery status and metadata.
+     *
+     * @param string $notificationUuid
+     * @param string $channel
+     * @param string $status
+     * @param string|null $lastError
+     * @return void
+     */
+    public function recordDeliveryAttempt(
+        string $notificationUuid,
+        string $channel,
+        string $status,
+        ?string $lastError = null
+    ): void {
+        $now = (new DateTime())->format('Y-m-d H:i:s');
+
+        $existing = $this->db->table('notification_deliveries')
+            ->select(['id', 'attempt_count'])
+            ->where([
+                'notification_uuid' => $notificationUuid,
+                'channel' => $channel,
+            ])
+            ->limit(1)
+            ->get();
+
+        if ($existing === []) {
+            $this->db->table('notification_deliveries')->insert([
+                'notification_uuid' => $notificationUuid,
+                'channel' => $channel,
+                'status' => $status,
+                'attempt_count' => 1,
+                'last_error' => $lastError,
+                'last_attempt_at' => $now,
+                'sent_at' => $status === 'sent' ? $now : null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+            return;
+        }
+
+        $attemptCount = (int)($existing[0]['attempt_count'] ?? 0) + 1;
+        $update = [
+            'status' => $status,
+            'attempt_count' => $attemptCount,
+            'last_error' => $lastError,
+            'last_attempt_at' => $now,
+            'updated_at' => $now,
+        ];
+        if ($status === 'sent') {
+            $update['sent_at'] = $now;
+        }
+
+        $this->db->table('notification_deliveries')
+            ->where('id', '=', $existing[0]['id'])
+            ->update($update);
+    }
+
+    /**
+     * Return channels that are currently failed (optionally filtered by request list).
+     *
+     * @param string $notificationUuid
+     * @param array<string>|null $requestedChannels
+     * @return array<string>
+     */
+    public function getFailedDeliveryChannels(string $notificationUuid, ?array $requestedChannels = null): array
+    {
+        $query = $this->db->table('notification_deliveries')
+            ->select(['channel'])
+            ->where([
+                'notification_uuid' => $notificationUuid,
+                'status' => 'failed',
+            ]);
+
+        $rows = $query->get();
+        $channels = array_values(array_unique(array_filter(array_map(static function ($row): string {
+            return (string)($row['channel'] ?? '');
+        }, $rows), static function (string $channel): bool {
+            return $channel !== '';
+        })));
+
+        if ($requestedChannels === null) {
+            return $channels;
+        }
+
+        $filter = array_values(array_unique(array_filter($requestedChannels, static function ($channel): bool {
+            return is_string($channel) && $channel !== '';
+        })));
+
+        if ($filter === []) {
+            return [];
+        }
+
+        return array_values(array_intersect($channels, $filter));
     }
 
     /**

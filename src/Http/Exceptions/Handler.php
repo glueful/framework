@@ -29,6 +29,7 @@ use Glueful\Http\Exceptions\Domain\SecurityException;
 use Glueful\Http\Exceptions\Domain\HttpAuthException;
 use Glueful\Http\Exceptions\Domain\HttpProtocolException;
 use Glueful\Http\Exceptions\Domain\ExtensionException;
+use Glueful\Http\Exceptions\Domain\ProvisioningException;
 use Glueful\Validation\ValidationException;
 use Glueful\Events\EventService;
 use Glueful\Events\Http\ExceptionEvent;
@@ -108,6 +109,7 @@ class Handler implements ExceptionHandlerInterface
 
         // Server errors (5xx)
         DatabaseException::class => 500,
+        ProvisioningException::class => 500,
         InternalServerException::class => 500,
         ServiceUnavailableException::class => 503,
         GatewayTimeoutException::class => 504,
@@ -126,6 +128,7 @@ class Handler implements ExceptionHandlerInterface
         SecurityException::class => 'security',
         TooManyRequestsException::class => 'ratelimit',
         ExtensionException::class => 'extensions',
+        ProvisioningException::class => 'api',
         HttpProtocolException::class => 'http',
         HttpAuthException::class => 'auth',
         BusinessLogicException::class => 'api',

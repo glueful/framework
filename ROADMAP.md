@@ -21,6 +21,14 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.40.0 — Alnair (Released 2026-02-21)
+- **Notification Split Delivery**: `NotificationService::sendSplit()` provides first-class sync/async channel separation. `send()` now supports `sync_channels`, `async_channels`, `channel_failure_policy` (`any_success`/`require_critical`/`all`), and `critical_channels`.
+- **Notification Idempotency**: Dedicated `notifications.idempotency_key` column with indexed DB lookup replaces the previous `_meta` JSON scan. Channel-level idempotency via `notification_deliveries` unique key on `(notification_uuid, channel)`.
+- **Per-Channel Delivery Tracking**: New `notification_deliveries` table and repository APIs (`ensureDeliveryRecords`, `recordDeliveryAttempt`, `getChannelsNeedingDispatch`, `getFailedDeliveryChannels`) track delivery lifecycle per channel. Async retries target only failed channels.
+- **Async Dispatch Job**: `DispatchNotificationChannels` dispatches persisted notifications by UUID, fails only when unresolved failed channels remain.
+- **`ProvisioningException`**: New domain exception for account setup failures, mapped to HTTP 500 and `api` log channel in `Handler`.
+- Notes: Non-backward-compatible changes to notification sending flow and response structure.
+
 ### 1.39.0 — Menkent (Released 2026-02-20)
 - **Token/Session Reimplementation**: Full replacement of the token/session model with hash-only refresh tokens, one-time-use rotation in a single DB transaction, and session versioning for instant access-token invalidation.
 - **New Service Architecture**: `RefreshService`, `AccessTokenIssuer`, `ProviderTokenIssuer`, `SessionRepository`, `RefreshTokenRepository`, `RefreshTokenStore`, `SessionStateCache` decompose the monolithic auth flow into single-responsibility units.
