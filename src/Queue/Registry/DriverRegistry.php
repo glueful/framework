@@ -279,18 +279,29 @@ class DriverRegistry
                 break;
             case 'int':
             case 'integer':
-                if (!is_int($value)) {
+                if (!(is_int($value) || (is_string($value) && preg_match('/^-?\d+$/', $value) === 1))) {
                     return "Field '{$key}' must be an integer";
                 }
                 break;
             case 'port':
-                if (!is_int($value) || $value < 1 || $value > 65535) {
+                $port = null;
+                if (is_int($value)) {
+                    $port = $value;
+                } elseif (is_string($value) && preg_match('/^\d+$/', $value) === 1) {
+                    $port = (int) $value;
+                }
+                if ($port === null || $port < 1 || $port > 65535) {
                     return "Field '{$key}' must be a valid port number (1-65535)";
                 }
                 break;
             case 'bool':
             case 'boolean':
-                if (!is_bool($value)) {
+                $isBoolString = is_string($value) && in_array(
+                    strtolower(trim($value)),
+                    ['true', 'false', '1', '0', 'yes', 'no', 'on', 'off'],
+                    true
+                );
+                if (!is_bool($value) && !$isBoolString) {
                     return "Field '{$key}' must be a boolean";
                 }
                 break;

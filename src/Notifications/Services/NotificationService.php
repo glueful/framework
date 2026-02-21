@@ -1084,24 +1084,30 @@ class NotificationService implements ConfigurableInterface
             'options' => $options,
         ];
 
-        if ($this->context !== null) {
-            $queueConfig = function_exists('loadConfigWithHierarchy')
-                ? loadConfigWithHierarchy($this->context, 'queue')
-                : [];
-            $manager = new QueueManager($queueConfig, $this->context);
+        try {
+            if ($this->context !== null) {
+                $queueConfig = function_exists('loadConfigWithHierarchy')
+                    ? loadConfigWithHierarchy($this->context, 'queue')
+                    : [];
+                $manager = new QueueManager($queueConfig, $this->context);
+                return $manager->push(
+                    DispatchNotificationChannels::class,
+                    $payload,
+                    (string)$this->getOption('async_queue')
+                );
+            }
+
+            $manager = QueueManager::createDefault();
             return $manager->push(
                 DispatchNotificationChannels::class,
                 $payload,
                 (string)$this->getOption('async_queue')
             );
+        } catch (\Throwable $e) {
+            // Best-effort async dispatch: do not fail the parent request.
+            error_log('[NotificationService] Failed to queue async dispatch: ' . $e->getMessage());
+            return null;
         }
-
-        $manager = QueueManager::createDefault();
-        return $manager->push(
-            DispatchNotificationChannels::class,
-            $payload,
-            (string)$this->getOption('async_queue')
-        );
     }
 
     /**

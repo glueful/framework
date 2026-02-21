@@ -372,17 +372,25 @@ class WhereClause implements WhereClauseInterface
     public function getConditionsArray(): array
     {
         // For simple conditions, return an associative array
-        // Only works for basic AND conditions with = operator
+        // Supports basic AND conditions including:
+        // - Equality/inequality/comparison operators
+        // - IS NULL / IS NOT NULL
         $simpleConditions = [];
         $complexConditions = [];
         $bindingIndex = 0;
 
         foreach ($this->conditions as $condition) {
-            if ($condition['type'] === 'basic' && $condition['boolean'] === 'AND') {
-                // Extract column name from SQL like "`users`.`name` = ?"
+            if ($condition['boolean'] !== 'AND') {
+                $complexConditions[] = $condition;
+                continue;
+            }
+
+            if ($condition['type'] === 'basic') {
+                // Extract column/operator from SQL like "`users`.`name` = ?"
                 $sql = $condition['sql'];
-                if (preg_match('/^(.+?)\s+=\s+\?$/', $sql, $matches)) {
+                if (preg_match('/^(.+?)\s+([=!<>]+|LIKE|NOT LIKE|IN|NOT IN|IS|IS NOT)\s+\?$/i', $sql, $matches)) {
                     $column = trim($matches[1], '`"[]');
+                    $operator = strtoupper(trim($matches[2]));
 
                     // Remove table prefix if present (e.g., "users.name" becomes "name")
                     if (strpos($column, '.') !== false) {
@@ -392,10 +400,36 @@ class WhereClause implements WhereClauseInterface
 
                     // Get the corresponding binding value
                     if (isset($this->bindings[$bindingIndex])) {
-                        $simpleConditions[$column] = $this->bindings[$bindingIndex];
+                        $bindingValue = $this->bindings[$bindingIndex];
+                        if ($operator === '=') {
+                            $simpleConditions[$column] = $bindingValue;
+                        } else {
+                            $simpleConditions[$column] = [
+                                '__op' => $operator,
+                                '__value' => $bindingValue,
+                            ];
+                        }
                     }
+                } else {
+                    $complexConditions[] = $condition;
                 }
                 $bindingIndex++;
+            } elseif ($condition['type'] === 'null') {
+                // Extract column/null operator from SQL like "`users`.`deleted_at` IS NULL"
+                $sql = $condition['sql'];
+                if (preg_match('/^(.+?)\s+IS\s+(NOT\s+)?NULL$/i', $sql, $matches)) {
+                    $column = trim($matches[1], '`"[]');
+                    if (strpos($column, '.') !== false) {
+                        $parts = explode('.', $column);
+                        $column = end($parts);
+                    }
+
+                    $simpleConditions[$column] = [
+                        '__op' => isset($matches[2]) && trim($matches[2]) !== '' ? 'IS NOT NULL' : 'IS NULL',
+                    ];
+                } else {
+                    $complexConditions[] = $condition;
+                }
             } else {
                 // For complex conditions, we'll need a different approach
                 $complexConditions[] = $condition;
