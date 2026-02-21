@@ -4,6 +4,21 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [1.40.3] - 2026-02-21 — Alnair (Patch)
+
+### Fixed
+
+- **Mutation WHERE clauses crash on non-equality operators**: `WhereClause::getConditionsArray()` only treated `=` as a valid operator for UPDATE/DELETE conditions. Queue and notification cleanup jobs using `<=`, `<`, `IS NULL`, etc. threw "Complex WHERE conditions not yet supported" errors. Now supports `<`, `<=`, `>`, `>=`, `!=`, `<>`, `LIKE`, `NOT LIKE`, `IN`, `NOT IN`, `IS NULL`, `IS NOT NULL` with proper SQL generation and binding extraction in both `UpdateBuilder` and `DeleteBuilder`.
+- **Queue Redis config validation rejects string values from `.env`**: `DriverRegistry::validateType()` required strict PHP `int`/`bool` types for fields like `port` and `database`, but `getenv()` always returns strings. Now accepts numeric strings for `int`/`port` types (with range validation for ports) and boolean-like strings (`true`/`false`/`1`/`0`/`yes`/`no`/`on`/`off`).
+- **Async notification dispatch crashes API requests**: Uncaught exceptions from `queueAsyncDispatch()` in `NotificationService` bubbled up and converted successful DB writes into 500 responses. Now wrapped in try/catch — logs the error and returns gracefully without failing the primary operation.
+
+### Notes
+
+- Patch release. No breaking changes. Drop-in replacement for 1.40.2.
+- The mutation WHERE fix affects any code path that uses non-equality conditions in `update()` or `delete()` queries built through the query builder.
+
+---
+
 ## [1.40.2] - 2026-02-21 — Alnair (Patch)
 
 ### Fixed

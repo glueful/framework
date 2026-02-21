@@ -76,8 +76,40 @@ class UpdateBuilder implements UpdateBuilderInterface
     {
         $whereClauses = [];
 
-        foreach (array_keys($conditions) as $column) {
-            $whereClauses[] = "{$this->driver->wrapIdentifier($column)} = ?";
+        foreach ($conditions as $column => $condition) {
+            $wrappedColumn = $this->driver->wrapIdentifier((string) $column);
+
+            if (is_array($condition) && isset($condition['__op'])) {
+                $op = strtoupper(trim((string) $condition['__op']));
+
+                if ($op === 'IS NULL' || $op === 'IS NOT NULL') {
+                    $whereClauses[] = "{$wrappedColumn} {$op}";
+                    continue;
+                }
+
+                if ($op === 'IN' || $op === 'NOT IN') {
+                    $values = $condition['__value'] ?? null;
+                    if (!is_array($values) || count($values) === 0) {
+                        throw new \InvalidArgumentException(
+                            "Condition '{$column}' with operator '{$op}' must provide a non-empty array"
+                        );
+                    }
+
+                    $placeholders = implode(', ', array_fill(0, count($values), '?'));
+                    $whereClauses[] = "{$wrappedColumn} {$op} ({$placeholders})";
+                    continue;
+                }
+
+                $whereClauses[] = "{$wrappedColumn} {$op} ?";
+                continue;
+            }
+
+            if ($condition === null) {
+                $whereClauses[] = "{$wrappedColumn} IS NULL";
+                continue;
+            }
+
+            $whereClauses[] = "{$wrappedColumn} = ?";
         }
 
         return implode(' AND ', $whereClauses);
@@ -88,7 +120,38 @@ class UpdateBuilder implements UpdateBuilderInterface
      */
     public function getBindings(array $data, array $conditions): array
     {
-        return array_merge(array_values($data), array_values($conditions));
+        $bindings = array_values($data);
+
+        foreach ($conditions as $condition) {
+            if (is_array($condition) && isset($condition['__op'])) {
+                $op = strtoupper(trim((string) $condition['__op']));
+
+                if ($op === 'IS NULL' || $op === 'IS NOT NULL') {
+                    continue;
+                }
+
+                if ($op === 'IN' || $op === 'NOT IN') {
+                    $values = $condition['__value'] ?? null;
+                    if (is_array($values)) {
+                        foreach ($values as $value) {
+                            $bindings[] = $value;
+                        }
+                    }
+                    continue;
+                }
+
+                $bindings[] = $condition['__value'] ?? null;
+                continue;
+            }
+
+            if ($condition === null) {
+                continue;
+            }
+
+            $bindings[] = $condition;
+        }
+
+        return $bindings;
     }
 
     /**

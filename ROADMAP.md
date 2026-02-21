@@ -21,6 +21,11 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.40.3 — Alnair (Patch, Released 2026-02-21)
+- **Mutation WHERE Operator Support**: `WhereClause`, `UpdateBuilder`, and `DeleteBuilder` now handle comparison and null operators (`<`, `<=`, `>`, `>=`, `!=`, `LIKE`, `IN`, `IS NULL`, `IS NOT NULL`) instead of crashing on non-equality conditions.
+- **Queue Config String Coercion**: `DriverRegistry` validates numeric-string ints/ports and boolean-like strings from `.env`, fixing Redis config rejection in production.
+- **Async Notification Best-Effort**: `NotificationService::queueAsyncDispatch()` wrapped in try/catch so side-effect failures don't crash primary API operations.
+
 ### 1.40.2 — Alnair (Patch, Released 2026-02-21)
 - **Config Merge Safe Dedup for Nested Lists**: Replaced `array_unique()` with hash-based dedup (`json_encode`/`serialize` for complex items, `var_export` for scalars) so list merges containing nested arrays/objects no longer trigger "Array to string conversion" warnings. Fixes 500 errors on event-driven flows that load merged config with nested list items.
 
