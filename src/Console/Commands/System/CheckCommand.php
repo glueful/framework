@@ -209,7 +209,7 @@ class CheckCommand extends BaseCommand
 
         // Production-specific checks
         if ($production === true) {
-            $debugEnabled = getenv('APP_DEBUG') === 'true';
+            $debugEnabled = $this->envBool('APP_DEBUG', false);
             if ($debugEnabled) {
                 $issues[] = 'APP_DEBUG should be false in production';
             }
@@ -217,6 +217,50 @@ class CheckCommand extends BaseCommand
             $jwtSecret = getenv('JWT_SECRET');
             if ($jwtSecret === false || strlen($jwtSecret) < 32) {
                 $issues[] = 'JWT_SECRET must be set and at least 32 characters';
+            }
+
+            $logToFile = $this->envBool('LOG_TO_FILE', true);
+            $logToDb = $this->envBool('LOG_TO_DB', false);
+            if (!$logToFile && !$logToDb) {
+                $issues[] = 'At least one durable log sink must be enabled in production (LOG_TO_FILE or LOG_TO_DB)';
+            }
+
+            $eventsEnabled = $this->envBool('EVENTS_ENABLED', true);
+            if (!$eventsEnabled) {
+                $issues[] = 'EVENTS_ENABLED should be true in production';
+            }
+
+            $eventsAuditEnabled = $this->envBool('EVENTS_AUDIT_LOGGING', true);
+            if (!$eventsAuditEnabled) {
+                $issues[] = 'EVENTS_AUDIT_LOGGING should be true in production';
+            }
+
+            $logLevel = strtolower((string) getenv('LOG_LEVEL'));
+            if (in_array($logLevel, ['debug', 'trace'], true)) {
+                $issues[] = 'LOG_LEVEL should not be debug/trace in production (use warning or info)';
+            }
+
+            $retentionKeys = [
+                'LOG_RETENTION_DAYS',
+                'LOG_RETENTION_DEBUG_DAYS',
+                'LOG_RETENTION_API_DAYS',
+                'LOG_RETENTION_APP_DAYS',
+                'LOG_RETENTION_FRAMEWORK_DAYS',
+                'LOG_RETENTION_AUTH_DAYS',
+                'LOG_RETENTION_SECURITY_DAYS',
+                'LOG_RETENTION_ERROR_DAYS',
+            ];
+
+            foreach ($retentionKeys as $key) {
+                $value = getenv($key);
+                if ($value === false || $value === '') {
+                    continue;
+                }
+
+                $days = $this->envInt($key, -1);
+                if ($days <= 0) {
+                    $issues[] = "{$key} must be a positive integer";
+                }
             }
         }
 
@@ -290,5 +334,30 @@ class CheckCommand extends BaseCommand
                 ]
             ];
         }
+    }
+
+    private function envBool(string $key, bool $default): bool
+    {
+        $value = getenv($key);
+        if ($value === false) {
+            return $default;
+        }
+
+        $normalized = strtolower(trim((string) $value));
+        return in_array($normalized, ['1', 'true', 'yes', 'on'], true);
+    }
+
+    private function envInt(string $key, int $default): int
+    {
+        $value = getenv($key);
+        if ($value === false || $value === '') {
+            return $default;
+        }
+
+        if (!is_numeric($value)) {
+            return $default;
+        }
+
+        return (int) $value;
     }
 }

@@ -74,8 +74,8 @@ class MySQLDriver implements DatabaseDriver
      * - Supports all MySQL column types
      *
      * @param  string $table         Target table
-     * @param  array<string, mixed>  $columns       Columns to insert
-     * @param  array<string, mixed>  $updateColumns Columns to update on duplicate
+     * @param  list<string>          $columns       Columns to insert
+     * @param  list<string>          $updateColumns Columns to update on duplicate
      * @return string MySQL upsert statement
      */
     public function upsert(string $table, array $columns, array $updateColumns): string

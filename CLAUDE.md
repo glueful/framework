@@ -4,6 +4,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Project Status
+
+This project is **not live/in production** unless explicitly told otherwise. Treat all environments as development/pre-release.
+
 ## Project Overview
 
 **Glueful Framework** is a high-performance PHP 8.3+ API framework designed for enterprise applications. It provides a comprehensive set of features including authentication, caching, queuing, database management, extensions, and advanced security features.
@@ -93,155 +97,6 @@ composer run ci:fast     # Fast CI (only changed files)
 composer run optimize    # Optimize autoloader for production
 ```
 
-### Framework CLI Commands
-
-**Essential Development Commands:**
-```bash
-# Start development server
-php glueful serve
-php glueful dev:server
-
-# Generate application key
-php glueful generate:key
-
-# Database operations
-php glueful migrate:run                    # Run pending migrations
-php glueful migrate:rollback               # Rollback last migration  
-php glueful migrate:status                 # Check migration status
-php glueful db:status                      # Check database connection
-
-# Cache management
-php glueful cache:clear                    # Clear all cache
-php glueful cache:clear --tag=users        # Clear specific cache tags
-php glueful cache:status                   # View cache statistics
-
-# Queue operations
-php glueful queue:work                     # Start queue worker
-php glueful queue:autoscale               # Auto-scale queue workers
-
-# Security commands
-php glueful security:check                # Security health check
-php glueful security:scan                 # Security vulnerability scan
-
-# Encryption commands
-php glueful encryption:test               # Verify encryption service works
-php glueful encryption:file encrypt /path/to/file   # Encrypt a file
-php glueful encryption:file decrypt /path/to/file.enc  # Decrypt a file
-php glueful encryption:rotate --table=users --columns=ssn  # Re-encrypt DB columns
-
-# Extension management
-php glueful extensions:info               # List all extensions
-php glueful extensions:enable <name>      # Enable extension
-php glueful extensions:disable <name>     # Disable extension
-
-# System utilities
-php glueful system:check                  # System health check
-php glueful doctor                        # Quick local health checks
-php glueful env:sync                      # Sync .env.example from config
-php glueful route:debug                   # Dump resolved routes
-php glueful cache:inspect                 # Inspect cache driver + extensions
-php glueful test:watch                    # Run tests on file changes
-php glueful help                          # List all available commands
-```
-
-**Scaffold Commands:**
-```bash
-# Model and Controller scaffolding
-php glueful scaffold:model User --fillable=name,email --migration
-php glueful scaffold:controller UserController --resource
-php glueful scaffold:request CreateUserRequest
-php glueful scaffold:resource UserResource --model
-
-# Middleware scaffolding
-php glueful scaffold:middleware RateLimitMiddleware
-php glueful scaffold:middleware Admin/AuthMiddleware  # Nested namespace
-
-# Filter scaffolding
-php glueful scaffold:filter UserFilter                # Query filter class
-
-# Queue job scaffolding
-php glueful scaffold:job ProcessPayment
-php glueful scaffold:job SendNewsletter --queue=emails --tries=5 --backoff=120
-php glueful scaffold:job GenerateReport --unique
-
-# Event scaffolding
-php glueful event:create UserRegistered                         # Basic event
-php glueful event:create Auth/LoginFailed                       # Event in subdirectory
-php glueful event:create SecurityAlert --type=security          # Event with category
-php glueful event:listener SendWelcomeEmail                     # Basic listener
-php glueful event:listener SendWelcomeEmail --event=App\\Events\\UserRegisteredEvent
-
-# Validation rule scaffolding
-php glueful scaffold:rule UniqueEmail
-php glueful scaffold:rule PasswordStrength --params=minLength,requireNumbers
-php glueful scaffold:rule RequiredWithoutField --implicit
-
-# Test scaffolding
-php glueful scaffold:test UserServiceTest              # Unit test (default)
-php glueful scaffold:test UserApiTest --feature        # Feature test
-php glueful scaffold:test PaymentTest --methods=testCharge,testRefund
-php glueful scaffold:test Services/UserServiceTest --class=App\\Services\\UserService
-```
-
-## Deployment Notes
-
-- For long-running servers (RoadRunner, Swoole, FrankenPHP), set `APP_LONG_RUNNING=true` to enable worker-safe lifecycle handling.
-- If your deploy process preserves file mtimes and you see stale routing, clear the route cache as part of deploy:
-  - `php glueful route:cache:clear`
-
-## Architecture Overview
-
-### Core Framework Structure
-
-**Bootstrap Flow:**
-1. `src/Framework.php` - Framework initialization and configuration
-2. `src/Application.php` - Application lifecycle management
-3. `src/Bootstrap/ApplicationContext.php` - Request-scoped context with container access
-
-**Key Architectural Components:**
-
-- **Router System**: `src/Routing/` - High-performance router with O(1) static route lookup, route caching, attribute-based routing, and advanced middleware pipeline
-- **Dependency Injection**: `src/Container/` - Full container with service providers and compilation
-- **HTTP Layer**: `src/Http/` - Request/response handling and foundational HTTP components
-- **API Resources**: `src/Http/Resources/` - JSON transformation layer for consistent API responses
-- **Database**: `src/Database/` - Query builder, migrations, connection pooling  
-- **Authentication**: `src/Auth/` - JWT, LDAP, SAML, API keys
-- **Caching**: `src/Cache/` - Distributed caching with Redis/Memcached
-- **Queue System**: `src/Queue/` - Job processing with Redis/Database backends
-- **Extensions**: `src/Extensions/` - Modular extension system
-- **Security**: `src/Security/` - Rate limiting, vulnerability scanning, lockdown mode
-- **Encryption**: `src/Encryption/` - AES-256-GCM encryption with key rotation support
-- **File Uploads**: `src/Uploader/` - File uploads with thumbnails, media metadata extraction
-- **Storage**: `src/Storage/` - Flysystem-based storage abstraction (local, S3, etc.)
-
-### Configuration System
-
-Configuration files in `config/` directory:
-- `app.php` - Core application settings, paths, performance
-- `database.php` - Database connections and pooling
-- `cache.php` - Cache drivers and distribution
-- `security.php` - Security policies and rate limits
-- `session.php` - Session/JWT authentication settings
-- `encryption.php` - Encryption keys and settings
-- `uploads.php` - File upload settings, blob visibility, signed URLs
-- `filesystem.php` - Storage disks, thumbnail generation settings
-
-Environment variables override config values using `env()` helper.
-
-### Service Provider Architecture
-
-Service providers in `src/Container/Providers/` register services:
-- `CoreProvider.php` - Essential framework services
-- `FileProvider.php` - File operations and storage
-- `ImageProvider.php` - Image processing (Intervention Image)
-- `StorageProvider.php` - Flysystem storage disks
-- `LockProvider.php` - Distributed locking
-
-Additional providers in specialized directories:
-- `src/Auth/AuthBootstrap.php` - Authentication providers
-- `src/Events/ServiceProvider/EventProvider.php` - Event system
-- `src/Http/ServiceProvider/HttpClientProvider.php` - HTTP client
-
 ### Router Architecture
 
 **High-Performance Routing:**
@@ -293,22 +148,6 @@ API_USE_PREFIX=true
 API_PREFIX=/api
 API_VERSION_IN_PATH=true
 ```
-
-**Important:** Application routes in `routes/api.php` must use the `api_prefix()` helper:
-
-```php
-// routes/api.php (receives $context from framework)
-$router->group(['prefix' => api_prefix($context)], function ($router) {
-    $router->get('/users', [UserController::class, 'index']);
-});
-```
-
-Helper functions available (all require `ApplicationContext`):
-- `api_prefix($context)` - Returns route prefix (e.g., `/api/v1`)
-- `api_url($context, '/path')` - Returns full URL (e.g., `https://api.example.com/v1/path`)
-- `is_api_path($context, $path)` - Checks if path matches API prefix
-
-See [docs/API_URLS.md](docs/API_URLS.md) for complete documentation.
 
 ### Database Architecture
 
@@ -395,25 +234,6 @@ public function index(): Response
 - `whenCounted($relation)` - Include relationship count if loaded
 - `whenPivotLoaded($table, $attribute)` - Access pivot data
 
-**Scaffolding:**
-```bash
-php glueful scaffold:resource UserResource           # Basic resource
-php glueful scaffold:resource UserResource --model   # ORM model resource
-php glueful scaffold:resource UserCollection --collection  # Collection
-```
-
-See [docs/RESOURCES.md](docs/RESOURCES.md) for complete documentation.
-
-### Event System
-
-**Scaffold Commands:**
-```bash
-php glueful event:create UserRegistered              # Create event class
-php glueful event:create Auth/LoginFailed            # Event in subdirectory
-php glueful event:listener SendWelcomeEmail          # Create listener class
-php glueful event:listener AuditLog --event=App\\Events\\UserCreatedEvent
-```
-
 **Event Development:**
 - **All events MUST extend `Glueful\Events\Contracts\BaseEvent`** (PSR-14 compliant)
 - BaseEvent provides: event IDs, timestamps, metadata support, propagation control
@@ -492,22 +312,6 @@ class MyMiddleware implements RouteMiddleware
         return array_merge($this->getDefaults(), $params);
     }
 }
-```
-
-**Middleware Registration:**
-```php
-// In service provider
-$container->set('my_middleware', MyMiddleware::class);
-
-// Usage in routes
-$router->get('/protected', $handler)
-    ->middleware(['my_middleware:param1,param2']);
-
-// Field selection middleware usage
-$router->group(['middleware' => ['field_selection']], function ($router) {
-    $router->get('/users/{id}', [UserController::class, 'show']);
-    $router->get('/posts', [PostController::class, 'index']);
-});
 ```
 
 ### Extension System
@@ -639,9 +443,8 @@ GET /users/123?fields=*&expand=posts.comments
 
 **Current Architecture:**
 - Framework uses the modern `src/Routing/` system with high-performance routing
-- All middleware use `RouteMiddleware` interface (not PSR-15 `MiddlewareInterface`)
+- All middleware use `RouteMiddleware` interface (not PSR-15 `MiddlewareInterface` but there is PSR-15 support in `src/Http/Bridge/Psr15/`)
 - Route cache clearing may be needed during integration tests to prevent state leakage
-- See `docs/MIDDLEWARE_MIGRATION_ROADMAP.md` for middleware development patterns and completed migrations
 
 ### Code Organization
 
@@ -1017,7 +820,6 @@ vendor/bin/phpunit --filter="RouterTest"
 - `docs/` - Comprehensive documentation
 - `tests/` - Test suite
 - `storage/` - Logs, cache, uploads
-- `extensions/` - User extensions
 
 **Important Files:**
 - `composer.json` - Dependencies and autoload

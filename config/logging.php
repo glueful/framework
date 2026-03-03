@@ -1,6 +1,84 @@
 <?php
 
 $root = dirname(__DIR__);
+$appEnv = (string) env('APP_ENV', 'development');
+$defaultProfile = match ($appEnv) {
+    'production' => 'production',
+    'staging' => 'staging',
+    'testing' => 'testing',
+    default => 'development',
+};
+$selectedProfile = (string) env('LOG_PROFILE', $defaultProfile);
+
+$profiles = [
+    'development' => [
+        'framework_level' => 'info',
+        'app_level' => 'debug',
+        'log_to_file' => true,
+        'log_to_db' => false,
+        'retention_default' => 30,
+        'retention' => [
+            'debug' => 7,
+            'api' => 14,
+            'app' => 30,
+            'framework' => 30,
+            'auth' => 180,
+            'security' => 180,
+            'error' => 180,
+        ],
+    ],
+    'staging' => [
+        'framework_level' => 'info',
+        'app_level' => 'info',
+        'log_to_file' => true,
+        'log_to_db' => false,
+        'retention_default' => 60,
+        'retention' => [
+            'debug' => 7,
+            'api' => 30,
+            'app' => 60,
+            'framework' => 60,
+            'auth' => 365,
+            'security' => 365,
+            'error' => 365,
+        ],
+    ],
+    'production' => [
+        'framework_level' => 'warning',
+        'app_level' => 'warning',
+        'log_to_file' => true,
+        'log_to_db' => false,
+        'retention_default' => 90,
+        'retention' => [
+            'debug' => 7,
+            'api' => 30,
+            'app' => 90,
+            'framework' => 90,
+            'auth' => 365,
+            'security' => 365,
+            'error' => 365,
+        ],
+    ],
+    'testing' => [
+        'framework_level' => 'warning',
+        'app_level' => 'warning',
+        'log_to_file' => false,
+        'log_to_db' => false,
+        'retention_default' => 7,
+        'retention' => [
+            'debug' => 1,
+            'api' => 1,
+            'app' => 1,
+            'framework' => 1,
+            'auth' => 7,
+            'security' => 7,
+            'error' => 7,
+        ],
+    ],
+];
+
+$profile = $profiles[$selectedProfile] ?? $profiles[$defaultProfile];
+$logDirectory = rtrim((string) env('LOG_FILE_PATH', $root . '/storage/logs/'), '/') . '/';
 
 /**
  * Logging Configuration
@@ -9,13 +87,15 @@ $root = dirname(__DIR__);
  * - Framework logs: HTTP protocol, exceptions, lifecycle, performance
  * - Application logs: Business logic, user actions, custom events
  */
-
-
 return [
+    'profile' => $selectedProfile,
+    'default_profile' => $defaultProfile,
+    'profiles' => $profiles,
+
     // Framework-level logging configuration
     'framework' => [
         'enabled' => env('FRAMEWORK_LOGGING_ENABLED', true),
-        'level' => env('FRAMEWORK_LOG_LEVEL', 'info'),
+        'level' => env('FRAMEWORK_LOG_LEVEL', $profile['framework_level']),
         'channel' => env('FRAMEWORK_LOG_CHANNEL', 'framework'),
 
         // Feature-specific toggles
@@ -47,19 +127,14 @@ return [
     // Application-level logging (developers configure)
     'application' => [
         'default_channel' => env('LOG_CHANNEL', 'app'),
-        'level' => env('LOG_LEVEL', match (env('APP_ENV')) {
-            'production' => 'error',
-            'staging' => 'warning',
-            default => 'debug'
-        }),
-        'log_to_file' => env('LOG_TO_FILE', true),
-        'log_to_db' => env('LOG_TO_DB', true),
-        'database_logging' => env('LOG_TO_DB', true), // Alias for backward compatibility
+        'level' => env('LOG_LEVEL', $profile['app_level']),
+        'log_to_file' => env('LOG_TO_FILE', $profile['log_to_file']),
+        'log_to_db' => env('LOG_TO_DB', $profile['log_to_db']),
     ],
 
     // File paths and rotation settings
     'paths' => [
-        'log_directory' => env('LOG_FILE_PATH', $root . '/storage/logs/'),
+        'log_directory' => $logDirectory,
         'api_log_file' => env('API_LOG_FILE', 'api_debug_') . date('Y-m-d') . '.log',
     ],
 
@@ -80,15 +155,15 @@ return [
     |
     */
     'retention' => [
-        'default' => env('LOG_RETENTION_DAYS', 90),
+        'default' => env('LOG_RETENTION_DAYS', $profile['retention_default']),
         'channels' => [
-            'debug' => env('LOG_RETENTION_DEBUG_DAYS', 7),
-            'api' => env('LOG_RETENTION_API_DAYS', 30),
-            'app' => env('LOG_RETENTION_APP_DAYS', 90),
-            'framework' => env('LOG_RETENTION_FRAMEWORK_DAYS', 90),
-            'auth' => env('LOG_RETENTION_AUTH_DAYS', 365),
-            'security' => env('LOG_RETENTION_SECURITY_DAYS', 365),
-            'error' => env('LOG_RETENTION_ERROR_DAYS', 365),
+            'debug' => env('LOG_RETENTION_DEBUG_DAYS', $profile['retention']['debug']),
+            'api' => env('LOG_RETENTION_API_DAYS', $profile['retention']['api']),
+            'app' => env('LOG_RETENTION_APP_DAYS', $profile['retention']['app']),
+            'framework' => env('LOG_RETENTION_FRAMEWORK_DAYS', $profile['retention']['framework']),
+            'auth' => env('LOG_RETENTION_AUTH_DAYS', $profile['retention']['auth']),
+            'security' => env('LOG_RETENTION_SECURITY_DAYS', $profile['retention']['security']),
+            'error' => env('LOG_RETENTION_ERROR_DAYS', $profile['retention']['error']),
         ],
     ],
 
@@ -96,31 +171,31 @@ return [
     'channels' => [
         'framework' => [
             'driver' => 'daily',
-            'path' => env('LOG_FILE_PATH', $root . '/storage/logs/') . 'framework.log',
-            'level' => env('FRAMEWORK_LOG_LEVEL', 'info'),
+            'path' => $logDirectory . 'framework.log',
+            'level' => env('FRAMEWORK_LOG_LEVEL', $profile['framework_level']),
             'days' => env('LOG_ROTATION_DAYS', 30),
         ],
         'app' => [
             'driver' => 'daily',
-            'path' => env('LOG_FILE_PATH', $root . '/storage/logs/') . 'app.log',
-            'level' => env('LOG_LEVEL', 'debug'),
+            'path' => $logDirectory . 'app.log',
+            'level' => env('LOG_LEVEL', $profile['app_level']),
             'days' => env('LOG_ROTATION_DAYS', 30),
         ],
         'api' => [
             'driver' => 'daily',
-            'path' => env('LOG_FILE_PATH', $root . '/storage/logs/') . 'api.log',
-            'level' => env('LOG_LEVEL', 'debug'),
+            'path' => $logDirectory . 'api.log',
+            'level' => env('LOG_LEVEL', $profile['app_level']),
             'days' => env('LOG_ROTATION_DAYS', 30),
         ],
         'error' => [
             'driver' => 'daily',
-            'path' => env('LOG_FILE_PATH', $root . '/storage/logs/') . 'error.log',
+            'path' => $logDirectory . 'error.log',
             'level' => 'error',
             'days' => env('LOG_ROTATION_DAYS', 30),
         ],
         'debug' => [
             'driver' => 'daily',
-            'path' => env('LOG_FILE_PATH', $root . '/storage/logs/') . 'debug.log',
+            'path' => $logDirectory . 'debug.log',
             'level' => 'debug',
             'days' => env('LOG_ROTATION_DAYS', 30),
         ]

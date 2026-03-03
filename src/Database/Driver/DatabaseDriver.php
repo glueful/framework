@@ -69,8 +69,8 @@ interface DatabaseDriver
      * - SQLite:     INSERT OR REPLACE INTO table (col1, col2) VALUES (?, ?)
      *
      * @param  string $table         The target table name (unquoted)
-     * @param  array<string, mixed>  $columns       Columns to insert in the format [name => value]
-     * @param  array<string, mixed>  $updateColumns Columns to update on conflict in format [name => value]
+     * @param  list<string>          $columns       Insert column names in binding order
+     * @param  list<string>          $updateColumns Column names to update on conflict
      * @return string Complete SQL statement with proper syntax for target database
      * @throws \InvalidArgumentException If parameters are invalid
      */

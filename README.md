@@ -56,6 +56,7 @@ $app->terminate($request, $response);
 ## Documentation
 
 - Official docs website: https://glueful.com (mirror: https://glueful.dev)
+- Logging bootstrap guide: `docs/LOGGING_BOOTSTRAP.md`
 - Changelog: `CHANGELOG.md`
 - Roadmap: `ROADMAP.md`
 - Breaking changes process: `BREAKING_CHANGE_PROCESS.md`

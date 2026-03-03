@@ -111,14 +111,14 @@ class InsertBuilder implements InsertBuilderInterface
      * Build UPSERT SQL query
      * @param string $table
      * @param array<string, mixed> $data
-     * @param array<string> $updateColumns
+     * @param list<string> $updateColumns
      */
     public function buildUpsertQuery(string $table, array $data, array $updateColumns): string
     {
-        // Use driver-specific upsert implementation
-        // Extract update data based on specified columns
-        $updateData = array_intersect_key($data, array_flip($updateColumns));
-        return $this->driver->upsert($table, $data, $updateData);
+        // Drivers build SQL from column names; values are bound separately by the executor.
+        $insertColumns = array_keys($data);
+
+        return $this->driver->upsert($table, $insertColumns, $updateColumns);
     }
 
     /**

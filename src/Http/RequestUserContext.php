@@ -507,7 +507,6 @@ class RequestUserContext
     public function getAuditContext(): array
     {
         $user = $this->getUser();
-        error_log("Generating audit context for user: " . json_encode($user));
         return array_merge($this->requestMetadata, [
         'user_uuid' => $user?->uuid,
         'session_id' => $this->sessionData['session_id'] ?? null,

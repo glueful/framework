@@ -144,20 +144,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
         $this->defaultChannel = $defaultChannel;
         $this->maxFiles = $maxFiles;
         $this->minimumLevel = Level::Debug;
-
-        // Get log directory from config
-        $logDirectory = $this->getConfig('logging.paths.log_directory')
-            ?? $this->getBasePath('storage/logs/');
-
-        // Create logs directory if it doesn't exist
-        if (!is_dir($logDirectory) && !mkdir($logDirectory, 0755, true)) {
-            throw new \RuntimeException("Failed to create logs directory: $logDirectory");
-        }
-
-        // Ensure directory is writable
-        if (!is_writable($logDirectory)) {
-            throw new \RuntimeException("Logs directory is not writable: $logDirectory");
-        }
+        $logToFile = (bool) $this->getConfig('logging.application.log_to_file', true);
 
         // Get max files setting from config
         $this->maxFiles = (int) $this->getConfig('logging.rotation.days', 30);
@@ -165,44 +152,60 @@ class LogManager implements LoggerInterface, LogManagerInterface
         // Create logger
         $this->logger = new Logger($defaultChannel);
 
-        // Create and add the handlers - using createRotatingHandler to allow for consistent initialization
-        $formatter = new LineFormatter(
-            "[%datetime%] %channel%.%level_name%: %message% %context% %extra%\n",
-            "Y-m-d H:i:s"
-        );
+        if ($logToFile) {
+            // Get log directory from config
+            $logDirectory = $this->getConfig('logging.paths.log_directory')
+                ?? $this->getBasePath('storage/logs/');
 
-        // Add rotating file handler for errors (ERROR, CRITICAL, ALERT, EMERGENCY)
-        $errorHandler = $this->createRotatingHandler(
-            $logDirectory . 'error.log',
-            Level::Error
-        );
+            // Create logs directory if it doesn't exist
+            if (!is_dir($logDirectory) && !mkdir($logDirectory, 0755, true)) {
+                throw new \RuntimeException("Failed to create logs directory: $logDirectory");
+            }
 
-        // Add rotating file handler for debug logs
-        $debugHandler = $this->createRotatingHandler(
-            $logDirectory . 'debug.log',
-            Level::Debug,
-            false // Don't bubble up to other handlers
-        );
+            // Ensure directory is writable
+            if (!is_writable($logDirectory)) {
+                throw new \RuntimeException("Logs directory is not writable: $logDirectory");
+            }
 
-        // Add rotating file handler for other logs (INFO, WARNING, NOTICE)
-        $defaultHandler = $this->createRotatingHandler(
-            $logDirectory . 'app.log',
-            Level::Info,
-            false // Don't bubble up to other handlers
-        );
+            // Create and add the handlers - using createRotatingHandler to allow for consistent initialization
+            $formatter = new LineFormatter(
+                "[%datetime%] %channel%.%level_name%: %message% %context% %extra%\n",
+                "Y-m-d H:i:s"
+            );
 
-        // Set formatter for all handlers
-        $errorHandler->setFormatter($formatter);
-        $defaultHandler->setFormatter($formatter);
-        $debugHandler->setFormatter($formatter);
+            // Add rotating file handler for errors (ERROR, CRITICAL, ALERT, EMERGENCY)
+            $errorHandler = $this->createRotatingHandler(
+                $logDirectory . 'error.log',
+                Level::Error
+            );
 
-        // Add handlers to logger
-        $this->logger->pushHandler($errorHandler);    // Errors go to error log
-        $this->logger->pushHandler($debugHandler);    // Debug logs go to debug log
-        $this->logger->pushHandler($defaultHandler);  // Other logs go to default log
+            // Add rotating file handler for debug logs
+            $debugHandler = $this->createRotatingHandler(
+                $logDirectory . 'debug.log',
+                Level::Debug,
+                false // Don't bubble up to other handlers
+            );
+
+            // Add rotating file handler for other logs (INFO, WARNING, NOTICE)
+            $defaultHandler = $this->createRotatingHandler(
+                $logDirectory . 'app.log',
+                Level::Info,
+                false // Don't bubble up to other handlers
+            );
+
+            // Set formatter for all handlers
+            $errorHandler->setFormatter($formatter);
+            $defaultHandler->setFormatter($formatter);
+            $debugHandler->setFormatter($formatter);
+
+            // Add handlers to logger
+            $this->logger->pushHandler($errorHandler);    // Errors go to error log
+            $this->logger->pushHandler($debugHandler);    // Debug logs go to debug log
+            $this->logger->pushHandler($defaultHandler);  // Other logs go to default log
+        }
 
         // Add database handler if configured
-        if ((bool) $this->getConfig('logging.application.database_logging', false)) {
+        if ((bool) $this->getConfig('logging.application.log_to_db', false)) {
             $this->logger->pushHandler(new DatabaseLogHandler([
                 'context' => $this->context,
             ]));
