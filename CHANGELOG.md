@@ -4,6 +4,31 @@ All notable changes to the Glueful framework will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [Unreleased]
+
+---
+
+## [1.41.0] - 2026-03-03 — Beid
+
+### Changed
+
+- **Logging bootstrap is now profile-driven**: `config/logging.php` now resolves deterministic defaults from `LOG_PROFILE` (or `APP_ENV`) before applying explicit env overrides. Added built-in `development`, `staging`, `production`, and `testing` logging profiles, normalized log directory handling, and aligned profile defaults for safer production startup.
+- **Production system checks now validate logging safety**: `system:check --production` now flags unsafe logging configurations including no durable sink (`LOG_TO_FILE=false` and `LOG_TO_DB=false`), disabled event audit toggles (`EVENTS_ENABLED`/`EVENTS_AUDIT_LOGGING`), debug-level production logging, and invalid retention values.
+- **Canonical logging guide added**: Added `docs/LOGGING_BOOTSTRAP.md` and linked it from `README.md`. `.env.example` now documents `LOG_PROFILE`, retention envs, and a production baseline block.
+
+### Fixed
+
+- **QueryBuilder upsert passed record values as identifiers**: `InsertBuilder::buildUpsertQuery()` sent the full associative data array to driver `upsert()` SQL builders, which expect column-name lists. On PostgreSQL this could pass `null` values into `wrapIdentifier()` and crash with `Argument #1 ($identifier) must be of type string, null given`. The framework now passes insert column names (`array_keys($data)`) and aligns `DatabaseDriver::upsert()` type docs/contracts to use `list<string>` column-name arrays.
+- **Audit logging toggles now match runtime behavior**: Core activity audit subscriber registration now respects `events.enabled` and `events.listeners.audit_logging` (`EVENTS_ENABLED`, `EVENTS_AUDIT_LOGGING`) during framework boot. `LogManager` now honors `LOG_TO_FILE=false` and skips file handler/directory setup when disabled. Removed debug `error_log()` noise from `RequestUserContext::getAuditContext()`, and documented event audit toggles in `.env.example`.
+
+### Upgrade Notes
+
+- **`LOG_TO_DB` default changed**: Previously defaulted to `true` when the env var was absent. Now defaults to `false` in all profiles. If your application relies on database logging, add `LOG_TO_DB=true` to your `.env` file.
+- **Profile-driven defaults**: Logging levels and sink settings are now determined by the active profile (`LOG_PROFILE` or `APP_ENV`). Explicit env vars still override profile defaults. Review `docs/LOGGING_BOOTSTRAP.md` for the full profile matrix.
+- **New env vars**: `LOG_PROFILE`, `LOG_RETENTION_*_DAYS` keys are now recognized. No action needed if unset — profiles provide safe defaults.
+
+---
+
 ## [1.40.4] - 2026-02-21 — Alnair (Patch)
 
 ### Fixed

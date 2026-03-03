@@ -21,6 +21,13 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.41.0 — Beid (Released 2026-03-03)
+- **Profile-Driven Logging Bootstrap**: `config/logging.php` now resolves deterministic defaults from `LOG_PROFILE` (or `APP_ENV`) with built-in `development`, `staging`, `production`, and `testing` profiles. Explicit env vars override profile defaults.
+- **Production Safety Checks**: `system:check --production` flags no durable log sink, disabled event/audit toggles, debug-level logging, and invalid retention values.
+- **Upsert Column Fix**: `InsertBuilder::buildUpsertQuery()` now passes column names instead of full data arrays to driver `upsert()` SQL builders, fixing PostgreSQL `wrapIdentifier()` crash on null values.
+- **Audit Toggle Alignment**: Framework boot and `LogManager` now respect `EVENTS_ENABLED`, `EVENTS_AUDIT_LOGGING`, and `LOG_TO_FILE=false` correctly.
+- Notes: Minor release. `LOG_TO_DB` default changed from implicit `true` to `false` in all profiles — add `LOG_TO_DB=true` to `.env` if DB logging is required.
+
 ### 1.40.4 — Alnair (Patch, Released 2026-02-21)
 - **PHPCS Line Length Fix**: Extracted long error message in `WhereClause::getConditionsArray()` to comply with 120-character line limit. Code style only — no runtime changes.
 

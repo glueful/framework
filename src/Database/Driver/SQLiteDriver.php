@@ -79,8 +79,8 @@ class SQLiteDriver implements DatabaseDriver
      * - Maintains atomicity
      *
      * @param  string $table         Target table
-     * @param  array<string, mixed>  $columns       Columns to insert
-     * @param  array<string, mixed>  $updateColumns Columns to update on conflict
+     * @param  list<string>          $columns       Columns to insert
+     * @param  list<string>          $updateColumns Columns to update on conflict
      * @return string SQLite upsert statement
      */
     public function upsert(string $table, array $columns, array $updateColumns): string

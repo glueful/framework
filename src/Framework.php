@@ -468,7 +468,14 @@ class Framework
     private function registerCoreEventSubscribers(): void
     {
         // ActivityLoggingSubscriber handles auth/security event logging
-        if ($this->container === null) {
+        if ($this->container === null || $this->context === null) {
+            return;
+        }
+
+        $eventsEnabled = (bool) config($this->context, 'events.enabled', true);
+        $auditLoggingEnabled = (bool) config($this->context, 'events.listeners.audit_logging', true);
+
+        if (!$eventsEnabled || !$auditLoggingEnabled) {
             return;
         }
 

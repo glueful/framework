@@ -36,7 +36,7 @@ interface InsertBuilderInterface
      *
      * @param string $table
      * @param array<string, mixed> $data
-     * @param array<string> $updateColumns
+     * @param list<string> $updateColumns
      * @return int
      */
     public function upsert(string $table, array $data, array $updateColumns): int;
@@ -64,7 +64,7 @@ interface InsertBuilderInterface
      *
      * @param string $table
      * @param array<string, mixed> $data
-     * @param array<string> $updateColumns
+     * @param list<string> $updateColumns
      * @return string
      */
     public function buildUpsertQuery(string $table, array $data, array $updateColumns): string;
