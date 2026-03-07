@@ -13,3 +13,4 @@ vendor
 /*.code-workspace
 
 bootstrap/cache/
+/.claude
