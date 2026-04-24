@@ -6,6 +6,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+
+- **Route cache writes no longer race across concurrent HTTP boots**: `RouteCache::save()` previously wrote to a shared `routes_{env}.php.tmp` path and then `rename()`d it into place. Under concurrent production requests, one worker could rename the shared temp file before another worker reached `rename()`, causing intermittent `No such file or directory` failures during HTTP layer initialization. The cache writer now skips rewrites when the computed route signature is unchanged, recreates the cache directory defensively, writes to a unique temp file per save, and throws clearer runtime errors when the temp write or atomic replace fails.
+
 ---
 
 ## [1.41.0] - 2026-03-03 — Beid
