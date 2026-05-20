@@ -75,6 +75,24 @@ $app->terminate($request, $response);
 - **Extensions**: Modular extension system with lifecycle management
 - **CLI Tools**: Comprehensive scaffold commands, migrations, cache management
 
+## Generating an SDK client
+
+Glueful produces a high-quality `openapi.json`; client generation is delegated to best-of-breed tools per language. The `generate:client` command builds the right shell invocation for you:
+
+```bash
+# Produce the spec
+php glueful generate:openapi
+
+# TypeScript types via openapi-typescript
+php glueful generate:client typescript --output=./sdk
+
+# Other languages via openapi-generator-cli
+php glueful generate:client python --output=./python-client
+php glueful generate:client go --output=./go-client
+```
+
+By default the command prints the shell command so you can pin a specific generator version in CI. Add `--execute` to run the generator directly. See `docs/WEBHOOKS.md` for how to surface outbound webhooks in the spec for SDK consumers.
+
 ## Deployment Notes
 
 - For long-running servers (RoadRunner, Swoole, FrankenPHP), set `APP_LONG_RUNNING=true` to enable worker-safe lifecycle handling.
