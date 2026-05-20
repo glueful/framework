@@ -49,4 +49,16 @@ final class HandlerEnvelopeTest extends TestCase
         self::assertArrayHasKey('timestamp', $body['error']);
         self::assertArrayHasKey('request_id', $body['error']);
     }
+
+    public function testUnknownStatusCodeReturnsStringifiedCodeAsErrorCode(): void
+    {
+        $handler = new Handler(debug: false);
+        $exception = new \RuntimeException('teapot', 418);
+        $response = $handler->render($exception);
+        $body = json_decode((string) $response->getContent(), true);
+
+        self::assertSame(418, $response->getStatusCode());
+        self::assertIsArray($body);
+        self::assertSame('418', $body['error']['error_code']);
+    }
 }

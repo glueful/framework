@@ -537,7 +537,7 @@ class Handler implements ExceptionHandlerInterface
     {
         return new Response([
             'success' => false,
-            'message' => $e->getMessage() !== '' ? $e->getMessage() : 'Forbidden',
+            'message' => $e->getMessage() !== '' ? $e->getMessage() : $this->getDefaultMessage(403),
             'error' => $this->buildErrorDetails($e, 403),
         ], 403);
     }
@@ -649,7 +649,7 @@ class Handler implements ExceptionHandlerInterface
             500 => 'INTERNAL_SERVER_ERROR',
             503 => 'SERVICE_UNAVAILABLE',
             504 => 'GATEWAY_TIMEOUT',
-            default => 'ERROR',
+            default => (string) $statusCode,
         };
     }
 
