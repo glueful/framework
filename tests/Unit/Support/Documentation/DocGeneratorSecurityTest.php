@@ -96,4 +96,27 @@ final class DocGeneratorSecurityTest extends TestCase
         self::assertContains('FORBIDDEN', $errorProps['error_code']['enum']);
         self::assertSame('date-time', $errorProps['timestamp']['format']);
     }
+
+    public function testCrudEndpointsReferenceErrorResponseSchema(): void
+    {
+        $generator = new DocGenerator(openApiVersion: '3.1.0');
+
+        $reflection = new \ReflectionClass($generator);
+        $method = $reflection->getMethod('addResourceEndpoints');
+        $method->setAccessible(true);
+        $method->invoke($generator, 'users', ['fields' => ['id' => ['type' => 'integer']]]);
+
+        $spec = json_decode($generator->getSwaggerJson(), true);
+        self::assertIsArray($spec);
+
+        $getSingle = $spec['paths']['/v1/users/{uuid}']['get'];
+        self::assertSame(
+            '#/components/schemas/ErrorResponse',
+            $getSingle['responses']['404']['content']['application/json']['schema']['$ref'],
+        );
+        self::assertSame(
+            '#/components/schemas/ErrorResponse',
+            $getSingle['responses']['403']['content']['application/json']['schema']['$ref'],
+        );
+    }
 }

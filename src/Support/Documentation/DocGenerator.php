@@ -86,6 +86,23 @@ class DocGenerator
     }
 
     /**
+     * Build a standard error response block referencing the ErrorResponse schema.
+     *
+     * @return array{description: string, content: array<string, array<string, mixed>>}
+     */
+    private function errorResponse(string $description): array
+    {
+        return [
+            'description' => $description,
+            'content' => [
+                'application/json' => [
+                    'schema' => ['$ref' => '#/components/schemas/ErrorResponse'],
+                ],
+            ],
+        ];
+    }
+
+    /**
      * Check if using OpenAPI 3.1.x
      *
      * @return bool True if using 3.1.x
@@ -372,8 +389,8 @@ class DocGenerator
                         ]
                     ]
                 ],
-                '403' => ['description' => 'Insufficient permissions'],
-                '404' => ['description' => 'Resource not found']
+                '403' => $this->errorResponse('Insufficient permissions'),
+                '404' => $this->errorResponse('Resource not found')
             ]
         ];
 
@@ -421,8 +438,8 @@ class DocGenerator
                         ]
                     ]
                 ],
-                '403' => ['description' => 'Insufficient permissions'],
-                '404' => ['description' => 'Resource not found']
+                '403' => $this->errorResponse('Insufficient permissions'),
+                '404' => $this->errorResponse('Resource not found')
             ]
         ];
 
@@ -462,8 +479,8 @@ class DocGenerator
                         ]
                     ]
                 ],
-                '400' => ['description' => 'Invalid input data'],
-                '403' => ['description' => 'Insufficient permissions']
+                '400' => $this->errorResponse('Invalid input data'),
+                '403' => $this->errorResponse('Insufficient permissions')
             ]
         ];
 
@@ -507,9 +524,9 @@ class DocGenerator
                         ]
                     ]
                 ],
-                '400' => ['description' => 'Invalid input data'],
-                '403' => ['description' => 'Insufficient permissions'],
-                '404' => ['description' => 'Resource not found']
+                '400' => $this->errorResponse('Invalid input data'),
+                '403' => $this->errorResponse('Insufficient permissions'),
+                '404' => $this->errorResponse('Resource not found')
             ]
         ];
 
@@ -544,8 +561,8 @@ class DocGenerator
                         ]
                     ]
                 ],
-                '403' => ['description' => 'Insufficient permissions'],
-                '404' => ['description' => 'Resource not found']
+                '403' => $this->errorResponse('Insufficient permissions'),
+                '404' => $this->errorResponse('Resource not found')
             ]
         ];
     }
