@@ -661,6 +661,12 @@ class CommentsDocGenerator
         // For complex tags, fall back to original extraction methods
         $responses = $this->extractSimplifiedResponses($docComment);
         $requestBody = $this->extractSimplifiedRequestBody($docComment);
+        if ($requestBody !== null) {
+            $example = $this->extractRequestExampleAnnotation($docComment);
+            if ($example !== null) {
+                $requestBody['_example'] = $example;
+            }
+        }
         $pathParams = $this->extractSimplifiedParameters($docComment);
 
         // Extract path parameters if not explicitly defined
@@ -720,6 +726,12 @@ class CommentsDocGenerator
 
         $responses = $this->extractSimplifiedResponses($docComment);
         $requestBody = $this->extractSimplifiedRequestBody($docComment);
+        if ($requestBody !== null) {
+            $example = $this->extractRequestExampleAnnotation($docComment);
+            if ($example !== null) {
+                $requestBody['_example'] = $example;
+            }
+        }
         $pathParams = $this->extractSimplifiedParameters($docComment);
 
         if ($pathParams === [] && strpos($routePath, '{') !== false) {
@@ -737,6 +749,27 @@ class CommentsDocGenerator
             'requestBody' => $requestBody,
             'pathParams' => $pathParams
         ];
+    }
+
+    /**
+     * Extract an @example annotation from a doc comment.
+     *
+     * The annotation may be either a JSON object literal or a quoted string.
+     * Returns the parsed value or null if no @example was found / parse failed.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function extractRequestExampleAnnotation(string $docComment): ?array
+    {
+        if (preg_match('/@example\s+(\{[\s\S]*?\}|"[^"]*")/', $docComment, $matches) !== 1) {
+            return null;
+        }
+
+        $raw = trim($matches[1]);
+        // Strip leading asterisks/whitespace from multiline JSON blocks
+        $cleaned = preg_replace('/^\s*\*\s*/m', '', $raw) ?? $raw;
+        $decoded = json_decode($cleaned, true);
+        return is_array($decoded) ? $decoded : null;
     }
 
     /**
@@ -1236,17 +1269,24 @@ class CommentsDocGenerator
     private function buildRequestBody(array $schema): array
     {
         $contentType = $this->getRequestBodyContentType($schema);
+        // Pull off the private _example key BEFORE conversion so it doesn't leak into the OpenAPI output
+        $annotatedExample = is_array($schema['_example'] ?? null) ? $schema['_example'] : null;
+        unset($schema['_example']);
+
         $convertedSchema = $this->convertFileFieldsToOpenApi($schema);
 
         $content = ['schema' => $convertedSchema];
 
-        if (
-            $contentType === 'application/json'
-            && isset($convertedSchema['properties'])
-            && is_array($convertedSchema['properties'])
-            && $convertedSchema['properties'] !== []
-        ) {
-            $content['example'] = (new ExampleDeriver())->fromSchemaProperties($convertedSchema['properties']);
+        if ($contentType === 'application/json') {
+            if ($annotatedExample !== null) {
+                $content['example'] = $annotatedExample;
+            } elseif (
+                isset($convertedSchema['properties'])
+                && is_array($convertedSchema['properties'])
+                && $convertedSchema['properties'] !== []
+            ) {
+                $content['example'] = (new ExampleDeriver())->fromSchemaProperties($convertedSchema['properties']);
+            }
         }
 
         return [
