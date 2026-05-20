@@ -69,8 +69,8 @@ final class PaginationSchemaBuilder
                 'properties' => [
                     'first' => ['type' => 'string', 'format' => 'uri', 'example' => '/api/users?page=1'],
                     'last' => ['type' => 'string', 'format' => 'uri', 'example' => '/api/users?page=6'],
-                    'prev' => ['type' => ['string', 'null'], 'format' => 'uri'],
-                    'next' => ['type' => ['string', 'null'], 'format' => 'uri'],
+                    'prev' => ['type' => 'string', 'format' => 'uri', 'nullable' => true],
+                    'next' => ['type' => 'string', 'format' => 'uri', 'nullable' => true],
                 ],
             ],
         ];

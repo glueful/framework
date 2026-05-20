@@ -148,4 +148,29 @@ final class DocGeneratorSecurityTest extends TestCase
         }
         self::assertSame(array_unique($ids), $ids, 'Duplicate operationId detected');
     }
+
+    public function testListEndpointReferencesPaginationLinks(): void
+    {
+        $generator = new DocGenerator(openApiVersion: '3.1.0');
+        $reflection = new \ReflectionClass($generator);
+        $method = $reflection->getMethod('addResourceEndpoints');
+        $method->setAccessible(true);
+        $method->invoke($generator, 'users', ['fields' => ['id' => ['type' => 'integer']]]);
+
+        $spec = json_decode($generator->getSwaggerJson(), true);
+        self::assertIsArray($spec);
+        self::assertArrayHasKey('PaginationLinks', $spec['components']['schemas']);
+        self::assertArrayHasKey('PaginationMeta', $spec['components']['schemas']);
+
+        $listSchema = $spec['paths']['/v1/users']['get']['responses']['200']
+            ['content']['application/json']['schema'];
+        self::assertSame(
+            '#/components/schemas/PaginationLinks',
+            $listSchema['properties']['links']['$ref'],
+        );
+        self::assertSame(
+            '#/components/schemas/users',
+            $listSchema['properties']['data']['items']['$ref'],
+        );
+    }
 }

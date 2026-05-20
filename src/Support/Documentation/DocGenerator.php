@@ -378,20 +378,10 @@ class DocGenerator
                     'description' => "{$tableName} retrieved successfully",
                     'content' => [
                         'application/json' => [
-                            'schema' => [
-                                'type' => 'object',
-                                'properties' => [
-                                    'success' => ['type' => 'boolean', 'example' => true],
-                                    'message' => ['type' => 'string'],
-                                    'data' => [
-                                        'type' => 'array',
-                                        'items' => ['$ref' => "#/components/schemas/{$tableName}"]
-                                    ],
-                                    'pagination' => ['$ref' => '#/components/schemas/PaginationMeta']
-                                ]
-                            ]
-                        ]
-                    ]
+                            'schema' => (new PaginationSchemaBuilder())
+                                ->envelopeFor("#/components/schemas/{$tableName}"),
+                        ],
+                    ],
                 ],
                 '403' => $this->errorResponse('Insufficient permissions'),
                 '404' => $this->errorResponse('Resource not found')
@@ -1437,7 +1427,9 @@ class DocGenerator
      */
     private function getDefaultSchemas(): array
     {
-        return [
+        $paginationComponents = (new PaginationSchemaBuilder())->components();
+
+        return array_merge($paginationComponents, [
             // Common Response Schemas
             'SuccessResponse' => [
                 'type' => 'object',
@@ -1960,7 +1952,7 @@ class DocGenerator
                     ]
                 ]
             ]
-        ];
+        ]);
     }
 
     /**
