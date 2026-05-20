@@ -125,4 +125,27 @@ final class DocGeneratorSecurityTest extends TestCase
             $post['responses']['400']['content']['application/json']['schema']['$ref'],
         );
     }
+
+    public function testAllOperationIdsAreUniqueAndCamelCase(): void
+    {
+        $generator = new DocGenerator(openApiVersion: '3.1.0');
+        $reflection = new \ReflectionClass($generator);
+        $method = $reflection->getMethod('addResourceEndpoints');
+        $method->setAccessible(true);
+        $method->invoke($generator, 'users', ['fields' => ['id' => ['type' => 'integer']]]);
+        $method->invoke($generator, 'posts', ['fields' => ['id' => ['type' => 'integer']]]);
+
+        $spec = json_decode($generator->getSwaggerJson(), true);
+        self::assertIsArray($spec);
+
+        $ids = [];
+        foreach ($spec['paths'] as $path => $methods) {
+            foreach ($methods as $verb => $op) {
+                self::assertArrayHasKey('operationId', $op, "Missing operationId on {$verb} {$path}");
+                self::assertMatchesRegularExpression('/^[a-z][a-zA-Z0-9]*$/', $op['operationId']);
+                $ids[] = $op['operationId'];
+            }
+        }
+        self::assertSame(array_unique($ids), $ids, 'Duplicate operationId detected');
+    }
 }

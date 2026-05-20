@@ -52,6 +52,9 @@ class CommentsDocGenerator
     /** @var SecuritySchemeRegistry|null Security scheme registry; null until DI wiring is complete */
     private ?SecuritySchemeRegistry $registry = null;
 
+    /** @var OperationIdGenerator Stable operation-id naming for SDK consumers. */
+    private OperationIdGenerator $operationIds;
+
     /**
      * Constructor
      *
@@ -83,6 +86,7 @@ class CommentsDocGenerator
         $this->extensionsManager = $extensionsManager
             ?? container($this->context)->get(ExtensionManager::class);
         $this->docBlockFactory = DocBlockFactory::createInstance();
+        $this->operationIds = new OperationIdGenerator();
     }
 
     /**
@@ -456,6 +460,7 @@ class CommentsDocGenerator
             // Create operation object
             $operation = [
                 'tags' => [$route['tag']],
+                'operationId' => $this->operationIds->register($this->operationIds->fromMethodAndPath($method, $path)),
                 'summary' => $route['summary'],
                 'description' => $route['description'],
                 'responses' => $route['responses']
@@ -1313,6 +1318,7 @@ class CommentsDocGenerator
             // Create operation object
             $operation = [
                 'tags' => [$route['tag']],
+                'operationId' => $this->operationIds->register($this->operationIds->fromMethodAndPath($method, $path)),
                 'summary' => $route['summary'],
                 'description' => $route['description'],
                 'responses' => $route['responses']

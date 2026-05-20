@@ -37,6 +37,9 @@ class DocGenerator
     /** @var SecuritySchemeRegistry|null Security scheme registry; null until DI wiring is complete */
     private ?SecuritySchemeRegistry $registry = null;
 
+    /** @var OperationIdGenerator Stable operation-id naming for SDK consumers. */
+    private OperationIdGenerator $operationIds;
+
     /**
      * Constructor
      *
@@ -47,6 +50,7 @@ class DocGenerator
         $this->context = $context;
         $this->openApiVersion = $openApiVersion
             ?? $this->getConfig('documentation.openapi_version', '3.1.0');
+        $this->operationIds = new OperationIdGenerator();
     }
 
     /**
@@ -329,7 +333,7 @@ class DocGenerator
             'tags' => [$tag],
             'summary' => "List {$tableName}",
             'description' => "Retrieves a paginated list of {$tableName} records",
-            'operationId' => "list" . ucfirst($tableName),
+            'operationId' => $this->operationIds->register($this->operationIds->fromMethodAndPath('GET', $basePath)),
             'security' => $this->securityFor(['auth']),
             'parameters' => [
                 [
@@ -399,7 +403,7 @@ class DocGenerator
             'tags' => [$tag],
             'summary' => "Get {$tableName} by UUID",
             'description' => "Retrieves a single {$tableName} record by its UUID",
-            'operationId' => "get" . ucfirst($tableName),
+            'operationId' => $this->operationIds->register($this->operationIds->fromMethodAndPath('GET', $basePath . '/{uuid}')),
             'security' => $this->securityFor(['auth']),
             'parameters' => [
                 [
@@ -453,7 +457,7 @@ class DocGenerator
             'tags' => [$tag],
             'summary' => "Create {$tableName}",
             'description' => "Creates a new {$tableName} record",
-            'operationId' => "create" . ucfirst($tableName),
+            'operationId' => $this->operationIds->register($this->operationIds->fromMethodAndPath('POST', $basePath)),
             'security' => $this->securityFor(['auth']),
             'requestBody' => [
                 'required' => true,
@@ -489,7 +493,7 @@ class DocGenerator
             'tags' => [$tag],
             'summary' => "Update {$tableName}",
             'description' => "Updates an existing {$tableName} record",
-            'operationId' => "update" . ucfirst($tableName),
+            'operationId' => $this->operationIds->register($this->operationIds->fromMethodAndPath('PUT', $basePath . '/{uuid}')),
             'security' => $this->securityFor(['auth']),
             'parameters' => [
                 [
@@ -535,7 +539,7 @@ class DocGenerator
             'tags' => [$tag],
             'summary' => "Delete {$tableName}",
             'description' => "Deletes a {$tableName} record",
-            'operationId' => "delete" . ucfirst($tableName),
+            'operationId' => $this->operationIds->register($this->operationIds->fromMethodAndPath('DELETE', $basePath . '/{uuid}')),
             'security' => $this->securityFor(['auth']),
             'parameters' => [
                 [
