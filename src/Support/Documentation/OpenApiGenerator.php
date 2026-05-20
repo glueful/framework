@@ -53,6 +53,34 @@ class OpenApiGenerator
         $this->fileFinder = $fileFinder ?? container($this->context)->get(FileFinder::class);
         $this->runFromConsole = $runFromConsole || $this->isConsole();
         $this->resourceExpander = $resourceExpander ?? new ResourceRouteExpander();
+
+        $this->wireSecurityRegistry();
+    }
+
+    /**
+     * Wire the configured SecuritySchemeRegistry into the underlying generators.
+     *
+     * Reads documentation.security_schemes and documentation.middleware_map from
+     * config and propagates them to both DocGenerator and CommentsDocGenerator so
+     * the emitted spec advertises the configured schemes and per-operation
+     * security requirements.
+     */
+    private function wireSecurityRegistry(): void
+    {
+        $schemes = config($this->context, 'documentation.security_schemes', []);
+        $middlewareMap = config($this->context, 'documentation.middleware_map', []);
+
+        if (!is_array($schemes) || $schemes === []) {
+            return;
+        }
+
+        $registry = new SecuritySchemeRegistry(
+            $schemes,
+            is_array($middlewareMap) ? $middlewareMap : [],
+        );
+
+        $this->docGenerator->setSecurityRegistry($registry);
+        $this->commentsGenerator->setSecurityRegistry($registry);
     }
 
     /**

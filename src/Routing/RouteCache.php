@@ -118,15 +118,30 @@ class RouteCache
         }
 
         $signature = $this->computeSignature();
-        $code = $compiler->compile($router, $signature);
-
         $cacheFile = $this->getCacheFile();
-        $tmpFile = $cacheFile . '.tmp';
+        $cachedSignature = $this->getCachedSignature();
+        if ($cachedSignature !== null && hash_equals($cachedSignature, $signature) && file_exists($cacheFile)) {
+            return true;
+        }
+
+        $code = $compiler->compile($router, $signature);
+        $tmpFile = sprintf('%s.tmp.%s', $cacheFile, bin2hex(random_bytes(8)));
+
+        if (!is_dir($this->cacheDir)) {
+            mkdir($this->cacheDir, 0755, true);
+        }
 
         // Atomic write with proper permissions
-        file_put_contents($tmpFile, $code, LOCK_EX);
+        if (file_put_contents($tmpFile, $code, LOCK_EX) === false) {
+            throw new \RuntimeException(sprintf('Failed to write route cache temp file: %s', $tmpFile));
+        }
+
         chmod($tmpFile, 0644);
-        rename($tmpFile, $cacheFile);
+
+        if (!rename($tmpFile, $cacheFile)) {
+            @unlink($tmpFile);
+            throw new \RuntimeException(sprintf('Failed to atomically replace route cache file: %s', $cacheFile));
+        }
 
         // Warm opcache
         if (function_exists('opcache_compile_file')) {

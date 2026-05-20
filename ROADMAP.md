@@ -21,6 +21,16 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.42.0 — Caph (Released 2026-05-20)
+- **OpenAPI Spec Excellence**: Generated `openapi.json` now declares all configured security schemes (BearerAuth, ApiKeyAuth, …) via `SecuritySchemeRegistry` driven by `documentation.security_schemes` / `middleware_map` config — per-operation `security` is derived from route middleware instead of being hardcoded.
+- **Unified `ErrorResponse` Schema**: New OpenAPI component for the `{success, message, error: {code, error_code, timestamp, request_id}}` envelope with an `error_code` enum (`NOT_FOUND`, `FORBIDDEN`, …). All CRUD 4xx responses `$ref` it so generated SDKs typecheck error responses.
+- **Deterministic Operation IDs**: New `OperationIdGenerator` produces camelCase SDK method names and closes a gap where comment-driven generation emitted operations without any `operationId`.
+- **Pagination + Field-Selection Components**: `PaginationMeta`, `PaginationLinks`, and per-resource envelope schemas match `PaginatedResourceResponse`. New `addRouteWithFieldsAttribute()` helper surfaces `?fields=` / `?expand=` from `#[Fields]` attributes.
+- **Auto-Derived Examples**: `ExampleDeriver` populates JSON request bodies with realistic examples inferred from Validator rules and schema properties; `@example` annotations override the derived value.
+- **OpenAPI 3.1 Webhooks**: `WebhookDocsBuilder` emits a top-level `webhooks` object from `documentation.webhooks` config — including the `X-Glueful-Signature` and `X-Glueful-Timestamp` headers actually sent by `WebhookDeliveryService`. New `docs/WEBHOOKS.md`.
+- **`generate:client` CLI Wrapper**: Thin command that shells out to `openapi-typescript` (TS targets) or `openapi-generator-cli` (everything else). Glueful does not own codegen logic.
+- Notes: Minor release with one breaking change — `PermissionUnauthorizedException` envelope unified with the standard `{success, message, error: {…}}` shape. Consumers reading top-level `code`/`error_code` must read `error.code`/`error.error_code` instead.
+
 ### 1.41.0 — Beid (Released 2026-03-03)
 - **Profile-Driven Logging Bootstrap**: `config/logging.php` now resolves deterministic defaults from `LOG_PROFILE` (or `APP_ENV`) with built-in `development`, `staging`, `production`, and `testing` profiles. Explicit env vars override profile defaults.
 - **Production Safety Checks**: `system:check --production` flags no durable log sink, disabled event/audit toggles, debug-level logging, and invalid retention values.

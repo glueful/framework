@@ -34,6 +34,12 @@ class DocGenerator
     private string $openApiVersion;
     private ?ApplicationContext $context;
 
+    /** @var SecuritySchemeRegistry|null Security scheme registry; null until DI wiring is complete */
+    private ?SecuritySchemeRegistry $registry = null;
+
+    /** @var OperationIdGenerator Stable operation-id naming for SDK consumers. */
+    private OperationIdGenerator $operationIds;
+
     /**
      * Constructor
      *
@@ -44,6 +50,118 @@ class DocGenerator
         $this->context = $context;
         $this->openApiVersion = $openApiVersion
             ?? $this->getConfig('documentation.openapi_version', '3.1.0');
+        $this->operationIds = new OperationIdGenerator();
+    }
+
+    /**
+     * Set the security scheme registry for this generator.
+     *
+     * When set, replaces the hardcoded BearerAuth fallback with registry-driven
+     * scheme resolution. Call before invoking any generation method.
+     */
+    public function setSecurityRegistry(SecuritySchemeRegistry $registry): void
+    {
+        $this->registry = $registry;
+    }
+
+    /**
+     * Advertise ?fields= and ?expand= query parameters on a documented route.
+     *
+     * Call this from controller-reflection code when a route carries
+     * #[Fields(allowed: [...], strict: true)]. The fields enum constrains
+     * what generated SDKs surface in their typed query interfaces.
+     *
+     * @param list<string> $allowedFields Field paths permitted by the route
+     */
+    public function addRouteWithFieldsAttribute(
+        string $method,
+        string $path,
+        array $allowedFields,
+        bool $strict = true,
+    ): void {
+        $verb = strtolower($method);
+        $existing = $this->paths[$path][$verb] ?? [];
+        $parameters = $existing['parameters'] ?? [];
+
+        $parameters[] = [
+            'name' => 'fields',
+            'in' => 'query',
+            'description' => 'Comma-separated list of fields to include in the response'
+                . ($strict ? ' (strict whitelist).' : '.'),
+            'schema' => [
+                'type' => 'array',
+                'items' => ['type' => 'string', 'enum' => $allowedFields],
+            ],
+            'style' => 'form',
+            'explode' => false,
+        ];
+
+        $parameters[] = [
+            'name' => 'expand',
+            'in' => 'query',
+            'description' => 'Comma-separated list of related resources to expand.',
+            'schema' => [
+                'type' => 'array',
+                'items' => ['type' => 'string'],
+            ],
+            'style' => 'form',
+            'explode' => false,
+        ];
+
+        $existing['parameters'] = $parameters;
+        $this->paths[$path][$verb] = $existing;
+    }
+
+    /** @return array<string, array<string, mixed>> */
+    private function securitySchemes(): array
+    {
+        return $this->registry?->getSchemes() ?? [
+            'BearerAuth' => [
+                'type' => 'http',
+                'scheme' => 'bearer',
+                'bearerFormat' => 'JWT',
+                'description' => 'JWT Authorization header using the Bearer scheme',
+            ],
+        ];
+    }
+
+    /**
+     * @param  list<string> $middleware
+     * @return list<array<string, list<string>>>
+     */
+    private function securityFor(array $middleware): array
+    {
+        if ($this->registry !== null) {
+            return $this->registry->securityFor($middleware);
+        }
+        return in_array('auth', $middleware, true) ? [['BearerAuth' => []]] : [];
+    }
+
+    /**
+     * Build a unique, camelCase operationId for the given HTTP method + path.
+     */
+    private function operationId(string $method, string $path): string
+    {
+        return $this->operationIds->register(
+            $this->operationIds->fromMethodAndPath($method, $path)
+        );
+    }
+
+    /**
+     * Build a standard error response block referencing the ErrorResponse schema.
+     *
+     * @return array{description: string, content: array<string, array<string, mixed>>}
+     */
+    private function errorResponse(string $description): array
+    {
+        return [
+            'description' => $description,
+            'content' => [
+                'application/json' => [
+                    'schema' => ['$ref' => '#/components/schemas/ErrorResponse'],
+                ],
+            ],
+        ];
     }
 
     /**
@@ -273,8 +391,8 @@ class DocGenerator
             'tags' => [$tag],
             'summary' => "List {$tableName}",
             'description' => "Retrieves a paginated list of {$tableName} records",
-            'operationId' => "list" . ucfirst($tableName),
-            'security' => [['BearerAuth' => []]],
+            'operationId' => $this->operationId('GET', $basePath),
+            'security' => $this->securityFor(['auth']),
             'parameters' => [
                 [
                     'name' => 'page',
@@ -318,23 +436,13 @@ class DocGenerator
                     'description' => "{$tableName} retrieved successfully",
                     'content' => [
                         'application/json' => [
-                            'schema' => [
-                                'type' => 'object',
-                                'properties' => [
-                                    'success' => ['type' => 'boolean', 'example' => true],
-                                    'message' => ['type' => 'string'],
-                                    'data' => [
-                                        'type' => 'array',
-                                        'items' => ['$ref' => "#/components/schemas/{$tableName}"]
-                                    ],
-                                    'pagination' => ['$ref' => '#/components/schemas/PaginationMeta']
-                                ]
-                            ]
-                        ]
-                    ]
+                            'schema' => (new PaginationSchemaBuilder())
+                                ->envelopeFor("#/components/schemas/{$tableName}"),
+                        ],
+                    ],
                 ],
-                '403' => ['description' => 'Insufficient permissions'],
-                '404' => ['description' => 'Resource not found']
+                '403' => $this->errorResponse('Insufficient permissions'),
+                '404' => $this->errorResponse('Resource not found')
             ]
         ];
 
@@ -343,8 +451,8 @@ class DocGenerator
             'tags' => [$tag],
             'summary' => "Get {$tableName} by UUID",
             'description' => "Retrieves a single {$tableName} record by its UUID",
-            'operationId' => "get" . ucfirst($tableName),
-            'security' => [['BearerAuth' => []]],
+            'operationId' => $this->operationId('GET', $basePath . '/{uuid}'),
+            'security' => $this->securityFor(['auth']),
             'parameters' => [
                 [
                     'name' => 'uuid',
@@ -382,8 +490,8 @@ class DocGenerator
                         ]
                     ]
                 ],
-                '403' => ['description' => 'Insufficient permissions'],
-                '404' => ['description' => 'Resource not found']
+                '403' => $this->errorResponse('Insufficient permissions'),
+                '404' => $this->errorResponse('Resource not found')
             ]
         ];
 
@@ -397,8 +505,8 @@ class DocGenerator
             'tags' => [$tag],
             'summary' => "Create {$tableName}",
             'description' => "Creates a new {$tableName} record",
-            'operationId' => "create" . ucfirst($tableName),
-            'security' => [['BearerAuth' => []]],
+            'operationId' => $this->operationId('POST', $basePath),
+            'security' => $this->securityFor(['auth']),
             'requestBody' => [
                 'required' => true,
                 'content' => [
@@ -423,8 +531,8 @@ class DocGenerator
                         ]
                     ]
                 ],
-                '400' => ['description' => 'Invalid input data'],
-                '403' => ['description' => 'Insufficient permissions']
+                '400' => $this->errorResponse('Invalid input data'),
+                '403' => $this->errorResponse('Insufficient permissions')
             ]
         ];
 
@@ -433,8 +541,8 @@ class DocGenerator
             'tags' => [$tag],
             'summary' => "Update {$tableName}",
             'description' => "Updates an existing {$tableName} record",
-            'operationId' => "update" . ucfirst($tableName),
-            'security' => [['BearerAuth' => []]],
+            'operationId' => $this->operationId('PUT', $basePath . '/{uuid}'),
+            'security' => $this->securityFor(['auth']),
             'parameters' => [
                 [
                     'name' => 'uuid',
@@ -468,9 +576,9 @@ class DocGenerator
                         ]
                     ]
                 ],
-                '400' => ['description' => 'Invalid input data'],
-                '403' => ['description' => 'Insufficient permissions'],
-                '404' => ['description' => 'Resource not found']
+                '400' => $this->errorResponse('Invalid input data'),
+                '403' => $this->errorResponse('Insufficient permissions'),
+                '404' => $this->errorResponse('Resource not found')
             ]
         ];
 
@@ -479,8 +587,8 @@ class DocGenerator
             'tags' => [$tag],
             'summary' => "Delete {$tableName}",
             'description' => "Deletes a {$tableName} record",
-            'operationId' => "delete" . ucfirst($tableName),
-            'security' => [['BearerAuth' => []]],
+            'operationId' => $this->operationId('DELETE', $basePath . '/{uuid}'),
+            'security' => $this->securityFor(['auth']),
             'parameters' => [
                 [
                     'name' => 'uuid',
@@ -505,8 +613,8 @@ class DocGenerator
                         ]
                     ]
                 ],
-                '403' => ['description' => 'Insufficient permissions'],
-                '404' => ['description' => 'Resource not found']
+                '403' => $this->errorResponse('Insufficient permissions'),
+                '404' => $this->errorResponse('Resource not found')
             ]
         ];
     }
@@ -647,14 +755,7 @@ class DocGenerator
                 ]
             ]),
             'components' => [
-                'securitySchemes' => [
-                    'BearerAuth' => [
-                        'type' => 'http',
-                        'scheme' => 'bearer',
-                        'bearerFormat' => 'JWT',
-                        'description' => 'JWT Authorization header using the Bearer scheme'
-                    ]
-                ],
+                'securitySchemes' => $this->securitySchemes(),
                 'schemas' => $this->transformSchemas(
                     array_merge($this->getDefaultSchemas(), $this->schemas)
                 )
@@ -666,6 +767,11 @@ class DocGenerator
         // Add JSON Schema dialect for OpenAPI 3.1
         if ($this->isOpenApi31()) {
             $swagger['jsonSchemaDialect'] = 'https://json-schema.org/draft/2020-12/schema';
+        }
+
+        $webhooksConfig = $this->getConfig('documentation.webhooks', []);
+        if (is_array($webhooksConfig) && $webhooksConfig !== [] && $this->isOpenApi31()) {
+            $swagger['webhooks'] = (new WebhookDocsBuilder())->build($webhooksConfig);
         }
 
         return json_encode($swagger, JSON_PRETTY_PRINT);
@@ -833,7 +939,7 @@ class DocGenerator
                 'tags' => ["Table - {$resource}"],
                 'summary' => "List {$tableName}",
                 'description' => "Retrieve a list of {$tableName} records",
-                'security' => [['BearerAuth' => []]],
+                'security' => $this->securityFor(['auth']),
                 'parameters' => [
                     ...$this->getCommonParameters(),
                     ...$this->getFilterParameters()
@@ -849,7 +955,7 @@ class DocGenerator
                 'tags' => ["Table - {$resource}"],
                 'summary' => "Create new {$tableName}",
                 'description' => "Create a new {$tableName} record",
-                'security' => [['BearerAuth' => []]],
+                'security' => $this->securityFor(['auth']),
                 'requestBody' => [
                     'required' => true,
                     'content' => [
@@ -877,7 +983,7 @@ class DocGenerator
                 'tags' => ["Table - {$resource}"],
                 'summary' => "Update {$tableName}",
                 'description' => "Update an existing {$tableName} record",
-                'security' => [['BearerAuth' => []]],
+                'security' => $this->securityFor(['auth']),
                 'parameters' => [
                     [
                         'name' => 'id',
@@ -913,7 +1019,7 @@ class DocGenerator
                 'tags' => ["Table - {$resource}"],
                 'summary' => "Delete {$tableName}",
                 'description' => "Delete a {$tableName} record",
-                'security' => [['BearerAuth' => []]],
+                'security' => $this->securityFor(['auth']),
                 'parameters' => [
                     [
                         'name' => 'id',
@@ -1021,7 +1127,7 @@ class DocGenerator
             'tags' => [explode('/', $docName)[0]],
             'summary' => ucwords(str_replace('-', ' ', basename($docName))),
             'description' => "Endpoint for " . str_replace('-', ' ', $docName),
-            'security' => $isPublic === true ? [] : [['BearerAuth' => []]],
+            'security' => $isPublic === true ? [] : $this->securityFor(['auth']),
             'requestBody' => [
                 'required' => true,
                 'content' => $content
@@ -1324,7 +1430,7 @@ class DocGenerator
                 'content' => [
                     'application/json' => [
                         'schema' => [
-                            '$ref' => '#/components/schemas/Error'
+                            '$ref' => '#/components/schemas/ErrorResponse'
                         ]
                     ]
                 ]
@@ -1347,7 +1453,7 @@ class DocGenerator
                 'content' => [
                     'application/json' => [
                         'schema' => [
-                            '$ref' => '#/components/schemas/Error'
+                            '$ref' => '#/components/schemas/ErrorResponse'
                         ]
                     ]
                 ]
@@ -1357,7 +1463,7 @@ class DocGenerator
                 'content' => [
                     'application/json' => [
                         'schema' => [
-                            '$ref' => '#/components/schemas/Error'
+                            '$ref' => '#/components/schemas/ErrorResponse'
                         ]
                     ]
                 ]
@@ -1367,7 +1473,7 @@ class DocGenerator
                 'content' => [
                     'application/json' => [
                         'schema' => [
-                            '$ref' => '#/components/schemas/Error'
+                            '$ref' => '#/components/schemas/ErrorResponse'
                         ]
                     ]
                 ]
@@ -1384,7 +1490,9 @@ class DocGenerator
      */
     private function getDefaultSchemas(): array
     {
-        return [
+        $paginationComponents = (new PaginationSchemaBuilder())->components();
+
+        return array_merge($paginationComponents, [
             // Common Response Schemas
             'SuccessResponse' => [
                 'type' => 'object',
@@ -1427,22 +1535,55 @@ class DocGenerator
             'ErrorResponse' => [
                 'type' => 'object',
                 'properties' => [
-                    'success' => [
-                        'type' => 'boolean',
-                        'example' => false
+                    'success' => ['type' => 'boolean', 'example' => false],
+                    'message' => ['type' => 'string', 'example' => 'Resource not found'],
+                    'error' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'code' => ['type' => 'integer', 'example' => 404],
+                            'error_code' => [
+                                'type' => 'string',
+                                'enum' => [
+                                    'BAD_REQUEST',
+                                    'UNAUTHORIZED',
+                                    'FORBIDDEN',
+                                    'NOT_FOUND',
+                                    'METHOD_NOT_ALLOWED',
+                                    'CONFLICT',
+                                    'UNPROCESSABLE_ENTITY',
+                                    'TOO_MANY_REQUESTS',
+                                    'INTERNAL_SERVER_ERROR',
+                                    'SERVICE_UNAVAILABLE',
+                                    'GATEWAY_TIMEOUT',
+                                ],
+                                'example' => 'NOT_FOUND',
+                            ],
+                            'timestamp' => [
+                                'type' => 'string',
+                                'format' => 'date-time',
+                                'description' => 'ISO 8601 datetime when the error occurred.',
+                            ],
+                            'request_id' => [
+                                'type' => 'string',
+                                'example' => 'req_abc123',
+                                'description' => 'Correlation identifier for tracing this request in logs.',
+                            ],
+                        ],
+                        'required' => ['code', 'error_code', 'timestamp', 'request_id'],
                     ],
-                    'message' => [
-                        'type' => 'string',
-                        'example' => 'An error occurred'
-                    ],
-                    'errors' => [
-                        'type' => 'array',
-                        'items' => [
-                            'type' => 'string'
-                        ]
-                    ]
                 ],
-                'required' => ['success', 'message']
+                'required' => ['success', 'message', 'error'],
+            ],
+
+            'WebhookEnvelope' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'string', 'example' => 'wh_evt_abc123'],
+                    'event' => ['type' => 'string', 'example' => 'user.created'],
+                    'created_at' => ['type' => 'string', 'format' => 'date-time'],
+                    'data' => ['type' => 'object'],
+                ],
+                'required' => ['id', 'event', 'created_at', 'data'],
             ],
 
             'ValidationErrorResponse' => [
@@ -1467,40 +1608,6 @@ class DocGenerator
                     ]
                 ],
                 'required' => ['success', 'message', 'errors']
-            ],
-
-            'PaginationMeta' => [
-                'type' => 'object',
-                'properties' => [
-                    'current_page' => [
-                        'type' => 'integer',
-                        'description' => 'Current page number'
-                    ],
-                    'per_page' => [
-                        'type' => 'integer',
-                        'description' => 'Number of items per page'
-                    ],
-                    'total' => [
-                        'type' => 'integer',
-                        'description' => 'Total number of items'
-                    ],
-                    'last_page' => [
-                        'type' => 'integer',
-                        'description' => 'Last page number'
-                    ],
-                    'has_more' => [
-                        'type' => 'boolean',
-                        'description' => 'Whether more pages exist'
-                    ],
-                    'from' => [
-                        'type' => 'integer',
-                        'description' => 'Starting item number on current page'
-                    ],
-                    'to' => [
-                        'type' => 'integer',
-                        'description' => 'Ending item number on current page'
-                    ]
-                ]
             ],
 
             // Authentication Schemas
@@ -1885,7 +1992,7 @@ class DocGenerator
                     ]
                 ]
             ]
-        ];
+        ]);
     }
 
     /**

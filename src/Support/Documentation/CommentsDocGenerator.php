@@ -49,6 +49,12 @@ class CommentsDocGenerator
     /** @var DocBlockFactoryInterface Doc block parser factory */
     private DocBlockFactoryInterface $docBlockFactory;
 
+    /** @var SecuritySchemeRegistry|null Security scheme registry; null until DI wiring is complete */
+    private ?SecuritySchemeRegistry $registry = null;
+
+    /** @var OperationIdGenerator Stable operation-id naming for SDK consumers. */
+    private OperationIdGenerator $operationIds;
+
     /**
      * Constructor
      *
@@ -80,6 +86,53 @@ class CommentsDocGenerator
         $this->extensionsManager = $extensionsManager
             ?? container($this->context)->get(ExtensionManager::class);
         $this->docBlockFactory = DocBlockFactory::createInstance();
+        $this->operationIds = new OperationIdGenerator();
+    }
+
+    /**
+     * Set the security scheme registry for this generator.
+     *
+     * When set, replaces the hardcoded BearerAuth fallback with registry-driven
+     * scheme resolution. Call before invoking any generation method.
+     */
+    public function setSecurityRegistry(SecuritySchemeRegistry $registry): void
+    {
+        $this->registry = $registry;
+    }
+
+    /** @return array<string, array<string, mixed>> */
+    private function securitySchemes(): array
+    {
+        return $this->registry?->getSchemes() ?? [
+            'BearerAuth' => [
+                'type' => 'http',
+                'scheme' => 'bearer',
+                'bearerFormat' => 'JWT',
+                'description' => 'JWT Authorization header using the Bearer scheme',
+            ],
+        ];
+    }
+
+    /**
+     * @param  list<string> $middleware
+     * @return list<array<string, list<string>>>
+     */
+    private function securityFor(array $middleware): array
+    {
+        if ($this->registry !== null) {
+            return $this->registry->securityFor($middleware);
+        }
+        return in_array('auth', $middleware, true) ? [['BearerAuth' => []]] : [];
+    }
+
+    /**
+     * Build a unique, camelCase operationId for the given HTTP method + path.
+     */
+    private function operationId(string $method, string $path): string
+    {
+        return $this->operationIds->register(
+            $this->operationIds->fromMethodAndPath($method, $path)
+        );
     }
 
     /**
@@ -417,6 +470,7 @@ class CommentsDocGenerator
             // Create operation object
             $operation = [
                 'tags' => [$route['tag']],
+                'operationId' => $this->operationId($method, $path),
                 'summary' => $route['summary'],
                 'description' => $route['description'],
                 'responses' => $route['responses']
@@ -429,7 +483,7 @@ class CommentsDocGenerator
 
             // Add security requirement if authentication is required
             if ((bool)($route['requiresAuth'] ?? false)) {
-                $operation['security'] = [['BearerAuth' => []]];
+                $operation['security'] = $this->securityFor(['auth']);
             }
 
             // Add path parameters if any
@@ -457,13 +511,7 @@ class CommentsDocGenerator
             ]),
             'paths' => $paths,
             'components' => [
-                'securitySchemes' => [
-                    'BearerAuth' => [
-                        'type' => 'http',
-                        'scheme' => 'bearer',
-                        'bearerFormat' => 'JWT'
-                    ]
-                ]
+                'securitySchemes' => $this->securitySchemes()
             ],
             'tags' => $tags
         ];
@@ -623,6 +671,12 @@ class CommentsDocGenerator
         // For complex tags, fall back to original extraction methods
         $responses = $this->extractSimplifiedResponses($docComment);
         $requestBody = $this->extractSimplifiedRequestBody($docComment);
+        if ($requestBody !== null) {
+            $example = $this->extractRequestExampleAnnotation($docComment);
+            if ($example !== null) {
+                $requestBody['_example'] = $example;
+            }
+        }
         $pathParams = $this->extractSimplifiedParameters($docComment);
 
         // Extract path parameters if not explicitly defined
@@ -682,6 +736,12 @@ class CommentsDocGenerator
 
         $responses = $this->extractSimplifiedResponses($docComment);
         $requestBody = $this->extractSimplifiedRequestBody($docComment);
+        if ($requestBody !== null) {
+            $example = $this->extractRequestExampleAnnotation($docComment);
+            if ($example !== null) {
+                $requestBody['_example'] = $example;
+            }
+        }
         $pathParams = $this->extractSimplifiedParameters($docComment);
 
         if ($pathParams === [] && strpos($routePath, '{') !== false) {
@@ -699,6 +759,27 @@ class CommentsDocGenerator
             'requestBody' => $requestBody,
             'pathParams' => $pathParams
         ];
+    }
+
+    /**
+     * Extract an @example annotation from a doc comment.
+     *
+     * The annotation may be either a JSON object literal or a quoted string.
+     * Returns the parsed value or null if no @example was found / parse failed.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function extractRequestExampleAnnotation(string $docComment): ?array
+    {
+        if (preg_match('/@example\s+(\{[\s\S]*?\}|"[^"]*")/', $docComment, $matches) !== 1) {
+            return null;
+        }
+
+        $raw = trim($matches[1]);
+        // Strip leading asterisks/whitespace from multiline JSON blocks
+        $cleaned = preg_replace('/^\s*\*\s*/m', '', $raw) ?? $raw;
+        $decoded = json_decode($cleaned, true);
+        return is_array($decoded) ? $decoded : null;
     }
 
     /**
@@ -1198,15 +1279,31 @@ class CommentsDocGenerator
     private function buildRequestBody(array $schema): array
     {
         $contentType = $this->getRequestBodyContentType($schema);
+        // Pull off the private _example key BEFORE conversion so it doesn't leak into the OpenAPI output
+        $annotatedExample = is_array($schema['_example'] ?? null) ? $schema['_example'] : null;
+        unset($schema['_example']);
+
         $convertedSchema = $this->convertFileFieldsToOpenApi($schema);
+
+        $content = ['schema' => $convertedSchema];
+
+        if ($contentType === 'application/json') {
+            if ($annotatedExample !== null) {
+                $content['example'] = $annotatedExample;
+            } elseif (
+                isset($convertedSchema['properties'])
+                && is_array($convertedSchema['properties'])
+                && $convertedSchema['properties'] !== []
+            ) {
+                $content['example'] = (new ExampleDeriver())->fromSchemaProperties($convertedSchema['properties']);
+            }
+        }
 
         return [
             'required' => true,
             'content' => [
-                $contentType => [
-                    'schema' => $convertedSchema
-                ]
-            ]
+                $contentType => $content,
+            ],
         ];
     }
 
@@ -1280,6 +1377,7 @@ class CommentsDocGenerator
             // Create operation object
             $operation = [
                 'tags' => [$route['tag']],
+                'operationId' => $this->operationId($method, $path),
                 'summary' => $route['summary'],
                 'description' => $route['description'],
                 'responses' => $route['responses']
@@ -1292,7 +1390,7 @@ class CommentsDocGenerator
 
             // Add security requirement if authentication is required
             if ((bool)($route['requiresAuth'] ?? false)) {
-                $operation['security'] = [['BearerAuth' => []]];
+                $operation['security'] = $this->securityFor(['auth']);
             }
 
             // Add path parameters if any
@@ -1320,13 +1418,7 @@ class CommentsDocGenerator
             ]),
             'paths' => $paths,
             'components' => [
-                'securitySchemes' => [
-                    'BearerAuth' => [
-                        'type' => 'http',
-                        'scheme' => 'bearer',
-                        'bearerFormat' => 'JWT'
-                    ]
-                ]
+                'securitySchemes' => $this->securitySchemes()
             ],
             'tags' => $tags
         ];
