@@ -1373,7 +1373,7 @@ class DocGenerator
                 'content' => [
                     'application/json' => [
                         'schema' => [
-                            '$ref' => '#/components/schemas/Error'
+                            '$ref' => '#/components/schemas/ErrorResponse'
                         ]
                     ]
                 ]
@@ -1396,7 +1396,7 @@ class DocGenerator
                 'content' => [
                     'application/json' => [
                         'schema' => [
-                            '$ref' => '#/components/schemas/Error'
+                            '$ref' => '#/components/schemas/ErrorResponse'
                         ]
                     ]
                 ]
@@ -1406,7 +1406,7 @@ class DocGenerator
                 'content' => [
                     'application/json' => [
                         'schema' => [
-                            '$ref' => '#/components/schemas/Error'
+                            '$ref' => '#/components/schemas/ErrorResponse'
                         ]
                     ]
                 ]
@@ -1416,7 +1416,7 @@ class DocGenerator
                 'content' => [
                     'application/json' => [
                         'schema' => [
-                            '$ref' => '#/components/schemas/Error'
+                            '$ref' => '#/components/schemas/ErrorResponse'
                         ]
                     ]
                 ]

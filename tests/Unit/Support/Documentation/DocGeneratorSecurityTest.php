@@ -118,5 +118,11 @@ final class DocGeneratorSecurityTest extends TestCase
             '#/components/schemas/ErrorResponse',
             $getSingle['responses']['403']['content']['application/json']['schema']['$ref'],
         );
+
+        $post = $spec['paths']['/v1/users']['post'];
+        self::assertSame(
+            '#/components/schemas/ErrorResponse',
+            $post['responses']['400']['content']['application/json']['schema']['$ref'],
+        );
     }
 }
