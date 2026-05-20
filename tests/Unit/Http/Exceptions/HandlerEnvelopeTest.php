@@ -46,5 +46,7 @@ final class HandlerEnvelopeTest extends TestCase
         self::assertIsArray($body['error']);
         self::assertSame(403, $body['error']['code']);
         self::assertSame('FORBIDDEN', $body['error']['error_code']);
+        self::assertArrayHasKey('timestamp', $body['error']);
+        self::assertArrayHasKey('request_id', $body['error']);
     }
 }
