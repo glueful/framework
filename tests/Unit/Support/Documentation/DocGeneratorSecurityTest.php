@@ -173,4 +173,48 @@ final class DocGeneratorSecurityTest extends TestCase
             $listSchema['properties']['data']['items']['$ref'],
         );
     }
+
+    public function testAddRouteWithFieldsAttributeAdvertisesQueryParams(): void
+    {
+        $generator = new DocGenerator(openApiVersion: '3.1.0');
+        $generator->addRouteWithFieldsAttribute(
+            method: 'GET',
+            path: '/api/users/{id}',
+            allowedFields: ['id', 'name', 'email', 'posts', 'posts.comments'],
+            strict: true,
+        );
+
+        $spec = json_decode($generator->getSwaggerJson(), true);
+        self::assertIsArray($spec);
+
+        $params = $spec['paths']['/api/users/{id}']['get']['parameters'];
+        $fields = array_values(array_filter($params, static fn ($p) => $p['name'] === 'fields'));
+        $expand = array_values(array_filter($params, static fn ($p) => $p['name'] === 'expand'));
+
+        self::assertCount(1, $fields);
+        self::assertSame(['id', 'name', 'email', 'posts', 'posts.comments'], $fields[0]['schema']['items']['enum']);
+        self::assertStringContainsString('strict whitelist', $fields[0]['description']);
+        self::assertSame('query', $fields[0]['in']);
+        self::assertSame('form', $fields[0]['style']);
+        self::assertFalse($fields[0]['explode']);
+
+        self::assertCount(1, $expand);
+        self::assertSame('string', $expand[0]['schema']['items']['type']);
+    }
+
+    public function testAddRouteWithFieldsAttributeWithoutStrict(): void
+    {
+        $generator = new DocGenerator(openApiVersion: '3.1.0');
+        $generator->addRouteWithFieldsAttribute(
+            method: 'GET',
+            path: '/api/posts',
+            allowedFields: ['title', 'body'],
+            strict: false,
+        );
+
+        $spec = json_decode($generator->getSwaggerJson(), true);
+        $params = $spec['paths']['/api/posts']['get']['parameters'];
+        $fields = array_values(array_filter($params, static fn ($p) => $p['name'] === 'fields'));
+        self::assertStringNotContainsString('strict whitelist', $fields[0]['description']);
+    }
 }

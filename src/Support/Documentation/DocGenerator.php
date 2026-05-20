@@ -64,6 +64,54 @@ class DocGenerator
         $this->registry = $registry;
     }
 
+    /**
+     * Advertise ?fields= and ?expand= query parameters on a documented route.
+     *
+     * Call this from controller-reflection code when a route carries
+     * #[Fields(allowed: [...], strict: true)]. The fields enum constrains
+     * what generated SDKs surface in their typed query interfaces.
+     *
+     * @param list<string> $allowedFields Field paths permitted by the route
+     */
+    public function addRouteWithFieldsAttribute(
+        string $method,
+        string $path,
+        array $allowedFields,
+        bool $strict = true,
+    ): void {
+        $verb = strtolower($method);
+        $existing = $this->paths[$path][$verb] ?? [];
+        $parameters = $existing['parameters'] ?? [];
+
+        $parameters[] = [
+            'name' => 'fields',
+            'in' => 'query',
+            'description' => 'Comma-separated list of fields to include in the response'
+                . ($strict ? ' (strict whitelist).' : '.'),
+            'schema' => [
+                'type' => 'array',
+                'items' => ['type' => 'string', 'enum' => $allowedFields],
+            ],
+            'style' => 'form',
+            'explode' => false,
+        ];
+
+        $parameters[] = [
+            'name' => 'expand',
+            'in' => 'query',
+            'description' => 'Comma-separated list of related resources to expand.',
+            'schema' => [
+                'type' => 'array',
+                'items' => ['type' => 'string'],
+            ],
+            'style' => 'form',
+            'explode' => false,
+        ];
+
+        $existing['parameters'] = $parameters;
+        $this->paths[$path][$verb] = $existing;
+    }
+
     /** @return array<string, array<string, mixed>> */
     private function securitySchemes(): array
     {
