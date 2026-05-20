@@ -76,4 +76,24 @@ final class DocGeneratorSecurityTest extends TestCase
         self::assertSame([['BearerAuth' => []]], $method->invoke($generator, ['auth']));
         self::assertSame([], $method->invoke($generator, ['rate_limit']));
     }
+
+    public function testDeclaresErrorResponseSchemaComponent(): void
+    {
+        $generator = new DocGenerator(openApiVersion: '3.1.0');
+        $spec = json_decode($generator->getSwaggerJson(), true);
+
+        self::assertIsArray($spec);
+        self::assertArrayHasKey('ErrorResponse', $spec['components']['schemas']);
+
+        $schema = $spec['components']['schemas']['ErrorResponse'];
+        self::assertSame('object', $schema['type']);
+        self::assertSame(['success', 'message', 'error'], $schema['required']);
+
+        $errorProps = $schema['properties']['error']['properties'];
+        self::assertSame('integer', $errorProps['code']['type']);
+        self::assertSame('string', $errorProps['error_code']['type']);
+        self::assertContains('NOT_FOUND', $errorProps['error_code']['enum']);
+        self::assertContains('FORBIDDEN', $errorProps['error_code']['enum']);
+        self::assertSame('date-time', $errorProps['timestamp']['format']);
+    }
 }

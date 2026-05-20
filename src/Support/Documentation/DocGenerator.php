@@ -1458,23 +1458,37 @@ class DocGenerator
 
             'ErrorResponse' => [
                 'type' => 'object',
+                'required' => ['success', 'message', 'error'],
                 'properties' => [
-                    'success' => [
-                        'type' => 'boolean',
-                        'example' => false
+                    'success' => ['type' => 'boolean', 'example' => false],
+                    'message' => ['type' => 'string', 'example' => 'Resource not found'],
+                    'error' => [
+                        'type' => 'object',
+                        'required' => ['code', 'error_code', 'timestamp', 'request_id'],
+                        'properties' => [
+                            'code' => ['type' => 'integer', 'example' => 404],
+                            'error_code' => [
+                                'type' => 'string',
+                                'enum' => [
+                                    'BAD_REQUEST',
+                                    'UNAUTHORIZED',
+                                    'FORBIDDEN',
+                                    'NOT_FOUND',
+                                    'METHOD_NOT_ALLOWED',
+                                    'CONFLICT',
+                                    'UNPROCESSABLE_ENTITY',
+                                    'TOO_MANY_REQUESTS',
+                                    'INTERNAL_SERVER_ERROR',
+                                    'SERVICE_UNAVAILABLE',
+                                    'GATEWAY_TIMEOUT',
+                                ],
+                                'example' => 'NOT_FOUND',
+                            ],
+                            'timestamp' => ['type' => 'string', 'format' => 'date-time'],
+                            'request_id' => ['type' => 'string', 'example' => 'req_abc123'],
+                        ],
                     ],
-                    'message' => [
-                        'type' => 'string',
-                        'example' => 'An error occurred'
-                    ],
-                    'errors' => [
-                        'type' => 'array',
-                        'items' => [
-                            'type' => 'string'
-                        ]
-                    ]
                 ],
-                'required' => ['success', 'message']
             ],
 
             'ValidationErrorResponse' => [
