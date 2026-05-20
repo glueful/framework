@@ -1458,13 +1458,11 @@ class DocGenerator
 
             'ErrorResponse' => [
                 'type' => 'object',
-                'required' => ['success', 'message', 'error'],
                 'properties' => [
                     'success' => ['type' => 'boolean', 'example' => false],
                     'message' => ['type' => 'string', 'example' => 'Resource not found'],
                     'error' => [
                         'type' => 'object',
-                        'required' => ['code', 'error_code', 'timestamp', 'request_id'],
                         'properties' => [
                             'code' => ['type' => 'integer', 'example' => 404],
                             'error_code' => [
@@ -1484,11 +1482,21 @@ class DocGenerator
                                 ],
                                 'example' => 'NOT_FOUND',
                             ],
-                            'timestamp' => ['type' => 'string', 'format' => 'date-time'],
-                            'request_id' => ['type' => 'string', 'example' => 'req_abc123'],
+                            'timestamp' => [
+                                'type' => 'string',
+                                'format' => 'date-time',
+                                'description' => 'ISO 8601 datetime when the error occurred.',
+                            ],
+                            'request_id' => [
+                                'type' => 'string',
+                                'example' => 'req_abc123',
+                                'description' => 'Correlation identifier for tracing this request in logs.',
+                            ],
                         ],
+                        'required' => ['code', 'error_code', 'timestamp', 'request_id'],
                     ],
                 ],
+                'required' => ['success', 'message', 'error'],
             ],
 
             'ValidationErrorResponse' => [
