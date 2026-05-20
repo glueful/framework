@@ -34,6 +34,7 @@ class DocGenerator
     private string $openApiVersion;
     private ?ApplicationContext $context;
 
+    /** @var SecuritySchemeRegistry|null Security scheme registry; null until DI wiring is complete */
     private ?SecuritySchemeRegistry $registry = null;
 
     /**
@@ -48,6 +49,12 @@ class DocGenerator
             ?? $this->getConfig('documentation.openapi_version', '3.1.0');
     }
 
+    /**
+     * Set the security scheme registry for this generator.
+     *
+     * When set, replaces the hardcoded BearerAuth fallback with registry-driven
+     * scheme resolution. Call before invoking any generation method.
+     */
     public function setSecurityRegistry(SecuritySchemeRegistry $registry): void
     {
         $this->registry = $registry;

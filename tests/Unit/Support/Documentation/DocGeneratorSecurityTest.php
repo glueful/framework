@@ -38,4 +38,42 @@ final class DocGeneratorSecurityTest extends TestCase
         self::assertArrayHasKey('BearerAuth', $spec['components']['securitySchemes']);
         self::assertSame('http', $spec['components']['securitySchemes']['BearerAuth']['type']);
     }
+
+    public function testSecurityForDelegatesToRegistryWhenSet(): void
+    {
+        $registry = new SecuritySchemeRegistry(
+            schemes: [
+                'BearerAuth' => ['type' => 'http', 'scheme' => 'bearer'],
+                'ApiKeyAuth' => ['type' => 'apiKey', 'in' => 'header', 'name' => 'X-API-Key'],
+            ],
+            middlewareMap: ['auth' => ['BearerAuth'], 'api_key' => ['ApiKeyAuth']],
+        );
+
+        $generator = new DocGenerator(openApiVersion: '3.1.0');
+        $generator->setSecurityRegistry($registry);
+
+        $method = new \ReflectionMethod($generator, 'securityFor');
+        $method->setAccessible(true);
+
+        self::assertSame(
+            [['BearerAuth' => []]],
+            $method->invoke($generator, ['auth']),
+        );
+        self::assertSame(
+            [['BearerAuth' => []], ['ApiKeyAuth' => []]],
+            $method->invoke($generator, ['auth', 'api_key']),
+        );
+        self::assertSame([], $method->invoke($generator, ['rate_limit']));
+    }
+
+    public function testSecurityForFallsBackToLegacyBehaviorWithoutRegistry(): void
+    {
+        $generator = new DocGenerator(openApiVersion: '3.1.0');
+
+        $method = new \ReflectionMethod($generator, 'securityFor');
+        $method->setAccessible(true);
+
+        self::assertSame([['BearerAuth' => []]], $method->invoke($generator, ['auth']));
+        self::assertSame([], $method->invoke($generator, ['rate_limit']));
+    }
 }

@@ -49,6 +49,7 @@ class CommentsDocGenerator
     /** @var DocBlockFactoryInterface Doc block parser factory */
     private DocBlockFactoryInterface $docBlockFactory;
 
+    /** @var SecuritySchemeRegistry|null Security scheme registry; null until DI wiring is complete */
     private ?SecuritySchemeRegistry $registry = null;
 
     /**
@@ -84,6 +85,12 @@ class CommentsDocGenerator
         $this->docBlockFactory = DocBlockFactory::createInstance();
     }
 
+    /**
+     * Set the security scheme registry for this generator.
+     *
+     * When set, replaces the hardcoded BearerAuth fallback with registry-driven
+     * scheme resolution. Call before invoking any generation method.
+     */
     public function setSecurityRegistry(SecuritySchemeRegistry $registry): void
     {
         $this->registry = $registry;
