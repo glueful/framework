@@ -17,6 +17,9 @@ final class DocumentationConfigTest extends TestCase
         self::assertArrayHasKey('ApiKeyAuth', $config['security_schemes']);
         self::assertSame('apiKey', $config['security_schemes']['ApiKeyAuth']['type']);
         self::assertSame('X-API-Key', $config['security_schemes']['ApiKeyAuth']['name']);
+        self::assertSame('http', $config['security_schemes']['BearerAuth']['type']);
+        self::assertSame('bearer', $config['security_schemes']['BearerAuth']['scheme']);
+        self::assertSame('header', $config['security_schemes']['ApiKeyAuth']['in']);
     }
 
     public function testMiddlewareMapIsDeclared(): void
