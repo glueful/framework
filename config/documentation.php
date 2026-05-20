@@ -161,8 +161,10 @@ return [
     | Security Schemes
     |--------------------------------------------------------------------------
     |
-    | Default security schemes to include in the generated documentation.
-    | These define authentication methods for your API.
+    | Declared OpenAPI 3.1 security schemes. Keys are the scheme names that
+    | appear in #/components/securitySchemes and in operation `security`
+    | requirements. The middleware_map tells the documentation generator
+    | which scheme(s) protect a route based on its declared middleware.
     |
     */
     'security_schemes' => [
@@ -170,8 +172,19 @@ return [
             'type' => 'http',
             'scheme' => 'bearer',
             'bearerFormat' => 'JWT',
-            'description' => 'JWT authentication token',
+            'description' => 'JWT bearer token in the Authorization header.',
         ],
+        'ApiKeyAuth' => [
+            'type' => 'apiKey',
+            'in' => 'header',
+            'name' => 'X-API-Key',
+            'description' => 'API key issued via the developer console.',
+        ],
+    ],
+
+    'middleware_map' => [
+        'auth' => ['BearerAuth'],
+        'api_key' => ['ApiKeyAuth'],
     ],
 
     /*
