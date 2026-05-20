@@ -217,4 +217,45 @@ final class DocGeneratorSecurityTest extends TestCase
         $fields = array_values(array_filter($params, static fn ($p) => $p['name'] === 'fields'));
         self::assertStringNotContainsString('strict whitelist', $fields[0]['description']);
     }
+
+    public function testCommentsDocGeneratorAttachesExampleToJsonRequestBody(): void
+    {
+        $context = new \Glueful\Bootstrap\ApplicationContext(sys_get_temp_dir() . '/comments_doc_' . uniqid());
+        $container = new \Glueful\Container\Container();
+        $container->load([
+            \Glueful\Bootstrap\ApplicationContext::class => new \Glueful\Container\Definition\ValueDefinition(
+                \Glueful\Bootstrap\ApplicationContext::class,
+                $context
+            ),
+        ]);
+        $context->setContainer($container);
+
+        $extensionsManager = new \Glueful\Extensions\ExtensionManager($container);
+        $generator = new \Glueful\Support\Documentation\CommentsDocGenerator(
+            context: $context,
+            localExtensionsPath: sys_get_temp_dir(),
+            outputPath: sys_get_temp_dir(),
+            routesPath: sys_get_temp_dir(),
+            routesOutputPath: sys_get_temp_dir(),
+            extensionsManager: $extensionsManager,
+        );
+
+        $reflection = new \ReflectionClass($generator);
+        $method = $reflection->getMethod('buildRequestBody');
+        $method->setAccessible(true);
+
+        $result = $method->invoke($generator, [
+            'type' => 'object',
+            'properties' => [
+                'email' => ['type' => 'string'],
+                'age' => ['type' => 'integer'],
+            ],
+            'required' => ['email'],
+        ]);
+
+        self::assertArrayHasKey('example', $result['content']['application/json']);
+        $example = $result['content']['application/json']['example'];
+        self::assertSame('user@example.com', $example['email']);
+        self::assertIsInt($example['age']);
+    }
 }

@@ -62,4 +62,24 @@ final class ExampleDeriverTest extends TestCase
         self::assertSame('A short description.', $example['description']);
         self::assertSame('example', $example['comment']);
     }
+
+    public function testDerivesExampleFromSchemaProperties(): void
+    {
+        $deriver = new ExampleDeriver();
+        $example = $deriver->fromSchemaProperties([
+            'name' => ['type' => 'string'],
+            'age' => ['type' => 'integer'],
+            'is_active' => ['type' => 'boolean'],
+            'role' => ['type' => 'string', 'enum' => ['admin', 'user', 'guest']],
+            'tags' => ['type' => 'array', 'items' => ['type' => 'string']],
+        ]);
+
+        self::assertIsString($example['name']);
+        self::assertIsInt($example['age']);
+        self::assertTrue($example['is_active']);
+        self::assertSame('admin', $example['role']);
+        self::assertIsArray($example['tags']);
+        self::assertCount(1, $example['tags']);
+        self::assertIsString($example['tags'][0]);
+    }
 }

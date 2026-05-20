@@ -1238,13 +1238,22 @@ class CommentsDocGenerator
         $contentType = $this->getRequestBodyContentType($schema);
         $convertedSchema = $this->convertFileFieldsToOpenApi($schema);
 
+        $content = ['schema' => $convertedSchema];
+
+        if (
+            $contentType === 'application/json'
+            && isset($convertedSchema['properties'])
+            && is_array($convertedSchema['properties'])
+            && $convertedSchema['properties'] !== []
+        ) {
+            $content['example'] = (new ExampleDeriver())->fromSchemaProperties($convertedSchema['properties']);
+        }
+
         return [
             'required' => true,
             'content' => [
-                $contentType => [
-                    'schema' => $convertedSchema
-                ]
-            ]
+                $contentType => $content,
+            ],
         ];
     }
 

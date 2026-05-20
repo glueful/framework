@@ -80,4 +80,53 @@ final class ExampleDeriver
             default => 'example',
         };
     }
+
+    /**
+     * Derive an example payload from an OpenAPI properties map.
+     *
+     * The properties array follows the shape:
+     *   ['field' => ['type' => 'string', 'enum' => [...]?, 'items' => [...]?]]
+     *
+     * @param  array<string, array<string, mixed>> $properties
+     * @return array<string, mixed>
+     */
+    public function fromSchemaProperties(array $properties): array
+    {
+        $example = [];
+        foreach ($properties as $field => $property) {
+            $example[$field] = $this->exampleForProperty($field, $property);
+        }
+        return $example;
+    }
+
+    /** @param array<string, mixed> $property */
+    private function exampleForProperty(string $field, array $property): mixed
+    {
+        if (isset($property['enum']) && is_array($property['enum']) && $property['enum'] !== []) {
+            return $property['enum'][0];
+        }
+
+        $type = is_string($property['type'] ?? null) ? $property['type'] : 'string';
+
+        return match ($type) {
+            'integer', 'number' => 42,
+            'boolean' => true,
+            'array' => [$this->exampleForProperty(
+                $field,
+                is_array($property['items'] ?? null) ? $property['items'] : ['type' => 'string']
+            )],
+            'object' => new \stdClass(),
+            default => $this->stringExampleFor($field),
+        };
+    }
+
+    private function stringExampleFor(string $field): string
+    {
+        return match (strtolower($field)) {
+            'email' => 'user@example.com',
+            'id', 'uuid' => '550e8400-e29b-41d4-a716-446655440000',
+            'url', 'website' => 'https://example.com',
+            default => $this->stringExample($field),
+        };
+    }
 }
