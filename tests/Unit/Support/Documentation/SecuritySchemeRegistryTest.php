@@ -37,4 +37,14 @@ final class SecuritySchemeRegistryTest extends TestCase
         self::assertArrayHasKey('BearerAuth', $schemes);
         self::assertSame('http', $schemes['BearerAuth']['type']);
     }
+
+    public function testHasReturnsTrueForKnownSchemeAndFalseOtherwise(): void
+    {
+        $registry = new SecuritySchemeRegistry([
+            'BearerAuth' => ['type' => 'http', 'scheme' => 'bearer'],
+        ]);
+
+        self::assertTrue($registry->has('BearerAuth'));
+        self::assertFalse($registry->has('NoSuchScheme'));
+    }
 }
