@@ -138,6 +138,16 @@ class DocGenerator
     }
 
     /**
+     * Build a unique, camelCase operationId for the given HTTP method + path.
+     */
+    private function operationId(string $method, string $path): string
+    {
+        return $this->operationIds->register(
+            $this->operationIds->fromMethodAndPath($method, $path)
+        );
+    }
+
+    /**
      * Build a standard error response block referencing the ErrorResponse schema.
      *
      * @return array{description: string, content: array<string, array<string, mixed>>}
@@ -381,7 +391,7 @@ class DocGenerator
             'tags' => [$tag],
             'summary' => "List {$tableName}",
             'description' => "Retrieves a paginated list of {$tableName} records",
-            'operationId' => $this->operationIds->register($this->operationIds->fromMethodAndPath('GET', $basePath)),
+            'operationId' => $this->operationId('GET', $basePath),
             'security' => $this->securityFor(['auth']),
             'parameters' => [
                 [
@@ -441,7 +451,7 @@ class DocGenerator
             'tags' => [$tag],
             'summary' => "Get {$tableName} by UUID",
             'description' => "Retrieves a single {$tableName} record by its UUID",
-            'operationId' => $this->operationIds->register($this->operationIds->fromMethodAndPath('GET', $basePath . '/{uuid}')),
+            'operationId' => $this->operationId('GET', $basePath . '/{uuid}'),
             'security' => $this->securityFor(['auth']),
             'parameters' => [
                 [
@@ -495,7 +505,7 @@ class DocGenerator
             'tags' => [$tag],
             'summary' => "Create {$tableName}",
             'description' => "Creates a new {$tableName} record",
-            'operationId' => $this->operationIds->register($this->operationIds->fromMethodAndPath('POST', $basePath)),
+            'operationId' => $this->operationId('POST', $basePath),
             'security' => $this->securityFor(['auth']),
             'requestBody' => [
                 'required' => true,
@@ -531,7 +541,7 @@ class DocGenerator
             'tags' => [$tag],
             'summary' => "Update {$tableName}",
             'description' => "Updates an existing {$tableName} record",
-            'operationId' => $this->operationIds->register($this->operationIds->fromMethodAndPath('PUT', $basePath . '/{uuid}')),
+            'operationId' => $this->operationId('PUT', $basePath . '/{uuid}'),
             'security' => $this->securityFor(['auth']),
             'parameters' => [
                 [
@@ -577,7 +587,7 @@ class DocGenerator
             'tags' => [$tag],
             'summary' => "Delete {$tableName}",
             'description' => "Deletes a {$tableName} record",
-            'operationId' => $this->operationIds->register($this->operationIds->fromMethodAndPath('DELETE', $basePath . '/{uuid}')),
+            'operationId' => $this->operationId('DELETE', $basePath . '/{uuid}'),
             'security' => $this->securityFor(['auth']),
             'parameters' => [
                 [

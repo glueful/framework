@@ -126,6 +126,16 @@ class CommentsDocGenerator
     }
 
     /**
+     * Build a unique, camelCase operationId for the given HTTP method + path.
+     */
+    private function operationId(string $method, string $path): string
+    {
+        return $this->operationIds->register(
+            $this->operationIds->fromMethodAndPath($method, $path)
+        );
+    }
+
+    /**
      * Find matching closing brace/bracket in a string
      *
      * Handles nested braces and quoted strings properly.
@@ -460,7 +470,7 @@ class CommentsDocGenerator
             // Create operation object
             $operation = [
                 'tags' => [$route['tag']],
-                'operationId' => $this->operationIds->register($this->operationIds->fromMethodAndPath($method, $path)),
+                'operationId' => $this->operationId($method, $path),
                 'summary' => $route['summary'],
                 'description' => $route['description'],
                 'responses' => $route['responses']
@@ -1367,7 +1377,7 @@ class CommentsDocGenerator
             // Create operation object
             $operation = [
                 'tags' => [$route['tag']],
-                'operationId' => $this->operationIds->register($this->operationIds->fromMethodAndPath($method, $path)),
+                'operationId' => $this->operationId($method, $path),
                 'summary' => $route['summary'],
                 'description' => $route['description'],
                 'responses' => $route['responses']
