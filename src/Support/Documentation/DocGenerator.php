@@ -34,6 +34,8 @@ class DocGenerator
     private string $openApiVersion;
     private ?ApplicationContext $context;
 
+    private ?SecuritySchemeRegistry $registry = null;
+
     /**
      * Constructor
      *
@@ -44,6 +46,36 @@ class DocGenerator
         $this->context = $context;
         $this->openApiVersion = $openApiVersion
             ?? $this->getConfig('documentation.openapi_version', '3.1.0');
+    }
+
+    public function setSecurityRegistry(SecuritySchemeRegistry $registry): void
+    {
+        $this->registry = $registry;
+    }
+
+    /** @return array<string, array<string, mixed>> */
+    private function securitySchemes(): array
+    {
+        return $this->registry?->getSchemes() ?? [
+            'BearerAuth' => [
+                'type' => 'http',
+                'scheme' => 'bearer',
+                'bearerFormat' => 'JWT',
+                'description' => 'JWT Authorization header using the Bearer scheme',
+            ],
+        ];
+    }
+
+    /**
+     * @param  list<string> $middleware
+     * @return list<array<string, list<string>>>
+     */
+    private function securityFor(array $middleware): array
+    {
+        if ($this->registry !== null) {
+            return $this->registry->securityFor($middleware);
+        }
+        return in_array('auth', $middleware, true) ? [['BearerAuth' => []]] : [];
     }
 
     /**
@@ -274,7 +306,7 @@ class DocGenerator
             'summary' => "List {$tableName}",
             'description' => "Retrieves a paginated list of {$tableName} records",
             'operationId' => "list" . ucfirst($tableName),
-            'security' => [['BearerAuth' => []]],
+            'security' => $this->securityFor(['auth']),
             'parameters' => [
                 [
                     'name' => 'page',
@@ -344,7 +376,7 @@ class DocGenerator
             'summary' => "Get {$tableName} by UUID",
             'description' => "Retrieves a single {$tableName} record by its UUID",
             'operationId' => "get" . ucfirst($tableName),
-            'security' => [['BearerAuth' => []]],
+            'security' => $this->securityFor(['auth']),
             'parameters' => [
                 [
                     'name' => 'uuid',
@@ -398,7 +430,7 @@ class DocGenerator
             'summary' => "Create {$tableName}",
             'description' => "Creates a new {$tableName} record",
             'operationId' => "create" . ucfirst($tableName),
-            'security' => [['BearerAuth' => []]],
+            'security' => $this->securityFor(['auth']),
             'requestBody' => [
                 'required' => true,
                 'content' => [
@@ -434,7 +466,7 @@ class DocGenerator
             'summary' => "Update {$tableName}",
             'description' => "Updates an existing {$tableName} record",
             'operationId' => "update" . ucfirst($tableName),
-            'security' => [['BearerAuth' => []]],
+            'security' => $this->securityFor(['auth']),
             'parameters' => [
                 [
                     'name' => 'uuid',
@@ -480,7 +512,7 @@ class DocGenerator
             'summary' => "Delete {$tableName}",
             'description' => "Deletes a {$tableName} record",
             'operationId' => "delete" . ucfirst($tableName),
-            'security' => [['BearerAuth' => []]],
+            'security' => $this->securityFor(['auth']),
             'parameters' => [
                 [
                     'name' => 'uuid',
@@ -647,14 +679,7 @@ class DocGenerator
                 ]
             ]),
             'components' => [
-                'securitySchemes' => [
-                    'BearerAuth' => [
-                        'type' => 'http',
-                        'scheme' => 'bearer',
-                        'bearerFormat' => 'JWT',
-                        'description' => 'JWT Authorization header using the Bearer scheme'
-                    ]
-                ],
+                'securitySchemes' => $this->securitySchemes(),
                 'schemas' => $this->transformSchemas(
                     array_merge($this->getDefaultSchemas(), $this->schemas)
                 )
@@ -833,7 +858,7 @@ class DocGenerator
                 'tags' => ["Table - {$resource}"],
                 'summary' => "List {$tableName}",
                 'description' => "Retrieve a list of {$tableName} records",
-                'security' => [['BearerAuth' => []]],
+                'security' => $this->securityFor(['auth']),
                 'parameters' => [
                     ...$this->getCommonParameters(),
                     ...$this->getFilterParameters()
@@ -849,7 +874,7 @@ class DocGenerator
                 'tags' => ["Table - {$resource}"],
                 'summary' => "Create new {$tableName}",
                 'description' => "Create a new {$tableName} record",
-                'security' => [['BearerAuth' => []]],
+                'security' => $this->securityFor(['auth']),
                 'requestBody' => [
                     'required' => true,
                     'content' => [
@@ -877,7 +902,7 @@ class DocGenerator
                 'tags' => ["Table - {$resource}"],
                 'summary' => "Update {$tableName}",
                 'description' => "Update an existing {$tableName} record",
-                'security' => [['BearerAuth' => []]],
+                'security' => $this->securityFor(['auth']),
                 'parameters' => [
                     [
                         'name' => 'id',
@@ -913,7 +938,7 @@ class DocGenerator
                 'tags' => ["Table - {$resource}"],
                 'summary' => "Delete {$tableName}",
                 'description' => "Delete a {$tableName} record",
-                'security' => [['BearerAuth' => []]],
+                'security' => $this->securityFor(['auth']),
                 'parameters' => [
                     [
                         'name' => 'id',
@@ -1021,7 +1046,7 @@ class DocGenerator
             'tags' => [explode('/', $docName)[0]],
             'summary' => ucwords(str_replace('-', ' ', basename($docName))),
             'description' => "Endpoint for " . str_replace('-', ' ', $docName),
-            'security' => $isPublic === true ? [] : [['BearerAuth' => []]],
+            'security' => $isPublic === true ? [] : $this->securityFor(['auth']),
             'requestBody' => [
                 'required' => true,
                 'content' => $content

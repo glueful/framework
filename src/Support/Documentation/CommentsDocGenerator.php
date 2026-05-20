@@ -49,6 +49,8 @@ class CommentsDocGenerator
     /** @var DocBlockFactoryInterface Doc block parser factory */
     private DocBlockFactoryInterface $docBlockFactory;
 
+    private ?SecuritySchemeRegistry $registry = null;
+
     /**
      * Constructor
      *
@@ -80,6 +82,36 @@ class CommentsDocGenerator
         $this->extensionsManager = $extensionsManager
             ?? container($this->context)->get(ExtensionManager::class);
         $this->docBlockFactory = DocBlockFactory::createInstance();
+    }
+
+    public function setSecurityRegistry(SecuritySchemeRegistry $registry): void
+    {
+        $this->registry = $registry;
+    }
+
+    /** @return array<string, array<string, mixed>> */
+    private function securitySchemes(): array
+    {
+        return $this->registry?->getSchemes() ?? [
+            'BearerAuth' => [
+                'type' => 'http',
+                'scheme' => 'bearer',
+                'bearerFormat' => 'JWT',
+                'description' => 'JWT Authorization header using the Bearer scheme',
+            ],
+        ];
+    }
+
+    /**
+     * @param  list<string> $middleware
+     * @return list<array<string, list<string>>>
+     */
+    private function securityFor(array $middleware): array
+    {
+        if ($this->registry !== null) {
+            return $this->registry->securityFor($middleware);
+        }
+        return in_array('auth', $middleware, true) ? [['BearerAuth' => []]] : [];
     }
 
     /**
@@ -429,7 +461,7 @@ class CommentsDocGenerator
 
             // Add security requirement if authentication is required
             if ((bool)($route['requiresAuth'] ?? false)) {
-                $operation['security'] = [['BearerAuth' => []]];
+                $operation['security'] = $this->securityFor(['auth']);
             }
 
             // Add path parameters if any
@@ -457,13 +489,7 @@ class CommentsDocGenerator
             ]),
             'paths' => $paths,
             'components' => [
-                'securitySchemes' => [
-                    'BearerAuth' => [
-                        'type' => 'http',
-                        'scheme' => 'bearer',
-                        'bearerFormat' => 'JWT'
-                    ]
-                ]
+                'securitySchemes' => $this->securitySchemes()
             ],
             'tags' => $tags
         ];
@@ -1292,7 +1318,7 @@ class CommentsDocGenerator
 
             // Add security requirement if authentication is required
             if ((bool)($route['requiresAuth'] ?? false)) {
-                $operation['security'] = [['BearerAuth' => []]];
+                $operation['security'] = $this->securityFor(['auth']);
             }
 
             // Add path parameters if any
@@ -1320,13 +1346,7 @@ class CommentsDocGenerator
             ]),
             'paths' => $paths,
             'components' => [
-                'securitySchemes' => [
-                    'BearerAuth' => [
-                        'type' => 'http',
-                        'scheme' => 'bearer',
-                        'bearerFormat' => 'JWT'
-                    ]
-                ]
+                'securitySchemes' => $this->securitySchemes()
             ],
             'tags' => $tags
         ];
