@@ -6,6 +6,20 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Added
+
+- **OpenAPI spec quality improvements (Phase 1-2)**: The generated OpenAPI spec now declares all configured security schemes (BearerAuth, ApiKeyAuth, ...) via a new `SecuritySchemeRegistry`, driven by `documentation.security_schemes` and `documentation.middleware_map` config. Per-operation `security` requirements are derived from route middleware instead of being hardcoded to BearerAuth.
+- **`ErrorResponse` schema component**: New OpenAPI component describing the unified error envelope (`{success, message, error: {code, error_code, timestamp, request_id}}`) with an enum of stable `error_code` values (`BAD_REQUEST`, `NOT_FOUND`, `FORBIDDEN`, etc.). All CRUD endpoint 4xx responses now `$ref` this schema so generated SDKs can typecheck error responses.
+
+### Changed
+
+- **Error response references unified**: `DocGenerator::getErrorResponses()` and `getCommonResponses()` now reference `#/components/schemas/ErrorResponse` instead of the legacy flat `Error` schema. The `Error` schema is preserved in the components for backward compatibility but is no longer referenced by generated endpoints.
+
+### Breaking
+
+- **`PermissionUnauthorizedException` envelope shape changed**: Previously returned `{success, message, code, error_code}` with `code` and `error_code` at the top level. Now returns the unified `{success, message, error: {code, error_code, timestamp, request_id}}` shape, identical to all other HTTP exceptions. API consumers that read `code` or `error_code` at the top level must read `error.code` and `error.error_code` instead.
+- **Error envelope now includes `error_code`**: The `error` object now always contains an `error_code` field (`NOT_FOUND`, `FORBIDDEN`, etc., or the stringified status code for non-enumerated statuses like `"418"`). Existing consumers that did strict-shape matching on `error` may need to ignore unknown keys.
+
 ---
 
 ## [1.41.0] - 2026-03-03 — Beid
