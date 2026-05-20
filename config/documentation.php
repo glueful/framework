@@ -281,4 +281,22 @@ return [
             'theme' => [],
         ],
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Webhooks
+    |--------------------------------------------------------------------------
+    |
+    | Events this API dispatches as outbound HTTP webhooks. Each entry will
+    | appear in the OpenAPI 3.1 `webhooks` object so SDK generators can
+    | scaffold handler types automatically.
+    |
+    */
+    'webhooks' => [
+        // Example:
+        // 'user.created' => [
+        //     'summary' => 'A new user has been created.',
+        //     'payload_schema' => 'User',  // References #/components/schemas/User
+        // ],
+    ],
 ];

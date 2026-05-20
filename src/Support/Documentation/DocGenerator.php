@@ -759,6 +759,11 @@ class DocGenerator
             $swagger['jsonSchemaDialect'] = 'https://json-schema.org/draft/2020-12/schema';
         }
 
+        $webhooksConfig = $this->getConfig('documentation.webhooks', []);
+        if (is_array($webhooksConfig) && $webhooksConfig !== [] && $this->isOpenApi31()) {
+            $swagger['webhooks'] = (new WebhookDocsBuilder())->build($webhooksConfig);
+        }
+
         return json_encode($swagger, JSON_PRETTY_PRINT);
     }
 
@@ -1558,6 +1563,17 @@ class DocGenerator
                     ],
                 ],
                 'required' => ['success', 'message', 'error'],
+            ],
+
+            'WebhookEnvelope' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'string', 'example' => 'wh_evt_abc123'],
+                    'event' => ['type' => 'string', 'example' => 'user.created'],
+                    'created_at' => ['type' => 'string', 'format' => 'date-time'],
+                    'data' => ['type' => 'object'],
+                ],
+                'required' => ['id', 'event', 'created_at', 'data'],
             ],
 
             'ValidationErrorResponse' => [
