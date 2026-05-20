@@ -23,7 +23,7 @@
 | `tests/Support/Traits/ResetsLazyLoading.php` | Opt-in PHPUnit trait calling `Model::resetLazyLoadingState()` in `tearDown()`. |
 | `tests/Unit/Database/ORM/LazyLoadingViolationExceptionTest.php` | Exception shape. |
 | `tests/Unit/Database/ORM/PreventsLazyLoadingTraitTest.php` | Trait state + mode resolution + dedupe + reset. |
-| `tests/Unit/Database/ORM/BuilderHydrationTaggingTest.php` | `Builder::hydrate()` tags collections only when enabled and count > 1. |
+| `tests/Unit/Database/ORM/BuilderHydrationTaggingTest.php` | Unit-tests the trait setter and the `Model::lazyLoadingEnabled()` guard that `Builder::hydrate()` calls. The real `hydrate()` tagging is verified end-to-end by Task 11. |
 | `tests/Integration/Database/ORM/LazyLoadingDetectionTest.php` | Full ORM behavior matrix with SQLite. Includes CI-enforcement scenarios. |
 | `docs/ORM/N_PLUS_ONE_DETECTION.md` | Public docs. |
 
@@ -53,7 +53,7 @@
 
 declare(strict_types=1);
 
-namespace Tests\Support\Traits;
+namespace Glueful\Tests\Support\Traits;
 
 use Glueful\Database\ORM\Model;
 
@@ -97,7 +97,7 @@ git commit -m "test(orm): add ResetsLazyLoading trait for N+1 detector state iso
 
 declare(strict_types=1);
 
-namespace Tests\Unit\Database\ORM;
+namespace Glueful\Tests\Unit\Database\ORM;
 
 use Glueful\Database\ORM\Exceptions\LazyLoadingViolationException;
 use PHPUnit\Framework\TestCase;
@@ -191,14 +191,15 @@ git commit -m "feat(orm): add LazyLoadingViolationException for strict-mode N+1 
 
 declare(strict_types=1);
 
-namespace Tests\Unit\Database\ORM;
+namespace Glueful\Tests\Unit\Database\ORM;
 
 use Glueful\Database\ORM\Concerns\PreventsLazyLoading;
 use PHPUnit\Framework\TestCase;
-use Tests\Support\Traits\ResetsLazyLoading;
 
 /**
- * Anonymous host class that uses the trait under test.
+ * Anonymous host class that uses the trait under test. Static properties
+ * on a trait are per-using-class in PHP, so TraitHost has its own copy
+ * independent of Model. Tests reset TraitHost state directly in tearDown.
  */
 class TraitHost
 {
@@ -207,7 +208,17 @@ class TraitHost
 
 class PreventsLazyLoadingTraitTest extends TestCase
 {
-    use ResetsLazyLoading;
+    protected function tearDown(): void
+    {
+        // Reset BOTH the local TraitHost and Model — each class that uses
+        // the trait owns its own copy of the static state. Later tasks
+        // (Task 7+) add tests that mutate Model state, so reset both here.
+        TraitHost::resetLazyLoadingState();
+        if (method_exists(\Glueful\Database\ORM\Model::class, 'resetLazyLoadingState')) {
+            \Glueful\Database\ORM\Model::resetLazyLoadingState();
+        }
+        parent::tearDown();
+    }
 
     public function testDefaultModeIsOff(): void
     {
@@ -427,33 +438,44 @@ Open `config/database.php`. Above the existing `'migrations' => [...]` block nea
 
 ```
 
-- [ ] **Step 2: Write a failing test for boot wiring**
+- [ ] **Step 2: Write a failing test that proves boot read the config**
 
-Open `tests/Integration/FrameworkBootTest.php`. Add this method to the existing class:
+Open `tests/Integration/FrameworkBootTest.php`. Add this method to the existing class. It writes an explicit `'strict'` into the temp config file, boots the framework, and asserts the mode was applied — proving boot actually ran the wiring (not just that the default happened to match).
 
 ```php
-    public function testBootSetsLazyLoadingModeFromConfig(): void
+    public function testBootAppliesLazyLoadingModeFromConfig(): void
     {
-        // Default APP_ENV in phpunit.xml is 'testing', so 'auto' should resolve to 'off'
-        $this->assertFalse(\Glueful\Database\ORM\Model::lazyLoadingEnabled());
+        // Override the database config written in setUp() with an explicit
+        // strict mode, so passing the assertion proves the boot wiring ran.
+        file_put_contents(
+            $this->testConfigPath . '/database.php',
+            "<?php\nreturn ["
+            . "'engine' => 'sqlite', "
+            . "'sqlite' => ['primary' => ':memory:'], "
+            . "'pooling' => ['enabled' => false], "
+            . "'orm' => ['lazy_loading_mode' => 'strict']"
+            . "];\n"
+        );
+
+        try {
+            Framework::create($this->testAppPath)->boot(allowReboot: true);
+
+            $this->assertSame(
+                'strict',
+                \Glueful\Database\ORM\Model::resolvedGlobalMode(),
+                'Framework::boot() should have read database.orm.lazy_loading_mode '
+                . 'from config and called Model::preventLazyLoading()'
+            );
+        } finally {
+            \Glueful\Database\ORM\Model::resetLazyLoadingState();
+        }
     }
 ```
 
-Note: the framework must have booted for this test (the existing tests already exercise boot). If this file does not already boot the framework, copy the boot pattern from other methods in the same file.
-
 - [ ] **Step 3: Run the test to verify it fails**
 
-Run: `vendor/bin/phpunit tests/Integration/FrameworkBootTest.php --filter testBootSetsLazyLoadingModeFromConfig -v`
-Expected: It may already pass (default is `off`), but verify by temporarily flipping the default in `PreventsLazyLoading::$lazyLoadingMode` to `'warn'` and confirming the test fails. Revert.
-
-A more diagnostic failure check: add a second assertion that the global mode was actively resolved through boot, not just left at default:
-
-```php
-        $this->assertSame('off', \Glueful\Database\ORM\Model::resolvedGlobalMode());
-        // The default value of the property is 'off', so to prove boot ran,
-        // also assert that env-derived resolution happened. We do this in
-        // the dedicated dev-mode test below.
-```
+Run: `vendor/bin/phpunit tests/Integration/FrameworkBootTest.php --filter testBootAppliesLazyLoadingModeFromConfig -v`
+Expected: FAIL — the global mode is still `'off'` (default) because `Framework::initializeOrmFeatures()` doesn't exist yet.
 
 - [ ] **Step 4: Wire boot in Framework**
 
@@ -562,7 +584,7 @@ Create `tests/Support/Stubs/HydrationTaggingTestModel.php`:
 
 declare(strict_types=1);
 
-namespace Tests\Support\Stubs;
+namespace Glueful\Tests\Support\Stubs;
 
 use Glueful\Database\ORM\Model;
 
@@ -579,80 +601,57 @@ class HydrationTaggingTestModel extends Model
 
 - [ ] **Step 3: Write the failing test**
 
-Create `tests/Unit/Database/ORM/BuilderHydrationTaggingTest.php`:
+Create `tests/Unit/Database/ORM/BuilderHydrationTaggingTest.php`. Note: we test the trait's tagging behavior in isolation here — the actual `Builder::hydrate()` change is verified end-to-end by the integration test in Task 11 (`testHydratedCollectionIsTaggedAsLoadedFromCollection`), which boots the framework and uses a real ORM query. Constructing a real `Builder` in a unit test requires a real `QueryBuilder` (the framework's `setModel()` calls `$query->from()`), and that infrastructure is heavy for what is fundamentally a one-line tagging block.
 
 ```php
 <?php
 
 declare(strict_types=1);
 
-namespace Tests\Unit\Database\ORM;
+namespace Glueful\Tests\Unit\Database\ORM;
 
-use Glueful\Database\ORM\Builder;
 use Glueful\Database\ORM\Model;
 use PHPUnit\Framework\TestCase;
-use Tests\Support\Stubs\HydrationTaggingTestModel;
-use Tests\Support\Traits\ResetsLazyLoading;
+use Glueful\Tests\Support\Stubs\HydrationTaggingTestModel;
+use Glueful\Tests\Support\Traits\ResetsLazyLoading;
 
 class BuilderHydrationTaggingTest extends TestCase
 {
     use ResetsLazyLoading;
 
-    public function testTagsModelsWhenEnabledAndCollectionGreaterThanOne(): void
+    public function testSetLoadedFromCollectionFlagPersists(): void
     {
-        Model::preventLazyLoading('warn');
+        $model = new HydrationTaggingTestModel();
+        $this->assertFalse($model->wasLoadedFromCollection());
 
-        $builder = $this->makeBuilder();
-        $models = $builder->hydrate([
-            ['id' => 1, 'name' => 'A'],
-            ['id' => 2, 'name' => 'B'],
-        ]);
+        $model->setLoadedFromCollection(true);
+        $this->assertTrue($model->wasLoadedFromCollection());
 
-        $this->assertTrue($models[0]->wasLoadedFromCollection());
-        $this->assertTrue($models[1]->wasLoadedFromCollection());
+        $model->setLoadedFromCollection(false);
+        $this->assertFalse($model->wasLoadedFromCollection());
     }
 
-    public function testDoesNotTagSingleRowResult(): void
+    public function testLazyLoadingEnabledControlsTaggingDecision(): void
     {
-        Model::preventLazyLoading('warn');
-
-        $builder = $this->makeBuilder();
-        $models = $builder->hydrate([['id' => 1, 'name' => 'A']]);
-
-        $this->assertFalse($models[0]->wasLoadedFromCollection());
-    }
-
-    public function testDoesNotTagWhenModeIsOff(): void
-    {
+        // This test verifies the GUARD logic that Builder::hydrate() uses —
+        // namely Model::lazyLoadingEnabled(). It does NOT exercise the real
+        // hydrate(); the integration test in Task 11 does that.
         Model::preventLazyLoading('off');
+        $this->assertFalse(Model::lazyLoadingEnabled());
 
-        $builder = $this->makeBuilder();
-        $models = $builder->hydrate([
-            ['id' => 1, 'name' => 'A'],
-            ['id' => 2, 'name' => 'B'],
-        ]);
+        Model::preventLazyLoading('warn');
+        $this->assertTrue(Model::lazyLoadingEnabled());
 
-        $this->assertFalse($models[0]->wasLoadedFromCollection());
-        $this->assertFalse($models[1]->wasLoadedFromCollection());
-    }
-
-    private function makeBuilder(): Builder
-    {
-        // Builder::__construct(QueryBuilder $query) — mock the QueryBuilder
-        // since hydrate() never touches it. setModel() supplies the model
-        // that newFromBuilder() will be called on.
-        $queryBuilder = $this->createMock(\Glueful\Database\QueryBuilder::class);
-        $builder = new Builder($queryBuilder);
-        $builder->setModel(new HydrationTaggingTestModel());
-        return $builder;
+        Model::preventLazyLoading('strict');
+        $this->assertTrue(Model::lazyLoadingEnabled());
     }
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it fails**
+- [ ] **Step 4: Run the test to verify it passes already**
 
 Run: `vendor/bin/phpunit tests/Unit/Database/ORM/BuilderHydrationTaggingTest.php -v`
-Expected: FAIL — models are not tagged because `hydrate()` doesn't tag them yet.
+Expected: PASS, 2 tests. The trait setter/getter and `Model::lazyLoadingEnabled()` were already added in earlier tasks; this unit test simply documents the contract that `Builder::hydrate()` depends on. The actual end-to-end behavior is verified in Task 11.
 
 - [ ] **Step 5: Add the tagging logic to `Builder::hydrate()`**
 
@@ -692,10 +691,10 @@ Replace with:
     }
 ```
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [ ] **Step 6: Run tests to verify they still pass after the Builder edit**
 
 Run: `vendor/bin/phpunit tests/Unit/Database/ORM/BuilderHydrationTaggingTest.php -v`
-Expected: PASS, 3 tests.
+Expected: PASS, 2 tests. The Builder change is exercised end-to-end by Task 11's integration test.
 
 - [ ] **Step 7: Commit**
 
@@ -799,7 +798,7 @@ Add these imports at the top of `PreventsLazyLoadingTraitTest.php`:
 
 ```php
 use Glueful\Database\ORM\Model;
-use Tests\Support\Stubs\HydrationTaggingTestModel;
+use Glueful\Tests\Support\Stubs\HydrationTaggingTestModel;
 ```
 
 The stub was moved to `tests/Support/Stubs/HydrationTaggingTestModel.php` in Task 6 specifically so it can be shared across test files without duplicate-class errors.
@@ -1299,7 +1298,7 @@ Create `tests/Integration/Database/ORM/LazyLoadingDetectionTest.php`:
 
 declare(strict_types=1);
 
-namespace Tests\Integration\Database\ORM;
+namespace Glueful\Tests\Integration\Database\ORM;
 
 use Glueful\Application;
 use Glueful\Bootstrap\ApplicationContext;
@@ -1308,7 +1307,7 @@ use Glueful\Database\ORM\Model;
 use Glueful\Database\ORM\Exceptions\LazyLoadingViolationException;
 use Glueful\Framework;
 use PHPUnit\Framework\TestCase;
-use Tests\Support\Traits\ResetsLazyLoading;
+use Glueful\Tests\Support\Traits\ResetsLazyLoading;
 
 class IntUser extends Model
 {
@@ -1453,9 +1452,12 @@ class LazyLoadingDetectionTest extends TestCase
             "<?php\nreturn ['name' => 'T', 'version_full' => '1.0.0', 'env' => 'testing', 'debug' => true];\n"
         );
         file_put_contents($configPath . '/database.php',
-            "<?php\nreturn ['engine' => 'sqlite', "
-            . "'connections' => ['sqlite' => ['driver' => 'sqlite', 'database' => ':memory:']], "
-            . "'orm' => ['lazy_loading_mode' => 'off']];\n"
+            "<?php\nreturn ["
+            . "'engine' => 'sqlite', "
+            . "'sqlite' => ['primary' => ':memory:'], "
+            . "'pooling' => ['enabled' => false], "
+            . "'orm' => ['lazy_loading_mode' => 'off']"
+            . "];\n"
         );
         file_put_contents($configPath . '/cache.php',
             "<?php\nreturn ['enabled' => true, 'default' => 'array', "
@@ -1474,7 +1476,9 @@ class LazyLoadingDetectionTest extends TestCase
 
     private function setUpSchema(): void
     {
-        $pdo = $this->app->getContainer()->get(Connection::class)->pdo();
+        // CoreProvider registers the Connection under the service id 'database',
+        // not under the Glueful\Database\Connection class name.
+        $pdo = $this->app->getContainer()->get('database')->getPDO();
         $pdo->exec('CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)');
         $pdo->exec('CREATE TABLE posts (id INTEGER PRIMARY KEY, user_id INTEGER, title TEXT)');
         $pdo->exec('CREATE TABLE comments (id INTEGER PRIMARY KEY, post_id INTEGER, text TEXT)');
@@ -1482,7 +1486,7 @@ class LazyLoadingDetectionTest extends TestCase
 
     private function seed(): void
     {
-        $pdo = $this->app->getContainer()->get(Connection::class)->pdo();
+        $pdo = $this->app->getContainer()->get('database')->getPDO();
         $pdo->exec("INSERT INTO users (id, name) VALUES (1, 'Alice'), (2, 'Bob')");
         $pdo->exec("INSERT INTO posts (id, user_id, title) VALUES (1, 1, 'P1'), (2, 1, 'P2'), (3, 2, 'P3')");
         $pdo->exec("INSERT INTO comments (id, post_id, text) VALUES (1, 1, 'C1'), (2, 1, 'C2')");
@@ -1500,7 +1504,7 @@ class LazyLoadingDetectionTest extends TestCase
 }
 ```
 
-**Implementation note:** The exact methods for resolving the `Connection` (`->get(Connection::class)`) and the `pdo()` accessor must match the codebase. Before running tests, grep `tests/Integration/Auth/` for an existing pattern (the `RefreshTokenStoreIntegrationTest` already uses a Connection in tests). If the API differs, adjust the harness — but do NOT change the production code or the behavior assertions.
+**Implementation note:** The Connection is registered in the container under the service id `'database'` (see `src/Container/Providers/CoreProvider.php:202`), not under the `Glueful\Database\Connection::class` name. PDO is accessed via `getPDO()` (see `src/Database/Connection.php:466`). Both are wired correctly in the test above; if you adapt this pattern elsewhere, use the same service id and method name.
 
 - [ ] **Step 4: Run the integration tests**
 
@@ -1536,7 +1540,7 @@ Append to `LazyLoadingDetectionTest`:
         $tmp = tempnam(sys_get_temp_dir(), 'glueful-n1-');
         $prev = ini_set('error_log', $tmp);
         try {
-            $users = IntUser::query()->get();
+            $users = IntUser::query($this->context)->get();
             // Lazy-load — triggers our detector and potentially the SQL one
             $users[0]->posts;
 
@@ -1587,19 +1591,21 @@ Glueful's ORM ships with an N+1 detector that fires at the model layer with enou
 
 ## Overview
 
-When you load a collection of models (e.g., `User::query()->get()`) and then access a relation on one of them without having eager-loaded it, that's the classic N+1 pattern. The framework tracks which models came from a collection and warns or throws when those models lazy-load a relation.
+When you load a collection of models (e.g., `User::query($context)->get()`) and then access a relation on one of them without having eager-loaded it, that's the classic N+1 pattern. The framework tracks which models came from a collection and warns or throws when those models lazy-load a relation.
+
+> Glueful's ORM requires an `ApplicationContext` on `Model::query()`. In controllers it's typically `$this->context`; in services, inject it. The examples below show the pattern.
 
 **Does trigger detection:**
 
-- `User::query()->get()` → `$user->posts`
-- `User::query()->with('posts')->get()` → `$user->posts[0]->comments`
+- `User::query($context)->get()` → `$user->posts`
+- `User::query($context)->with('posts')->get()` → `$user->posts[0]->comments`
 
 **Does not trigger:**
 
-- `User::query()->find(1)->posts` (single-row find)
-- `User::query()->with('posts')->get()` → `$user->posts` (already loaded)
+- `User::query($context)->find(1)->posts` (single-row find)
+- `User::query($context)->with('posts')->get()` → `$user->posts` (already loaded)
 - `$user->load('posts')->posts` (explicit load)
-- `new User([...])->posts` (manually constructed, not hydrated)
+- `new User([...], $context)->posts` (manually constructed, not hydrated)
 
 ## Modes
 
@@ -1643,10 +1649,15 @@ Replace the default warn/throw behavior with your own handler — e.g., to route
 
 ```php
 use Glueful\Database\ORM\Model;
+use Glueful\Bootstrap\ApplicationContext;
+use Psr\Log\LoggerInterface;
 
-Model::handleLazyLoadingViolationUsing(function (Model $model, string $relation) {
-    app()->get(LoggerInterface::class)->warning("N+1: {$model::class}::$relation");
-    if (app()->environment('testing')) {
+// In a service provider's boot() method, with $context available:
+Model::handleLazyLoadingViolationUsing(function (Model $model, string $relation) use ($context) {
+    $logger = app($context, LoggerInterface::class);
+    $logger->warning("N+1: {$model::class}::$relation");
+
+    if ($context->getEnvironment() === 'testing') {
         throw new \LogicException("N+1 detected in test");
     }
 });
@@ -1659,7 +1670,7 @@ The callback **replaces** default behavior — neither `error_log()` nor the str
 Enable strict mode in tests so any N+1 fails CI:
 
 ```php
-use Tests\Support\Traits\ResetsLazyLoading;
+use Glueful\Tests\Support\Traits\ResetsLazyLoading;
 
 class MyControllerTest extends TestCase
 {
