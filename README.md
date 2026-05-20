@@ -81,7 +81,7 @@ Glueful produces a high-quality `openapi.json`; client generation is delegated t
 
 ```bash
 # Produce the spec
-php glueful api:docs
+php glueful generate:openapi
 
 # TypeScript types via openapi-typescript
 php glueful generate:client typescript --output=./sdk

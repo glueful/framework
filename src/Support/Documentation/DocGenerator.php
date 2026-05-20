@@ -1600,40 +1600,6 @@ class DocGenerator
                 'required' => ['success', 'message', 'errors']
             ],
 
-            'PaginationMeta' => [
-                'type' => 'object',
-                'properties' => [
-                    'current_page' => [
-                        'type' => 'integer',
-                        'description' => 'Current page number'
-                    ],
-                    'per_page' => [
-                        'type' => 'integer',
-                        'description' => 'Number of items per page'
-                    ],
-                    'total' => [
-                        'type' => 'integer',
-                        'description' => 'Total number of items'
-                    ],
-                    'last_page' => [
-                        'type' => 'integer',
-                        'description' => 'Last page number'
-                    ],
-                    'has_more' => [
-                        'type' => 'boolean',
-                        'description' => 'Whether more pages exist'
-                    ],
-                    'from' => [
-                        'type' => 'integer',
-                        'description' => 'Starting item number on current page'
-                    ],
-                    'to' => [
-                        'type' => 'integer',
-                        'description' => 'Ending item number on current page'
-                    ]
-                ]
-            ],
-
             // Authentication Schemas
             'LoginRequest' => [
                 'type' => 'object',

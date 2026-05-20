@@ -82,7 +82,7 @@ final class ClientCommand extends Command
     {
         if ($language === 'typescript' || $language === 'ts') {
             $outFile = rtrim($outputDir, '/') . '/api.d.ts';
-            return self::TS_TOOL . ' ' . escapeshellarg($specPath) . ' -o ' . $outFile;
+            return self::TS_TOOL . ' ' . escapeshellarg($specPath) . ' -o ' . escapeshellarg($outFile);
         }
 
         // Language is restricted to alphanumerics + dashes — safe to inline.

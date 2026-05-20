@@ -19,7 +19,7 @@ final class ClientCommandTest extends TestCase
         );
         self::assertStringContainsString('openapi-typescript', $built);
         self::assertStringContainsString('/tmp/openapi.json', $built);
-        self::assertStringContainsString('./generated/api.d.ts', $built);
+        self::assertStringContainsString("'./generated/api.d.ts'", $built);
     }
 
     public function testTsAliasMapsToTypescript(): void
