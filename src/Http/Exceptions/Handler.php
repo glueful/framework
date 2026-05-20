@@ -537,9 +537,8 @@ class Handler implements ExceptionHandlerInterface
     {
         return new Response([
             'success' => false,
-            'message' => $e->getMessage(),
-            'code' => 403,
-            'error_code' => 'FORBIDDEN',
+            'message' => $e->getMessage() !== '' ? $e->getMessage() : 'Forbidden',
+            'error' => $this->buildErrorDetails($e, 403),
         ], 403);
     }
 
@@ -567,6 +566,7 @@ class Handler implements ExceptionHandlerInterface
     {
         $details = [
             'code' => $statusCode,
+            'error_code' => $this->deriveErrorCode($statusCode),
             'timestamp' => date('c'),
             'request_id' => $this->getRequestId(),
         ];
@@ -629,6 +629,27 @@ class Handler implements ExceptionHandlerInterface
             503 => 'Service Unavailable',
             504 => 'Gateway Timeout',
             default => 'An error occurred',
+        };
+    }
+
+    /**
+     * Derive a stable SCREAMING_SNAKE_CASE error code from an HTTP status.
+     */
+    private function deriveErrorCode(int $statusCode): string
+    {
+        return match ($statusCode) {
+            400 => 'BAD_REQUEST',
+            401 => 'UNAUTHORIZED',
+            403 => 'FORBIDDEN',
+            404 => 'NOT_FOUND',
+            405 => 'METHOD_NOT_ALLOWED',
+            409 => 'CONFLICT',
+            422 => 'UNPROCESSABLE_ENTITY',
+            429 => 'TOO_MANY_REQUESTS',
+            500 => 'INTERNAL_SERVER_ERROR',
+            503 => 'SERVICE_UNAVAILABLE',
+            504 => 'GATEWAY_TIMEOUT',
+            default => 'ERROR',
         };
     }
 
