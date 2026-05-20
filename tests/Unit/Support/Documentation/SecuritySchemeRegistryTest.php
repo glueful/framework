@@ -47,4 +47,30 @@ final class SecuritySchemeRegistryTest extends TestCase
         self::assertTrue($registry->has('BearerAuth'));
         self::assertFalse($registry->has('NoSuchScheme'));
     }
+
+    public function testResolvesSchemesForMiddlewareList(): void
+    {
+        $registry = new SecuritySchemeRegistry(
+            schemes: [
+                'BearerAuth' => ['type' => 'http', 'scheme' => 'bearer'],
+                'ApiKeyAuth' => ['type' => 'apiKey', 'in' => 'header', 'name' => 'X-API-Key'],
+            ],
+            middlewareMap: [
+                'auth' => ['BearerAuth'],
+                'api_key' => ['ApiKeyAuth'],
+            ],
+        );
+
+        self::assertSame(
+            [['BearerAuth' => []]],
+            $registry->securityFor(['auth', 'rate_limit']),
+        );
+
+        self::assertSame(
+            [['BearerAuth' => []], ['ApiKeyAuth' => []]],
+            $registry->securityFor(['auth', 'api_key']),
+        );
+
+        self::assertSame([], $registry->securityFor(['rate_limit']));
+    }
 }
