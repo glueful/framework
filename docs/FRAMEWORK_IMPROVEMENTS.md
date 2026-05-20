@@ -36,9 +36,9 @@ Several extensions are already published and available:
 
 ### Planned Extension Candidates
 Features that should be implemented as extensions:
-- **Observability** - OpenTelemetry, Prometheus metrics, APM integrations
+- **Observability** - OpenTelemetry, APM integrations
 - **Advanced Security** - OAuth2 server, MFA/TOTP, WebAuthn
-- **Search** - Elasticsearch, Meilisearch, Algolia adapters
+- **Search** - Meilisearch (✅ published as `glueful/meilisearch`), Elasticsearch, Algolia adapters
 
 This approach keeps the core framework lightweight and allows teams to opt-in to features they need.
 
@@ -1055,13 +1055,63 @@ return Response::stream(function () {
 - [x] `glueful/payvia` - Payment gateways (Stripe, Paystack, Flutterwave)
 - [x] `glueful/runiva` - Server runtimes (RoadRunner, Swoole, FrankenPHP)
 
+#### Already Published (Search) ✅
+- [x] `glueful/meilisearch` - Meilisearch adapter
+
 #### Planned Extensions
 - [ ] `glueful/oauth2-server` - OAuth2 authorization server (BE an OAuth provider)
 - [ ] `glueful/mfa` - TOTP, WebAuthn, recovery codes
 - [ ] `glueful/opentelemetry` - Request tracing, distributed tracing
-- [ ] `glueful/prometheus` - Metrics export, Grafana dashboards
-- [ ] `glueful/elasticsearch` - Elasticsearch adapter
-- [ ] `glueful/meilisearch` - Meilisearch adapter
+- [ ] `glueful/elasticsearch` - Elasticsearch adapter (deferred — overlaps with Meilisearch)
+- [ ] `glueful/prometheus` - Metrics export, Grafana dashboards (deferred — overlaps with OpenTelemetry)
+
+---
+
+## Post-Phase 3 Roadmap: Tiered Plan
+
+With Phases 1–3 complete, the remaining items are no longer foundational — they are opt-in surface area. The question for each is "who needs this enough to justify the maintenance cost?" The work is grouped into three tiers by leverage and demand, not by chronological phase.
+
+### Tier 1 — Core, Near-Term (high leverage, low surface area)
+
+Build these into the core framework soon. Each is small, complements work that already landed, and prevents foreseeable user pain.
+
+| Item | Source | Rationale |
+|------|--------|-----------|
+| **N+1 query detection (dev-only)** | 6.2 (partial) | The ORM landed in Phase 1; without N+1 detection in dev, users hit performance cliffs and blame the framework. Cheapest win on the list. |
+| **Kubernetes health probes** (`/health/live`, `/health/ready`, `/health/startup`) | 4.3 | Table stakes for k8s/ECS deployment. Small code, large perception win. |
+| **API key scopes + expiration + rotation** | 5.3 | Basic API keys already exist; this is incremental hardening, not a new system. |
+
+**Scope discipline:** Skip read/write splitting and query-level result caching from 6.2 for now — over-scoped relative to the value.
+
+### Tier 2 — Extensions, Demand-Driven
+
+Build these as extensions **when a real user asks**, not speculatively. The maintenance cost of speculative extensions (especially OTel and WebAuthn) outweighs the value of having them on the shelf.
+
+| Extension | Source | Notes |
+|-----------|--------|-------|
+| `glueful/opentelemetry` | 4.1 | High value, but OTel SDK churn is non-trivial. Wait for a concrete consumer. |
+| `glueful/mfa` | 5.1 | TOTP is ~a day's work; WebAuthn is a project. Build when needed. |
+| `glueful/oauth2-server` | 5.2 | Narrow audience — only relevant when a Glueful API needs to *be* an OAuth provider. Most OAuth needs are client-side and covered by `glueful/entrada`. |
+
+### Tier 3 — Defer or Drop
+
+These items either overlap with existing work or risk introducing competing patterns. Revisit only if a strong use case emerges.
+
+| Item | Source | Reason to defer |
+|------|--------|-----------------|
+| **Async operations** (`Async::parallel`, SSE, WebSockets) | 6.3 | `glueful/runiva` already covers the runtime concurrency story (Swoole, RoadRunner, FrankenPHP). Adding a parallel `Async::` API in core risks two competing concurrency models. |
+| `glueful/prometheus` | 4.2 | Overlaps heavily with OpenTelemetry (OTel exports to Prometheus). Pick one path; don't build both. |
+| `glueful/elasticsearch` | — | `glueful/meilisearch` already covers the search slot. ES is heavier and audiences barely overlap. |
+
+### Suggested Next Sprint
+
+A concrete next-sprint scope from Tier 1:
+
+1. N+1 detection in development mode
+2. Kubernetes-ready health probes
+3. API key scopes, expiration, and rotation
+
+Then reassess Tier 2 based on actual user demand rather than a fixed roadmap.
 
 ---
 
@@ -1076,7 +1126,7 @@ With Phases 1-3 complete, Glueful is now a comprehensive framework for building 
 | Phase 1 | Foundation (ORM, Validation, Resources, Exceptions) | ✅ Complete |
 | Phase 2 | Developer Experience (Scaffold, CLI, Dev Server) | ✅ Complete |
 | Phase 3 | API Features (Versioning, Webhooks, Rate Limiting, Caching) | ✅ Complete |
-| Phase 4+ | Observability & Advanced Security | Planned as Extensions |
+| Post-Phase 3 | Tiered roadmap (see above) | Tier 1 in core, Tier 2 demand-driven, Tier 3 deferred |
 
 ### Design Principles
 
