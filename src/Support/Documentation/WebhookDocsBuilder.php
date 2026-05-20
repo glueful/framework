@@ -38,6 +38,7 @@ final class WebhookDocsBuilder
                 'post' => [
                     'summary' => $meta['summary'] ?? "Webhook for {$event}",
                     'operationId' => $this->operationIdFor($event),
+                    'parameters' => $this->signatureHeaders(),
                     'requestBody' => [
                         'required' => true,
                         'content' => [
@@ -59,5 +60,34 @@ final class WebhookDocsBuilder
         $parts = preg_split('/[._\-]+/', $event) ?: [];
         $parts = array_map(static fn (string $p): string => ucfirst(strtolower($p)), $parts);
         return 'on' . implode('', $parts);
+    }
+
+    /**
+     * Build the standard webhook authentication headers documented for every
+     * webhook delivery sent by WebhookDeliveryService.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function signatureHeaders(): array
+    {
+        return [
+            [
+                'name' => 'X-Glueful-Signature',
+                'in' => 'header',
+                'required' => true,
+                'description' => 'HMAC-SHA256 signature of the request body in '
+                    . 'Stripe-compatible format `t={timestamp},v1={hex_signature}`. '
+                    . 'Verify with the subscription secret before processing.',
+                'schema' => ['type' => 'string'],
+            ],
+            [
+                'name' => 'X-Glueful-Timestamp',
+                'in' => 'header',
+                'required' => true,
+                'description' => 'Unix timestamp (seconds) when the delivery was sent. '
+                    . 'Match against the timestamp embedded in X-Glueful-Signature to detect replays.',
+                'schema' => ['type' => 'integer'],
+            ],
+        ];
     }
 }
