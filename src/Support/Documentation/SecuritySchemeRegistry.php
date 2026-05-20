@@ -50,11 +50,14 @@ final class SecuritySchemeRegistry
     public function securityFor(array $middleware): array
     {
         $requirements = [];
+        $seen = [];
         foreach ($middleware as $name) {
             foreach ($this->middlewareMap[$name] ?? [] as $schemeName) {
-                if (isset($this->schemes[$schemeName])) {
-                    $requirements[] = [$schemeName => []];
+                if (!isset($this->schemes[$schemeName]) || isset($seen[$schemeName])) {
+                    continue;
                 }
+                $seen[$schemeName] = true;
+                $requirements[] = [$schemeName => []];
             }
         }
         return $requirements;

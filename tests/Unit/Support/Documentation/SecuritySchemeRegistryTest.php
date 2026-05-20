@@ -73,4 +73,17 @@ final class SecuritySchemeRegistryTest extends TestCase
 
         self::assertSame([], $registry->securityFor(['rate_limit']));
     }
+
+    public function testSecurityForDeduplicatesRepeatedMiddleware(): void
+    {
+        $registry = new SecuritySchemeRegistry(
+            schemes: ['BearerAuth' => ['type' => 'http', 'scheme' => 'bearer']],
+            middlewareMap: ['auth' => ['BearerAuth']],
+        );
+
+        self::assertSame(
+            [['BearerAuth' => []]],
+            $registry->securityFor(['auth', 'auth']),
+        );
+    }
 }
