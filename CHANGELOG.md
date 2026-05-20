@@ -6,19 +6,39 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+---
+
+## [1.42.0] - 2026-05-20 — Caph
+
 ### Added
 
-- **OpenAPI spec quality improvements (Phase 1-2)**: The generated OpenAPI spec now declares all configured security schemes (BearerAuth, ApiKeyAuth, ...) via a new `SecuritySchemeRegistry`, driven by `documentation.security_schemes` and `documentation.middleware_map` config. Per-operation `security` requirements are derived from route middleware instead of being hardcoded to BearerAuth.
+- **OpenAPI spec quality overhaul**: The generated OpenAPI spec now declares all configured security schemes (BearerAuth, ApiKeyAuth, ...) via a new `SecuritySchemeRegistry`, driven by `documentation.security_schemes` and `documentation.middleware_map` config. Per-operation `security` requirements are derived from route middleware instead of being hardcoded to BearerAuth.
 - **`ErrorResponse` schema component**: New OpenAPI component describing the unified error envelope (`{success, message, error: {code, error_code, timestamp, request_id}}`) with an enum of stable `error_code` values (`BAD_REQUEST`, `NOT_FOUND`, `FORBIDDEN`, etc.). All CRUD endpoint 4xx responses now `$ref` this schema so generated SDKs can typecheck error responses.
+- **Deterministic `operationId` values**: New `OperationIdGenerator` produces camelCase IDs (`getV1UsersByUuid`) with collision-numbering. Closes a hidden gap where comment-driven generation emitted operations without any `operationId` at all, forcing SDK generators into auto-derived garbage method names.
+- **`PaginationSchemaBuilder`**: New `PaginationMeta`, `PaginationLinks`, and per-resource envelope schemas matching `PaginatedResourceResponse` exactly. List endpoints now reference these components so generated SDKs can type paginated responses uniformly.
+- **`addRouteWithFieldsAttribute()` helper**: Surfaces `?fields=` and `?expand=` query parameters with an enum of allowed paths derived from `#[Fields(allowed: [...], strict: true)]`. Public API ready for controller-reflection wiring (auto-discovery deferred).
+- **`ExampleDeriver`**: Auto-derives representative request body examples from Validator rules and from parsed schema properties (`email`, `uuid`, `url`, `date`, `datetime` formats; field-name heuristics for `name`, `slug`, `title`, etc.). `@example` annotation in docblocks overrides the derived value.
+- **OpenAPI 3.1 webhooks block**: New `WebhookDocsBuilder` emits the top-level `webhooks` object from `documentation.webhooks` config. Each entry documents `X-Glueful-Signature` (Stripe-style `t=...,v1=...`) and `X-Glueful-Timestamp` headers actually sent by `WebhookDeliveryService`. New `WebhookEnvelope` schema describes the standard payload shape.
+- **`generate:client` CLI wrapper**: Shells out to `openapi-typescript` for TS/JS targets and `openapi-generator-cli` for everything else. Glueful does not own codegen logic — the command builds the right shell invocation with safe-by-construction language sanitization and `escapeshellarg` for paths. Prints the command by default; `--execute` runs it.
+- **`docs/WEBHOOKS.md`**: Guide explaining how to declare events under `documentation.webhooks` so they appear in the spec for SDK consumers.
 
 ### Changed
 
 - **Error response references unified**: `DocGenerator::getErrorResponses()` and `getCommonResponses()` now reference `#/components/schemas/ErrorResponse` instead of the legacy flat `Error` schema. The `Error` schema is preserved in the components for backward compatibility but is no longer referenced by generated endpoints.
+- **`SecuritySchemeRegistry` wired into `OpenApiGenerator`**: Config keys `documentation.security_schemes` and `documentation.middleware_map` now actually take effect in the production pipeline (previously they were inert despite the registry API existing).
+- **Duplicate `PaginationMeta` removed**: An inline legacy definition in `getDefaultSchemas()` that silently overwrote the new builder-provided shape (with mismatched `last_page`/`has_more` fields) has been removed. The authoritative shape now matches `PaginatedResourceResponse`.
 
 ### Breaking
 
 - **`PermissionUnauthorizedException` envelope shape changed**: Previously returned `{success, message, code, error_code}` with `code` and `error_code` at the top level. Now returns the unified `{success, message, error: {code, error_code, timestamp, request_id}}` shape, identical to all other HTTP exceptions. API consumers that read `code` or `error_code` at the top level must read `error.code` and `error.error_code` instead.
 - **Error envelope now includes `error_code`**: The `error` object now always contains an `error_code` field (`NOT_FOUND`, `FORBIDDEN`, etc., or the stringified status code for non-enumerated statuses like `"418"`). Existing consumers that did strict-shape matching on `error` may need to ignore unknown keys.
+
+### Upgrade Notes
+
+- **Permission exception consumers** — If any API client reads `code` or `error_code` at the top level of a 403 response from a `PermissionUnauthorizedException`, update it to read `error.code` and `error.error_code`. All other 4xx/5xx responses already used the nested shape, so most consumers are unaffected.
+- **Generated SDK consumers** — Regenerate clients after upgrading. The `ErrorResponse`, `PaginationMeta`, `PaginationLinks`, and `WebhookEnvelope` components are new; operation IDs may have changed to the deterministic camelCase form (e.g., `getUsers` → `getV1UsersByUuid`).
+- **No new env vars** — Configuration extensions live entirely in `config/documentation.php` (`security_schemes`, `middleware_map`, `webhooks`). Existing deployments need no `.env` changes.
+- **Discriminator support deferred** — The plan included optional `discriminator` emission for polymorphic resources, gated on actual polymorphism in the codebase. The gate found none, so this is deferred to a future release.
 
 ---
 
