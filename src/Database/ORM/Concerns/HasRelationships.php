@@ -20,6 +20,13 @@ use Glueful\Database\ORM\Relations\Relation;
  * Provides relationship functionality for ORM models. Supports
  * one-to-one (hasOne), one-to-many (hasMany), and inverse (belongsTo)
  * relationships with eager loading support.
+ *
+ * Expected to be composed alongside the {@see PreventsLazyLoading} trait
+ * on the consuming class (e.g. {@see \Glueful\Database\ORM\Model}). The
+ * methods declared below are provided by that trait.
+ *
+ * @method bool preventsLazyLoadingNow()
+ * @method void handleLazyLoadingViolation(string $relation)
  */
 trait HasRelationships
 {
@@ -266,6 +273,16 @@ trait HasRelationships
      */
     protected function newRelatedInstance(string $class): object
     {
+        // Pass the parent model's context so the related instance can resolve
+        // its database connection via the container (required for relation queries).
+        // method_exists() guard keeps HasRelationships usable standalone (e.g. in unit-test stubs).
+        // @phpstan-ignore function.alreadyNarrowedType
+        $context = method_exists($this, 'getContext') ? $this->getContext() : null;
+
+        if ($context !== null) {
+            return new $class([], $context);
+        }
+
         return new $class();
     }
 
@@ -396,6 +413,10 @@ trait HasRelationships
 
         if (!$relation instanceof Relation) {
             return null;
+        }
+
+        if ($this->preventsLazyLoadingNow()) {
+            $this->handleLazyLoadingViolation($method);
         }
 
         $results = $relation->getResults();

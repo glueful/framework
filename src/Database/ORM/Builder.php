@@ -403,6 +403,12 @@ class Builder
             $models[] = $this->model->newFromBuilder($result);
         }
 
+        if (count($models) > 1 && Model::lazyLoadingEnabled()) {
+            foreach ($models as $m) {
+                $m->setLoadedFromCollection(true);
+            }
+        }
+
         return $models;
     }
 
@@ -554,10 +560,11 @@ class Builder
         $parts = explode('.', $name);
         $baseName = $parts[0];
 
-        // Create a clean model instance and get the relation
-        $relation = $this->model->$baseName();
-
-        return $relation;
+        // Create the relation without the single-model WHERE constraint so that
+        // addEagerConstraints() can then apply a WHERE IN over all parent keys.
+        return Relations\Relation::noConstraints(function () use ($baseName): Relations\Relation {
+            return $this->model->$baseName();
+        });
     }
 
     /**
@@ -1348,5 +1355,21 @@ class Builder
         $this->applyScopes();
 
         return $this->query->toSql();
+    }
+
+    /**
+     * Get the query execution plan for the underlying SELECT.
+     *
+     * Applies any global scopes, then delegates to QueryBuilder::explain(),
+     * which is driver-aware (`EXPLAIN QUERY PLAN` on SQLite, `EXPLAIN`
+     * elsewhere). Returns the driver's native EXPLAIN row shape.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function explain(): array
+    {
+        $this->applyScopes();
+
+        return $this->query->explain();
     }
 }

@@ -237,4 +237,10 @@ class QueryExecutor implements QueryExecutorInterface
     {
         return $this->debugMode;
     }
+
+    public function getDriverName(): string
+    {
+        $name = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        return is_string($name) ? $name : '';
+    }
 }

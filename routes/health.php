@@ -233,6 +233,66 @@ $router->group(['prefix' => '/health'], function (Router $router) {
      */
     $router->get('/queue', [HealthController::class, 'queue'])
         ->middleware('rate_limit:20,60');
+
+    /**
+     * @route GET /health/live
+     * @summary Liveness Probe (k8s convention)
+     * @description Kubernetes-conventional liveness endpoint. Returns 200 if the
+     *              process is alive and can respond. No dependency checks.
+     *              Equivalent to /healthz; provided at the conventional path so
+     *              k8s/ECS/Nomad Pod specs can use the standard `/health/live` URL.
+     * @tag Health
+     * @response 200 application/json "Service is alive" {
+     *   status:string="ok"
+     * }
+     */
+    $router->get('/live', [HealthController::class, 'liveness'])
+        ->middleware('rate_limit:60,60');
+
+    /**
+     * @route GET /health/ready
+     * @summary Readiness Probe (k8s convention)
+     * @description Kubernetes-conventional readiness endpoint. Returns 200 when
+     *              the service can serve traffic (database, cache, and config
+     *              checks all pass), 503 otherwise. No authentication required —
+     *              k8s probes run from the cluster network.
+     * @tag Health
+     * @response 200 application/json "Service is ready" {
+     *   success:boolean="true",
+     *   message:string="Service is ready",
+     *   data:{
+     *     status:string="ready",
+     *     timestamp:string="ISO timestamp",
+     *     checks:object="Individual readiness checks"
+     *   }
+     * }
+     * @response 503 application/json "Service is not ready" {
+     *   success:boolean="false",
+     *   message:string="Service not ready",
+     *   data:{
+     *     timestamp:string="ISO timestamp",
+     *     checks:object="Failed readiness checks"
+     *   }
+     * }
+     */
+    $router->get('/ready', [HealthController::class, 'readiness'])
+        ->middleware('rate_limit:30,60');
+
+    /**
+     * @route GET /health/startup
+     * @summary Startup Probe (k8s convention)
+     * @description Kubernetes-conventional startup endpoint. Returns 200 once the
+     *              framework has finished initializing. Used by orchestrators to
+     *              defer liveness probes until startup completes — slow-booting
+     *              containers (heavy migrations, JIT warm-up, etc.) get a longer
+     *              grace period without falsely failing liveness.
+     * @tag Health
+     * @response 200 application/json "Service has started" {
+     *   status:string="started"
+     * }
+     */
+    $router->get('/startup', [HealthController::class, 'startup'])
+        ->middleware('rate_limit:60,60');
 });
 
 /**

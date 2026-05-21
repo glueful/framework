@@ -34,9 +34,14 @@ class CacheFactory
      */
     public static function create(string $driverOverride = '', ?ApplicationContext $context = null): CacheStore
     {
+        // Resolution order: explicit override → config (when context available)
+        // → CACHE_DRIVER env var → 'redis' default. The env-var fallback is
+        // what lets phpunit.xml's `CACHE_DRIVER=array` take effect for tests
+        // that resolve `cache.store` without a context (CI environments
+        // without Redis would otherwise fail here).
         $cacheType = $driverOverride !== ''
             ? $driverOverride
-            : (string) self::getConfig($context, 'cache.default', 'redis');
+            : (string) (self::getConfig($context, 'cache.default', null) ?? env('CACHE_DRIVER', 'redis'));
 
         if ($cacheType === 'redis') {
             $redis = new Redis();

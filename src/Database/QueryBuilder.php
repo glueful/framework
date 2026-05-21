@@ -784,13 +784,25 @@ class QueryBuilder implements QueryBuilderInterface
     }
 
     /**
-     * Get query execution plan
+     * Get the query execution plan.
      *
-     * @return array<mixed>
+     * Driver-aware: MySQL and PostgreSQL prepend `EXPLAIN`; SQLite uses
+     * `EXPLAIN QUERY PLAN` because plain `EXPLAIN` on SQLite returns a
+     * raw opcode dump that isn't useful for debugging. The returned rows
+     * follow each driver's native EXPLAIN output shape — callers should
+     * treat the result as an array of associative arrays keyed by the
+     * driver's column names (e.g. `id, select_type, table` on MySQL;
+     * `id, parent, notused, detail` on SQLite).
+     *
+     * @return array<int, array<string, mixed>>
      */
     public function explain(): array
     {
-        $sql = 'EXPLAIN ' . $this->buildSelectQuery();
+        $prefix = $this->queryExecutor->getDriverName() === 'sqlite'
+            ? 'EXPLAIN QUERY PLAN '
+            : 'EXPLAIN ';
+
+        $sql = $prefix . $this->buildSelectQuery();
         $bindings = $this->getAllBindings();
 
         return $this->queryExecutor->executeQuery($sql, $bindings);

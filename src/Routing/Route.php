@@ -25,6 +25,13 @@ class Route
     private array $rateLimitConfig = [];
     /** @var int|null Rate limit cost multiplier */
     private ?int $rateLimitCost = null;
+    /**
+     * Required-scope configurations (one entry per stacked #[RequireScope]).
+     * Across attributes = AND; within an attribute's scope list = OR.
+     *
+     * @var array<int, array<int, string>>
+     */
+    private array $requireScopeConfig = [];
 
     public function __construct(
         private Router $router, // Back-reference for named route registration
@@ -323,6 +330,27 @@ class Route
     public function getRateLimitConfig(): array
     {
         return $this->rateLimitConfig;
+    }
+
+    /**
+     * Set required-scope configuration for this route.
+     * Each entry is one #[RequireScope] attribute's scope list (OR within).
+     * Multiple entries are enforced with AND semantics across attributes.
+     *
+     * @param array<int, array<int, string>> $config
+     */
+    public function setRequireScopeConfig(array $config): self
+    {
+        $this->requireScopeConfig = $config;
+        return $this;
+    }
+
+    /**
+     * @return array<int, array<int, string>>
+     */
+    public function getRequireScopeConfig(): array
+    {
+        return $this->requireScopeConfig;
     }
 
     /**

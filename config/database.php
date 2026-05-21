@@ -119,6 +119,15 @@ return [
         'log_path' => dirname(__DIR__) . '/storage/logs/query.log',
     ],
 
+    // ORM features
+    'orm' => [
+        'lazy_loading_mode' => env('DB_LAZY_LOADING_MODE', 'auto'),
+        // 'off'    — skips hydration tagging and violation checks; minimal overhead
+        // 'warn'   — log warning via error_log() with [GLUEFUL-N+1] prefix
+        // 'strict' — throw LazyLoadingViolationException
+        // 'auto'   — 'warn' in development, 'off' otherwise
+    ],
+
     // Migration settings
     'migrations' => [
         'table' => 'migrations',

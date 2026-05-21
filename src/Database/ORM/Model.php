@@ -11,6 +11,7 @@ use Glueful\Database\ORM\Concerns\HasEvents;
 use Glueful\Database\ORM\Concerns\HasGlobalScopes;
 use Glueful\Database\ORM\Concerns\HasRelationships;
 use Glueful\Database\ORM\Concerns\HasTimestamps;
+use Glueful\Database\ORM\Concerns\PreventsLazyLoading;
 use Glueful\Database\ORM\Contracts\ModelInterface;
 use Glueful\Database\QueryBuilder;
 use JsonSerializable;
@@ -61,6 +62,7 @@ abstract class Model implements ModelInterface, JsonSerializable
     use HasEvents;
     use HasGlobalScopes;
     use HasRelationships;
+    use PreventsLazyLoading;
 
     /**
      * The database connection that should be used

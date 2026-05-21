@@ -156,6 +156,8 @@ API_VERSION_IN_PATH=true
 - Multiple database drivers: MySQL, PostgreSQL, SQLite
 - Query builder with advanced features in `src/Database/Query/`
 
+**N+1 query detection** — ORM-aware detector at `src/Database/ORM/Concerns/PreventsLazyLoading.php`. Modes: `off | warn | strict | auto`. Configure via `DB_LAZY_LOADING_MODE`. Per-model opt-out via `$instanceLazyLoadingMode = 'off'`. See `docs/ORM/N_PLUS_ONE_DETECTION.md`.
+
 **Query Building Pattern:**
 ```php
 // Via connection (inject or resolve from container)
@@ -179,6 +181,8 @@ $users = User::query()
 - LDAP integration via `LdapAuthenticationProvider.php` 
 - SAML SSO via `SamlAuthenticationProvider.php`
 - API key authentication via `ApiKeyAuthenticationProvider.php`
+
+**API key hardening** — Dedicated `api_keys` table (scopes, IP allowlist, expiration, rotation grace, environment-prefixed keys `gf_live_*` / `gf_test_*`). Schema migration in api-skeleton (`009_CreateApiKeysTable.php`); code in `src/Auth/ApiKey/`. Use `ApiKeyService::create/verify/rotate/revoke` and `#[RequireScope('write:posts')]` on routes (auto-attaches `require_scope` middleware). CLI: `php glueful apikey:create|list|rotate|revoke`. Provider is single-track — verifies via the new table only. **Usage guide:** `docs/API_KEYS.md`.
 
 **Session Management:**
 - Advanced session analytics in `SessionAnalytics.php`
