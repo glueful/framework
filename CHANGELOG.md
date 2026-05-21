@@ -6,6 +6,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+---
+
+## [1.43.0] - 2026-05-21 — Dabih
+
 ### Added
 
 - **ORM-aware N+1 query detection**: New `PreventsLazyLoading` trait on `Model` detects lazy-loaded relations on members of a hydrated collection and produces actionable warnings that name the model and relation (`User::posts lazy-loaded from a collection of 50, add ->with('posts')`). Four modes: `off`, `warn` (logs `[GLUEFUL-N+1] ...` via `error_log()` with per-request dedupe), `strict` (throws `LazyLoadingViolationException`, which extends `\LogicException`), and `auto` (resolves to `warn` in development, `off` otherwise). Configure via `DB_LAZY_LOADING_MODE` or `config/database.php` → `orm.lazy_loading_mode`.
@@ -15,7 +19,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - **`Framework::initializeOrmFeatures()` boot hook**: Reads the lazy-loading mode from config and wires it into `Model::preventLazyLoading()`. Runs unconditionally on every boot — not gated on the development environment — so strict mode works in CI (`APP_ENV=testing`) and any explicit non-dev configuration.
 - **`Relations\Relation::noConstraints(callable)`**: Standard Eloquent-style pattern for suppressing the single-parent `WHERE` constraint during eager-load construction. The `static $constraints` flag is reset in a `finally` block so subsequent eager loads still get the correct `WHERE ... IN (...)` clause from `addEagerConstraints()`.
 - **`docs/ORM/N_PLUS_ONE_DETECTION.md`**: Public documentation covering modes, configuration, per-model opt-out, custom handlers, CI enforcement patterns, coexistence with the existing SQL-pattern detectors (`DevelopmentQueryMonitor`, `QueryLogger::detectN1Patterns()`), performance characteristics, and long-running-runtime considerations.
-- **`docs/FRAMEWORK_IMPROVEMENTS.md` tiered roadmap**: Replaces the old "Phase 4+" placeholder with a Post-Phase 3 tiered plan — Tier 1 (core, near-term), Tier 2 (demand-driven extensions), Tier 3 (defer/drop) — with concrete rationale for each item. Marks `glueful/meilisearch` as published; drops `glueful/elasticsearch` and `glueful/prometheus` from planned with documented overlap reasoning.
+- **`docs/FRAMEWORK_IMPROVEMENTS.md` roadmap restructure**: Replaces the old "Phase 4+" placeholder with a three-tier plan grouped by leverage (near-term core work, demand-driven extensions, deferred/dropped items) and concrete rationale for each item. Marks `glueful/meilisearch` as published; drops `glueful/elasticsearch` and `glueful/prometheus` from planned with documented overlap reasoning.
 - **Driver-aware `$query->explain()` and `Builder::explain()`**: The existing `QueryBuilder::explain()` is now driver-aware — SQLite uses `EXPLAIN QUERY PLAN` (the useful form) instead of plain `EXPLAIN` (which on SQLite returns a raw opcode dump). MySQL and PostgreSQL continue to use `EXPLAIN`. A new `Builder::explain()` on the ORM applies global scopes and delegates to the underlying query builder, returning the driver's native EXPLAIN row shape as `array<int, array<string, mixed>>`. Pairs naturally with N+1 detection for debugging the queries it flags.
 - **`QueryExecutorInterface::getDriverName()`**: New interface method returning the underlying PDO driver name (`mysql`, `pgsql`, `sqlite`). Used by `QueryBuilder::explain()` to vary SQL by driver; available to other call-sites that need the same kind of branching.
 - **Kubernetes-conventional health probe endpoints**: Three new routes at the canonical paths orchestrators expect — `GET /health/live`, `GET /health/ready`, `GET /health/startup`. `live` is a dependency-free liveness check (200 when the process can respond); `ready` reports database, cache, and config status and returns 503 when any dependency is unhealthy; `startup` reports initialization complete. The existing `/healthz` and `/ready` endpoints continue to work — the new paths are additive, so Pod specs that reference either form keep working. New `HealthController::startup()` handler; `liveness()` and `readiness()` are reused.
@@ -38,6 +42,19 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ### Removed
 
 - **`UserRepository::findByApiKey()`** — zero callers after the provider switches to `ApiKeyService::verify()`. The method queried a `users.api_key` column that doesn't exist in the canonical schema, so it was dead code for any standard install. Verified no external callers (extensions, api-skeleton app code, other repos).
+
+### Upgrade Notes
+
+- **Run the new migration.** `glueful/api-skeleton ^1.26.0` ships `009_CreateApiKeysTable.php`. Run `php glueful migrate:run` after upgrading. The `apikey:*` CLI commands and the new auth provider both require the table.
+- **`ApiKeyAuthenticationProvider` is single-track.** If you previously relied on a custom `users.api_key` column being read by `UserRepository::findByApiKey()`, that code path is gone. Migrate existing keys into the new `api_keys` table (use `ApiKeyService::create()` programmatically, or `php glueful apikey:create` per user). No data is migrated automatically — the canonical schema never had the column, so we don't ship an opt-in helper.
+- **`UserRepository::findByApiKey()` removed.** Zero callers verified across the framework, all official extensions, api-skeleton, and other org repos. External consumers that subclass `UserRepository` or call the method directly must remove the reference.
+- **New env var (optional): `DB_LAZY_LOADING_MODE`.** Defaults to `auto` → `warn` in development, `off` elsewhere. Set explicitly to `strict` in CI to fail tests on accidental N+1 patterns, or `off` to disable detection entirely.
+- **`ApiKey` model uses `$timestamps = false`.** The migration's `created_at` / `updated_at` columns have `DEFAULT CURRENT_TIMESTAMP`, so the database fills them. The trait-driven timestamp path was unsuitable because it returns `DateTimeImmutable` instances that don't bind cleanly through the QueryBuilder. Subclasses of `ApiKey` should keep this disabled.
+
+```bash
+composer update glueful/framework
+php glueful migrate:run
+```
 
 ---
 
