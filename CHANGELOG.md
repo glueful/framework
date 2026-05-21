@@ -6,6 +6,24 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Added
+
+- **ORM-aware N+1 query detection**: New `PreventsLazyLoading` trait on `Model` detects lazy-loaded relations on members of a hydrated collection and produces actionable warnings that name the model and relation (`User::posts lazy-loaded from a collection of 50, add ->with('posts')`). Four modes: `off`, `warn` (logs `[GLUEFUL-N+1] ...` via `error_log()` with per-request dedupe), `strict` (throws `LazyLoadingViolationException`, which extends `\LogicException`), and `auto` (resolves to `warn` in development, `off` otherwise). Configure via `DB_LAZY_LOADING_MODE` or `config/database.php` → `orm.lazy_loading_mode`.
+- **Per-model lazy-loading opt-out**: Set `protected ?string $instanceLazyLoadingMode = 'off';` on a model to skip detection for that class regardless of the global setting. Useful for legacy models that intentionally lazy-load.
+- **Custom violation handler hook**: `Model::handleLazyLoadingViolationUsing(?\Closure $callback)` registers a callback that replaces the default warn/throw behavior — e.g. to route through a PSR logger, dispatch an event, or capture to Sentry. Pass `null` to clear.
+- **`Model::clearLazyLoadingWarnings()`**: Explicit per-request clearing of the warn-mode dedupe set. PHP-FPM and CLI clear automatically via PHP's request shutdown; long-running runtimes (`glueful/runiva`: Swoole, RoadRunner, FrankenPHP) need to call this at request boundaries.
+- **`Framework::initializeOrmFeatures()` boot hook**: Reads the lazy-loading mode from config and wires it into `Model::preventLazyLoading()`. Runs unconditionally on every boot — not gated on the development environment — so strict mode works in CI (`APP_ENV=testing`) and any explicit non-dev configuration.
+- **`Relations\Relation::noConstraints(callable)`**: Standard Eloquent-style pattern for suppressing the single-parent `WHERE` constraint during eager-load construction. The `static $constraints` flag is reset in a `finally` block so subsequent eager loads still get the correct `WHERE ... IN (...)` clause from `addEagerConstraints()`.
+- **`docs/ORM/N_PLUS_ONE_DETECTION.md`**: Public documentation covering modes, configuration, per-model opt-out, custom handlers, CI enforcement patterns, coexistence with the existing SQL-pattern detectors (`DevelopmentQueryMonitor`, `QueryLogger::detectN1Patterns()`), performance characteristics, and long-running-runtime considerations.
+- **`docs/FRAMEWORK_IMPROVEMENTS.md` tiered roadmap**: Replaces the old "Phase 4+" placeholder with a Post-Phase 3 tiered plan — Tier 1 (core, near-term), Tier 2 (demand-driven extensions), Tier 3 (defer/drop) — with concrete rationale for each item. Marks `glueful/meilisearch` as published; drops `glueful/elasticsearch` and `glueful/prometheus` from planned with documented overlap reasoning.
+
+### Fixed
+
+- **ORM property access now routes to relations**: `HasAttributes::getAttribute()` previously returned `null` for relation-method names (`$user->posts` came back empty). It now forwards to `getRelationValue()` when the relation is already loaded or the method declares a `Relation` return type. Detected via reflection without actually invoking the method, so non-relation methods with the same name as a key are left alone.
+- **`__isset()` is now relation-aware**: PHP's null-coalescing operator (`??`) calls `__isset()` before `__get()`. The previous `__isset()` ignored relations entirely, so `$user->posts[0] ?? null` silently returned `null` even when posts existed. Now it returns true for loaded relations and for relation methods, so `??` correctly triggers lazy-load (or returns eager-loaded data) instead of swallowing the result.
+- **Related-model context propagation**: `HasRelationships::newRelatedInstance()` now passes the parent model's `ApplicationContext` to the child model's constructor. Without this, child instances could not resolve their database connection via the container, causing relation queries to fail with a `RuntimeException`.
+- **Eager loading no longer emits `WHERE x = NULL`**: `Builder::getRelation()` used to instantiate the relation against a template model with a `NULL` primary key, so `addConstraints()` generated `WHERE user_id = NULL` and eager-loaded collections came back empty. Builder now wraps the relation construction in `Relation::noConstraints(...)` so `addEagerConstraints()` applies the correct `WHERE user_id IN (...)` clause across all parent keys.
+
 ---
 
 ## [1.42.0] - 2026-05-20 — Caph
