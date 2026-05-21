@@ -181,6 +181,20 @@ class HealthController extends BaseController
     }
 
     /**
+     * Startup probe for orchestrators (k8s)
+     *
+     * Reports whether initialization has completed. Under traditional PHP-FPM and
+     * CLI, reaching this handler implies the framework has booted — once this
+     * endpoint returns 200, orchestrators may begin calling liveness/readiness.
+     * Long-running runtimes (Swoole, RoadRunner) can extend the check via the
+     * application's own boot signal if they need a warmer threshold.
+     */
+    public function startup(): Response
+    {
+        return new Response(['status' => 'started']);
+    }
+
+    /**
      * Get detailed production monitoring metrics
      *
      * Comprehensive health endpoint with Response API metrics, middleware pipeline status,
