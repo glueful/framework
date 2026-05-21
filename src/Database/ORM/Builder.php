@@ -1356,4 +1356,20 @@ class Builder
 
         return $this->query->toSql();
     }
+
+    /**
+     * Get the query execution plan for the underlying SELECT.
+     *
+     * Applies any global scopes, then delegates to QueryBuilder::explain(),
+     * which is driver-aware (`EXPLAIN QUERY PLAN` on SQLite, `EXPLAIN`
+     * elsewhere). Returns the driver's native EXPLAIN row shape.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function explain(): array
+    {
+        $this->applyScopes();
+
+        return $this->query->explain();
+    }
 }

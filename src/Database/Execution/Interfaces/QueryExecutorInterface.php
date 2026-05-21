@@ -71,4 +71,12 @@ interface QueryExecutorInterface
      * Set business purpose for queries
      */
     public function withPurpose(string $purpose): void;
+
+    /**
+     * Get the underlying PDO driver name (e.g. 'mysql', 'pgsql', 'sqlite').
+     *
+     * Used by callers that need to vary SQL by driver — for example,
+     * `EXPLAIN` vs `EXPLAIN QUERY PLAN` on SQLite.
+     */
+    public function getDriverName(): string;
 }

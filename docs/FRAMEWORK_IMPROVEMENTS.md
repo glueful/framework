@@ -1077,21 +1077,24 @@ Build these into the core framework soon. Each is small, complements work that a
 
 | Item | Source | Rationale |
 |------|--------|-----------|
-| **N+1 query detection (dev-only)** ✅ | 6.2 (partial) | The ORM landed in Phase 1; without N+1 detection in dev, users hit performance cliffs and blame the framework. Cheapest win on the list. **Shipped 2026-05-21.** |
+| **N+1 query detection (dev-only)** ✅ | 6.2.1 | The ORM landed in Phase 1; without N+1 detection in dev, users hit performance cliffs and blame the framework. Cheapest win on the list. **Shipped 2026-05-21.** |
+| **Query explain support** (`$query->explain()`) ✅ | 6.2.2 | Driver-aware `EXPLAIN` passthrough returning the execution plan. Useful debugging companion to N+1 detection; ~50 lines on top of the existing `Connection`/`QueryBuilder` abstraction. **Shipped 2026-05-21.** |
 | **Kubernetes health probes** (`/health/live`, `/health/ready`, `/health/startup`) | 4.3 | Table stakes for k8s/ECS deployment. Small code, large perception win. |
 | **API key scopes + expiration + rotation** | 5.3 | Basic API keys already exist; this is incremental hardening, not a new system. |
 
-**Scope discipline:** Skip read/write splitting and query-level result caching from 6.2 for now — over-scoped relative to the value.
+**Scope discipline:** Read/write splitting and query-level result caching from 6.2 are intentionally deferred to Tier 2 (build on demand). Index suggestions are deferred to Tier 3 (external tooling covers it).
 
 ### Tier 2 — Extensions, Demand-Driven
 
 Build these as extensions **when a real user asks**, not speculatively. The maintenance cost of speculative extensions (especially OTel and WebAuthn) outweighs the value of having them on the shelf.
 
-| Extension | Source | Notes |
-|-----------|--------|-------|
+| Item | Source | Notes |
+|------|--------|-------|
 | `glueful/opentelemetry` | 4.1 | High value, but OTel SDK churn is non-trivial. Wait for a concrete consumer. |
 | `glueful/mfa` | 5.1 | TOTP is ~a day's work; WebAuthn is a project. Build when needed. |
 | `glueful/oauth2-server` | 5.2 | Narrow audience — only relevant when a Glueful API needs to *be* an OAuth provider. Most OAuth needs are client-side and covered by `glueful/entrada`. |
+| **Read/write connection splitting** (core ORM) | 6.2.4 | Only matters for apps with replicas. Large surface area — query routing, transaction-aware writes-to-primary, replica lag handling. Build when a real user has the replica topology to justify it. |
+| **Query-level result caching** (fluent ORM API like `->cache(ttl, tags)`) | 6.2.5 | Existing cache layer already covers this manually via tags. The fluent API is a convenience; build when a user asks for the shape. |
 
 ### Tier 3 — Defer or Drop
 
@@ -1100,6 +1103,7 @@ These items either overlap with existing work or risk introducing competing patt
 | Item | Source | Reason to defer |
 |------|--------|-----------------|
 | **Async operations** (`Async::parallel`, SSE, WebSockets) | 6.3 | `glueful/runiva` already covers the runtime concurrency story (Swoole, RoadRunner, FrankenPHP). Adding a parallel `Async::` API in core risks two competing concurrency models. |
+| **Index suggestions CLI** (`php glueful db:optimize`) | 6.2.3 | External tools cover this well — MySQL's `sys` schema, `pt-query-digest`, EXPLAIN tooling in PMM/Datadog. Reimplementing in core duplicates established tooling without matching quality. |
 | `glueful/prometheus` | 4.2 | Overlaps heavily with OpenTelemetry (OTel exports to Prometheus). Pick one path; don't build both. |
 | `glueful/elasticsearch` | — | `glueful/meilisearch` already covers the search slot. ES is heavier and audiences barely overlap. |
 
@@ -1107,9 +1111,10 @@ These items either overlap with existing work or risk introducing competing patt
 
 A concrete next-sprint scope from Tier 1:
 
-1. N+1 detection in development mode
-2. Kubernetes-ready health probes
-3. API key scopes, expiration, and rotation
+1. ~~N+1 detection in development mode~~ ✅ Shipped 2026-05-21
+2. ~~`$query->explain()` driver-aware passthrough~~ ✅ Shipped 2026-05-21
+3. Kubernetes-ready health probes
+4. API key scopes, expiration, and rotation
 
 Then reassess Tier 2 based on actual user demand rather than a fixed roadmap.
 
