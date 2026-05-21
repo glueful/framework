@@ -1080,7 +1080,7 @@ Build these into the core framework soon. Each is small, complements work that a
 | **N+1 query detection (dev-only)** ✅ | 6.2.1 | The ORM landed in Phase 1; without N+1 detection in dev, users hit performance cliffs and blame the framework. Cheapest win on the list. **Shipped 2026-05-21.** |
 | **Query explain support** (`$query->explain()`) ✅ | 6.2.2 | Driver-aware `EXPLAIN` passthrough returning the execution plan. Useful debugging companion to N+1 detection; ~50 lines on top of the existing `Connection`/`QueryBuilder` abstraction. **Shipped 2026-05-21.** |
 | **Kubernetes health probes** (`/health/live`, `/health/ready`, `/health/startup`) ✅ | 4.3 | Table stakes for k8s/ECS deployment. Small code, large perception win. **Shipped 2026-05-21.** |
-| **API key scopes + expiration + rotation** | 5.3 | Basic API keys already exist; this is incremental hardening, not a new system. |
+| **API key scopes + expiration + rotation** ✅ | 5.3 | Basic API keys already exist; this is incremental hardening, not a new system. **Shipped 2026-05-21.** |
 
 **Scope discipline:** Read/write splitting and query-level result caching from 6.2 are intentionally deferred to Tier 2 (build on demand). Index suggestions are deferred to Tier 3 (external tooling covers it).
 
@@ -1114,7 +1114,7 @@ A concrete next-sprint scope from Tier 1:
 1. ~~N+1 detection in development mode~~ ✅ Shipped 2026-05-21
 2. ~~`$query->explain()` driver-aware passthrough~~ ✅ Shipped 2026-05-21
 3. ~~Kubernetes-ready health probes~~ ✅ Shipped 2026-05-21
-4. API key scopes, expiration, and rotation
+4. ~~API key scopes, expiration, and rotation~~ ✅ Shipped 2026-05-21
 
 Then reassess Tier 2 based on actual user demand rather than a fixed roadmap.
 

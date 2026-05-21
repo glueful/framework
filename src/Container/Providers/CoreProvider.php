@@ -493,6 +493,14 @@ final class CoreProvider extends BaseServiceProvider
             'rate_limit',
             \Glueful\Api\RateLimiting\Middleware\EnhancedRateLimiterMiddleware::class
         );
+        $defs['require_scope'] = new AliasDefinition(
+            'require_scope',
+            \Glueful\Routing\Middleware\RequireScopeMiddleware::class
+        );
+        $defs[\Glueful\Routing\Middleware\RequireScopeMiddleware::class] =
+            $this->autowire(\Glueful\Routing\Middleware\RequireScopeMiddleware::class);
+        $defs[\Glueful\Auth\ApiKey\ApiKeyService::class] =
+            $this->autowire(\Glueful\Auth\ApiKey\ApiKeyService::class);
         $defs['csrf'] = new AliasDefinition(
             'csrf',
             \Glueful\Routing\Middleware\CSRFMiddleware::class

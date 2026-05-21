@@ -5,32 +5,35 @@ declare(strict_types=1);
 namespace Glueful\Auth;
 
 use Symfony\Component\HttpFoundation\Request;
+use Glueful\Auth\ApiKey\ApiKeyService;
+use Glueful\Auth\ApiKey\Exceptions\ApiKeyExpiredException;
+use Glueful\Auth\ApiKey\Exceptions\InvalidApiKeyException;
 use Glueful\Repository\UserRepository;
 use Glueful\Auth\Interfaces\AuthenticationProviderInterface;
 use Glueful\Bootstrap\ApplicationContext;
 
-// PermissionHelper no longer directly used; admin check delegates to manager
-
 /**
  * API Key Authentication Provider
  *
- * Implements authentication using API keys stored in the database.
- * This demonstrates how different authentication methods can be implemented
- * using the same standardized interface.
+ * Implements authentication using API keys stored in the dedicated
+ * `api_keys` table. Verification, scope extraction, IP allowlisting,
+ * expiration, and revocation all flow through ApiKeyService.
+ *
+ * Single-track: no legacy `users.api_key` fallback. The previous dual-
+ * track approach was both dead code (canonical schema has no api_key
+ * column) and a security hole (a revoked key whose plaintext still
+ * existed in a custom column could re-authenticate).
  */
 class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
 {
     /** @var string|null Last authentication error message */
     private ?string $lastError = null;
 
-    /** @var UserRepository|null User repository for looking up API keys */
+    /** @var UserRepository|null User repository for looking up users by id */
     private ?UserRepository $userRepository = null;
     private ?ApplicationContext $context = null;
     private ?AuthenticationManager $authManager = null;
 
-    /**
-     * Create a new API key authentication provider
-     */
     public function __construct(?ApplicationContext $context = null)
     {
         $this->context = $context;
@@ -41,9 +44,6 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
         $this->authManager = $authManager;
     }
 
-    /**
-     * Get the user repository instance
-     */
     private function getUserRepository(): UserRepository
     {
         if ($this->userRepository === null) {
@@ -59,38 +59,43 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
     {
         $this->lastError = null;
 
+        $apiKey = $this->extractApiKeyFromRequest($request);
+        if ($apiKey === null || $apiKey === '') {
+            $this->lastError = 'API key not found in request';
+            return null;
+        }
+
+        if ($this->context === null) {
+            $this->lastError = 'No application context available for API key verification';
+            return null;
+        }
+
         try {
-            // Extract API key from request
-            $apiKey = $this->extractApiKeyFromRequest($request);
+            $key = ApiKeyService::verify(
+                $this->context,
+                $apiKey,
+                $request->getClientIp() ?? ''
+            );
 
-            if ($apiKey === null || $apiKey === '') {
-                // Silently fail with a less alarming message so other auth methods can be tried
-                $this->lastError = 'API key not found in request';
-                return null;
-            }
-
-            // Validate the API key and get associated user
-            $userData = $this->getUserRepository()->findByApiKey($apiKey);
-
+            $userData = $this->getUserRepository()->find($key->user_id);
             if ($userData === null) {
-                $this->lastError = 'Invalid API key';
+                $this->lastError = 'API key belongs to no known user';
                 return null;
             }
 
-            // Check if the API key is still valid
-            $expiresAt = $userData['api_key_expires_at'] ?? null;
-            if (is_string($expiresAt) && $expiresAt !== '' && strtotime($expiresAt) < time()) {
-                $this->lastError = 'Expired API key';
-                return null;
-            }
-
-            // Store authentication info in request attributes
             $request->attributes->set('authenticated', true);
-            $request->attributes->set('user_id', $userData['uuid'] ?? null);
+            $request->attributes->set('user_id', $key->user_id);
             $request->attributes->set('user_data', $userData);
             $request->attributes->set('auth_method', 'api_key');
+            $request->attributes->set('api_key_scopes', $key->getScopes());
 
             return $userData;
+        } catch (ApiKeyExpiredException) {
+            $this->lastError = 'Expired API key';
+            return null;
+        } catch (InvalidApiKeyException) {
+            $this->lastError = 'Invalid API key';
+            return null;
         } catch (\Throwable $e) {
             $this->lastError = 'Authentication error: ' . $e->getMessage();
             return null;
@@ -102,13 +107,11 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
      */
     public function isAdmin(array $userData): bool
     {
-        // Delegate to the central AuthenticationManager to avoid duplication
         try {
             if ($this->authManager !== null) {
                 return $this->authManager->isAdmin($userData);
             }
         } catch (\Throwable) {
-            // Conservative fallback to original heuristic
             $user = $userData['user'] ?? $userData;
             return (bool)($user['is_admin'] ?? false);
         }
@@ -127,9 +130,6 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
 
     /**
      * Extract API key from request
-     *
-     * @param Request $request The HTTP request
-     * @return string|null The API key or null if not found
      */
     private function extractApiKeyFromRequest(Request $request): ?string
     {
@@ -159,23 +159,23 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
      */
     public function validateToken(string $token): bool
     {
+        if ($this->context === null) {
+            $this->lastError = 'No application context available for API key verification';
+            return false;
+        }
+
         try {
-            // Check if the API key exists and is valid in the database
-            $userData = $this->getUserRepository()->findByApiKey($token);
-
-            if ($userData === null) {
-                $this->lastError = 'Invalid API key';
-                return false;
-            }
-
-            // Check if the API key is still valid
-            $expiresAt = $userData['api_key_expires_at'] ?? null;
-            if (is_string($expiresAt) && $expiresAt !== '' && strtotime($expiresAt) < time()) {
-                $this->lastError = 'Expired API key';
-                return false;
-            }
-
+            // Client IP isn't available here (no Request). Passing empty IP
+            // means rows with an allowed_ips restriction will reject. Routes
+            // that need IP-aware validation should use authenticate(Request).
+            ApiKeyService::verify($this->context, $token, '');
             return true;
+        } catch (ApiKeyExpiredException) {
+            $this->lastError = 'Expired API key';
+            return false;
+        } catch (InvalidApiKeyException) {
+            $this->lastError = 'Invalid API key';
+            return false;
         } catch (\Throwable $e) {
             $this->lastError = 'API key validation error: ' . $e->getMessage();
             return false;
@@ -187,87 +187,75 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
      */
     public function canHandleToken(string $token): bool
     {
-        // API keys are typically alphanumeric strings with a specific length
-        // This is a simple pattern match to determine if a token could be an API key
+        // API keys match this shape: gf_live_/gf_test_ prefix or a generic
+        // 16-64 char alphanumeric/dash/underscore token. The generic match
+        // stays for backward compatibility with consumers that experimented
+        // with custom token shapes.
         return (bool) preg_match('/^[a-zA-Z0-9_\-]{16,64}$/', $token);
     }
 
     /**
      * {@inheritdoc}
+     *
+     * API keys are administratively created via `php glueful apikey:create`,
+     * not generated at authentication time. Callers that arrive here are
+     * typically trying to use the JWT-style auth code paths against an API
+     * key provider — that's a programming error that should be reported
+     * explicitly rather than papered over with an empty token response.
+     *
+     * @param array<string, mixed> $userData
+     * @return array<string, mixed>
      */
     public function generateTokens(
         array $userData,
         ?int $accessTokenLifetime = null,
         ?int $refreshTokenLifetime = null
     ): array {
-        try {
-            // For API Key authentication, we don't generate separate refresh tokens
-            // Instead, we just return the API key as the access token
-            $apiKey = $userData['api_key'] ?? '';
+        $this->lastError = 'API keys are created administratively via apikey:create CLI, '
+            . 'not generated at authentication time. Use ApiKeyService::create() directly '
+            . 'or the CLI command if you need to mint a new key.';
 
-            if ($apiKey === '') {
-                $this->lastError = 'No API key available for user';
-                return [
-                    'access_token' => '',
-                    'refresh_token' => '',
-                    'expires_in' => 0
-                ];
-            }
-
-            // Calculate expiration based on the API key expiration date in userData
-            $expiresIn = 0;
-            if (
-                isset($userData['api_key_expires_at']) &&
-                is_string($userData['api_key_expires_at']) &&
-                $userData['api_key_expires_at'] !== ''
-            ) {
-                $expiresTimestamp = strtotime($userData['api_key_expires_at']);
-                if ($expiresTimestamp !== false) {
-                    $expiresIn = max(0, $expiresTimestamp - time());
-                }
-            }
-
-            return [
-                'access_token' => $apiKey,
-                'refresh_token' => $apiKey, // Same as access token for API key auth
-                'expires_in' => $expiresIn
-            ];
-        } catch (\Throwable $e) {
-            $this->lastError = 'Token generation error: ' . $e->getMessage();
-            return [
-                'access_token' => '',
-                'refresh_token' => '',
-                'expires_in' => 0
-            ];
-        }
+        return [
+            'access_token'  => '',
+            'refresh_token' => '',
+            'expires_in'    => 0,
+        ];
     }
 
     /**
      * {@inheritdoc}
+     *
+     * For API keys "refresh" means "the same key is still valid, here it is
+     * again" — no token rotation in the OAuth/JWT sense. Verify via the new
+     * table and return the same plaintext key with an updated expires_in.
+     *
+     * @param array<string, mixed> $sessionData
+     * @return array{access_token: string, refresh_token: string, expires_in: int}|null
      */
     public function refreshTokens(string $refreshToken, array $sessionData): ?array
     {
+        if ($this->context === null) {
+            $this->lastError = 'No application context available for API key verification';
+            return null;
+        }
+
         try {
-            // For API Key authentication, we don't have separate refresh tokens
-            // We just verify if the API key is still valid
+            $key = ApiKeyService::verify($this->context, $refreshToken, '');
 
-            $userData = $this->getUserRepository()->findByApiKey($refreshToken);
-
-            if ($userData === null) {
-                $this->lastError = 'Invalid API key';
-                return null;
+            $expiresIn = 0;
+            $expiresAt = $key->expires_at ?? null;
+            if (is_string($expiresAt) && $expiresAt !== '') {
+                $ts = strtotime($expiresAt);
+                if ($ts !== false) {
+                    $expiresIn = max(0, $ts - time());
+                }
             }
 
-            // Check if the API key has expired
-            $expiresAt = $userData['api_key_expires_at'] ?? null;
-            if (is_string($expiresAt) && $expiresAt !== '' && strtotime($expiresAt) < time()) {
-                $this->lastError = 'Expired API key';
-                return null;
-            }
-
-            // For API keys, no new tokens are generated during refresh
-            // We just return the same key with updated expiration time
-            return $this->generateTokens($userData);
+            return [
+                'access_token'  => $refreshToken,
+                'refresh_token' => $refreshToken,
+                'expires_in'    => $expiresIn,
+            ];
         } catch (\Throwable $e) {
             $this->lastError = 'Token refresh error: ' . $e->getMessage();
             return null;

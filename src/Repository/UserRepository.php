@@ -365,21 +365,6 @@ class UserRepository extends BaseRepository
     }
 
     /**
-     * Find user by API key
-     *
-     * Retrieves user record using the API key identifier.
-     * Used for API key-based authentication.
-     *
-     * @param string $apiKey API key to search for
-     * @return array<string, mixed>|null User data or null if not found
-     */
-    public function findByApiKey(string $apiKey): ?array
-    {
-        // Use BaseRepository's findBy method since we're still querying the users table
-        return $this->findBy('api_key', $apiKey);
-    }
-
-    /**
      * Find or create user from SAML authentication with transaction safety
      *
      * Locates existing users by email or creates new accounts from SAML authentication

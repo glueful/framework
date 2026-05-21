@@ -6,6 +6,7 @@ namespace Glueful\Routing;
 
 use Glueful\Api\RateLimiting\Attributes\RateLimit;
 use Glueful\Api\RateLimiting\Attributes\RateLimitCost;
+use Glueful\Routing\Attributes\RequireScope;
 use Glueful\Routing\Attributes\{Route, Controller, Middleware, Get, Post, Put, Delete, Fields};
 
 class AttributeRouteLoader
@@ -171,6 +172,9 @@ class AttributeRouteLoader
 
                 // Process RateLimit attributes for this route
                 $this->processRateLimitAttributes($method, $registered);
+
+                // Process RequireScope attributes for this route
+                $this->processRequireScopeAttributes($method, $registered);
             }
         }
 
@@ -226,6 +230,9 @@ class AttributeRouteLoader
 
                 // Process RateLimit attributes for this route
                 $this->processRateLimitAttributes($method, $route);
+
+                // Process RequireScope attributes for this route
+                $this->processRequireScopeAttributes($method, $route);
             }
         }
     }
@@ -357,5 +364,32 @@ class AttributeRouteLoader
             $costAttr = $costAttributes[0]->newInstance();
             $route->setRateLimitCost($costAttr->cost);
         }
+    }
+
+    /**
+     * Process #[RequireScope] attributes on a method.
+     *
+     * Collects all instances (the IS_REPEATABLE flag makes this return >1
+     * when the attribute is stacked), stores them on the route as metadata,
+     * and auto-attaches the 'require_scope' middleware so the route's
+     * pipeline actually enforces them. Without the middleware attach the
+     * metadata would be stored but never read.
+     */
+    private function processRequireScopeAttributes(
+        \ReflectionMethod $method,
+        \Glueful\Routing\Route $route
+    ): void {
+        $attributes = $method->getAttributes(RequireScope::class);
+        if (count($attributes) === 0) {
+            return;
+        }
+
+        $configs = [];
+        foreach ($attributes as $attribute) {
+            $configs[] = $attribute->newInstance()->scopes;
+        }
+
+        $route->setRequireScopeConfig($configs);
+        $route->middleware('require_scope');
     }
 }

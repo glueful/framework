@@ -610,6 +610,12 @@ class Router
         $route = $match['route'];
         $params = $match['params'];
 
+        // Expose the matched route and params to middleware via the request
+        // attributes bag, so middleware can read route-level metadata (e.g.
+        // #[RequireScope] config, #[RateLimit] config) without re-resolving.
+        $request->attributes->set('_route', $route);
+        $request->attributes->set('_route_params', $params);
+
         // Build middleware pipeline (with caching)
         $pipeline = $this->buildMiddlewarePipeline($route);
 
