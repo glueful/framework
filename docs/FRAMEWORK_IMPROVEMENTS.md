@@ -1077,7 +1077,7 @@ Build these into the core framework soon. Each is small, complements work that a
 
 | Item | Source | Rationale |
 |------|--------|-----------|
-| **N+1 query detection (dev-only)** | 6.2 (partial) | The ORM landed in Phase 1; without N+1 detection in dev, users hit performance cliffs and blame the framework. Cheapest win on the list. |
+| **N+1 query detection (dev-only)** ✅ | 6.2 (partial) | The ORM landed in Phase 1; without N+1 detection in dev, users hit performance cliffs and blame the framework. Cheapest win on the list. **Shipped 2026-05-21.** |
 | **Kubernetes health probes** (`/health/live`, `/health/ready`, `/health/startup`) | 4.3 | Table stakes for k8s/ECS deployment. Small code, large perception win. |
 | **API key scopes + expiration + rotation** | 5.3 | Basic API keys already exist; this is incremental hardening, not a new system. |
 

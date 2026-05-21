@@ -339,6 +339,9 @@ class Framework
         CacheInvalidationService::enable();
         CacheInvalidationService::warmupPatterns();
 
+        // Initialize ORM features (unconditional; mode resolution handles env defaults)
+        $this->initializeOrmFeatures();
+
         // Enable development features
         if ($this->environment === 'development') {
             $this->initializeDevelopmentTools();
@@ -443,6 +446,28 @@ class Framework
                 $dumper->dump($cloner->cloneVar($var));
             });
         }
+    }
+
+    /**
+     * Initialize ORM-level features.
+     *
+     * Runs unconditionally on boot so opt-in modes (e.g. strict for CI) work
+     * outside the development environment.
+     */
+    private function initializeOrmFeatures(): void
+    {
+        if ($this->container === null) {
+            return;
+        }
+
+        $context = $this->container->get(\Glueful\Bootstrap\ApplicationContext::class);
+        $mode = config($context, 'database.orm.lazy_loading_mode', 'auto');
+
+        if (!is_string($mode)) {
+            $mode = 'auto';
+        }
+
+        \Glueful\Database\ORM\Model::preventLazyLoading($mode);
     }
 
     /**

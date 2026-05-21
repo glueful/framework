@@ -14,9 +14,7 @@ trait ResetsLazyLoading
 {
     protected function tearDown(): void
     {
-        if (method_exists(Model::class, 'resetLazyLoadingState')) {
-            Model::resetLazyLoadingState();
-        }
+        Model::resetLazyLoadingState();
         parent::tearDown();
     }
 }

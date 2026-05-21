@@ -156,6 +156,8 @@ API_VERSION_IN_PATH=true
 - Multiple database drivers: MySQL, PostgreSQL, SQLite
 - Query builder with advanced features in `src/Database/Query/`
 
+**N+1 query detection** — ORM-aware detector at `src/Database/ORM/Concerns/PreventsLazyLoading.php`. Modes: `off | warn | strict | auto`. Configure via `DB_LAZY_LOADING_MODE`. Per-model opt-out via `$instanceLazyLoadingMode = 'off'`. See `docs/ORM/N_PLUS_ONE_DETECTION.md`.
+
 **Query Building Pattern:**
 ```php
 // Via connection (inject or resolve from container)

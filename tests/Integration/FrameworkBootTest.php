@@ -103,6 +103,51 @@ final class FrameworkBootTest extends TestCase
         $this->assertTrue($container->has(\Glueful\Routing\Router::class));
     }
 
+    public function testBootAppliesLazyLoadingModeFromConfig(): void
+    {
+        // Override the database config written in setUp() with an explicit
+        // strict mode, so passing the assertion proves the boot wiring ran.
+        file_put_contents(
+            $this->testConfigPath . '/database.php',
+            "<?php\nreturn ["
+            . "'engine' => 'sqlite', "
+            . "'sqlite' => ['primary' => ':memory:'], "
+            . "'pooling' => ['enabled' => false], "
+            . "'orm' => ['lazy_loading_mode' => 'strict']"
+            . "];\n"
+        );
+
+        try {
+            Framework::create($this->testAppPath)->boot(allowReboot: true);
+
+            $this->assertSame(
+                'strict',
+                \Glueful\Database\ORM\Model::resolvedGlobalMode(),
+                'Framework::boot() should have read database.orm.lazy_loading_mode '
+                . 'from config and called Model::preventLazyLoading()'
+            );
+        } finally {
+            \Glueful\Database\ORM\Model::resetLazyLoadingState();
+        }
+    }
+
+    public function testAutoModeResolvesToWarnInDevelopmentEnvironment(): void
+    {
+        $prev = $_ENV['APP_ENV'] ?? null;
+        $_ENV['APP_ENV'] = 'development';
+        try {
+            \Glueful\Database\ORM\Model::preventLazyLoading('auto');
+            $this->assertSame('warn', \Glueful\Database\ORM\Model::resolvedGlobalMode());
+        } finally {
+            \Glueful\Database\ORM\Model::resetLazyLoadingState();
+            if ($prev === null) {
+                unset($_ENV['APP_ENV']);
+            } else {
+                $_ENV['APP_ENV'] = $prev;
+            }
+        }
+    }
+
     private function recursiveRemoveDirectory(string $directory): void
     {
         $files = array_diff(scandir($directory), ['.', '..']);

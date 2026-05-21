@@ -403,6 +403,12 @@ class Builder
             $models[] = $this->model->newFromBuilder($result);
         }
 
+        if (count($models) > 1 && Model::lazyLoadingEnabled()) {
+            foreach ($models as $m) {
+                $m->setLoadedFromCollection(true);
+            }
+        }
+
         return $models;
     }
 
@@ -554,10 +560,11 @@ class Builder
         $parts = explode('.', $name);
         $baseName = $parts[0];
 
-        // Create a clean model instance and get the relation
-        $relation = $this->model->$baseName();
-
-        return $relation;
+        // Create the relation without the single-model WHERE constraint so that
+        // addEagerConstraints() can then apply a WHERE IN over all parent keys.
+        return Relations\Relation::noConstraints(function () use ($baseName): Relations\Relation {
+            return $this->model->$baseName();
+        });
     }
 
     /**

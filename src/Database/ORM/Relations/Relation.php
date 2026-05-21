@@ -36,6 +36,12 @@ abstract class Relation
     protected bool $loaded = false;
 
     /**
+     * Indicates whether constraints should be skipped on construction.
+     * Set to true via noConstraints() when building eager-load queries.
+     */
+    protected static bool $constraints = true;
+
+    /**
      * Create a new relation instance
      *
      * @param Builder $query
@@ -47,7 +53,29 @@ abstract class Relation
         $this->parent = $parent;
         $this->related = $query->getModel();
 
-        $this->addConstraints();
+        if (static::$constraints) {
+            $this->addConstraints();
+        }
+    }
+
+    /**
+     * Run a callback with constraints disabled.
+     *
+     * Used by the eager loader to obtain a clean relation query without the
+     * single-model WHERE clause that addConstraints() normally adds.
+     *
+     * @template TReturn
+     * @param callable(): TReturn $callback
+     * @return TReturn
+     */
+    public static function noConstraints(callable $callback): mixed
+    {
+        static::$constraints = false;
+        try {
+            return $callback();
+        } finally {
+            static::$constraints = true;
+        }
     }
 
     /**

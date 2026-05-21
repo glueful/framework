@@ -117,6 +117,18 @@ trait HasAttributes
             return $this->callGetAccessor($key);
         }
 
+        // Route to relation value if the relation is already loaded or the
+        // method exists and declares a Relation return type (supports property-style
+        // access to relations, e.g. $user->posts). The return-type check avoids
+        // accidentally calling non-relation methods that share a name with a key.
+        // method_exists() guard keeps HasAttributes usable standalone (e.g. in unit-test stubs).
+        // @phpstan-ignore function.alreadyNarrowedType, function.alreadyNarrowedType
+        if (method_exists($this, 'getRelationValue') && method_exists($this, 'relationLoaded')) {
+            if ($this->relationLoaded($key) || $this->isRelationMethod($key)) {
+                return $this->getRelationValue($key);
+            }
+        }
+
         // Get from attributes array
         $value = $this->attributes[$key] ?? null;
 
@@ -719,6 +731,36 @@ trait HasAttributes
     }
 
     /**
+     * Determine if a method is a relation method (return-type is a Relation subclass).
+     *
+     * Uses reflection on the return type declaration to avoid calling the method,
+     * which would require a live database connection.
+     *
+     * @param string $key
+     * @return bool
+     */
+    protected function isRelationMethod(string $key): bool
+    {
+        if (!method_exists($this, $key)) {
+            return false;
+        }
+
+        try {
+            $returnType = (new \ReflectionMethod($this, $key))->getReturnType();
+        } catch (\ReflectionException $e) {
+            return false;
+        }
+
+        if (!$returnType instanceof \ReflectionNamedType) {
+            return false;
+        }
+
+        $typeName = $returnType->getName();
+
+        return is_a($typeName, \Glueful\Database\ORM\Relations\Relation::class, true);
+    }
+
+    /**
      * Determine if a set mutator exists for an attribute
      *
      * @param string $key
@@ -907,7 +949,20 @@ trait HasAttributes
      */
     public function __isset(string $key): bool
     {
-        return isset($this->attributes[$key]) || $this->hasGetAccessor($key);
+        // Standard attribute check
+        if (isset($this->attributes[$key]) || $this->hasGetAccessor($key)) {
+            return true;
+        }
+
+        // Check for loaded relations or relation methods (supports property-style
+        // isset() and the null-coalescing operator on relation properties).
+        // method_exists() guard keeps HasAttributes usable standalone (e.g. in unit-test stubs).
+        // @phpstan-ignore function.alreadyNarrowedType, function.alreadyNarrowedType
+        if (method_exists($this, 'relationLoaded') && method_exists($this, 'isRelationMethod')) {
+            return $this->relationLoaded($key) || $this->isRelationMethod($key);
+        }
+
+        return false;
     }
 
     /**
