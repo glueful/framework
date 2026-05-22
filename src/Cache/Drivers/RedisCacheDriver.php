@@ -548,7 +548,7 @@ class RedisCacheDriver implements CacheStore
                 'counters' => true,
                 'expiration' => true,
                 'bulk_operations' => true,
-                'tags' => false, // Not implemented yet
+                'tags' => true,
             ],
             'data_types' => ['string', 'integer', 'float', 'boolean', 'array', 'object'],
             'max_key_length' => 512 * 1024 * 1024, // 512MB
@@ -557,7 +557,21 @@ class RedisCacheDriver implements CacheStore
     }
 
     /**
-     * Add tags to a cache key for grouped invalidation
+     * Tag set key prefix.
+     *
+     * Each tag is stored as a Redis SET at `{TAG_PREFIX}{tag}`; the members of
+     * the set are the cache keys associated with that tag. The prefix is kept
+     * short and distinctive enough to avoid colliding with typical user keys.
+     */
+    private const TAG_PREFIX = '_gf_tag:';
+
+    /**
+     * Associate a cache key with one or more tags for grouped invalidation.
+     *
+     * Implementation: each tag becomes a Redis SET keyed `_gf_tag:{tag}` whose
+     * members are the cache keys associated with it. SADD is idempotent, so
+     * calling addTags() multiple times with the same key/tag pair is safe.
+     * Operations are pipelined for efficiency.
      *
      * @param string $key Cache key
      * @param list<string> $tags Array of tags to associate with the key
@@ -565,22 +579,69 @@ class RedisCacheDriver implements CacheStore
      */
     public function addTags(string $key, array $tags): bool
     {
-        // TODO: Implement tagging system using Redis sets
-        // For now, return false to indicate not implemented
-        return false;
+        if ($tags === []) {
+            return true;
+        }
+
+        $this->validateKey($key);
+
+        try {
+            $pipe = $this->redis->multi(\Redis::PIPELINE);
+            foreach ($tags as $tag) {
+                $pipe->sAdd(self::TAG_PREFIX . $tag, $key);
+            }
+            $results = $pipe->exec();
+
+            return is_array($results) && !in_array(false, $results, true);
+        } catch (\RedisException) {
+            return false;
+        }
     }
 
     /**
-     * Invalidate all cache entries with specified tags
+     * Invalidate all cache entries associated with the given tags.
+     *
+     * Collects all keys referenced by each `_gf_tag:{tag}` set, deletes those
+     * keys, and deletes the tag sets themselves so they don't accumulate stale
+     * members. Tag sets that don't exist or contain expired keys are handled
+     * gracefully — DEL is a no-op on missing keys.
      *
      * @param list<string> $tags Array of tags to invalidate
-     * @return bool True if invalidation successful
+     * @return bool True if invalidation completed without error
      */
     public function invalidateTags(array $tags): bool
     {
-        // TODO: Implement tag-based invalidation
-        // For now, return false to indicate not implemented
-        return false;
+        if ($tags === []) {
+            return true;
+        }
+
+        try {
+            $tagKeys = array_map(
+                static fn(string $tag): string => self::TAG_PREFIX . $tag,
+                $tags
+            );
+
+            $keysToDelete = [];
+            foreach ($tagKeys as $tagKey) {
+                $members = $this->redis->sMembers($tagKey);
+                if (is_array($members)) {
+                    foreach ($members as $member) {
+                        if (is_string($member)) {
+                            $keysToDelete[$member] = true;
+                        }
+                    }
+                }
+            }
+
+            $allKeys = array_merge(array_keys($keysToDelete), $tagKeys);
+            if ($allKeys !== []) {
+                $this->redis->del($allKeys);
+            }
+
+            return true;
+        } catch (\RedisException) {
+            return false;
+        }
     }
 
     /**

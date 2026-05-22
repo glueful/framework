@@ -477,11 +477,212 @@ class ArchiveService implements ArchiveServiceInterface
         }
     }
 
+    /**
+     * Restore records from an archive into a target table.
+     *
+     * Reads the archive payload via {@see loadArchive()} (which handles
+     * checksum verification, decryption, and decompression), applies optional
+     * `offset`/`limit` slicing, then replays rows into the target table inside
+     * a single database transaction.
+     *
+     * Conflict resolution:
+     *  - `skip`: skip rows whose primary-key value already exists; record them
+     *    in the result's `conflicts` list.
+     *  - `overwrite`: delete the existing row before inserting (within the
+     *    same transaction).
+     *  - `rename`: not implemented — caller should supply a fresh
+     *    `targetTable` instead.
+     *
+     * Primary key detection prefers `uuid`, then `id`. Tables with neither
+     * column lose conflict detection — every row is inserted regardless of
+     * collisions, and the database's own constraints will reject duplicates
+     * (rolling back the transaction).
+     *
+     * Auto-creating the target table from archive metadata
+     * (`createTableIfNotExists`) is intentionally not implemented; create the
+     * schema manually before restoring.
+     */
     public function restoreFromArchive(string $archiveUuid, ?ArchiveRestoreOptions $options = null): RestoreResult
     {
-        // Implementation for restore functionality
-        // This is a placeholder - full implementation would be quite complex
-        return RestoreResult::failure("Restore functionality not yet implemented");
+        $options ??= ArchiveRestoreOptions::fullRestore();
+
+        $archive = $this->getArchiveRecord($archiveUuid);
+        if ($archive === null) {
+            return RestoreResult::failure("Archive {$archiveUuid} not found");
+        }
+
+        if (!in_array($options->conflictResolution, ['skip', 'overwrite'], true)) {
+            return RestoreResult::failure(sprintf(
+                "Unsupported conflict resolution '%s'. Supported: skip, overwrite.",
+                $options->conflictResolution
+            ));
+        }
+
+        $sourceTable = (string) ($archive['table_name'] ?? '');
+        $targetTable = $options->targetTable ?? $sourceTable;
+
+        if ($targetTable === '') {
+            return RestoreResult::failure('Archive has no source table and no targetTable was provided');
+        }
+
+        if (!$this->validateTable($targetTable)) {
+            if ($options->createTableIfNotExists) {
+                return RestoreResult::failure(sprintf(
+                    "Auto-creating target table '%s' from archive metadata is not supported. " .
+                    'Create the table manually before restoring.',
+                    $targetTable
+                ));
+            }
+            return RestoreResult::failure(sprintf(
+                "Target table '%s' does not exist. Create it manually before restoring.",
+                $targetTable
+            ));
+        }
+
+        try {
+            $records = $this->loadArchive($archiveUuid);
+        } catch (\Throwable $e) {
+            return RestoreResult::failure('Failed to load archive: ' . $e->getMessage());
+        }
+
+        if ($options->offset !== null && $options->offset > 0) {
+            $records = array_slice($records, $options->offset);
+        }
+        if ($options->limit !== null && $options->limit > 0) {
+            $records = array_slice($records, 0, $options->limit);
+        }
+
+        if (count($records) === 0) {
+            return RestoreResult::success(
+                0,
+                $targetTable,
+                [],
+                [
+                    'archive_uuid' => $archiveUuid,
+                    'source_table' => $sourceTable,
+                    'conflict_resolution' => $options->conflictResolution,
+                ]
+            );
+        }
+
+        $restored = 0;
+        $conflicts = [];
+
+        try {
+            $this->db->transaction(function () use (
+                $records,
+                $targetTable,
+                $options,
+                &$restored,
+                &$conflicts
+            ): void {
+                foreach ($records as $record) {
+                    if (!is_array($record)) {
+                        continue;
+                    }
+
+                    $pk = $this->detectPrimaryKey($record);
+                    $pkValue = $pk !== null ? $record[$pk] : null;
+                    $hasCollision = $pk !== null && $this->recordExists($targetTable, $pk, $pkValue);
+
+                    if ($hasCollision && $options->conflictResolution === 'skip') {
+                        $conflicts[] = sprintf('%s=%s', $pk, (string) $pkValue);
+                        continue;
+                    }
+
+                    if ($hasCollision && $options->conflictResolution === 'overwrite') {
+                        // Hard delete to clear the UNIQUE constraint blocker. Bypasses
+                        // any soft-delete behavior so previously-archived rows (which
+                        // archiveTable() leaves soft-deleted) don't block reinsertion.
+                        $this->hardDeleteRow($targetTable, (string) $pk, $pkValue);
+                    }
+
+                    $this->db->table($targetTable)->insert($record);
+                    $restored++;
+                }
+            });
+        } catch (\Throwable $e) {
+            return RestoreResult::failure('Restore transaction failed: ' . $e->getMessage());
+        }
+
+        return RestoreResult::success(
+            $restored,
+            $targetTable,
+            $conflicts,
+            [
+                'archive_uuid' => $archiveUuid,
+                'source_table' => $sourceTable,
+                'conflict_resolution' => $options->conflictResolution,
+                'total_records_processed' => count($records),
+            ]
+        );
+    }
+
+    /**
+     * Detect the primary-key column to use for conflict resolution.
+     *
+     * Prefers `uuid` (the framework's default surrogate key), falls back to
+     * `id`. Returns null when neither is present — callers will then insert
+     * without prior existence checks.
+     *
+     * @param array<string, mixed> $record
+     */
+    private function detectPrimaryKey(array $record): ?string
+    {
+        if (array_key_exists('uuid', $record)) {
+            return 'uuid';
+        }
+        if (array_key_exists('id', $record)) {
+            return 'id';
+        }
+        return null;
+    }
+
+    /**
+     * Existence check that bypasses soft-delete filtering.
+     *
+     * Restore semantics treat the target table as a raw row store: a
+     * collision is anything that would violate the PK/UNIQUE constraint on
+     * insert, including rows that the soft-delete handler would normally
+     * hide (e.g., rows left behind by a prior archive). Direct PDO is used
+     * to ensure we see those rows.
+     */
+    private function recordExists(string $table, string $column, mixed $value): bool
+    {
+        if ($value === null) {
+            return false;
+        }
+
+        $driver = $this->db->getDriver();
+        $sql = sprintf(
+            'SELECT 1 FROM %s WHERE %s = ? LIMIT 1',
+            $driver->wrapIdentifier($table),
+            $driver->wrapIdentifier($column)
+        );
+
+        $stmt = $this->db->getPDO()->prepare($sql);
+        $stmt->execute([$value]);
+
+        return $stmt->fetchColumn() !== false;
+    }
+
+    /**
+     * Hard delete a row, bypassing soft-delete semantics.
+     *
+     * Used by the overwrite path to clear any row (live or soft-deleted)
+     * that would block reinsertion of an archived row with the same PK.
+     */
+    private function hardDeleteRow(string $table, string $column, mixed $value): void
+    {
+        $driver = $this->db->getDriver();
+        $sql = sprintf(
+            'DELETE FROM %s WHERE %s = ?',
+            $driver->wrapIdentifier($table),
+            $driver->wrapIdentifier($column)
+        );
+
+        $stmt = $this->db->getPDO()->prepare($sql);
+        $stmt->execute([$value]);
     }
 
     public function deleteArchive(string $archiveUuid): bool
@@ -586,8 +787,10 @@ class ArchiveService implements ArchiveServiceInterface
             if ($this->schemaManager === null) {
                 return false;
             }
-            $this->schemaManager->getTableColumns($table);
-            return true;
+            // PRAGMA-style introspection on SQLite returns an empty array for
+            // missing tables instead of throwing, so an empty column list is
+            // treated as "table not found" rather than "unschema'd table".
+            return count($this->schemaManager->getTableColumns($table)) > 0;
         } catch (\Exception) {
             return false;
         }

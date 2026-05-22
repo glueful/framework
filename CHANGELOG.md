@@ -8,6 +8,47 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ---
 
+## [1.44.0] - 2026-05-22 — Errai
+
+> **Theme: Closing the Trust Gaps.** A focused follow-up to Dabih that reconciles four places where the README, CLI, or public API advertised behavior the code didn't deliver. The 1.43.0 "Production Hardening" release raised the framework's credibility surface, which made the remaining gaps more damaging, not less. This release closes them.
+
+### Added
+
+- **Real tag-aware cache invalidation on the Redis driver**: `RedisCacheDriver::addTags()` and `invalidateTags()` are now backed by Redis SETs (`_gf_tag:{tag}` → set of cache keys), with pipelined `SADD` on association and bulk `DEL` (keys + tag sets) on invalidation. The capability flag (`getCapabilities()['features']['tags']`) is now `true`. This unblocks `QueryCacheService`, `DistributedCacheService`, `ResponseCachingTrait`, and `php glueful cache:clear --tags` — all of which previously called `addTags()`/`invalidateTags()` only to receive a silent `false`.
+- **`NON_STRICT_WHITELIST` security finding in `fields:whitelist-check`**: API routes with a configured field whitelist that isn't strict now raise a low-severity finding ("disallowed fields are silently dropped"). Strict whitelists reject disallowed fields with a 4xx; non-strict ones drop them silently, which is the more dangerous default for security-sensitive routes.
+- **Real `ArchiveService::restoreFromArchive()` implementation**: Replay rows from a previously-created archive into a target table inside a database transaction. Honors `ArchiveRestoreOptions`: `targetTable` (defaults to the archive's source table), `offset`/`limit` for partial restore, and `conflictResolution` (`skip` records collisions in the result; `overwrite` hard-deletes the existing row to bypass soft-delete and re-inserts). Primary key detection prefers `uuid` then falls back to `id`. The existing `loadArchive()` handles checksum verification, decryption, and decompression — only the row replay was missing.
+
+### Changed
+
+- **`fields:whitelist-check` iterates real routes**: `analyzeWhitelistCompliance()` now reads `Router::getStaticRoutes()` and `Router::getDynamicRoutes()` and inspects each `Route`'s `getFieldsConfig()` for the actual `#[Fields]` attribute data (`allowed` list, `strict` flag). The previous placeholder loop iterated a hardcoded three-entry list (`api.users.index`, `api.posts.show`, `api.admin.users`) regardless of the application's actual routes.
+- **`security:report` stripped to sections backed by real introspection**: Removed `analyzeAuthenticationSecurity()`, `getAuditSummary()`, `runVulnerabilityAssessment()`, `gatherSecurityMetrics()` (all returned `rand()` values across 12+ fields), the `sendReportByEmail()` stub (only printed a "would be sent" message), and `assessCompliance()` (returned hardcoded `'Partial'`/`'Enabled'` strings unconnected to any real signal). Removed the `--include-vulnerabilities`, `--include-metrics`, `--email`, and `--days` options (the first two only fed the fake methods; `--email` and `--days` were inert against the remaining real sections). The PDF format was also removed — never implemented. The command now exports HTML/JSON/text reports of the production readiness score, environment configuration, system info, and derived recommendations. For dependency CVE scanning, users are directed to `security:vulnerabilities`.
+- **Memcached and File cache drivers document tagging as a deliberate gap**: `'tags' => false` in both drivers now carries an explanatory comment ("Memcached lacks set primitives" / "use Redis driver for tag invalidation") instead of the misleading "Not implemented yet" TODO. `addTags()`/`invalidateTags()` docblocks point callers at `getCapabilities()['features']['tags']` for branching.
+- **README cache claim narrowed to reality**: The cache line in `README.md` now reads "Multi-driver support (Redis/Memcached/File) with distributed caching; tag-based invalidation on the Redis driver" instead of the previous unqualified "with tagging" — accurate for the driver matrix that actually ships.
+- **`ArchiveService::validateTable()` handles SQLite's empty-result behavior**: PRAGMA-style introspection returns an empty column list for missing tables instead of throwing, so the previous `try/catch` was a false positive. The method now treats an empty result as "table not found" — required for `restoreFromArchive()` to return a useful error when the target schema isn't present.
+
+### Removed
+
+- **Fabricated telemetry in `security:report`**: Per the Changed section, the four `rand()`-driven sections (authentication, audit_summary, vulnerabilities, metrics) are gone, as is the hardcoded `compliance` block. The command no longer ships fake numbers under the name "security report."
+- **Placeholder route data in `fields:whitelist-check`**: The three-entry stub list and its accompanying `// placeholder` comment are gone, as is the fabricated `pattern_frequency` block (`['simple' => 65, 'moderate' => 25, 'complex' => 10]`) from `analyzeCommonPatterns()`. The helper was renamed to `getReferenceFieldPatterns()` and now documents itself as static defaults seeding `--suggest-whitelist`, not telemetry.
+
+### Fixed
+
+- **Loop variable shadowing in `Model.php`**: `class_uses_recursive($class)` was using `$class` both as the function parameter and the `foreach` loop variable, tripping intelephense's P1124 warning. Renamed the loop variable to `$ancestor`.
+
+### Upgrade Notes
+
+- **`security:report` output shape changed.** Consumers parsing the JSON output should expect `authentication`, `audit_summary`, `vulnerabilities`, `metrics`, and `compliance` keys to be absent. Scripts depending on the removed `--include-vulnerabilities`, `--include-metrics`, `--email`, or `--days` options must be updated — those flags now produce `InvalidOptionException`.
+- **PDF format removed from `security:report`.** Only `html`, `json`, and `text` are accepted. PDF was never actually generated.
+- **Cache tagging is Redis-only.** If your application calls `$cache->addTags($key, $tags)` or `$cache->invalidateTags($tags)` while running on the Memcached or File driver, those calls continue to return `false` (unchanged), but the capability is now documented as deliberate. Branch on `$cache->getCapabilities()['features']['tags']` if you need driver-agnostic behavior, or switch to Redis for real tag invalidation.
+- **`fields:whitelist-check` will now report your real routes.** Previously it analyzed the same three placeholder entries every run; the output is now meaningful but will be different. Routes without `#[Fields]` or with non-strict whitelists may surface as findings.
+- **`ArchiveService::restoreFromArchive()` no longer always fails.** Code that called this method and treated the failure as expected (e.g., catch-and-log scaffolding) should be reviewed — it will actually restore rows now. Use `ArchiveRestoreOptions::testRestore()` (limit: 10, skip on conflict) for a safe dry-run shape.
+
+```bash
+composer update glueful/framework
+```
+
+---
+
 ## [1.43.0] - 2026-05-21 — Dabih
 
 ### Added

@@ -68,7 +68,7 @@ $app->terminate($request, $response);
 - **Authentication**: JWT, LDAP, SAML SSO, API keys with session analytics
 - **Encryption**: AES-256-GCM authenticated encryption with key rotation support
 - **File Uploads**: Blob storage with visibility controls, signed URLs, thumbnail generation, media metadata
-- **Caching**: Multi-driver support (Redis/Memcached/File) with tagging and distributed caching
+- **Caching**: Multi-driver support (Redis/Memcached/File) with distributed caching; tag-based invalidation on the Redis driver
 - **Queue System**: Job processing with Redis/Database backends, auto-scaling workers
 - **Security**: Enhanced rate limiting, CSRF protection, security headers, lockdown mode
 - **Database**: Query builder, migrations, connection pooling (MySQL, PostgreSQL, SQLite)

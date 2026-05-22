@@ -937,8 +937,8 @@ function class_uses_recursive(object|string $class): array
 
     $results = [];
 
-    foreach (array_reverse(class_parents($class) ?: []) + [$class => $class] as $class) {
-        $results = array_merge(class_uses($class) ?: [], $results);
+    foreach (array_reverse(class_parents($class) ?: []) + [$class => $class] as $ancestor) {
+        $results = array_merge(class_uses($ancestor) ?: [], $results);
     }
 
     return array_unique($results);

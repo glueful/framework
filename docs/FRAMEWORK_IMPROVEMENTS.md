@@ -1116,7 +1116,93 @@ A concrete next-sprint scope from Tier 1:
 3. ~~Kubernetes-ready health probes~~ ✅ Shipped 2026-05-21
 4. ~~API key scopes, expiration, and rotation~~ ✅ Shipped 2026-05-21
 
-Then reassess Tier 2 based on actual user demand rather than a fixed roadmap.
+Then close the trust gaps below before picking up Tier 2.
+
+---
+
+## Trust Gaps — Ship or Unship What's Advertised
+
+> **Priority: Higher than Tier 2.** These are places where the README, CLI, or public API promises behavior the code does not deliver. Each one is a credibility leak — a fresh evaluator running `php glueful security:report` or reading the README cache section loses confidence in the rest of the framework, regardless of how solid the underlying work is. The 1.43.0 Production Hardening release raises the framework's credibility surface, which makes these gaps more damaging, not less.
+>
+> Rule for each item: **either implement it, or remove the claim**. Do not leave the promise standing while the implementation is a stub.
+
+### TG-1 — Cache tagging across all drivers ✅ Shipped 2026-05-21
+
+**Promised:** `README.md:70` advertised "Multi-driver support (Redis/Memcached/File) with tagging and distributed caching."
+
+**Reality:** All three drivers self-reported `'tags' => false, // Not implemented yet` and `addTags`/`invalidateTags` returned `false` — yet `QueryCacheService`, `DistributedCacheService`, `ResponseCachingTrait`, and `cache:clear --tags` all relied on those methods.
+
+**Resolution:**
+- Redis driver now implements real tag-aware invalidation backed by Redis SETs (`_gf_tag:{tag}` → set of cache keys), with pipelined `SADD` on `addTags()` and bulk `DEL` (keys + tag sets) on `invalidateTags()`. Capability flag flipped to `true`.
+- Memcached and File drivers retain `'tags' => false` as a deliberate, documented limitation (Memcached lacks set primitives; File would need a separate index layer). Their `addTags`/`invalidateTags` are now documented no-ops, not TODOs.
+- README updated to state tagging is Redis-only.
+- Tests: integration suite (`tests/Integration/Cache/RedisCacheDriverTagsTest.php`) skips cleanly when Redis isn't reachable; contract suite (`tests/Unit/Cache/UnsupportedTagsContractTest.php`) pins the Memcached/File capability behavior.
+
+---
+
+### TG-2 — Security report fabricated metrics ✅ Shipped 2026-05-21
+
+**Promised:** `php glueful security:report` claimed to summarize security telemetry (logins, failed attempts, audit events, vulnerability counts, request volume).
+
+**Reality:** `src/Console/Commands/Security/ReportCommand.php` returned hardcoded `rand()` values across 12+ fields. A security CLI returning fake numbers is worse than one that doesn't exist — it actively misleads operators.
+
+**Resolution:** Stripped the command down to sections backed by real introspection only:
+- Production readiness score and warnings (via `SecurityManager`)
+- Environment configuration (debug mode, APP_KEY/JWT_KEY presence)
+- System info (PHP version, loaded extensions, ini limits)
+- Recommendations derived from the above
+
+Removed: `analyzeAuthenticationSecurity()`, `getAuditSummary()`, `runVulnerabilityAssessment()`, `gatherSecurityMetrics()`, the `sendReportByEmail()` stub, and (in a follow-up) the `assessCompliance()` section — its values for `gdpr_compliance`/`security_headers`/`encryption_at_rest`/`audit_logging` were hardcoded strings with no real introspection, the same class of issue as the `rand()` calls. Also removed the `--include-vulnerabilities`, `--include-metrics`, `--email`, and `--days` options (the first two only fed the fake methods; `--email` only printed a "would be sent" message; `--days` was never read by the real sections). For dependency vulnerability scanning, users are directed to the existing `security:vulnerabilities` command (which uses a real `VulnerabilityScanner`).
+
+The `--format` option now accepts `html`, `json`, or `text` (PDF support removed — it was never implemented). Help text and class docblock document the narrower scope.
+
+Tests: `tests/Unit/Console/Commands/Security/ReportCommandTest.php` pins the contract — asserts that the JSON output contains only the real sections and that the removed options are no longer accepted.
+
+---
+
+### TG-3 — Whitelist compliance analyzer is a placeholder ✅ Shipped 2026-05-22
+
+**Promised:** `php glueful fields:whitelist-check` analyzes route-level field whitelists for compliance and security issues.
+
+**Reality:** The analyzer iterated over a hardcoded three-entry route list (`api.users.index`, `api.posts.show`, `api.admin.users`) regardless of the application's actual routes — the placeholder comment claimed `Router::getRoutes()` didn't exist, but it shipped long ago.
+
+**Resolution:**
+- Replaced the placeholder loop with real Router introspection. `analyzeWhitelistCompliance()` now iterates `Router::getStaticRoutes()` and `Router::getDynamicRoutes()`, normalizes each `Route` to a record with `name`/`path`/`method`/`has_whitelist`/`whitelist`/`is_strict`, and reads `#[Fields]` configuration via `Route::getFieldsConfig()` (a route has a whitelist when its fields config carries a non-empty `allowed` list).
+- Added a new real check while we were there: API routes with a whitelist that isn't strict now raise a `NON_STRICT_WHITELIST` low-severity issue (the previous fake check space lacked this).
+- Removed the fabricated `pattern_frequency` block (65/25/10) from `analyzeCommonPatterns()`; renamed the helper to `getReferenceFieldPatterns()` and documented that these are static defaults driving `--suggest-whitelist`, not telemetry.
+- Tests: `tests/Unit/Console/Commands/Fields/WhitelistCheckCommandTest.php` registers real routes, runs the analyzer through reflection, and pins the classification rules (admin-without-whitelist → critical, non-strict API whitelist → low, strict whitelist → clean, `--route` filtering, removed `pattern_frequency`).
+
+---
+
+### TG-4 — Archive restore returns "not yet implemented" ✅ Shipped 2026-05-22
+
+**Promised:** `ArchiveService::restoreFromArchive()` accepted a typed options struct and returned a typed result — looking like a real API surface that happened to reject the particular call.
+
+**Reality:** It always returned `RestoreResult::failure("Restore functionality not yet implemented")` regardless of input.
+
+**Resolution:** Implemented the real path. The existing `loadArchive()` already handled checksum verification, decryption, and decompression — the missing piece was the row replay. The new flow:
+
+1. Look up the archive registry record; bail with a clear error if missing.
+2. Reject unsupported conflict resolutions (`rename`) and the unimplemented `createTableIfNotExists` auto-create branch with explicit failure messages — no more silent acceptance of unsupported options.
+3. Validate the target table exists (fixed a latent SQLite bug in `validateTable()` where PRAGMA's empty result for missing tables was treated as success).
+4. Load the archive payload via `loadArchive()` and apply `offset`/`limit` slicing.
+5. Replay rows inside a `Connection::transaction()`:
+   - Detect primary key via `uuid` (preferred) then `id`.
+   - For collisions: `skip` records the conflict and moves on; `overwrite` hard-deletes the existing row (raw PDO `DELETE`, bypassing soft-delete) before re-inserting, so previously-archived rows that `archiveTable()` left soft-deleted don't block reinsertion via UNIQUE constraints.
+6. Return a populated `RestoreResult::success(...)` with `recordsRestored`, `conflicts`, and metadata.
+
+Tests: `tests/Integration/Services/Archive/ArchiveRestoreTest.php` runs against a real Connection on a temp SQLite DB and covers the full round-trip (archive → delete source rows → restore), `skip` reporting conflicts, `overwrite` replacing existing data, `limit`/`offset` slicing, missing archive, unsupported conflict resolution, missing target table, and the explicit refusal to auto-create the target schema.
+
+---
+
+### Suggested Order
+
+1. ~~**TG-1** (cache tagging) — Redis implementation + README reconciliation.~~ ✅ Shipped 2026-05-21
+2. ~~**TG-2** (security report) — stripped fabricated sections, kept real config audit.~~ ✅ Shipped 2026-05-21
+3. ~~**TG-3** (whitelist analyzer) — wired to real Router; added NON_STRICT_WHITELIST check.~~ ✅ Shipped 2026-05-22
+4. ~~**TG-4** (archive restore) — implemented real row replay with skip/overwrite conflict resolution.~~ ✅ Shipped 2026-05-22
+
+All four trust gaps are now closed. The framework's promises match the code: cache tagging is real on Redis (and explicitly unsupported elsewhere), `security:report` shows only data backed by real introspection, `fields:whitelist-check` inspects real routes, and `restoreFromArchive()` actually restores. Tier 2 work can now be picked based on user demand without the credibility headwind.
 
 ---
 
