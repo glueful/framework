@@ -504,7 +504,7 @@ class MemcachedCacheDriver implements CacheStore
                 'counters' => true,
                 'expiration' => true,
                 'bulk_operations' => true,
-                'tags' => false,             // Not implemented yet
+                'tags' => false,             // Not supported; Memcached lacks set primitives
                 'key_enumeration' => false,  // Memcached limitation
             ],
             'data_types' => ['string', 'integer', 'float', 'boolean', 'array', 'object'],
@@ -519,29 +519,33 @@ class MemcachedCacheDriver implements CacheStore
     }
 
     /**
-     * Add tags to a cache key for grouped invalidation
+     * Tag-based invalidation is not supported by this driver.
+     *
+     * Memcached lacks SET primitives, so tagging would require a separate
+     * indexing layer (e.g. namespace versioning) that is intentionally out of
+     * scope. Callers should branch on `getCapabilities()['features']['tags']`
+     * and fall back to direct key deletion, or switch to the Redis driver
+     * when tag-based invalidation is required.
      *
      * @param string $key Cache key
-     * @param list<string> $tags Array of tags to associate with the key
-     * @return bool True if tags added successfully
+     * @param list<string> $tags Array of tags
+     * @return bool Always false
      */
     public function addTags(string $key, array $tags): bool
     {
-        // TODO: Implement tagging system using additional key storage
-        // For now, return false to indicate not implemented
         return false;
     }
 
     /**
-     * Invalidate all cache entries with specified tags
+     * Tag-based invalidation is not supported by this driver.
      *
-     * @param list<string> $tags Array of tags to invalidate
-     * @return bool True if invalidation successful
+     * See {@see addTags()} for the rationale and recommended alternatives.
+     *
+     * @param list<string> $tags Array of tags
+     * @return bool Always false
      */
     public function invalidateTags(array $tags): bool
     {
-        // TODO: Implement tag-based invalidation
-        // For now, return false to indicate not implemented
         return false;
     }
 

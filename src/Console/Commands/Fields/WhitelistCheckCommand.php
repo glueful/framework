@@ -183,7 +183,7 @@ class WhitelistCheckCommand extends BaseCommand
     }
 
     /**
-     * @param array<string> $specificRoutes
+     * @param array<string> $specificRoutes Route names to limit analysis to (empty = all)
      * @return array<string,mixed>
      */
     private function analyzeWhitelistCompliance(
@@ -192,37 +192,26 @@ class WhitelistCheckCommand extends BaseCommand
         bool $strict,
         bool $security
     ): array {
-        // Note: This is a placeholder implementation since we don't have the actual Router::getRoutes() method
-        // In a real implementation, this would iterate through actual routes
-
-        $routes = []; // $router->getRoutes(); - placeholder
         $analysis = [
             'summary' => [
                 'total_routes' => 0,
                 'whitelist_configured' => 0,
                 'compliance_passes' => 0,
                 'compliance_failures' => 0,
-                'no_whitelist' => 0
+                'no_whitelist' => 0,
             ],
             'routes' => [],
             'security' => [
                 'critical_issues' => 0,
                 'medium_issues' => 0,
                 'low_issues' => 0,
-                'issues' => []
+                'issues' => [],
             ],
-            'common_patterns' => $this->analyzeCommonPatterns(),
-            'recommendations' => []
+            'common_patterns' => $this->getReferenceFieldPatterns(),
+            'recommendations' => [],
         ];
 
-        // Placeholder route data for demonstration
-        $placeholderRoutes = [
-            ['name' => 'api.users.index', 'path' => '/api/users', 'has_whitelist' => true],
-            ['name' => 'api.posts.show', 'path' => '/api/posts/{id}', 'has_whitelist' => false],
-            ['name' => 'api.admin.users', 'path' => '/api/admin/users', 'has_whitelist' => true],
-        ];
-
-        foreach ($placeholderRoutes as $routeData) {
+        foreach ($this->collectRouteData($router) as $routeData) {
             if ($specificRoutes !== [] && !in_array($routeData['name'], $specificRoutes, true)) {
                 continue;
             }
@@ -232,7 +221,6 @@ class WhitelistCheckCommand extends BaseCommand
             $routeAnalysis = $this->analyzeRouteWhitelist($routeData, $strict, $security);
             $analysis['routes'][] = $routeAnalysis;
 
-            // Update summary
             if (($routeAnalysis['has_whitelist'] ?? false) === true) {
                 $analysis['summary']['whitelist_configured']++;
                 if ($routeAnalysis['compliance'] === 'pass') {
@@ -244,17 +232,77 @@ class WhitelistCheckCommand extends BaseCommand
                 $analysis['summary']['no_whitelist']++;
             }
 
-            // Add security issues
             foreach ($routeAnalysis['security_issues'] as $issue) {
                 $analysis['security']['issues'][] = $issue;
                 $analysis['security'][$issue['severity'] . '_issues']++;
             }
         }
 
-        // Generate recommendations
         $analysis['recommendations'] = $this->generateRecommendations($analysis);
 
         return $analysis;
+    }
+
+    /**
+     * Pull every registered route from the Router and normalize it into the
+     * shape expected by {@see analyzeRouteWhitelist()}.
+     *
+     * Reads `#[Fields]` configuration via {@see Route::getFieldsConfig()}:
+     * a route is considered to have a whitelist when its fields config carries
+     * a non-empty `allowed` list.
+     *
+     * @return list<array{
+     *     name: string,
+     *     path: string,
+     *     method: string,
+     *     has_whitelist: bool,
+     *     whitelist: list<string>,
+     *     is_strict: bool
+     * }>
+     */
+    private function collectRouteData(Router $router): array
+    {
+        $routes = [];
+
+        foreach ($router->getStaticRoutes() as $key => $route) {
+            [$method] = explode(':', $key, 2);
+            $routes[] = $this->normalizeRoute($route, $method);
+        }
+
+        foreach ($router->getDynamicRoutes() as $method => $dynamicRoutes) {
+            foreach ($dynamicRoutes as $route) {
+                $routes[] = $this->normalizeRoute($route, $method);
+            }
+        }
+
+        return $routes;
+    }
+
+    /**
+     * @return array{
+     *     name: string,
+     *     path: string,
+     *     method: string,
+     *     has_whitelist: bool,
+     *     whitelist: list<string>,
+     *     is_strict: bool
+     * }
+     */
+    private function normalizeRoute(\Glueful\Routing\Route $route, string $method): array
+    {
+        $fieldsConfig = $route->getFieldsConfig() ?? [];
+        /** @var list<string> $allowed */
+        $allowed = $fieldsConfig['allowed'] ?? [];
+        $hasWhitelist = count($allowed) > 0;
+
+        return [
+            'name' => $route->getName() ?? ($method . ' ' . $route->getPath()),
+            'path' => $route->getPath(),
+            'method' => $method,
+            'has_whitelist' => $hasWhitelist,
+            'whitelist' => $allowed,
+            'is_strict' => (bool) ($fieldsConfig['strict'] ?? false),
+        ];
     }
 
     /**
@@ -267,7 +315,7 @@ class WhitelistCheckCommand extends BaseCommand
         $securityIssues = [];
 
         // Check if whitelist is configured
-        $hasWhitelist = $routeData['has_whitelist'] ?? false;
+        $hasWhitelist = (bool) ($routeData['has_whitelist'] ?? false);
 
         if ($hasWhitelist === false) {
             if ($security && str_contains($routeData['path'], '/api/')) {
@@ -301,6 +349,21 @@ class WhitelistCheckCommand extends BaseCommand
             ];
         }
 
+        // Flag whitelists configured non-strictly on /api/ routes
+        if (
+            $security
+            && $hasWhitelist
+            && ($routeData['is_strict'] ?? false) === false
+            && str_contains($routeData['path'], '/api/')
+        ) {
+            $securityIssues[] = [
+                'severity' => 'low',
+                'type' => 'NON_STRICT_WHITELIST',
+                'message' => 'API route whitelist is not strict — disallowed fields are silently dropped',
+                'route' => $routeData['name'],
+            ];
+        }
+
         // Determine compliance status
         $compliance = 'pass';
         if ($hasWhitelist === false && $strict) {
@@ -322,20 +385,21 @@ class WhitelistCheckCommand extends BaseCommand
     }
 
     /**
-     * @return array<string,mixed>
+     * Reference field patterns used to drive whitelist suggestions.
+     *
+     * These are static defaults (not telemetry about the running app) — they
+     * exist to seed `--suggest-whitelist` output with sensible starting
+     * points. The previous implementation also returned a fabricated
+     * `pattern_frequency` block (65/25/10) that has been removed.
+     *
+     * @return array<string, list<string>>
      */
-    private function analyzeCommonPatterns(): array
+    private function getReferenceFieldPatterns(): array
     {
-        // Analyze common field selection patterns used in the application
         return [
             'most_requested_fields' => ['id', 'name', 'email', 'created_at', 'updated_at'],
             'sensitive_fields' => ['password', 'token', 'secret', 'private_key'],
             'admin_only_fields' => ['internal_notes', 'system_flags', 'audit_log'],
-            'pattern_frequency' => [
-                'simple' => 65,  // id,name,email
-                'moderate' => 25, // user(id,name,posts(title))
-                'complex' => 10   // deep nested selections
-            ]
         ];
     }
 

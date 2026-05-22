@@ -8,6 +8,97 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ---
 
+## [1.44.0] - 2026-05-22 — Errai
+
+> **Theme: Closing the Trust Gaps.** A focused follow-up to Dabih that reconciles four places where the README, CLI, or public API advertised behavior the code didn't deliver. The 1.43.0 "Production Hardening" release raised the framework's credibility surface, which made the remaining gaps more damaging, not less. This release closes them.
+
+### Added
+
+- **Real tag-aware cache invalidation on the Redis driver**: `RedisCacheDriver::addTags()` and `invalidateTags()` are now backed by Redis SETs (`_gf_tag:{tag}` → set of cache keys), with pipelined `SADD` on association and bulk `DEL` (keys + tag sets) on invalidation. The capability flag (`getCapabilities()['features']['tags']`) is now `true`. This unblocks `QueryCacheService`, `DistributedCacheService`, `ResponseCachingTrait`, and `php glueful cache:clear --tags` — all of which previously called `addTags()`/`invalidateTags()` only to receive a silent `false`.
+- **`NON_STRICT_WHITELIST` security finding in `fields:whitelist-check`**: API routes with a configured field whitelist that isn't strict now raise a low-severity finding ("disallowed fields are silently dropped"). Strict whitelists reject disallowed fields with a 4xx; non-strict ones drop them silently, which is the more dangerous default for security-sensitive routes.
+- **Real `ArchiveService::restoreFromArchive()` implementation**: Replay rows from a previously-created archive into a target table inside a database transaction. Honors `ArchiveRestoreOptions`: `targetTable` (defaults to the archive's source table), `offset`/`limit` for partial restore, and `conflictResolution` (`skip` records collisions in the result; `overwrite` hard-deletes the existing row to bypass soft-delete and re-inserts). Primary key detection prefers `uuid` then falls back to `id`. The existing `loadArchive()` handles checksum verification, decryption, and decompression — only the row replay was missing.
+
+### Changed
+
+- **`fields:whitelist-check` iterates real routes**: `analyzeWhitelistCompliance()` now reads `Router::getStaticRoutes()` and `Router::getDynamicRoutes()` and inspects each `Route`'s `getFieldsConfig()` for the actual `#[Fields]` attribute data (`allowed` list, `strict` flag). The previous placeholder loop iterated a hardcoded three-entry list (`api.users.index`, `api.posts.show`, `api.admin.users`) regardless of the application's actual routes.
+- **`security:report` stripped to sections backed by real introspection**: Removed `analyzeAuthenticationSecurity()`, `getAuditSummary()`, `runVulnerabilityAssessment()`, `gatherSecurityMetrics()` (all returned `rand()` values across 12+ fields), the `sendReportByEmail()` stub (only printed a "would be sent" message), and `assessCompliance()` (returned hardcoded `'Partial'`/`'Enabled'` strings unconnected to any real signal). Removed the `--include-vulnerabilities`, `--include-metrics`, `--email`, and `--days` options (the first two only fed the fake methods; `--email` and `--days` were inert against the remaining real sections). The PDF format was also removed — never implemented. The command now exports HTML/JSON/text reports of the production readiness score, environment configuration, system info, and derived recommendations. For dependency CVE scanning, users are directed to `security:vulnerabilities`.
+- **Memcached and File cache drivers document tagging as a deliberate gap**: `'tags' => false` in both drivers now carries an explanatory comment ("Memcached lacks set primitives" / "use Redis driver for tag invalidation") instead of the misleading "Not implemented yet" TODO. `addTags()`/`invalidateTags()` docblocks point callers at `getCapabilities()['features']['tags']` for branching.
+- **README cache claim narrowed to reality**: The cache line in `README.md` now reads "Multi-driver support (Redis/Memcached/File) with distributed caching; tag-based invalidation on the Redis driver" instead of the previous unqualified "with tagging" — accurate for the driver matrix that actually ships.
+- **`ArchiveService::validateTable()` handles SQLite's empty-result behavior**: PRAGMA-style introspection returns an empty column list for missing tables instead of throwing, so the previous `try/catch` was a false positive. The method now treats an empty result as "table not found" — required for `restoreFromArchive()` to return a useful error when the target schema isn't present.
+
+### Removed
+
+- **Fabricated telemetry in `security:report`**: Per the Changed section, the four `rand()`-driven sections (authentication, audit_summary, vulnerabilities, metrics) are gone, as is the hardcoded `compliance` block. The command no longer ships fake numbers under the name "security report."
+- **Placeholder route data in `fields:whitelist-check`**: The three-entry stub list and its accompanying `// placeholder` comment are gone, as is the fabricated `pattern_frequency` block (`['simple' => 65, 'moderate' => 25, 'complex' => 10]`) from `analyzeCommonPatterns()`. The helper was renamed to `getReferenceFieldPatterns()` and now documents itself as static defaults seeding `--suggest-whitelist`, not telemetry.
+
+### Fixed
+
+- **Loop variable shadowing in `Model.php`**: `class_uses_recursive($class)` was using `$class` both as the function parameter and the `foreach` loop variable, tripping intelephense's P1124 warning. Renamed the loop variable to `$ancestor`.
+
+### Upgrade Notes
+
+- **`security:report` output shape changed.** Consumers parsing the JSON output should expect `authentication`, `audit_summary`, `vulnerabilities`, `metrics`, and `compliance` keys to be absent. Scripts depending on the removed `--include-vulnerabilities`, `--include-metrics`, `--email`, or `--days` options must be updated — those flags now produce `InvalidOptionException`.
+- **PDF format removed from `security:report`.** Only `html`, `json`, and `text` are accepted. PDF was never actually generated.
+- **Cache tagging is Redis-only.** If your application calls `$cache->addTags($key, $tags)` or `$cache->invalidateTags($tags)` while running on the Memcached or File driver, those calls continue to return `false` (unchanged), but the capability is now documented as deliberate. Branch on `$cache->getCapabilities()['features']['tags']` if you need driver-agnostic behavior, or switch to Redis for real tag invalidation.
+- **`fields:whitelist-check` will now report your real routes.** Previously it analyzed the same three placeholder entries every run; the output is now meaningful but will be different. Routes without `#[Fields]` or with non-strict whitelists may surface as findings.
+- **`ArchiveService::restoreFromArchive()` no longer always fails.** Code that called this method and treated the failure as expected (e.g., catch-and-log scaffolding) should be reviewed — it will actually restore rows now. Use `ArchiveRestoreOptions::testRestore()` (limit: 10, skip on conflict) for a safe dry-run shape.
+
+```bash
+composer update glueful/framework
+```
+
+---
+
+## [1.43.0] - 2026-05-21 — Dabih
+
+### Added
+
+- **ORM-aware N+1 query detection**: New `PreventsLazyLoading` trait on `Model` detects lazy-loaded relations on members of a hydrated collection and produces actionable warnings that name the model and relation (`User::posts lazy-loaded from a collection of 50, add ->with('posts')`). Four modes: `off`, `warn` (logs `[GLUEFUL-N+1] ...` via `error_log()` with per-request dedupe), `strict` (throws `LazyLoadingViolationException`, which extends `\LogicException`), and `auto` (resolves to `warn` in development, `off` otherwise). Configure via `DB_LAZY_LOADING_MODE` or `config/database.php` → `orm.lazy_loading_mode`.
+- **Per-model lazy-loading opt-out**: Set `protected ?string $instanceLazyLoadingMode = 'off';` on a model to skip detection for that class regardless of the global setting. Useful for legacy models that intentionally lazy-load.
+- **Custom violation handler hook**: `Model::handleLazyLoadingViolationUsing(?\Closure $callback)` registers a callback that replaces the default warn/throw behavior — e.g. to route through a PSR logger, dispatch an event, or capture to Sentry. Pass `null` to clear.
+- **`Model::clearLazyLoadingWarnings()`**: Explicit per-request clearing of the warn-mode dedupe set. PHP-FPM and CLI clear automatically via PHP's request shutdown; long-running runtimes (`glueful/runiva`: Swoole, RoadRunner, FrankenPHP) need to call this at request boundaries.
+- **`Framework::initializeOrmFeatures()` boot hook**: Reads the lazy-loading mode from config and wires it into `Model::preventLazyLoading()`. Runs unconditionally on every boot — not gated on the development environment — so strict mode works in CI (`APP_ENV=testing`) and any explicit non-dev configuration.
+- **`Relations\Relation::noConstraints(callable)`**: Standard Eloquent-style pattern for suppressing the single-parent `WHERE` constraint during eager-load construction. The `static $constraints` flag is reset in a `finally` block so subsequent eager loads still get the correct `WHERE ... IN (...)` clause from `addEagerConstraints()`.
+- **`docs/ORM/N_PLUS_ONE_DETECTION.md`**: Public documentation covering modes, configuration, per-model opt-out, custom handlers, CI enforcement patterns, coexistence with the existing SQL-pattern detectors (`DevelopmentQueryMonitor`, `QueryLogger::detectN1Patterns()`), performance characteristics, and long-running-runtime considerations.
+- **`docs/FRAMEWORK_IMPROVEMENTS.md` roadmap restructure**: Replaces the old "Phase 4+" placeholder with a three-tier plan grouped by leverage (near-term core work, demand-driven extensions, deferred/dropped items) and concrete rationale for each item. Marks `glueful/meilisearch` as published; drops `glueful/elasticsearch` and `glueful/prometheus` from planned with documented overlap reasoning.
+- **Driver-aware `$query->explain()` and `Builder::explain()`**: The existing `QueryBuilder::explain()` is now driver-aware — SQLite uses `EXPLAIN QUERY PLAN` (the useful form) instead of plain `EXPLAIN` (which on SQLite returns a raw opcode dump). MySQL and PostgreSQL continue to use `EXPLAIN`. A new `Builder::explain()` on the ORM applies global scopes and delegates to the underlying query builder, returning the driver's native EXPLAIN row shape as `array<int, array<string, mixed>>`. Pairs naturally with N+1 detection for debugging the queries it flags.
+- **`QueryExecutorInterface::getDriverName()`**: New interface method returning the underlying PDO driver name (`mysql`, `pgsql`, `sqlite`). Used by `QueryBuilder::explain()` to vary SQL by driver; available to other call-sites that need the same kind of branching.
+- **Kubernetes-conventional health probe endpoints**: Three new routes at the canonical paths orchestrators expect — `GET /health/live`, `GET /health/ready`, `GET /health/startup`. `live` is a dependency-free liveness check (200 when the process can respond); `ready` reports database, cache, and config status and returns 503 when any dependency is unhealthy; `startup` reports initialization complete. The existing `/healthz` and `/ready` endpoints continue to work — the new paths are additive, so Pod specs that reference either form keep working. New `HealthController::startup()` handler; `liveness()` and `readiness()` are reused.
+- **Hardened API keys via dedicated `api_keys` table**: New `ApiKeyService` provides creation, verification, rotation with grace period, and revocation. Keys carry scopes (`['read:*', 'write:posts']`), CIDR/IP allowlists (`['192.168.1.0/24']`), expiration, and environment-prefixed plaintext format (`gf_live_...` in production, `gf_test_...` elsewhere). Plaintext keys are SHA-256 hashed before storage; the first 16 chars are stored as an indexed prefix for O(1) lookup. The `key_hash` column is `UNIQUE` and lookup is collision-tolerant — if two prefixes ever collided (statistically impossible at ~190 bits of entropy but defensively handled), the code iterates all candidates and `hash_equals` each. Rotation creates a new key and sets the old key's `expires_at` to `now + graceHours` so both work during the grace window. Schema migration ships in api-skeleton (`009_CreateApiKeysTable.php`).
+- **`#[RequireScope]` route attribute**: Declares required scopes on controller methods. Repeatable — multiple scopes within one attribute are OR, multiple attributes are AND. `AttributeRouteLoader` auto-attaches the `require_scope` middleware so the declaration is self-contained.
+- **`apikey:*` CLI commands**: `apikey:create`, `apikey:list`, `apikey:rotate`, `apikey:revoke`.
+- **Router exposes the matched route on the request**: `Router::dispatch()` now sets `_route` and `_route_params` on `$request->attributes` before middleware runs, so middleware (ours + future) can read route-level metadata.
+
+### Fixed
+
+- **ORM property access now routes to relations**: `HasAttributes::getAttribute()` previously returned `null` for relation-method names (`$user->posts` came back empty). It now forwards to `getRelationValue()` when the relation is already loaded or the method declares a `Relation` return type. Detected via reflection without actually invoking the method, so non-relation methods with the same name as a key are left alone.
+- **`__isset()` is now relation-aware**: PHP's null-coalescing operator (`??`) calls `__isset()` before `__get()`. The previous `__isset()` ignored relations entirely, so `$user->posts[0] ?? null` silently returned `null` even when posts existed. Now it returns true for loaded relations and for relation methods, so `??` correctly triggers lazy-load (or returns eager-loaded data) instead of swallowing the result.
+- **Related-model context propagation**: `HasRelationships::newRelatedInstance()` now passes the parent model's `ApplicationContext` to the child model's constructor. Without this, child instances could not resolve their database connection via the container, causing relation queries to fail with a `RuntimeException`.
+- **Eager loading no longer emits `WHERE x = NULL`**: `Builder::getRelation()` used to instantiate the relation against a template model with a `NULL` primary key, so `addConstraints()` generated `WHERE user_id = NULL` and eager-loaded collections came back empty. Builder now wraps the relation construction in `Relation::noConstraints(...)` so `addEagerConstraints()` applies the correct `WHERE user_id IN (...)` clause across all parent keys.
+
+### Changed
+
+- **`ApiKeyAuthenticationProvider` is now single-track**: Verifies via the new `api_keys` table only. The previous code path that queried `UserRepository::findByApiKey()` referenced a `users.api_key` column that doesn't exist in the canonical api-skeleton schema (`001_CreateInitialSchema.php`) — there was no legacy data to preserve. All four `AuthenticationProviderInterface` methods (`authenticate`, `validateToken`, `refreshTokens`, `generateTokens`) updated. Provider returns null on any failure (revoked, expired, invalid, IP-blocked, unknown). Populates `api_key_scopes` on the request for `RequireScopeMiddleware` to enforce.
+
+### Removed
+
+- **`UserRepository::findByApiKey()`** — zero callers after the provider switches to `ApiKeyService::verify()`. The method queried a `users.api_key` column that doesn't exist in the canonical schema, so it was dead code for any standard install. Verified no external callers (extensions, api-skeleton app code, other repos).
+
+### Upgrade Notes
+
+- **Run the new migration.** `glueful/api-skeleton ^1.26.0` ships `009_CreateApiKeysTable.php`. Run `php glueful migrate:run` after upgrading. The `apikey:*` CLI commands and the new auth provider both require the table.
+- **`ApiKeyAuthenticationProvider` is single-track.** If you previously relied on a custom `users.api_key` column being read by `UserRepository::findByApiKey()`, that code path is gone. Migrate existing keys into the new `api_keys` table (use `ApiKeyService::create()` programmatically, or `php glueful apikey:create` per user). No data is migrated automatically — the canonical schema never had the column, so we don't ship an opt-in helper.
+- **`UserRepository::findByApiKey()` removed.** Zero callers verified across the framework, all official extensions, api-skeleton, and other org repos. External consumers that subclass `UserRepository` or call the method directly must remove the reference.
+- **New env var (optional): `DB_LAZY_LOADING_MODE`.** Defaults to `auto` → `warn` in development, `off` elsewhere. Set explicitly to `strict` in CI to fail tests on accidental N+1 patterns, or `off` to disable detection entirely.
+- **`ApiKey` model uses `$timestamps = false`.** The migration's `created_at` / `updated_at` columns have `DEFAULT CURRENT_TIMESTAMP`, so the database fills them. The trait-driven timestamp path was unsuitable because it returns `DateTimeImmutable` instances that don't bind cleanly through the QueryBuilder. Subclasses of `ApiKey` should keep this disabled.
+
+```bash
+composer update glueful/framework
+php glueful migrate:run
+```
+
+---
+
 ## [1.43.0] - 2026-05-21 — Dabih
 
 ### Added

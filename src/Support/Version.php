@@ -13,10 +13,12 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.43.0';
+    public const VERSION = '1.44.0';
+
 
     /** Release code name */
-    public const NAME = 'Dabih';
+    public const NAME = 'Errai';
+
 
     /** Release date */
     public const RELEASE_DATE = '2026-05-21';
