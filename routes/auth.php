@@ -3,7 +3,7 @@
 /**
  * Auth routes - loaded via RouteManifest::requireRouteFile()
  *
- * @var Router $router
+ * @var \Glueful\Routing\Router $router
  */
 
 use Glueful\Routing\Router;

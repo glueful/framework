@@ -4,7 +4,7 @@ use Glueful\Routing\Router;
 use Glueful\Controllers\HealthController;
 
 /**
- * @var Router $router Router instance injected by RouteManifest::load()
+ * @var \Glueful\Routing\Router $router Router instance injected by RouteManifest::load()
  */
 
 // Health check routes - organized by access level
