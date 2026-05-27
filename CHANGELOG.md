@@ -6,6 +6,24 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Added
+
+- **`QueryBuilder::selectRaw()` parameter bindings**: `selectRaw()` now accepts an optional second argument — `selectRaw(string $expression, array $bindings = []): static` — so dynamic values in a raw SELECT expression can be passed as positional `?` placeholders instead of being string-interpolated. This closes the one unsafe-by-design gap in the SELECT clause (previously `selectRaw()` took only a raw string with no way to bind a value). Bindings are stored on `QueryState` alongside the `RawExpression` they pair with, and `getBindings()` now returns them in true SQL clause order — `SELECT → JOIN → WHERE → HAVING` — so positional placeholders line up. The method is also declared on `QueryBuilderInterface`. Fully backward compatible: existing `selectRaw($expr)` calls pass `[]` and behave exactly as before. Bindings protect dynamic *values* only — not identifiers, operators, directions, function names, or SQL fragments.
+- **`docs/SECURITY.md` — SQL injection & XSS guide**: New documentation covering the framework's actual defenses: parameterized queries and identifier validation/quoting (with the raw-method breakdown of which `*Raw()` methods accept bindings), `QueryValidator` strict mode, and the XSS model for a JSON API (responses served as `application/json`, `SecurityHeadersMiddleware`/CSP, `CSRFMiddleware`, and the limits of `strip_tags`-based sanitization). Includes a developer checklist.
+
+### Changed
+
+- **`AdminPermissionMiddleware::checkMfaAuth()` consolidated on the session MFA handshake**: The `require_mfa` check now reads only the session-based handshake (`mfa_verified` + `mfa_verified_at`), valid for a named `MFA_FRESHNESS_SECONDS` (300s) window, and documents that framework core ships no MFA verifier — the TOTP/SMS/WebAuthn challenge flow belongs to an MFA extension (`glueful/mfa`) or app-level code. Stateless (sessionless) requests cannot satisfy `require_mfa`.
+
+### Removed
+
+- **Dead `validateMfaToken()` / `X-MFA-Token` path in `AdminPermissionMiddleware`**: Removed the `validateMfaToken()` placeholder (which always returned `false`) and the `X-MFA-Token` header branch that fed it. The header path advertised a token-validation capability the framework never implemented.
+
+### Fixed
+
+- **`QueryBuilder::clone()` rendered cloned columns from the original state**: `SelectBuilder::buildSelectClause()` built its column list from the builder's internal state reference rather than the passed `$state`, so a cloned `QueryBuilder` (which reuses the original `SelectBuilder` with a cloned `QueryState`) would render the original's SELECT columns while sourcing bindings from the clone — a latent placeholder/binding mismatch surfaced by the new `selectRaw()` bindings. `buildSelectClause()` now derives the column list from the passed `$state`; behavior is unchanged for non-cloned queries (the sole caller passes its own state). `select()` also now clears any prior `selectRaw()` bindings, since it replaces the column list.
+- **`selectRaw()` docblock referenced a non-existent `addBinding()` method**: The previous example showed `->addBinding($ageLimit)`, which does not exist anywhere in the codebase and would not compile. The docblock now documents the real `$bindings` parameter and a stale `@throws` line was removed.
+
 ---
 
 ## [1.44.0] - 2026-05-22 — Errai

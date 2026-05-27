@@ -120,7 +120,13 @@ class SelectBuilder implements SelectBuilderInterface
     public function buildSelectClause(\Glueful\Database\Query\Interfaces\QueryStateInterface $state): string
     {
         $table = $state->getTableOrFail();
-        $columns = $this->buildColumnList();
+        $columns = implode(
+            ', ',
+            array_map(
+                fn($column) => $this->formatColumn($column),
+                $state->getSelectColumns()
+            )
+        );
 
         $sql = ($state->isDistinct() ? 'SELECT DISTINCT ' : 'SELECT ') . $columns;
         $sql .= ' FROM ' . $this->driver->wrapIdentifier($table);

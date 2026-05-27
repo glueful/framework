@@ -32,31 +32,7 @@ final class WhitelistCheckCommandTest extends TestCase
         $context = new ApplicationContext(sys_get_temp_dir() . '/whitelist_check_test_' . uniqid('', true));
         (new RouteCache($context))->clear();
 
-        $container = new class implements ContainerInterface {
-            /** @var array<string, mixed> */
-            private array $services = [];
-
-            public function has(string $id): bool
-            {
-                return array_key_exists($id, $this->services);
-            }
-
-            public function get(string $id): mixed
-            {
-                if ($this->has($id)) {
-                    return $this->services[$id];
-                }
-                throw new class("Service '{$id}' not found") extends \RuntimeException implements
-                    \Psr\Container\NotFoundExceptionInterface {
-                };
-            }
-
-            public function set(string $id, mixed $service): void
-            {
-                $this->services[$id] = $service;
-            }
-        };
-        $container->set(ApplicationContext::class, $context);
+        $container = $this->makeContainer([ApplicationContext::class => $context]);
 
         $this->router = new Router($container);
         $this->command = new WhitelistCheckCommand();
@@ -155,5 +131,35 @@ final class WhitelistCheckCommandTest extends TestCase
         $result = $method->invoke($this->command, $this->router, $specificRoutes, $strict, $security);
 
         return $result;
+    }
+
+    /**
+     * @param array<string, mixed> $services
+     */
+    private function makeContainer(array $services): ContainerInterface
+    {
+        return new class ($services) implements ContainerInterface {
+            /**
+             * @param array<string, mixed> $services
+             */
+            public function __construct(private array $services)
+            {
+            }
+
+            public function has(string $id): bool
+            {
+                return array_key_exists($id, $this->services);
+            }
+
+            public function get(string $id): mixed
+            {
+                if ($this->has($id)) {
+                    return $this->services[$id];
+                }
+                throw new class("Service '{$id}' not found") extends \RuntimeException implements
+                    \Psr\Container\NotFoundExceptionInterface {
+                };
+            }
+        };
     }
 }

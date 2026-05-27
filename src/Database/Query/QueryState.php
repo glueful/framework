@@ -27,6 +27,8 @@ class QueryState implements QueryStateInterface
     protected array $groupBy = [];
     /** @var array<array{column: string, direction: string}> */
     protected array $orderBy = [];
+    /** @var array<mixed> */
+    protected array $selectRawBindings = [];
 
     /**
      * Set the primary table for the query
@@ -74,6 +76,34 @@ class QueryState implements QueryStateInterface
     public function getSelectColumns(): array
     {
         return $this->selectColumns;
+    }
+
+    /**
+     * Append bindings for raw SELECT expressions
+     *
+     * @param array<mixed> $bindings
+     */
+    public function appendSelectRawBindings(array $bindings): void
+    {
+        $this->selectRawBindings = array_merge($this->selectRawBindings, array_values($bindings));
+    }
+
+    /**
+     * Get bindings for raw SELECT expressions
+     *
+     * @return array<mixed>
+     */
+    public function getSelectRawBindings(): array
+    {
+        return $this->selectRawBindings;
+    }
+
+    /**
+     * Clear bindings for raw SELECT expressions
+     */
+    public function clearSelectRawBindings(): void
+    {
+        $this->selectRawBindings = [];
     }
 
     /**
@@ -185,6 +215,7 @@ class QueryState implements QueryStateInterface
         $this->offset = null;
         $this->groupBy = [];
         $this->orderBy = [];
+        $this->selectRawBindings = [];
     }
 
     /**
@@ -201,6 +232,7 @@ class QueryState implements QueryStateInterface
         $clone->offset = $this->offset;
         $clone->groupBy = $this->groupBy;
         $clone->orderBy = $this->orderBy;
+        $clone->selectRawBindings = $this->selectRawBindings;
 
         return $clone;
     }
