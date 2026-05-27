@@ -6,6 +6,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+---
+
+## [1.45.0] - 2026-05-27 — Fomalhaut
+
+> **Theme: The Second Factor.** Baseline email-PIN two-factor authentication ships in framework core — opt-in, off by default, and byte-for-byte identical on the wire to a normal login once completed. Alongside it: parameterized `selectRaw()` bindings close the last unsafe-by-design gap in the query builder, a new `docs/SECURITY.md` documents the SQL-injection and XSS model, and the admin permission middleware drops a dead MFA-token placeholder.
+
 ### Added
 
 - **`QueryBuilder::selectRaw()` parameter bindings**: `selectRaw()` now accepts an optional second argument — `selectRaw(string $expression, array $bindings = []): static` — so dynamic values in a raw SELECT expression can be passed as positional `?` placeholders instead of being string-interpolated. This closes the one unsafe-by-design gap in the SELECT clause (previously `selectRaw()` took only a raw string with no way to bind a value). Bindings are stored on `QueryState` alongside the `RawExpression` they pair with, and `getBindings()` now returns them in true SQL clause order — `SELECT → JOIN → WHERE → HAVING` — so positional placeholders line up. The method is also declared on `QueryBuilderInterface`. Fully backward compatible: existing `selectRaw($expr)` calls pass `[]` and behave exactly as before. Bindings protect dynamic *values* only — not identifiers, operators, directions, function names, or SQL fragments.
@@ -26,6 +32,17 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 - **`QueryBuilder::clone()` rendered cloned columns from the original state**: `SelectBuilder::buildSelectClause()` built its column list from the builder's internal state reference rather than the passed `$state`, so a cloned `QueryBuilder` (which reuses the original `SelectBuilder` with a cloned `QueryState`) would render the original's SELECT columns while sourcing bindings from the clone — a latent placeholder/binding mismatch surfaced by the new `selectRaw()` bindings. `buildSelectClause()` now derives the column list from the passed `$state`; behavior is unchanged for non-cloned queries (the sole caller passes its own state). `select()` also now clears any prior `selectRaw()` bindings, since it replaces the column list.
 - **`selectRaw()` docblock referenced a non-existent `addBinding()` method**: The previous example showed `->addBinding($ageLimit)`, which does not exist anywhere in the codebase and would not compile. The docblock now documents the real `$bindings` parameter and a stale `@throws` line was removed.
+
+### Upgrade Notes
+
+- **Email 2FA is opt-in and off by default.** With `TWO_FACTOR_ENABLED=false` (the default) there is no behavioral change — the `/2fa/*` routes are not registered, the `two_factor_enabled` column is never read, and `POST /auth/login` responds exactly as before. To enable: (1) run the `010_AddTwoFactorEnabledToUsers` migration (ships in api-skeleton `^1.28.0`), (2) install `glueful/email-notification`, (3) set `TWO_FACTOR_ENABLED=true`, (4) enroll users via `POST /2fa/enable` or `php glueful 2fa:enable <uuid>`.
+- **New env vars (all optional).** `TWO_FACTOR_ENABLED` (default `false`) plus tunables `TWO_FACTOR_PIN_LENGTH` (6), `TWO_FACTOR_PIN_TTL` (300), `TWO_FACTOR_CHALLENGE_TTL` (300), `TWO_FACTOR_DISABLE_FRESHNESS` (300), `TWO_FACTOR_TEMPLATE` (`two-factor-pin`). Defaults preserve current behavior.
+- **`AdminPermissionMiddleware` dropped the `X-MFA-Token` header path.** The `require_mfa` check now reads only the session handshake (`mfa_verified` + `mfa_verified_at`). The removed header path always returned `false`, so no working flow relied on it.
+- **`selectRaw()` bindings are backward compatible.** Existing `selectRaw($expr)` calls are unaffected; the second argument is optional.
+
+```bash
+composer update glueful/framework
+```
 
 ---
 
