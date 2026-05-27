@@ -12,9 +12,6 @@ use Glueful\Auth\AuthenticationService;
 use Glueful\Http\Exceptions\Domain\AuthenticationException;
 use Glueful\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
-use Glueful\Events\EventService;
-use Glueful\Events\Auth\LoginResponseBuildingEvent;
-use Glueful\Events\Auth\LoginResponseBuiltEvent;
 
 /**
  * Authentication Controller
@@ -49,6 +46,8 @@ class AuthController
     private EmailVerification $verifier;
     private AuthenticationService $authService;
     private ApplicationContext $context;
+    private \Glueful\Auth\TwoFactor\TwoFactorService $twoFactor;
+    private \Glueful\Auth\LoginResponseShaper $loginResponseShaper;
 
     public function __construct(ApplicationContext $context)
     {
@@ -60,6 +59,11 @@ class AuthController
             // Fallback to direct construction with context for proper DI resolution
             $this->authService = new AuthenticationService(context: $this->context);
         }
+
+        // 2FA dependencies — always registered in CoreProvider. Resolved internally
+        // (not via constructor params) to keep the controller's instantiation contract.
+        $this->twoFactor = container($this->context)->get(\Glueful\Auth\TwoFactor\TwoFactorService::class);
+        $this->loginResponseShaper = container($this->context)->get(\Glueful\Auth\LoginResponseShaper::class);
 
         // Initialize the authentication system
         app($this->context, \Glueful\Auth\AuthBootstrap::class)->initialize();
@@ -119,9 +123,6 @@ class AuthController
         // Get credentials using the getPostData method from our Helper Request class
         $credentials = RequestHelper::getRequestData($request);
 
-        $clientIp = $request->getClientIp();
-        $userAgent = $request->headers->get('User-Agent');
-
         // Extract remember me preference from credentials
         $rememberMe = isset($credentials['remember']) && (bool)$credentials['remember'];
 
@@ -133,49 +134,57 @@ class AuthController
         if (isset($credentials['provider'])) {
             $providerName = $credentials['provider'];
         }
+        $preferredProvider = $providerName ?? ($credentials['provider'] ?? 'jwt');
 
-        // Authenticate with the specified provider or use default
-        $result = $this->authService->authenticate($credentials, $providerName);
+        // Route 1 — token / API-key provider login. Bypasses the 2FA gate entirely
+        // (these credentials have no "verified user, no session yet" intermediate
+        // state). Delegates to the unchanged AuthenticationService::authenticate()
+        // provider short-circuit, then shapes the response like every other login.
+        if (isset($credentials['token']) || isset($credentials['api_key'])) {
+            $result = $this->authService->authenticate($credentials, $providerName);
+            if ($result === null) {
+                throw new AuthenticationException('Invalid credentials');
+            }
+            return $this->loginResponseShaper->shape($request, $result);
+        }
 
-        if ($result === null) {
+        // Route 2 — username/password login. Goes through the split + 2FA gate.
+
+        // Step 1: credentials & status validation only. NO session is created here.
+        $userData = $this->authService->verifyCredentials($credentials, $providerName);
+        if ($userData === null) {
             throw new AuthenticationException('Invalid credentials');
         }
 
-        // Add CSRF token to login response only if CSRF protection is enabled
-        if (env('CSRF_PROTECTION_ENABLED', true) === true) {
-            try {
-                $csrfMiddleware = new \Glueful\Routing\Middleware\CSRFMiddleware();
-                $csrfToken = $csrfMiddleware->generateToken($request);
-                $result['csrf_token'] = [
-                    'token' => $csrfToken,
-                    'header' => 'X-CSRF-Token',
-                    'field' => '_token',
-                    'expires_at' => time() + (int)env('CSRF_TOKEN_LIFETIME', 3600)
-                ];
-            } catch (\Exception $e) {
-                // Don't fail login if CSRF token generation fails
-                error_log('Failed to generate CSRF token during login: ' . $e->getMessage());
-            }
+        // Step 2: 2FA branch. isEnabled() short-circuits (no DB read) when the
+        // master switch is off, so this is a no-op for installs without 2FA.
+        if ($this->twoFactor->isEnabled((string) $userData['uuid'])) {
+            $challenge = $this->twoFactor->beginLogin(
+                [
+                    'uuid'              => (string) $userData['uuid'],
+                    'email'             => (string) ($userData['email'] ?? ''),
+                    'email_verified_at' => $userData['email_verified_at'] ?? null,
+                    'username'          => $userData['username'] ?? null,
+                    'profile'           => $userData['profile'] ?? null,
+                    'remember_me'       => $rememberMe,
+                    'status'            => $userData['status'] ?? null,
+                ],
+                $preferredProvider
+            );
+
+            // Challenge responses deliberately skip CSRF + login events — login is
+            // not yet complete and there is no session to bind a CSRF token to.
+            return Response::success([
+                'two_factor_required' => true,
+                'challenge_token'     => $challenge['token'],
+                'expires_in'          => $challenge['expires_in'],
+                'delivered_to'        => $challenge['delivered_to'],
+            ], 'Two-factor verification required');
         }
 
-        // Allow listeners to enrich/shape the login response before returning
-        $data = $result;
-        $tokens = [
-            'access_token' => $result['access_token'] ?? null,
-            'refresh_token' => $result['refresh_token'] ?? null,
-            'expires_in' => $result['expires_in'] ?? null,
-            'token_type' => $result['token_type'] ?? 'Bearer',
-        ];
-        $user = $result['user'] ?? [];
-        try {
-            app($this->context, EventService::class)->dispatch(new LoginResponseBuildingEvent($tokens, $user, $data));
-            app($this->context, EventService::class)->dispatch(new LoginResponseBuiltEvent($data));
-        } catch (\Throwable $e) {
-            // Do not fail login if event listeners throw
-            error_log('Login response events failed: ' . $e->getMessage());
-        }
-
-        return Response::success($data, 'Login successful');
+        // Step 3: no 2FA. Issue the session and shape the response (CSRF + events).
+        $session = $this->authService->issueSession($userData, $preferredProvider);
+        return $this->loginResponseShaper->shape($request, $session);
     }
 
     /**

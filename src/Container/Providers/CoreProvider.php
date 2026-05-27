@@ -254,6 +254,47 @@ final class CoreProvider extends BaseServiceProvider
             )
         );
 
+        // Core email-PIN 2FA services. Inert unless auth.two_factor.enabled is true.
+        $defs[\Glueful\Auth\TwoFactor\JtiBlocklist::class] = new FactoryDefinition(
+            \Glueful\Auth\TwoFactor\JtiBlocklist::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Auth\TwoFactor\JtiBlocklist(
+                $c->get(\Glueful\Cache\CacheStore::class)
+            )
+        );
+
+        $defs[\Glueful\Auth\TwoFactor\ChallengeTokenIssuer::class] = new FactoryDefinition(
+            \Glueful\Auth\TwoFactor\ChallengeTokenIssuer::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Auth\TwoFactor\ChallengeTokenIssuer(
+                $c->get(\Glueful\Auth\TwoFactor\JtiBlocklist::class),
+                (int) config($this->context, 'auth.two_factor.challenge_ttl', 300)
+            )
+        );
+
+        $defs[\Glueful\Auth\LoginResponseShaper::class] = new FactoryDefinition(
+            \Glueful\Auth\LoginResponseShaper::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Auth\LoginResponseShaper(
+                $this->context
+            )
+        );
+
+        $defs[\Glueful\Auth\TwoFactor\TwoFactorService::class] = new FactoryDefinition(
+            \Glueful\Auth\TwoFactor\TwoFactorService::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Auth\TwoFactor\TwoFactorService(
+                $this->context,
+                $c->get('database'),
+                $c->get(\Glueful\Cache\CacheStore::class),
+                $c->get(\Glueful\Notifications\Services\NotificationService::class),
+                $c->get(\Glueful\Auth\TwoFactor\ChallengeTokenIssuer::class),
+                $c->get(\Glueful\Auth\TwoFactor\JtiBlocklist::class),
+                $c->get(\Glueful\Auth\TokenManager::class),
+                (int) config($this->context, 'auth.two_factor.pin_length', 6),
+                (int) config($this->context, 'auth.two_factor.pin_ttl', 300),
+                (int) config($this->context, 'auth.two_factor.disable_freshness', 300),
+                (string) config($this->context, 'auth.two_factor.template_name', 'two-factor-pin'),
+                (bool) config($this->context, 'auth.two_factor.enabled', false)
+            )
+        );
+
         // HTTP request — delegate to RequestProvider's shared definition
         $defs['request'] = new FactoryDefinition(
             'request',

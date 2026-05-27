@@ -172,7 +172,34 @@ class AuthenticationService
             }
         }
 
-        // Default flow for username/password authentication
+        // Username/password flow — delegated to verifyCredentials() + issueSession()
+        // so callers (e.g. AuthController) can insert a 2FA gate between credential
+        // verification and session issuance. The provider short-circuit above is
+        // untouched; only this branch is split. The credentials/status/password
+        // validation logic is unchanged — it now lives in verifyCredentials().
+        $userData = $this->verifyCredentials($credentials, $providerName);
+        if ($userData === null) {
+            return null;
+        }
+
+        $preferredProvider = $providerName ?? ($credentials['provider'] ?? 'jwt');
+        return $this->issueSession($userData, $preferredProvider);
+    }
+
+    /**
+     * Verify username/password credentials without creating a session.
+     *
+     * Username/password flow only — does NOT handle token or api_key provider
+     * credentials (route those through authenticate()). Runs the same find-user +
+     * status-allowlist + password-verify + formatting chain authenticate() used to
+     * run inline; the only behavioral change is that no session is created here.
+     *
+     * @param array<string, mixed> $credentials Must contain username|email + password.
+     * @param string|null $providerName Reserved for parity with authenticate(); unused here.
+     * @return array<string, mixed>|null Formatted user data ready for issueSession(), or null on failure.
+     */
+    public function verifyCredentials(array $credentials, ?string $providerName = null): ?array
+    {
         // Validate required fields
         if ($this->validateCredentials($credentials) === false) {
             return null;
@@ -231,14 +258,20 @@ class AuthenticationService
         // Pass through remember_me preference from credentials
         $userData['remember_me'] = $credentials['remember_me'] ?? false;
 
-        // Add any custom provider preference from credentials
-        $preferredProvider = $providerName ?? ($credentials['provider'] ?? 'jwt');
+        return $userData;
+    }
 
-        // Create user session with the appropriate provider
-        $userSession = $this->tokenManager->createUserSession($userData, $preferredProvider);
-
-        // Return authentication result
-        return $userSession;
+    /**
+     * Create a session for an already-verified user. Returns the OIDC session payload.
+     *
+     * @param array<string, mixed> $userData As returned by verifyCredentials()
+     * @param string|null $providerName Preferred token provider (jwt, ldap, saml, ...).
+     * @return array<string, mixed>
+     */
+    public function issueSession(array $userData, ?string $providerName = null): array
+    {
+        $preferredProvider = $providerName ?? ($userData['provider'] ?? 'jwt');
+        return $this->tokenManager->createUserSession($userData, $preferredProvider);
     }
 
     /**

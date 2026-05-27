@@ -41,6 +41,7 @@ class RouteManifest
             // Framework routes that get the API prefix (e.g., /api/v1/auth/login)
             'api_routes' => [
                 '/routes/auth.php',
+                '/routes/2fa.php',
                 '/routes/blobs.php',
                 '/routes/resource.php',
             ],
