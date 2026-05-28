@@ -8,6 +8,28 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ---
 
+## [1.46.0] - 2026-05-28 — Gienah
+
+> **Theme: Fluent Query Caching.** `QueryBuilder::cache(ttl, tags)` is now wired through to `QueryCacheService` — the method was previously a silent no-op. Also marks the start of the framework-wide PHPStan level-8 hardening initiative, beginning with the query-binding path.
+
+### Added
+- **Fluent query result caching — `QueryBuilder::cache(?int $ttl = null, array $tags = [])`**: The fluent cache method is now wired through `QueryExecutor` to `QueryCacheService` for read queries (`get`/`first`/`count`/`max`). Results are tagged automatically by the tables involved plus any caller-supplied `$tags`, so they can be invalidated targetedly (e.g. `$cache->invalidateTags(['users'])`) in addition to the automatic per-table invalidation. Caching activates per-query when `->cache()` is called (no global toggle required); the executor lazily resolves a cache backend and degrades to uncached execution if none is configured.
+
+### Changed
+- **Began framework-wide PHPStan level-8 hardening.** Internal typing fixes in the query-binding path (`ParameterBinder`/`QueryExecutor`) — behavior-preserving. The full level-8 gap (~914 errors across `src/`) is catalogued in `docs/LEVEL8_TYPING_DEBT.md`; the CI gate remains level 6. No user-facing change.
+
+### Fixed
+- **`QueryBuilder::cache()` was a no-op**: it set builder-local flags that `get()` never propagated to the executor, so per-query caching and the TTL were silently ignored, and there was no `tags` parameter. The method now actually caches and accepts invalidation tags.
+
+### Upgrade Notes
+- **No action required.** `selectRaw`/query-builder behavior is unchanged unless you opt into `->cache(...)`. Framework-only release — no migrations, no env vars, no api-skeleton changes (the existing `^1.45` constraint already permits 1.46).
+
+```bash
+composer update glueful/framework
+```
+
+---
+
 ## [1.45.0] - 2026-05-27 — Fomalhaut
 
 > **Theme: The Second Factor.** Baseline email-PIN two-factor authentication ships in framework core — opt-in, off by default, and byte-for-byte identical on the wire to a normal login once completed. Alongside it: parameterized `selectRaw()` bindings close the last unsafe-by-design gap in the query builder, a new `docs/SECURITY.md` documents the SQL-injection and XSS model, and the admin permission middleware drops a dead MFA-token placeholder.

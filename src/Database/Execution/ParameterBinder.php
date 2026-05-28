@@ -122,7 +122,7 @@ class ParameterBinder implements ParameterBinderInterface
         ];
 
         foreach ($sensitivePatterns as $pattern) {
-            if (preg_match($pattern, $value)) {
+            if (preg_match($pattern, $value) === 1) {
                 return true;
             }
         }

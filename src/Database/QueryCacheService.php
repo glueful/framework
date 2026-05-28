@@ -67,9 +67,11 @@ class QueryCacheService
      * @param  array<mixed>    $params   Query parameters
      * @param  \Closure $executor Function to execute if cache miss
      * @param  int|null $ttl      Cache TTL in seconds
+     * @param  array<int, string> $tags Extra caller-supplied tags for targeted invalidation,
+     *                                   stored alongside the automatic per-table tags
      * @return mixed Query result
      */
-    public function getOrExecute(string $query, array $params, \Closure $executor, ?int $ttl = null)
+    public function getOrExecute(string $query, array $params, \Closure $executor, ?int $ttl = null, array $tags = [])
     {
         if (!$this->enabled || !$this->isCacheable($query)) {
             return $executor();
@@ -80,16 +82,20 @@ class QueryCacheService
 
         return $this->cache->remember(
             $key,
-            function () use ($executor, $query, $key) {
+            function () use ($executor, $query, $key, $tags) {
                 $result = $executor();
 
-                // Associate the cache entry with affected tables for invalidation
+                // Associate the cache entry with affected tables for invalidation,
+                // plus any caller-supplied tags (e.g. from QueryBuilder::cache(ttl, tags)).
                 $tables = $this->extractTablesFromQuery($query);
                 $allTags = ["query_cache:all"];
                 foreach ($tables as $table) {
                     $allTags[] = "query_cache:table:{$table}";
                 }
-                $this->cache->addTags($key, $allTags);
+                foreach ($tags as $tag) {
+                    $allTags[] = (string) $tag;
+                }
+                $this->cache->addTags($key, array_values(array_unique($allTags)));
 
                 return $result;
             },
