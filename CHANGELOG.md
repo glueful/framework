@@ -8,6 +8,44 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ---
 
+## [1.45.0] - 2026-05-27 — Fomalhaut
+
+> **Theme: The Second Factor.** Baseline email-PIN two-factor authentication ships in framework core — opt-in, off by default, and byte-for-byte identical on the wire to a normal login once completed. Alongside it: parameterized `selectRaw()` bindings close the last unsafe-by-design gap in the query builder, a new `docs/SECURITY.md` documents the SQL-injection and XSS model, and the admin permission middleware drops a dead MFA-token placeholder.
+
+### Added
+
+- **`QueryBuilder::selectRaw()` parameter bindings**: `selectRaw()` now accepts an optional second argument — `selectRaw(string $expression, array $bindings = []): static` — so dynamic values in a raw SELECT expression can be passed as positional `?` placeholders instead of being string-interpolated. This closes the one unsafe-by-design gap in the SELECT clause (previously `selectRaw()` took only a raw string with no way to bind a value). Bindings are stored on `QueryState` alongside the `RawExpression` they pair with, and `getBindings()` now returns them in true SQL clause order — `SELECT → JOIN → WHERE → HAVING` — so positional placeholders line up. The method is also declared on `QueryBuilderInterface`. Fully backward compatible: existing `selectRaw($expr)` calls pass `[]` and behave exactly as before. Bindings protect dynamic *values* only — not identifiers, operators, directions, function names, or SQL fragments.
+- **`docs/SECURITY.md` — SQL injection & XSS guide**: New documentation covering the framework's actual defenses: parameterized queries and identifier validation/quoting (with the raw-method breakdown of which `*Raw()` methods accept bindings), `QueryValidator` strict mode, and the XSS model for a JSON API (responses served as `application/json`, `SecurityHeadersMiddleware`/CSP, `CSRFMiddleware`, and the limits of `strip_tags`-based sanitization). Includes a developer checklist.
+- **Core email-PIN two-factor authentication (2FA)**: Baseline 2FA ships in framework core (richer TOTP/WebAuthn/recovery codes remain `glueful/mfa` scope). Opt-in and **off by default** (`TWO_FACTOR_ENABLED=false`) — a fresh install behaves exactly like a pre-2FA framework, and the `/2fa/*` routes are not even registered when off. When enabled, `POST /auth/login` for an enrolled user returns a `challenge_token` and emails a 6-digit PIN (bcrypt-hashed via `Glueful\Security\OTP`, cached under `2fa:pin:{jti}` with a strictly-projected user array — no password hash can leak); the client completes login at `POST /2fa/verify`. New `src/Auth/TwoFactor/` services (`TwoFactorService`, `ChallengeTokenIssuer`, `JtiBlocklist`), `TwoFactorController` (`/2fa/enable|verify|disable`, IP-rate-limited), `2fa:enable|disable|status` CLI commands, and a `config/auth.php` `two_factor` block. `/2fa/verify` re-validates the account (existence, status allowlist, 2FA-still-enabled) before minting a session via `TokenManager::createUserSession`, and writes a **session-scoped** freshness marker so `/2fa/disable` can't be ridden by a stolen token from another session. Requires `glueful/email-notification` (email channel) and the `010_AddTwoFactorEnabledToUsers` migration. See the implementation plan in `docs/superpowers/plans/2026-05-22-core-email-2fa.md`.
+
+### Changed
+
+- **`AuthenticationService::authenticate()` username/password branch split into `verifyCredentials()` + `issueSession()`**: To expose a "verified user, no session yet" state for the 2FA gate, the username/password flow is split — `verifyCredentials()` runs the unchanged find-user + status-allowlist + password-verify + formatting chain (no session), and `issueSession()` calls `TokenManager::createUserSession()`. `authenticate()` keeps its provider short-circuit (token / API-key) verbatim and now falls back to the two new methods for username/password, preserving the public contract for all four flows (JWT, LDAP, SAML, API key). `AuthController::login()` uses the split to insert the 2FA branch and now routes all login responses through the new `LoginResponseShaper` (shared CSRF + login-event shaping), so a 2FA-completed login is on-the-wire identical to a direct login.
+
+- **`AdminPermissionMiddleware::checkMfaAuth()` consolidated on the session MFA handshake**: The `require_mfa` check now reads only the session-based handshake (`mfa_verified` + `mfa_verified_at`), valid for a named `MFA_FRESHNESS_SECONDS` (300s) window, and documents that framework core ships no MFA verifier — the TOTP/SMS/WebAuthn challenge flow belongs to an MFA extension (`glueful/mfa`) or app-level code. Stateless (sessionless) requests cannot satisfy `require_mfa`.
+
+### Removed
+
+- **Dead `validateMfaToken()` / `X-MFA-Token` path in `AdminPermissionMiddleware`**: Removed the `validateMfaToken()` placeholder (which always returned `false`) and the `X-MFA-Token` header branch that fed it. The header path advertised a token-validation capability the framework never implemented.
+
+### Fixed
+
+- **`QueryBuilder::clone()` rendered cloned columns from the original state**: `SelectBuilder::buildSelectClause()` built its column list from the builder's internal state reference rather than the passed `$state`, so a cloned `QueryBuilder` (which reuses the original `SelectBuilder` with a cloned `QueryState`) would render the original's SELECT columns while sourcing bindings from the clone — a latent placeholder/binding mismatch surfaced by the new `selectRaw()` bindings. `buildSelectClause()` now derives the column list from the passed `$state`; behavior is unchanged for non-cloned queries (the sole caller passes its own state). `select()` also now clears any prior `selectRaw()` bindings, since it replaces the column list.
+- **`selectRaw()` docblock referenced a non-existent `addBinding()` method**: The previous example showed `->addBinding($ageLimit)`, which does not exist anywhere in the codebase and would not compile. The docblock now documents the real `$bindings` parameter and a stale `@throws` line was removed.
+
+### Upgrade Notes
+
+- **Email 2FA is opt-in and off by default.** With `TWO_FACTOR_ENABLED=false` (the default) there is no behavioral change — the `/2fa/*` routes are not registered, the `two_factor_enabled` column is never read, and `POST /auth/login` responds exactly as before. To enable: (1) run the `010_AddTwoFactorEnabledToUsers` migration (ships in api-skeleton `^1.28.0`), (2) install `glueful/email-notification`, (3) set `TWO_FACTOR_ENABLED=true`, (4) enroll users via `POST /2fa/enable` or `php glueful 2fa:enable <uuid>`.
+- **New env vars (all optional).** `TWO_FACTOR_ENABLED` (default `false`) plus tunables `TWO_FACTOR_PIN_LENGTH` (6), `TWO_FACTOR_PIN_TTL` (300), `TWO_FACTOR_CHALLENGE_TTL` (300), `TWO_FACTOR_DISABLE_FRESHNESS` (300), `TWO_FACTOR_TEMPLATE` (`two-factor-pin`). Defaults preserve current behavior.
+- **`AdminPermissionMiddleware` dropped the `X-MFA-Token` header path.** The `require_mfa` check now reads only the session handshake (`mfa_verified` + `mfa_verified_at`). The removed header path always returned `false`, so no working flow relied on it.
+- **`selectRaw()` bindings are backward compatible.** Existing `selectRaw($expr)` calls are unaffected; the second argument is optional.
+
+```bash
+composer update glueful/framework
+```
+
+---
+
 ## [1.44.0] - 2026-05-22 — Errai
 
 > **Theme: Closing the Trust Gaps.** A focused follow-up to Dabih that reconciles four places where the README, CLI, or public API advertised behavior the code didn't deliver. The 1.43.0 "Production Hardening" release raised the framework's credibility surface, which made the remaining gaps more damaging, not less. This release closes them.

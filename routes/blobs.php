@@ -7,8 +7,8 @@
  * Supports multipart uploads, base64 encoding, on-demand image resizing,
  * per-blob visibility controls, and signed URLs for temporary access.
  *
- * @var Router $router
- * @var ApplicationContext $context
+ * @var \Glueful\Routing\Router $router
+ * @var \Glueful\Bootstrap\ApplicationContext $context
  */
 
 use Glueful\Routing\Router;
@@ -59,7 +59,6 @@ $router->group(['prefix' => '/blobs'], function (Router $router) use ($postMw, $
      * @summary Retrieve Blob
      * @description Retrieve blob file content with optional image resizing.
      * @tag Blobs
-     * @param uuid:string="Blob UUID" {required=true}
      * @response 200 "File content with appropriate Content-Type header"
      * @response 401 "Authentication required for private blob"
      * @response 404 "Blob not found"
@@ -72,7 +71,6 @@ $router->group(['prefix' => '/blobs'], function (Router $router) use ($postMw, $
      * @summary Blob Metadata
      * @description Retrieve blob metadata without downloading the file content
      * @tag Blobs
-     * @param uuid:string="Blob UUID" {required=true}
      * @response 200 application/json "Blob metadata retrieved"
      * @response 401 "Authentication required"
      * @response 404 "Blob not found"
@@ -86,7 +84,6 @@ $router->group(['prefix' => '/blobs'], function (Router $router) use ($postMw, $
      * @description Soft-delete a blob and remove its underlying file from storage
      * @tag Blobs
      * @requiresAuth true
-     * @param uuid:string="Blob UUID" {required=true}
      * @response 200 application/json "Blob deleted"
      * @response 401 "Authentication required"
      * @response 404 "Blob not found"
@@ -100,7 +97,6 @@ $router->group(['prefix' => '/blobs'], function (Router $router) use ($postMw, $
      * @description Generate a temporary signed URL for accessing a private blob.
      * @tag Blobs
      * @requiresAuth true
-     * @param uuid:string="Blob UUID" {required=true}
      * @queryParam ttl:integer="URL lifetime in seconds (default: 3600, max: 604800)"
      * @response 200 application/json "Signed URL generated"
      * @response 400 "Signed URLs are disabled"

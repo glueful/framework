@@ -5,8 +5,8 @@ use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Controllers\ResourceController;
 
 /**
- * @var Router $router Router instance injected by RouteManifest::load()
- * @var ApplicationContext $context
+ * @var \Glueful\Routing\Router $router Router instance injected by RouteManifest::load()
+ * @var \Glueful\Bootstrap\ApplicationContext $context
  */
 
 /** @var ApplicationContext|null $context */

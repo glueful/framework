@@ -84,6 +84,9 @@ class AdminPermissionMiddleware implements RouteMiddleware
     /** @var int Default elevated auth timeout (15 minutes) */
     private const DEFAULT_ELEVATED_TIMEOUT = 900;
 
+    /** @var int How long an MFA-verified session flag remains valid (5 minutes) */
+    private const MFA_FRESHNESS_SECONDS = 300;
+
 
     /** @var array<string, array<string, mixed>> Predefined security profiles */
     private const SECURITY_PROFILES = [
@@ -918,32 +921,34 @@ class AdminPermissionMiddleware implements RouteMiddleware
     }
 
     /**
-     * Check multi-factor authentication
+     * Check multi-factor authentication.
      *
-     * @param Request $request The request
-     * @param string $userUuid User UUID
-     * @return bool Whether MFA is satisfied
+     * The framework core does not ship an MFA verifier — the actual TOTP / SMS /
+     * WebAuthn challenge flow belongs to an MFA extension (`glueful/mfa`) or
+     * to app-level code. This method reads the session-based handshake that
+     * such code is expected to perform after a successful challenge:
+     *
+     *   $session->set('mfa_verified', true);
+     *   $session->set('mfa_verified_at', time());
+     *
+     * The verified flag remains valid for {@see MFA_FRESHNESS_SECONDS} seconds.
+     *
+     * Requests without a session (stateless API calls) cannot satisfy this
+     * check — `require_mfa` is only meaningful for session-backed admin flows.
      */
     private function checkMfaAuth(Request $request, string $userUuid): bool
     {
-        // Check MFA token in header
-        $mfaToken = $request->headers->get('X-MFA-Token');
-        if ($mfaToken !== null) {
-            return $this->validateMfaToken($mfaToken, $userUuid);
+        if (!$request->hasSession()) {
+            return false;
         }
 
-        // Check session for valid MFA
-        if ($request->hasSession()) {
-            $session = $request->getSession();
-            $mfaValid = $session->get('mfa_verified');
-            $mfaTime = $session->get('mfa_verified_at');
+        $session = $request->getSession();
+        $mfaValid = $session->get('mfa_verified');
+        $mfaTime = $session->get('mfa_verified_at');
 
-            if ($mfaValid === true && $mfaTime !== null && (time() - $mfaTime) < 300) { // 5 minutes
-                return true;
-            }
-        }
-
-        return false;
+        return $mfaValid === true
+            && is_int($mfaTime)
+            && (time() - $mfaTime) < self::MFA_FRESHNESS_SECONDS;
     }
 
     /**
@@ -978,22 +983,6 @@ class AdminPermissionMiddleware implements RouteMiddleware
         // This could be a time-limited token, TOTP, or other mechanism
         $authKey = "{$userUuid}_{$elevatedAuth}";
         unset($authKey); // Suppress unused variable warning
-        return false; // Placeholder
-    }
-
-    /**
-     * Validate MFA token
-     *
-     * @param string $mfaToken MFA token
-     * @param string $userUuid User UUID
-     * @return bool Whether MFA token is valid
-     */
-    private function validateMfaToken(string $mfaToken, string $userUuid): bool
-    {
-        // Implementation would depend on your MFA strategy
-        // This could be TOTP, SMS code, etc.
-        $tokenKey = "{$userUuid}_{$mfaToken}";
-        unset($tokenKey); // Suppress unused variable warning
         return false; // Placeholder
     }
 

@@ -65,7 +65,7 @@ $app->terminate($request, $response);
 
 - **High-Performance Router**: O(1) static route lookup, dynamic route bucketing, attribute-based routing, middleware pipeline
 - **Dependency Injection**: Symfony Container with service providers, lazy services, ApplicationContext injection
-- **Authentication**: JWT, LDAP, SAML SSO, API keys with session analytics
+- **Authentication**: JWT, LDAP, SAML SSO, API keys with session analytics; opt-in email-PIN 2FA
 - **Encryption**: AES-256-GCM authenticated encryption with key rotation support
 - **File Uploads**: Blob storage with visibility controls, signed URLs, thumbnail generation, media metadata
 - **Caching**: Multi-driver support (Redis/Memcached/File) with distributed caching; tag-based invalidation on the Redis driver
@@ -74,6 +74,17 @@ $app->terminate($request, $response);
 - **Database**: Query builder, migrations, connection pooling (MySQL, PostgreSQL, SQLite)
 - **Extensions**: Modular extension system with lifecycle management
 - **CLI Tools**: Comprehensive scaffold commands, migrations, cache management
+
+## Email Two-Factor Authentication (2FA)
+
+Baseline email-PIN 2FA ships in core and is **off by default** — a fresh install behaves exactly like a pre-2FA framework. To enable it (no source-code editing required):
+
+1. Run the `010_AddTwoFactorEnabledToUsers` migration (ships in api-skeleton).
+2. Install `glueful/email-notification` (provides the email channel + `two-factor-pin` template).
+3. Set `TWO_FACTOR_ENABLED=true` in `.env`.
+4. Enroll users via `POST /2fa/enable` or `php glueful 2fa:enable <user-uuid>`.
+
+Once enabled, `POST /auth/login` returns a `challenge_token` (and emails a 6-digit PIN) for enrolled users instead of tokens; the client completes login at `POST /2fa/verify`. Richer factors (TOTP, WebAuthn, recovery codes) ship separately as `glueful/mfa`.
 
 ## Generating an SDK client
 

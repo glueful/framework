@@ -45,6 +45,25 @@ interface QueryStateInterface
     public function getSelectColumns(): array;
 
     /**
+     * Append bindings for raw SELECT expressions
+     *
+     * @param array<mixed> $bindings
+     */
+    public function appendSelectRawBindings(array $bindings): void;
+
+    /**
+     * Get bindings for raw SELECT expressions
+     *
+     * @return array<mixed>
+     */
+    public function getSelectRawBindings(): array;
+
+    /**
+     * Clear bindings for raw SELECT expressions
+     */
+    public function clearSelectRawBindings(): void;
+
+    /**
      * Set distinct flag
      */
     public function setDistinct(bool $distinct = true): void;

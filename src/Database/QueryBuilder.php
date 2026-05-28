@@ -101,31 +101,36 @@ class QueryBuilder implements QueryBuilderInterface
     {
         $this->queryValidator->validateColumnNames($columns);
         $this->state->setSelectColumns($columns);
+        // select() replaces the column list, dropping any prior selectRaw()
+        // RawExpression — clear its bindings so they don't outlive their placeholder.
+        $this->state->clearSelectRawBindings();
         return $this;
     }
 
     /**
-     * Add raw SELECT expression to the query
+     * Add a raw SELECT expression to the query, with optional parameter bindings.
      *
-     * ⚠️ **SECURITY WARNING**: This method accepts raw SQL expressions that are NOT escaped
-     * or validated for SQL injection. Only use this method with trusted input or properly
-     * escaped values.
+     * Use `?` placeholders in the expression and pass their values via $bindings;
+     * they are bound positionally ahead of JOIN/WHERE/HAVING bindings.
      *
-     * Use parameter bindings for any user input:
+     * ⚠️ **SECURITY**: bindings protect dynamic *values* only — never identifiers,
+     * operators, sort directions, function names, or SQL fragments. The expression
+     * string itself is NOT escaped, so never interpolate user input into it; put
+     * dynamic values in $bindings and allowlist anything that cannot be bound.
+     *
      * ```php
-     * // UNSAFE - Don't do this with user input
-     * $query->selectRaw("CONCAT(first_name, ' ', last_name) as full_name");
+     * // Safe: values bound via placeholders
+     * $query->selectRaw('CASE WHEN age > ? THEN ? ELSE ? END AS band', [$limit, 'adult', 'minor']);
      *
-     * // SAFE - Use bindings for dynamic values
-     * $query->selectRaw("CASE WHEN age > ? THEN 'adult' ELSE 'minor' END as category")
-     *       ->addBinding($ageLimit);
+     * // UNSAFE: user input concatenated into the expression
+     * $query->selectRaw("CASE WHEN age > {$userInput} THEN 1 ELSE 0 END AS band");
      * ```
      *
-     * @param  string $expression Raw SQL expression to add to SELECT clause
+     * @param  string      $expression Raw SQL expression to add to the SELECT clause
+     * @param  array<mixed> $bindings  Values for `?` placeholders in $expression
      * @return static Returns this QueryBuilder instance for method chaining
-     * @throws \InvalidArgumentException If expression is empty or contains dangerous patterns
      */
-    public function selectRaw(string $expression): static
+    public function selectRaw(string $expression, array $bindings = []): static
     {
         $columns = $this->state->getSelectColumns();
 
@@ -139,6 +144,11 @@ class QueryBuilder implements QueryBuilderInterface
         }
 
         $this->state->setSelectColumns($columns);
+
+        if ($bindings !== []) {
+            $this->state->appendSelectRawBindings($bindings);
+        }
+
         return $this;
     }
 
@@ -1035,9 +1045,14 @@ class QueryBuilder implements QueryBuilderInterface
      */
     private function getAllBindings(): array
     {
+        // Return bindings in SQL clause order so positional `?` placeholders line up:
+        // SELECT -> JOIN -> WHERE -> HAVING (matches buildSelectQuery()).
+        // JoinClause::getBindings() is always empty today, but ordering it before
+        // WHERE keeps the contract correct if joins ever bind values.
         $bindings = [];
-        $bindings = array_merge($bindings, $this->whereClause->getBindings());
+        $bindings = array_merge($bindings, $this->state->getSelectRawBindings());
         $bindings = array_merge($bindings, $this->joinClause->getBindings());
+        $bindings = array_merge($bindings, $this->whereClause->getBindings());
         $bindings = array_merge($bindings, $this->queryModifiers->getHavingBindings());
 
         return $bindings;

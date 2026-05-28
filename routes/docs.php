@@ -4,7 +4,7 @@ use Glueful\Routing\Router;
 use Glueful\Controllers\DocsController;
 
 /**
- * @var Router $router Router instance injected by RouteManifest::load()
+ * @var \Glueful\Routing\Router $router Router instance injected by RouteManifest::load()
  */
 
 // Documentation routes - serves OpenAPI spec and interactive UI

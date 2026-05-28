@@ -33,6 +33,16 @@ interface QueryBuilderInterface
     public function select(array $columns = ['*']): static;
 
     /**
+     * Add a raw SELECT expression with optional parameter bindings
+     *
+     * Bindings protect dynamic values only (via `?` placeholders), not identifiers,
+     * operators, directions, function names, or SQL fragments.
+     *
+     * @param array<mixed> $bindings
+     */
+    public function selectRaw(string $expression, array $bindings = []): static;
+
+    /**
      * Add WHERE condition
      *
      * @param string|array<string,mixed>|callable $column
