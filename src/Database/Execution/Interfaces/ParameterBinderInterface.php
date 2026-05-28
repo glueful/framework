@@ -16,7 +16,10 @@ interface ParameterBinderInterface
     /**
      * Flatten bindings to prevent nested arrays
      *
-     * @param array<string, mixed> $bindings
+     * Bindings may be positional (numeric keys, from `?` placeholders) or named
+     * (string keys, from `:name` placeholders), hence the int|string key type.
+     *
+     * @param array<int|string, mixed> $bindings
      * @return array<string, mixed>
      */
     public function flattenBindings(array $bindings): array;
