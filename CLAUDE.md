@@ -18,7 +18,7 @@ This project is **not live/in production** unless explicitly told otherwise. Tre
 
 ### Guidelines for Working with Glueful
 
-1. **Always verify methods exist**: Before using any method, search the framework codebase to confirm it exists and understand its signature. Do not assume methods like `DB::transaction()`, `Model::create()`, or other Laravel-style APIs are available.
+1. **Always verify methods exist — and check their signature**: Before using any method, search the framework codebase to confirm it exists and understand its signature. Don't assume Laravel-style APIs are available, or that a familiar-looking one shares Laravel's signature. For example: `DB::transaction()` does **not** exist (use `db($context)->transaction(...)`); `Model::create()` **does** exist but is context-first (`Model::create($context, [...])`, not Laravel's `Model::create([...])`).
 
 2. **Check helpers.php for convenience functions**: Common helpers are defined in `src/helpers.php`. Examples:
    - `app($context, ServiceClass::class)` - Resolve from container
@@ -327,9 +327,8 @@ class MyMiddleware implements RouteMiddleware
 - Extension lifecycle: register → boot
 
 **Creating Extensions:**
-```bash
-php glueful extensions:create MyExtension
-```
+
+There is no `extensions:create` scaffolder. Create the package by hand — a `composer.json` with `"type": "glueful-extension"` and `extra.glueful.provider` pointing at your `ServiceProvider` subclass — or copy an existing extension's layout. Manage installed extensions with `php glueful extensions:enable|disable|list|info|diagnose`.
 
 **Extension Structure:**
 ```php
@@ -810,7 +809,7 @@ vendor/bin/phpunit --filter="RouterTest"
 5. Write tests
 
 ### Extension Development
-1. `php glueful extensions:create <name>`
+1. Scaffold the package by hand (composer `type: glueful-extension` + `extra.glueful.provider` → your `ServiceProvider`); copy an existing extension as a starting point
 2. Implement extension logic
 3. Add routes and services
 4. Test extension
