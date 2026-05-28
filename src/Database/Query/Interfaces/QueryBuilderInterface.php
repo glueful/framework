@@ -241,9 +241,17 @@ interface QueryBuilderInterface
     public function transaction(callable $callback);
 
     /**
-     * Enable query caching
+     * Enable query result caching for this query.
+     *
+     * Results are cached via QueryCacheService and tagged automatically by the
+     * tables involved; any $tags supplied here are stored alongside for targeted
+     * invalidation (e.g. `$cache->invalidateTags(['users'])`). Applies to read
+     * queries (get/first/count/max).
+     *
+     * @param int|null $ttl Cache TTL in seconds (null = service default)
+     * @param array<int, string> $tags Extra invalidation tags
      */
-    public function cache(?int $ttl = null): static;
+    public function cache(?int $ttl = null, array $tags = []): static;
 
     /**
      * Enable query optimization

@@ -6,6 +6,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Added
+- **Fluent query result caching — `QueryBuilder::cache(?int $ttl = null, array $tags = [])`**: The fluent cache method is now wired through `QueryExecutor` to `QueryCacheService` for read queries (`get`/`first`/`count`/`max`). Results are tagged automatically by the tables involved plus any caller-supplied `$tags`, so they can be invalidated targetedly (e.g. `$cache->invalidateTags(['users'])`) in addition to the automatic per-table invalidation. Caching activates per-query when `->cache()` is called (no global toggle required); the executor lazily resolves a cache backend and degrades to uncached execution if none is configured.
+
+### Fixed
+- **`QueryBuilder::cache()` was a no-op**: it set builder-local flags that `get()` never propagated to the executor, so per-query caching and the TTL were silently ignored, and there was no `tags` parameter. The method now actually caches and accepts invalidation tags.
+
 ---
 
 ## [1.45.0] - 2026-05-27 — Fomalhaut

@@ -19,9 +19,18 @@ interface QueryExecutorInterface
      * Execute a SELECT query and return all results
      *
      * @param array<int|string, mixed> $bindings
+     * @param int|null $cacheTtl Per-query cache TTL override
+     * @param array<int, string> $cacheTags Per-query invalidation tags
+     * @param bool $useCache Force caching for this call even if the global flag is off
      * @return array<int, array<string, mixed>>
      */
-    public function executeQuery(string $sql, array $bindings = []): array;
+    public function executeQuery(
+        string $sql,
+        array $bindings = [],
+        ?int $cacheTtl = null,
+        array $cacheTags = [],
+        bool $useCache = false
+    ): array;
 
     /**
      * Execute a SELECT query and return first result

@@ -42,25 +42,56 @@ class QueryExecutor implements QueryExecutorInterface
 
     /**
      * Execute a SELECT query and return all results
+     *
+     * @param array<mixed> $bindings
+     * @param int|null $cacheTtl   Per-query cache TTL (overrides the executor default for this call)
+     * @param array<int, string> $cacheTags Per-query invalidation tags (from QueryBuilder::cache(ttl, tags))
+     * @param bool $useCache        Force caching for this call even if the global cache flag is off
+     * @return array<int, array<string, mixed>>
      */
-    public function executeQuery(string $sql, array $bindings = []): array
-    {
-        // Use cache if enabled
-        if ($this->cacheEnabled && $this->cache !== null) {
-            return $this->cache->getOrExecute(
+    public function executeQuery(
+        string $sql,
+        array $bindings = [],
+        ?int $cacheTtl = null,
+        array $cacheTags = [],
+        bool $useCache = false
+    ): array {
+        // Cache when the per-query flag is set or the executor has caching enabled globally.
+        $cache = ($useCache || $this->cacheEnabled) ? $this->resolveCacheService() : null;
+        if ($cache !== null) {
+            return $cache->getOrExecute(
                 $sql,
                 $bindings,
                 function () use ($sql, $bindings) {
                     $stmt = $this->executeStatement($sql, $bindings);
                     return $stmt->fetchAll(PDO::FETCH_ASSOC);
                 },
-                $this->cacheTtl
+                $cacheTtl ?? $this->cacheTtl,
+                $cacheTags
             );
         }
 
         // Execute without caching
         $stmt = $this->executeStatement($sql, $bindings);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Lazily resolve a cache service when per-query caching is requested.
+     * Returns null (and leaves caching off) if no cache backend can be created,
+     * so a missing cache config degrades to uncached execution rather than erroring.
+     */
+    private function resolveCacheService(): ?QueryCacheService
+    {
+        if ($this->cache !== null) {
+            return $this->cache;
+        }
+        try {
+            $this->cache = new QueryCacheService();
+        } catch (\Throwable $e) {
+            $this->cache = null;
+        }
+        return $this->cache;
     }
 
     /**

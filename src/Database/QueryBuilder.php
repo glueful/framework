@@ -35,6 +35,8 @@ class QueryBuilder implements QueryBuilderInterface
 {
     private bool $cacheEnabled = false;
     private ?int $cacheTtl = null;
+    /** @var array<int, string> */
+    private array $cacheTags = [];
     private bool $optimizeEnabled = false;
     private bool $debugEnabled = false;
 
@@ -476,7 +478,13 @@ class QueryBuilder implements QueryBuilderInterface
         $sql = $this->buildSelectQuery();
         $bindings = $this->getAllBindings();
 
-        $result = $this->queryExecutor->executeQuery($sql, $bindings);
+        $result = $this->queryExecutor->executeQuery(
+            $sql,
+            $bindings,
+            $this->cacheTtl,
+            $this->cacheTags,
+            $this->cacheEnabled
+        );
 
         return $result;
     }
@@ -510,7 +518,13 @@ class QueryBuilder implements QueryBuilderInterface
         $countSql = $this->buildCountQuery();
         $bindings = $this->getWhereBindings();
 
-        $result = $this->queryExecutor->executeQuery($countSql, $bindings);
+        $result = $this->queryExecutor->executeQuery(
+            $countSql,
+            $bindings,
+            $this->cacheTtl,
+            $this->cacheTags,
+            $this->cacheEnabled
+        );
         return (int) ($result[0]['count'] ?? 0);
     }
 
@@ -537,7 +551,13 @@ class QueryBuilder implements QueryBuilderInterface
         $maxSql = $this->buildMaxQuery($column);
         $bindings = $this->getWhereBindings();
 
-        $result = $this->queryExecutor->executeQuery($maxSql, $bindings);
+        $result = $this->queryExecutor->executeQuery(
+            $maxSql,
+            $bindings,
+            $this->cacheTtl,
+            $this->cacheTags,
+            $this->cacheEnabled
+        );
         return $result[0]['max_value'] ?? null;
     }
 
@@ -740,11 +760,15 @@ class QueryBuilder implements QueryBuilderInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @param array<int, string> $tags Invalidation tags stored with the cached result
+     *                                 (alongside automatic per-table tags)
      */
-    public function cache(?int $ttl = null): static
+    public function cache(?int $ttl = null, array $tags = []): static
     {
         $this->cacheEnabled = true;
         $this->cacheTtl = $ttl;
+        $this->cacheTags = array_values($tags);
         return $this;
     }
 
@@ -960,16 +984,19 @@ class QueryBuilder implements QueryBuilderInterface
         $cloneReflection = new \ReflectionObject($clone);
         $cacheEnabledProp = $cloneReflection->getProperty('cacheEnabled');
         $cacheTtlProp = $cloneReflection->getProperty('cacheTtl');
+        $cacheTagsProp = $cloneReflection->getProperty('cacheTags');
         $optimizeEnabledProp = $cloneReflection->getProperty('optimizeEnabled');
         $debugEnabledProp = $cloneReflection->getProperty('debugEnabled');
 
         $cacheEnabledProp->setAccessible(true);
         $cacheTtlProp->setAccessible(true);
+        $cacheTagsProp->setAccessible(true);
         $optimizeEnabledProp->setAccessible(true);
         $debugEnabledProp->setAccessible(true);
 
         $cacheEnabledProp->setValue($clone, $this->cacheEnabled);
         $cacheTtlProp->setValue($clone, $this->cacheTtl);
+        $cacheTagsProp->setValue($clone, $this->cacheTags);
         $optimizeEnabledProp->setValue($clone, $this->optimizeEnabled);
         $debugEnabledProp->setValue($clone, $this->debugEnabled);
 
