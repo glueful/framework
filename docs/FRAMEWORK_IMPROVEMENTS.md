@@ -971,7 +971,7 @@ $users = User::query()
 - [ ] Add query explain support
 - [ ] Create index suggestion command
 - [ ] Support read/write connection splitting
-- [ ] Add query-level result caching
+- [x] Add query-level result caching — fluent `QueryBuilder::cache(?int $ttl, array $tags)` wired to `QueryCacheService` (caches get/first/count/max; auto per-table tags + caller-supplied invalidation tags)
 
 **Impact:** High - Database is often the bottleneck
 
@@ -1094,7 +1094,7 @@ Build these as extensions **when a real user asks**, not speculatively. The main
 | `glueful/mfa` | 5.1 | TOTP is ~a day's work; WebAuthn is a project. Build when needed. |
 | `glueful/oauth2-server` | 5.2 | Narrow audience — only relevant when a Glueful API needs to *be* an OAuth provider. Most OAuth needs are client-side and covered by `glueful/entrada`. |
 | **Read/write connection splitting** (core ORM) | 6.2.4 | Only matters for apps with replicas. Large surface area — query routing, transaction-aware writes-to-primary, replica lag handling. Build when a real user has the replica topology to justify it. |
-| **Query-level result caching** (fluent ORM API like `->cache(ttl, tags)`) | 6.2.5 | Existing cache layer already covers this manually via tags. The fluent API is a convenience; build when a user asks for the shape. |
+| ~~**Query-level result caching** (fluent ORM API like `->cache(ttl, tags)`)~~ ✅ **DONE** | 6.2.5 | Implemented: `QueryBuilder::cache(?int $ttl, array $tags)` is wired through `QueryExecutor` to `QueryCacheService` for read queries (get/first/count/max). Entries are tagged with the involved tables plus any caller-supplied tags for targeted invalidation. (Previously the method existed but set builder flags execution ignored — that gap is now closed.) |
 
 ### Tier 3 — Defer or Drop
 
@@ -1106,6 +1106,8 @@ These items either overlap with existing work or risk introducing competing patt
 | **Index suggestions CLI** (`php glueful db:optimize`) | 6.2.3 | External tools cover this well — MySQL's `sys` schema, `pt-query-digest`, EXPLAIN tooling in PMM/Datadog. Reimplementing in core duplicates established tooling without matching quality. |
 | `glueful/prometheus` | 4.2 | Overlaps heavily with OpenTelemetry (OTel exports to Prometheus). Pick one path; don't build both. |
 | `glueful/elasticsearch` | — | `glueful/meilisearch` already covers the search slot. ES is heavier and audiences barely overlap. |
+
+> **Static-analysis hardening (level 8, framework-wide goal).** The framework carries ~914 PHPStan level-8 errors across `src/` (the CI gate is level 6, which is green — level 8 is the target, not yet enforced). The intent is to eventually run level 8 across the whole framework and enforce it in CI. Scope by area, per-file/category detail for the largest area (`src/Database`, 201), risk notes, and a recommended area-by-area adoption strategy (incl. ratcheting the baseline 6 → 7 → 8) are catalogued in [`docs/LEVEL8_TYPING_DEBT.md`](LEVEL8_TYPING_DEBT.md).
 
 ### Suggested Next Sprint
 
