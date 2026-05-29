@@ -12,6 +12,13 @@ on:
         required: false
         default: 'Manual run of combined CI'
 
+# Collapse the duplicate push + pull_request runs for the same commit:
+# both share the same head SHA, so the later-started run cancels the earlier,
+# leaving a single completed run. Also cancels superseded runs on rapid re-pushes.
+concurrency:
+  group: ci-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     name: Lint & Style
@@ -101,7 +108,10 @@ jobs:
         run: |
           if [ -f .env.example ]; then
             cp .env.example .env.testing
-            echo "DB_CONNECTION=mysql" >> .env.testing
+            # config/database.php selects the engine via DB_DRIVER (NOT DB_CONNECTION,
+            # which the framework does not read — leaving it set would silently fall
+            # back to the sqlite default and never exercise the MySQL service below).
+            echo "DB_DRIVER=mysql" >> .env.testing
             echo "DB_HOST=127.0.0.1" >> .env.testing
             echo "DB_PORT=3306" >> .env.testing
             echo "DB_DATABASE=glueful_test" >> .env.testing
