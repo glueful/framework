@@ -6,18 +6,17 @@ namespace Glueful\Console\Commands\Extensions;
 
 use Glueful\Console\BaseCommand;
 use Glueful\Extensions\ExtensionManager;
-use Glueful\Extensions\ProviderLocator;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 
 /**
- * Enhanced Extensions Cache Command
+ * Extensions Cache Command
  *
- * Build extensions cache for production with comprehensive verification:
- * - Cache building functionality
- * - Verification and validation
- * - Performance benchmarking
+ * Compiles the extension provider manifest to bootstrap/cache/extensions.php.
+ * Strict: resolves the enabled allow-list through the shared resolver and refuses
+ * to write the cache if resolution reports any error (missing provider/dependency,
+ * version mismatch, cycle). Production boots from this compiled manifest.
  */
 #[AsCommand(
     name: 'extensions:cache',
@@ -44,25 +43,34 @@ final class CacheCommand extends BaseCommand
         $output->writeln('=========================');
         $output->writeln('');
 
-        // Performance benchmarking
         $startTime = microtime(true);
         $memoryStart = memory_get_usage(true);
 
-        // Step 1: Validate configuration before building
+        // Step 1: Validate configuration.
         $output->writeln('1. <info>Validating configuration...</info>');
-        $validationErrors = $this->validateConfiguration();
-
-        if (count($validationErrors) > 0) {
-            $output->writeln('<error>Configuration validation failed:</error>');
-            foreach ($validationErrors as $error) {
-                $output->writeln("   ✗ {$error}");
-            }
+        $enabled = config($this->getContext(), 'extensions.enabled');
+        if ($enabled !== null && !is_array($enabled)) {
+            $output->writeln('<error>   ✗ extensions.enabled must be an array.</error>');
             return self::FAILURE;
         }
         $output->writeln('   ✓ Configuration is valid');
 
-        // Step 2: Clear existing cache
-        $output->writeln('2. <info>Clearing existing cache...</info>');
+        // Step 2: Resolve providers (strict — fail on any resolver error).
+        $output->writeln('2. <info>Resolving providers...</info>');
+        $classes = $this->extensions->resolveProviderClasses();
+        $errors = $this->extensions->getResolverErrors();
+        if ($errors !== []) {
+            foreach ($errors as $e) {
+                $output->writeln("   <error>✗ [{$e->kind}] {$e->message}</error>");
+            }
+            $output->writeln('<error>Refusing to write extension cache with unresolved errors.</error>');
+            return self::FAILURE;
+        }
+        $providerCount = count($classes);
+        $output->writeln("   ✓ Resolved {$providerCount} providers");
+
+        // Step 3: Clear existing cache.
+        $output->writeln('3. <info>Clearing existing cache...</info>');
         $cacheFile = base_path($this->getContext(), 'bootstrap/cache/extensions.php');
         if (file_exists($cacheFile)) {
             @unlink($cacheFile);
@@ -71,138 +79,40 @@ final class CacheCommand extends BaseCommand
             $output->writeln('   - No existing cache found');
         }
 
-        // Step 3: Discover providers
-        $output->writeln('3. <info>Discovering providers...</info>');
-        $discoveredProviders = ProviderLocator::all($this->getContext());
-        $providerCount = count($discoveredProviders);
-        $output->writeln("   ✓ Found {$providerCount} providers");
-
-        // Step 4: Validate providers
-        $output->writeln('4. <info>Validating providers...</info>');
-        $providerErrors = $this->validateProviders($discoveredProviders);
-
-        if (count($providerErrors) > 0) {
-            $output->writeln('<error>Provider validation failed:</error>');
-            foreach ($providerErrors as $error) {
-                $output->writeln("   ✗ {$error}");
-            }
-            return self::FAILURE;
-        }
-        $output->writeln("   ✓ All {$providerCount} providers are valid");
-
-        // Step 5: Build cache (in any environment)
-        $output->writeln('5. <info>Building cache...</info>');
+        // Step 4: Build cache from the resolved list.
+        $output->writeln('4. <info>Building cache...</info>');
         try {
-            // Write cache deterministically using the validated provider list
-            $this->extensions->writeCacheNow($discoveredProviders);
+            $this->extensions->writeCacheNow($classes);
             $output->writeln('   ✓ Cache built successfully');
         } catch (\Throwable $e) {
             $output->writeln("   <error>✗ Cache build failed: {$e->getMessage()}</error>");
             return self::FAILURE;
         }
 
-        // Step 6: Verify cache
-        $output->writeln('6. <info>Verifying cache...</info>');
-        $cacheVerification = $this->verifyCacheIntegrity();
-
-        if (!$cacheVerification['valid']) {
-            $output->writeln("<error>   ✗ Cache verification failed: {$cacheVerification['error']}</error>");
+        // Step 5: Verify cache integrity.
+        $output->writeln('5. <info>Verifying cache...</info>');
+        $verification = $this->verifyCacheIntegrity();
+        if (!$verification['valid']) {
+            $output->writeln("<error>   ✗ Cache verification failed: {$verification['error']}</error>");
             return self::FAILURE;
         }
         $output->writeln('   ✓ Cache verification passed');
 
-        // Performance metrics
-        $endTime = microtime(true);
-        $memoryEnd = memory_get_usage(true);
-        $buildTime = round(($endTime - $startTime) * 1000, 2);
-        $memoryUsed = round(($memoryEnd - $memoryStart) / 1024 / 1024, 2);
-        $cacheSize = file_exists($cacheFile) ? round(filesize($cacheFile) / 1024, 2) : 0;
+        // Performance metrics.
+        $buildTime = round((microtime(true) - $startTime) * 1000, 2);
+        $memoryUsed = round((memory_get_usage(true) - $memoryStart) / 1024 / 1024, 2);
+        $cacheSize = file_exists($cacheFile) ? round((int) filesize($cacheFile) / 1024, 2) : 0;
 
-        // Summary
         $output->writeln('');
         $output->writeln('<info>Cache Build Summary:</info>');
-        $output->writeln("Providers cached:  {$providerCount}");
-        $output->writeln("Cache file size:   {$cacheSize} KB");
-        $output->writeln("Build time:        {$buildTime} ms");
-        $output->writeln("Memory used:       {$memoryUsed} MB");
+        $output->writeln("Providers resolved: {$providerCount}");
+        $output->writeln("Cache file size:    {$cacheSize} KB");
+        $output->writeln("Build time:         {$buildTime} ms");
+        $output->writeln("Memory used:        {$memoryUsed} MB");
         $output->writeln('');
         $output->writeln('<info>Extensions cache ready for production deployment!</info>');
 
         return self::SUCCESS;
-    }
-
-    /**
-     * @return array<string>
-     */
-    private function validateConfiguration(): array
-    {
-        $errors = [];
-
-        // Check required config values
-        $enabled = config($this->getContext(), 'extensions.enabled');
-        if ($enabled === null) {
-            $errors[] = 'extensions.enabled config is not set';
-        }
-
-        // Validate allow-list mode configuration
-        $only = config($this->getContext(), 'extensions.only');
-        if ($only !== null && !is_array($only) && !is_string($only)) {
-            $errors[] = 'extensions.only must be array or string';
-        }
-
-        // Validate blacklist configuration
-        $disabled = config($this->getContext(), 'extensions.disabled');
-        if ($disabled !== null && !is_array($disabled)) {
-            $errors[] = 'extensions.disabled must be array';
-        }
-
-        // Check for conflicting configurations
-        if ($only !== null && $disabled !== null) {
-            $errors[] = 'Cannot use both extensions.only (allow-list) and extensions.disabled (blacklist)';
-        }
-
-        // Validate local path configuration
-        $localPath = config($this->getContext(), 'extensions.local_path');
-        if ($localPath !== null && !is_string($localPath)) {
-            $errors[] = 'extensions.local_path must be string';
-        }
-
-        return $errors;
-    }
-
-    /**
-     * @param array<class-string> $providers
-     * @return array<string>
-     */
-    private function validateProviders(array $providers): array
-    {
-        $errors = [];
-
-        foreach ($providers as $providerClass) {
-            // Check if class exists
-            if (!class_exists($providerClass)) {
-                $errors[] = "Provider class not found: {$providerClass}";
-                continue;
-            }
-
-            // Check if it's a valid ServiceProvider
-            if (!is_subclass_of($providerClass, \Glueful\Extensions\ServiceProvider::class)) {
-                $errors[] = "Not a valid ServiceProvider: {$providerClass}";
-                continue;
-            }
-
-            // Check if it can be instantiated
-            try {
-                $reflection = new \ReflectionClass($providerClass);
-                if (!$reflection->isInstantiable()) {
-                    $errors[] = "Provider is not instantiable: {$providerClass}";
-                }
-            } catch (\ReflectionException $e) {
-                $errors[] = "Reflection error for {$providerClass}: {$e->getMessage()}";
-            }
-        }
-
-        return $errors;
     }
 
     /**
@@ -212,30 +122,22 @@ final class CacheCommand extends BaseCommand
     {
         $cacheFile = base_path($this->getContext(), 'bootstrap/cache/extensions.php');
 
-        // Check if cache file exists
         if (!file_exists($cacheFile)) {
             return ['valid' => false, 'error' => 'Cache file not found'];
         }
-
-        // Check if cache file is readable
         if (!is_readable($cacheFile)) {
             return ['valid' => false, 'error' => 'Cache file is not readable'];
         }
 
-        // Verify cache file structure
         try {
             $cachedProviders = require $cacheFile;
-
             if (!is_array($cachedProviders)) {
                 return ['valid' => false, 'error' => 'Cache file does not return array'];
             }
-
-            // Verify each provider class exists
             foreach ($cachedProviders as $providerClass) {
                 if (!is_string($providerClass)) {
                     return ['valid' => false, 'error' => 'Cache contains non-string provider class'];
                 }
-
                 if (!class_exists($providerClass)) {
                     return ['valid' => false, 'error' => "Cached provider class not found: {$providerClass}"];
                 }

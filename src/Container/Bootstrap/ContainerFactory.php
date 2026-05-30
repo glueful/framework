@@ -11,7 +11,7 @@ use Glueful\Container\Definition\{ValueDefinition, TaggedIteratorDefinition};
 use Glueful\Container\Compile\ContainerCompiler;
 use Glueful\Container\Providers\{TagCollector, BaseServiceProvider};
 use Glueful\Container\Loader\{ServicesLoader, DefaultServicesLoader};
-use Glueful\Extensions\ProviderLocator;
+use Glueful\Extensions\ProviderClassResolver;
 use Psr\Container\ContainerInterface;
 
 final class ContainerFactory
@@ -168,7 +168,11 @@ final class ContainerFactory
     {
         $defs = [];
         $loader = self::dslLoader();
-        foreach (ProviderLocator::all($context) as $providerClass) {
+        // Same resolution path as ExtensionManager — the shared, stateless resolver.
+        // It takes only the context, so it works during container construction
+        // (no need to resolve anything from the not-yet-built container).
+        $providerClasses = (new ProviderClassResolver())->resolve($context)->providers;
+        foreach ($providerClasses as $providerClass) {
             if (!class_exists($providerClass)) {
                 continue;
             }

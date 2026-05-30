@@ -5,21 +5,23 @@ declare(strict_types=1);
 namespace Glueful\Console\Commands\Extensions;
 
 use Glueful\Console\BaseCommand;
+use Glueful\Extensions\EnabledProviders;
 use Glueful\Extensions\ExtensionManager;
-use Glueful\Extensions\ProviderLocator;
 use Glueful\Extensions\PackageManifest;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 
 /**
- * Enhanced Extensions List Command
+ * Extensions List Command
  *
- * List discovered extensions with comprehensive status information:
- * - Status indicators (✓/✗)
- * - Discovery source identification
- * - Dependency information
- * - Performance metrics
+ * Lists every composer-discovered extension candidate cross-referenced with the
+ * `extensions.enabled` allow-list, showing each one's state:
+ *   ✓ enabled              — discovered and in the allow-list (it loads)
+ *   ○ available            — discovered but not enabled (does nothing)
+ *   ⚠ enabled-but-missing  — in the allow-list but not installed/discovered
+ *
+ * This folds in the old `why` command: the state column is the reason.
  */
 #[AsCommand(
     name: 'extensions:list',
@@ -42,258 +44,89 @@ final class ListCommand extends BaseCommand
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $startTime = microtime(true);
-
-        // Get all providers and metadata
-        $loadedProviders = $this->extensions->getProviders();
+        $context = $this->getContext();
+        $candidates = (new PackageManifest($context))->getCandidates();
         $meta = $this->extensions->listMeta();
 
-        // Get all discoverable providers to show disabled ones too
-        $allDiscoverable = ProviderLocator::all($this->getContext());
-        $disabledProviders = $this->getDisabledProviders();
+        $enabled = EnabledProviders::from($context);
+        $enabledSet = array_fill_keys($enabled, true);
 
-        if (count($loadedProviders) === 0 && count($disabledProviders) === 0) {
-            $output->writeln('<comment>No extensions discovered.</comment>');
+        // Providers that exist as candidates (used to detect enabled-but-missing).
+        $candidateProviders = [];
+        foreach ($candidates as $c) {
+            $candidateProviders[$c->provider] = true;
+        }
+
+        if (count($candidates) === 0 && count($enabled) === 0) {
+            $output->writeln('<comment>No extensions discovered and none enabled.</comment>');
             return self::SUCCESS;
         }
 
-        // Enhanced table header
         $output->writeln('<info>Extensions Status Report</info>');
         $output->writeln('========================');
         $output->writeln('');
-
         $output->writeln(sprintf(
-            "%-3s %-25s %-15s %-10s %-20s %s",
+            '%-3s %-22s %-40s %-12s %s',
             'St',
+            'Package',
             'Provider',
-            'Source',
-            'Priority',
-            'Dependencies',
+            'Requires',
             'Version'
         ));
         $output->writeln(str_repeat('-', 100));
 
-        // Show loaded providers
-        foreach ($loadedProviders as $class => $provider) {
-            $m = $meta[$class] ?? [];
-            $source = $this->getDiscoverySource($class);
-            $priority = $this->getProviderPriority($provider);
-            $dependencies = $this->getProviderDependencies($provider);
+        $enabledCount = 0;
+        $availableCount = 0;
 
+        // Discovered candidates (enabled ✓ or available ○).
+        foreach ($candidates as $name => $c) {
+            $isEnabled = isset($enabledSet[$c->provider]);
+            $isEnabled ? $enabledCount++ : $availableCount++;
+            $m = $meta[$c->provider] ?? [];
+
+            $version = $c->version ?? (is_string($m['version'] ?? null) ? $m['version'] : null);
             $output->writeln(sprintf(
-                "%-3s %-25s %-15s %-10s %-20s %s",
-                '✓',
-                $this->truncate($class, 25),
-                $source,
-                $priority,
-                $this->truncate($dependencies, 20),
-                $m['version'] ?? 'n/a'
+                '%-3s %-22s %-40s %-12s %s',
+                $isEnabled ? '✓' : '○',
+                $this->truncate($name, 22),
+                $this->truncate($c->provider, 40),
+                $this->truncate($c->requiresGlueful ?? '*', 12),
+                $version ?? 'n/a'
             ));
         }
 
-        // Show disabled providers
-        foreach ($disabledProviders as $class) {
-            $source = $this->getDiscoverySource($class);
-            $reason = $this->getDisabledReason($class);
-
-            $output->writeln(sprintf(
-                "%-3s %-25s %-15s %-10s %-20s %s",
-                '✗',
-                $this->truncate($class, 25),
-                $source,
-                'disabled',
-                $this->truncate($reason, 20),
-                'n/a'
-            ));
+        // Enabled-but-missing (⚠): in the allow-list but not discovered.
+        $missing = [];
+        foreach ($enabled as $provider) {
+            if (!isset($candidateProviders[$provider])) {
+                $missing[] = $provider;
+                $output->writeln(sprintf(
+                    '%-3s %-22s %-40s %-12s %s',
+                    '⚠',
+                    '(not installed)',
+                    $this->truncate($provider, 40),
+                    '-',
+                    'n/a'
+                ));
+            }
         }
-
-        // Performance metrics and summary
-        $loadTime = round((microtime(true) - $startTime) * 1000, 2);
-        $cacheUsed = $this->extensions->getCacheUsed();
 
         $output->writeln('');
         $output->writeln('<info>Summary:</info>');
-        $output->writeln(sprintf('Active providers:   %d', count($loadedProviders)));
-        $output->writeln(sprintf('Disabled providers: %d', count($disabledProviders)));
-        $output->writeln(sprintf('Cache used:         %s', $cacheUsed ? 'yes' : 'no'));
-        $output->writeln(sprintf('Discovery time:     %s ms', $loadTime));
+        $output->writeln(sprintf('Enabled:             %d', $enabledCount));
+        $output->writeln(sprintf('Available (off):     %d', $availableCount));
+        $output->writeln(sprintf('Enabled-but-missing: %d', count($missing)));
+        $output->writeln(sprintf('Cache used:          %s', $this->extensions->getCacheUsed() ? 'yes' : 'no'));
+
+        if (count($missing) > 0) {
+            $output->writeln('');
+            $output->writeln(
+                '<comment>⚠ Some enabled providers are not installed. Install them (composer require) '
+                . 'or remove them with: php glueful extensions:disable <provider></comment>'
+            );
+        }
 
         return self::SUCCESS;
-    }
-
-    private function getDiscoverySource(string $class): string
-    {
-        // Check enabled config
-        $enabled = (array) config($this->getContext(), 'extensions.enabled', []);
-        if (in_array($class, $enabled, true)) {
-            return 'config';
-        }
-
-        // Check dev_only config
-        $devOnly = (array) config($this->getContext(), 'extensions.dev_only', []);
-        if (in_array($class, $devOnly, true)) {
-            return 'dev_only';
-        }
-
-        // Check Composer packages
-        $scanComposer = config($this->getContext(), 'extensions.scan_composer', true);
-        if ($scanComposer === true) {
-            $manifest = new PackageManifest($this->getContext());
-            $composerProviders = $manifest->getGluefulProviders();
-            if (in_array($class, $composerProviders, true)) {
-                return 'composer';
-            }
-        }
-
-        // Check local scan
-        $appEnv = $_ENV['APP_ENV'] ?? (getenv('APP_ENV') !== false ? getenv('APP_ENV') : 'production');
-        if ($appEnv !== 'production') {
-            $localPath = config($this->getContext(), 'extensions.local_path');
-            if ($localPath !== null) {
-                $localProviders = $this->scanLocalExtensions($localPath);
-                if (in_array($class, $localProviders, true)) {
-                    return 'local';
-                }
-            }
-        }
-
-        return 'unknown';
-    }
-
-    private function getProviderPriority(object $provider): string
-    {
-        if ($provider instanceof \Glueful\Extensions\OrderedProvider) {
-            return (string) $provider->priority();
-        }
-        return '0';
-    }
-
-    private function getProviderDependencies(object $provider): string
-    {
-        if ($provider instanceof \Glueful\Extensions\OrderedProvider) {
-            $dependencies = $provider->bootAfter();
-            if (count($dependencies) === 0) {
-                return 'none';
-            }
-            return count($dependencies) === 1
-                ? basename(str_replace('\\', '/', $dependencies[0]))
-                : count($dependencies) . ' deps';
-        }
-        return 'none';
-    }
-
-    /**
-     * @return array<class-string>
-     */
-    private function getDisabledProviders(): array
-    {
-        $disabled = [];
-        $disabledConfig = (array) config($this->getContext(), 'extensions.disabled', []);
-
-        // Get all possible providers from discovery sources
-        $allDiscovered = [];
-
-        // Check enabled config
-        $allDiscovered = array_merge($allDiscovered, (array) config($this->getContext(), 'extensions.enabled', []));
-
-        // Check dev_only config
-        $appEnv = $_ENV['APP_ENV'] ?? (getenv('APP_ENV') !== false ? getenv('APP_ENV') : 'production');
-        if ($appEnv !== 'production') {
-            $devOnly = (array) config($this->getContext(), 'extensions.dev_only', []);
-            $allDiscovered = array_merge($allDiscovered, $devOnly);
-
-            // Check local scan
-            $localPath = config($this->getContext(), 'extensions.local_path');
-            if ($localPath !== null) {
-                try {
-                    $local = $this->scanLocalExtensions($localPath);
-                    $allDiscovered = array_merge($allDiscovered, $local);
-                } catch (\Throwable) {
-                    // Ignore scan errors in list command
-                }
-            }
-        }
-
-        // Check Composer packages
-        $scanComposerDisabled = config($this->getContext(), 'extensions.scan_composer', true);
-        if ($scanComposerDisabled === true) {
-            try {
-                $manifest = new PackageManifest($this->getContext());
-                $composer = $manifest->getGluefulProviders();
-                $allDiscovered = array_merge($allDiscovered, array_values($composer));
-            } catch (\Throwable) {
-                // Ignore composer scan errors
-            }
-        }
-
-        // Find providers that were discovered but are disabled
-        foreach (array_unique($allDiscovered) as $provider) {
-            if (in_array($provider, $disabledConfig, true)) {
-                $disabled[] = $provider;
-            }
-        }
-
-        return $disabled;
-    }
-
-    private function getDisabledReason(string $class): string
-    {
-        $disabled = (array) config($this->getContext(), 'extensions.disabled', []);
-        if (in_array($class, $disabled, true)) {
-            return 'blacklisted';
-        }
-
-        // Check allow-list mode
-        $only = config($this->getContext(), 'extensions.only');
-        if ($only !== null) {
-            $onlyArray = (array) $only;
-            if (!in_array($class, $onlyArray, true)) {
-                return 'not in allow-list';
-            }
-        }
-
-        return 'unknown';
-    }
-
-    /**
-     * @return list<class-string>
-     */
-    private function scanLocalExtensions(string $path): array
-    {
-        $providers = [];
-        $extensionsPath = base_path($this->getContext(), $path);
-
-        if (!is_dir($extensionsPath)) {
-            return [];
-        }
-
-        $pattern = $extensionsPath . '/*/composer.json';
-        $files = glob($pattern);
-        if ($files === false) {
-            return [];
-        }
-
-        foreach ($files as $file) {
-            if (is_link($file) || !is_readable($file)) {
-                continue;
-            }
-
-            $filesize = @filesize($file);
-            if ($filesize === false || $filesize > 1024 * 100) {
-                continue;
-            }
-
-            try {
-                $json = json_decode(file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
-                if (isset($json['extra']['glueful']['provider'])) {
-                    $providers[] = $json['extra']['glueful']['provider'];
-                }
-            } catch (\JsonException) {
-                continue;
-            }
-        }
-
-        return $providers;
     }
 
     private function truncate(string $text, int $length): string

@@ -5,8 +5,17 @@ declare(strict_types=1);
 namespace Glueful\Console\Commands\Extensions;
 
 use Glueful\Console\BaseCommand;
+use Glueful\Console\Commands\Extensions\Concerns\ResolvesExtensionNeedle;
+use Glueful\Extensions\EnabledProviders;
 use Glueful\Extensions\ExtensionManager;
+use Glueful\Extensions\ExtensionResolver;
+use Glueful\Extensions\ExtensionStateWriter;
+use Glueful\Extensions\PackageManifest;
+use Glueful\Extensions\ResolverError;
+use Glueful\Support\Version;
 use Symfony\Component\Console\Input\InputArgument;
+use Psr\Container\ContainerInterface;
+use Glueful\Bootstrap\ApplicationContext;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -15,8 +24,9 @@ use Symfony\Component\Console\Attribute\AsCommand;
 /**
  * Extensions Disable Command
  *
- * Disable extension in development environment by editing config/extensions.php.
- * This is a development-only convenience command.
+ * Removes an extension's provider FQCN from config/extensions.php's `enabled`
+ * allow-list, then recompiles the cache. Refuses to disable an extension that
+ * another still-enabled extension depends on. Development only.
  */
 #[AsCommand(
     name: 'extensions:disable',
@@ -24,19 +34,18 @@ use Symfony\Component\Console\Attribute\AsCommand;
 )]
 final class DisableCommand extends BaseCommand
 {
-    private ExtensionManager $extensions;
+    use ResolvesExtensionNeedle;
 
-    public function __construct()
+    public function __construct(?ContainerInterface $container = null, ?ApplicationContext $context = null)
     {
-        parent::__construct();
-        $this->extensions = $this->getService(ExtensionManager::class);
+        parent::__construct($container, $context);
     }
 
     protected function configure(): void
     {
         $this
             ->setDescription('Disable extension (development only)')
-            ->addArgument('extension', InputArgument::REQUIRED, 'Extension provider class or slug')
+            ->addArgument('extension', InputArgument::REQUIRED, 'Extension package name, provider class, or slug')
             ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Show changes without writing file')
             ->addOption('backup', null, InputOption::VALUE_NONE, 'Create a .bak backup before writing');
     }
@@ -51,100 +60,75 @@ final class DisableCommand extends BaseCommand
         }
 
         $needle = (string) $input->getArgument('extension');
-
-        $metaAll = $this->extensions->listMeta();
-        $providers = $this->extensions->getProviders();
-
-        $providerClass = null;
-        foreach (array_keys($providers) as $class) {
-            $meta = $metaAll[$class] ?? [];
-            if ($class === $needle || ($meta['slug'] ?? null) === $needle) {
-                $providerClass = $class;
-                break;
-            }
-        }
-
-        if ($providerClass === null) {
-            $output->writeln("<error>Extension not found: {$needle}</error>");
-            return self::FAILURE;
-        }
-
         $context = $this->getContext();
+
+        $candidates = (new PackageManifest($context))->getCandidates();
+        // A disabled-but-still-installed extension is resolvable by needle; if the
+        // package is gone, fall back to treating the needle as a literal FQCN.
+        $providerClass = $this->resolveNeedle($needle, $candidates) ?? ltrim($needle, '\\');
+
+        $current = EnabledProviders::from($context);
+        if (!in_array($providerClass, $current, true)) {
+            $output->writeln("<info>{$providerClass} is not enabled.</info>");
+            return self::SUCCESS;
+        }
+
+        // Dry-resolve the proposed list with the provider removed; refuse if that
+        // leaves another still-enabled extension with a missing dependency.
+        $proposed = array_values(array_filter($current, static fn($p) => $p !== $providerClass));
+        $result = (new ExtensionResolver())->resolve($candidates, $proposed, Version::VERSION);
+        $blocking = array_filter(
+            $result->errors,
+            static fn($e) => $e->kind === ResolverError::MISSING_DEPENDENCY
+        );
+        if ($blocking !== []) {
+            foreach ($blocking as $e) {
+                $output->writeln("<error>[{$e->kind}] {$e->message}</error>");
+            }
+            $output->writeln(
+                "<error>Not disabling {$providerClass} — another enabled extension depends on it. "
+                . "Disable that first.</error>"
+            );
+            return self::FAILURE;
+        }
+
         $configPath = config_path($context, 'extensions.php');
-
-        if (!is_file($configPath) || !is_readable($configPath)) {
-            $output->writeln("<error>Cannot read config file: {$configPath}</error>");
+        try {
+            (new ExtensionStateWriter())->disable(
+                $configPath,
+                $providerClass,
+                dryRun: (bool) $input->getOption('dry-run'),
+                backup: (bool) $input->getOption('backup'),
+            );
+        } catch (\RuntimeException $e) {
+            $output->writeln("<error>{$e->getMessage()}</error>");
             return self::FAILURE;
         }
-
-        $content = file_get_contents($configPath);
-        if ($content === false) {
-            $output->writeln("<error>Failed to read config file: {$configPath}</error>");
-            return self::FAILURE;
-        }
-
-        $lines = preg_split("/\\R/", $content);
-        if ($lines === false) {
-            $output->writeln("<error>Failed to parse config file: {$configPath}</error>");
-            return self::FAILURE;
-        }
-
-        $changed = false;
-        $alreadyDisabled = false;
-        foreach ($lines as $i => $line) {
-            if (strpos($line, $providerClass . '::class') === false) {
-                continue;
-            }
-
-            $trimmed = ltrim($line);
-            if (str_starts_with($trimmed, '//') || str_starts_with($trimmed, '#')) {
-                $alreadyDisabled = true;
-                break;
-            }
-
-            $indent = substr($line, 0, strlen($line) - strlen($trimmed));
-            $lines[$i] = $indent . '// ' . $trimmed;
-            $changed = true;
-            break;
-        }
-
-        if ($alreadyDisabled) {
-            $output->writeln("<info>{$providerClass} is already disabled (commented out).</info>");
-            return self::SUCCESS;
-        }
-
-        if (!$changed) {
-            $output->writeln("<info>{$providerClass} not found in {$configPath}.</info>");
-            return self::SUCCESS;
-        }
-
-        $updated = implode(PHP_EOL, $lines);
 
         if ($input->getOption('dry-run') === true) {
-            $output->writeln('<comment>Dry run:</comment>');
-            $output->writeln("Would comment out {$providerClass}::class in {$configPath}");
+            $output->writeln("<comment>Dry run: would disable {$providerClass} in {$configPath}</comment>");
             return self::SUCCESS;
         }
 
-        if ($input->getOption('backup') === true) {
-            $backupPath = $configPath . '.bak';
-            if (!copy($configPath, $backupPath)) {
-                $output->writeln("<error>Failed to create backup file: {$backupPath}</error>");
-                return self::FAILURE;
-            }
-        }
-
-        if (file_put_contents($configPath, $updated) === false) {
-            $output->writeln("<error>Failed to write config file: {$configPath}</error>");
-            return self::FAILURE;
-        }
-
-        $output->writeln("<info>Disabled {$providerClass} in {$configPath}</info>");
-        $output->writeln('<comment>Development-only command</comment>');
-        $output->writeln(
-            '<info>Note: In production, manage extensions through configuration files and deployment.</info>'
-        );
-
+        $output->writeln("<info>Disabled {$providerClass}.</info>");
+        $this->recompileCache($output);
         return self::SUCCESS;
+    }
+
+    /**
+     * Recompile the extension cache after a config write. The config is already
+     * written and valid; a failure here only leaves the compiled cache stale,
+     * which is recoverable — surface it as a warning.
+     */
+    private function recompileCache(OutputInterface $output): void
+    {
+        try {
+            $this->getService(ExtensionManager::class)->writeCacheNow();
+        } catch (\Throwable $e) {
+            $output->writeln(
+                "<comment>Config updated, but recompiling the cache failed: {$e->getMessage()}. "
+                . "Re-run 'php glueful extensions:cache' (dev boot resolves live in the meantime).</comment>"
+            );
+        }
     }
 }

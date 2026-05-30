@@ -8,6 +8,46 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ---
 
+## [1.47.0] - 2026-05-30 — Hadar
+
+> **Theme: Extension System Re-Architecture.** Extension loading is rebuilt around a single mental model — **Composer discovers, one `enabled` list activates, a pure resolver orders and validates.** The four overlapping discovery sources, the multi-key config files, and the live-resolve/lazy-cache dev↔prod parity hazard are gone. Breaking change to `config/extensions.php` and `config/serviceproviders.php`; see `docs/EXTENSIONS_UPGRADE.md`.
+
+### Added
+- **Pure `ExtensionResolver`** (`src/Extensions/ExtensionResolver.php`): given Composer candidates + the `enabled` allow-list, it selects, validates (missing provider, missing dependency, framework-version mismatch via `composer/semver`, dependency cycle), and topologically orders providers, returning a `ResolverResult { providers, errors }`. It reads no environment and never throws, so dev and prod resolve identically.
+- **`ExtensionCandidate`** value object and **`PackageManifest::getCandidates()`** capturing each installed `glueful-extension`'s provider FQCN and `extra.glueful.requires` (`glueful` constraint + `extensions` dependency list).
+- **`ProviderClassResolver`** — the single resolution path (`[app providers] ++ [resolved extensions]`) shared by both `ExtensionManager` and `ContainerFactory`, so there is one implementation, not two that drift.
+- **`AppProviderLoader`** — loads the application's own providers from the new single-key `serviceproviders.enabled` (always loaded; not gated by `extensions.enabled`).
+- **`ExtensionStateWriter`** — the one safe writer for the `enabled` string list (idempotent add/remove, `--dry-run`/`--backup`); refuses to edit a non-trivial array (conditionals/function calls/`::class`/non-string entries) after stripping comments.
+- **`EnabledProviders`** — the single place that reads + normalizes a config `enabled` list (filters non-strings, trims a leading backslash), used by the resolver, `AppProviderLoader`, and every extension CLI command so the list is interpreted identically everywhere.
+- **`composer/semver`** added as an explicit framework dependency (used by the resolver for `requires.glueful` matching).
+- **`docs/EXTENSIONS_UPGRADE.md`** — old→new config key mapping, install/enable/cache workflow, path-repository instructions, and the behavioral changes.
+
+### Changed
+- **`config/extensions.php` and `config/serviceproviders.php` are now single-key** (`enabled` = a flat list of plain string FQCNs, no `::class`). The `only` / `dev_only` / `disabled` / `local_path` / `scan_composer` keys are removed.
+- **`extensions:enable` / `extensions:disable` validate before writing** — they dry-resolve the *proposed* list and refuse to write if it would introduce an error (e.g. enabling an extension whose dependency is not enabled, or disabling one another enabled extension depends on), so the config is never left in a broken state. Both edit the `enabled` list via `ExtensionStateWriter` and recompile the cache.
+- **`extensions:cache` is strict** — it refuses to write the manifest if resolution reports any error.
+- **`extensions:list` shows state** (`enabled ✓` / `available ○` / `enabled-but-missing ⚠`) and **folds in the old `why` command** (the state column is the reason). `extensions:info` shows package, provider, requirements, and state; `extensions:diagnose` surfaces resolver errors, the resolved load order, and (in production) whether the compiled cache is present.
+- **Production must run `php glueful extensions:cache`** — boot now fails fast if the compiled manifest is missing in production instead of silently resolving live. Development still resolves live.
+- **`create:extension` scaffolds a real Composer package** under `extensions/<slug>/` (type `glueful-extension`, `extra.glueful.provider`, PSR-4 autoload) and registers a Composer **path repository** in the app's `composer.json`. It prints the `composer require` + `extensions:enable` commands rather than running Composer itself.
+
+### Fixed
+- **Composer discovery reads `installed.json`, not `installed.php`.** Composer's optimized `installed.php` omits the `extra` field, so reading it for extension discovery found zero candidates (every enabled extension showed as "enabled-but-missing"). `PackageManifest` now prefers `installed.json` (which carries `extra.glueful`), falling back to `installed.php` only when the json is absent.
+
+### Removed
+- **`ProviderLocator`** (the 4-source discovery unifier), the local-folder extension scan, and the runtime PSR-4 registration path. **`extensions:why`** (folded into `extensions:list`). Installing an extension no longer auto-loads it — it must be enabled.
+
+### Upgrade Notes
+- **Breaking config change (called out per the pre-public minor policy).** Convert `config/extensions.php` and `config/serviceproviders.php` to the single `enabled` string-FQCN list; map old keys per `docs/EXTENSIONS_UPGRADE.md` (`only`→`enabled`, `disabled`→omit, `dev_only`→`enabled` + `require-dev`, `local_path`→Composer path repo, `scan_composer`→removed). Enable extensions explicitly with `php glueful extensions:enable <name>`, and add `php glueful extensions:cache` to your production deploy step.
+- **New dependency — run `composer update`.** This release adds `composer/semver` to the framework's `require`; consumers must `composer update glueful/framework` so it lands in their `vendor/` (the resolver fatals at boot without it). Entries in `enabled` must be **plain string FQCNs** (no `::class`); a stray `::class` literal shows as `enabled-but-missing` in `extensions:list`.
+- **Version constraint.** `glueful/api-skeleton` is bumped to `^1.47.0`. Because this breaking change ships as a minor, apps pinned to `^1.46.0` will resolve 1.47.0 — review `docs/EXTENSIONS_UPGRADE.md` before updating.
+
+```bash
+composer update glueful/framework
+php glueful extensions:cache   # required in production
+```
+
+---
+
 ## [1.46.0] - 2026-05-28 — Gienah
 
 > **Theme: Fluent Query Caching.** `QueryBuilder::cache(ttl, tags)` is now wired through to `QueryCacheService` — the method was previously a silent no-op. Also marks the start of the framework-wide PHPStan level-8 hardening initiative, beginning with the query-binding path.

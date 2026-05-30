@@ -8,11 +8,10 @@ use Psr\Container\ContainerInterface;
 use Glueful\Bootstrap\ApplicationContext;
 
 /**
- * Discovers, registers, boots extension providers.
- * - Composer discovery (installed.php/json)
- * - Optional local dev scan
+ * Registers and boots provider classes resolved by the shared ProviderClassResolver
+ * (app providers ++ composer-discovered extensions gated by extensions.enabled).
  * - Deterministic ordering (priority + bootAfter())
- * - Production cache
+ * - Strict production cache (fail-if-missing); development resolves live
  */
 final class ExtensionManager
 {
@@ -23,6 +22,9 @@ final class ExtensionManager
     private bool $booted = false;
     private bool $cacheUsed = false;
 
+    /** @var list<ResolverError> */
+    private array $resolverErrors = [];
+
     public function __construct(private ContainerInterface $container)
     {
     }
@@ -30,6 +32,27 @@ final class ExtensionManager
     private function getContext(): ApplicationContext
     {
         return $this->container->get(ApplicationContext::class);
+    }
+
+    /**
+     * Resolve the ordered provider class list via the shared ProviderClassResolver.
+     * Records resolver errors for diagnose/cache callers.
+     *
+     * @return list<class-string>
+     */
+    public function resolveProviderClasses(): array
+    {
+        $result = (new ProviderClassResolver())->resolve($this->getContext());
+        $this->resolverErrors = $result->errors;
+        /** @var list<class-string> $providers */
+        $providers = $result->providers;
+        return $providers;
+    }
+
+    /** @return list<ResolverError> */
+    public function getResolverErrors(): array
+    {
+        return $this->resolverErrors;
     }
 
     /**
@@ -51,7 +74,14 @@ final class ExtensionManager
             return;
         }
 
-        // Full discovery using unified ProviderLocator
+        // Production must boot from a compiled manifest — never resolve live.
+        if ($this->isProduction()) {
+            throw new \RuntimeException(
+                'Extension cache missing in production. Run: php glueful extensions:cache'
+            );
+        }
+
+        // Development: resolve live via the shared resolver.
         $this->loadAllProviders();
 
         // Sort providers by priority and dependencies
@@ -59,11 +89,6 @@ final class ExtensionManager
 
         // Register all providers
         $this->registerProviders();
-
-        // Cache for next time (production only)
-        if ($this->isProduction()) {
-            $this->saveToCache();
-        }
     }
 
     /**
@@ -93,12 +118,12 @@ final class ExtensionManager
     }
 
     /**
-     * Discovery now unified via ProviderLocator to prevent dev/prod mismatches
+     * Discovery unified via the shared ProviderClassResolver to prevent dev/prod
+     * mismatches (one resolution path, also used by ContainerFactory).
      */
     private function loadAllProviders(): void
     {
-        $context = $this->container->get(ApplicationContext::class);
-        foreach (ProviderLocator::all($context) as $providerClass) {
+        foreach ($this->resolveProviderClasses() as $providerClass) {
             $this->addProvider($providerClass);
         }
     }
@@ -143,29 +168,6 @@ final class ExtensionManager
                     ['provider' => $providerClass, 'error' => $e->getMessage()]
                 );
             }
-        }
-    }
-
-    /**
-     * @param array<string, string|array<string>> $psr4
-     */
-    private function registerComposerAutoload(array $psr4, string $basePath): void
-    {
-        // Use Composer's ClassLoader if available
-        static $composerLoader = null;
-
-        if ($composerLoader === null) {
-            $composerLoader = require base_path($this->getContext(), 'vendor/autoload.php');
-        }
-
-        if ($composerLoader instanceof \Composer\Autoload\ClassLoader) {
-            foreach ($psr4 as $namespace => $path) {
-                $fullPath = rtrim($basePath, '/\\') . '/' . ltrim($path, '/\\') . '/';
-                if (is_dir($fullPath) && is_readable($fullPath)) {
-                    $composerLoader->addPsr4($namespace, $fullPath, true); // prepend = true
-                }
-            }
-            $composerLoader->register(true); // prepend so local wins in dev
         }
     }
 
@@ -337,8 +339,7 @@ final class ExtensionManager
     {
         // Rebuild internal providers list deterministically
         $this->providers = [];
-        $context = $this->container->get(ApplicationContext::class);
-        $classes = $providerClasses ?? ProviderLocator::all($context);
+        $classes = $providerClasses ?? $this->resolveProviderClasses();
         foreach ($classes as $cls) {
             $this->addProvider($cls);
         }
