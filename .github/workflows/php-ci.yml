@@ -101,7 +101,10 @@ jobs:
         run: |
           if [ -f .env.example ]; then
             cp .env.example .env.testing
-            echo "DB_CONNECTION=mysql" >> .env.testing
+            # config/database.php selects the engine via DB_DRIVER (NOT DB_CONNECTION,
+            # which the framework does not read — leaving it set would silently fall
+            # back to the sqlite default and never exercise the MySQL service below).
+            echo "DB_DRIVER=mysql" >> .env.testing
             echo "DB_HOST=127.0.0.1" >> .env.testing
             echo "DB_PORT=3306" >> .env.testing
             echo "DB_DATABASE=glueful_test" >> .env.testing
