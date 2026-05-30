@@ -36,23 +36,19 @@ class CheckCommand extends BaseSecurityCommand
                  'Attempt to automatically fix security issues'
              )
              ->addOption(
-                 'verbose',
-                 'v',
-                 InputOption::VALUE_NONE,
-                 'Show detailed information about each check'
-             )
-             ->addOption(
                  'production',
                  'p',
                  InputOption::VALUE_NONE,
                  'Check production-specific security requirements'
              );
+        // Note: detailed output uses Symfony Console's built-in -v/--verbose global
+        // flag (read via $output->isVerbose()); do not redefine a `verbose` option here.
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $fix = (bool) $input->getOption('fix');
-        $verbose = (bool) $input->getOption('verbose');
+        $verbose = $output->isVerbose();
         $production = (bool) $input->getOption('production') || env('APP_ENV') === 'production';
 
         $this->info('🔒 Comprehensive Security Configuration Check');
@@ -135,7 +131,9 @@ class CheckCommand extends BaseSecurityCommand
             $this->success("🎉 Security check passed! ({$passedCount}/{$totalCount} categories passed)");
 
             $this->info("Security Score: {$scoreData['score']}/100 ({$scoreData['status']})");
-            $this->info($scoreData['message']);
+            if (isset($scoreData['message']) && is_string($scoreData['message']) && $scoreData['message'] !== '') {
+                $this->info($scoreData['message']);
+            }
 
             return self::SUCCESS;
         } else {

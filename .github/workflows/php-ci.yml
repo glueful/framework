@@ -12,6 +12,9 @@ on:
         required: false
         default: 'Manual run of combined CI'
 
+# Independent jobs run in parallel; each installs its own deps (no shared cache
+# benefit was being gained from serialising them). Required tools fail hard if
+# missing — a green CI must mean the checks actually ran.
 jobs:
   lint:
     name: Lint & Style
@@ -24,13 +27,10 @@ jobs:
           php-version: '8.3'
           tools: composer:v2
           ini-values: memory_limit=1G, max_execution_time=0
-      - name: Validate composer.json (non-strict then strict)
-        run: |
-          composer validate || true
-          echo '---'
-          composer validate || { echo 'Critical errors in composer.json - please fix them'; exit 1; }
+      - name: Validate composer.json
+        run: composer validate
       - name: Install dependencies
-        run: composer install --prefer-dist --no-progress
+        run: composer install --prefer-dist --no-progress --no-interaction
       - name: PHP syntax check
         run: find . -name "*.php" -not -path "./vendor/*" -print0 | xargs -0 -n1 php -l
       - name: Enforce no globals or Event facade
@@ -53,18 +53,12 @@ jobs:
             exit 1
           fi
           echo "OK: No \$GLOBALS or Event:: facade usage found"
-      - name: Check coding standards (PSR-12)
-        run: |
-          if [ -f vendor/bin/phpcs ]; then
-            vendor/bin/phpcs --standard=PSR12 src
-          else
-            echo 'PHP_CodeSniffer not installed - skipping coding standards check'
-          fi
+      - name: Check coding standards (composer run phpcs)
+        run: composer run phpcs
 
   tests:
     name: PHPUnit (PHP ${{ matrix.php }})
     runs-on: ubuntu-latest
-    needs: lint
     services:
       mysql:
         image: mysql:8.0
@@ -96,7 +90,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-php-
       - name: Install dependencies
-        run: composer install --prefer-dist --no-progress
+        run: composer install --prefer-dist --no-progress --no-interaction
       - name: Setup test environment
         run: |
           if [ -f .env.example ]; then
@@ -111,48 +105,14 @@ jobs:
             echo "DB_USERNAME=root" >> .env.testing
             echo "DB_PASSWORD=password" >> .env.testing
           fi
-      - name: Run PHPUnit (no coverage)
+      - name: Run tests (composer run test)
         env:
           XDEBUG_MODE: off
-        run: |
-          if [ -f vendor/bin/phpunit ]; then
-            mkdir -p build/logs
-            vendor/bin/phpunit --no-coverage --log-junit build/logs/junit.xml
-          else
-            echo 'PHPUnit not installed - skipping tests'
-          fi
-
-  coverage:
-    name: Coverage (PHP 8.3)
-    runs-on: ubuntu-latest
-    needs: tests
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup PHP (with Xdebug)
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.3'
-          coverage: xdebug
-          tools: composer:v2
-      - name: Install dependencies
-        run: composer install --prefer-dist --no-progress
-      - name: Run coverage (best-effort)
-        run: |
-          mkdir -p build/logs
-          if [ -f vendor/bin/phpunit ]; then
-            vendor/bin/phpunit --coverage-text --coverage-clover build/logs/clover.xml || echo 'Coverage failed; tests likely passed'
-          fi
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage
-          path: build/logs/clover.xml
-          if-no-files-found: warn
+        run: composer run test
 
   static:
     name: PHPStan
     runs-on: ubuntu-latest
-    needs: coverage
     steps:
       - uses: actions/checkout@v4
       - name: Setup PHP
@@ -162,32 +122,36 @@ jobs:
           tools: composer:v2
           ini-values: memory_limit=1G
       - name: Install dependencies
-        run: composer install --prefer-dist --no-progress
-      - name: Run PHPStan
-        run: |
-          if [ -f vendor/bin/phpstan ]; then
-            vendor/bin/phpstan analyse src --level=6
-          else
-            echo 'PHPStan not installed - skipping static analysis'
-          fi
+        run: composer install --prefer-dist --no-progress --no-interaction
+      - name: Run static analysis (composer run analyse)
+        run: composer run analyse
 
-  security:
-    name: Security Audit
+  # NOTE: dependency advisories are handled by GitHub Dependabot (out-of-band,
+  # opens fix PRs), not a CI audit step. And `php glueful security:check --production`
+  # is a deployed-app readiness command (it boots Redis/DB/extensions/routes) — it
+  # belongs in the APP's deploy/staging pipeline, not framework PR CI.
+  coverage:
+    name: Coverage (PHP 8.3, non-blocking)
     runs-on: ubuntu-latest
-    needs: static
+    # Informational only — coverage tooling flakiness must not block merges/releases.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - name: Setup PHP
+      - name: Setup PHP (with Xdebug)
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
+          coverage: xdebug
           tools: composer:v2
       - name: Install dependencies
-        run: composer install --prefer-dist --no-progress
-      - name: Glueful security audit (production profile)
+        run: composer install --prefer-dist --no-progress --no-interaction
+      - name: Run coverage
         run: |
-          if [ -f vendor/bin/glueful ]; then
-            php vendor/bin/glueful security:check --production || exit 1
-          else
-            echo 'Glueful CLI not installed - skipping security audit'
-          fi
+          mkdir -p build/logs
+          vendor/bin/phpunit --coverage-clover build/logs/clover.xml
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: build/logs/clover.xml
+          if-no-files-found: warn
