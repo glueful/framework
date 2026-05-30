@@ -55,14 +55,22 @@ abstract class BaseSecurityCommand extends BaseCommand
      */
     protected function processProductionCheck(array $validation, bool $fix, bool $verbose): array
     {
-        $passed = ($validation['production_ready'] ?? false) === true;
-        $message = $passed === true ? 'Production environment validated' : 'Production environment issues found';
+        // Align with SecurityManager::validateProductionEnvironment()'s actual shape
+        // (is_production / warnings), not the never-returned production_ready/issues keys.
+        // Outside production the validator is informational — treat as "not applicable"
+        // (mirrors the Score check) so it doesn't fail dev/CI runs; in production it
+        // passes only when there are no critical warnings.
+        $isProduction = ($validation['is_production'] ?? false) === true;
+        $warnings = is_array($validation['warnings'] ?? null) ? $validation['warnings'] : [];
+        $passed = $isProduction !== true || count($warnings) === 0;
+        $message = $isProduction !== true
+            ? 'Not applicable (development environment)'
+            : ($passed ? 'Production environment validated' : 'Production environment issues found');
 
-        $issues = is_array($validation['issues']) ? $validation['issues'] : [];
-        if ($verbose && count($issues) > 0) {
-            $this->line('  Issues found:');
-            foreach ($issues as $issue) {
-                $this->line("    • {$issue}");
+        if ($verbose && count($warnings) > 0) {
+            $this->line('  Warnings:');
+            foreach ($warnings as $warning) {
+                $this->line("    • {$warning}");
             }
         }
 
