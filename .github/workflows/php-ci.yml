@@ -126,27 +126,10 @@ jobs:
       - name: Run static analysis (composer run analyse)
         run: composer run analyse
 
-  # Dependency advisory check — the CI-appropriate security signal for a package.
-  # Non-blocking for now because there are known advisories to triage; harden later.
-  # NOTE: `php glueful security:check --production` is a deployed-app readiness command
-  # (it boots Redis/DB/extensions/routes), NOT a PR gate — run it in deploy/staging
-  # or a nightly runtime-smoke workflow with that infrastructure prepared.
-  security:
-    name: Dependency Audit
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.3'
-          tools: composer:v2
-      - name: Install dependencies
-        run: composer install --prefer-dist --no-progress --no-interaction
-      - name: Composer audit
-        run: composer audit
-
+  # NOTE: dependency advisories are handled by GitHub Dependabot (out-of-band,
+  # opens fix PRs), not a CI audit step. And `php glueful security:check --production`
+  # is a deployed-app readiness command (it boots Redis/DB/extensions/routes) — it
+  # belongs in the APP's deploy/staging pipeline, not framework PR CI.
   coverage:
     name: Coverage (PHP 8.3, non-blocking)
     runs-on: ubuntu-latest
