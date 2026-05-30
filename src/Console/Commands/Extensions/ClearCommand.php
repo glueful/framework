@@ -126,17 +126,6 @@ final class ClearCommand extends BaseCommand
                     }
                 }
 
-                // Clear local extension scan cache (if any)
-                $localPath = config($this->getContext(), 'extensions.local_path');
-                if ($localPath !== null && is_string($localPath)) {
-                    $cacheFileName = "storage/framework/cache/local_extensions_{$localPath}_scan.php";
-                    $scanCacheFile = base_path($this->getContext(), $cacheFileName);
-                    if (file_exists($scanCacheFile) && @unlink($scanCacheFile)) {
-                        $output->writeln('   ✓ Local extension scan cache cleared');
-                        $clearedItems++;
-                    }
-                }
-
                 // Reset any runtime caches
                 if (function_exists('opcache_reset')) {
                     @opcache_reset();
