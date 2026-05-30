@@ -12,13 +12,6 @@ on:
         required: false
         default: 'Manual run of combined CI'
 
-# Collapse the duplicate push + pull_request runs for the same commit:
-# both share the same head SHA, so the later-started run cancels the earlier,
-# leaving a single completed run. Also cancels superseded runs on rapid re-pushes.
-concurrency:
-  group: ci-${{ github.event.pull_request.head.sha || github.sha }}
-  cancel-in-progress: true
-
 jobs:
   lint:
     name: Lint & Style
