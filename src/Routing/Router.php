@@ -84,6 +84,19 @@ class Router
         return $this->add('HEAD', $path, $handler);
     }
 
+    public function patch(string $path, mixed $handler): Route
+    {
+        return $this->add('PATCH', $path, $handler);
+    }
+
+    // Registers an explicit OPTIONS handler. Note: by default dispatch() answers
+    // OPTIONS automatically for CORS preflight; an explicit route registered here
+    // takes precedence over that automatic handling for the matched path.
+    public function options(string $path, mixed $handler): Route
+    {
+        return $this->add('OPTIONS', $path, $handler);
+    }
+
     // Core route registration
     private function add(string $method, string $path, mixed $handler): Route
     {
@@ -294,17 +307,24 @@ class Router
             ];
         }
 
-        // 2. Try dynamic routes with first-segment optimization
-        // IMPORTANT: Routes are now pre-sorted by precedence within buckets
-        // This ensures /users/me always wins over /users/{id}
+        // 2. No exact static hit — try dynamic routes, bucketed by first segment.
+        // Precedence is NOT a specificity sort; it comes from two things:
+        //   (a) Static routes already won above (step 1), so e.g. a static
+        //       /users/me beats a dynamic /users/{id} regardless of order.
+        //   (b) Routes whose first segment is a literal live in that segment's
+        //       bucket; routes whose first segment is a parameter live in the
+        //       '*' bucket. We try the literal-segment bucket before '*', so
+        //       /users/{id} beats /{resource}/{id} for a request to /users/5.
+        // WITHIN a single bucket there is NO ranking — routes are tried in
+        // registration order, so for two overlapping dynamic patterns with the
+        // same first segment (e.g. /posts/{id}/edit vs /posts/{id}/{action}),
+        // register the more specific one FIRST or it will not be reached.
         $segments = explode('/', trim($path, '/'));
         $firstSegment = $segments[0] ?? '';
 
-        // Check bucketed routes in precedence order (already sorted)
-        // Static segments get priority over wildcard bucket
         $candidates = array_merge(
             $this->routeBuckets[$method][$firstSegment] ?? [],
-            $this->routeBuckets[$method]['*'] ?? [] // Wildcard bucket
+            $this->routeBuckets[$method]['*'] ?? [] // Parameter-first-segment bucket
         );
 
         foreach ($candidates as $route) {
@@ -361,6 +381,16 @@ class Router
         }
 
         return array_unique($allowed);
+    }
+
+    // Whether an explicit OPTIONS route is registered for this request. When one
+    // exists, dispatch() lets it handle the request instead of returning the
+    // automatic CORS preflight response.
+    private function hasExplicitOptionsRoute(Request $request): bool
+    {
+        $match = $this->match($request);
+
+        return $match !== null && ($match['route'] ?? null) !== null;
     }
 
     // Group support with middleware
@@ -563,8 +593,10 @@ class Router
     {
         $originalMethod = $request->getMethod();
 
-        // Handle OPTIONS for CORS (before any processing)
-        if ($originalMethod === 'OPTIONS') {
+        // Handle OPTIONS for CORS (before any processing). An explicitly
+        // registered OPTIONS route takes precedence: if one matches this path,
+        // skip the automatic CORS responder and let the route's handler run.
+        if ($originalMethod === 'OPTIONS' && !$this->hasExplicitOptionsRoute($request)) {
             $path = '/' . ltrim(rawurldecode($request->getPathInfo()), '/');
             $path = rtrim($path, '/');
             $path = $path !== '' ? $path : '/';

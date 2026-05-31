@@ -8,7 +8,7 @@ use PHPUnit\Framework\TestCase;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Routing\Router;
 use Glueful\Routing\AttributeRouteLoader;
-use Glueful\Routing\Attributes\{Controller, Get, Post, Put, Delete, Middleware, Route};
+use Glueful\Routing\Attributes\{Controller, Get, Post, Put, Patch, Delete, Options, Middleware, Route};
 use Psr\Container\ContainerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -119,11 +119,44 @@ class AttributeRouteLoaderTest extends TestCase
         $this->assertNotNull($putMatch);
         $this->assertEquals([TestApiController::class, 'update'], $putMatch['route']->getHandler());
 
+        // Test PATCH
+        $patchRequest = Request::create('/api/test/users/123', 'PATCH');
+        $patchMatch = $this->router->match($patchRequest);
+        $this->assertNotNull($patchMatch);
+        $this->assertEquals([TestApiController::class, 'patchUser'], $patchMatch['route']->getHandler());
+
         // Test DELETE
         $deleteRequest = Request::create('/api/test/users/123', 'DELETE');
         $deleteMatch = $this->router->match($deleteRequest);
         $this->assertNotNull($deleteMatch);
         $this->assertEquals([TestApiController::class, 'destroy'], $deleteMatch['route']->getHandler());
+
+        // Test OPTIONS (explicit route registered via #[Options])
+        $optionsRequest = Request::create('/api/test/users', 'OPTIONS');
+        $optionsMatch = $this->router->match($optionsRequest);
+        $this->assertNotNull($optionsMatch);
+        $this->assertEquals([TestApiController::class, 'preflight'], $optionsMatch['route']->getHandler());
+    }
+
+    /**
+     * The #[Route(methods: [...])] form must accept PATCH/OPTIONS/HEAD, not just
+     * the original GET/POST/PUT/DELETE (which previously threw).
+     */
+    public function testRouteAttributeAcceptsExtendedMethods(): void
+    {
+        $this->loader->processClass(TestVerbController::class);
+
+        $patchMatch = $this->router->match(Request::create('/verbs/item/5', 'PATCH'));
+        $this->assertNotNull($patchMatch);
+        $this->assertEquals([TestVerbController::class, 'patch'], $patchMatch['route']->getHandler());
+
+        $optionsMatch = $this->router->match(Request::create('/verbs/item', 'OPTIONS'));
+        $this->assertNotNull($optionsMatch);
+        $this->assertEquals([TestVerbController::class, 'meta'], $optionsMatch['route']->getHandler());
+
+        $headMatch = $this->router->match(Request::create('/verbs/item', 'HEAD'));
+        $this->assertNotNull($headMatch);
+        $this->assertEquals([TestVerbController::class, 'meta'], $headMatch['route']->getHandler());
     }
 
     /**
@@ -251,11 +284,44 @@ class TestApiController
         return new JsonResponse(['updated' => $id]);
     }
 
+    #[Patch('/users/{id}', name: 'users.patch', where: ['id' => '\d+'])]
+    #[Middleware('auth:admin')]
+    public function patchUser(int $id): JsonResponse
+    {
+        return new JsonResponse(['patched' => $id]);
+    }
+
     #[Delete('/users/{id}', name: 'users.destroy', where: ['id' => '\d+'])]
     #[Middleware('auth:admin')]
     public function destroy(int $id): JsonResponse
     {
         return new JsonResponse(['deleted' => $id]);
+    }
+
+    #[Options('/users')]
+    public function preflight(): JsonResponse
+    {
+        return new JsonResponse(['options' => true]);
+    }
+}
+
+/**
+ * Test controller exercising the #[Route(methods: [...])] array form with the
+ * extended verb set (PATCH/OPTIONS/HEAD).
+ */
+#[Controller(prefix: '/verbs')]
+class TestVerbController
+{
+    #[Route('/item/{id}', methods: ['PATCH'], where: ['id' => '\d+'])]
+    public function patch(int $id): JsonResponse
+    {
+        return new JsonResponse(['patched' => $id]);
+    }
+
+    #[Route('/item', methods: ['OPTIONS', 'HEAD'])]
+    public function meta(): JsonResponse
+    {
+        return new JsonResponse(['ok' => true]);
     }
 }
 

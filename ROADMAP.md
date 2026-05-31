@@ -21,6 +21,12 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.48.0 — Imai (Released 2026-05-31)
+- **Router Verb Completeness**: `PATCH` and `OPTIONS` become first-class routing verbs. New `$router->patch()` / `$router->options()` shortcuts and `#[Patch]` / `#[Options]` attributes; the `#[Route(methods: [...])]` array form now accepts `PATCH`, `OPTIONS` and `HEAD` (it previously threw for anything but GET/POST/PUT/DELETE). Both verbs were previously unreachable through the public routing API.
+- **Explicit `OPTIONS` beats auto-CORS**: `Router::dispatch()` still answers `OPTIONS` automatically (204 + `Allow`) when no `OPTIONS` route is registered, but an explicitly registered `OPTIONS` route now runs its own handler instead of being silently shadowed by the CORS preflight responder.
+- **Route precedence documented and pinned**: The three-tier precedence model (static beats dynamic; literal first segment beats a parameter first segment; within a first-segment group, registration order wins) is now documented in the cookbook and locked down by `RoutePrecedenceTest`. A misleading in-code comment in `Router::match()` claiming a specificity sort that never existed was corrected.
+- Notes: **Minor release, fully backward compatible.** Framework-only — no migrations, no env vars, no breaking changes. The existing api-skeleton `^1.47.0` constraint already permits 1.48.0; the skeleton constraint is bumped to `^1.48.0` for clarity.
+
 ### 1.47.0 — Hadar (Released 2026-05-30)
 - **Extension System Re-Architecture**: Extension loading is rebuilt around a single model — **Composer discovers, one `enabled` list activates, a pure resolver orders and validates.** The four overlapping discovery sources, the multi-key config files, and the dev↔prod parity hazard (live-resolve in dev, lazy-cache in prod) are gone. `config/extensions.php` and `config/serviceproviders.php` are now a single `enabled` list of plain string FQCNs.
 - **Pure `ExtensionResolver` + shared `ProviderClassResolver`**: A pure resolver selects from `enabled`, validates (missing provider/dependency, framework-version mismatch via `composer/semver`, dependency cycle), and topologically orders providers — reading no environment, so dev and prod resolve identically. `ProviderClassResolver` is the one resolution path used by both `ExtensionManager` and `ContainerFactory` (no drift). `PackageManifest::getCandidates()` reads `installed.json` for the full `extra.glueful` metadata.

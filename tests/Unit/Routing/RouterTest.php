@@ -326,15 +326,48 @@ class RouterTest extends TestCase
         $this->router->get('/resource', fn() => 'GET');
         $this->router->post('/resource', fn() => 'POST');
         $this->router->put('/resource', fn() => 'PUT');
+        $this->router->patch('/resource', fn() => 'PATCH');
         $this->router->delete('/resource', fn() => 'DELETE');
 
-        $methods = ['GET', 'POST', 'PUT', 'DELETE'];
+        $methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
 
         foreach ($methods as $method) {
             $request = Request::create('/resource', $method);
             $response = $this->router->dispatch($request);
             $this->assertEquals($method, $response->getContent());
         }
+    }
+
+    /**
+     * An explicitly registered OPTIONS route must be dispatched to its handler
+     * rather than being shadowed by the automatic CORS preflight response.
+     */
+    public function testExplicitOptionsRouteIsDispatched(): void
+    {
+        $this->router->options('/widgets', fn() => 'custom options');
+
+        $request = Request::create('/widgets', 'OPTIONS');
+        $response = $this->router->dispatch($request);
+
+        $this->assertEquals('custom options', $response->getContent());
+    }
+
+    /**
+     * Without an explicit OPTIONS route, OPTIONS still falls back to the
+     * automatic CORS preflight responder (204 + Allow header).
+     */
+    public function testOptionsFallsBackToCorsWhenNoExplicitRoute(): void
+    {
+        $this->router->get('/widgets', fn() => 'list');
+        $this->router->post('/widgets', fn() => 'create');
+
+        $request = Request::create('/widgets', 'OPTIONS');
+        $response = $this->router->dispatch($request);
+
+        $this->assertEquals(204, $response->getStatusCode());
+        $allow = (string) $response->headers->get('Allow');
+        $this->assertStringContainsString('GET', $allow);
+        $this->assertStringContainsString('POST', $allow);
     }
 
     /**
