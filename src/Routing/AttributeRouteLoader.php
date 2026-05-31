@@ -7,7 +7,7 @@ namespace Glueful\Routing;
 use Glueful\Api\RateLimiting\Attributes\RateLimit;
 use Glueful\Api\RateLimiting\Attributes\RateLimitCost;
 use Glueful\Routing\Attributes\RequireScope;
-use Glueful\Routing\Attributes\{Route, Controller, Middleware, Get, Post, Put, Delete, Fields};
+use Glueful\Routing\Attributes\{Route, Controller, Middleware, Get, Post, Put, Patch, Delete, Options, Fields};
 
 class AttributeRouteLoader
 {
@@ -143,7 +143,10 @@ class AttributeRouteLoader
                     'GET' => $this->router->get($fullPath, [$className, $methodName]),
                     'POST' => $this->router->post($fullPath, [$className, $methodName]),
                     'PUT' => $this->router->put($fullPath, [$className, $methodName]),
+                    'PATCH' => $this->router->patch($fullPath, [$className, $methodName]),
                     'DELETE' => $this->router->delete($fullPath, [$className, $methodName]),
+                    'HEAD' => $this->router->head($fullPath, [$className, $methodName]),
+                    'OPTIONS' => $this->router->options($fullPath, [$className, $methodName]),
                     default => throw new \InvalidArgumentException("Unsupported HTTP method: {$httpMethod}")
                 };
 
@@ -198,7 +201,9 @@ class AttributeRouteLoader
             Get::class => 'GET',
             Post::class => 'POST',
             Put::class => 'PUT',
+            Patch::class => 'PATCH',
             Delete::class => 'DELETE',
+            Options::class => 'OPTIONS',
         ];
 
         foreach ($httpMethods as $attributeClass => $httpMethod) {
@@ -210,7 +215,9 @@ class AttributeRouteLoader
                     'GET' => $this->router->get($fullPath, [$className, $methodName]),
                     'POST' => $this->router->post($fullPath, [$className, $methodName]),
                     'PUT' => $this->router->put($fullPath, [$className, $methodName]),
-                    'DELETE' => $this->router->delete($fullPath, [$className, $methodName])
+                    'PATCH' => $this->router->patch($fullPath, [$className, $methodName]),
+                    'DELETE' => $this->router->delete($fullPath, [$className, $methodName]),
+                    'OPTIONS' => $this->router->options($fullPath, [$className, $methodName])
                 };
 
                 if (count($middleware) > 0) {

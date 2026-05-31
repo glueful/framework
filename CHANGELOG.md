@@ -8,6 +8,23 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ---
 
+## [1.48.0] - 2026-05-31 — Imai
+
+> **Theme: Router Verb Completeness.** `PATCH` and `OPTIONS` become first-class routing verbs (they were previously unreachable through the public API), explicit `OPTIONS` routes now win over the automatic CORS preflight responder, and the route-precedence model is documented and pinned with tests. Purely additive — no breaking changes, no new env vars, no migrations.
+
+### Added
+- **`PATCH` and `OPTIONS` are now first-class HTTP verbs in the router.** New `$router->patch()` / `$router->options()` shortcuts and `#[Patch]` / `#[Options]` attributes, and the `#[Route(methods: [...])]` array form now accepts `PATCH`, `OPTIONS` and `HEAD` (previously it threw `InvalidArgumentException` for anything but GET/POST/PUT/DELETE). `PATCH` and `OPTIONS` were previously unreachable through the public routing API.
+- **Explicit `OPTIONS` routes take precedence over automatic CORS preflight.** Dispatch still answers `OPTIONS` automatically (204 + `Allow`) when no `OPTIONS` route is registered for the path, but a route registered via `$router->options(...)` / `#[Options]` now runs its own handler instead of being shadowed.
+
+### Documentation
+- Documented the route-cache **closure limitation** (closure handlers are never cached; the router skips/discards the cache for them and resolves them live) and the expanded HTTP-method surface in `docs/content/2.essentials/1.routing.md`.
+- Documented the **route-precedence model** (static beats dynamic; literal first segment beats a parameter first segment; within a first-segment group, registration order wins — register the more specific overlapping pattern first) in `docs/content/6.cookbook/1.routing.md`.
+
+### Tests
+- Added `tests/Unit/Routing/RoutePrecedenceTest.php` pinning all three precedence tiers, constraint-based fall-through, single-segment parameter matching, trailing-slash normalization, and method isolation (405 vs match). Corrected a misleading in-code comment in `Router::match()` that claimed a specificity sort the router does not perform.
+
+---
+
 ## [1.47.0] - 2026-05-30 — Hadar
 
 > **Theme: Extension System Re-Architecture.** Extension loading is rebuilt around a single mental model — **Composer discovers, one `enabled` list activates, a pure resolver orders and validates.** The four overlapping discovery sources, the multi-key config files, and the live-resolve/lazy-cache dev↔prod parity hazard are gone. Breaking change to `config/extensions.php` and `config/serviceproviders.php`; see `docs/EXTENSIONS_UPGRADE.md`.
