@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Tests\Unit\Database\ORM;
+namespace Glueful\Tests\Unit\Database\ORM;
 
 use Glueful\Database\ORM\Contracts\Scope;
 use Glueful\Database\ORM\Model;
@@ -206,7 +206,7 @@ class ModelTest extends TestCase
  * Basic test model
  */
 // phpcs:ignore PSR1.Classes.ClassDeclaration.MultipleClasses
-class TestModel extends Model
+class ModelTestFixture extends Model
 {
     protected string $table = 'test_models';
     protected string $primaryKey = 'id';
@@ -228,7 +228,7 @@ class FillableModel extends Model
  * Model with hidden attributes
  */
 // phpcs:ignore PSR1.Classes.ClassDeclaration.MultipleClasses
-class HiddenModel extends Model
+class ModelHiddenFixture extends Model
 {
     protected string $table = 'hidden_models';
     protected array $hidden = ['password'];

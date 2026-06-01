@@ -21,6 +21,13 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.49.0 — Jishui (Released 2026-06-01)
+- **HTTP Basic auth in `Http\Client`**: `Client::transformOptions()` now forwards the `auth_basic` option to Symfony HttpClient (previously dropped), so callers can do `['auth_basic' => [$user, $pass], 'form_params' => [...]]` without hand-building an `Authorization` header.
+- **`whatsapp` notification queue type**: added to `SendNotification::SUPPORTED_TYPES` (+ timeout arm) so phone-messaging extensions registering a `whatsapp` channel can be delivered asynchronously.
+- **Intervention Image v4**: upgraded `intervention/image` to `^4.1` and ported `ImageProcessor` to the v4 API (`decode`/`createImage`/`insert`/`flip(Direction)`/named `save` options). The public `ImageProcessor`/`image()` API is unchanged.
+- **Dependency hardening**: patched all known advisories within the existing `^7.4` / `^10.5` constraints (Symfony 7.4.x — incl. HIGH-severity mailer/mime injection CVEs — and PHPUnit 10.5.63); `composer audit` clean. Pinned `symfony/event-dispatcher` + `symfony/string` to `^7.4` to hold the PHP 8.3 floor.
+- Notes: **Minor release. No framework API breaks, no env vars, no migrations.** `composer update` suffices; only apps using `intervention/image` *directly* need to move to its v4 API. api-skeleton bumped to `^1.49.0`.
+
 ### 1.48.0 — Imai (Released 2026-05-31)
 - **Router Verb Completeness**: `PATCH` and `OPTIONS` become first-class routing verbs. New `$router->patch()` / `$router->options()` shortcuts and `#[Patch]` / `#[Options]` attributes; the `#[Route(methods: [...])]` array form now accepts `PATCH`, `OPTIONS` and `HEAD` (it previously threw for anything but GET/POST/PUT/DELETE). Both verbs were previously unreachable through the public routing API.
 - **Explicit `OPTIONS` beats auto-CORS**: `Router::dispatch()` still answers `OPTIONS` automatically (204 + `Allow`) when no `OPTIONS` route is registered, but an explicitly registered `OPTIONS` route now runs its own handler instead of being silently shadowed by the CORS preflight responder.

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Tests\Unit\Api\RateLimiting\Limiters;
+namespace Glueful\Tests\Unit\Api\RateLimiting\Limiters;
 
 use Glueful\Api\RateLimiting\Limiters\TokenBucketLimiter;
 use Glueful\Api\RateLimiting\Storage\MemoryStorage;

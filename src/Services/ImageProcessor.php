@@ -7,6 +7,7 @@ namespace Glueful\Services;
 use Glueful\Bootstrap\ApplicationContext;
 use Intervention\Image\ImageManager;
 use Intervention\Image\Interfaces\ImageInterface;
+use Intervention\Image\Direction;
 use Intervention\Image\Encoders\AutoEncoder;
 use Intervention\Image\Encoders\JpegEncoder;
 use Intervention\Image\Encoders\PngEncoder;
@@ -20,7 +21,7 @@ use Psr\Log\LoggerInterface;
 /**
  * Image Processor
  *
- * Modern image processing implementation using Intervention Image v3.
+ * Modern image processing implementation using Intervention Image v4.
  * Provides fluent API for image transformations, caching, and output.
  */
 class ImageProcessor implements ImageProcessorInterface
@@ -76,7 +77,7 @@ class ImageProcessor implements ImageProcessorInterface
                 $instance->security->validateUrl($source);
             }
 
-            $instance->image = $instance->manager->read($source);
+            $instance->image = $instance->manager->decode($source);
             $instance->validateImage();
 
             $instance->logger->debug('Image loaded successfully', [
@@ -116,7 +117,13 @@ class ImageProcessor implements ImageProcessorInterface
                 ], $options)
             ]);
 
-            $instance->image = $instance->manager->read($url, context: $context);
+            // Intervention v4's decode() has no stream-context parameter, so fetch
+            // the remote image with the configured context first, then decode the bytes.
+            $contents = @file_get_contents($url, false, $context);
+            if ($contents === false) {
+                throw new \RuntimeException("Unable to fetch remote image: {$url}");
+            }
+            $instance->image = $instance->manager->decode($contents);
             $instance->validateImage();
 
             $instance->logger->info('Remote image loaded', [
@@ -154,7 +161,7 @@ class ImageProcessor implements ImageProcessorInterface
         $instance->security->validateFormat($extension, $file->getClientMediaType());
 
         try {
-            $instance->image = $instance->manager->read($file->getStream()->getContents());
+            $instance->image = $instance->manager->decode($file->getStream()->getContents());
             $instance->validateImage();
 
             return $instance;
@@ -178,7 +185,7 @@ class ImageProcessor implements ImageProcessorInterface
         $instance->security->validateDimensions($width, $height);
 
         try {
-            $instance->image = $instance->manager->create($width, $height, $background);
+            $instance->image = $instance->manager->createImage($width, $height)->fill($background);
 
             $instance->logger->debug('Blank canvas created', [
                 'width' => $width,
@@ -301,7 +308,7 @@ class ImageProcessor implements ImageProcessorInterface
     {
         $this->operations[] = ['flipHorizontal', []];
 
-        $this->image = $this->image->flop();
+        $this->image = $this->image->flip(Direction::HORIZONTAL);
 
         return $this;
     }
@@ -310,7 +317,7 @@ class ImageProcessor implements ImageProcessorInterface
     {
         $this->operations[] = ['flipVertical', []];
 
-        $this->image = $this->image->flip();
+        $this->image = $this->image->flip(Direction::VERTICAL);
 
         return $this;
     }
@@ -327,7 +334,7 @@ class ImageProcessor implements ImageProcessorInterface
         $this->operations[] = ['watermark', compact('watermarkPath', 'position', 'opacity')];
 
         try {
-            $watermark = $this->manager->read($watermarkPath);
+            $watermark = $this->manager->decode($watermarkPath);
 
             // Apply opacity
             if ($opacity < 100) {
@@ -338,7 +345,7 @@ class ImageProcessor implements ImageProcessorInterface
             // Position calculation
             $positions = $this->calculateWatermarkPosition($position, $watermark);
 
-            $this->image = $this->image->place($watermark, 'top-left', $positions['x'], $positions['y']);
+            $this->image = $this->image->insert($watermark, $positions['x'], $positions['y'], 'top-left');
 
             return $this;
         } catch (\Exception $e) {
@@ -358,7 +365,7 @@ class ImageProcessor implements ImageProcessorInterface
         try {
             $quality = $this->config['current_quality'] ?? $this->getDefaultQuality();
 
-            $this->image->save($path, $quality);
+            $this->image->save($path, quality: $quality);
 
             $this->logger->info('Image saved successfully', [
                 'path' => $path,

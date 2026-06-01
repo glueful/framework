@@ -255,6 +255,13 @@ class Client
             $symfonyOptions['headers'] = $options['headers'];
         }
 
+        // Transform HTTP Basic authentication ([username, password] or "user:pass").
+        // Symfony HttpClient supports auth_basic natively; without this passthrough
+        // per-request basic auth would be silently dropped.
+        if (isset($options['auth_basic'])) {
+            $symfonyOptions['auth_basic'] = $options['auth_basic'];
+        }
+
         // Transform query parameters
         if (isset($options['query'])) {
             $symfonyOptions['query'] = $options['query'];

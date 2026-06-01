@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Tests\Unit\Api\RateLimiting;
+namespace Glueful\Tests\Unit\Api\RateLimiting;
 
 use Glueful\Api\RateLimiting\TierManager;
 use PHPUnit\Framework\TestCase;

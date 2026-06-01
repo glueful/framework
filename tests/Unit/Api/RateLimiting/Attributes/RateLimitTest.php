@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Tests\Unit\Api\RateLimiting\Attributes;
+namespace Glueful\Tests\Unit\Api\RateLimiting\Attributes;
 
 use Glueful\Api\RateLimiting\Attributes\RateLimit;
 use Glueful\Api\RateLimiting\Attributes\RateLimitCost;

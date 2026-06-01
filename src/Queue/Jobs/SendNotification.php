@@ -41,6 +41,7 @@ class SendNotification extends Job
     private const SUPPORTED_TYPES = [
         'email',
         'sms',
+        'whatsapp',
         'push',
         'webhook',
         'slack',
@@ -202,6 +203,7 @@ class SendNotification extends Job
             'webhook' => 120, // Webhooks might be slower
             'email' => 90,    // Email sending can take time
             'sms' => 45,      // SMS is usually faster
+            'whatsapp' => 45, // WhatsApp (provider API) similar to SMS
             'push' => 30,     // Push notifications are quick
             default => 60     // Default timeout
         };
