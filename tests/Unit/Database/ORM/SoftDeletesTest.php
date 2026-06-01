@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Tests\Unit\Database\ORM;
+namespace Glueful\Tests\Unit\Database\ORM;
 
 use Glueful\Database\ORM\Builder;
 use Glueful\Database\ORM\Concerns\SoftDeletes;
