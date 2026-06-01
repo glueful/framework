@@ -6,6 +6,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+- **`QueryValidator` no longer rejects reserved SQL words used as column names.** In strict mode, `validateColumnName()` previously threw `Column name '<x>' is a reserved SQL keyword` for columns like `from`, `order`, `group`, `key`, or `values` — even though the query builders always emit column identifiers through the driver's `wrapIdentifier()` (`` `from` `` / `"from"`), which is valid SQL. The reserved-word check is removed for *column* names (the SQL-injection character check remains the guard); reserved-word checks for unquoted table/schema/alias names are unchanged. This also resolves a latent inconsistency where `to` was accepted only because `TO` happened to be absent from the keyword list.
+
 ---
 
 ## [1.49.0] - 2026-06-01 — Jishui

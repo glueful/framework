@@ -325,10 +325,11 @@ class QueryValidator implements QueryValidatorInterface
                 continue;
             }
 
-            // Check if it's a reserved keyword
-            if ($this->strictMode && in_array(strtoupper($part), self::RESERVED_KEYWORDS, true)) {
-                throw new \InvalidArgumentException("Column name '$part' is a reserved SQL keyword");
-            }
+            // NOTE: column identifiers are always emitted through the driver's
+            // wrapIdentifier() (e.g. `from` / "from"), so a reserved word used as a
+            // column name is valid SQL and does not need a keyword check here. The
+            // SQL-injection character check above is the real guard. (Reserved-word
+            // checks are still applied to table/schema/alias names below.)
         }
     }
 
