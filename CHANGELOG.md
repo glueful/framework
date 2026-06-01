@@ -8,6 +8,26 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ---
 
+## [1.49.0] - 2026-06-01 — Jishui
+
+> **Theme: HTTP Auth, WhatsApp Plumbing & Dependency Hardening.** `Http\Client` now forwards per-request `auth_basic`; the notification queue learns the `whatsapp` type; image processing moves to Intervention Image v4; and all known dependency advisories are patched. No framework API breaks, no new env vars, no migrations; PHP 8.3 floor preserved.
+
+### Added
+- **`Http\Client` now passes `auth_basic` through to Symfony HttpClient.** Per-request HTTP Basic auth (`$client->post($url, ['auth_basic' => [$user, $pass], 'form_params' => [...]])`) previously had no effect — `Client::transformOptions()` mapped `headers/query/json/form_params/body` but silently dropped `auth_basic`. It is now forwarded natively, so callers no longer need to hand-build an `Authorization: Basic …` header.
+- **`whatsapp` is now a supported `SendNotification` queue type.** Added to `SendNotification::SUPPORTED_TYPES` (with a matching timeout arm) so phone-messaging extensions registering a `whatsapp` notification channel can be delivered asynchronously through the framework's notification job. Additive; existing types are unchanged.
+
+### Changed
+- **Upgraded to Intervention Image v4** (`intervention/image: ^4.1`, was `^3.11`). `ImageProcessor` was ported to the v4 API — `read()`→`decode()`, `create()`→`createImage()->fill()`, `place()`→`insert()`, `flop()`/`flip()`→`flip(Direction::HORIZONTAL|VERTICAL)`, and `save()` now passes `quality` as a named option. Public `ImageProcessor`/`image()` API is unchanged.
+- **Refreshed in-range dependencies** to their latest patch/minor: `league/flysystem` (+ `-local`, dev `-memory`), `james-heinrich/getid3`, `phpdocumentor/reflection-docblock`.
+- **Pinned `symfony/event-dispatcher` and `symfony/string` to `^7.4`** so a transitive `composer update` can't pull the Symfony 8.x (PHP 8.4-only) lines and silently raise the PHP floor.
+
+### Security
+- **Patched all known dependency advisories** (within the existing `^7.4` / `^10.5` constraints): updated the Symfony components to `7.4.x` patch releases — fixing HIGH-severity email header / SMTP-command injection in `symfony/mailer`/`symfony/mime` (CVE-2026-45067/45070), `symfony/http-foundation` (CVE-2026-48736), and `symfony/polyfill-intl-idn` — and `phpunit/phpunit` to `10.5.63` (unsafe deserialization in code coverage, dev-only). `composer audit` is now clean. Symfony stays on the 7.x line (PHP 8.3 floor preserved).
+
+### Upgrade Notes
+- **`composer update` is sufficient** for the framework itself — no API changes, env vars, or migrations.
+- **Intervention Image is now `^4`.** If your application code depends on `intervention/image` directly (not just via the framework's `ImageProcessor`/`image()` helper, which is unchanged), move it to the v4 API — see the [v4 upgrade guide](https://image.intervention.io/v4). Apps that only use Glueful's image facade need no changes.
+
 ## [1.48.0] - 2026-05-31 — Imai
 
 > **Theme: Router Verb Completeness.** `PATCH` and `OPTIONS` become first-class routing verbs (they were previously unreachable through the public API), explicit `OPTIONS` routes now win over the automatic CORS preflight responder, and the route-precedence model is documented and pinned with tests. Purely additive — no breaking changes, no new env vars, no migrations.
