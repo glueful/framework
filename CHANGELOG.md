@@ -8,6 +8,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ---
 
+## [1.49.1] - 2026-06-01 — Jishui
+
+> **Theme: Reserved-word column names.** A focused bug fix: column names that are SQL reserved words (`from`, `order`, `group`, `key`, `values`, …) are now accepted by `QueryValidator` — they were always quoted by the query builders anyway, so the rejection blocked valid SQL. Framework-only; no API breaks, no env vars, no migrations.
+
+### Fixed
+- **`QueryValidator` no longer rejects reserved SQL words used as column names.** In strict mode, `validateColumnName()` previously threw `Column name '<x>' is a reserved SQL keyword` for columns like `from`, `order`, `group`, `key`, or `values` — even though the query builders always emit column identifiers through the driver's `wrapIdentifier()` (`` `from` `` / `"from"`), which is valid SQL. The reserved-word check is removed for *column* names (the SQL-injection character check remains the guard); reserved-word checks for unquoted table/schema/alias names are unchanged. This also resolves a latent inconsistency where `to` was accepted only because `TO` happened to be absent from the keyword list.
+
+---
+
 ## [1.49.0] - 2026-06-01 — Jishui
 
 > **Theme: HTTP Auth, WhatsApp Plumbing & Dependency Hardening.** `Http\Client` now forwards per-request `auth_basic`; the notification queue learns the `whatsapp` type; image processing moves to Intervention Image v4; and all known dependency advisories are patched. No framework API breaks, no new env vars, no migrations; PHP 8.3 floor preserved.

@@ -21,6 +21,10 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.49.1 — Jishui (Released 2026-06-01)
+- **Reserved-word column names**: `QueryValidator` no longer rejects SQL reserved words used as *column* names (`from`, `order`, `group`, `key`, `values`, …). Column identifiers are always emitted through the driver's `wrapIdentifier()`, so a quoted `from`/`"from"` is valid SQL — the strict-mode keyword check was blocking valid columns and was inconsistent (`to` slipped through only because `TO` was missing from the list). Table/schema/alias keyword checks and the SQL-injection character guard are unchanged.
+- Notes: **Patch release. Framework-only — no API breaks, no env vars, no migrations.** The existing api-skeleton `^1.49.0` constraint already permits 1.49.1.
+
 ### 1.49.0 — Jishui (Released 2026-06-01)
 - **HTTP Basic auth in `Http\Client`**: `Client::transformOptions()` now forwards the `auth_basic` option to Symfony HttpClient (previously dropped), so callers can do `['auth_basic' => [$user, $pass], 'form_params' => [...]]` without hand-building an `Authorization` header.
 - **`whatsapp` notification queue type**: added to `SendNotification::SUPPORTED_TYPES` (+ timeout arm) so phone-messaging extensions registering a `whatsapp` channel can be delivered asynchronously.
