@@ -49,6 +49,27 @@ abstract class ServiceProvider
  /* optional */
     }
 
+    /**
+     * Declare permissions contributed by this provider.
+     * Collected by ExtensionManager::aggregatePermissionCatalog() into the PermissionRegistry.
+     *
+     * @return list<\Glueful\Permissions\Catalog\Permission>
+     */
+    public function permissions(): array
+    {
+        return [];
+    }
+
+    /**
+     * Declare roles contributed by this provider.
+     *
+     * @return list<\Glueful\Permissions\Catalog\Role>
+     */
+    public function roles(): array
+    {
+        return [];
+    }
+
     /** Load routes from a file; file will use $router from the container. */
     protected function loadRoutesFrom(string $path): void
     {

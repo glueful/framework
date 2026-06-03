@@ -305,6 +305,13 @@ final class CoreProvider extends BaseServiceProvider
 
         // Permission services
 
+        // Declarative permission catalog (shared singleton; filled by ExtensionManager::aggregatePermissionCatalog()).
+        $defs[\Glueful\Permissions\Catalog\PermissionRegistry::class] = new FactoryDefinition(
+            \Glueful\Permissions\Catalog\PermissionRegistry::class,
+            fn(): \Glueful\Permissions\Catalog\PermissionRegistry
+                => new \Glueful\Permissions\Catalog\PermissionRegistry()
+        );
+
         // Gate service with voters
         $defs[\Glueful\Permissions\Gate::class] = new FactoryDefinition(
             \Glueful\Permissions\Gate::class,
