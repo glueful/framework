@@ -338,6 +338,13 @@ final class CoreProvider extends BaseServiceProvider
                 // 3. Register role voter with configured roles
                 $gate->registerVoter(new \Glueful\Permissions\Voters\RoleVoter($config['roles'] ?? []));
 
+                // 3b. Registry-backed role voter: lets DECLARED roles enforce (fallback path).
+                if ($c->has(\Glueful\Permissions\Catalog\PermissionRegistry::class)) {
+                    $gate->registerVoter(new \Glueful\Permissions\Voters\RegistryRoleVoter(
+                        $c->get(\Glueful\Permissions\Catalog\PermissionRegistry::class)
+                    ));
+                }
+
                 // 4. Register scope voter
                 $gate->registerVoter(new \Glueful\Permissions\Voters\ScopeVoter());
 
@@ -519,7 +526,7 @@ final class CoreProvider extends BaseServiceProvider
         $defs[\Glueful\Permissions\Middleware\GateAttributeMiddleware::class] = new FactoryDefinition(
             \Glueful\Permissions\Middleware\GateAttributeMiddleware::class,
             fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Permissions\Middleware\GateAttributeMiddleware(
-                $c->get(\Glueful\Permissions\Gate::class)
+                $c->get('permission.manager')
             )
         );
 

@@ -104,6 +104,12 @@ class PermissionManager implements PermissionManagerInterface
         return self::$activeProvider;
     }
 
+    /** Reset the active provider. Intended for test isolation between cases. */
+    public function clearProvider(): void
+    {
+        self::$activeProvider = null;
+    }
+
     /**
      * Check if a user has permission
      *
