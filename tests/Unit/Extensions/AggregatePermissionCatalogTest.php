@@ -68,6 +68,29 @@ final class AggregatePermissionCatalogTest extends TestCase
         self::assertSame(['blog.editor' => ['blog.publish']], $registry->rolePermissionMap());
     }
 
+    public function test_double_aggregation_is_idempotent(): void
+    {
+        $registry = new PermissionRegistry();
+        $container = $this->createMock(ContainerInterface::class);
+        $provider = new class ($container) extends ServiceProvider {
+            public function permissions(): array
+            {
+                return [Permission::define('blog.publish')];
+            }
+        };
+
+        $manager = $this->managerWith($registry, ['BlogProvider' => $provider]);
+        $manager->aggregatePermissionCatalog();
+        $countAfterFirst = count($registry->permissions());
+
+        // Re-running (e.g. CLI sync after boot) must not throw or duplicate entries.
+        $manager->aggregatePermissionCatalog();
+
+        self::assertSame($countAfterFirst, count($registry->permissions()));
+        self::assertTrue($registry->has('blog.publish'));
+        self::assertTrue($registry->has(PermissionStandards::PERMISSION_SYSTEM_ACCESS));
+    }
+
     public function test_dangling_grant_is_fatal(): void
     {
         $registry = new PermissionRegistry();

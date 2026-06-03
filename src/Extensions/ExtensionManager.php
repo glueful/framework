@@ -132,6 +132,10 @@ final class ExtensionManager
         /** @var PermissionRegistry $registry */
         $registry = $this->container->get(PermissionRegistry::class);
 
+        // Rebuild from scratch so repeated calls (e.g. boot then permissions:sync) are idempotent
+        // and never double-register against an already-populated registry.
+        $registry->reset();
+
         // 1. Framework core permissions.
         foreach (PermissionStandards::CORE_PERMISSIONS as $slug) {
             $registry->register(Permission::define($slug), 'glueful/framework');

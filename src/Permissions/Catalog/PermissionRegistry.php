@@ -46,6 +46,19 @@ final class PermissionRegistry
         return isset($this->permissions[$slug]);
     }
 
+    /**
+     * Clear all declarations. Makes a rebuild via aggregatePermissionCatalog() idempotent —
+     * re-running (e.g. from the permissions:sync CLI after a boot-time build) reconstructs the
+     * catalog from scratch instead of appending to an already-populated registry.
+     */
+    public function reset(): void
+    {
+        $this->permissions = [];
+        $this->permissionSources = [];
+        $this->roles = [];
+        $this->roleSources = [];
+    }
+
     /** @return Permission[] */
     public function permissions(): array
     {
