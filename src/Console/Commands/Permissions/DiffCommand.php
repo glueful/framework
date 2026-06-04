@@ -55,15 +55,31 @@ final class DiffCommand extends BaseCommand
         );
 
         $output->writeln('<info>Permissions</info>');
-        $this->section($output, 'Enforced but undeclared (likely typo / missing declaration)', $sections['perm_enforced_undeclared']);
+        $this->section(
+            $output,
+            'Enforced but undeclared (likely typo / missing declaration)',
+            $sections['perm_enforced_undeclared']
+        );
         $this->section($output, 'Declared but unenforced (orphan?)', $sections['perm_declared_unenforced']);
-        $this->section($output, 'Stale managed (declared nowhere — prunable with --prune)', $sections['perm_stale_managed']);
-        $this->section($output, 'Unmanaged persisted (hand-created — informational, never pruned)', $sections['perm_unmanaged_persisted']);
+        $this->section(
+            $output,
+            'Stale managed (declared nowhere — prunable with --prune)',
+            $sections['perm_stale_managed']
+        );
+        $this->section(
+            $output,
+            'Unmanaged persisted (hand-created — informational, never pruned)',
+            $sections['perm_unmanaged_persisted']
+        );
 
         $output->writeln('<info>Roles</info>');
         $this->section($output, 'Enforced but undeclared (role)', $sections['role_enforced_undeclared']);
         $this->section($output, 'Declared but unenforced (role)', $sections['role_declared_unenforced']);
-        $this->section($output, 'Stale managed roles (declared nowhere — prunable with --prune)', $sections['role_stale_managed']);
+        $this->section(
+            $output,
+            'Stale managed roles (declared nowhere — prunable with --prune)',
+            $sections['role_stale_managed']
+        );
 
         return self::SUCCESS;
     }
