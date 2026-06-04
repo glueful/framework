@@ -6,6 +6,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Added
+- **Declarative permission catalog (Phase 1).** Service providers (framework core, app, extensions) declare permissions/roles via `Permission`/`Role` builder DTOs and the optional `ServiceProvider::permissions()`/`roles()` hooks. A fail-fast `ExtensionManager::aggregatePermissionCatalog()` pass aggregates them into a shared `PermissionRegistry` (collision + dangling-grant validation), runnable idempotently via `PermissionRegistry::reset()`.
+- `RegistryRoleVoter` so declared roles enforce in the no-provider fallback path; shared `RoleKey` canonicalization used by both enforcement and (future) drift tooling.
+- `PermissionCatalogSyncInterface` + `SyncResult` so a provider can persist the catalog; `permissions:sync` CLI command (self-aggregating, deterministic, idempotent).
+
+### Changed
+- Attribute enforcement (`#[RequiresPermission]`/`#[RequiresRole]`) now routes through `PermissionManager::can()` (single enforcement entry point) instead of `Gate::decide()` directly; `GateAttributeMiddleware` is a thin adapter with a `'system'` resource default. `PermissionManager` gains `clearProvider()`.
+
 ---
 
 ## [1.49.1] - 2026-06-01 — Jishui
