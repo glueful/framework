@@ -9,7 +9,8 @@ final class DuplicatePermissionException extends PermissionCatalogException
     public function __construct(string $slug, string $existingSource, string $newSource)
     {
         parent::__construct(sprintf(
-            'Duplicate permission slug "%s" declared by both "%s" and "%s". Prefix slugs per package to avoid collisions.',
+            'Duplicate permission slug "%s" declared by both "%s" and "%s". '
+            . 'Prefix slugs per package to avoid collisions.',
             $slug,
             $existingSource,
             $newSource

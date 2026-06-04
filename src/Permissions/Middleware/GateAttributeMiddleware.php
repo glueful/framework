@@ -46,7 +46,8 @@ final class GateAttributeMiddleware implements RouteMiddleware
 
         $required = [];
         // Permission attributes carry an optional resource; default to 'system'.
-        foreach ($this->collectAttributePairs($meta, 'Glueful\\Auth\\Attributes\\RequiresPermission') as [$name, $resource]) {
+        $permissionAttr = 'Glueful\\Auth\\Attributes\\RequiresPermission';
+        foreach ($this->collectAttributePairs($meta, $permissionAttr) as [$name, $resource]) {
             $required[] = [$name, $resource ?? 'system'];
         }
         // Role attributes: canonicalize via the SHARED RoleKey contract (dotted values pass

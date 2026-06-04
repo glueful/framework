@@ -47,7 +47,10 @@ final class SyncCommand extends BaseCommand
         }
 
         if ($provider === null) {
-            $output->writeln('<comment>No persistent permission provider installed; declarations remain in-registry only.</comment>');
+            $output->writeln(
+                '<comment>No persistent permission provider installed; '
+                . 'declarations remain in-registry only.</comment>'
+            );
             return self::SUCCESS;
         }
 
@@ -63,7 +66,10 @@ final class SyncCommand extends BaseCommand
             $result->unchanged
         ));
         if (count($result->stale) > 0) {
-            $output->writeln('<comment>Stale (managed, no longer declared): ' . implode(', ', $result->stale) . '</comment>');
+            $output->writeln(
+                '<comment>Stale (managed, no longer declared): '
+                . implode(', ', $result->stale) . '</comment>'
+            );
             $output->writeln('<comment>Run permissions:diff to review; pruning arrives in Phase 2.</comment>');
         }
 
