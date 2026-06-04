@@ -127,15 +127,25 @@ abstract class ServiceProvider
         }
     }
 
-    /** Register migrations directory. */
-    protected function loadMigrationsFrom(string $dir): void
-    {
+    /**
+     * Register a migrations directory.
+     *
+     * @param string      $dir      Migration directory.
+     * @param int         $priority Lower runs first (see MigrationPriority). Default DEFAULT (app tier).
+     * @param string|null $source   Composer package name (e.g. "glueful/users"); defaults to the
+     *                              directory's last segment for back-compat.
+     */
+    protected function loadMigrationsFrom(
+        string $dir,
+        int $priority = \Glueful\Database\Migrations\MigrationPriority::DEFAULT,
+        ?string $source = null
+    ): void {
         if (!is_dir($dir) || !$this->app->has(MigrationManager::class)) {
             return;
         }
         /** @var MigrationManager $mm */
         $mm = $this->app->get(MigrationManager::class);
-        $mm->addMigrationPath($dir);
+        $mm->addMigrationPath($dir, $priority, $source);
     }
 
     /**

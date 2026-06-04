@@ -15,8 +15,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - `PermissionRegistry` introspection (`sourceOf`, `permissionSlugs`, `roleSlugs`, `permissionsByCategory`), `PermissionAttributeScanner`, and two opt-in capability interfaces — `CatalogPruneInterface`, `RoleCatalogSyncInterface` — so prune/role support is additive and never breaks existing providers.
 - **Permission ergonomics.** Service providers can declare Gate voters and resource policies via `ServiceProvider::voters()`/`policies()` (registered onto the shared `Gate`/`PolicyRegistry` at boot). Testing helpers `actingWithPermissions()`/`actingWithRoles()` on `Glueful\Testing\TestCase` plus a reusable `Glueful\Testing\InMemoryPermissionProvider` (user-scoped) make authorization trivially testable.
 
+- **Ordered, package-scoped migrations.** `MigrationPriority` tiers (`FOUNDATION`/`IDENTITY`/`DEFAULT`/`DEPENDENT`) and `ServiceProvider::loadMigrationsFrom($dir, $priority, $source)` let a foundational extension's migrations run before app/dependent ones. Pending migrations sort by `(priority, basename)`, and the `migrations` version table gains a `source` column so applied-state is tracked per package — two packages can ship the same filename without conflating, and rollback resolves/deletes by `(source, migration)`.
+
 ### Changed
 - Attribute enforcement (`#[RequiresPermission]`/`#[RequiresRole]`) now routes through `PermissionManager::can()` (single enforcement entry point) instead of `Gate::decide()` directly; `GateAttributeMiddleware` is a thin adapter with a `'system'` resource default. `PermissionManager` gains `clearProvider()`.
+- **Soft-delete is column-aware on writes.** `QueryBuilder::delete()` now soft-deletes only when soft-delete is enabled *and* the table has a `deleted_at` column (via `SoftDeleteHandler::appliesTo()`), mirroring the existing column-aware read path; tables without `deleted_at` get a real `DELETE` instead of an erroring/no-op `UPDATE`.
 
 ---
 
