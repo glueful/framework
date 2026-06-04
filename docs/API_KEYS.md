@@ -7,13 +7,15 @@ Glueful ships a hardened API key system with per-key scopes, IP allowlists, expi
 ### 1. Run the migration
 
 The `api_keys` table is a **core foundation migration** shipped by the framework itself
-(`framework/migrations/003_CreateApiKeysTable.php`, source `glueful/framework`, priority
+(`framework/migrations/auth/003_CreateApiKeysTable.php`, source `glueful/framework`, priority
 `FOUNDATION`). It is auto-registered, so no copying or renumbering is needed in your app — just
 apply pending migrations:
 
 ```bash
 php glueful migrate:run
 ```
+
+See [Migrations & Core Capability Schema](MIGRATIONS_AND_CAPABILITIES.md) for how core-owned schema (auth, queue, notifications, metrics, …) is organized and gated.
 
 ### 2. Create a key
 
@@ -409,6 +411,6 @@ The `api_keys` table:
 | `src/Routing/Attributes/RequireScope.php` | Route-level scope declaration |
 | `src/Routing/Middleware/RequireScopeMiddleware.php` | Enforces declared scopes |
 | `src/Console/Commands/ApiKey/` | Four CLI commands |
-| `migrations/003_CreateApiKeysTable.php` | Schema (core foundation migration, source `glueful/framework`) |
+| `migrations/auth/003_CreateApiKeysTable.php` | Schema (core foundation migration, source `glueful/framework`) |
 
 For design rationale, see `docs/superpowers/specs/2026-05-21-api-key-hardening-design.md`.
