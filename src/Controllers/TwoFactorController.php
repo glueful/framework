@@ -45,7 +45,7 @@ final class TwoFactorController extends BaseController
             throw new AuthenticationException('Authentication required');
         }
 
-        $challenge = $this->twoFactor->beginEnable($userUuid, (string) $user->email);
+        $challenge = $this->twoFactor->beginEnable($userUuid, (string) $user->email());
 
         return Response::success([
             'challenge_token' => $challenge['token'],

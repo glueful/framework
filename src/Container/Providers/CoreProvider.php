@@ -362,6 +362,22 @@ final class CoreProvider extends BaseServiceProvider
             }
         );
 
+        // Fail-closed default user provider; glueful/users overrides this binding when installed.
+        $defs[\Glueful\Auth\Contracts\UserProviderInterface::class] = new FactoryDefinition(
+            \Glueful\Auth\Contracts\UserProviderInterface::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Auth\NullUserProvider()
+        );
+
+        // IdentityResolver folds every service tagged 'identity.claims_provider' (priority-sorted),
+        // same consumption pattern as 'console.commands'. Status gate + additive claims fold.
+        $defs[\Glueful\Auth\IdentityResolver::class] = new FactoryDefinition(
+            \Glueful\Auth\IdentityResolver::class,
+            function (\Psr\Container\ContainerInterface $c): \Glueful\Auth\IdentityResolver {
+                $providers = $c->has('identity.claims_provider') ? $c->get('identity.claims_provider') : [];
+                return new \Glueful\Auth\IdentityResolver(is_array($providers) ? array_values($providers) : []);
+            }
+        );
+
         // Policy registry service
         $defs[\Glueful\Permissions\PolicyRegistry::class] = new FactoryDefinition(
             \Glueful\Permissions\PolicyRegistry::class,

@@ -11,7 +11,7 @@ use Glueful\Helpers\DatabaseConnectionTrait;
 use Glueful\Controllers\Traits\CachedUserContextTrait;
 use Glueful\Controllers\Traits\AuthorizationTrait;
 use Glueful\Controllers\Traits\ResponseCachingTrait;
-use Glueful\Auth\AuthenticatedUser;
+use Glueful\Auth\UserIdentity;
 use Glueful\Http\RequestUserContext;
 use Glueful\Http\Response;
 use Glueful\Validation\ValidationException;
@@ -59,9 +59,9 @@ abstract class BaseController implements \Glueful\Contracts\ContextAwareInterfac
     protected Serializer $serializer;
 
     /**
-     * @var AuthenticatedUser|null Current authenticated user
+     * @var UserIdentity|null Current authenticated user
      */
-    protected ?AuthenticatedUser $currentUser = null;
+    protected ?UserIdentity $currentUser = null;
 
     /**
      * @var string|null Current authentication token
