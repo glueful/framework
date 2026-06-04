@@ -6,6 +6,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+---
+
+## [1.50.0] - 2026-06-04 — Kochab
+
+> **Theme: Provider-agnostic identity & core-owned schema.** The concrete user store is extracted to the first-party `glueful/users` extension behind `UserProviderInterface`/`UserIdentity`, leaving a lean, swappable core that's safe-by-default. The framework now **owns the schema for its own subsystems** — the auth security spine plus DB-backed platform capabilities (queue, scheduler, notifications, metrics, locks, uploads, archive) — as first-class, config-gated, source-tracked migrations, replacing lazy runtime DDL. Also: a declarative permission catalog with drift/sync tooling, ordered package-scoped migrations, and column-aware soft-delete. **Breaking (pre-release):** apps must enable a user store — see the Removed section and `docs/IDENTITY.md`.
+
 ### Added
 - **Declarative permission catalog.** Service providers (framework core, app, extensions) declare permissions/roles via `Permission`/`Role` builder DTOs and the optional `ServiceProvider::permissions()`/`roles()` hooks. A fail-fast `ExtensionManager::aggregatePermissionCatalog()` pass aggregates them into a shared `PermissionRegistry` (collision + dangling-grant validation), runnable idempotently via `PermissionRegistry::reset()`.
 - `RegistryRoleVoter` so declared roles enforce in the no-provider fallback path; shared `RoleKey` canonicalization used by both enforcement and (future) drift tooling.
