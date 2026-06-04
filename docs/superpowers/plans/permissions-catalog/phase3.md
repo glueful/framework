@@ -702,3 +702,11 @@ Update framework `[Unreleased]`: `voters()`/`policies()` extension hooks, provid
 - Policy/voter registration sugar for extensions (spec §10 Phase 3, §4.6 "register a VoterInterface / map a PolicyInterface") → Tasks 1, 2
 - Roles define grants, not assignments — `actingWithRoles` resolves grants via the registry, consistent with `RegistryRoleVoter` (spec §4.1) → Task 4
 - Single-active-provider model preserved — helpers use `setProvider()`/`clearProvider()` (spec §4.6) → Task 4
+
+---
+
+## Execution notes (as built)
+
+- Built as planned. `registerProviderGateExtensions()` runs in `Framework::initializeExtensions()` right after the catalog build; the Phase 1 bootstrap stub test was updated to add the method.
+- `actingWithRoles()` throws `InvalidArgumentException` on an undeclared role (typo surfaces as an error, not a silent denial); `InMemoryPermissionProvider` is user-scoped and returns the `resource => permissions[]` contract shape from `getUserPermissions()`.
+- **Result:** full framework suite green (1030 tests); PHPStan + phpcs clean on new files. (Phase 3 is framework-only — no Aegis changes.)
