@@ -157,6 +157,33 @@ final class ExtensionManager
     }
 
     /**
+     * Register provider-contributed Gate voters and resource policies onto the shared
+     * Gate and PolicyRegistry singletons. Runs after the permission catalog is built.
+     */
+    public function registerProviderGateExtensions(): void
+    {
+        $gate = $this->container->has(\Glueful\Permissions\Gate::class)
+            ? $this->container->get(\Glueful\Permissions\Gate::class)
+            : null;
+        $policies = $this->container->has(\Glueful\Permissions\PolicyRegistry::class)
+            ? $this->container->get(\Glueful\Permissions\PolicyRegistry::class)
+            : null;
+
+        foreach ($this->providers as $provider) {
+            if ($gate !== null) {
+                foreach ($provider->voters() as $voter) {
+                    $gate->registerVoter($voter);
+                }
+            }
+            if ($policies !== null) {
+                foreach ($provider->policies() as $resource => $policyClass) {
+                    $policies->register($resource, $policyClass);
+                }
+            }
+        }
+    }
+
+    /**
      * Resolve a provider class to its composer package name (stable identifier for managed_by).
      * Falls back to "app" for app/core providers not present in the composer candidate list.
      */

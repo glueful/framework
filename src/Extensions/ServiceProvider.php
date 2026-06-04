@@ -70,6 +70,27 @@ abstract class ServiceProvider
         return [];
     }
 
+    /**
+     * Declare Gate voters contributed by this provider. Registered onto the shared Gate.
+     *
+     * @return list<\Glueful\Permissions\VoterInterface>
+     */
+    public function voters(): array
+    {
+        return [];
+    }
+
+    /**
+     * Declare resource policies contributed by this provider.
+     * Map of resource slug or FQCN => PolicyInterface class-string.
+     *
+     * @return array<string, class-string<\Glueful\Permissions\PolicyInterface>>
+     */
+    public function policies(): array
+    {
+        return [];
+    }
+
     /** Load routes from a file; file will use $router from the container. */
     protected function loadRoutesFrom(string $path): void
     {

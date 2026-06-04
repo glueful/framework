@@ -528,6 +528,9 @@ class Framework
         // are configuration bugs that should stop the app, not be logged and ignored.
         $extensions->aggregatePermissionCatalog();
 
+        // Register provider-contributed Gate voters / resource policies onto the shared services.
+        $extensions->registerProviderGateExtensions();
+
         try {
             $extensions->boot();
         } catch (\Throwable $e) {
