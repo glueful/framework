@@ -312,6 +312,13 @@ final class CoreProvider extends BaseServiceProvider
                 => new \Glueful\Permissions\Catalog\PermissionRegistry()
         );
 
+        // Route attribute scanner for permissions:diff (enforced-permission discovery).
+        $defs[\Glueful\Permissions\Catalog\PermissionAttributeScanner::class] = new FactoryDefinition(
+            \Glueful\Permissions\Catalog\PermissionAttributeScanner::class,
+            fn(\Psr\Container\ContainerInterface $c): \Glueful\Permissions\Catalog\PermissionAttributeScanner
+                => new \Glueful\Permissions\Catalog\PermissionAttributeScanner($c->get(\Glueful\Routing\Router::class))
+        );
+
         // Gate service with voters
         $defs[\Glueful\Permissions\Gate::class] = new FactoryDefinition(
             \Glueful\Permissions\Gate::class,
