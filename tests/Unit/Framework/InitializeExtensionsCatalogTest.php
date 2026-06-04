@@ -51,6 +51,9 @@ final class InitializeExtensionsCatalogTest extends TestCase
             {
                 throw new DuplicatePermissionException('blog.x', 'vendor/a', 'vendor/b');
             }
+            public function registerProviderGateExtensions(): void
+            {
+            }
             public function boot(): void
             {
             }
@@ -71,6 +74,9 @@ final class InitializeExtensionsCatalogTest extends TestCase
             public function aggregatePermissionCatalog(): void
             {
                 $this->catalogRan = true;
+            }
+            public function registerProviderGateExtensions(): void
+            {
             }
             public function boot(): void
             {
