@@ -20,9 +20,57 @@ abstract class TestCase extends PHPUnitTestCase
 
     protected function tearDown(): void
     {
+        // Reset the static permission provider so acting* helpers don't leak across tests.
+        if ($this->app !== null && $this->getContainer()->has('permission.manager')) {
+            $this->get('permission.manager')->clearProvider();
+        }
         $this->resetFrameworkState();
         $this->app = null;
         parent::tearDown();
+    }
+
+    /**
+     * Authorize the given permission slugs for the rest of the test by installing an in-memory
+     * permission provider in 'replace' mode. ONLY $userUuid is granted them. Returns the uuid.
+     *
+     * @param string[] $permissions
+     */
+    protected function actingWithPermissions(array $permissions, string $userUuid = 'test-user'): string
+    {
+        $manager = $this->get('permission.manager');
+        $manager->setPermissionsConfig(['provider_mode' => 'replace', 'strategy' => 'affirmative']);
+        $manager->setProvider(new \Glueful\Testing\InMemoryPermissionProvider([$userUuid => $permissions]), []);
+        return $userUuid;
+    }
+
+    /**
+     * Authorize via declared roles: resolves each role's granted permissions from the
+     * PermissionRegistry, then grants them to the acting user. Returns the uuid.
+     *
+     * @param string[] $roleSlugs
+     * @throws \InvalidArgumentException if a role is not declared in the catalog (so a typo'd
+     *         role surfaces as an error, not a silent denial).
+     */
+    protected function actingWithRoles(array $roleSlugs, string $userUuid = 'test-user'): string
+    {
+        /** @var \Glueful\Permissions\Catalog\PermissionRegistry $registry */
+        $registry = $this->get(\Glueful\Permissions\Catalog\PermissionRegistry::class);
+        $map = $registry->rolePermissionMap();
+
+        $permissions = [];
+        foreach ($roleSlugs as $role) {
+            if (!array_key_exists($role, $map)) {
+                throw new \InvalidArgumentException(sprintf(
+                    'actingWithRoles(): role "%s" is not declared in the permission catalog.',
+                    $role
+                ));
+            }
+            foreach ($map[$role] as $perm) {
+                $permissions[] = $perm;
+            }
+        }
+
+        return $this->actingWithPermissions(array_values(array_unique($permissions)), $userUuid);
     }
 
     /**
