@@ -118,14 +118,14 @@ class RevokeTokensCommand extends BaseSecurityCommand
                 ->where('status', 'active');
 
             if ($user !== null) {
-                // Find user UUID first
-                $userRepo = new \Glueful\Repository\UserRepository();
-                $userData = $userRepo->findByEmail($user) ?? $userRepo->findByUsername($user);
-                if ($userData === null) {
+                // Resolve the principal uuid via the identity provider (identifier-agnostic).
+                $identity = app($this->getContext(), \Glueful\Auth\Contracts\UserProviderInterface::class)
+                    ->findByLogin($user);
+                if ($identity === null) {
                     $this->error("User not found: {$user}");
                     return self::FAILURE;
                 }
-                $sessionsQuery->where('user_uuid', $userData['uuid']);
+                $sessionsQuery->where('user_uuid', '=', $identity->uuid());
             }
 
             if ($olderThan !== null) {

@@ -92,6 +92,10 @@ class AuthenticationService
         }
         $this->userRepository = $userRepository ?? new UserRepository();
         $this->passwordHasher = $passwordHasher ?? new PasswordHasher();
+        // Transitional: credential verification routes through the contract. Defaults to a
+        // UserProvider over the existing repo so direct construction still works. Set before the
+        // RefreshService fallback below, which now consumes the provider.
+        $this->userProvider = $userProvider ?? new UserProvider($this->userRepository, $this->passwordHasher);
 
         if ($authManager !== null) {
             $this->authManager = $authManager;
@@ -127,14 +131,10 @@ class AuthenticationService
                 new ProviderTokenIssuer($this->tokenManager),
                 new SessionStateCache($this->sessionStore),
                 $this->sessionStore,
-                $this->userRepository,
+                $this->userProvider,
                 $this->context
             );
         }
-
-        // Transitional: credential verification routes through the contract. Defaults to a
-        // UserProvider over the existing repo so direct construction still works.
-        $this->userProvider = $userProvider ?? new UserProvider($this->userRepository, $this->passwordHasher);
     }
 
     protected function getContext(): ?ApplicationContext

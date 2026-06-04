@@ -754,11 +754,12 @@ class NotificationService implements ConfigurableInterface
         // Determine which repository to use based on entity type
         switch (strtolower($type)) {
             case 'user':
-                // For users, use the UserRepository
-                $userRepository = new \Glueful\Repository\UserRepository();
-                $userData = $userRepository->findByUuid($id);
-
-                if ($userData === null) {
+                // Resolve the principal via the identity provider (no concrete UserRepository in
+                // core). Only existence matters here; the notifiable wraps the uuid.
+                $provider = $this->context !== null
+                    ? container($this->context)->get(\Glueful\Auth\Contracts\UserProviderInterface::class)
+                    : new \Glueful\Auth\NullUserProvider();
+                if ($provider->findByUuid($id) === null) {
                     return null;
                 }
 

@@ -8,7 +8,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Glueful\Auth\ApiKey\ApiKeyService;
 use Glueful\Auth\ApiKey\Exceptions\ApiKeyExpiredException;
 use Glueful\Auth\ApiKey\Exceptions\InvalidApiKeyException;
-use Glueful\Repository\UserRepository;
+use Glueful\Auth\Contracts\UserProviderInterface;
 use Glueful\Auth\Interfaces\AuthenticationProviderInterface;
 use Glueful\Bootstrap\ApplicationContext;
 
@@ -29,8 +29,8 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
     /** @var string|null Last authentication error message */
     private ?string $lastError = null;
 
-    /** @var UserRepository|null User repository for looking up users by id */
-    private ?UserRepository $userRepository = null;
+    /** @var UserProviderInterface|null Provider for looking up the key's user by uuid */
+    private ?UserProviderInterface $userProvider = null;
     private ?ApplicationContext $context = null;
     private ?AuthenticationManager $authManager = null;
 
@@ -44,12 +44,14 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
         $this->authManager = $authManager;
     }
 
-    private function getUserRepository(): UserRepository
+    private function getUserProvider(): UserProviderInterface
     {
-        if ($this->userRepository === null) {
-            $this->userRepository = new UserRepository(null, null, $this->context);
+        if ($this->userProvider === null) {
+            $this->userProvider = ($this->context !== null && $this->context->hasContainer())
+                ? $this->context->getContainer()->get(UserProviderInterface::class)
+                : new NullUserProvider();
         }
-        return $this->userRepository;
+        return $this->userProvider;
     }
 
     /**
@@ -77,11 +79,14 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
                 $request->getClientIp() ?? ''
             );
 
-            $userData = $this->getUserRepository()->find($key->user_id);
-            if ($userData === null) {
+            $identity = $this->getUserProvider()->findByUuid($key->user_id);
+            if ($identity === null) {
                 $this->lastError = 'API key belongs to no known user';
                 return null;
             }
+            // Identity-only shape (clean break): user_data is the UserIdentity array, not a
+            // full user-table row.
+            $userData = $identity->toArray();
 
             $request->attributes->set('authenticated', true);
             $request->attributes->set('user_id', $key->user_id);

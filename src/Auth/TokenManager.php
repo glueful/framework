@@ -390,23 +390,9 @@ class TokenManager
         $normalizedUser['remember_me'] = $normalizedUser['remember_me'] ?? false;
         $normalizedUser['provider'] = $provider ?? 'jwt';
 
-        // Ensure profile data exists
-        if (
-            !isset($normalizedUser['profile'])
-            || (is_array($normalizedUser['profile']) && $normalizedUser['profile'] === [])
-        ) {
-            // Try to fetch profile data from database
-            $userRepository = new \Glueful\Repository\UserRepository();
-            $profileData = $userRepository->getProfile($normalizedUser['uuid']);
-
-            // Create profile structure with null-safe access
-            $normalizedUser['profile'] = [
-                'first_name' => $profileData['first_name'] ?? null,
-                'last_name' => $profileData['last_name'] ?? null,
-                'photo_uuid' => $profileData['photo_uuid'] ?? null,
-                'photo_url' => $profileData['photo_url'] ?? null
-            ];
-        }
+        // Profile enrichment removed (clean break): core no longer embeds rich profile in the
+        // token/session. Profile is a glueful/users concern, fetched on demand via the account
+        // API. Tokens carry identity + claims only.
 
         // Don't include roles in the login response - fetch via separate endpoint
         // This follows OAuth/OIDC best practices for minimal token responses
