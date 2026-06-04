@@ -46,6 +46,35 @@ final class PermissionRegistry
         return isset($this->permissions[$slug]);
     }
 
+    /** Declaring package for a permission slug, or null if not declared. */
+    public function sourceOf(string $slug): ?string
+    {
+        return $this->permissionSources[$slug] ?? null;
+    }
+
+    /** @return string[] */
+    public function permissionSlugs(): array
+    {
+        return array_keys($this->permissions);
+    }
+
+    /** @return string[] */
+    public function roleSlugs(): array
+    {
+        return array_keys($this->roles);
+    }
+
+    /** @return array<string, Permission[]> category => permissions (uncategorized under '') */
+    public function permissionsByCategory(): array
+    {
+        $grouped = [];
+        foreach ($this->permissions as $perm) {
+            $category = (string) ($perm->toArray()['category'] ?? '');
+            $grouped[$category][] = $perm;
+        }
+        return $grouped;
+    }
+
     /**
      * Clear all declarations. Makes a rebuild via aggregatePermissionCatalog() idempotent —
      * re-running (e.g. from the permissions:sync CLI after a boot-time build) reconstructs the
