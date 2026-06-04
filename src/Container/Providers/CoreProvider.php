@@ -362,10 +362,17 @@ final class CoreProvider extends BaseServiceProvider
             }
         );
 
-        // Fail-closed default user provider; glueful/users overrides this binding when installed.
+        // TRANSITIONAL (Phase 3): wrap the core UserRepository so the identity seam has a working
+        // provider while the store still lives in core. Phase 4 flips this back to NullUserProvider
+        // and glueful/users registers the real provider.
         $defs[\Glueful\Auth\Contracts\UserProviderInterface::class] = new FactoryDefinition(
             \Glueful\Auth\Contracts\UserProviderInterface::class,
-            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Auth\NullUserProvider()
+            function (\Psr\Container\ContainerInterface $c) {
+                $repo = $c->has(\Glueful\Repository\UserRepository::class)
+                    ? $c->get(\Glueful\Repository\UserRepository::class)
+                    : new \Glueful\Repository\UserRepository();
+                return new \Glueful\Auth\UserProvider($repo);
+            }
         );
 
         // IdentityResolver folds every service tagged 'identity.claims_provider' (priority-sorted),
@@ -442,7 +449,8 @@ final class CoreProvider extends BaseServiceProvider
                 null,
                 $this->context,
                 $c->get(\Glueful\Auth\AuthenticationManager::class),
-                $c->get(\Glueful\Auth\TokenManager::class)
+                $c->get(\Glueful\Auth\TokenManager::class),
+                userProvider: $c->get(\Glueful\Auth\Contracts\UserProviderInterface::class)
             )
         );
 

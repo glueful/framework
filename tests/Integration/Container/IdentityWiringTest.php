@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Tests\Integration\Container;
 
 use Glueful\Auth\Contracts\UserProviderInterface;
-use Glueful\Auth\{IdentityResolver, NullUserProvider};
+use Glueful\Auth\{IdentityResolver, UserProvider};
 use Glueful\Testing\TestCase;
 
 final class IdentityWiringTest extends TestCase
@@ -49,9 +49,11 @@ final class IdentityWiringTest extends TestCase
         }
     }
 
-    public function test_default_user_provider_is_null_provider(): void
+    public function test_default_user_provider_is_user_provider(): void
     {
-        self::assertInstanceOf(NullUserProvider::class, $this->get(UserProviderInterface::class));
+        // Transitional (Phase 3): the core UserRepository-backed UserProvider. Phase 4 flips
+        // this back to NullUserProvider when the store moves to glueful/users.
+        self::assertInstanceOf(UserProvider::class, $this->get(UserProviderInterface::class));
     }
 
     public function test_identity_resolver_is_resolvable(): void
