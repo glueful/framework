@@ -234,3 +234,44 @@ self::assertContains('glueful/aegis', $sources);
 - No cross-package FKs to `users`/principals anywhere: skeleton `blobs.created_by`, and **all** Aegis actor refs (`user_roles.user_uuid`/`granted_by`, `user_permissions.user_uuid`/`granted_by`, `role_permissions.granted_by`) are indexed UUIDs with no FK; intra-package FKs (role/permission/parent) retained.
 - Migration order on the combined stack is `framework (FOUNDATION) → users (IDENTITY) → app (DEFAULT) → aegis (DEPENDENT)`, source-tracked per package.
 - All three suites (framework, users, aegis) green; analysis/style clean; CHANGELOG + docs updated.
+
+---
+
+## Execution notes (as built)
+
+**Aegis (Tasks 3–4) — committed** (`glueful/aegis` `6c598c4`). All 5 cross-package FKs into `users`
+removed (indexed-only principal ids, §2); `MigrationsFkPolicyTest` guards it via PRAGMA.
+`IdentityClaimsProvider` (tag `identity.claims_provider`) + `UserRoleRepository::roleSlugsForUser()`
+(join, no N+1); migrations at `DEPENDENT`/source `glueful/aegis`. Suite green (14). Aegis carries
+~285 **pre-existing, ungated** level-8 PHPStan errors (no aegis CI); the new files are level-8
+clean — the debt is tracked separately, out of Phase-5 scope.
+
+**Skeleton (Tasks 1–2, 5) — done locally, COMMIT HELD.** Per the user, the api-skeleton commit
+waits until its dependents are published, so it can reference real versions instead of local path
+repos. Done in the working tree:
+- `001_CreateInitialSchema` reduced to blobs-only (`created_by` indexed, no FK); `008/009/010`
+  deleted; `config/extensions.php` enables `UsersServiceProvider` (Aegis opt-in).
+- Test harness built (was absent): `phpunit.xml`, `tests/Unit/`, and `WelcomeTest` rewritten to
+  dispatch real routes (`/welcome`, `/v1/status`) via `Application::handle()` — it previously
+  asserted non-existent routes (`/`, `/health`) with HTTP helpers `Glueful\Testing\TestCase`
+  doesn't provide.
+- `AuthEndToEndTest` proves the auth seam with a local `InMemoryUserProvider` (framework's
+  fake-provider pattern) — no DB, no extension-boot dependency, no state pollution. The **real**
+  glueful/users wiring + full schema are proven separately by the extension's own suite and by a
+  live `migrate:run`: 11 migrations apply in order framework(FOUNDATION) → users(IDENTITY) →
+  app(DEFAULT); `migrations.source` records `glueful/framework`/`glueful/users`/`app`;
+  `api_keys.user_uuid` present; `blobs.created_by` has no FK. Skeleton suite green (3 tests).
+- `composer.json` (working tree) uses local path repos (`../framework`, `../extensions/users`,
+  `../extensions/aegis` @dev) for testing — **not to be committed**; the committed template uses
+  published version constraints. `composer.lock` is untracked (template).
+
+**Docs (Task 6) — committed** (framework `0275307`): CHANGELOG `[Unreleased]` extraction summary +
+BREAKING note; `docs/superpowers/specs/2026-06-04-platform-schema-ownership-design.md`.
+
+**Spun out (deferred):** the skeleton's remaining platform migrations (blobs/queue/scheduler/
+notifications/archive/locks) back framework-core subsystems — same ownership smell as auth. Captured
+in the platform-schema-ownership design note (recommended: core-owned, config-gated migrations).
+
+**Resume point:** when the dependent versions are provided — set the skeleton `composer.json` to
+those published versions, drop the path repos, and commit the skeleton (schema + config + composer
++ phpunit.xml + tests).
