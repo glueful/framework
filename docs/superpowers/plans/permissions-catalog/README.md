@@ -7,16 +7,24 @@ implementation, not a dependency.
 
 **Spec (source of truth):** [`../../specs/2026-06-03-extension-permissions-dx-design.md`](../../specs/2026-06-03-extension-permissions-dx-design.md)
 
+## Status
+
+**✅ All phases implemented and committed on `dev`** (both `glueful/framework` and `extensions/aegis`) — 2026-06-04. Not yet pushed.
+
+Verification: framework suite green (1030 tests), Aegis suite green (9 tests), PHPStan + phpcs clean on all new files.
+
 ## Phases
 
 Each phase is an independent, working/testable slice. They depend on Phase 1; Phase 2 and
 Phase 3 are independent of each other.
 
-| Phase | Plan | Scope |
-|-------|------|-------|
-| 1 — Foundation | [`phase1.md`](phase1.md) | `Permission`/`Role` DTOs, `PermissionRegistry`, `ServiceProvider::permissions()/roles()`, fail-fast catalog build pass, `RegistryRoleVoter`, enforcement routed through `PermissionManager::can()` (shared `RoleKey`), `PermissionCatalogSyncInterface`, `permissions:sync`; Aegis `managed_by` + `syncCatalog`/`getManagedCatalog`. |
-| 2 — Visibility | [`phase2.md`](phase2.md) | `PermissionAttributeScanner`, registry introspection, `permissions:list` and `permissions:diff` (permissions **and** roles), `--prune` via opt-in `CatalogPruneInterface`/`RoleCatalogSyncInterface`; Aegis prune + managed-role methods. |
-| 3 — Ergonomics | [`phase3.md`](phase3.md) | `voters()`/`policies()` provider hooks + bootstrap registration onto `Gate`/`PolicyRegistry`, `InMemoryPermissionProvider` test double, `actingWithPermissions()`/`actingWithRoles()` test helpers. |
+| Phase | Plan | Status | Scope |
+|-------|------|--------|-------|
+| 1 — Foundation | [`phase1.md`](phase1.md) | ✅ Done | `Permission`/`Role` DTOs, `PermissionRegistry`, `ServiceProvider::permissions()/roles()`, fail-fast catalog build pass, `RegistryRoleVoter`, enforcement routed through `PermissionManager::can()` (shared `RoleKey`), `PermissionCatalogSyncInterface`, `permissions:sync`; Aegis `managed_by` + `syncCatalog`/`getManagedCatalog`. |
+| 2 — Visibility | [`phase2.md`](phase2.md) | ✅ Done | `PermissionAttributeScanner`, registry introspection, `permissions:list` and `permissions:diff` (permissions **and** roles), `--prune` via opt-in `CatalogPruneInterface`/`RoleCatalogSyncInterface`; Aegis prune + managed-role methods. |
+| 3 — Ergonomics | [`phase3.md`](phase3.md) | ✅ Done | `voters()`/`policies()` provider hooks + bootstrap registration onto `Gate`/`PolicyRegistry`, `InMemoryPermissionProvider` test double, `actingWithPermissions()`/`actingWithRoles()` test helpers. |
+
+> Each plan ends with an **"Execution notes (as built)"** section recording deviations from the original plan (e.g. self-aggregating CLI commands, soft-delete prune, real-boot integration tests in place of a shared `IntegrationTestCase`).
 
 ## Cross-repo scope
 
@@ -25,5 +33,5 @@ Phase 3 are independent of each other.
 
 ## Execution
 
-Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans`
-to work each plan task-by-task. Start with `phase1.md`.
+Implemented via `superpowers:executing-plans`, task-by-task, committed directly on `dev`.
+(`superpowers:subagent-driven-development` is the alternative for fresh work.)
