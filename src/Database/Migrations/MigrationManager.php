@@ -252,9 +252,11 @@ class MigrationManager
             }
         }
 
-        // (priority ASC, basename ASC)
+        // (priority ASC, basename ASC, source ASC) — source breaks ties so multiple sources
+        // shipping the same basename at the same priority order deterministically.
         usort($candidates, function (array $a, array $b): int {
-            return [$a['priority'], basename($a['file'])] <=> [$b['priority'], basename($b['file'])];
+            return [$a['priority'], basename($a['file']), $a['source']]
+                <=> [$b['priority'], basename($b['file']), $b['source']];
         });
 
         return array_map(fn(array $c) => $c['file'], $candidates);

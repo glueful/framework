@@ -5,7 +5,6 @@ namespace Glueful\Services;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use Glueful\Cache\CacheStore;
-use Glueful\Database\Schema\Interfaces\SchemaBuilderInterface;
 use Glueful\Helpers\Utils;
 use Glueful\Helpers\CacheHelper;
 use Exception;
@@ -21,7 +20,6 @@ use Glueful\Http\Exceptions\Domain\DatabaseException;
 class ApiMetricsService
 {
     private Connection $db;
-    private SchemaBuilderInterface $schemaManager;
     /** @var CacheStore<mixed>|null */
     private ?CacheStore $cache;
     private string $metricsTable = 'api_metrics';
@@ -40,20 +38,18 @@ class ApiMetricsService
     public function __construct(
         ?CacheStore $cache = null,
         ?Connection $connection = null,
-        ?SchemaBuilderInterface $schemaManager = null,
         ?ApplicationContext $context = null
     ) {
         try {
             // Assign dependencies with sensible defaults
             $this->cache = $cache ?? CacheHelper::createCacheInstance();
             $connection = $connection ?? Connection::fromContext($context);
-            $this->schemaManager = $schemaManager ?? $connection->getSchemaBuilder();
 
             // Initialize derived dependencies
             $this->db = $connection;
 
-            // Ensure metrics tables exist
-            $this->ensureTablesExist();
+            // Schema is owned by the core 'glueful/framework:metrics' migration (registered when
+            // metrics.database_store is true). No lazy runtime DDL — run `php glueful migrate:run`.
         } catch (\Exception $e) {
             error_log("ApiMetricsService CRITICAL ERROR: Service initialization failed: " . $e->getMessage());
             error_log($e->getTraceAsString());
@@ -587,78 +583,6 @@ class ApiMetricsService
                 ->delete();
         } catch (Exception $e) {
             error_log("Error purging old API metrics: " . $e->getMessage());
-        }
-    }
-
-    /**
-     * Create necessary tables if they don't exist
-     */
-    private function ensureTablesExist(): void
-    {
-        try {
-            // Check and create metrics table
-            if (!$this->schemaManager->hasTable($this->metricsTable)) {
-                $table = $this->schemaManager->table($this->metricsTable);
-                $table->bigInteger('id')->primary()->autoIncrement();
-                $table->string('uuid', 12);
-                $table->string('endpoint', 255);
-                $table->string('method', 10);
-                $table->decimal('response_time', 10, 2);
-                $table->integer('status_code');
-                $table->boolean('is_error')->default(false);
-                $table->dateTime('timestamp');
-                $table->string('ip', 45); // IPv6 compatible
-
-                // Add indexes
-                $table->index('timestamp', 'idx_' . $this->metricsTable . '_timestamp');
-                $table->index(['endpoint', 'method'], 'idx_' . $this->metricsTable . '_endpoint_method');
-
-                $table->create();
-            }
-
-            // Check and create daily metrics table
-            if (!$this->schemaManager->hasTable($this->dailyMetricsTable)) {
-                $table = $this->schemaManager->table($this->dailyMetricsTable);
-                $table->bigInteger('id')->primary()->autoIncrement();
-                $table->string('uuid', 12);
-                $table->date('date');
-                $table->string('endpoint', 255);
-                $table->string('method', 10);
-                $table->string('endpoint_key', 266); // endpoint|method
-                $table->integer('calls')->default(0);
-                $table->decimal('total_response_time', 15, 2)->default(0);
-                $table->integer('error_count')->default(0);
-                $table->dateTime('last_called')->nullable();
-
-                // Add indexes
-                $table->unique(['date', 'endpoint_key'], 'idx_' . $this->dailyMetricsTable . '_date_endpoint_key');
-                $table->index('date', 'idx_' . $this->dailyMetricsTable . '_date');
-
-                $table->create();
-            }
-
-            // Check and create rate limits table
-            if (!$this->schemaManager->hasTable($this->rateLimitsTable)) {
-                $table = $this->schemaManager->table($this->rateLimitsTable);
-                $table->bigInteger('id')->primary()->autoIncrement();
-                $table->string('uuid', 12);
-                $table->string('ip', 45);
-                $table->string('endpoint', 255);
-                $table->integer('remaining');
-                $table->integer('limit');
-                $table->dateTime('reset_time');
-                $table->decimal('usage_percentage', 5, 2);
-
-                // Add unique index
-                $table->unique(['ip', 'endpoint'], 'idx_' . $this->rateLimitsTable . '_ip_endpoint');
-
-                $table->create();
-            }
-
-            // Execute all pending operations
-            $this->schemaManager->execute();
-        } catch (Exception $e) {
-            error_log("Error ensuring API metrics tables exist: " . $e->getMessage());
         }
     }
 

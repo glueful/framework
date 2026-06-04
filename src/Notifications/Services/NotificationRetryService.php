@@ -118,13 +118,10 @@ class NotificationRetryService
         $nextRetryTime = new DateTime();
         $nextRetryTime->modify("+{$delay} seconds");
 
-        // Insert into retry queue table
+        // Insert into retry queue table (schema owned by the core notifications migration).
         try {
             // Initialize QueryBuilder if not already done
             $this->initDatabase();
-
-            // Create retry queue table if it doesn't exist
-            $this->ensureRetryQueueTableExists();
 
             // Check if this notification is already in the retry queue
             $existingEntry = $this->connection->table('notification_retry_queue')
@@ -200,53 +197,6 @@ class NotificationRetryService
             default:
                 // Default to fixed delay
                 return $baseDelay;
-        }
-    }
-
-    /**
-     * Ensure the retry queue table exists
-     *
-     * @return void
-     */
-    public function ensureRetryQueueTableExists(): void
-    {
-        try {
-            $connection = Connection::fromContext($this->context);
-            $schema = $connection->getSchemaBuilder();
-
-            // Check if table exists first
-            if (!$schema->hasTable('notification_retry_queue')) {
-                $table = $schema->table('notification_retry_queue');
-
-                // Define columns
-                $table->integer('id')->primary()->autoIncrement();
-                $table->string('notification_id', 255);
-                $table->string('notifiable_type', 100);
-                $table->string('notifiable_id', 255);
-                $table->string('channel', 50);
-                $table->integer('retry_count')->default(1);
-                $table->timestamp('retry_at');
-                $table->timestamp('created_at')->default('CURRENT_TIMESTAMP');
-                $table->timestamp('updated_at')->nullable();
-
-                // Add indexes
-                $table->unique(['notification_id', 'channel']);
-                $table->index('retry_at');
-                $table->index('notification_id');
-                $table->index(['notifiable_type', 'notifiable_id']);
-
-                // Create the table
-                $table->create();
-
-                // Execute the operation
-                $schema->execute();
-            }
-        } catch (\Throwable $e) {
-            if ($this->logger !== null) {
-                $this->logger->error('Failed to create notification_retry_queue table', [
-                    'error' => $e->getMessage()
-                ]);
-            }
         }
     }
 

@@ -78,9 +78,6 @@ class NotificationRetryTask
     {
         $limit = $params['limit'] ?? 50;
 
-        // Ensure retry queue table exists
-        $this->retryService->ensureRetryQueueTableExists();
-
         // Process due retries
         $results = $this->retryService->processDueRetries($limit, $this->notificationService);
 
