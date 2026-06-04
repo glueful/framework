@@ -7,18 +7,18 @@ namespace Glueful\Tests\Integration\Auth;
 use Glueful\Application;
 use Glueful\Auth\AuthenticationService;
 use Glueful\Auth\IdentityResolver;
-use Glueful\Auth\PasswordHasher;
+use Glueful\Auth\UserIdentity;
 use Glueful\Bootstrap\ApplicationContext;
-use Glueful\Extensions\Users\UserProvider;
-use Glueful\Extensions\Users\Repositories\UserRepository;
 use Glueful\Framework;
 use Glueful\Routing\RouteManifest;
+use Glueful\Tests\Support\Auth\InMemoryUserProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Regression guard: AuthenticationService::verifyCredentials() now routes credential
- * verification through UserProviderInterface, but observable behaviour is unchanged — a valid
- * user authenticates, a wrong password does not.
+ * Regression guard: AuthenticationService::verifyCredentials() routes credential verification
+ * through UserProviderInterface, and observable behaviour is unchanged — a valid user
+ * authenticates, a wrong password does not. Uses an in-memory provider so the framework suite
+ * stays decoupled from any concrete user store (the real provider is covered by glueful/users).
  */
 final class AuthenticationServiceSeamTest extends TestCase
 {
@@ -31,7 +31,6 @@ final class AuthenticationServiceSeamTest extends TestCase
         parent::setUp();
         RouteManifest::reset();
         $this->bootFramework();
-        $this->createSchemaInline();
     }
 
     protected function tearDown(): void
@@ -51,18 +50,16 @@ final class AuthenticationServiceSeamTest extends TestCase
 
     public function test_verify_credentials_still_authenticates_a_valid_user(): void
     {
-        (new UserRepository())->create([
-            'username' => 'amy',
-            'email' => 'amy@x.test',
-            'password' => (new PasswordHasher())->hash('secret-123'),
-            'status' => 'active',
-        ]);
-
-        // Core defaults to NullUserProvider; inject the real (extension) provider to exercise the
-        // seam. (End-to-end with the provider bound via DI is covered by the Phase 5 skeleton smoke.)
+        // Core defaults to NullUserProvider; inject an in-memory provider to exercise the seam.
+        // (End-to-end with a real provider bound via DI is covered by glueful/users' own suite.)
+        $provider = (new InMemoryUserProvider())->add(
+            new UserIdentity('u-amy00000001', email: 'amy@x.test', username: 'amy', status: 'active'),
+            'secret-123',
+            'amy@x.test',
+        );
         $svc = new AuthenticationService(
             context: $this->context,
-            userProvider: new UserProvider(new UserRepository()),
+            userProvider: $provider,
             identityResolver: new IdentityResolver([]),
         );
 
@@ -89,24 +86,5 @@ final class AuthenticationServiceSeamTest extends TestCase
 
         $this->app = Framework::create($this->appPath)->boot(allowReboot: true);
         $this->context = $this->app->getContainer()->get(ApplicationContext::class);
-    }
-
-    private function createSchemaInline(): void
-    {
-        $connection = $this->app->getContainer()->get('database');
-        new UserRepository($connection, null, $this->context); // pre-seed shared connection
-
-        $pdo = $connection->getPDO();
-        $pdo->exec('
-            CREATE TABLE users (
-                uuid VARCHAR(12) PRIMARY KEY,
-                username VARCHAR(255),
-                email VARCHAR(255),
-                password VARCHAR(255),
-                status VARCHAR(32) DEFAULT "active",
-                created_at TIMESTAMP NULL
-            )
-        ');
-        $pdo->exec('CREATE TABLE profiles (user_uuid VARCHAR(12), first_name VARCHAR(255) NULL)');
     }
 }

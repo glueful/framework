@@ -9,9 +9,11 @@ use Glueful\Auth\ApiKey\ApiKeyService;
 use Glueful\Auth\ApiKey\Exceptions\ApiKeyExpiredException;
 use Glueful\Auth\ApiKey\Exceptions\InvalidApiKeyException;
 use Glueful\Auth\ApiKeyAuthenticationProvider;
+use Glueful\Auth\UserIdentity;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Framework;
 use Glueful\Routing\RouteManifest;
+use Glueful\Tests\Support\Auth\InMemoryUserProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -116,10 +118,8 @@ class ApiKeyAuthenticationTest extends TestCase
         ]);
 
         $provider = new ApiKeyAuthenticationProvider($this->context);
-        // Core binds NullUserProvider; inject the real (extension) provider for the user lookup.
-        $provider->setUserProvider(new \Glueful\Extensions\Users\UserProvider(
-            new \Glueful\Extensions\Users\Repositories\UserRepository()
-        ));
+        // Core binds NullUserProvider; inject an in-memory provider for the user lookup.
+        $provider->setUserProvider($this->fakeProvider('u-abc12345abcd'));
         $request = Request::create('/x', 'GET');
         $request->headers->set('X-API-Key', $result['plain']);
 
@@ -137,10 +137,8 @@ class ApiKeyAuthenticationTest extends TestCase
         ApiKeyService::revoke($this->context, $result['key']);
 
         $provider = new ApiKeyAuthenticationProvider($this->context);
-        // Core binds NullUserProvider; inject the real (extension) provider for the user lookup.
-        $provider->setUserProvider(new \Glueful\Extensions\Users\UserProvider(
-            new \Glueful\Extensions\Users\Repositories\UserRepository()
-        ));
+        // Core binds NullUserProvider; inject an in-memory provider for the user lookup.
+        $provider->setUserProvider($this->fakeProvider('u-abc12345abcd'));
         $request = Request::create('/x', 'GET');
         $request->headers->set('X-API-Key', $result['plain']);
 
@@ -192,7 +190,14 @@ class ApiKeyAuthenticationTest extends TestCase
         // the same in-memory SQLite PDO). Without this, BaseRepository
         // resolves a fresh Connection via Connection::fromContext(), which
         // opens a separate :memory: database that doesn't see our tables.
-        new \Glueful\Extensions\Users\Repositories\UserRepository($connection, null, $this->context);
+        // Pre-seed BaseRepository's static shared connection (so ApiKeyService reuses
+        // the SAME in-memory PDO) without depending on any concrete repository/store.
+        new class ($connection, $this->context) extends \Glueful\Repository\BaseRepository {
+            public function getTableName(): string
+            {
+                return 'api_keys';
+            }
+        };
 
         $pdo = $connection->getPDO();
         $pdo->exec('
@@ -222,6 +227,13 @@ class ApiKeyAuthenticationTest extends TestCase
                 email VARCHAR(255)
             )
         ');
+    }
+
+    private function fakeProvider(string $uuid): InMemoryUserProvider
+    {
+        return (new InMemoryUserProvider())->add(
+            new UserIdentity($uuid, email: $uuid . '@example.com', username: 'test_user_' . $uuid, status: 'active')
+        );
     }
 
     private function ensureUserRow(string $uuid): void

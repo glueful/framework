@@ -44,8 +44,8 @@ class AuthController
 {
     private AuthenticationService $authService;
     private ApplicationContext $context;
-    /** Optional: 2FA is provided by glueful/users; null when no user store / 2FA is installed. */
-    private ?\Glueful\Extensions\Users\TwoFactor\TwoFactorService $twoFactor = null;
+    /** Optional: a 2FA impl (e.g. glueful/users); null when no 2FA service is registered. */
+    private ?\Glueful\Auth\Contracts\TwoFactorServiceInterface $twoFactor = null;
     private \Glueful\Auth\LoginResponseShaper $loginResponseShaper;
 
     public function __construct(ApplicationContext $context)
@@ -58,9 +58,10 @@ class AuthController
             $this->authService = new AuthenticationService(context: $this->context);
         }
 
-        // 2FA lives in glueful/users — resolve it optionally (no hard core dependency on the
-        // extension). Login enforces 2FA only when the service is available.
-        $twoFactorClass = \Glueful\Extensions\Users\TwoFactor\TwoFactorService::class;
+        // 2FA is provided by an extension (e.g. glueful/users) behind the core contract — resolve
+        // it optionally (no hard core dependency on any impl). Login enforces 2FA only when a
+        // service is registered against the interface.
+        $twoFactorClass = \Glueful\Auth\Contracts\TwoFactorServiceInterface::class;
         $c = container($this->context);
         $this->twoFactor = $c->has($twoFactorClass) ? $c->get($twoFactorClass) : null;
         $this->loginResponseShaper = container($this->context)->get(\Glueful\Auth\LoginResponseShaper::class);
