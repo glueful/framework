@@ -2679,3 +2679,13 @@ Update `[Unreleased]` in the framework CHANGELOG covering: declarative permissio
 - Regression tests (spec §9) → Tasks 8, 9, 12, 17
 
 **Deferred to later plans:** `permissions:diff`, `permissions:list`, attribute scanning (Phase 2); test helpers, voter/policy sugar (Phase 3); `--prune` execution (surfaced in Task 14, executed in Phase 2).
+
+---
+
+## Execution notes (deviations from plan as built)
+
+- **No `IntegrationTestCase` exists** in the framework — the DI-wiring tests (Tasks 6, 10, 12) were implemented as real-boot integration tests modelled on `FrameworkBootTest` (`tests/Integration/Permissions/PermissionCatalogBootTest.php`, `EnforcementWiringTest.php`).
+- **Task 14 (`permissions:sync`) self-aggregates.** `BaseCommand` subclasses rebuild their own container and `ConsoleProvider` autowires commands, so a CLI command can't rely on boot-time aggregation. The command runs `discover()` + `aggregatePermissionCatalog()` at execute-time, then syncs — deterministic and boot-independent. `PermissionRegistry::reset()` makes `aggregatePermissionCatalog()` idempotent (rebuild, not append) so repeated runs never double-register.
+- **Task 15 (`managed_by`)** was added directly to the original Aegis migrations (`001_CreateRolesTables`, `002_CreatePermissionsTables`) rather than a separate ALTER migration (project is pre-release). The same migration edit also adds `updated_at`/`deleted_at` to `role_permissions` because `RolePermissionRepository` uses the BaseRepository soft-delete/updated-at lifecycle (a latent gap the original schema missed).
+- **Aegis null-cache fix.** `PermissionRepository::findPermissionBySlug()` caches null-misses in a static cache; `createPermission()` now invalidates the slug entry on write and a `clearCache()` was added for test isolation — required for `syncCatalog` idempotency within a process.
+- **Result:** full framework suite green (1006 tests); Aegis suite green (6 tests).
