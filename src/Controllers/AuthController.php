@@ -7,7 +7,6 @@ namespace Glueful\Controllers;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Http\Response;
 use Glueful\Helpers\RequestHelper;
-use Glueful\Security\EmailVerification;
 use Glueful\Auth\AuthenticationService;
 use Glueful\Http\Exceptions\Domain\AuthenticationException;
 use Glueful\Validation\ValidationException;
@@ -43,7 +42,6 @@ use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
  */
 class AuthController
 {
-    private EmailVerification $verifier;
     private AuthenticationService $authService;
     private ApplicationContext $context;
     private \Glueful\Auth\TwoFactor\TwoFactorService $twoFactor;
@@ -52,7 +50,6 @@ class AuthController
     public function __construct(ApplicationContext $context)
     {
         $this->context = $context;
-        $this->verifier = new EmailVerification(context: $this->context);
         try {
             $this->authService = container($this->context)->get(AuthenticationService::class);
         } catch (\Throwable) {
@@ -250,92 +247,6 @@ class AuthController
     }
 
     /**
-     * Verify email for registration/password reset
-     *
-     * @return mixed HTTP response
-     */
-    public function verifyEmail(SymfonyRequest $request)
-    {
-        $postData = RequestHelper::getRequestData($request);
-        if (!isset($postData['email'])) {
-            throw ValidationException::forField('email', 'Email address is required');
-        }
-
-        $otp = $this->verifier->generateOTP();
-
-        // Send verification email with the new return format (array with status info)
-        $result = $this->verifier->sendVerificationEmail($postData['email'], $otp);
-
-        if (!$result['success']) {
-            // Use the detailed error message from the verification service
-            $errorMessage = $result['message'] ?? 'Failed to send verification email';
-            throw ValidationException::forField('email', $errorMessage);
-        }
-
-        return Response::success([
-            'email' => $postData['email'],
-            'expires_in' => EmailVerification::OTP_EXPIRY_MINUTES * 60
-        ], 'Verification code has been sent to your email');
-    }
-
-    /**
-     * Verify OTP code
-     *
-     * @return mixed HTTP response
-     */
-    public function verifyOtp(SymfonyRequest $request)
-    {
-        $postData = RequestHelper::getRequestData($request);
-        if (!isset($postData['email']) || !isset($postData['otp'])) {
-            throw ValidationException::forFields([
-                'email' => 'Email is required',
-                'otp' => 'OTP is required',
-            ]);
-        }
-
-        $isValid = $this->verifier->verifyOTP($postData['email'], $postData['otp']);
-
-        if (!$isValid) {
-            throw ValidationException::forField('otp', 'Invalid or expired OTP');
-        }
-
-        return Response::success([
-            'email' => $postData['email'],
-            'verified' => true,
-            'verified_at' => date('Y-m-d\TH:i:s\Z')
-        ], 'OTP verified successfully');
-    }
-
-    /**
-     * Resend OTP code
-     *
-     * @return mixed HTTP response
-     */
-    public function resendOtp(SymfonyRequest $request)
-    {
-        $postData = RequestHelper::getRequestData($request);
-        if (!isset($postData['email'])) {
-            throw ValidationException::forField('email', 'Email address is required');
-        }
-
-        $otp = $this->verifier->generateOTP();
-
-        // Send verification email with updated return format (array with status info)
-        $result = $this->verifier->sendVerificationEmail($postData['email'], $otp);
-
-        if (!$result['success']) {
-            // Use the detailed error message from the verification service
-            $errorMessage = $result['message'] ?? 'Failed to send verification email';
-            throw ValidationException::forField('email', $errorMessage);
-        }
-
-        return Response::success([
-            'email' => $postData['email'],
-            'expires_in' => EmailVerification::OTP_EXPIRY_MINUTES * 60
-        ], 'Verification code has been resent to your email');
-    }
-
-    /**
      * Refresh user permissions
      *
      * Updates the session with fresh user permissions and returns a new token.
@@ -401,148 +312,6 @@ class AuthController
             'user' => $userData,
             'is_valid' => true
         ], 'Token is valid');
-    }
-
-    /**
-     * Initiate password reset process with email verification
-     *
-     * Starts the password recovery flow by sending a secure OTP code to the
-     * user's registered email address. Implements security measures to prevent
-     * account enumeration and abuse.
-     *
-     * **Password Reset Process:**
-     * 1. Validate email address format and presence
-     * 2. Verify user account exists in system
-     * 3. Generate secure OTP code with expiration
-     * 4. Send password reset email with OTP
-     * 5. Return confirmation without revealing account status
-     *
-     * **Security Features:**
-     * - Account existence verification before email sending
-     * - Time-limited OTP codes (default 15 minutes)
-     * - Rate limiting to prevent abuse
-     * - Secure email templates with anti-phishing measures
-     *
-     * **Request Format:**
-     * ```json
-     * {
-     *   "email": "user@example.com"
-     * }
-     * ```
-     *
-     * **Response Format:**
-     * ```json
-     * {
-     *   "email": "user@example.com",
-     *   "expires_in": 900
-     * }
-     * ```
-     *
-     * @return mixed HTTP response confirming reset email sent
-     * @throws \Glueful\Validation\ValidationException If email is missing or user not found
-     * @throws \RuntimeException If email sending fails due to system issues
-     */
-    public function forgotPassword(SymfonyRequest $request)
-    {
-        $postData = RequestHelper::getRequestData($request);
-        if (!isset($postData['email'])) {
-            throw ValidationException::forField('email', 'Email address is required');
-        }
-
-        // Check if user exists before attempting password reset
-        if (!$this->authService->userExists($postData['email'], 'email')) {
-            if (env('APP_ENV', 'production') !== 'production') {
-                error_log('Password reset requested for non-existent email: ' . $postData['email']);
-            }
-            if ((bool) config($this->context, 'security.auth.generic_error_responses', true)) {
-                return Response::success([
-                    'email' => $postData['email'],
-                    'expires_in' => EmailVerification::OTP_EXPIRY_MINUTES * 60
-                ], 'Password reset instructions have been sent to your email');
-            }
-            throw ValidationException::forField('email', 'User not found with the provided email address');
-        }
-
-        // Send verification email
-        $result = EmailVerification::sendPasswordResetEmail($postData['email'], $this->context);
-        if (!$result['success']) {
-            $errorMsg = $result['message'] ?? 'Failed to send reset email';
-            throw ValidationException::forField('email', $errorMsg);
-        }
-
-        return Response::success([
-            'email' => $postData['email'],
-            'expires_in' => EmailVerification::OTP_EXPIRY_MINUTES * 60
-        ], 'Password reset instructions have been sent to your email');
-    }
-
-    /**
-     * Complete password reset with new secure password
-     *
-     * Finalizes the password recovery process by updating the user's password
-     * with proper security validation and session invalidation.
-     *
-     * **Password Reset Process:**
-     * 1. Validate email and new password presence
-     * 2. Verify user account exists
-     * 3. Hash new password using secure algorithm
-     * 4. Update password in database
-     * 5. Invalidate all existing user sessions
-     * 6. Log security event for audit trail
-     *
-     * **Security Features:**
-     * - Secure password hashing (bcrypt/argon2)
-     * - Session invalidation to prevent unauthorized access
-     * - Password strength validation
-     * - Audit logging for security monitoring
-     *
-     * **Request Format:**
-     * ```json
-     * {
-     *   "email": "user@example.com",
-     *   "password": "new_secure_password123!"
-     * }
-     * ```
-     *
-     * @return mixed HTTP response confirming password reset
-     * @throws \Glueful\Validation\ValidationException If email/password missing or user not found
-     * @throws \Glueful\Http\Exceptions\Domain\AuthenticationException If password update fails
-     */
-    public function resetPassword(SymfonyRequest $request)
-    {
-        $postData = RequestHelper::getRequestData($request);
-        if (!isset($postData['email']) || !isset($postData['password'])) {
-            throw ValidationException::forFields([
-                'email' => 'Email is required',
-                'password' => 'New password is required',
-            ]);
-        }
-
-        // Check if user exists before attempting password reset
-        if (!$this->authService->userExists($postData['email'], 'email')) {
-            if (env('APP_ENV', 'production') !== 'production') {
-                error_log('Password reset attempted for non-existent email: ' . $postData['email']);
-            }
-            if ((bool) config($this->context, 'security.auth.generic_error_responses', true)) {
-                return Response::success(null, 'Password has been reset successfully');
-            }
-            throw ValidationException::forField('email', 'User not found with the provided email address');
-        }
-
-        // Use the service method to update the password (this handles hashing internally)
-        $success = $this->authService->updatePassword(
-            $postData['email'],
-            $postData['password'],
-            'email'
-        );
-
-        if (!$success) {
-            throw new AuthenticationException('Failed to update password');
-        }
-
-        return Response::success([
-            'updated_at' => date('Y-m-d\TH:i:s\Z')
-        ], 'Password has been reset successfully');
     }
 
     /**

@@ -44,6 +44,12 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
         $this->authManager = $authManager;
     }
 
+    /** Override the identity provider (defaults to the container's UserProviderInterface). */
+    public function setUserProvider(UserProviderInterface $userProvider): void
+    {
+        $this->userProvider = $userProvider;
+    }
+
     private function getUserProvider(): UserProviderInterface
     {
         if ($this->userProvider === null) {

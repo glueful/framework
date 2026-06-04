@@ -5,10 +5,11 @@ declare(strict_types=1);
 namespace Glueful\Tests\Integration\Auth;
 
 use Glueful\Application;
-use Glueful\Auth\{PasswordHasher, UserIdentity, UserProvider};
+use Glueful\Auth\{PasswordHasher, UserIdentity};
 use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Extensions\Users\UserProvider;
+use Glueful\Extensions\Users\Repositories\UserRepository;
 use Glueful\Framework;
-use Glueful\Repository\UserRepository;
 use Glueful\Routing\RouteManifest;
 use PHPUnit\Framework\TestCase;
 

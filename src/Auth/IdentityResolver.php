@@ -15,9 +15,14 @@ use Glueful\Auth\Contracts\IdentityClaimsProviderInterface;
  */
 final class IdentityResolver
 {
-    /** @param list<IdentityClaimsProviderInterface> $claimsProviders */
-    public function __construct(private array $claimsProviders)
-    {
+    /**
+     * @param list<IdentityClaimsProviderInterface> $claimsProviders
+     * @param list<string> $allowedStatuses Account statuses permitted to log in (default ['active']).
+     */
+    public function __construct(
+        private array $claimsProviders,
+        private array $allowedStatuses = ['active'],
+    ) {
     }
 
     /**
@@ -38,10 +43,13 @@ final class IdentityResolver
         return $identity;
     }
 
-    /** Reject only explicit non-active statuses; null = "store has no opinion" = allowed. */
+    /**
+     * null = "store has no opinion" = allowed; otherwise the status must be in the allow-list.
+     * Allow-list (never deny-list) keeps it fail-closed.
+     */
     private function statusAllowsLogin(?string $status): bool
     {
-        return $status === null || $status === 'active';
+        return $status === null || in_array($status, $this->allowedStatuses, true);
     }
 
     /**

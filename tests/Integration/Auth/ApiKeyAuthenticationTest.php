@@ -116,6 +116,10 @@ class ApiKeyAuthenticationTest extends TestCase
         ]);
 
         $provider = new ApiKeyAuthenticationProvider($this->context);
+        // Core binds NullUserProvider; inject the real (extension) provider for the user lookup.
+        $provider->setUserProvider(new \Glueful\Extensions\Users\UserProvider(
+            new \Glueful\Extensions\Users\Repositories\UserRepository()
+        ));
         $request = Request::create('/x', 'GET');
         $request->headers->set('X-API-Key', $result['plain']);
 
@@ -133,6 +137,10 @@ class ApiKeyAuthenticationTest extends TestCase
         ApiKeyService::revoke($this->context, $result['key']);
 
         $provider = new ApiKeyAuthenticationProvider($this->context);
+        // Core binds NullUserProvider; inject the real (extension) provider for the user lookup.
+        $provider->setUserProvider(new \Glueful\Extensions\Users\UserProvider(
+            new \Glueful\Extensions\Users\Repositories\UserRepository()
+        ));
         $request = Request::create('/x', 'GET');
         $request->headers->set('X-API-Key', $result['plain']);
 
@@ -184,7 +192,7 @@ class ApiKeyAuthenticationTest extends TestCase
         // the same in-memory SQLite PDO). Without this, BaseRepository
         // resolves a fresh Connection via Connection::fromContext(), which
         // opens a separate :memory: database that doesn't see our tables.
-        new \Glueful\Repository\UserRepository($connection, null, $this->context);
+        new \Glueful\Extensions\Users\Repositories\UserRepository($connection, null, $this->context);
 
         $pdo = $connection->getPDO();
         $pdo->exec('

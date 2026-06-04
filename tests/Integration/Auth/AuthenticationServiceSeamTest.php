@@ -6,10 +6,12 @@ namespace Glueful\Tests\Integration\Auth;
 
 use Glueful\Application;
 use Glueful\Auth\AuthenticationService;
+use Glueful\Auth\IdentityResolver;
 use Glueful\Auth\PasswordHasher;
 use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Extensions\Users\UserProvider;
+use Glueful\Extensions\Users\Repositories\UserRepository;
 use Glueful\Framework;
-use Glueful\Repository\UserRepository;
 use Glueful\Routing\RouteManifest;
 use PHPUnit\Framework\TestCase;
 
@@ -56,8 +58,13 @@ final class AuthenticationServiceSeamTest extends TestCase
             'status' => 'active',
         ]);
 
-        /** @var AuthenticationService $svc */
-        $svc = $this->app->getContainer()->get(AuthenticationService::class);
+        // Core defaults to NullUserProvider; inject the real (extension) provider to exercise the
+        // seam. (End-to-end with the provider bound via DI is covered by the Phase 5 skeleton smoke.)
+        $svc = new AuthenticationService(
+            context: $this->context,
+            userProvider: new UserProvider(new UserRepository()),
+            identityResolver: new IdentityResolver([]),
+        );
 
         $userData = $svc->verifyCredentials(['email' => 'amy@x.test', 'password' => 'secret-123']);
         self::assertNotNull($userData);

@@ -362,17 +362,12 @@ final class CoreProvider extends BaseServiceProvider
             }
         );
 
-        // TRANSITIONAL (Phase 3): wrap the core UserRepository so the identity seam has a working
-        // provider while the store still lives in core. Phase 4 flips this back to NullUserProvider
-        // and glueful/users registers the real provider.
+        // Fail-closed default: no user store in core. Any app or user-store extension overrides
+        // this binding with the real UserProviderInterface implementation (glueful/users is the
+        // first-party reference, but any provider — LDAP, external IdP, custom store — can bind it).
         $defs[\Glueful\Auth\Contracts\UserProviderInterface::class] = new FactoryDefinition(
             \Glueful\Auth\Contracts\UserProviderInterface::class,
-            function (\Psr\Container\ContainerInterface $c) {
-                $repo = $c->has(\Glueful\Repository\UserRepository::class)
-                    ? $c->get(\Glueful\Repository\UserRepository::class)
-                    : new \Glueful\Repository\UserRepository();
-                return new \Glueful\Auth\UserProvider($repo);
-            }
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Auth\NullUserProvider()
         );
 
         // IdentityResolver folds every service tagged 'identity.claims_provider' (priority-sorted),
@@ -381,7 +376,13 @@ final class CoreProvider extends BaseServiceProvider
             \Glueful\Auth\IdentityResolver::class,
             function (\Psr\Container\ContainerInterface $c): \Glueful\Auth\IdentityResolver {
                 $providers = $c->has('identity.claims_provider') ? $c->get('identity.claims_provider') : [];
-                return new \Glueful\Auth\IdentityResolver(is_array($providers) ? array_values($providers) : []);
+                $allowed = (array) (function_exists('config')
+                    ? config($this->context, 'security.auth.allowed_login_statuses', ['active'])
+                    : ['active']);
+                return new \Glueful\Auth\IdentityResolver(
+                    is_array($providers) ? array_values($providers) : [],
+                    array_values($allowed)
+                );
             }
         );
 
@@ -443,14 +444,13 @@ final class CoreProvider extends BaseServiceProvider
         $defs[\Glueful\Auth\AuthenticationService::class] = new FactoryDefinition(
             \Glueful\Auth\AuthenticationService::class,
             fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Auth\AuthenticationService(
-                $c->get(\Glueful\Auth\Interfaces\SessionStoreInterface::class),
-                $c->get(\Glueful\Auth\SessionCacheManager::class),
-                null,
-                null,
-                $this->context,
-                $c->get(\Glueful\Auth\AuthenticationManager::class),
-                $c->get(\Glueful\Auth\TokenManager::class),
-                userProvider: $c->get(\Glueful\Auth\Contracts\UserProviderInterface::class)
+                sessionStore: $c->get(\Glueful\Auth\Interfaces\SessionStoreInterface::class),
+                sessionCacheManager: $c->get(\Glueful\Auth\SessionCacheManager::class),
+                context: $this->context,
+                authManager: $c->get(\Glueful\Auth\AuthenticationManager::class),
+                tokenManager: $c->get(\Glueful\Auth\TokenManager::class),
+                userProvider: $c->get(\Glueful\Auth\Contracts\UserProviderInterface::class),
+                identityResolver: $c->get(\Glueful\Auth\IdentityResolver::class)
             )
         );
 

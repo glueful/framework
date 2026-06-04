@@ -40,11 +40,8 @@ class RepositoryFactory
             return $this->repositories[$resource];
         }
 
-        // Create repository based on resource name
-        $repository = match ($resource) {
-            'users' => new UserRepository($this->connection, null, $this->context),
-            default => new ResourceRepository($resource, $this->connection, $this->context)
-        };
+        // Create repository based on resource name. ('users' moved to glueful/users.)
+        $repository = new ResourceRepository($resource, $this->connection, $this->context);
 
         // Cache the repository instance
         $this->repositories[$resource] = $repository;
@@ -73,17 +70,6 @@ class RepositoryFactory
         $this->repositories[$repositoryClass] = $repository;
 
         return $repository;
-    }
-
-    /**
-     * Get the users repository
-     *
-     * @return UserRepository
-     */
-    public function users(): UserRepository
-    {
-        /** @var UserRepository */
-        return $this->getRepository('users');
     }
 
     /**
