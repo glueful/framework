@@ -457,7 +457,6 @@ if (!function_exists('get_service_ids')) {
         // This is a simplified implementation
         return [
             'Glueful\\Auth\\Interfaces\\SessionStoreInterface',
-            'Glueful\\Repository\\UserRepository',
             'Glueful\\Extensions\\ExtensionManager',
             'Glueful\\Cache\\CacheStore',
             'Glueful\\Queue\\QueueManager',

@@ -7,12 +7,18 @@ namespace Glueful\Permissions\Middleware;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Glueful\Routing\RouteMiddleware;
-use Glueful\Permissions\{Gate, Context};
+use Glueful\Permissions\PermissionManager;
+use Glueful\Permissions\Catalog\RoleKey;
 use Glueful\Auth\UserIdentity;
 
+/**
+ * Thin adapter: collects #[RequiresPermission]/#[RequiresRole] from the handler and
+ * routes each check through PermissionManager::can() — the single enforcement entry
+ * point. PermissionManager (not this middleware) decides provider-vs-Gate fallback.
+ */
 final class GateAttributeMiddleware implements RouteMiddleware
 {
-    public function __construct(private Gate $gate)
+    public function __construct(private PermissionManager $permissions)
     {
     }
 
@@ -29,23 +35,30 @@ final class GateAttributeMiddleware implements RouteMiddleware
             return $this->forbidden();
         }
 
-        $ctx = new Context(
-            tenantId: $request->attributes->get('tenant.id'),
-            routeParams: (array) $request->attributes->get('route.params'),
-            jwtClaims: (array) $request->attributes->get('jwt.claims'),
-            extra: []
-        );
+        // Context passed to can(); roles come from the request identity (no fabrication).
+        $context = [
+            'roles' => $user->roles(),
+            'scopes' => $user->scopes(),
+            'tenant_id' => $request->attributes->get('tenant.id'),
+            'route_params' => (array) $request->attributes->get('route.params'),
+            'jwt_claims' => (array) $request->attributes->get('jwt.claims'),
+        ];
 
-        $required = array_merge(
-            $this->collectAttributeValues($meta, 'Glueful\\Auth\\Attributes\\RequiresPermission', 'name'),
-            $this->collectAttributeValues($meta, 'Glueful\\Auth\\Attributes\\RequiresRole', 'name')
-        );
+        $required = [];
+        // Permission attributes carry an optional resource; default to 'system'.
+        $permissionAttr = 'Glueful\\Auth\\Attributes\\RequiresPermission';
+        foreach ($this->collectAttributePairs($meta, $permissionAttr) as [$name, $resource]) {
+            $required[] = [$name, $resource ?? 'system'];
+        }
+        // Role attributes: canonicalize via the SHARED RoleKey contract (dotted values pass
+        // through unchanged; non-dotted map to "role.{name}"). The same RoleKey is used by the
+        // permissions:diff scanner so enforcement and drift detection never diverge.
+        foreach ($this->collectAttributeValues($meta, 'Glueful\\Auth\\Attributes\\RequiresRole', 'name') as $roleName) {
+            $required[] = [RoleKey::canonical($roleName), 'system'];
+        }
 
-        foreach ($required as $permOrRole) {
-            // Check "role.*" permission if no dot, else treat as permission
-            $perm = str_contains($permOrRole, '.') ? $permOrRole : "role.{$permOrRole}";
-            $decision = $this->gate->decide($user, $perm, null, $ctx);
-            if ($decision !== 'grant') {
+        foreach ($required as [$perm, $resource]) {
+            if (!$this->permissions->can($user->id(), $perm, $resource, $context)) {
                 return $this->forbidden();
             }
         }
@@ -56,30 +69,56 @@ final class GateAttributeMiddleware implements RouteMiddleware
     /**
      * @param array{class?:string,method?:string} $meta
      * @return array<string>
-     * @phpstan-ignore-next-line
      */
     private function collectAttributeValues(array $meta, string $attributeFqcn, string $prop): array
     {
         $values = [];
+        foreach ($this->attributeInstances($meta, $attributeFqcn) as $inst) {
+            $v = $inst->{$prop} ?? null;
+            if ($v !== null) {
+                $values[] = $v;
+            }
+        }
+        return $values;
+    }
+
+    /**
+     * @param array{class?:string,method?:string} $meta
+     * @return list<array{0:string,1:?string}> [name, resource]
+     */
+    private function collectAttributePairs(array $meta, string $attributeFqcn): array
+    {
+        $pairs = [];
+        foreach ($this->attributeInstances($meta, $attributeFqcn) as $inst) {
+            $name = $inst->name ?? null;
+            if ($name !== null) {
+                $pairs[] = [$name, $inst->resource ?? null];
+            }
+        }
+        return $pairs;
+    }
+
+    /**
+     * @param array{class?:string,method?:string} $meta
+     * @return list<object>
+     */
+    private function attributeInstances(array $meta, string $attributeFqcn): array
+    {
+        $instances = [];
         try {
             $rc = new \ReflectionClass($meta['class']);
             foreach ($rc->getAttributes($attributeFqcn) as $a) {
-                $inst = $a->newInstance();
-                // @phpstan-ignore-next-line
-                $values[] = $inst->{$prop} ?? null;
+                $instances[] = $a->newInstance();
             }
             if (isset($meta['method']) && $rc->hasMethod($meta['method'])) {
-                $rm = $rc->getMethod($meta['method']);
-                foreach ($rm->getAttributes($attributeFqcn) as $a) {
-                    $inst = $a->newInstance();
-                    // @phpstan-ignore-next-line
-                    $values[] = $inst->{$prop} ?? null;
+                foreach ($rc->getMethod($meta['method'])->getAttributes($attributeFqcn) as $a) {
+                    $instances[] = $a->newInstance();
                 }
             }
         } catch (\Throwable) {
-            // If attributes class not present, ignore
+            // Attribute class absent or reflection failure — treat as no requirements.
         }
-        return array_values(array_filter($values, fn($v) => $v !== null));
+        return $instances;
     }
 
     private function forbidden(): JsonResponse
@@ -88,7 +127,7 @@ final class GateAttributeMiddleware implements RouteMiddleware
             'success' => false,
             'message' => 'Forbidden',
             'code' => 403,
-            'error_code' => 'FORBIDDEN'
+            'error_code' => 'FORBIDDEN',
         ], 403);
     }
 }

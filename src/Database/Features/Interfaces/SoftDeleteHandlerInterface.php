@@ -25,6 +25,13 @@ interface SoftDeleteHandlerInterface
     public function isEnabled(): bool;
 
     /**
+     * Whether soft-delete actually applies to the given table: enabled AND the table has the
+     * deleted_at column. Lets writers (delete()) fall back to a hard delete on tables that do
+     * not support soft-deletes, mirroring the column-aware read path (applyToWhereClause()).
+     */
+    public function appliesTo(string $table): bool;
+
+    /**
      * Include soft-deleted records in queries
      */
     public function withTrashed(): void;

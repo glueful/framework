@@ -4,15 +4,18 @@ Glueful ships a hardened API key system with per-key scopes, IP allowlists, expi
 
 ## Quick start
 
-### 1. Run the migration (in api-skeleton or your consumer app)
+### 1. Run the migration
 
-The migration ships in api-skeleton at `database/migrations/009_CreateApiKeysTable.php`. Apply it:
+The `api_keys` table is a **core foundation migration** shipped by the framework itself
+(`framework/migrations/auth/003_CreateApiKeysTable.php`, source `glueful/framework`, priority
+`FOUNDATION`). It is auto-registered, so no copying or renumbering is needed in your app — just
+apply pending migrations:
 
 ```bash
 php glueful migrate:run
 ```
 
-If you're not using api-skeleton, copy that file into your own `database/migrations/` directory (renumber if needed).
+See [Migrations & Core Capability Schema](MIGRATIONS_AND_CAPABILITIES.md) for how core-owned schema (auth, queue, notifications, metrics, …) is organized and gated.
 
 ### 2. Create a key
 
@@ -85,7 +88,7 @@ Scopes are arbitrary strings, colon-separated by convention with `fnmatch`-style
 use Glueful\Auth\ApiKey\ApiKeyService;
 
 ApiKeyService::create($context, [
-    'user_id' => $user->uuid,
+    'user_uuid' => $user->uuid,
     'name'    => 'Editor key',
     'scopes'  => ['read:posts', 'write:posts', 'admin:*'],
 ]);
@@ -147,7 +150,7 @@ Setting `scopes` to `null` (or omitting it) means "no scope restriction" — the
 
 ```php
 ApiKeyService::create($context, [
-    'user_id' => $admin->uuid,
+    'user_uuid' => $admin->uuid,
     'name'    => 'Admin key',
     // no 'scopes' → full access
 ]);
@@ -159,7 +162,7 @@ Restrict a key to specific CIDR ranges or single IPs.
 
 ```php
 ApiKeyService::create($context, [
-    'user_id'     => $user->uuid,
+    'user_uuid'     => $user->uuid,
     'name'        => 'Office key',
     'allowed_ips' => ['192.168.1.0/24', '203.0.113.42', '10.0.0.5/32'],
 ]);
@@ -177,7 +180,7 @@ CLI: `--ips="192.168.1.0/24,203.0.113.42"`
 
 ```php
 ApiKeyService::create($context, [
-    'user_id'    => $user->uuid,
+    'user_uuid'    => $user->uuid,
     'name'       => 'One-year key',
     'expires_at' => '2027-05-21 00:00:00',  // or any strtotime() input
 ]);
@@ -277,8 +280,8 @@ The provider also sets:
 | Attribute | Value |
 |---|---|
 | `authenticated` | `true` |
-| `user_id` | the key's `user_id` |
-| `user_data` | the full user record (from `UserRepository::find()`) |
+| `user_id` | the key's `user_uuid` (the principal uuid; request-attribute name kept as `user_id`) |
+| `user_data` | the resolved identity as an array (`UserIdentity::toArray()`, via `UserProviderInterface`) |
 | `auth_method` | `'api_key'` |
 | `api_key_scopes` | `array<int, string>` — the key's scopes, or `[]` for unrestricted keys |
 
@@ -306,7 +309,7 @@ For authentication failures (invalid / expired keys), check `$provider->getError
 use Glueful\Auth\ApiKey\ApiKeyService;
 
 $result = ApiKeyService::create($context, [
-    'user_id'     => $user->uuid,
+    'user_uuid'     => $user->uuid,
     'name'        => 'Service-to-service',
     'scopes'      => ['read:posts'],
     'allowed_ips' => ['10.0.0.0/8'],
@@ -347,7 +350,7 @@ public function testProtectedEndpoint(): void
 {
     // Create a key with the scope your route requires
     $result = ApiKeyService::create($this->context, [
-        'user_id' => $this->user->uuid,
+        'user_uuid' => $this->user->uuid,
         'name'    => 'Test key',
         'scopes'  => ['read:posts'],
     ]);
@@ -377,7 +380,7 @@ The `api_keys` table:
 |---|---|---|
 | `id` | bigint, primary key, auto-increment | Internal row identifier |
 | `uuid` | varchar(12), unique | Public identifier (12-char nanoid, matches framework convention) |
-| `user_id` | varchar(12), indexed | App-level reference to `users.uuid`; no DB FK |
+| `user_uuid` | varchar(12), indexed | External principal id (reference to a user's uuid); no DB FK (§2) |
 | `name` | varchar(255) | Developer-facing label |
 | `key_prefix` | varchar(24), indexed | First 16 chars of the plaintext key |
 | `key_hash` | varchar(64), unique | SHA-256 hex of the full plaintext key |
@@ -408,6 +411,6 @@ The `api_keys` table:
 | `src/Routing/Attributes/RequireScope.php` | Route-level scope declaration |
 | `src/Routing/Middleware/RequireScopeMiddleware.php` | Enforces declared scopes |
 | `src/Console/Commands/ApiKey/` | Four CLI commands |
-| `api-skeleton/database/migrations/009_CreateApiKeysTable.php` | Schema |
+| `migrations/auth/003_CreateApiKeysTable.php` | Schema (core foundation migration, source `glueful/framework`) |
 
 For design rationale, see `docs/superpowers/specs/2026-05-21-api-key-hardening-design.md`.

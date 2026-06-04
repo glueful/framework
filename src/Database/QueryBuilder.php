@@ -712,11 +712,15 @@ class QueryBuilder implements QueryBuilderInterface
 
         $this->queryValidator->validateDelete($table, $conditions);
 
-        if ($this->softDeleteHandler->isEnabled()) {
+        // Soft-delete only when it actually applies to this table (enabled AND a deleted_at
+        // column exists). Mirrors the column-aware read path (applyToWhereClause). When it does
+        // not apply (no deleted_at column, or disabled), force a real DELETE — note DeleteBuilder
+        // has its own softDeleteEnabled flag, so plain delete() would otherwise still soft-delete.
+        if ($this->softDeleteHandler->appliesTo($table)) {
             return $this->softDeleteHandler->softDelete($table, $conditions);
         }
 
-        return $this->deleteBuilder->delete($table, $conditions);
+        return $this->deleteBuilder->forceDelete($table, $conditions);
     }
 
     /**

@@ -95,8 +95,8 @@ class DatabaseQueue implements QueueDriverInterface
         $this->failedTable = (string) $this->getConfig('queue.connections.database.failed_table', 'queue_failed_jobs');
         $this->retryAfter = (int) $this->getConfig('queue.connections.database.retry_after', 90);
 
-        // Ensure queue tables exist
-        $this->ensureQueueTables();
+        // Schema is owned by the core 'glueful/framework:queue' migration (registered when
+        // queue.default=database). No lazy runtime DDL here — run `php glueful migrate:run`.
     }
 
     private function getConfig(string $key, mixed $default = null): mixed
@@ -573,70 +573,5 @@ class DatabaseQueue implements QueueDriverInterface
             // Remove from main queue
             $this->delete($job);
         });
-    }
-
-    /**
-     * Ensure queue tables exist
-     *
-     * Creates the queue_jobs and queue_failed_jobs tables if they don't exist.
-     * Uses SchemaManager's createTable method which checks for table existence.
-     *
-     * @return void
-     */
-    private function ensureQueueTables(): void
-    {
-        // Create main queue jobs table
-        if (!$this->schema->hasTable($this->table)) {
-            $table = $this->schema->table($this->table);
-
-            // Define columns
-            $table->integer('id')->primary()->autoIncrement();
-            $table->string('uuid', 21);
-            $table->string('queue', 100);
-            $table->text('payload');
-            $table->integer('attempts')->default(0);
-            $table->integer('reserved_at')->nullable();
-            $table->integer('available_at');
-            $table->integer('created_at');
-            $table->integer('priority')->default(0);
-            $table->string('batch_id', 21)->nullable();
-
-            // Add indexes
-            $table->unique('uuid');
-            $table->index(['queue', 'reserved_at', 'available_at', 'priority']);
-            $table->index('batch_id');
-
-            // Create the table
-            $table->create();
-        }
-
-        // Create failed jobs table
-        if (!$this->schema->hasTable($this->failedTable)) {
-            $table = $this->schema->table($this->failedTable);
-
-            // Define columns
-            $table->bigInteger('id')->primary()->autoIncrement();
-            $table->string('uuid', 12);
-            $table->string('connection', 255);
-            $table->string('queue', 255);
-            $table->text('payload');
-            $table->text('exception');
-            $table->string('batch_uuid', 12)->nullable();
-            $table->timestamp('failed_at')->default('CURRENT_TIMESTAMP');
-
-            // Add indexes
-            $table->unique('uuid');
-            $table->index('connection');
-            $table->index('queue');
-            $table->index('batch_uuid');
-            $table->index('failed_at');
-            $table->index(['connection', 'queue'], 'idx_failed_connection_queue');
-
-            // Create the table
-            $table->create();
-        }
-
-        // Execute all pending operations
-        $this->schema->execute();
     }
 }

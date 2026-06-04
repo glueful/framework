@@ -22,12 +22,7 @@ final class RepositoryProvider extends BaseServiceProvider
             )
         );
 
-        $defs[\Glueful\Repository\UserRepository::class] = new FactoryDefinition(
-            \Glueful\Repository\UserRepository::class,
-            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Repository\UserRepository(
-                $c->get('database')
-            )
-        );
+        // UserRepository moved to the glueful/users extension (registers its own binding).
         $defs[\Glueful\Repository\ResourceRepository::class] = new FactoryDefinition(
             \Glueful\Repository\ResourceRepository::class,
             fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Repository\ResourceRepository(
@@ -49,7 +44,7 @@ final class RepositoryProvider extends BaseServiceProvider
 
         // Convenience aliases
         $defs['repository'] = new AliasDefinition('repository', \Glueful\Repository\RepositoryFactory::class);
-        $defs['repository.user'] = new AliasDefinition('repository.user', \Glueful\Repository\UserRepository::class);
+        // 'repository.user' alias removed — UserRepository moved to glueful/users.
         $defs['repository.resource'] = new AliasDefinition(
             'repository.resource',
             \Glueful\Repository\ResourceRepository::class

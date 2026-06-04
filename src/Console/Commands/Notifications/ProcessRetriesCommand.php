@@ -84,9 +84,6 @@ class ProcessRetriesCommand extends BaseCommand
         }
 
         try {
-            // Ensure the retry queue table exists
-            $this->retryService->ensureRetryQueueTableExists();
-
             // Build filter options
             $options = [
                 'limit' => $limit,

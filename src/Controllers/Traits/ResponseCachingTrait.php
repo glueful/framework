@@ -77,7 +77,7 @@ trait ResponseCachingTrait
 
         // Add user-specific tags if authenticated
         if ($this->currentUser !== null) {
-            $tags[] = 'user:' . $this->currentUser->uuid;
+            $tags[] = 'user:' . $this->currentUser->uuid();
         }
 
         return $this->getCacheStore()->remember($cacheKey, $callback, $ttl);
@@ -284,7 +284,7 @@ trait ResponseCachingTrait
         if (count($tags) === 0) {
             // Invalidate user-specific cache by default
             if ($this->currentUser !== null) {
-                $tags = ['user:' . $this->currentUser->uuid];
+                $tags = ['user:' . $this->currentUser->uuid()];
             }
         }
 
@@ -423,7 +423,7 @@ trait ResponseCachingTrait
             'hit' => $hit,
             'duration_ms' => $duration * 1000,
             'controller' => static::class,
-            'user_uuid' => $this->currentUser?->uuid,
+            'user_uuid' => $this->currentUser?->uuid(),
             'timestamp' => time()
         ];
 

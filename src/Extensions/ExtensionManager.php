@@ -6,6 +6,9 @@ namespace Glueful\Extensions;
 
 use Psr\Container\ContainerInterface;
 use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Permissions\Catalog\Permission;
+use Glueful\Permissions\Catalog\PermissionRegistry;
+use Glueful\Interfaces\Permission\PermissionStandards;
 
 /**
  * Registers and boots provider classes resolved by the shared ProviderClassResolver
@@ -115,6 +118,83 @@ final class ExtensionManager
         }
 
         $this->booted = true;
+    }
+
+    /**
+     * Build the declarative permission catalog from framework core + all registered providers.
+     *
+     * This is intentionally a dedicated pass, NOT part of register()/boot() — those wrap each
+     * provider in catch(\Throwable) and only log, which would swallow collision/dangling-grant
+     * errors. Catalog errors must be fatal, so this method lets them propagate.
+     */
+    public function aggregatePermissionCatalog(): void
+    {
+        /** @var PermissionRegistry $registry */
+        $registry = $this->container->get(PermissionRegistry::class);
+
+        // Rebuild from scratch so repeated calls (e.g. boot then permissions:sync) are idempotent
+        // and never double-register against an already-populated registry.
+        $registry->reset();
+
+        // 1. Framework core permissions.
+        foreach (PermissionStandards::CORE_PERMISSIONS as $slug) {
+            $registry->register(Permission::define($slug), 'glueful/framework');
+        }
+
+        // 2. Provider declarations (app + extensions).
+        foreach ($this->providers as $providerClass => $provider) {
+            $source = $this->packageNameFor($providerClass);
+            foreach ($provider->permissions() as $perm) {
+                $registry->register($perm, $source);
+            }
+            foreach ($provider->roles() as $role) {
+                $registry->registerRole($role, $source);
+            }
+        }
+
+        // 3. Fatal validation: role grants must reference declared permissions.
+        $registry->validate();
+    }
+
+    /**
+     * Register provider-contributed Gate voters and resource policies onto the shared
+     * Gate and PolicyRegistry singletons. Runs after the permission catalog is built.
+     */
+    public function registerProviderGateExtensions(): void
+    {
+        $gate = $this->container->has(\Glueful\Permissions\Gate::class)
+            ? $this->container->get(\Glueful\Permissions\Gate::class)
+            : null;
+        $policies = $this->container->has(\Glueful\Permissions\PolicyRegistry::class)
+            ? $this->container->get(\Glueful\Permissions\PolicyRegistry::class)
+            : null;
+
+        foreach ($this->providers as $provider) {
+            if ($gate !== null) {
+                foreach ($provider->voters() as $voter) {
+                    $gate->registerVoter($voter);
+                }
+            }
+            if ($policies !== null) {
+                foreach ($provider->policies() as $resource => $policyClass) {
+                    $policies->register($resource, $policyClass);
+                }
+            }
+        }
+    }
+
+    /**
+     * Resolve a provider class to its composer package name (stable identifier for managed_by).
+     * Falls back to "app" for app/core providers not present in the composer candidate list.
+     */
+    private function packageNameFor(string $providerClass): string
+    {
+        foreach ((new PackageManifest($this->getContext()))->getCandidates() as $candidate) {
+            if ($candidate->provider === $providerClass) {
+                return $candidate->name;
+            }
+        }
+        return 'app';
     }
 
     /**

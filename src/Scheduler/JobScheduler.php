@@ -90,89 +90,12 @@ class JobScheduler
             $this->lockManager = $this->getLockManagerFromContainer();
         }
 
-        // Ensure required database tables exist before trying to use them
-        $this->ensureTablesExist();
-
+        // Schema is owned by the core 'glueful/framework:scheduler' migration (registered when
+        // schedule.database_store is true). No lazy runtime DDL — run `php glueful migrate:run`.
         $this->loadJobsFromDatabase();
 
          // Register core jobs from config file
          $this->loadCoreJobsFromConfig();
-    }
-
-    /**
-     * Ensure scheduler database tables exist
-     *
-     * Creates required tables for job scheduling if they don't exist yet:
-     * - scheduled_jobs: Stores job definitions and schedules
-     * - job_executions: Tracks job execution history
-     */
-    protected function ensureTablesExist(): void
-    {
-        try {
-            $schema = $this->db->getSchemaBuilder();
-
-            // Create Scheduled Jobs Table
-            if (!$schema->hasTable('scheduled_jobs')) {
-                $table = $schema->table('scheduled_jobs');
-
-                // Define columns
-                $table->bigInteger('id')->primary()->autoIncrement();
-                $table->string('uuid', 12);
-                $table->string('name', 255);
-                $table->string('schedule', 100);
-                $table->string('handler_class', 255);
-                $table->json('parameters')->nullable();
-                $table->boolean('is_enabled')->default(true);
-                $table->dateTime('last_run')->nullable();
-                $table->dateTime('next_run')->nullable();
-                $table->timestamp('created_at')->default('CURRENT_TIMESTAMP');
-                $table->dateTime('updated_at')->nullable();
-
-                // Add indexes
-                $table->index('name');
-                $table->index('next_run');
-                $table->index('is_enabled');
-
-                // Create the table
-                $table->create();
-            }
-
-            // Create Job Executions Table
-            if (!$schema->hasTable('job_executions')) {
-                $table = $schema->table('job_executions');
-
-                // Define columns
-                $table->bigInteger('id')->primary()->autoIncrement();
-                $table->string('uuid', 12);
-                $table->string('job_uuid', 12);
-                $table->string('status', 20); // Will use CHECK constraint in some databases
-                $table->dateTime('started_at');
-                $table->dateTime('completed_at')->nullable();
-                $table->text('result')->nullable();
-                $table->text('error_message')->nullable();
-                $table->decimal('execution_time', 10, 2)->nullable();
-                $table->timestamp('created_at')->default('CURRENT_TIMESTAMP');
-
-                // Add indexes
-                $table->index('job_uuid');
-                $table->index('status');
-                $table->index('started_at');
-
-                // Add foreign key
-                $table->foreign('job_uuid')
-                    ->references('uuid')
-                    ->on('scheduled_jobs')
-                    ->cascadeOnDelete();
-
-                // Create the table
-                $table->create();
-            }
-
-            // Execute all pending operations
-            $schema->execute();
-        } catch (\Exception $e) {
-            $this->log("Failed to ensure table existence: " . $e->getMessage(), 'error');
-        }
     }
 
     private function getLockManagerFromContainer(): ?LockManagerInterface

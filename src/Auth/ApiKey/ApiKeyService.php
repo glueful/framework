@@ -73,7 +73,7 @@ final class ApiKeyService
      * Create a new API key. Returns the plaintext key ONCE; never stored.
      *
      * @param array{
-     *     user_id: string,
+     *     user_uuid: string,
      *     name: string,
      *     scopes?: array<int, string>|null,
      *     allowed_ips?: array<int, string>|null,
@@ -91,7 +91,7 @@ final class ApiKeyService
 
         $key = new ApiKey([
             'uuid'        => Utils::generateNanoID(),
-            'user_id'     => $attrs['user_id'],
+            'user_uuid'   => $attrs['user_uuid'],
             'name'        => $attrs['name'],
             'key_prefix'  => self::extractPrefix($plain),
             'key_hash'    => self::hashKey($plain),
@@ -183,7 +183,7 @@ final class ApiKeyService
 
         $newKey = new ApiKey([
             'uuid'            => Utils::generateNanoID(),
-            'user_id'         => $existing->user_id,
+            'user_uuid'       => $existing->user_uuid,
             'name'            => $existing->name . ' (rotated)',
             'key_prefix'      => self::extractPrefix($newPlain),
             'key_hash'        => self::hashKey($newPlain),
@@ -215,7 +215,7 @@ final class ApiKeyService
     public static function forUser(ApplicationContext $context, string $userId): array
     {
         $rows = ApiKey::query($context)
-            ->where('user_id', '=', $userId)
+            ->where('user_uuid', '=', $userId)
             ->get();
 
         // Filter to typed ApiKey instances — ApiKey::query()->get() returns

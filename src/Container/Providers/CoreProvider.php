@@ -277,23 +277,9 @@ final class CoreProvider extends BaseServiceProvider
             )
         );
 
-        $defs[\Glueful\Auth\TwoFactor\TwoFactorService::class] = new FactoryDefinition(
-            \Glueful\Auth\TwoFactor\TwoFactorService::class,
-            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Auth\TwoFactor\TwoFactorService(
-                $this->context,
-                $c->get('database'),
-                $c->get(\Glueful\Cache\CacheStore::class),
-                $c->get(\Glueful\Notifications\Services\NotificationService::class),
-                $c->get(\Glueful\Auth\TwoFactor\ChallengeTokenIssuer::class),
-                $c->get(\Glueful\Auth\TwoFactor\JtiBlocklist::class),
-                $c->get(\Glueful\Auth\TokenManager::class),
-                (int) config($this->context, 'auth.two_factor.pin_length', 6),
-                (int) config($this->context, 'auth.two_factor.pin_ttl', 300),
-                (int) config($this->context, 'auth.two_factor.disable_freshness', 300),
-                (string) config($this->context, 'auth.two_factor.template_name', 'two-factor-pin'),
-                (bool) config($this->context, 'auth.two_factor.enabled', false)
-            )
-        );
+        // TwoFactorService moved to glueful/users (owns users.two_factor_enabled state); it is
+        // registered by UsersServiceProvider. ChallengeTokenIssuer + JtiBlocklist (above) stay in
+        // core as pure token mechanics that the moved service consumes across the boundary.
 
         // HTTP request — delegate to RequestProvider's shared definition
         $defs['request'] = new FactoryDefinition(
@@ -304,6 +290,20 @@ final class CoreProvider extends BaseServiceProvider
         );
 
         // Permission services
+
+        // Declarative permission catalog (shared singleton; filled by ExtensionManager::aggregatePermissionCatalog()).
+        $defs[\Glueful\Permissions\Catalog\PermissionRegistry::class] = new FactoryDefinition(
+            \Glueful\Permissions\Catalog\PermissionRegistry::class,
+            fn(): \Glueful\Permissions\Catalog\PermissionRegistry
+                => new \Glueful\Permissions\Catalog\PermissionRegistry()
+        );
+
+        // Route attribute scanner for permissions:diff (enforced-permission discovery).
+        $defs[\Glueful\Permissions\Catalog\PermissionAttributeScanner::class] = new FactoryDefinition(
+            \Glueful\Permissions\Catalog\PermissionAttributeScanner::class,
+            fn(\Psr\Container\ContainerInterface $c): \Glueful\Permissions\Catalog\PermissionAttributeScanner
+                => new \Glueful\Permissions\Catalog\PermissionAttributeScanner($c->get(\Glueful\Routing\Router::class))
+        );
 
         // Gate service with voters
         $defs[\Glueful\Permissions\Gate::class] = new FactoryDefinition(
@@ -331,6 +331,13 @@ final class CoreProvider extends BaseServiceProvider
                 // 3. Register role voter with configured roles
                 $gate->registerVoter(new \Glueful\Permissions\Voters\RoleVoter($config['roles'] ?? []));
 
+                // 3b. Registry-backed role voter: lets DECLARED roles enforce (fallback path).
+                if ($c->has(\Glueful\Permissions\Catalog\PermissionRegistry::class)) {
+                    $gate->registerVoter(new \Glueful\Permissions\Voters\RegistryRoleVoter(
+                        $c->get(\Glueful\Permissions\Catalog\PermissionRegistry::class)
+                    ));
+                }
+
                 // 4. Register scope voter
                 $gate->registerVoter(new \Glueful\Permissions\Voters\ScopeVoter());
 
@@ -338,6 +345,30 @@ final class CoreProvider extends BaseServiceProvider
                 $gate->registerVoter(new \Glueful\Permissions\Voters\OwnershipVoter());
 
                 return $gate;
+            }
+        );
+
+        // Fail-closed default: no user store in core. Any app or user-store extension overrides
+        // this binding with the real UserProviderInterface implementation (glueful/users is the
+        // first-party reference, but any provider — LDAP, external IdP, custom store — can bind it).
+        $defs[\Glueful\Auth\Contracts\UserProviderInterface::class] = new FactoryDefinition(
+            \Glueful\Auth\Contracts\UserProviderInterface::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Auth\NullUserProvider()
+        );
+
+        // IdentityResolver folds every service tagged 'identity.claims_provider' (priority-sorted),
+        // same consumption pattern as 'console.commands'. Status gate + additive claims fold.
+        $defs[\Glueful\Auth\IdentityResolver::class] = new FactoryDefinition(
+            \Glueful\Auth\IdentityResolver::class,
+            function (\Psr\Container\ContainerInterface $c): \Glueful\Auth\IdentityResolver {
+                $providers = $c->has('identity.claims_provider') ? $c->get('identity.claims_provider') : [];
+                $allowed = (array) (function_exists('config')
+                    ? config($this->context, 'security.auth.allowed_login_statuses', ['active'])
+                    : ['active']);
+                return new \Glueful\Auth\IdentityResolver(
+                    is_array($providers) ? array_values($providers) : [],
+                    array_values($allowed)
+                );
             }
         );
 
@@ -399,13 +430,13 @@ final class CoreProvider extends BaseServiceProvider
         $defs[\Glueful\Auth\AuthenticationService::class] = new FactoryDefinition(
             \Glueful\Auth\AuthenticationService::class,
             fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Auth\AuthenticationService(
-                $c->get(\Glueful\Auth\Interfaces\SessionStoreInterface::class),
-                $c->get(\Glueful\Auth\SessionCacheManager::class),
-                null,
-                null,
-                $this->context,
-                $c->get(\Glueful\Auth\AuthenticationManager::class),
-                $c->get(\Glueful\Auth\TokenManager::class)
+                sessionStore: $c->get(\Glueful\Auth\Interfaces\SessionStoreInterface::class),
+                sessionCacheManager: $c->get(\Glueful\Auth\SessionCacheManager::class),
+                context: $this->context,
+                authManager: $c->get(\Glueful\Auth\AuthenticationManager::class),
+                tokenManager: $c->get(\Glueful\Auth\TokenManager::class),
+                userProvider: $c->get(\Glueful\Auth\Contracts\UserProviderInterface::class),
+                identityResolver: $c->get(\Glueful\Auth\IdentityResolver::class)
             )
         );
 
@@ -429,9 +460,51 @@ final class CoreProvider extends BaseServiceProvider
         $defs[\Glueful\Cache\EdgeCacheService::class] = $this->autowire(\Glueful\Cache\EdgeCacheService::class);
         $defs[\Glueful\Database\QueryCacheService::class] = $this->autowire(\Glueful\Database\QueryCacheService::class);
 
-        // Database migrations
-        $defs[\Glueful\Database\Migrations\MigrationManager::class] =
-            $this->autowire(\Glueful\Database\Migrations\MigrationManager::class);
+        // Database migrations. Factory (not bare autowire) so core can register its OWN schema —
+        // the security spine plus DB-backed platform capabilities — whose owning subsystems all
+        // live in core. They ship as first-class, versioned, source-tracked migrations applied
+        // through the runner (NOT lazy runtime DDL).
+        //
+        // findMigrations() RECURSES, so we register only explicit LEAF subdirs of migrations/,
+        // never the parent (registering the parent would slurp every capability subdir under the
+        // wrong source and bypass the gates). auth/ is always-on (source 'glueful/framework');
+        // each capability subdir is registered only when its config gate is on, under its own
+        // source 'glueful/framework:<capability>'. All at FOUNDATION priority. Shared, so
+        // extensions' loadMigrationsFrom() and the migrate commands see the same instance; tests
+        // that construct `new MigrationManager(...)` directly stay isolated (no core paths).
+        $defs[\Glueful\Database\Migrations\MigrationManager::class] = new FactoryDefinition(
+            \Glueful\Database\Migrations\MigrationManager::class,
+            function (): \Glueful\Database\Migrations\MigrationManager {
+                $base = \dirname(__DIR__, 3) . '/migrations';
+                $foundation = \Glueful\Database\Migrations\MigrationPriority::FOUNDATION;
+                $mm = new \Glueful\Database\Migrations\MigrationManager(null, null, $this->context);
+
+                $cfg = fn(string $key, mixed $default): mixed =>
+                    \function_exists('config') ? config($this->context, $key, $default) : $default;
+
+                // subdir => enabled. auth is unconditional. locks/queue/uploads derive from their
+                // own driver/enable config; the rest are explicit flags in config/capabilities.php.
+                $gates = [
+                    'auth' => true,
+                    'locks' => $cfg('lock.default', 'file') === 'database',
+                    'uploads' => (bool) $cfg('uploads.enabled', true),
+                    'queue' => $cfg('queue.default', 'sync') === 'database',
+                    'scheduler' => (bool) $cfg('capabilities.scheduler', true),
+                    'notifications' => (bool) $cfg('capabilities.notifications', true),
+                    'metrics' => (bool) $cfg('capabilities.metrics', true),
+                    'archive' => (bool) $cfg('capabilities.archive', false),
+                ];
+                foreach ($gates as $dir => $enabled) {
+                    if ($enabled) {
+                        // Source is 'glueful/framework' for auth, 'glueful/framework:<cap>' otherwise.
+                        $source = $dir === 'auth' ? 'glueful/framework' : 'glueful/framework:' . $dir;
+                        // addMigrationPath() no-ops when the dir is absent (safe before a subdir exists).
+                        $mm->addMigrationPath($base . '/' . $dir, $foundation, $source);
+                    }
+                }
+                return $mm;
+            }
+        );
 
         // Field selection
         $defs[\Glueful\Support\FieldSelection\Projector::class] = new FactoryDefinition(
@@ -512,7 +585,7 @@ final class CoreProvider extends BaseServiceProvider
         $defs[\Glueful\Permissions\Middleware\GateAttributeMiddleware::class] = new FactoryDefinition(
             \Glueful\Permissions\Middleware\GateAttributeMiddleware::class,
             fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Permissions\Middleware\GateAttributeMiddleware(
-                $c->get(\Glueful\Permissions\Gate::class)
+                $c->get('permission.manager')
             )
         );
 

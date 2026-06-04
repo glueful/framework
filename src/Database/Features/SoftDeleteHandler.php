@@ -46,6 +46,11 @@ class SoftDeleteHandler implements SoftDeleteHandlerInterface
         return $this->enabled;
     }
 
+    public function appliesTo(string $table): bool
+    {
+        return $this->enabled && $this->tableHasDeletedAtColumn($table);
+    }
+
     /**
      * {@inheritdoc}
      */

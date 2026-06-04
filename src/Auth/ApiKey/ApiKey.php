@@ -14,7 +14,7 @@ use Glueful\Database\ORM\Model;
  *
  * @property int|null    $id
  * @property string      $uuid
- * @property string      $user_id
+ * @property string      $user_uuid
  * @property string      $name
  * @property string      $key_prefix
  * @property string      $key_hash
@@ -40,7 +40,7 @@ final class ApiKey extends Model
     /** @var array<string> */
     protected array $fillable = [
         'uuid',
-        'user_id',
+        'user_uuid',
         'name',
         'key_prefix',
         'key_hash',

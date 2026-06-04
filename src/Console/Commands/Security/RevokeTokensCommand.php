@@ -107,25 +107,26 @@ class RevokeTokensCommand extends BaseSecurityCommand
         $this->line('');
 
         try {
-            // Import required classes (following original pattern)
             $cacheStore = $this->getService(CacheStore::class);
-            $tokenManager = app($this->getContext(), \Glueful\Auth\TokenManager::class);
+            $sessionStore = $this->getService(\Glueful\Auth\SessionStore::class);
 
-            // Step 1: Get all active sessions from database
+            // Step 1: Get all active sessions from database. Sessions are keyed by uuid in the
+            // refresh-token-store design — auth_sessions has no access_token/refresh_token columns,
+            // so select the columns that exist.
             $this->info('📊 Retrieving all active sessions...');
             $sessionsQuery = $this->db->table('auth_sessions')
-                ->select(['access_token', 'refresh_token', 'user_uuid', 'uuid'])
+                ->select(['uuid', 'user_uuid'])
                 ->where('status', 'active');
 
             if ($user !== null) {
-                // Find user UUID first
-                $userRepo = new \Glueful\Repository\UserRepository();
-                $userData = $userRepo->findByEmail($user) ?? $userRepo->findByUsername($user);
-                if ($userData === null) {
+                // Resolve the principal uuid via the identity provider (identifier-agnostic).
+                $identity = app($this->getContext(), \Glueful\Auth\Contracts\UserProviderInterface::class)
+                    ->findByLogin($user);
+                if ($identity === null) {
                     $this->error("User not found: {$user}");
                     return self::FAILURE;
                 }
-                $sessionsQuery->where('user_uuid', $userData['uuid']);
+                $sessionsQuery->where('user_uuid', '=', $identity->uuid());
             }
 
             if ($olderThan !== null) {
@@ -174,12 +175,9 @@ class RevokeTokensCommand extends BaseSecurityCommand
 
             foreach ($activeSessions as $session) {
                 try {
-                    // Revoke the session (this handles database update and audit logging)
-                    $result = $tokenManager->revokeSession($session['access_token']);
-
-                    if ($result > 0) {
-                        // Remove token mapping from cache
-                        $tokenManager->removeTokenMapping($session['access_token']);
+                    // Revoke by session UUID — SessionStore marks the row revoked and clears the
+                    // session's cached token mappings. Any residual cache is flushed in step 3.
+                    if ($sessionStore->revoke($session['uuid'])) {
                         $revokedCount++;
                     } else {
                         $failedCount++;

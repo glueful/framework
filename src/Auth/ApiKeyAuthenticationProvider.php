@@ -8,7 +8,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Glueful\Auth\ApiKey\ApiKeyService;
 use Glueful\Auth\ApiKey\Exceptions\ApiKeyExpiredException;
 use Glueful\Auth\ApiKey\Exceptions\InvalidApiKeyException;
-use Glueful\Repository\UserRepository;
+use Glueful\Auth\Contracts\UserProviderInterface;
 use Glueful\Auth\Interfaces\AuthenticationProviderInterface;
 use Glueful\Bootstrap\ApplicationContext;
 
@@ -29,8 +29,8 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
     /** @var string|null Last authentication error message */
     private ?string $lastError = null;
 
-    /** @var UserRepository|null User repository for looking up users by id */
-    private ?UserRepository $userRepository = null;
+    /** @var UserProviderInterface|null Provider for looking up the key's user by uuid */
+    private ?UserProviderInterface $userProvider = null;
     private ?ApplicationContext $context = null;
     private ?AuthenticationManager $authManager = null;
 
@@ -44,12 +44,20 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
         $this->authManager = $authManager;
     }
 
-    private function getUserRepository(): UserRepository
+    /** Override the identity provider (defaults to the container's UserProviderInterface). */
+    public function setUserProvider(UserProviderInterface $userProvider): void
     {
-        if ($this->userRepository === null) {
-            $this->userRepository = new UserRepository(null, null, $this->context);
+        $this->userProvider = $userProvider;
+    }
+
+    private function getUserProvider(): UserProviderInterface
+    {
+        if ($this->userProvider === null) {
+            $this->userProvider = ($this->context !== null && $this->context->hasContainer())
+                ? $this->context->getContainer()->get(UserProviderInterface::class)
+                : new NullUserProvider();
         }
-        return $this->userRepository;
+        return $this->userProvider;
     }
 
     /**
@@ -77,14 +85,19 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
                 $request->getClientIp() ?? ''
             );
 
-            $userData = $this->getUserRepository()->find($key->user_id);
-            if ($userData === null) {
+            $identity = $this->getUserProvider()->findByUuid($key->user_uuid);
+            if ($identity === null) {
                 $this->lastError = 'API key belongs to no known user';
                 return null;
             }
+            // Identity-only shape (clean break): user_data is the UserIdentity array, not a
+            // full user-table row.
+            $userData = $identity->toArray();
 
             $request->attributes->set('authenticated', true);
-            $request->attributes->set('user_id', $key->user_id);
+            // Request attribute name stays 'user_id' (the generic auth-principal key read by
+            // SessionContext); its value is the principal uuid from the api_keys.user_uuid column.
+            $request->attributes->set('user_id', $key->user_uuid);
             $request->attributes->set('user_data', $userData);
             $request->attributes->set('auth_method', 'api_key');
             $request->attributes->set('api_key_scopes', $key->getScopes());

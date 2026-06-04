@@ -6,7 +6,7 @@ namespace Glueful\Tests\Unit\Permissions;
 
 use PHPUnit\Framework\TestCase;
 use Glueful\Permissions\Middleware\GateAttributeMiddleware;
-use Glueful\Permissions\Gate;
+use Glueful\Permissions\PermissionManager;
 use Glueful\Auth\UserIdentity;
 use Glueful\Auth\Attributes\RequiresPermission;
 use Glueful\Auth\Attributes\RequiresRole;
@@ -47,35 +47,11 @@ class AttributeMiddlewareTest extends TestCase
 
     public function testMiddlewareChecksAttributes(): void
     {
-        // Gate is final, so we'll create a real instance with test voters
-        $gate = new Gate('affirmative', false);
+        // Enforcement now routes through PermissionManager::can() (single entry point).
+        $manager = $this->createMock(PermissionManager::class);
+        $manager->method('can')->willReturn(true);
 
-        // Register a simple voter that always grants
-        $gate->registerVoter(new class implements \Glueful\Permissions\VoterInterface {
-            public function vote(
-                \Glueful\Auth\UserIdentity $user,
-                string $permission,
-                mixed $resource,
-                \Glueful\Permissions\Context $ctx
-            ): \Glueful\Permissions\Vote {
-                return new \Glueful\Permissions\Vote(\Glueful\Permissions\Vote::GRANT);
-            }
-
-            public function supports(
-                string $permission,
-                mixed $resource,
-                \Glueful\Permissions\Context $ctx
-            ): bool {
-                return true;
-            }
-
-            public function priority(): int
-            {
-                return 0;
-            }
-        });
-
-        $middleware = new GateAttributeMiddleware($gate);
+        $middleware = new GateAttributeMiddleware($manager);
 
         $request = Request::create('/test');
         $request->attributes->set('handler_meta', [

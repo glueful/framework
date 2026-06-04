@@ -66,7 +66,8 @@ class MigrationManager
     private FileFinder $fileFinder;
 
     /**
-     * @var array<string> Additional migration paths from extensions
+     * @var array<int, array{path: string, priority: int, source: string}>
+     *      Additional migration sources from extensions.
      */
     private array $additionalMigrationPaths = [];
 
@@ -124,11 +125,53 @@ class MigrationManager
      *
      * @param string $path Path to migration directory
      */
-    public function addMigrationPath(string $path): void
-    {
-        if (is_dir($path)) {
-            $this->additionalMigrationPaths[] = $path;
+    public function addMigrationPath(
+        string $path,
+        int $priority = MigrationPriority::DEFAULT,
+        ?string $source = null
+    ): void {
+        if (!is_dir($path)) {
+            return;
         }
+        if ($source === null) {
+            $parts = explode('/', str_replace('\\', '/', rtrim($path, '/')));
+            $source = end($parts) !== false ? (string) end($parts) : 'extension';
+        }
+        $this->additionalMigrationPaths[] = ['path' => $path, 'priority' => $priority, 'source' => $source];
+    }
+
+    /**
+     * The complete, ordered set of migration sources: the main app path (source 'app',
+     * DEFAULT priority) followed by all registered additional paths.
+     *
+     * @return array<int, array{path: string, priority: int, source: string}>
+     */
+    private function allSources(): array
+    {
+        $sources = [[
+            'path' => $this->migrationsPath,
+            'priority' => MigrationPriority::DEFAULT,
+            'source' => 'app',
+        ]];
+        foreach ($this->additionalMigrationPaths as $entry) {
+            $sources[] = $entry;
+        }
+        return $sources;
+    }
+
+    /**
+     * True when $file lives inside $dir, compared by canonical realpath with a trailing
+     * separator so sibling prefixes (e.g. /foo/pkg vs /foo/pkg2) never false-match.
+     */
+    private function fileBelongsToDir(string $file, string $dir): bool
+    {
+        $rf = realpath($file);
+        $rd = realpath($dir);
+        if ($rf === false || $rd === false) {
+            return false;
+        }
+        $rd = rtrim($rd, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        return str_starts_with($rf, $rd);
     }
 
     /**
@@ -156,12 +199,29 @@ class MigrationManager
             $table->string('checksum', 64);
             $table->text('description')->nullable();
             $table->string('extension', 100)->nullable();
+            $table->string('source', 191)->default('app'); // package name, or 'app' for skeleton
 
-            // Add unique constraint
-            $table->unique('migration');
+            // Package-scoped uniqueness: two sources may ship the same basename, so the
+            // unique key is composite (source, migration) — NOT migration alone.
+            $table->unique(['source', 'migration']);
 
             // Create the table
             $table->create()->execute();
+
+            return;
+        }
+
+        // Upgrade path for existing version tables (pre-release dev DBs).
+        if (!$this->schema->hasColumn(self::VERSION_TABLE, 'source')) {
+            // Callback form runs the column builder, calls execute(), and flushes pending ops.
+            $this->schema->alterTable(self::VERSION_TABLE, function ($table): void {
+                $table->string('source', 191)->default('app');
+            });
+            // Backfill any pre-existing rows to the app source.
+            $this->db->table(self::VERSION_TABLE)->whereNull('source')->update(['source' => 'app']);
+            // IMPORTANT: existing tables still carry the legacy unique(migration). That constraint
+            // contradicts package-scoped tracking and must be replaced with unique(source, migration)
+            // via a clean migration-history reset (pre-release) — SQLite cannot portably drop it.
         }
     }
 
@@ -178,35 +238,34 @@ class MigrationManager
      */
     public function getPendingMigrations(): array
     {
-        $applied = $this->getAppliedMigrations();
+        $appliedKeys = $this->appliedKeys();
 
-        // Get migrations from main directory using FileFinder
-        $files = [];
-        $mainMigrations = $this->fileFinder->findMigrations($this->migrationsPath);
-        foreach ($mainMigrations as $file) {
-            $files[] = $file->getPathname();
-        }
-
-        // Get migrations from additional paths (extensions register their paths)
-        foreach ($this->additionalMigrationPaths as $migrationDir) {
-            $extensionMigrations = $this->fileFinder->findMigrations($migrationDir);
-            foreach ($extensionMigrations as $file) {
-                $files[] = $file->getPathname();
+        // Collect candidate files with their source + priority.
+        $candidates = []; // array<int, array{file:string, priority:int, source:string}>
+        foreach ($this->allSources() as $src) {
+            foreach ($this->fileFinder->findMigrations($src['path']) as $file) {
+                $path = $file->getPathname();
+                if (in_array($this->sourceKey($src['source'], basename($path)), $appliedKeys, true)) {
+                    continue;
+                }
+                $candidates[] = ['file' => $path, 'priority' => $src['priority'], 'source' => $src['source']];
             }
         }
 
-        $pendingFiles = array_filter($files, fn($file) => !in_array(basename($file), $applied, true));
+        // (priority ASC, basename ASC, source ASC) — source breaks ties so multiple sources
+        // shipping the same basename at the same priority order deterministically.
+        usort($candidates, function (array $a, array $b): int {
+            return [$a['priority'], basename($a['file']), $a['source']]
+                <=> [$b['priority'], basename($b['file']), $b['source']];
+        });
 
-        // Sort files by filename to ensure proper execution order
-        usort($pendingFiles, fn($a, $b) => basename($a) <=> basename($b));
-
-        return $pendingFiles;
+        return array_map(fn(array $c) => $c['file'], $candidates);
     }
 
     /**
      * Get list of applied migrations
      *
-     * @return array<string> List of applied migration filenames
+     * @return array<string> List of applied migration filenames (basename-only view).
      */
     private function getAppliedMigrations(): array
     {
@@ -216,6 +275,27 @@ class MigrationManager
             ->get();
 
         return array_column($result, 'migration');
+    }
+
+    /**
+     * Applied keys as "{source}\0{basename}" for package-scoped dedup.
+     *
+     * @return array<string>
+     */
+    private function appliedKeys(): array
+    {
+        $rows = $this->db->table(self::VERSION_TABLE)->select(['migration', 'source'])->get();
+        $keys = [];
+        foreach ($rows as $row) {
+            $source = (string) ($row['source'] ?? 'app');
+            $keys[] = $this->sourceKey($source, (string) $row['migration']);
+        }
+        return $keys;
+    }
+
+    private function sourceKey(string $source, string $migration): string
+    {
+        return $source . "\0" . $migration;
     }
 
     /**
@@ -238,33 +318,10 @@ class MigrationManager
      */
     public function getMigrationStatus(): array
     {
-        // Get applied migrations once
-        $applied = $this->getAppliedMigrations();
-
-        // Get all migration files
-        $files = [];
-        $mainMigrations = $this->fileFinder->findMigrations($this->migrationsPath);
-        foreach ($mainMigrations as $file) {
-            $files[] = $file->getPathname();
-        }
-
-        // Get migrations from additional paths (extensions register their paths)
-        foreach ($this->additionalMigrationPaths as $migrationDir) {
-            $extensionMigrations = $this->fileFinder->findMigrations($migrationDir);
-            foreach ($extensionMigrations as $file) {
-                $files[] = $file->getPathname();
-            }
-        }
-
-        // Filter pending migrations
-        $pendingFiles = array_filter($files, fn($file) => !in_array(basename($file), $applied, true));
-
-        // Sort files by filename to ensure proper execution order
-        usort($pendingFiles, fn($a, $b) => basename($a) <=> basename($b));
-
+        // Pending is computed with the same priority + package-scoped logic as getPendingMigrations().
         return [
-            'pending' => $pendingFiles,
-            'applied' => $applied
+            'pending' => $this->getPendingMigrations(),
+            'applied' => $this->getAppliedMigrations(),
         ];
     }
 
@@ -382,14 +439,15 @@ class MigrationManager
         $filename = basename($file);
         $checksum = hash_file('sha256', $file);
 
-        // Determine if this is an extension migration
+        // Determine the owning source (package name) + legacy extension label. Use realpath +
+        // trailing-separator matching so "/foo/pkg2" does not match "/foo/pkg".
+        $source = 'app';
         $extensionName = null;
-
-        foreach ($this->additionalMigrationPaths as $migrationPath) {
-            if (strpos($file, $migrationPath) === 0) {
-                // Extract extension name from path (assume path contains extension name)
-                $pathParts = explode('/', str_replace('\\', '/', $migrationPath));
-                $extensionName = end($pathParts) !== false ? end($pathParts) : 'extension';
+        foreach ($this->additionalMigrationPaths as $entry) {
+            if ($this->fileBelongsToDir($file, $entry['path'])) {
+                $source = $entry['source'];
+                $parts = explode('/', str_replace('\\', '/', rtrim($entry['path'], '/')));
+                $extensionName = end($parts) !== false ? (string) end($parts) : 'extension';
                 break;
             }
         }
@@ -407,7 +465,8 @@ class MigrationManager
                     'batch' => $batch,
                     'checksum' => $checksum,
                     'description' => $migration->getDescription(),
-                    'extension' => $extensionName
+                    'extension' => $extensionName,
+                    'source' => $source
                     ]
                 );
 
@@ -451,8 +510,8 @@ class MigrationManager
         $results = ['reverted' => [], 'failed' => []];
         $migrations = $this->getMigrationsToRollback($steps);
 
-        foreach (array_reverse($migrations) as $migration) {
-            $status = $this->rollbackMigration($migration);
+        foreach ($migrations as $row) { // already ordered most-recent-first
+            $status = $this->rollbackMigration($row['migration'], $row['source']);
             if ($status['success']) {
                 $results['reverted'][] = $status['file'];
             } else {
@@ -466,26 +525,29 @@ class MigrationManager
     /**
      * Get migrations for rollback
      *
-     * Returns list of migrations to roll back based on:
-     * - Most recent batch first
-     * - Specified number of steps
+     * Returns list of migrations to roll back (most recent batch first), each carrying its
+     * owning source so rollback can resolve + delete by (source, migration).
      *
      * @param  int $steps Number of migrations to return
-     * @return array<string> List of migration filenames
+     * @return array<int, array{migration: string, source: string}>
      */
     private function getMigrationsToRollback(int $steps): array
     {
-        // Use schema manager for getting migrations to rollback
-
         $result = $this->db
             ->table(self::VERSION_TABLE)
-            ->select(['migration'])
+            ->select(['migration', 'source'])
             ->orderBy('batch', 'DESC')
             ->orderBy('id', 'DESC')
             ->limit($steps)
             ->get();
 
-        return array_column($result, 'migration');
+        return array_map(
+            fn(array $r) => [
+                'migration' => (string) $r['migration'],
+                'source' => (string) ($r['source'] ?? 'app'),
+            ],
+            $result
+        );
     }
 
     /**
@@ -497,62 +559,57 @@ class MigrationManager
      * 3. Removes from version history
      *
      * @param  string $filename Migration filename
+     * @param  string $source   Owning source (package name, or 'app')
      * @return array{
      *     success: bool,
      *     file: string,
      *     error?: string
      * } Rollback result
      */
-    private function rollbackMigration(string $filename): array
+    private function rollbackMigration(string $filename, string $source): array
     {
-        // First check in main migrations directory
-        $file = $this->migrationsPath . '/' . $filename;
-
-        // If not found in main directory, check in additional migration paths
-        if (!file_exists($file)) {
-            $found = false;
-
-            foreach ($this->additionalMigrationPaths as $migrationDir) {
-                $extensionFile = $migrationDir . '/' . $filename;
-
-                // Use FileFinder to check if migration directory exists and file exists
-                $extensionMigrations = $this->fileFinder->findMigrations($migrationDir);
-                $matchingFile = null;
-                foreach ($extensionMigrations as $migFile) {
-                    if ($migFile->getFilename() === $filename) {
-                        $matchingFile = $migFile;
-                        break;
-                    }
-                }
-
-                if ($matchingFile !== null && file_exists($extensionFile)) {
-                    $file = $extensionFile;
-                    $found = true;
-                    break;
-                }
+        // Resolve the file within the directory that owns this source.
+        $file = null;
+        foreach ($this->allSources() as $src) {
+            if ($src['source'] !== $source) {
+                continue;
             }
-
-            if (!$found) {
-                return ['success' => false, 'file' => $filename, 'error' => 'File not found in enabled extensions'];
+            $candidate = rtrim($src['path'], '/') . '/' . $filename;
+            if (file_exists($candidate)) {
+                $file = $candidate;
+                break;
             }
+        }
+
+        if ($file === null) {
+            return ['success' => false, 'file' => $filename, 'error' => "File not found for source $source"];
         }
 
         include_once $file;
-        $className = pathinfo($file, PATHINFO_FILENAME);
-        $className = preg_replace('/^\d+_/', '', $className); // Removes any leading digits and underscore
 
-        if (!class_exists($className)) {
-            throw DatabaseException::queryFailed(
-                'MIGRATION_ERROR',
-                "Migration class $className not found in $file"
-            );
+        // Namespace-aware class resolution (mirrors runMigration()).
+        $className = preg_replace('/^\d+_/', '', pathinfo($file, PATHINFO_FILENAME));
+        $fileContent = file_get_contents($file);
+        $namespace = '';
+        if (is_string($fileContent) && preg_match('/namespace\s+([^;]+);/i', $fileContent, $m) === 1) {
+            $namespace = $m[1] . '\\';
+        }
+        $fullClassName = $namespace . $className;
+        if (!class_exists($fullClassName)) {
+            if (!class_exists((string) $className)) {
+                throw DatabaseException::queryFailed(
+                    'MIGRATION_ERROR',
+                    "Migration class $className not found in $file"
+                );
+            }
+            $fullClassName = (string) $className;
         }
 
-        $migration = new $className();
+        $migration = new $fullClassName();
         if (!$migration instanceof MigrationInterface) {
             throw BusinessLogicException::operationNotAllowed(
                 'migration_validation',
-                "Migration $className must implement MigrationInterface"
+                "Migration $fullClassName must implement MigrationInterface"
             );
         }
 
@@ -560,8 +617,14 @@ class MigrationManager
             // Run migration rollback - operations will execute immediately
             $migration->down($this->schema);
 
-            // Delete migration record after schema operations complete
-            $this->db->table(self::VERSION_TABLE)->where('migration', $filename)->delete();
+            // Delete the version row by (source, migration) — basename alone is not unique.
+            // The migrations table has no deleted_at, so delete() now hard-deletes it (the
+            // soft-delete handler is column-aware). Explicit operators: where() does not
+            // normalize a 2-arg string value to equality.
+            $this->db->table(self::VERSION_TABLE)
+                ->where('migration', '=', $filename)
+                ->where('source', '=', $source)
+                ->delete();
 
             return ['success' => true, 'file' => $filename];
         } catch (\Exception $e) {

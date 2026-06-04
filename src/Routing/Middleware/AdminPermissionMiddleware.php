@@ -13,7 +13,7 @@ use Glueful\Permissions\PermissionManager;
 use Glueful\Permissions\Exceptions\PermissionException;
 use Glueful\Permissions\Exceptions\ProviderNotFoundException;
 use Glueful\Auth\AuthenticationService;
-use Glueful\Repository\UserRepository;
+use Glueful\Auth\Contracts\UserProviderInterface;
 use Glueful\Http\Exceptions\Domain\SecurityException;
 use Glueful\Http\Exceptions\Domain\AuthenticationException;
 use Glueful\Events\Security\AdminAccessEvent;
@@ -172,8 +172,8 @@ class AdminPermissionMiddleware implements RouteMiddleware
     /** @var PermissionManager Permission manager instance */
     private PermissionManager $permissionManager;
 
-    /** @var UserRepository User repository for admin checks */
-    private UserRepository $userRepository;
+    /** @var UserProviderInterface Identity provider for the account-status gate */
+    private UserProviderInterface $userProvider;
 
     /** @var LoggerInterface|null Logger instance */
     private ?LoggerInterface $logger;
@@ -199,7 +199,7 @@ class AdminPermissionMiddleware implements RouteMiddleware
      * @param array<string> $allowedCountries Allowed countries
      * @param string $logLevel Log level for security events
      * @param PermissionManager|null $permissionManager Permission manager instance
-     * @param UserRepository|null $userRepository User repository instance
+     * @param UserProviderInterface|null $userProvider Identity provider for the account-status gate
      * @param LoggerInterface|null $logger Logger instance
      * @param ContainerInterface|null $container DI Container instance
      * @param ApplicationContext|null $appContext Application context
@@ -217,7 +217,7 @@ class AdminPermissionMiddleware implements RouteMiddleware
         array $allowedCountries = [],
         string $logLevel = 'warning',
         ?PermissionManager $permissionManager = null,
-        ?UserRepository $userRepository = null,
+        ?UserProviderInterface $userProvider = null,
         ?LoggerInterface $logger = null,
         ?ContainerInterface $container = null,
         ?ApplicationContext $appContext = null
@@ -239,7 +239,11 @@ class AdminPermissionMiddleware implements RouteMiddleware
 
         // Initialize dependencies
         $this->permissionManager = $permissionManager ?? $this->getPermissionManagerFromContainer();
-        $this->userRepository = $userRepository ?? new UserRepository(null, null, $this->appContext);
+        $this->userProvider = $userProvider ?? (
+            ($this->container !== null && $this->container->has(UserProviderInterface::class))
+                ? $this->container->get(UserProviderInterface::class)
+                : new \Glueful\Auth\NullUserProvider()
+        );
 
         // Try to get logger from container if not provided
         if ($this->logger === null && $this->container !== null) {
@@ -824,35 +828,18 @@ class AdminPermissionMiddleware implements RouteMiddleware
     private function validateUserStatus(string $userUuid): bool
     {
         try {
-            $user = $this->userRepository->findByUuid($userUuid);
-            if ($user === null) {
+            // Account-health gate only: the identity must exist and be active. Admin AUTHORIZATION
+            // is a permission decision handled via $this->permissionManager->can() elsewhere — it
+            // is no longer derived from a users.is_admin column (authz lives with the RBAC provider).
+            $identity = $this->userProvider->findByUuid($userUuid);
+            if ($identity === null) {
                 return false;
             }
 
-            // Check if user is active
-            if (!isset($user['is_active']) || $user['is_active'] !== true) {
-                return false;
-            }
-
-            // Check if user has admin privileges
-            if (!isset($user['is_admin']) || $user['is_admin'] !== true) {
-                return false;
-            }
-
-            // Check if account is not locked
-            if (array_key_exists('locked_at', $user) && $user['locked_at'] !== null && $user['locked_at'] !== '') {
-                return false;
-            }
-
-            // Check if account is not expired
-            if (array_key_exists('expires_at', $user) && $user['expires_at'] !== null && $user['expires_at'] !== '') {
-                $expiryDate = new \DateTime($user['expires_at']);
-                if ($expiryDate < new \DateTime()) {
-                    return false;
-                }
-            }
-
-            return true;
+            // status: null = no opinion = allowed; any explicit non-active value (suspended/
+            // disabled/locked/pending) blocks access.
+            $status = $identity->status();
+            return $status === null || $status === 'active';
         } catch (\Exception) {
             return false;
         }

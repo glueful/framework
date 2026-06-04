@@ -301,9 +301,8 @@ class ContainerDebugCommand extends BaseCommand
 
         // Simplified dependency graph
         $dependencies = [
-            'AuthController' => ['SessionStoreInterface', 'UserRepository'],
+            'AuthController' => ['SessionStoreInterface'],
             'SessionStoreInterface' => ['DatabaseInterface', 'CacheStore'],
-            'UserRepository' => ['DatabaseInterface'],
             'ExtensionManager' => ['ExtensionLoader', 'ExtensionConfig', 'ExtensionValidator']
         ];
 
@@ -388,7 +387,6 @@ class ContainerDebugCommand extends BaseCommand
         // access to the ContainerBuilder to get all service IDs
         return [
             'Glueful\\Auth\\Interfaces\\SessionStoreInterface',
-            'Glueful\\Repository\\UserRepository',
             'Glueful\\Extensions\\ExtensionManager',
             'Glueful\\Cache\\CacheStore',
             'Glueful\\Queue\\QueueManager',

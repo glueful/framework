@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Http;
 
 use Glueful\Bootstrap\ApplicationContext;
-use Glueful\Auth\AuthenticatedUser;
+use Glueful\Auth\UserIdentity;
 use Glueful\Auth\TokenManager;
 use Glueful\Auth\SessionCacheManager;
 
@@ -65,8 +65,8 @@ class RequestUserContext
     /** @var array<string, mixed>|null Cached session data */
     private ?array $sessionData = null; // @phpstan-var AuthSessionPayload|null
 
-    /** @var AuthenticatedUser|null Cached user object */
-    private ?AuthenticatedUser $user = null;
+    /** @var UserIdentity|null Cached user object */
+    private ?UserIdentity $user = null;
 
     /** @var array<string, bool> Cached permission results */
     private array $permissionCache = [];
@@ -175,9 +175,9 @@ class RequestUserContext
     /**
      * Get authenticated user
      *
-     * @return AuthenticatedUser|null Authenticated user or null
+     * @return UserIdentity|null Authenticated user or null
      */
-    public function getUser(): ?AuthenticatedUser
+    public function getUser(): ?UserIdentity
     {
         $this->initialize();
         return $this->user;
@@ -190,7 +190,7 @@ class RequestUserContext
      */
     public function getUserUuid(): ?string
     {
-        return $this->getUser()?->uuid;
+        return $this->getUser()?->uuid();
     }
 
     /**
@@ -464,7 +464,7 @@ class RequestUserContext
             $this->gate = new \Glueful\Permissions\Gate($strategy, $allowOverride);
         }
 
-        $identity = $this->buildUserIdentity();
+        $identity = $this->getUser() ?? new UserIdentity('anonymous');
 
         // Prepare Gate Context from available request attributes / provided context
         $tenantId   = $context['tenant_id']   ?? ($this->requestMetadata['tenant_id'] ?? null);
@@ -508,7 +508,7 @@ class RequestUserContext
     {
         $user = $this->getUser();
         return array_merge($this->requestMetadata, [
-        'user_uuid' => $user?->uuid,
+        'user_uuid' => $user?->uuid(),
         'session_id' => $this->sessionData['session_id'] ?? null,
         'request_id' => $this->requestId,
         'is_authenticated' => $this->isAuthenticated(),
@@ -564,7 +564,7 @@ class RequestUserContext
     }
 
     /** @param array<string, mixed> $sessionData */
-    private function buildUserFromSession(array $sessionData): ?AuthenticatedUser
+    private function buildUserFromSession(array $sessionData): ?UserIdentity
     {
         $sessionUser = is_array($sessionData['user'] ?? null) ? $sessionData['user'] : [];
         $userUuid = isset($sessionUser['uuid'])
@@ -574,21 +574,29 @@ class RequestUserContext
             return null;
         }
 
-        $roles = is_array($sessionUser['roles'] ?? null) ? $sessionUser['roles'] : [];
+        $roles = is_array($sessionUser['roles'] ?? null) ? array_values($sessionUser['roles']) : [];
         $permissions = is_array($sessionUser['permissions'] ?? null) ? $sessionUser['permissions'] : [];
 
-        return new AuthenticatedUser(
+        $identity = new UserIdentity(
             uuid: $userUuid,
-            sessionUuid: isset($sessionData['id']) ? (string) $sessionData['id'] : null,
-            provider: isset($sessionData['provider']) ? (string) $sessionData['provider'] : null,
-            username: isset($sessionUser['username']) ? (string) $sessionUser['username'] : null,
-            email: isset($sessionUser['email']) ? (string) $sessionUser['email'] : null,
             roles: $roles,
-            permissions: $permissions
+            scopes: [],
+            attributes: ['permissions' => $permissions],
+            email: isset($sessionUser['email']) ? (string) $sessionUser['email'] : null,
+            username: isset($sessionUser['username']) ? (string) $sessionUser['username'] : null,
+            status: isset($sessionUser['status']) ? (string) $sessionUser['status'] : null,
         );
+
+        $sessionUuid = isset($sessionData['id']) ? (string) $sessionData['id'] : null;
+        $provider = isset($sessionData['provider']) ? (string) $sessionData['provider'] : null;
+        if ($sessionUuid !== null && $provider !== null) {
+            $identity = $identity->withSession($sessionUuid, $provider);
+        }
+
+        return $identity;
     }
 
-    private function buildUserFromToken(string $token): ?AuthenticatedUser
+    private function buildUserFromToken(string $token): ?UserIdentity
     {
         try {
             $jwtPayload = \Glueful\Auth\JWTService::decode($token);
@@ -601,11 +609,11 @@ class RequestUserContext
                 return null;
             }
 
-            return new AuthenticatedUser(
-                uuid: $userUuid,
-                sessionUuid: isset($jwtPayload['sid']) ? (string) $jwtPayload['sid'] : null,
-                provider: null
-            );
+            $identity = new UserIdentity($userUuid);
+            if (isset($jwtPayload['sid'])) {
+                $identity = $identity->withSession((string) $jwtPayload['sid'], 'jwt');
+            }
+            return $identity;
         } catch (\Exception $e) {
             error_log("Failed to build user from token: " . $e->getMessage());
             return null;
@@ -762,17 +770,5 @@ class RequestUserContext
     public function setPermissionsConfig(array $config): void
     {
         $this->permissionsConfig = $config;
-    }
-
-/** Build a lightweight UserIdentity from current request/session */
-    private function buildUserIdentity(): \Glueful\Auth\UserIdentity
-    {
-        $uuid = $this->getUserUuid() ?? 'anonymous';
-        $roles = $this->getUserRoles();
-        $scopes = []; // add when you expose scopes in this context
-        $attrs = [
-        'permissions' => $this->getUserPermissions(),
-        ];
-        return new \Glueful\Auth\UserIdentity($uuid, $roles, $scopes, $attrs);
     }
 }

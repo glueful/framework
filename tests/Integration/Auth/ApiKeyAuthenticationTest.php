@@ -9,18 +9,19 @@ use Glueful\Auth\ApiKey\ApiKeyService;
 use Glueful\Auth\ApiKey\Exceptions\ApiKeyExpiredException;
 use Glueful\Auth\ApiKey\Exceptions\InvalidApiKeyException;
 use Glueful\Auth\ApiKeyAuthenticationProvider;
+use Glueful\Auth\UserIdentity;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Framework;
 use Glueful\Routing\RouteManifest;
+use Glueful\Tests\Support\Auth\InMemoryUserProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
  * Service-level + provider-level integration tests for the hardened API key
- * system. The migration lives in api-skeleton (`009_CreateApiKeysTable.php`)
- * so the framework test creates the `api_keys` table inline via PDO to stay
- * self-contained — running the migration would couple test environments
- * across repos.
+ * system. The `api_keys` table is a CORE migration (`framework/migrations/003_CreateApiKeysTable`);
+ * this test creates it inline via PDO to stay fast/self-contained. Keep the inline columns in
+ * sync with that migration — notably `user_uuid` (indexed, no FK — external principal id, §2).
  */
 class ApiKeyAuthenticationTest extends TestCase
 {
@@ -49,7 +50,7 @@ class ApiKeyAuthenticationTest extends TestCase
     public function testCreateThenVerifyHappyPath(): void
     {
         $result = ApiKeyService::create($this->context, [
-            'user_id' => 'u-abc12345abcd',
+            'user_uuid' => 'u-abc12345abcd',
             'name'    => 'Test Key',
         ]);
         $verified = ApiKeyService::verify($this->context, $result['plain'], '203.0.113.5');
@@ -58,7 +59,7 @@ class ApiKeyAuthenticationTest extends TestCase
 
     public function testVerifyThrowsInvalidOnWrongHash(): void
     {
-        ApiKeyService::create($this->context, ['user_id' => 'u-abc12345abcd', 'name' => 'X']);
+        ApiKeyService::create($this->context, ['user_uuid' => 'u-abc12345abcd', 'name' => 'X']);
         $this->expectException(InvalidApiKeyException::class);
         ApiKeyService::verify($this->context, 'gf_test_zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz', '1.2.3.4');
     }
@@ -66,7 +67,7 @@ class ApiKeyAuthenticationTest extends TestCase
     public function testVerifyThrowsExpiredForPastExpiry(): void
     {
         $result = ApiKeyService::create($this->context, [
-            'user_id'    => 'u-abc12345abcd',
+            'user_uuid'    => 'u-abc12345abcd',
             'name'       => 'Past',
             'expires_at' => date('Y-m-d H:i:s', time() - 60),
         ]);
@@ -77,7 +78,7 @@ class ApiKeyAuthenticationTest extends TestCase
     public function testVerifyEnforcesIpAllowlist(): void
     {
         $result = ApiKeyService::create($this->context, [
-            'user_id'     => 'u-abc12345abcd',
+            'user_uuid'     => 'u-abc12345abcd',
             'name'        => 'IP-restricted',
             'allowed_ips' => ['10.0.0.0/8'],
         ]);
@@ -87,7 +88,7 @@ class ApiKeyAuthenticationTest extends TestCase
 
     public function testRotateProducesNewKeyAndKeepsOldValidDuringGrace(): void
     {
-        $original = ApiKeyService::create($this->context, ['user_id' => 'u-abc12345abcd', 'name' => 'O']);
+        $original = ApiKeyService::create($this->context, ['user_uuid' => 'u-abc12345abcd', 'name' => 'O']);
         $rotation = ApiKeyService::rotate($this->context, $original['key'], graceHours: 24);
 
         $this->assertNotNull(ApiKeyService::verify($this->context, $rotation['new_plain'], '1.2.3.4'));
@@ -96,7 +97,7 @@ class ApiKeyAuthenticationTest extends TestCase
 
     public function testRevokedKeyFailsVerify(): void
     {
-        $result = ApiKeyService::create($this->context, ['user_id' => 'u-abc12345abcd', 'name' => 'Doomed']);
+        $result = ApiKeyService::create($this->context, ['user_uuid' => 'u-abc12345abcd', 'name' => 'Doomed']);
         ApiKeyService::revoke($this->context, $result['key']);
 
         $this->expectException(InvalidApiKeyException::class);
@@ -110,12 +111,14 @@ class ApiKeyAuthenticationTest extends TestCase
         $this->ensureUserRow('u-abc12345abcd');
 
         $result = ApiKeyService::create($this->context, [
-            'user_id' => 'u-abc12345abcd',
+            'user_uuid' => 'u-abc12345abcd',
             'name'    => 'Provider Test',
             'scopes'  => ['read:posts'],
         ]);
 
         $provider = new ApiKeyAuthenticationProvider($this->context);
+        // Core binds NullUserProvider; inject an in-memory provider for the user lookup.
+        $provider->setUserProvider($this->fakeProvider('u-abc12345abcd'));
         $request = Request::create('/x', 'GET');
         $request->headers->set('X-API-Key', $result['plain']);
 
@@ -129,10 +132,12 @@ class ApiKeyAuthenticationTest extends TestCase
     {
         $this->ensureUserRow('u-abc12345abcd');
 
-        $result = ApiKeyService::create($this->context, ['user_id' => 'u-abc12345abcd', 'name' => 'Doomed']);
+        $result = ApiKeyService::create($this->context, ['user_uuid' => 'u-abc12345abcd', 'name' => 'Doomed']);
         ApiKeyService::revoke($this->context, $result['key']);
 
         $provider = new ApiKeyAuthenticationProvider($this->context);
+        // Core binds NullUserProvider; inject an in-memory provider for the user lookup.
+        $provider->setUserProvider($this->fakeProvider('u-abc12345abcd'));
         $request = Request::create('/x', 'GET');
         $request->headers->set('X-API-Key', $result['plain']);
 
@@ -184,14 +189,21 @@ class ApiKeyAuthenticationTest extends TestCase
         // the same in-memory SQLite PDO). Without this, BaseRepository
         // resolves a fresh Connection via Connection::fromContext(), which
         // opens a separate :memory: database that doesn't see our tables.
-        new \Glueful\Repository\UserRepository($connection, null, $this->context);
+        // Pre-seed BaseRepository's static shared connection (so ApiKeyService reuses
+        // the SAME in-memory PDO) without depending on any concrete repository/store.
+        new class ($connection, $this->context) extends \Glueful\Repository\BaseRepository {
+            public function getTableName(): string
+            {
+                return 'api_keys';
+            }
+        };
 
         $pdo = $connection->getPDO();
         $pdo->exec('
             CREATE TABLE api_keys (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 uuid VARCHAR(12) NOT NULL UNIQUE,
-                user_id VARCHAR(12) NOT NULL,
+                user_uuid VARCHAR(12) NOT NULL,
                 name VARCHAR(255) NOT NULL,
                 key_prefix VARCHAR(24) NOT NULL,
                 key_hash VARCHAR(64) NOT NULL UNIQUE,
@@ -204,7 +216,7 @@ class ApiKeyAuthenticationTest extends TestCase
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         ');
-        $pdo->exec('CREATE INDEX idx_api_keys_user_id ON api_keys(user_id)');
+        $pdo->exec('CREATE INDEX idx_api_keys_user_uuid ON api_keys(user_uuid)');
         $pdo->exec('CREATE INDEX idx_api_keys_key_prefix ON api_keys(key_prefix)');
 
         $pdo->exec('
@@ -214,6 +226,13 @@ class ApiKeyAuthenticationTest extends TestCase
                 email VARCHAR(255)
             )
         ');
+    }
+
+    private function fakeProvider(string $uuid): InMemoryUserProvider
+    {
+        return (new InMemoryUserProvider())->add(
+            new UserIdentity($uuid, email: $uuid . '@example.com', username: 'test_user_' . $uuid, status: 'active')
+        );
     }
 
     private function ensureUserRow(string $uuid): void

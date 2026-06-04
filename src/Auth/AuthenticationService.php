@@ -7,7 +7,7 @@ namespace Glueful\Auth;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Cache\Drivers\ArrayCacheDriver;
 use Glueful\Helpers\CacheHelper;
-use Glueful\Repository\UserRepository;
+use Glueful\Auth\Contracts\UserProviderInterface;
 use Glueful\DTOs\{PasswordDTO};
 use Symfony\Component\HttpFoundation\Request;
 use Glueful\Auth\Interfaces\SessionStoreInterface;
@@ -32,7 +32,8 @@ class AuthenticationService
 {
     use ResolvesSessionStore;
 
-    private UserRepository $userRepository;
+    private UserProviderInterface $userProvider;
+    private IdentityResolver $identityResolver;
     private PasswordHasher $passwordHasher;
     private AuthenticationManager $authManager;
     private TokenManager $tokenManager;
@@ -55,13 +56,11 @@ class AuthenticationService
      * **Dependency Resolution:**
      * - SessionStore: Unified session persistence and validation (DB + cache)
      * - SessionCacheManager: Manages user session data and caching
-     * - UserRepository: Provides user data access and persistence
-     * - Validator: Validates input credentials and authentication data
+     * - UserProviderInterface: Resolves identities + verifies credentials (no concrete store in core)
      * - PasswordHasher: Handles secure password hashing and verification
      *
      * @param SessionStoreInterface|null $sessionStore Unified session store for JWT handling
      * @param SessionCacheManager|null $sessionCacheManager Session management and caching service
-     * @param UserRepository|null $userRepository User data repository for authentication
      * @param PasswordHasher|null $passwordHasher Password hashing and verification service
      * @param ApplicationContext|null $context
      * @throws \RuntimeException If authentication system initialization fails
@@ -70,12 +69,13 @@ class AuthenticationService
     public function __construct(
         ?SessionStoreInterface $sessionStore = null,
         ?SessionCacheManager $sessionCacheManager = null,
-        ?UserRepository $userRepository = null,
         ?PasswordHasher $passwordHasher = null,
         ?ApplicationContext $context = null,
         ?AuthenticationManager $authManager = null,
         ?TokenManager $tokenManager = null,
-        ?RefreshService $refreshService = null
+        ?RefreshService $refreshService = null,
+        ?UserProviderInterface $userProvider = null,
+        ?IdentityResolver $identityResolver = null
     ) {
         $this->context = $context;
         // Resolve SessionStore via trait helper (container with fallback)
@@ -88,8 +88,12 @@ class AuthenticationService
             $cache = CacheHelper::createCacheInstance($this->context) ?? new ArrayCacheDriver();
             $this->sessionCacheManager = new SessionCacheManager($cache, $this->context);
         }
-        $this->userRepository = $userRepository ?? new UserRepository();
         $this->passwordHasher = $passwordHasher ?? new PasswordHasher();
+        // No user store in core: default to the fail-closed provider. The real provider is bound
+        // by whatever user store is installed (glueful/users is the first-party one; LDAP/external
+        // IdP/custom stores work too). Set before the RefreshService fallback (consumes it).
+        $this->userProvider = $userProvider ?? new NullUserProvider();
+        $this->identityResolver = $identityResolver ?? new IdentityResolver([]);
 
         if ($authManager !== null) {
             $this->authManager = $authManager;
@@ -125,7 +129,7 @@ class AuthenticationService
                 new ProviderTokenIssuer($this->tokenManager),
                 new SessionStateCache($this->sessionStore),
                 $this->sessionStore,
-                $this->userRepository,
+                $this->userProvider,
                 $this->context
             );
         }
@@ -205,60 +209,48 @@ class AuthenticationService
             return null;
         }
 
-        // Process credentials based on type (username or email) using optimized query
-        $user = null;
-
-        $username = $credentials['username'] ?? $credentials['email'] ?? null;
-        if ($username === null) {
+        $identifier = $credentials['username'] ?? $credentials['email'] ?? null;
+        if ($identifier === null) {
             return null;
         }
 
-        if (filter_var($username, FILTER_VALIDATE_EMAIL)) {
-            // For email login
-            $user = $this->userRepository->findByEmail($username);
-        } else {
-            // For username login
-            $user = $this->userRepository->findByUsername($username);
-        }
-
-        // If user not found or is an array of error messages
-        if ($user === null) {
-            return null;
-        }
-
-        // Enforce allowed login statuses (default: ['active'])
-        $allowedStatuses = (array) $this->getConfig('security.auth.allowed_login_statuses', ['active']);
-        $userStatus = (string) ($user['status'] ?? '');
-        if ($allowedStatuses !== [] && !in_array($userStatus, $allowedStatuses, true)) {
-            // Fail silently to avoid account enumeration
-            return null;
-        }
-
-        // Validate password with new Validation rules
+        // Validate password format first (unchanged).
         try {
             PasswordDTO::from(['password' => $credentials['password'] ?? '']);
         } catch (\Glueful\Validation\ValidationException $e) {
             return null;
         }
 
-        // Verify password against hash
-        if (
-            !isset($user['password'])
-            || $this->passwordHasher->verify($credentials['password'], $user['password']) === false
-        ) {
+        // Credential verification routes through the provider contract.
+        $identity = $this->userProvider->verifyCredentials(
+            (string) $identifier,
+            (string) ($credentials['password'] ?? '')
+        );
+        if ($identity === null) {
             return null;
         }
 
-        // Format user data and get profile
-        $userData = $this->formatUserData($user);
-        $userData['profile'] = $this->userRepository->getProfile($user['uuid']) ?? null;
-        $userData['roles'] = []; // Roles managed by RBAC extension
-        $userData['last_login'] = date('Y-m-d H:i:s');
+        // Centralized status gate (configured allowed statuses) + claims fold (Aegis etc.).
+        // Null => rejected (e.g. suspended/disabled).
+        $identity = $this->identityResolver->resolve($identity);
+        if ($identity === null) {
+            return null;
+        }
 
-        // Pass through remember_me preference from credentials
-        $userData['remember_me'] = $credentials['remember_me'] ?? false;
-
-        return $userData;
+        // Build session user data from the resolved identity ONLY — no UserRepository, no profile
+        // (rich profile is a glueful/users concern; clean break). Core login operates on identity
+        // + claims.
+        return [
+            'uuid' => $identity->uuid(),
+            'id' => $identity->uuid(),
+            'email' => $identity->email(),
+            'username' => $identity->username(),
+            'status' => $identity->status(),
+            'roles' => $identity->roles(),
+            'permissions' => $identity->claim('permissions', []),
+            'last_login' => date('Y-m-d H:i:s'),
+            'remember_me' => $credentials['remember_me'] ?? false,
+        ];
     }
 
     /**
@@ -378,24 +370,6 @@ class AuthenticationService
     }
 
     /**
-     * Format user data for session
-     *
-     * Prepares user data for storage in session.
-     *
-     * @param array<string, mixed> $user Raw user data
-     * @return array<string, mixed> Formatted user data
-     */
-    private function formatUserData(array $user): array
-    {
-        // Remove password field
-        unset($user['password']);
-
-        // Get additional user data if needed
-        // For now, return the basic user data
-        return $user;
-    }
-
-    /**
      * Refresh user permissions
      *
      * Updates permissions in the user session and generates a new token.
@@ -471,63 +445,10 @@ class AuthenticationService
     }
 
     /**
-     * Update user password
-     *
-     * Changes user password and invalidates existing sessions.
-     *
-     * @param string $identifier User's email or UUID
-     * @param string $password New password (plaintext)
-     * @param string|null $identifierType Optional type specifier ('email' or 'uuid')
-     * @return bool Success status
+     * Account writes — password reset (updatePassword) and existence checks (userExists) — moved
+     * to glueful/users. Core authentication does not own account mutation; the account API in the
+     * Users extension performs these via its UserRepository.
      */
-    public function updatePassword(string $identifier, string $password, ?string $identifierType = null): bool
-    {
-        // Validate password using new Validation rules
-        try {
-            PasswordDTO::from(['password' => $password]);
-        } catch (\Glueful\Validation\ValidationException $e) {
-            return false;
-        }
-
-        // Determine identifier type automatically if not specified
-        if ($identifierType === null) {
-            $identifierType = filter_var($identifier, FILTER_VALIDATE_EMAIL) ? 'email' : 'uuid';
-        }
-
-        // Hash password
-        $hashedPassword = $this->passwordHasher->hash($password);
-
-        // Update password in database using the new method
-        return $this->userRepository->setNewPassword($identifier, $hashedPassword, $identifierType);
-    }
-
-    /**
-     * Check if user exists
-     *
-     * Verifies if a user exists in the system by identifier.
-     * This method is useful for validating user existence without
-     * revealing which specific criteria failed during operations
-     * like password reset or account recovery.
-     *
-     * @param string $identifier User's email or UUID to check
-     * @param string|null $identifierType Optional type specifier ('email' or 'uuid')
-     * @return bool True if user exists, false otherwise
-     */
-    public function userExists(string $identifier, ?string $identifierType = null): bool
-    {
-        // Determine identifier type automatically if not specified
-        if ($identifierType === null) {
-            $identifierType = filter_var($identifier, FILTER_VALIDATE_EMAIL) ? 'email' : 'uuid';
-        }
-
-        // Attempt to find the user based on identifier type
-        $user = $identifierType === 'email'
-            ? $this->userRepository->findByEmail($identifier)
-            : $this->userRepository->findByUuid($identifier);
-
-        // Return true if user was found and is properly formatted
-        return is_array($user) && $user !== [];
-    }
 
     /**
      * Refresh authentication tokens
@@ -556,53 +477,6 @@ class AuthenticationService
         return $this->refreshService->refresh($refreshToken);
     }
 
-    /**
-     * Get user data from user UUID
-     *
-     * Retrieves full user information for token refresh response payload.
-     *
-     * **Security considerations:**
-     * - User data is sanitized before return
-     *
-     * **Process:**
-     * 1. Fetch complete user profile from users table
-     * 2. Return sanitized user data
-     *
-     * @param string $userUuid User UUID from validated session
-     * @return array<string, mixed>|null User data array with profile information, or null if token is invalid/expired
-     */
-    /**
-     * @return array<string, mixed>|null
-     */
-    private function getUserDataByUuid(string $userUuid): ?array
-    {
-        if ($userUuid === '') {
-            return null;
-        }
-
-        $user = $this->userRepository->findByUuid($userUuid);
-
-        if ($user === null || $user === []) {
-            return null;
-        }
-
-        // Enforce allowed statuses for token refresh as well
-        $allowedStatuses = (array) $this->getConfig('security.auth.allowed_login_statuses', ['active']);
-        $userStatus = (string) ($user['status'] ?? '');
-        if ($allowedStatuses !== [] && !in_array($userStatus, $allowedStatuses, true)) {
-            return null;
-        }
-
-        $userData = $this->formatUserData($user);
-        $userProfile = $this->userRepository->getProfile($userData['uuid']);
-        // Note: Role functionality moved to RBAC extension
-        $userRoles = []; // Use RBAC extension APIs for role management
-
-        $userData['roles'] = $userRoles;
-        $userData['profile'] = $userProfile;
-
-        return $userData;
-    }
 
     /**
      * Check if user is authenticated

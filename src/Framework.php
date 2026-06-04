@@ -514,14 +514,27 @@ class Framework
      */
     private function initializeExtensions(): void
     {
-        try {
-            $extensions = $this->container->get(\Glueful\Extensions\ExtensionManager::class);
+        /** @var \Glueful\Extensions\ExtensionManager $extensions */
+        $extensions = $this->container->get(\Glueful\Extensions\ExtensionManager::class);
 
-            // Discover providers before boot so runtime list is populated
+        try {
+            // Discover providers before catalog build so the provider list is populated.
             $extensions->discover();
+        } catch (\Throwable $e) {
+            error_log("Extensions discovery failed: " . $e->getMessage());
+        }
+
+        // Fail-fast: catalog build must NOT be swallowed. Collisions / dangling grants
+        // are configuration bugs that should stop the app, not be logged and ignored.
+        $extensions->aggregatePermissionCatalog();
+
+        // Register provider-contributed Gate voters / resource policies onto the shared services.
+        $extensions->registerProviderGateExtensions();
+
+        try {
             $extensions->boot();
         } catch (\Throwable $e) {
-            error_log("Extensions initialization failed: " . $e->getMessage());
+            error_log("Extensions boot failed: " . $e->getMessage());
         }
     }
 

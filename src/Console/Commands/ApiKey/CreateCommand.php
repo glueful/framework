@@ -48,7 +48,7 @@ final class CreateCommand extends BaseCommand
         $expires = self::parseExpires($input->getOption('expires'));
 
         $result = ApiKeyService::create($this->context, [
-            'user_id'     => $userId,
+            'user_uuid'   => $userId,
             'name'        => $name,
             'scopes'      => $scopes !== [] ? $scopes : null,
             'allowed_ips' => $ips !== [] ? $ips : null,

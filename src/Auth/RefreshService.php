@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Glueful\Auth;
 
+use Glueful\Auth\Contracts\UserProviderInterface;
 use Glueful\Auth\Interfaces\SessionStoreInterface;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Helpers\CacheHelper;
-use Glueful\Repository\UserRepository;
 
 class RefreshService
 {
@@ -18,7 +18,7 @@ class RefreshService
         private readonly ProviderTokenIssuer $providerTokenIssuer,
         private readonly SessionStateCache $sessionStateCache,
         private readonly SessionStoreInterface $sessionStore,
-        private readonly UserRepository $userRepository,
+        private readonly UserProviderInterface $userProvider,
         private readonly ?ApplicationContext $context = null
     ) {
     }
@@ -144,34 +144,20 @@ class RefreshService
     /** @return array<string, mixed>|null */
     private function loadUser(string $userUuid): ?array
     {
-        $user = $this->userRepository->findByUuid($userUuid);
-        if ($user === null || $user === []) {
+        // Identity-only (clean break): the refreshed payload carries uuid/email/username, not
+        // rich profile (name/given_name/family_name/picture/locale). Profile is a glueful/users
+        // concern now; TokenManager::getProfile() and the profile-in-token shape were removed.
+        $identity = $this->userProvider->findByUuid($userUuid);
+        if ($identity === null) {
             return null;
         }
 
-        $profile = $this->userRepository->getProfile($userUuid);
-        $firstName = (string) ($profile['first_name'] ?? '');
-        $lastName = (string) ($profile['last_name'] ?? '');
-
-        $payload = [
-            'id' => $user['uuid'],
-            'email' => $user['email'] ?? null,
-            'email_verified' => (bool) ($user['email_verified_at'] ?? false),
-            'username' => $user['username'] ?? null,
-            'locale' => $user['locale'] ?? 'en-US',
-            'updated_at' => isset($user['updated_at']) ? strtotime((string) $user['updated_at']) : time(),
+        return [
+            'id' => $identity->uuid(),
+            'email' => $identity->email(),
+            'username' => $identity->username(),
+            'updated_at' => time(),
         ];
-
-        if ($firstName !== '' || $lastName !== '') {
-            $payload['name'] = trim($firstName . ' ' . $lastName);
-            $payload['given_name'] = $firstName !== '' ? $firstName : null;
-            $payload['family_name'] = $lastName !== '' ? $lastName : null;
-        }
-        if (($profile['photo_url'] ?? '') !== '') {
-            $payload['picture'] = $profile['photo_url'];
-        }
-
-        return $payload;
     }
 
     private function incrementMetric(string $name, int $value = 1): void
