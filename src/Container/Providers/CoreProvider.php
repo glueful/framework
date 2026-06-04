@@ -277,23 +277,9 @@ final class CoreProvider extends BaseServiceProvider
             )
         );
 
-        $defs[\Glueful\Auth\TwoFactor\TwoFactorService::class] = new FactoryDefinition(
-            \Glueful\Auth\TwoFactor\TwoFactorService::class,
-            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Auth\TwoFactor\TwoFactorService(
-                $this->context,
-                $c->get('database'),
-                $c->get(\Glueful\Cache\CacheStore::class),
-                $c->get(\Glueful\Notifications\Services\NotificationService::class),
-                $c->get(\Glueful\Auth\TwoFactor\ChallengeTokenIssuer::class),
-                $c->get(\Glueful\Auth\TwoFactor\JtiBlocklist::class),
-                $c->get(\Glueful\Auth\TokenManager::class),
-                (int) config($this->context, 'auth.two_factor.pin_length', 6),
-                (int) config($this->context, 'auth.two_factor.pin_ttl', 300),
-                (int) config($this->context, 'auth.two_factor.disable_freshness', 300),
-                (string) config($this->context, 'auth.two_factor.template_name', 'two-factor-pin'),
-                (bool) config($this->context, 'auth.two_factor.enabled', false)
-            )
-        );
+        // TwoFactorService moved to glueful/users (owns users.two_factor_enabled state); it is
+        // registered by UsersServiceProvider. ChallengeTokenIssuer + JtiBlocklist (above) stay in
+        // core as pure token mechanics that the moved service consumes across the boundary.
 
         // HTTP request — delegate to RequestProvider's shared definition
         $defs['request'] = new FactoryDefinition(

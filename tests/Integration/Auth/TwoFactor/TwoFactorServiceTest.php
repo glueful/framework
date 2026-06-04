@@ -11,7 +11,7 @@ use Glueful\Auth\TwoFactor\Exceptions\InvalidChallengeTokenException;
 use Glueful\Auth\TwoFactor\Exceptions\InvalidTwoFactorCodeException;
 use Glueful\Auth\TwoFactor\Exceptions\TwoFactorNotEnabledException;
 use Glueful\Auth\TwoFactor\JtiBlocklist;
-use Glueful\Auth\TwoFactor\TwoFactorService;
+use Glueful\Extensions\Users\TwoFactor\TwoFactorService;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Cache\Drivers\ArrayCacheDriver;
 use Glueful\Database\Connection;

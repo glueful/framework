@@ -44,7 +44,8 @@ class AuthController
 {
     private AuthenticationService $authService;
     private ApplicationContext $context;
-    private \Glueful\Auth\TwoFactor\TwoFactorService $twoFactor;
+    /** Optional: 2FA is provided by glueful/users; null when no user store / 2FA is installed. */
+    private ?\Glueful\Extensions\Users\TwoFactor\TwoFactorService $twoFactor = null;
     private \Glueful\Auth\LoginResponseShaper $loginResponseShaper;
 
     public function __construct(ApplicationContext $context)
@@ -57,9 +58,11 @@ class AuthController
             $this->authService = new AuthenticationService(context: $this->context);
         }
 
-        // 2FA dependencies — always registered in CoreProvider. Resolved internally
-        // (not via constructor params) to keep the controller's instantiation contract.
-        $this->twoFactor = container($this->context)->get(\Glueful\Auth\TwoFactor\TwoFactorService::class);
+        // 2FA lives in glueful/users — resolve it optionally (no hard core dependency on the
+        // extension). Login enforces 2FA only when the service is available.
+        $twoFactorClass = \Glueful\Extensions\Users\TwoFactor\TwoFactorService::class;
+        $c = container($this->context);
+        $this->twoFactor = $c->has($twoFactorClass) ? $c->get($twoFactorClass) : null;
         $this->loginResponseShaper = container($this->context)->get(\Glueful\Auth\LoginResponseShaper::class);
 
         // Initialize the authentication system
@@ -153,9 +156,9 @@ class AuthController
             throw new AuthenticationException('Invalid credentials');
         }
 
-        // Step 2: 2FA branch. isEnabled() short-circuits (no DB read) when the
-        // master switch is off, so this is a no-op for installs without 2FA.
-        if ($this->twoFactor->isEnabled((string) $userData['uuid'])) {
+        // Step 2: 2FA branch. Skipped entirely when 2FA isn't installed (glueful/users absent).
+        // isEnabled() short-circuits (no DB read) when the master switch is off.
+        if ($this->twoFactor !== null && $this->twoFactor->isEnabled((string) $userData['uuid'])) {
             $challenge = $this->twoFactor->beginLogin(
                 [
                     'uuid'              => (string) $userData['uuid'],
