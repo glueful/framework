@@ -2,6 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status: ✅ Implemented (commit `678e97f`, on `dev`).** Full suite green (1055), phpcs + PHPStan clean.
+>
+> ### Execution notes (as built) — one deviation
+> **Two hidden `AuthenticatedUser` consumers beyond the planned 4.** Task 5 said to grep 4 files, but two more accessed the user object's *properties* without naming `AuthenticatedUser`, so the name-grep missed them: `src/Controllers/Traits/ResponseCachingTrait.php` (`$this->currentUser->uuid` ×3) and `src/Controllers/TwoFactorController.php` (`$user->email`). PHPStan flagged them as private-property access once `UserIdentity` made those fields private; both migrated to method calls (`->uuid()`/`->email()`). The other property-style `$user->...` sites (`AuthToRequestAttributesMiddleware`, `AuthMiddleware`, `UserResponseModel`) operate on the `Models\User` DTO / arrays (public props), not `UserIdentity` — confirmed by a clean PHPStan run, left unchanged. **Lesson for later phases:** after a type swap, rely on PHPStan (private-property access errors) to find consumers, not just a symbol grep.
+
 **Goal:** Introduce the core identity seam — a single canonical, `final`, immutable `UserIdentity`; a `UserProviderInterface` (lookup + credential verification); an `IdentityClaimsProviderInterface` (post-auth enrichment); a null/guest provider; and a claims-composition + status gate — then retire `AuthenticatedUser` onto `UserIdentity`.
 
 **Architecture:** `UserIdentity` keeps its existing 4-arg constructor (so the 12 permission-subsystem call sites and voters keep working) but gains identity facts (`email`/`username`/`status`), runtime fields (`sessionUuid`/`provider`), an open claims bag with typed `roles()`/`scopes()` accessors backed by it, and immutable `with*()` builders. Authentication resolves an identity via `UserProviderInterface`, the core applies a status gate, then folds all registered `IdentityClaimsProviderInterface`s (re-pinning identity facts so providers can only *add* claims). `AuthenticatedUser` is removed and `RequestUserContext` + controller traits expose `UserIdentity`.
