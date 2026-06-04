@@ -340,3 +340,70 @@ Expected: **no matches** (TwoFactorService/EmailVerification moved to `glueful/u
 - **No core file references `UserRepository` or `Glueful\Models\User`** (grep clean); `TokenManager::getProfile()` removed; `SecureSerializer` whitelist updated; core default is `NullUserProvider`.
 - Framework suite green (auth fails closed without the extension); `glueful/users` suite green; PHPStan/phpcs clean.
 - Ready for Phase 5 to wire the skeleton + Aegis.
+
+---
+
+## Execution notes (as built)
+
+Phase 4 landed across the framework repo (consumer re-points, core deletions, test
+moves) and a new standalone `glueful/users` repo. Deviations from the plan as written:
+
+**Sequencing — re-point before move.** The plan ordered "move files, then re-point
+consumers." Executed the reverse: re-pointed every core consumer to
+`UserProviderInterface::findByUuid()` *first*, ran the suite green, then deleted the
+store from core. This kept core compiling at each step (no window where core
+referenced a class that no longer existed) and made the deletions a pure no-op
+verification.
+
+**2FA via a static factory, mechanics stay in core.** `TwoFactorService` moved to the
+extension but its container entry uses a prod-safe static factory
+(`TwoFactor\TwoFactorServiceFactory::create($c)`) rather than a closure — closures are
+forbidden in the compiled prod container. The token *mechanics*
+(`ChallengeTokenIssuer`, `JtiBlocklist`, the 2FA exceptions) stay in core; only the
+user-state-bound service moved. `AuthController` resolves 2FA optionally
+(`container($ctx)->has(TwoFactorService::class)`) so core runs with or without the
+extension.
+
+**Migration filenames must be `\d{3}_`.** `FileFinder::findMigrations()` filters to
+exactly three leading digits. The plan's `0001_`-style examples for `glueful/users`
+were wrong — renamed to `001_`…`005_`. Cross-source ordering is *not* expressed by the
+prefix; it is handled by the `IDENTITY` priority passed to `loadMigrationsFrom()`
+(Phase 1). So `glueful/users` `001_` runs before the skeleton's `001_` purely on
+priority, and the `source` column keeps same-basename rows distinct.
+
+**Five migrations, not six.** `two_factor_enabled` is folded into the `001` users
+`CREATE TABLE` rather than shipped as a separate `ALTER`. Tables: `001` users, `002`
+profiles, `003` auth_sessions, `004` auth_refresh_tokens, `005` api_keys.
+
+**FK policy applied (spec §2).** Intra-package FKs only: profiles/sessions/refresh →
+users; refresh → auth_sessions. `profiles.photo_uuid` (blobs live in the skeleton) and
+`api_keys.user_uuid` are indexed UUID columns with **no** cross-package FK. `api_keys`
+also renamed its owner column `user_id` → `user_uuid` to match the principal-as-
+external-reference convention.
+
+**Account lifecycle reimplemented, not relocated wholesale.**
+`AuthenticationService`'s account methods (`updatePassword`, `userExists`,
+`getUserDataByUuid`, `formatUserData`) were removed from core — their only callers were
+the account actions that moved. The new `AccountController` reimplements them locally
+against `UserRepository` (`userExists()` via `findByEmail`; reset via `setNewPassword`
++ `PasswordHasher`). The seam (`AuthenticationService`/`RefreshService`) is now
+identity-only.
+
+**Test infra and consumption model.** The framework consumes `glueful/users` in its
+*own* suite via an `autoload-dev` PSR-4 map to `../extensions/users/src` (no composer
+require into core). The extension is a standalone repo with a composer path-repo
+symlink back to the framework (`../../framework`) and its own `phpunit.xml` /
+`phpstan.neon` (level 6) + `phpstan-baseline.neon` grandfathering 7 inherited items
+from the moved code. `UserProviderTest` and `TwoFactorServiceTest` relocated to the
+extension suite; the framework's seam/api-key tests stayed in core and inject a real
+`UserProvider`. `ApiKeyAuthenticationProvider` gained a `setUserProvider()` injector
+for that wiring. New `MigrationsTest` applies the five migrations on file-based SQLite
+(`:memory:` is per-connection) and asserts the schema.
+
+**Routes grouped.** Account + 2FA routes live under the extension's `routes/` folder
+(`account.php`, `2fa.php`), loaded from `register()`; core's `RouteManifest` no longer
+lists `routes/2fa.php`.
+
+**Status authority.** `IdentityResolver` was made status-configurable
+(`allowed_login_statuses` config) so it is the single place that gates login by status,
+rather than that logic living in the (now-removed) store methods.
