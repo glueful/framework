@@ -80,7 +80,9 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "Glueful\\Tests\\": "tests/"
+            "Glueful\\Tests\\": "tests/",
+            "Glueful\\Extensions\\Users\\": "../extensions/users/src/",
+            "Glueful\\Extensions\\Users\\Tests\\": "../extensions/users/tests/"
         }
     },
   "scripts": {
