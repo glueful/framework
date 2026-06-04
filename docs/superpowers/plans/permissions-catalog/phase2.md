@@ -1078,3 +1078,12 @@ Update framework `[Unreleased]` (permissions:list/diff, attribute scanner, --pru
 - Registry introspection (spec §4.1 "records declaring extension") → Task 1
 - Stale = managed-only; unmanaged never pruned (spec §4.1, §6) → Tasks 4, 5, 6
 - `--prune` explicit + non-automatic, for permissions **and** roles (spec §6) → Tasks 4, 5, 6
+
+---
+
+## Execution notes (deviations from plan as built)
+
+- **Commands are parameterless + self-aggregating** (matching the Phase 1 `SyncCommand` reality), not constructor-injected: `list`/`diff`/`sync` resolve services from their own container and run `discover()` + `aggregatePermissionCatalog()` at execute-time.
+- **`DiffCommand` exposes a pure static `classify()`** that does the declared×enforced×persisted×managed set math; it is unit-tested directly (`tests/Unit/Console/Permissions/DiffCommandTest.php`), with a separate integration smoke test for wiring. This sidesteps mocking final/DI-heavy command internals.
+- **`permissions` gained a `deleted_at` column.** The framework QueryBuilder soft-deletes by default and rejects `IN (...)` conditions for DELETE, so prune soft-deletes **per slug**; `findManaged()` SELECTs auto-exclude soft-deleted rows. Roles already had `deleted_at`.
+- **Result:** full framework suite green (1019 tests); Aegis suite green (9 tests); PHPStan + phpcs clean on new files.

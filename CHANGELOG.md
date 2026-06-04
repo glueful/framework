@@ -11,6 +11,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - `RegistryRoleVoter` so declared roles enforce in the no-provider fallback path; shared `RoleKey` canonicalization used by both enforcement and (future) drift tooling.
 - `PermissionCatalogSyncInterface` + `SyncResult` so a provider can persist the catalog; `permissions:sync` CLI command (self-aggregating, deterministic, idempotent).
 
+- **Permission catalog visibility (Phase 2).** `permissions:list` (declared catalog grouped by category) and `permissions:diff` (drift between declared, enforced via route-attribute scanning, and persisted/managed — for permissions *and* roles, with unmanaged/hand-created rows reported informationally and never pruned). `permissions:sync --prune` removes stale managed permissions and roles, capability-guarded and failing loudly if the provider can't prune.
+- `PermissionRegistry` introspection (`sourceOf`, `permissionSlugs`, `roleSlugs`, `permissionsByCategory`), `PermissionAttributeScanner`, and two opt-in capability interfaces — `CatalogPruneInterface`, `RoleCatalogSyncInterface` — so prune/role support is additive and never breaks existing providers.
+
 ### Changed
 - Attribute enforcement (`#[RequiresPermission]`/`#[RequiresRole]`) now routes through `PermissionManager::can()` (single enforcement entry point) instead of `Gate::decide()` directly; `GateAttributeMiddleware` is a thin adapter with a `'system'` resource default. `PermissionManager` gains `clearProvider()`.
 
