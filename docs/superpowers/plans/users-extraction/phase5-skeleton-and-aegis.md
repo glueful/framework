@@ -20,9 +20,9 @@
 
 **Files (api-skeleton):** `database/migrations/001_CreateInitialSchema.php`, delete `008_CreateAuthRefreshTokensTable.php`, `009_CreateApiKeysTable.php`, `010_AddTwoFactorEnabledToUsers.php`.
 
-- [ ] **Step 1:** In `001_CreateInitialSchema.php`, remove the `users`, `profiles`, and `auth_sessions` table creation (now owned by `glueful/users`). Keep `blobs` and the system tables (archive, queue, locks, scheduled jobs, notifications).
+- [ ] **Step 1:** In `001_CreateInitialSchema.php`, remove `users` + `profiles` (now owned by `glueful/users`) **and** `auth_sessions` (now a **core** foundation migration — `framework/migrations/001`). Keep `blobs` and the system tables (archive, queue, locks, scheduled jobs, notifications).
 - [ ] **Step 2:** Change `blobs.created_by` from an FK → `users.uuid` into an **indexed `uuid` column, no FK** (spec §2). Apply the same to any other skeleton table referencing an actor.
-- [ ] **Step 3:** Delete migrations `008`, `009`, `010` (auth_refresh_tokens, api_keys, 2FA) — all moved to `glueful/users` in Phase 4 Task 3.
+- [ ] **Step 3:** Delete migrations `008`, `009`, `010`: `auth_refresh_tokens` + `api_keys` are now **core** foundation migrations (`framework/migrations/002`, `003`); the 2FA-enabled column folds into `glueful/users` `001_CreateUsersTable`. The skeleton gets the core auth tables automatically by depending on the framework (auto-registered at `FOUNDATION`, source `glueful/framework`) — it ships none of them itself.
 - [ ] **Step 4: Test** — `tests/Feature/MigrationsRunCleanTest.php` (skeleton): with `glueful/users` enabled, `php glueful migrate:run` (or the migrate API) applies cleanly on a fresh SQLite DB; assert `users` and `blobs` both exist and `blobs.created_by` has no FK constraint. (Mirror the skeleton's existing `tests/Feature` style.)
 - [ ] **Step 5: Commit (api-skeleton repo)** — `git commit -am "refactor(db): drop user/auth schema; blobs.created_by no longer FKs users"`.
 
@@ -203,13 +203,14 @@ This orders Aegis after `glueful/users` (IDENTITY) and the app (DEFAULT) in the 
   - the identity now carries the role claim (Aegis enrichment),
   - the role-gated route **authorizes**.
 
-- [ ] **Step 3: Migration ordering on the combined stack** — fresh DB with both extensions: assert applied order is `glueful/users` (IDENTITY) → skeleton (DEFAULT) → Aegis (DEPENDENT), all apply, and the `migrations.source` column records **all three** sources (Phase-1 source tracking, end-to-end):
+- [ ] **Step 3: Migration ordering on the combined stack** — fresh DB with both extensions: assert applied order is `glueful/framework` (FOUNDATION) → `glueful/users` (IDENTITY) → skeleton (DEFAULT) → Aegis (DEPENDENT), all apply, and the `migrations.source` column records **all four** sources (Phase-1 source tracking, end-to-end):
 
 ```php
 $sources = array_column(
     $db->table('migrations')->select(['source'])->get(),
     'source'
 );
+self::assertContains('glueful/framework', $sources); // core auth_sessions/refresh/api_keys
 self::assertContains('glueful/users', $sources);
 self::assertContains('app', $sources);          // skeleton migrations
 self::assertContains('glueful/aegis', $sources);
@@ -231,5 +232,5 @@ self::assertContains('glueful/aegis', $sources);
 - Fresh skeleton (with `glueful/users`) migrates cleanly, authenticates, and fails authorization closed without Aegis.
 - With Aegis enabled, identities are enriched with role claims and role-gated routes authorize.
 - No cross-package FKs to `users`/principals anywhere: skeleton `blobs.created_by`, and **all** Aegis actor refs (`user_roles.user_uuid`/`granted_by`, `user_permissions.user_uuid`/`granted_by`, `role_permissions.granted_by`) are indexed UUIDs with no FK; intra-package FKs (role/permission/parent) retained.
-- Migration order on the combined stack is `users → app → aegis`, source-tracked per package.
+- Migration order on the combined stack is `framework (FOUNDATION) → users (IDENTITY) → app (DEFAULT) → aegis (DEPENDENT)`, source-tracked per package.
 - All three suites (framework, users, aegis) green; analysis/style clean; CHANGELOG + docs updated.

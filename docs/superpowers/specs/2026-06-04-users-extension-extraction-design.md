@@ -42,7 +42,9 @@ Hard database FK constraints are kept **inside an ownership boundary only**. Ref
 
 | Reference | Treatment |
 |---|---|
-| `glueful/users`: `auth_sessions.user_uuid`, `auth_refresh_tokens.user_uuid`, `profiles.user_uuid` → `users.uuid` | **Hard FK** (intra-package) |
+| `glueful/users`: `profiles.user_uuid` → `users.uuid` | **Hard FK** (intra-package) |
+| `glueful/framework` (core): `auth_refresh_tokens.session_uuid` → `auth_sessions.uuid` | **Hard FK** (intra-package — both are core-owned) |
+| `glueful/framework` (core): `auth_sessions.user_uuid`, `auth_refresh_tokens.user_uuid`, `api_keys.user_uuid` → a principal | **Indexed UUID, no FK** — external principal id (the user store is a separate package) |
 | skeleton: `blobs.created_by` and any app table referencing an actor | **Indexed UUID, no FK** (nullable or not as appropriate) |
 | `glueful/aegis`: `user_roles.user_uuid` → a principal | **Indexed UUID, no FK**; treated as an external principal id, with existence enforced at assignment time via the identity provider rather than SQL |
 
@@ -175,7 +177,7 @@ This formalizes the seam that today is just `$session['user']['roles'] = []`.
 - `Security/EmailVerification` (email OTP / verify-email) — account-lifecycle, not security-spine.
 - **Rich profile + account API.** `TokenManager::getProfile()` is **removed** from core; the account/profile API in `glueful/users` owns profile behavior. Core no longer preserves a rich profile shape in the login/token response — profile is a user-store concern fetched on demand via the account API, not baked into the auth pipeline.
 - The `'Glueful\Models\User'` entry in `SecureSerializer` whitelist (extension registers its own).
-- **Canonical users/auth schema** (see §7): `users`, `profiles`, `auth_sessions`, `auth_refresh_tokens`, `api_keys`, password-reset state, 2FA user state — shipped as the extension's own migrations via `loadMigrationsFrom(..., priority)`.
+- **User-store schema only** (see §7): `users`, `profiles`, password-reset state, 2FA user state — shipped as the extension's own migrations via `loadMigrationsFrom(..., priority)`. **Correction (post-Phase-4):** the security-spine tables `auth_sessions`, `auth_refresh_tokens`, `api_keys` are **owned by framework core, not this extension** — the code that reads/writes them (`SessionStore`/`SessionRepository`/`TokenManager`/`RefreshTokenStore`/`ApiKeyService`) all lives in core, so co-locating their migrations with the user store was wrong (it coupled the core spine to an extension and made an alternate user store re-ship core schema). They now ship as **core foundation migrations** (see §7). The extension owns only what it is the authority for.
 - **Account-lifecycle routes + controller actions** (see §8): the `AuthController` actions `verify-email`, `verify-otp`, `resend-otp`, `forgot-password`, `reset-password` and any user-CRUD/profile routes move to a controller in `glueful/users`. The `routes/auth.php` and `routes/2fa.php` account portions move with them.
 
 **Stays in core (auth pipeline routes):**
@@ -213,7 +215,7 @@ Two changes, both prerequisites for moving the users schema out:
    Exposed as named tiers (with a raw `int` escape hatch so finer ordering stays possible):
 
    ```php
-   MigrationPriority::FOUNDATION = -200;  // reserved (core ships no migrations today)
+   MigrationPriority::FOUNDATION = -200;  // core's own foundation schema (auth_sessions, auth_refresh_tokens, api_keys)
    MigrationPriority::IDENTITY   = -100;  // glueful/users identity/auth schema
    MigrationPriority::DEFAULT    =    0;  // app / skeleton + ordinary feature migrations
    MigrationPriority::DEPENDENT  =  100;  // aegis & co (commonly paired, ordered for seeders)
@@ -229,7 +231,7 @@ Two changes, both prerequisites for moving the users schema out:
 
 The skeleton stops owning user/auth schema and gains the Users extension by default.
 
-- **Migrations.** Remove `users`, `profiles`, `auth_sessions` from `001_CreateInitialSchema.php`; remove `008_CreateAuthRefreshTokensTable.php`, `009_CreateApiKeysTable.php`, `010_AddTwoFactorEnabledToUsers.php`. These become `glueful/users` migrations (priority `IDENTITY`/`-100`). The skeleton **keeps** genuinely app/platform tables (`blobs` and the system tables: archive, queue, locks, scheduled jobs, notifications). Per the §2 policy, skeleton tables that reference an actor keep an **indexed `uuid` with no FK into `users`** — `blobs.created_by` drops its FK constraint (becomes an indexed uuid). `api_keys` already has no FK; normalize its `user_id` → `user_uuid` naming (still no FK). App-layer logic validates principal existence via the identity provider.
+- **Migrations.** Remove `users`, `profiles`, `auth_sessions` from `001_CreateInitialSchema.php`; remove `008_CreateAuthRefreshTokensTable.php`, `009_CreateApiKeysTable.php`, `010_AddTwoFactorEnabledToUsers.php`. Split by ownership: `users`/`profiles`/2FA-user-state become **`glueful/users`** migrations (priority `IDENTITY`/`-100`); `auth_sessions`/`auth_refresh_tokens`/`api_keys` become **core foundation migrations** owned by `glueful/framework` (priority `FOUNDATION`/`-200`, auto-registered by core — see §7), so the skeleton drops them entirely and gets them just by depending on the framework. The skeleton **keeps** genuinely app/platform tables (`blobs` and the system tables: archive, queue, locks, scheduled jobs, notifications). Per the §2 policy, skeleton tables that reference an actor keep an **indexed `uuid` with no FK into `users`** — `blobs.created_by` drops its FK constraint (becomes an indexed uuid). App-layer logic validates principal existence via the identity provider.
 - **composer.json.** Skeleton adds `glueful/users` to `require` (and Aegis stays optional/commented as today).
 - **config/extensions.php.** `glueful/users` is enabled by default in the skeleton's `enabled` list; Aegis remains opt-in.
 - **Routes/controllers.** Account-lifecycle routes move into the extension (§6); the skeleton continues to ship no auth routes of its own.
@@ -276,4 +278,4 @@ In scope for this spec: **phases 1–5** (migration-system change + extraction +
 
 ### Deferred (not blocking)
 
-- Whether `blobs` and other app/platform tables become their own capability extensions (e.g. `glueful/storage`) later — kept in the skeleton for now (§8). The `FOUNDATION` priority tier is reserved though core ships no migrations today.
+- Whether `blobs` and other app/platform tables become their own capability extensions (e.g. `glueful/storage`) later — kept in the skeleton for now (§8). Core now **uses** the `FOUNDATION` tier for its own security-spine schema (`auth_sessions`, `auth_refresh_tokens`, `api_keys`), auto-registered via the container-built `MigrationManager` (source `glueful/framework`) — so the framework ships first-class, versioned, source-tracked migrations rather than creating those tables lazily at runtime.

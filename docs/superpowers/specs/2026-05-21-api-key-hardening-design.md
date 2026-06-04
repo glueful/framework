@@ -6,6 +6,8 @@
 
 ## Revisions
 
+> **Superseded (2026-06 — users-extension extraction).** Two things below are now out of date; this doc is kept as the historical hardening record. (a) **Migration ownership moved to framework core**, not api-skeleton: `api_keys` is read/written only by core (`ApiKeyService`/`ApiKeyAuthenticationProvider`), so it ships as a **core foundation migration** (`framework/migrations/003_CreateApiKeysTable.php`, source `glueful/framework`, priority `FOUNDATION`, auto-registered). (b) The column **`user_id` was renamed to `user_uuid`** (still indexed, no FK — external principal id), and the provider resolves the user via `UserProviderInterface::findByUuid()`, not `UserRepository::find()`. The `user_id` references and "api-skeleton owns the schema" statements throughout this doc reflect the original design; see `docs/superpowers/specs/2026-06-04-users-extension-extraction-design.md` (§2/§6/§7) and `docs/API_KEYS.md` for the current shape.
+
 Two architectural decisions in the initial draft were superseded after deeper exploration of the codebase. The plan at `docs/superpowers/plans/2026-05-21-api-key-hardening.md` is authoritative; this spec has been updated to match.
 
 1. **Migration ownership: api-skeleton, not framework.** The initial draft proposed shipping the migration in `src/Database/Migrations/files/`. Investigation showed that schema lives in `api-skeleton/database/migrations/` by convention (`001_CreateInitialSchema.php` through `008_CreateAuthRefreshTokensTable.php`). The framework owns the code surface; api-skeleton owns the schema. Migration is `009_CreateApiKeysTable.php`.

@@ -460,9 +460,25 @@ final class CoreProvider extends BaseServiceProvider
         $defs[\Glueful\Cache\EdgeCacheService::class] = $this->autowire(\Glueful\Cache\EdgeCacheService::class);
         $defs[\Glueful\Database\QueryCacheService::class] = $this->autowire(\Glueful\Database\QueryCacheService::class);
 
-        // Database migrations
-        $defs[\Glueful\Database\Migrations\MigrationManager::class] =
-            $this->autowire(\Glueful\Database\Migrations\MigrationManager::class);
+        // Database migrations. Factory (not bare autowire) so core can register its OWN
+        // foundation migrations — auth_sessions, auth_refresh_tokens, api_keys — whose owning
+        // subsystems (SessionStore/TokenManager/ApiKeyService) live in core. They ship as
+        // first-class, versioned, source-tracked migrations applied through the runner (NOT lazy
+        // runtime DDL). Registered at FOUNDATION priority, source 'glueful/framework'. Shared, so
+        // extensions' loadMigrationsFrom() and the migrate commands all see the same instance.
+        // Tests that construct `new MigrationManager(...)` directly stay isolated (no core paths).
+        $defs[\Glueful\Database\Migrations\MigrationManager::class] = new FactoryDefinition(
+            \Glueful\Database\Migrations\MigrationManager::class,
+            function (): \Glueful\Database\Migrations\MigrationManager {
+                $mm = new \Glueful\Database\Migrations\MigrationManager(null, null, $this->context);
+                $mm->addMigrationPath(
+                    \dirname(__DIR__, 3) . '/migrations',
+                    \Glueful\Database\Migrations\MigrationPriority::FOUNDATION,
+                    'glueful/framework'
+                );
+                return $mm;
+            }
+        );
 
         // Field selection
         $defs[\Glueful\Support\FieldSelection\Projector::class] = new FactoryDefinition(

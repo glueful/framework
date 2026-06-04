@@ -23,13 +23,13 @@ New package `glueful/users` (suggested location `../extensions/users` alongside 
 ```
 extensions/users/
 ├── composer.json                       (type: glueful-extension, psr-4 Glueful\Extensions\Users\)
-├── migrations/
-│   ├── 0001_CreateUsersTable.php        (users)
-│   ├── 0002_CreateProfilesTable.php     (profiles, user_uuid FK -> users.uuid  [intra-package])
-│   ├── 0003_CreateAuthSessionsTable.php (auth_sessions, user_uuid FK -> users.uuid)
-│   ├── 0004_CreateAuthRefreshTokensTable.php (FK -> users + auth_sessions)
-│   ├── 0005_CreateApiKeysTable.php       (api_keys, user_uuid indexed, no cross-pkg FK)
-│   └── 0006_AddTwoFactorToUsers.php
+├── migrations/                          (3-digit prefix — FileFinder requires ^\d{3}_)
+│   ├── 001_CreateUsersTable.php         (users; two_factor_enabled folded in)
+│   └── 002_CreateProfilesTable.php      (profiles, user_uuid FK -> users.uuid  [intra-package])
+│   # NOTE (corrected post-Phase-4): auth_sessions, auth_refresh_tokens, api_keys are NOT
+│   # owned here — they are CORE security-spine tables. They ship as framework foundation
+│   # migrations (framework/migrations/001..003, source 'glueful/framework'). See the
+│   # as-built addendum at the end of this plan.
 ├── src/
 │   ├── UsersServiceProvider.php
 │   ├── Models/User.php                  (moved from framework Glueful\Models\User)
@@ -195,15 +195,19 @@ git add -A && git commit -m "feat(users): move User model, UserRepository, and U
 
 ---
 
-## Task 3: Move the canonical schema migrations
+## Task 3: Author the schema migrations (split by ownership)
 
-**Files:** create `extensions/users/migrations/0001..0006`.
+> **Ownership (corrected post-Phase-4):** a table's migration belongs to the package whose code reads/writes it. `glueful/users` owns only `users` + `profiles` (the user store). `auth_sessions`, `auth_refresh_tokens`, `api_keys` are core security-spine tables (read/written by `SessionStore`/`TokenManager`/`RefreshTokenStore`/`ApiKeyService`) and ship as **core** migrations. See the as-built addendum.
 
-- [ ] **Step 1:** Author the six migrations listed in the file-structure tree, porting table definitions from the skeleton's `001_CreateInitialSchema.php` (users/profiles/auth_sessions), `008` (auth_refresh_tokens), `009` (api_keys), `010` (2FA). **Intra-package FKs only** (`profiles/auth_sessions/auth_refresh_tokens.user_uuid → users.uuid`). `api_keys.user_uuid` is an indexed uuid (no FK). Use the `0001_`-style 4-digit prefix for clean ordering within the `glueful/users` source.
+**Files:** create `extensions/users/migrations/001_CreateUsersTable.php`, `002_CreateProfilesTable.php`; and `framework/migrations/001_CreateAuthSessionsTable.php`, `002_CreateAuthRefreshTokensTable.php`, `003_CreateApiKeysTable.php`.
 
-- [ ] **Step 2: Test** — an integration test enabling `glueful/users` and running `migrate()` over SQLite asserts the tables exist and that `migrations.source = 'glueful/users'` for these rows (exercises Phase-1 source recording).
+- [ ] **Step 1 (extension):** Author `001_CreateUsersTable` (users; fold `two_factor_enabled` in) and `002_CreateProfilesTable` (profiles, `user_uuid` FK → `users.uuid`, intra-package). 3-digit prefix (FileFinder requires `^\d{3}_`); cross-source order comes from the `IDENTITY` priority, not the prefix.
 
-- [ ] **Step 3: Commit** — `git commit -am "feat(users): ship canonical identity/auth schema migrations"`.
+- [ ] **Step 2 (core):** Author `framework/migrations/001..003` (namespace `Glueful\Migrations`) for `auth_sessions`, `auth_refresh_tokens`, `api_keys`. Per §2, `*.user_uuid` are **indexed UUIDs, no FK** (external principal id); the only retained FK is intra-core `auth_refresh_tokens.session_uuid → auth_sessions`. Register them automatically: make the container's `MigrationManager` a shared `FactoryDefinition` that calls `addMigrationPath(framework/migrations, FOUNDATION, 'glueful/framework')`.
+
+- [ ] **Step 3: Test** — extension `MigrationsTest` asserts `users`/`profiles` apply; framework `CoreMigrationsTest` resolves `MigrationManager` from the container and asserts the three core tables apply (and that directly-constructed managers stay isolated — `MigrationOrderingTest`/`MigrationSourcesTest`).
+
+- [ ] **Step 4: Commit** — extension: `"feat(db): canonical user-store schema migrations"`; framework: `"feat(db): core foundation migrations for auth_sessions/refresh/api_keys"`.
 
 > Phase 5 removes the corresponding tables from the skeleton. Do **not** run both in the same DB until the skeleton tables are dropped, or table-create will collide.
 
@@ -371,9 +375,22 @@ prefix; it is handled by the `IDENTITY` priority passed to `loadMigrationsFrom()
 (Phase 1). So `glueful/users` `001_` runs before the skeleton's `001_` purely on
 priority, and the `source` column keeps same-basename rows distinct.
 
-**Five migrations, not six.** `two_factor_enabled` is folded into the `001` users
-`CREATE TABLE` rather than shipped as a separate `ALTER`. Tables: `001` users, `002`
-profiles, `003` auth_sessions, `004` auth_refresh_tokens, `005` api_keys.
+**Migrations — initially five here, corrected to two (ownership fix).** `two_factor_enabled`
+is folded into the `001` users `CREATE TABLE` rather than a separate `ALTER`. Phase 4 first
+shipped all five identity/auth tables as `glueful/users` migrations (`001` users … `005`
+api_keys). That was **wrong**: `auth_sessions`, `auth_refresh_tokens`, `api_keys` are
+read/written exclusively by core (`SessionStore`/`TokenManager`/`RefreshTokenStore`/
+`ApiKeyService`), so the user store was shipping the core security spine's schema — coupling
+core to the extension and forcing any alternate user store to re-ship it. **Corrected:** those
+three moved to **core foundation migrations** (`framework/migrations/001…003`, namespace
+`Glueful\Migrations`, source `glueful/framework`, priority `FOUNDATION`), auto-registered by
+the container-built `MigrationManager` (CoreProvider `FactoryDefinition` → `addMigrationPath`).
+`glueful/users` now ships only `001` users + `002` profiles. Principal references in the core
+tables (`*.user_uuid`) are indexed-no-FK (§2); the only retained FK is intra-core
+`auth_refresh_tokens.session_uuid → auth_sessions`. Verified: the container-resolved manager
+applies the core schema (`CoreMigrationsTest`); directly-constructed managers stay isolated
+(`MigrationOrderingTest`/`MigrationSourcesTest` unchanged). No lazy runtime DDL — first-class
+versioned migrations only.
 
 **FK policy applied (spec §2).** Intra-package FKs only: profiles/sessions/refresh →
 users; refresh → auth_sessions. `profiles.photo_uuid` (blobs live in the skeleton) and

@@ -85,7 +85,7 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
                 $request->getClientIp() ?? ''
             );
 
-            $identity = $this->getUserProvider()->findByUuid($key->user_id);
+            $identity = $this->getUserProvider()->findByUuid($key->user_uuid);
             if ($identity === null) {
                 $this->lastError = 'API key belongs to no known user';
                 return null;
@@ -95,7 +95,9 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
             $userData = $identity->toArray();
 
             $request->attributes->set('authenticated', true);
-            $request->attributes->set('user_id', $key->user_id);
+            // Request attribute name stays 'user_id' (the generic auth-principal key read by
+            // SessionContext); its value is the principal uuid from the api_keys.user_uuid column.
+            $request->attributes->set('user_id', $key->user_uuid);
             $request->attributes->set('user_data', $userData);
             $request->attributes->set('auth_method', 'api_key');
             $request->attributes->set('api_key_scopes', $key->getScopes());
