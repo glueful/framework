@@ -8,6 +8,21 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ---
 
+## [1.50.2] - 2026-06-05 — Kochab
+
+> **Theme: `@queryParam` route-doc tag.** Route docblocks can now document query parameters with an editor-clean `@queryParam name:type="…"` tag that the OpenAPI generator actually parses — avoiding the IDE/Intelephense false positives (P1133) caused by overloading the reserved `@param` tag — and a latent doc-gen bug that dropped path params from any route which *also* declared a parameter is fixed. Framework-only — no env vars, no migrations, no API breaks. The api-skeleton `^1.50.1` constraint already permits 1.50.2.
+
+### Added
+- **`@queryParam` route doc tag.** `CommentsDocGenerator` now parses `@queryParam <name>:<type>="description" [{required}]` in route docblocks, emitting an `in: query` OpenAPI parameter. It's an editor-clean alternative to the positional `@param <name> query <type> <bool> "desc"` form — the reserved `@param` tag makes IDEs/Intelephense mis-read the location/type tokens as undefined PHPDoc types (P1133). The legacy `@param` form still parses unchanged.
+
+### Fixed
+- **Route path parameters are no longer dropped when a query parameter is also documented.** `CommentsDocGenerator` previously auto-derived `{name}` path params from the URL *only* when no parameters were documented at all, so a route declaring a query param plus a `{id}` in its path silently lost the path param from its OpenAPI spec. Path params are now always derived from the URL and merged with documented params (de-duplicated by name; an explicit path-param docblock still wins). Pinned by `tests/Unit/Support/Documentation/CommentsDocGeneratorParamTest.php`.
+
+### Changed
+- **`routes/resource.php` migrated to `@queryParam`.** The `/data/{table}` list endpoint's `page`/`limit`/`sort`/`order` query parameters now use the `@queryParam` tag (so they actually appear in the generated OpenAPI — the previous `@parameter` tag was never parsed), and the redundant `@parameter` path-param docblocks were removed (path params auto-derive from the route URL). No runtime change.
+
+---
+
 ## [1.50.1] - 2026-06-05 — Kochab
 
 > **Theme: Two silent no-op extension points, fixed.** `ServiceProvider::mergeConfig()` now actually applies an extension's config defaults (it delegated to a service that was never registered), and `LoginResponseBuildingEvent` listeners can now actually modify the login response (the shaper discarded their changes). Framework-only — no new env vars, no migrations, no API breaks. The existing api-skeleton `^1.50.0` constraint already permits 1.50.1.

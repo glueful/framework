@@ -21,6 +21,11 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.50.2 — Kochab (Patch, Released 2026-06-05)
+- **`@queryParam` route-doc tag**: `CommentsDocGenerator` now parses `@queryParam name:type="…" [{required}]` in route docblocks as an `in: query` OpenAPI parameter — an editor-clean alternative to the positional `@param … query …` form, which overloads the reserved `@param` tag and triggers IDE/Intelephense false positives (P1133). The legacy `@param` form still parses.
+- **Doc-gen path-param fix**: URL `{name}` path params were auto-derived only when *no* params were documented, so a route with a query param plus a `{id}` lost its path param from the spec. Path params are now always derived and merged (de-duped by name; explicit docblock wins). `routes/resource.php` migrated to `@queryParam`.
+- Notes: **Patch release. Framework-only — no env vars, no migrations, no API breaks.** The api-skeleton `^1.50.1` constraint already permits 1.50.2.
+
 ### 1.50.1 — Kochab (Released 2026-06-05)
 - **`mergeConfig()` no longer a silent no-op**: `ServiceProvider::mergeConfig()` delegated to an unregistered `config.manager` service, so extension `config/*.php` defaults never reached `config()` (affected all 8 first-party extensions). Now backed by the new `ApplicationContext::mergeConfigDefaults()`, which merges defaults *under* framework/app/env config (app values win) and persists across `clearConfigCache()`.
 - **`LoginResponseBuildingEvent` listeners now affect the response**: `LoginResponseShaper::shape()` dispatched the event but discarded listener mutations; it now reads `$event->getResponse()` back, so listeners can add fields to the login response as documented.

@@ -677,12 +677,8 @@ class CommentsDocGenerator
                 $requestBody['_example'] = $example;
             }
         }
-        $pathParams = $this->extractSimplifiedParameters($docComment);
-
-        // Extract path parameters if not explicitly defined
-        if ($pathParams === [] && strpos($routePath, '{') !== false) {
-            $pathParams = $this->extractPathParameters($routePath);
-        }
+        // Path params present in the URL are auto-derived and merged inside the parser.
+        $pathParams = $this->extractSimplifiedParameters($docComment, $routePath);
 
         return [
             'method' => strtoupper($httpMethod),
@@ -742,11 +738,8 @@ class CommentsDocGenerator
                 $requestBody['_example'] = $example;
             }
         }
-        $pathParams = $this->extractSimplifiedParameters($docComment);
-
-        if ($pathParams === [] && strpos($routePath, '{') !== false) {
-            $pathParams = $this->extractPathParameters($routePath);
-        }
+        // Path params present in the URL are auto-derived and merged inside the parser.
+        $pathParams = $this->extractSimplifiedParameters($docComment, $routePath);
 
         return [
             'method' => strtoupper($httpMethod),
@@ -1098,20 +1091,28 @@ class CommentsDocGenerator
     }
 
     /**
-     * Extract simplified parameters from doc comment
-     * Format: @param name location type required "description"
+     * Extract route parameters from a doc comment.
+     *
+     * Two annotation styles are supported:
+     *  - `@param <name> <path|query|header|cookie> <type> <true|false> "description"` (positional, legacy)
+     *  - `@queryParam <name>:<type>="description" [{required}]` — always `in: query`; avoids the
+     *      reserved `@param` tag so IDEs/Intelephense don't mis-read the tokens as PHPDoc types
+     *
+     * Path parameters present in the route URL (`{name}`) are auto-derived and merged in when
+     * not already documented, so explicit path-parameter docblocks are optional.
      *
      * @param string $docComment Doc comment to parse
+     * @param string $routePath  Route path (e.g. /users/{uuid}); used to auto-derive path parameters
      * @return array<int, array<string, mixed>> Parameter definitions
      */
-    private function extractSimplifiedParameters(string $docComment): array
+    private function extractSimplifiedParameters(string $docComment, string $routePath = ''): array
     {
         $params = [];
-        $pattern = '/@param\s+(\w+)\s+(path|query|header|cookie)\s+(string|integer|number|boolean|array|object)'
-            . '\s+(true|false)\s+"([^"]*)"/';
+        $type = 'string|integer|number|boolean|array|object';
 
+        // Style 1 (legacy, positional): @param name location type required "description"
+        $pattern = '/@param\s+(\w+)\s+(path|query|header|cookie)\s+(' . $type . ')\s+(true|false)\s+"([^"]*)"/';
         preg_match_all($pattern, $docComment, $matches, PREG_SET_ORDER);
-
         foreach ($matches as $match) {
             $params[] = [
                 'name' => $match[1],
@@ -1120,6 +1121,29 @@ class CommentsDocGenerator
                 'description' => $match[5],
                 'schema' => ['type' => $match[3]]
             ];
+        }
+
+        // Style 2: @queryParam name:type="description" [{required}] — always a query parameter
+        $pattern = '/@queryParam\s+(\w+):(' . $type . ')="([^"]*)"\s*(\{required\})?/';
+        preg_match_all($pattern, $docComment, $matches, PREG_SET_ORDER);
+        foreach ($matches as $match) {
+            $params[] = [
+                'name' => $match[1],
+                'in' => 'query',
+                'required' => ($match[4] ?? '') !== '',
+                'description' => $match[3],
+                'schema' => ['type' => $match[2]]
+            ];
+        }
+
+        // Merge in any URL path parameters ({name}) not already documented above.
+        if (strpos($routePath, '{') !== false) {
+            $documented = array_column($params, 'name');
+            foreach ($this->extractPathParameters($routePath) as $pathParam) {
+                if (!in_array($pathParam['name'], $documented, true)) {
+                    $params[] = $pathParam;
+                }
+            }
         }
 
         return $params;
