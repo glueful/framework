@@ -154,10 +154,13 @@ abstract class ServiceProvider
      */
     protected function mergeConfig(string $key, array $defaults): void
     {
-        if (!$this->app->has('config.manager')) {
+        if (!$this->app->has(ApplicationContext::class)) {
             return;
         }
-        $this->app->get('config.manager')->merge($key, $defaults);
+        $context = $this->app->get(ApplicationContext::class);
+        if ($context instanceof ApplicationContext) {
+            $context->mergeConfigDefaults($key, $defaults);
+        }
     }
 
     /**

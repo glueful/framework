@@ -60,7 +60,11 @@ final class LoginResponseShaper
         $user = $session['user'] ?? [];
         try {
             $events = app($this->context, EventService::class);
-            $events->dispatch(new LoginResponseBuildingEvent($tokens, $user, $session));
+            $building = new LoginResponseBuildingEvent($tokens, $user, $session);
+            $events->dispatch($building);
+            // Read back any fields listeners added/merged into the response map
+            // (setResponse()/mergeResponse()); otherwise their changes are discarded.
+            $session = $building->getResponse();
             $events->dispatch(new LoginResponseBuiltEvent($session));
         } catch (\Throwable $e) {
             error_log('Login response events failed: ' . $e->getMessage());
