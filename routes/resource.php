@@ -23,11 +23,10 @@ $router->group(['prefix' => '/data'], function (Router $router) {
      * @summary List Resources
      * @description Retrieves a paginated list of resources from the specified table
      * @tag Data
-     * @parameter table:string="Table/resource name" {required}
-     * @parameter page:integer="Page number for pagination"
-     * @parameter limit:integer="Number of items per page (max 100)"
-     * @parameter sort:string="Field to sort by"
-     * @parameter order:string="Sort order (asc|desc)"
+     * @queryParam page:integer="Page number for pagination"
+     * @queryParam limit:integer="Number of items per page (max 100)"
+     * @queryParam sort:string="Field to sort by"
+     * @queryParam order:string="Sort order (asc|desc)"
      * @response 200 application/json "Resources retrieved successfully" {
      *   success:boolean="true",
      *   message:string="Success message",
@@ -56,8 +55,6 @@ $router->group(['prefix' => '/data'], function (Router $router) {
      * @summary Get Single Resource
      * @description Retrieves a single resource by its UUID
      * @tag Data
-     * @parameter table:string="Table/resource name" {required}
-     * @parameter uuid:string="Resource UUID" {required}
      * @response 200 application/json "Resource retrieved successfully"
      * @response 404 "Resource not found"
      * @response 403 "Insufficient permissions"
@@ -77,7 +74,6 @@ $router->group(['prefix' => '/data'], function (Router $router) {
      * @summary Create Resource
      * @description Creates a new resource in the specified table
      * @tag Data
-     * @parameter table:string="Table/resource name" {required}
      * @requestBody data:object="Resource data to create" {required}
      * @response 201 application/json "Resource created successfully"
      * @response 400 "Invalid input data"
@@ -92,8 +88,6 @@ $router->group(['prefix' => '/data'], function (Router $router) {
      * @summary Update Resource
      * @description Updates an existing resource by UUID
      * @tag Data
-     * @parameter table:string="Table/resource name" {required}
-     * @parameter uuid:string="Resource UUID to update" {required}
      * @requestBody data:object="Updated resource data" {required}
      * @response 200 application/json "Resource updated successfully"
      * @response 404 "Resource not found"
@@ -109,8 +103,6 @@ $router->group(['prefix' => '/data'], function (Router $router) {
      * @summary Delete Resource
      * @description Deletes a resource by UUID
      * @tag Data
-     * @parameter table:string="Table/resource name" {required}
-     * @parameter uuid:string="Resource UUID to delete" {required}
      * @response 200 application/json "Resource deleted successfully"
      * @response 404 "Resource not found"
      * @response 403 "Insufficient permissions"
@@ -128,7 +120,6 @@ if (config($context, 'resource.security.bulk_operations', false)) {
          * @summary Bulk Delete Resources
          * @description Deletes multiple resources by UUIDs
          * @tag Data
-         * @parameter table:string="Table/resource name" {required}
          * @requestBody uuids:array="Array of UUIDs to delete" {required}
          * @response 200 application/json "Resources deleted successfully"
          * @response 400 "Invalid input data"
@@ -143,7 +134,6 @@ if (config($context, 'resource.security.bulk_operations', false)) {
          * @summary Bulk Update Resources
          * @description Updates multiple resources with provided data
          * @tag Data
-         * @parameter table:string="Table/resource name" {required}
          * @requestBody data:object="Bulk update data with UUIDs and fields" {required}
          * @response 200 application/json "Resources updated successfully"
          * @response 400 "Invalid input data"
