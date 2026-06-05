@@ -8,6 +8,20 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ---
 
+## [1.50.1] - 2026-06-05 — Kochab
+
+> **Theme: Two silent no-op extension points, fixed.** `ServiceProvider::mergeConfig()` now actually applies an extension's config defaults (it delegated to a service that was never registered), and `LoginResponseBuildingEvent` listeners can now actually modify the login response (the shaper discarded their changes). Framework-only — no new env vars, no migrations, no API breaks. The existing api-skeleton `^1.50.0` constraint already permits 1.50.1.
+
+### Fixed
+- **`ServiceProvider::mergeConfig()` now actually merges extension config defaults.** It delegated to a `config.manager` container service that was never registered, so the call was a **silent no-op** for every extension — an extension's `config/*.php` defaults never reached `config()` unless the *app* shipped its own copy (affected `glueful/aegis`, `conversa`, `email-notification`, `entrada`, `meilisearch`, `notiva`, `payvia`, `runiva`). `mergeConfig()` now delegates to the new `ApplicationContext::mergeConfigDefaults()`, which merges defaults **under** framework/app/env config files (file/app values still win) and persists across `clearConfigCache()`. Extension config defaults now apply as authored. Pinned by `tests/Unit/ConfigDefaultsMergeTest.php`. **Behavior note:** enabled extensions that previously ran on empty/hardcoded fallbacks will now receive their declared config defaults.
+- **`LoginResponseBuildingEvent` listeners now actually affect the login response.** `LoginResponseShaper::shape()` dispatched the event (whose documented purpose is to let listeners add fields to the response `user`/body via `setResponse()`/`mergeResponse()`) but then returned the original `$session`, discarding any mutations — the extension point was a silent no-op. The shaper now reads `$event->getResponse()` back before returning, so a registered listener can add fields (e.g. organization/department context) to the login response. Pinned by `tests/Unit/Auth/LoginResponseShaperTest.php`.
+
+### Upgrade Notes
+- **`composer update glueful/framework` is sufficient** — no env vars, no migrations, no API changes; the api-skeleton `^1.50.0` constraint already permits 1.50.1.
+- **Behavioral note (config defaults).** If your app enables first-party extensions (`glueful/aegis`, `conversa`, `email-notification`, `entrada`, `meilisearch`, `notiva`, `payvia`, `runiva`), their shipped `config/*.php` defaults now **actually apply** — previously `mergeConfig()` was a silent no-op, so those subsystems ran on empty/hardcoded fallbacks. Your own `config/*.php` still overrides them (app values win). Review those extensions' defaults if you relied on the prior behavior.
+
+---
+
 ## [1.50.0] - 2026-06-04 — Kochab
 
 > **Theme: Provider-agnostic identity & core-owned schema.** The concrete user store is extracted to the first-party `glueful/users` extension behind `UserProviderInterface`/`UserIdentity`, leaving a lean, swappable core that's safe-by-default. The framework now **owns the schema for its own subsystems** — the auth security spine plus DB-backed platform capabilities (queue, scheduler, notifications, metrics, locks, uploads, archive) — as first-class, config-gated, source-tracked migrations, replacing lazy runtime DDL. Also: a declarative permission catalog with drift/sync tooling, ordered package-scoped migrations, and column-aware soft-delete. **Breaking (pre-release):** apps must enable a user store — see the Removed section and `docs/IDENTITY.md`.

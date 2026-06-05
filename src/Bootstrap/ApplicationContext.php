@@ -15,6 +15,9 @@ final class ApplicationContext
 {
     /** @var array<string, array<string, mixed>> Loaded config files cache */
     private array $loadedConfigs = [];
+
+    /** @var array<string, array<string, mixed>> Extension-provided config defaults, merged under file config */
+    private array $configDefaults = [];
     private ?ContainerInterface $container = null;
     private ?ConfigurationLoader $configLoader = null;
     private bool $booted = false;
@@ -113,16 +116,19 @@ final class ApplicationContext
      */
     private function resolveConfigValue(string $key, mixed $default): mixed
     {
-        if ($this->configLoader === null) {
-            return $default;
-        }
-
         $segments = explode('.', $key);
         $configName = array_shift($segments);
 
-        // Load the config file if not already loaded
+        // Load the config file (if any) and merge registered extension defaults UNDER it
+        // (framework/app/env file values win over defaults). Cached per config name.
         if (!isset($this->loadedConfigs[$configName])) {
-            $this->loadedConfigs[$configName] = $this->configLoader->loadConfig($configName);
+            $fileConfig = $this->configLoader !== null
+                ? $this->configLoader->loadConfig($configName)
+                : [];
+            $defaults = $this->configDefaults[$configName] ?? [];
+            $this->loadedConfigs[$configName] = $defaults !== []
+                ? self::deepMerge($defaults, $fileConfig)
+                : $fileConfig;
         }
 
         $config = $this->loadedConfigs[$configName];
@@ -136,6 +142,51 @@ final class ApplicationContext
         }
 
         return $config;
+    }
+
+    /**
+     * Register extension-provided config defaults for a config name.
+     *
+     * Defaults are merged UNDER any framework/app/env config file for that name (file/app values
+     * win) and persist across clearConfigCache(). This is what makes
+     * {@see \Glueful\Extensions\ServiceProvider::mergeConfig()} actually reach config().
+     *
+     * @param array<string, mixed> $defaults
+     */
+    public function mergeConfigDefaults(string $name, array $defaults): void
+    {
+        $this->configDefaults[$name] = isset($this->configDefaults[$name])
+            ? self::deepMerge($this->configDefaults[$name], $defaults)
+            : $defaults;
+
+        // Invalidate caches for this name so the next read re-merges defaults with file config.
+        unset($this->loadedConfigs[$name]);
+        foreach (array_keys($this->configCache) as $cachedKey) {
+            if ($cachedKey === $name || str_starts_with($cachedKey, $name . '.')) {
+                unset($this->configCache[$cachedKey]);
+            }
+        }
+    }
+
+    /**
+     * Deep-merge two config arrays: $override wins for scalars; nested arrays merge recursively.
+     *
+     * @param array<string, mixed> $base
+     * @param array<string, mixed> $override
+     * @return array<string, mixed>
+     */
+    private static function deepMerge(array $base, array $override): array
+    {
+        $merged = $base;
+        foreach ($override as $key => $value) {
+            if (is_array($value) && isset($merged[$key]) && is_array($merged[$key])) {
+                $merged[$key] = self::deepMerge($merged[$key], $value);
+            } else {
+                $merged[$key] = $value;
+            }
+        }
+
+        return $merged;
     }
 
     public function clearConfigCache(): void
