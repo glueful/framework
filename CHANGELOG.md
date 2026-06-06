@@ -6,6 +6,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Added
+- **Core `database` notification channel.** `Glueful\Notifications\Channels\DatabaseChannel` is registered by default in `NotificationsProvider`, so the framework's default `['database']` channel resolves end-to-end instead of failing as `channel_not_found`. It is an in-app *acknowledge* channel — it performs no writes of its own (the notification and its delivery records are owned by `NotificationService`); its availability tracks the `notifications` persistence capability, so it reports unavailable (and never success) when persistence is off. Part 1 of the notification-subsystem refinement (see `docs/superpowers/plans/2026-06-06-notification-subsystem-refinement.md`).
+
+### Changed
+- **Notification channel validation moved from construction to dispatch.** `NotificationService` no longer rejects `default_channels` against a hardcoded `['email','sms','database','slack','webhook','push']` list at construction; channel names are now only normalized structurally (trimmed, de-duplicated, non-empty — **case preserved**). Unknown channels are surfaced at dispatch via the dispatcher's existing `channel_not_found` / `channel_unavailable`, giving a single source of truth (the `ChannelManager` registry) and letting custom channels work without core changes. No env vars, no migrations, no API breaks.
+
 ---
 
 ## [1.50.2] - 2026-06-05 — Kochab

@@ -16,9 +16,26 @@ final class NotificationsProvider extends BaseServiceProvider
     {
         $defs = [];
 
-        // Channel manager as a shared singleton
-        $defs[\Glueful\Notifications\Services\ChannelManager::class] =
-            $this->autowire(\Glueful\Notifications\Services\ChannelManager::class, shared: true);
+        // Channel manager as a shared singleton, with the core `database` (in-app) channel
+        // registered by default so the framework's default `['database']` channel resolves
+        // end-to-end. Its availability tracks the `notifications` persistence capability.
+        $defs[\Glueful\Notifications\Services\ChannelManager::class] = new FactoryDefinition(
+            \Glueful\Notifications\Services\ChannelManager::class,
+            function () {
+                $manager = new \Glueful\Notifications\Services\ChannelManager();
+                $persistenceEnabled = (bool) config(
+                    $this->getContext(),
+                    'capabilities.notifications',
+                    true
+                );
+                $manager->registerChannel(
+                    new \Glueful\Notifications\Channels\DatabaseChannel($persistenceEnabled)
+                );
+
+                return $manager;
+            },
+            true
+        );
 
         // Notification dispatcher depends on ChannelManager and optional LogManager
         $defs[\Glueful\Notifications\Services\NotificationDispatcher::class] = new FactoryDefinition(

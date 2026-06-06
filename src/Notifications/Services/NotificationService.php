@@ -1150,26 +1150,31 @@ class NotificationService implements ConfigurableInterface
         $resolver->setAllowedTypes('critical_channels', 'array');
         $resolver->setAllowedTypes('async_queue', 'string');
 
-        // Validate default channels array
+        // Normalize default channels structurally only: require non-empty strings, trim, and
+        // dedupe. Channel *registration* is validated at dispatch time (the dispatcher reports
+        // channel_not_found / channel_unavailable), so unknown channels are not rejected here.
+        // Names are NOT lowercased — custom channel names are preserved exactly (post-1.0 safe).
         $resolver->setNormalizer('default_channels', function ($options, $value) {
             unset($options); // Required by interface but not used
-            if ($value === '') {
-                throw new \InvalidArgumentException('default_channels cannot be empty');
-            }
 
-            $validChannels = ['email', 'sms', 'database', 'slack', 'webhook', 'push'];
+            $normalized = [];
             foreach ($value as $channel) {
                 if (!is_string($channel)) {
                     throw new \InvalidArgumentException('All channel names must be strings');
                 }
-                if (!in_array($channel, $validChannels, true)) {
-                    throw new \InvalidArgumentException(
-                        "Invalid channel '{$channel}'. Valid channels: " . implode(', ', $validChannels)
-                    );
+                $name = trim($channel);
+                if ($name === '') {
+                    continue;
                 }
+                $normalized[] = $name;
             }
 
-            return array_unique($value);
+            $normalized = array_values(array_unique($normalized));
+            if ($normalized === []) {
+                throw new \InvalidArgumentException('default_channels cannot be empty');
+            }
+
+            return $normalized;
         });
 
         $resolver->setNormalizer('critical_channels', function ($options, $value) {
