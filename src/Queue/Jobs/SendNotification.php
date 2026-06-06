@@ -121,11 +121,13 @@ class SendNotification extends Job
             ]
         );
 
-        // Parse the result
-        $parsedResult = \Glueful\Notifications\Utils\NotificationResultParser::parseEmailResult(
+        // Parse the result for the actual channel/type (not email-specific).
+        $parsedResult = \Glueful\Notifications\Utils\NotificationResultParser::parse(
             $result,
             ['recipient' => $data['recipient']],
-            'Notification sent successfully'
+            'Notification sent successfully',
+            'Failed to send notification',
+            (string)($data['type'] ?? 'email')
         );
 
         // Log successful notification

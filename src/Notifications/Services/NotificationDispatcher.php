@@ -9,6 +9,8 @@ use Glueful\Events\EventService;
 use Glueful\Logging\LogManager;
 use Glueful\Notifications\Contracts\Notifiable;
 use Glueful\Notifications\Contracts\NotificationExtension;
+use Glueful\Notifications\Contracts\RichNotificationChannel;
+use Glueful\Notifications\Results\NotificationResult;
 use Glueful\Notifications\Events\NotificationFailed;
 use Glueful\Notifications\Events\NotificationSent;
 use Glueful\Notifications\Models\Notification;
@@ -150,25 +152,34 @@ class NotificationDispatcher
                 // Format the notification for this channel
                 $formattedData = $channel->format($data, $notifiable);
 
-                // Send the notification
-                $success = $channel->send($notifiable, $formattedData);
+                // Send the notification. Rich channels return a structured NotificationResult;
+                // legacy channels return bool and are normalized here (the single point where
+                // bool ↔ NotificationResult is reconciled).
+                $result = $channel instanceof RichNotificationChannel
+                    ? $channel->sendNotification($notifiable, $formattedData)
+                    : NotificationResult::fromBool($channel->send($notifiable, $formattedData));
+                $success = $result->success;
 
                 if ($success) {
-                    $results[$channelName] = [
-                        'status' => 'success'
-                    ];
+                    $results[$channelName] = array_filter([
+                        'status' => 'success',
+                        'provider_message_id' => $result->providerMessageId,
+                        'latency_ms' => $result->latencyMs,
+                    ], static fn($v): bool => $v !== null);
                     $successCount++;
 
                     // Trigger sent event
                     $this->triggerSentEvent($notification, $notifiable, $channelName);
                 } else {
-                    $results[$channelName] = [
+                    $reason = $result->errorCode ?? 'send_failed';
+                    $results[$channelName] = array_filter([
                         'status' => 'failed',
-                        'reason' => 'send_failed'
-                    ];
+                        'reason' => $reason,
+                        'message' => $result->errorMessage,
+                    ], static fn($v): bool => $v !== null);
 
                     // Trigger failed event
-                    $this->triggerFailedEvent($notification, $notifiable, $channelName, 'send_failed');
+                    $this->triggerFailedEvent($notification, $notifiable, $channelName, $reason);
                 }
 
                 // Process after sending
