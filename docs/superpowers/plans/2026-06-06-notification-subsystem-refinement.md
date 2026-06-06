@@ -91,26 +91,28 @@
 
 ---
 
-## Phase 4 — `NotificationResult` + `RichNotificationChannel` adapter + parser cleanup
+## Phase 4 — `NotificationResult` + `RichNotificationChannel` adapter + parser cleanup ✅ implemented
 
-**Create**
-- `src/Notifications/Results/NotificationResult.php` — readonly DTO: `success`, `providerMessageId`, `retryable`, `errorCode`, `latencyMs`, `metadata`.
-- `src/Notifications/Contracts/RichNotificationChannel.php` — **separate opt-in** interface with `sendNotification(Notifiable, array): NotificationResult` (NOT an override of `send(): bool`, §3).
-- `tests/Unit/Notifications/Results/NotificationResultNormalizationTest.php`
+**Created**
+- `src/Notifications/Results/NotificationResult.php` — readonly DTO (`success`, `providerMessageId`, `retryable`, `errorCode`, `errorMessage`, `latencyMs`, `metadata`) with `success()`/`failure()`/`fromBool()` factories. (`errorMessage` added beyond the original field list so the dispatcher can carry a failure message.)
+- `src/Notifications/Contracts/RichNotificationChannel.php` — **opt-in** interface `extends NotificationChannel` adding `sendNotification(Notifiable, array): NotificationResult` (NOT an override of `send(): bool`, §3).
+- `tests/Unit/Notifications/NotificationResultNormalizationTest.php`, `tests/Unit/Notifications/NotificationResultParserChannelTest.php`.
 
-**Modify**
-- `src/Notifications/Services/NotificationDispatcher.php` — single normalization point: `instanceof RichNotificationChannel` → call `sendNotification()`; else call legacy `send(): bool` and adapt to a `NotificationResult`.
-- `src/Notifications/Utils/NotificationResultParser.php` — shrink to a generic `bool → NotificationResult` adapter; provider-specific knowledge moves into channels (§G6).
-- `src/Queue/Jobs/SendNotification.php:125` — stop calling `parseEmailResult()` unconditionally; use the dispatcher-normalized result regardless of channel/type.
+**Modified**
+- `src/Notifications/Services/NotificationDispatcher.php` — single normalization point: `instanceof RichNotificationChannel` → `sendNotification()`; else `NotificationResult::fromBool($channel->send(...))`. Success surfaces `provider_message_id`/`latency_ms`; failure surfaces `reason` (= `errorCode ?? 'send_failed'`) + `message`. The existing per-channel result keys (`status`/`reason`/`message`) are preserved, so `NotificationService::recordDeliveryAttempt` is unaffected.
+- `src/Queue/Jobs/SendNotification.php` — replaced the unconditional `parseEmailResult()` with the generic `parse(..., channelName: $data['type'])`, so a failed SMS/whatsapp send is parsed against the correct channel (the `parseEmailResult` looked up `channels['email']` regardless).
 
-**Behavior:** Legacy bool channels keep working unchanged; channels may opt into rich results. No signature change to `NotificationChannel`.
+**Deviation from plan:** `NotificationResultParser` was **not** shrunk to a bool→adapter in this pass. Its `parse()` is generic and still used by `SendNotification`; the provider-specific `parseEmailResult/parseSmsResult/parsePushResult` wrappers are now unused in core but **retained** to avoid breaking any extension that calls them (post-1.0). Their removal belongs with the channel-package migration to `RichNotificationChannel` (the §5 follow-up), where provider parsing moves into the channels.
 
-**Tests**
-- A `RichNotificationChannel` returns its `NotificationResult` through the dispatcher intact (message id/error code preserved).
-- A legacy bool channel is adapted to a `NotificationResult` with matching `success`.
-- `SendNotification` job records the correct result for a non-email channel (regression for the `parseEmailResult` bug).
+**Behavior:** Legacy bool channels unchanged; channels may opt into rich results. No signature change to `NotificationChannel`.
 
-**Rollback risk:** Medium (new contract) but non-breaking. Revert = dispatcher ignores `RichNotificationChannel`, restore parser.
+**Tests:** rich channel success surfaces `provider_message_id`; rich failure surfaces `reason`/`message`; legacy bool true/false normalize to success/`send_failed`; parser uses the actual channel (regression for the `parseEmailResult` bug).
+
+**Verified:** full suite green; `composer analyse` (src) clean; phpcs clean.
+
+**Watch item (deferred):** `NotificationResult::$retryable` and `$metadata` are now carried on the result but **not yet consumed** by the retry policy or delivery recording. Wiring them in belongs with the channel-package migration (the §5 follow-up), once real channels populate them.
+
+**Rollback risk:** Medium (new contract) but non-breaking. Revert = dispatcher ignores `RichNotificationChannel`, restore the `parseEmailResult` call.
 
 ---
 
