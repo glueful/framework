@@ -14,6 +14,7 @@ use Glueful\Notifications\Models\NotificationPreference;
 use Glueful\Notifications\Templates\TemplateManager;
 use Glueful\Queue\Jobs\DispatchNotificationChannels;
 use Glueful\Queue\QueueManager;
+use Glueful\Notifications\Contracts\NotificationQueueDispatcherInterface;
 use Glueful\Notifications\Contracts\NotificationStoreInterface;
 use Glueful\Notifications\Exceptions\NotificationPersistenceDisabledException;
 use Glueful\Repository\NotificationRepository;
@@ -52,6 +53,12 @@ class NotificationService implements ConfigurableInterface
     private NotificationStoreInterface $repository;
 
     /**
+     * @var NotificationQueueDispatcherInterface|null Optional async-dispatch queue seam; when
+     *      null, queueAsyncDispatch() falls back to building a QueueManager inline.
+     */
+    private ?NotificationQueueDispatcherInterface $queueDispatcher;
+
+    /**
      * @var NotificationMetricsService The metrics service
      */
     private NotificationMetricsService $metricsService;
@@ -76,6 +83,8 @@ class NotificationService implements ConfigurableInterface
      * @param NotificationMetricsService|null $metricsService Metrics service
      * @param array<string, mixed> $config Configuration options
      * @param ApplicationContext|null $context Application context
+     * @param NotificationQueueDispatcherInterface|null $queueDispatcher Optional async-dispatch
+     *        queue seam; when null, async dispatch builds a QueueManager inline (back-compat)
      */
     public function __construct(
         NotificationDispatcher $dispatcher,
@@ -83,12 +92,14 @@ class NotificationService implements ConfigurableInterface
         ?TemplateManager $templateManager = null,
         ?NotificationMetricsService $metricsService = null,
         array $config = [],
-        ?ApplicationContext $context = null
+        ?ApplicationContext $context = null,
+        ?NotificationQueueDispatcherInterface $queueDispatcher = null
     ) {
         $this->dispatcher = $dispatcher;
         $this->repository = $repository;
         $this->templateManager = $templateManager;
         $this->context = $context;
+        $this->queueDispatcher = $queueDispatcher;
 
         // Resolve and validate configuration
         $this->resolveOptions($config);
@@ -1130,27 +1141,28 @@ class NotificationService implements ConfigurableInterface
             'options' => $options,
         ];
 
+        $queue = (string)$this->getOption('async_queue');
+
+        // Preferred path: delegate to the injected queue dispatcher (keeps queueing optional and
+        // testable, and doesn't construct a QueueManager here).
+        if ($this->queueDispatcher !== null) {
+            return $this->queueDispatcher->dispatch(DispatchNotificationChannels::class, $payload, $queue);
+        }
+
+        // Fallback (no dispatcher injected): build a QueueManager inline — best-effort, must not
+        // fail the parent request.
         try {
             if ($this->context !== null) {
                 $queueConfig = function_exists('loadConfigWithHierarchy')
                     ? loadConfigWithHierarchy($this->context, 'queue')
                     : [];
                 $manager = new QueueManager($queueConfig, $this->context);
-                return $manager->push(
-                    DispatchNotificationChannels::class,
-                    $payload,
-                    (string)$this->getOption('async_queue')
-                );
+                return $manager->push(DispatchNotificationChannels::class, $payload, $queue);
             }
 
             $manager = QueueManager::createDefault();
-            return $manager->push(
-                DispatchNotificationChannels::class,
-                $payload,
-                (string)$this->getOption('async_queue')
-            );
+            return $manager->push(DispatchNotificationChannels::class, $payload, $queue);
         } catch (\Throwable $e) {
-            // Best-effort async dispatch: do not fail the parent request.
             error_log('[NotificationService] Failed to queue async dispatch: ' . $e->getMessage());
             return null;
         }

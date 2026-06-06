@@ -83,11 +83,21 @@ final class NotificationsProvider extends BaseServiceProvider
             true
         );
 
+        // Async-dispatch queue seam (wraps QueueManager); shared.
+        $defs[\Glueful\Notifications\Contracts\NotificationQueueDispatcherInterface::class] = new FactoryDefinition(
+            \Glueful\Notifications\Contracts\NotificationQueueDispatcherInterface::class,
+            fn() => new \Glueful\Notifications\Queue\QueueManagerNotificationDispatcher($this->getContext()),
+            true
+        );
+
         $defs[\Glueful\Notifications\Services\NotificationService::class] = new FactoryDefinition(
             \Glueful\Notifications\Services\NotificationService::class,
             function ($c) {
                 $dispatcher = $c->get(\Glueful\Notifications\Services\NotificationDispatcher::class);
                 $store = $c->get(\Glueful\Notifications\Contracts\NotificationStoreInterface::class);
+                $queueDispatcher = $c->get(
+                    \Glueful\Notifications\Contracts\NotificationQueueDispatcherInterface::class
+                );
 
                 $templateManager = $c->has(\Glueful\Notifications\Templates\TemplateManager::class)
                     ? $c->get(\Glueful\Notifications\Templates\TemplateManager::class)
@@ -107,7 +117,10 @@ final class NotificationsProvider extends BaseServiceProvider
                         : null,
                     null,
                     $config,
-                    $context
+                    $context,
+                    $queueDispatcher instanceof \Glueful\Notifications\Contracts\NotificationQueueDispatcherInterface
+                        ? $queueDispatcher
+                        : null
                 );
             },
             true
