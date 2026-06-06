@@ -65,7 +65,7 @@ class NotificationRetryJob extends Job
         $retryType = $data['retryType'] ?? 'process';
         $options = $data['options'] ?? [];
 
-        $task = new NotificationRetryTask();
+        $task = new NotificationRetryTask(context: $this->context);
 
         // Note: NotificationRetryTask only has a handle() method that processes retries
         // The cleanup functionality would need to be implemented separately if needed

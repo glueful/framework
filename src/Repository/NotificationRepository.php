@@ -11,6 +11,7 @@ use Glueful\Notifications\Models\NotificationTemplate;
 use Glueful\Helpers\Utils;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
+use Glueful\Notifications\Contracts\NotificationStoreInterface;
 use Glueful\Repository\Concerns\QueryFilterTrait;
 
 /**
@@ -27,7 +28,7 @@ use Glueful\Repository\Concerns\QueryFilterTrait;
  *
  * @package Glueful\Repository
  */
-class NotificationRepository extends BaseRepository
+class NotificationRepository extends BaseRepository implements NotificationStoreInterface
 {
     use QueryFilterTrait;
 
@@ -53,6 +54,14 @@ class NotificationRepository extends BaseRepository
     public function getTableName(): string
     {
         return 'notifications';
+    }
+
+    /**
+     * This store durably persists notifications.
+     */
+    public function isPersistent(): bool
+    {
+        return true;
     }
 
     /**

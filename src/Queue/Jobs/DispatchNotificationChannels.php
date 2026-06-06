@@ -94,7 +94,13 @@ class DispatchNotificationChannels extends Job
             }
         }
 
-        $repository = new \Glueful\Repository\NotificationRepository();
-        return new NotificationService($dispatcher, $repository, context: $this->context);
+        // Resolve the capability-aware store from the container (NullNotificationStore when
+        // persistence is disabled) rather than hardcoding a repository.
+        $store = app($this->context, \Glueful\Notifications\Contracts\NotificationStoreInterface::class);
+        if (!$store instanceof \Glueful\Notifications\Contracts\NotificationStoreInterface) {
+            $store = new \Glueful\Repository\NotificationRepository();
+        }
+
+        return new NotificationService($dispatcher, $store, context: $this->context);
     }
 }

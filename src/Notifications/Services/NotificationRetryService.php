@@ -9,6 +9,8 @@ use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use Glueful\Logging\LogManager;
 use Glueful\Notifications\Contracts\Notifiable;
+use Glueful\Notifications\Contracts\NotificationStoreInterface;
+use Glueful\Notifications\Exceptions\NotificationPersistenceDisabledException;
 use Glueful\Notifications\Models\Notification;
 use Glueful\Repository\NotificationRepository;
 
@@ -40,9 +42,10 @@ class NotificationRetryService
     private array $config;
 
     /**
-     * @var NotificationRepository|null Notification repository
+     * @var NotificationStoreInterface The notification store (a NotificationRepository when
+     *      persistence is enabled). Always set by the constructor.
      */
-    private ?NotificationRepository $notificationRepository;
+    private NotificationStoreInterface $notificationRepository;
 
     /**
      * @var ApplicationContext|null Application context
@@ -53,13 +56,13 @@ class NotificationRetryService
      * NotificationRetryService constructor
      *
      * @param LogManager|null $logger Logger instance
-     * @param NotificationRepository|null $notificationRepository Notification repository
+     * @param NotificationStoreInterface|null $notificationRepository Notification store
      * @param array<string, mixed> $config Configuration options
      * @param ApplicationContext|null $context Application context
      */
     public function __construct(
         ?LogManager $logger = null,
-        ?NotificationRepository $notificationRepository = null,
+        ?NotificationStoreInterface $notificationRepository = null,
         array $config = [],
         ?ApplicationContext $context = null
     ) {
@@ -92,6 +95,12 @@ class NotificationRetryService
      */
     public function queueForRetry(Notification $notification, Notifiable $notifiable, string $channel): bool
     {
+        // The retry queue (notification_retry_queue) is part of the gated notifications schema;
+        // without persistence there is nowhere to durably queue a retry.
+        if (!$this->notificationRepository->isPersistent()) {
+            throw NotificationPersistenceDisabledException::forOperation('queueForRetry');
+        }
+
         // Get current retry count from notification data
         $data = $notification->getData() ?? [];
         $retryCount = ($data['retry_count'] ?? 0) + 1;
@@ -209,6 +218,10 @@ class NotificationRetryService
      */
     public function processDueRetries(int $limit, NotificationService $notificationService): array
     {
+        if (!$this->notificationRepository->isPersistent()) {
+            throw NotificationPersistenceDisabledException::forOperation('processDueRetries');
+        }
+
         $this->initDatabase();
         $now = (new DateTime())->format('Y-m-d H:i:s');
 

@@ -62,13 +62,32 @@ final class NotificationsProvider extends BaseServiceProvider
             true
         );
 
+        // Persistence seam: a real repository when the `notifications` capability is enabled,
+        // or a NullNotificationStore that degrades explicitly when it is disabled.
+        $defs[\Glueful\Notifications\Contracts\NotificationStoreInterface::class] = new FactoryDefinition(
+            \Glueful\Notifications\Contracts\NotificationStoreInterface::class,
+            function ($c) {
+                $persistenceEnabled = (bool) config(
+                    $this->getContext(),
+                    'capabilities.notifications',
+                    true
+                );
+                if (!$persistenceEnabled) {
+                    return new \Glueful\Notifications\Stores\NullNotificationStore();
+                }
+
+                return $c->has(\Glueful\Repository\NotificationRepository::class)
+                    ? $c->get(\Glueful\Repository\NotificationRepository::class)
+                    : new \Glueful\Repository\NotificationRepository();
+            },
+            true
+        );
+
         $defs[\Glueful\Notifications\Services\NotificationService::class] = new FactoryDefinition(
             \Glueful\Notifications\Services\NotificationService::class,
             function ($c) {
                 $dispatcher = $c->get(\Glueful\Notifications\Services\NotificationDispatcher::class);
-                $repository = $c->has(\Glueful\Repository\NotificationRepository::class)
-                    ? $c->get(\Glueful\Repository\NotificationRepository::class)
-                    : new \Glueful\Repository\NotificationRepository();
+                $store = $c->get(\Glueful\Notifications\Contracts\NotificationStoreInterface::class);
 
                 $templateManager = $c->has(\Glueful\Notifications\Templates\TemplateManager::class)
                     ? $c->get(\Glueful\Notifications\Templates\TemplateManager::class)
@@ -82,7 +101,7 @@ final class NotificationsProvider extends BaseServiceProvider
 
                 return new \Glueful\Notifications\Services\NotificationService(
                     $dispatcher,
-                    $repository,
+                    $store,
                     $templateManager instanceof \Glueful\Notifications\Templates\TemplateManager
                         ? $templateManager
                         : null,

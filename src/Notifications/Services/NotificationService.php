@@ -14,6 +14,8 @@ use Glueful\Notifications\Models\NotificationPreference;
 use Glueful\Notifications\Templates\TemplateManager;
 use Glueful\Queue\Jobs\DispatchNotificationChannels;
 use Glueful\Queue\QueueManager;
+use Glueful\Notifications\Contracts\NotificationStoreInterface;
+use Glueful\Notifications\Exceptions\NotificationPersistenceDisabledException;
 use Glueful\Repository\NotificationRepository;
 use InvalidArgumentException;
 use Glueful\Logging\LogManager;
@@ -44,9 +46,10 @@ class NotificationService implements ConfigurableInterface
     private ?TemplateManager $templateManager;
 
     /**
-     * @var NotificationRepository The notification repository
+     * @var NotificationStoreInterface The notification persistence store (a NotificationRepository
+     *      when persistence is enabled, or a NullNotificationStore when it is disabled).
      */
-    private NotificationRepository $repository;
+    private NotificationStoreInterface $repository;
 
     /**
      * @var NotificationMetricsService The metrics service
@@ -67,7 +70,8 @@ class NotificationService implements ConfigurableInterface
      * NotificationService constructor
      *
      * @param NotificationDispatcher $dispatcher Notification dispatcher
-     * @param NotificationRepository $repository Notification repository
+     * @param NotificationStoreInterface $repository Notification store (a NotificationRepository
+     *        satisfies this; existing callers passing a repository keep working unchanged)
      * @param TemplateManager|null $templateManager Template manager
      * @param NotificationMetricsService|null $metricsService Metrics service
      * @param array<string, mixed> $config Configuration options
@@ -75,7 +79,7 @@ class NotificationService implements ConfigurableInterface
      */
     public function __construct(
         NotificationDispatcher $dispatcher,
-        NotificationRepository $repository,
+        NotificationStoreInterface $repository,
         ?TemplateManager $templateManager = null,
         ?NotificationMetricsService $metricsService = null,
         array $config = [],
@@ -134,6 +138,16 @@ class NotificationService implements ConfigurableInterface
                     'message' => 'Notification already processed for this idempotency key'
                 ];
             }
+        }
+
+        // Scheduling requires durable persistence (the notification must survive to be picked
+        // up later by findPendingScheduled). Refuse up front when persistence is disabled
+        // rather than silently dropping the scheduled notification.
+        if (
+            isset($options['schedule']) && $options['schedule'] instanceof DateTime
+            && !$this->repository->isPersistent()
+        ) {
+            throw NotificationPersistenceDisabledException::forOperation('scheduleNotification');
         }
 
         $enrichedData = $this->withNotificationMeta($data, $idempotencyKey);
@@ -354,6 +368,12 @@ class NotificationService implements ConfigurableInterface
         array $channels = [],
         array $options = []
     ): array {
+        // Dispatching a *stored* notification is a durable flow — it has nothing to read back
+        // without persistence, so fail clearly instead of returning notification_not_found.
+        if (!$this->repository->isPersistent()) {
+            throw NotificationPersistenceDisabledException::forOperation('dispatchStoredNotification');
+        }
+
         $notification = $this->repository->findByUuid($notificationUuid);
         if ($notification === null) {
             return ['status' => 'failed', 'reason' => 'notification_not_found'];
@@ -610,6 +630,12 @@ class NotificationService implements ConfigurableInterface
      */
     public function processScheduledNotifications(int $batchSize = 50): array
     {
+        // The scheduled queue lives in the gated notifications schema; without persistence there
+        // is nothing to process. Fail clearly instead of silently returning empty stats.
+        if (!$this->repository->isPersistent()) {
+            throw NotificationPersistenceDisabledException::forOperation('processScheduledNotifications');
+        }
+
         $pendingNotifications = $this->repository->findPendingScheduled(null, $batchSize);
 
         $results = [
@@ -696,11 +722,30 @@ class NotificationService implements ConfigurableInterface
     }
 
     /**
-     * Get the notification repository
+     * Get the underlying notification repository (concrete, DB-backed).
+     *
+     * Kept for backward compatibility. When persistence is disabled the store is not a
+     * repository, so this throws rather than returning a non-repository — callers that need the
+     * store regardless of persistence should use {@see self::getStore()}.
      *
      * @return NotificationRepository The notification repository
+     * @throws NotificationPersistenceDisabledException When persistence is disabled
      */
     public function getRepository(): NotificationRepository
+    {
+        if (!$this->repository instanceof NotificationRepository) {
+            throw NotificationPersistenceDisabledException::forOperation('getRepository');
+        }
+
+        return $this->repository;
+    }
+
+    /**
+     * Get the notification persistence store (always available, regardless of persistence state).
+     *
+     * @return NotificationStoreInterface The notification store
+     */
+    public function getStore(): NotificationStoreInterface
     {
         return $this->repository;
     }

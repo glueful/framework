@@ -131,6 +131,13 @@ class ProcessRetriesCommand extends BaseCommand
         // Initialize logger properly
         $this->logger = new LogManager();
 
+        // Capability-aware store: a NullNotificationStore when persistence is disabled, so the
+        // retry service throws cleanly instead of querying a gated table.
+        $store = app($this->getContext(), \Glueful\Notifications\Contracts\NotificationStoreInterface::class);
+        if (!$store instanceof \Glueful\Notifications\Contracts\NotificationStoreInterface) {
+            $store = new NotificationRepository();
+        }
+
         // Set up notification service
         $this->notificationService = new NotificationService(
             new NotificationDispatcher(
@@ -139,16 +146,17 @@ class ProcessRetriesCommand extends BaseCommand
                 [],
                 app($this->getContext(), \Glueful\Events\EventService::class)
             ),
-            new NotificationRepository(),
+            $store,
             context: $this->getContext()
         );
 
-        // Initialize retry service with logger and configuration
+        // Initialize retry service with the same capability-aware store and context
         $this->retryService = new NotificationRetryService(
             $this->logger,
-            null, // Use default NotificationRepository
+            $store,
             // Align with extension config namespace used by EmailNotification
-            config($this->getContext(), 'emailnotification.retry') ?? []
+            config($this->getContext(), 'emailnotification.retry') ?? [],
+            $this->getContext()
         );
     }
 
