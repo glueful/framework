@@ -37,38 +37,36 @@
 
 ---
 
-## Phase 2 — `NotificationStoreInterface` + Database/Null stores + provider binding
+## Phase 2 — `NotificationStoreInterface` + Null store + provider binding ✅ implemented
 
-**Create**
-- `src/Notifications/Contracts/NotificationStoreInterface.php` — **broad**, mirrors current repo behavior (§4). Maps every `NotificationRepository` op used by the service: `save`, `findByUuid`, `findForNotifiable(+WithPagination)`, `findPendingScheduled`, `findRecentByIdempotencyKey`, `ensureDeliveryRecords`, `getChannelsNeedingDispatch`, `recordDeliveryAttempt`, `getFailedDeliveryChannels`, `savePreference`, `findPreferenceByUuid`, `findPreferencesForNotifiable`, `saveTemplate`/`findTemplateByUuid`/`findTemplates`, `countForNotifiable`, `markAllAsRead`, `deleteOldNotifications`, `deleteNotificationByUuid`.
-- `src/Notifications/Stores/DatabaseNotificationStore.php` — delegates to the existing `NotificationRepository` unchanged.
+> **Two deviations from the original plan, made during implementation:**
+> 1. **No separate `DatabaseNotificationStore` class.** Since the compat decision is "`NotificationRepository implements NotificationStoreInterface`", the repo *is* the database store — a wrapper would be dead weight. The provider binds the interface to the repo directly (or the null store).
+> 2. **Added `isPersistent(): bool` to the interface** (repo → `true`, null → `false`). It's the persistence-state signal the scheduled/dispatch/retry guards need, and unlike a capability re-read it needs no `ApplicationContext`.
+
+**Created**
+- `src/Notifications/Contracts/NotificationStoreInterface.php` — `isPersistent()` + the 15 ops the service/retry actually use: `save`, `findByUuid`, `findForNotifiable(+WithPagination)`, `findPendingScheduled`, `findRecentByIdempotencyKey`, `ensureDeliveryRecords`, `getChannelsNeedingDispatch`, `recordDeliveryAttempt`, `getFailedDeliveryChannels`, `savePreference`, `findPreferencesForNotifiable`, `countForNotifiable`, `markAllAsRead`, `deleteOldNotifications`. Signatures mirror the repo so it can `implements` cleanly.
 - `src/Notifications/Stores/NullNotificationStore.php` — explicit per-op (§6).
 - `src/Notifications/Exceptions/NotificationPersistenceDisabledException.php`
-- `tests/Unit/Notifications/Stores/NullNotificationStoreTest.php`, `tests/Unit/Notifications/Stores/DatabaseNotificationStoreTest.php`
+- Tests: `NullNotificationStoreTest`, `NotificationServiceStoreTest`, `NotificationNoDbGuardsTest`.
 
-**Modify**
-- `src/Repository/NotificationRepository.php` — **`implements NotificationStoreInterface`** (no behavior change). This is the key compat move (§G4): existing `new NotificationService($d, new NotificationRepository())` keeps working because the repo *is-a* store.
-- `src/Notifications/Services/NotificationService.php` — **widen** the constructor param type from `NotificationRepository` to `NotificationStoreInterface` (`:49,:78`) — **compat-preserving for normal callers** because `NotificationRepository` implements the interface (so existing instantiations keep type-checking). Note: it is still technically a source-compat change for subclasses that override the constructor or for reflection-heavy code — practical risk low, but not a literal no-op. **Keep** `getRepository(): NotificationRepository` (`:703`): return the underlying repo when the store is a `DatabaseNotificationStore`/repo, and throw a clear exception only when persistence is disabled. **Add** `getStore(): NotificationStoreInterface`. Do not rename or remove `getRepository()`.
-- `src/Notifications/Services/NotificationRetryService.php` — depends on `NotificationRepository` (`:45,:68`) and writes `notification_retry_queue` directly (`:135,:146`). Route it through the store/interface; retry is a **durable** flow, so it must throw `NotificationPersistenceDisabledException` (not silently no-op) when persistence is off.
-- `src/Container/Providers/NotificationsProvider.php` — bind `NotificationStoreInterface` → `Database` or `Null` based on the `notifications` capability; `DatabaseChannel` and `NotificationRetryService` consume the interface.
-- Direct sites (§5): `src/Tasks/NotificationRetryTask.php:63`, `src/Queue/Jobs/DispatchNotificationChannels.php:98`, `src/Console/Commands/Notifications/ProcessRetriesCommand.php:135` — resolve `NotificationService` from the container; fallback builds via the same store/queue factories the provider uses (never hardcoded `new NotificationRepository()`).
+**Modified**
+- `src/Repository/NotificationRepository.php` — `implements NotificationStoreInterface`; `isPersistent() → true` (the compat move, §G4).
+- `src/Notifications/Services/NotificationService.php` — ctor param widened to `NotificationStoreInterface`; `getStore()` added; `getRepository()` kept (throws `NotificationPersistenceDisabledException` when the store is not a repo); **scheduled** (`send()` with a `DateTime` schedule), **`processScheduledNotifications()`** (the worker side), and **`dispatchStoredNotification`** throw when `!isPersistent()`.
+- `src/Notifications/Services/NotificationRetryService.php` — store widened to the interface; `queueForRetry`/`processDueRetries` throw when `!isPersistent()`.
+- `src/Container/Providers/NotificationsProvider.php` — binds `NotificationStoreInterface` → repo or `NullNotificationStore` by the `notifications` capability; the service consumes the binding.
+- Direct sites (§5): `NotificationRetryTask` (gained a `?ApplicationContext` param, resolves the container service/store), `NotificationRetryJob` (passes its context), `DispatchNotificationChannels`, `ProcessRetriesCommand` — all resolve the capability-aware store via `app($context, NotificationStoreInterface::class)` instead of `new NotificationRepository()`.
 
 **Behavior (no-DB matrix, §6)** — with persistence disabled:
-- sync `send()` → allowed **over non-persistent channels only**, ephemeral (no persistence/idempotency/delivery tracking). A send whose requested/default channel is `database` fails with `channel_unavailable` (`DatabaseChannel::isAvailable()` is false) — it must never report success without persistence;
-- async channels → clear failure unless the queue payload carries the full notification without a DB lookup;
-- `dispatchStoredNotification`, scheduled, retry (incl. `NotificationRetryService`), preferences, read/unread → throw `NotificationPersistenceDisabledException`;
-- reads/counts → empty/zero.
-- Idempotency (`findRecentByIdempotencyKey`) documented as **unavailable** under the null store (duplicates possible).
+- sync `send()` → allowed **over non-persistent channels only**, ephemeral. A `database`-channel send yields `channel_unavailable` (`DatabaseChannel::isAvailable()` is false);
+- `dispatchStoredNotification`, scheduled, retry (incl. `NotificationRetryService`), preferences, read/unread, `deleteOldNotifications` → throw `NotificationPersistenceDisabledException`;
+- reads/counts → empty/null/zero; transient writes (`save`, `ensureDeliveryRecords`, `recordDeliveryAttempt`) → no-op.
+- Idempotency (`findRecentByIdempotencyKey`) is **unavailable** under the null store (duplicates possible).
 
-**Tests**
-- Each durable op on `NullNotificationStore` throws `NotificationPersistenceDisabledException`; each read returns empty/zero; fire-and-forget ops no-op.
-- `DatabaseNotificationStore` forwards 1:1 to the repo (spy/mock).
-- **Compat:** `new NotificationService($dispatcher, new NotificationRepository())` still constructs (repo implements the interface); `getRepository()` returns the repo with persistence on and throws a clear exception with it off; `getStore()` returns the bound store.
-- No-DB: a sync `send()` over a **non-persistent** channel succeeds with the null store; a `database`-channel send yields `channel_unavailable`.
-- `NotificationRetryService` throws `NotificationPersistenceDisabledException` when persistence is off.
-- The three direct sites resolve a working service from the container.
+**Verified:** full suite green; `composer analyse` (src) clean; phpcs clean.
 
-**Rollback risk:** Low–Medium. The compat move (repo implements the interface + widened param) is non-breaking, so the main risk is the no-DB *semantics* (which ops throw vs no-op) — covered by the matrix tests. Revert = rebind the store to the repo and drop the interface.
+**Rollback risk:** Low–Medium. The compat move is non-breaking; the main risk was the no-DB *semantics* (which ops throw vs no-op) — covered by `NullNotificationStoreTest` + `NotificationNoDbGuardsTest`.
+
+**Still deferred:** the end-to-end **row-count** assertion (needs a booted-DB harness). And `ProcessRetriesCommand`/`DispatchNotificationChannels` still hand-build a `ChannelManager` without the core `database` channel (low impact — they target async channels; `NotificationRetryTask` resolves the container service instead) — follow-up.
 
 ---
 
