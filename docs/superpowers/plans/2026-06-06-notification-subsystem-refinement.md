@@ -70,22 +70,22 @@
 
 ---
 
-## Phase 3 — Injectable queue dispatch (additive, keep fallback)
+## Phase 3 — Injectable queue dispatch (additive, keep fallback) ✅ implemented
 
-**Create**
-- `src/Notifications/Contracts/NotificationQueueDispatcherInterface.php` — minimal: enqueue a notification job (wraps `QueueManager::push`/`later`).
-- `src/Notifications/Queue/QueueManagerNotificationDispatcher.php` — default impl over `QueueManager`.
-- `tests/Unit/Notifications/QueueDispatchInjectionTest.php`
+**Created**
+- `src/Notifications/Contracts/NotificationQueueDispatcherInterface.php` — `dispatch(string $job, array $payload, ?string $queue = null): ?string` (best-effort enqueue; null on failure).
+- `src/Notifications/Queue/QueueManagerNotificationDispatcher.php` — default impl wrapping `QueueManager` (context-configured manager when available, else `createDefault()`), swallowing failures exactly as the old inline path did.
+- `tests/Unit/Notifications/NotificationQueueDispatchInjectionTest.php`.
 
-**Modify**
-- `src/Notifications/Services/NotificationService.php` — accept an optional `NotificationQueueDispatcherInterface`; replace inline `new QueueManager(...)` / `QueueManager::createDefault()` (`:1093,:1101`) with the injected dispatcher, **keeping the current construction as the fallback** when none is injected (§G4/G5).
-- `src/Container/Providers/NotificationsProvider.php` — bind the default dispatcher.
+**Modified**
+- `src/Notifications/Services/NotificationService.php` — added an optional trailing `?NotificationQueueDispatcherInterface $queueDispatcher` ctor param (after `$context`, so positional callers are unaffected). `queueAsyncDispatch()` delegates to it when present; **otherwise the inline `QueueManager` construction is kept as the fallback** (§G4/G5).
+- `src/Container/Providers/NotificationsProvider.php` — binds `NotificationQueueDispatcherInterface` → `QueueManagerNotificationDispatcher($context)` and passes it to the service factory.
 
-**Behavior:** Identical default behavior; queueing is now overridable and testable. `send()` never requires a queue.
+**Behavior:** Identical default behaviour; queueing is now overridable and unit-testable, and `send()` never requires a queue. The shared default-channel early-return guard (empty channels → null) is unchanged.
 
-**Tests**
-- Injected dispatcher is used when provided (spy asserts enqueue called, `QueueManager` not constructed).
-- With no dispatcher injected, the fallback path still enqueues (back-compat).
+**Tests:** injected dispatcher receives `(DispatchNotificationChannels::class, payload, 'notifications')` and its return propagates; empty channels short-circuit without touching the dispatcher. *Coverage boundary:* the inline `QueueManager` fallback is **not** unit-tested — it is the prior path retained verbatim, exercised by the green suite; a unit test would require real queue infra for no added confidence.
+
+**Verified:** full suite green; `composer analyse` (src) clean; phpcs clean.
 
 **Rollback risk:** Low. Purely additive; default path unchanged. Revert = drop the optional param + binding.
 
