@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Notifications\Services;
 
 use Glueful\Notifications\Contracts\NotificationChannel;
+use Glueful\Notifications\Exceptions\ChannelAlreadyRegisteredException;
 use InvalidArgumentException;
 
 /**
@@ -38,21 +39,46 @@ class ChannelManager
     }
 
     /**
-     * Register a notification channel
+     * Register a notification channel.
+     *
+     * Idempotent for the same concrete class (safe across repeated boots), but a *different*
+     * class claiming an already-registered name is a real conflict and throws. Use
+     * {@see self::replaceChannel()} to override intentionally.
      *
      * @param NotificationChannel $channel The channel to register
      * @return self
-     * @throws InvalidArgumentException If a channel with the same name already exists
+     * @throws ChannelAlreadyRegisteredException If a different channel class already holds the name
      */
     public function registerChannel(NotificationChannel $channel): self
     {
         $channelName = $channel->getChannelName();
 
         if ($this->hasChannel($channelName)) {
-            throw new InvalidArgumentException("Channel '{$channelName}' is already registered.");
+            $existing = $this->channels[$channelName];
+            if ($existing::class === $channel::class) {
+                return $this; // same class already registered — no-op
+            }
+
+            throw ChannelAlreadyRegisteredException::forName($channelName, $existing::class, $channel::class);
         }
 
         $this->channels[$channelName] = $channel;
+
+        return $this;
+    }
+
+    /**
+     * Register a channel, overwriting any existing channel with the same name.
+     *
+     * Intended for tests and intentional overrides where {@see self::registerChannel()}'s
+     * conflict protection should be bypassed.
+     *
+     * @param NotificationChannel $channel The channel to register
+     * @return self
+     */
+    public function replaceChannel(NotificationChannel $channel): self
+    {
+        $this->channels[$channel->getChannelName()] = $channel;
 
         return $this;
     }
@@ -110,17 +136,17 @@ class ChannelManager
     }
 
     /**
-     * Get available channel names
+     * Get the names of all registered channels.
      *
-     * @return array<string> Array of channel names
+     * @return array<string> Registered channel names
      */
-    public function getAvailableChannels(): array
+    public function getRegisteredChannelNames(): array
     {
         return array_keys($this->channels);
     }
 
     /**
-     * Get only channels that are currently available for sending
+     * Get only channels that are currently available for sending.
      *
      * @return array<string, NotificationChannel> Array of available channels
      */
@@ -129,6 +155,16 @@ class ChannelManager
         return array_filter($this->channels, function (NotificationChannel $channel) {
             return $channel->isAvailable();
         });
+    }
+
+    /**
+     * Get the names of channels that are currently available for sending.
+     *
+     * @return array<string> Active channel names
+     */
+    public function getActiveChannelNames(): array
+    {
+        return array_keys($this->getActiveChannels());
     }
 
     /**
