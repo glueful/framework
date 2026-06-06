@@ -21,6 +21,10 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.51.0 — Larawag (Minor, Released 2026-06-06)
+- **Notification subsystem refinement**: core in-app `database` channel + dispatch-time channel validation (single source of truth = the `ChannelManager` registry); optional/safe persistence via `NotificationStoreInterface` + `NullNotificationStore` (`NOTIFICATIONS_DATABASE_STORE=false` degrades explicitly rather than hitting gated tables); an injectable async-queue seam (`NotificationQueueDispatcherInterface`); structured channel results (`NotificationResult` + opt-in `RichNotificationChannel`); and extension-driven channel registration via `ServiceProvider::boot()` helpers into the shared `ChannelManager`/dispatcher.
+- Notes: **Minor release with breaking changes**, called out in the CHANGELOG with Upgrade Notes — `ChannelManager` channel-name methods renamed (no aliases); notification jobs/commands now require an `ApplicationContext`; the framework no longer hardcodes the `EmailNotification` provider (channel packages self-register from `boot()`). No env vars, no migrations; the `notifications` capability default stays `true`.
+
 ### 1.50.2 — Kochab (Patch, Released 2026-06-05)
 - **`@queryParam` route-doc tag**: `CommentsDocGenerator` now parses `@queryParam name:type="…" [{required}]` in route docblocks as an `in: query` OpenAPI parameter — an editor-clean alternative to the positional `@param … query …` form, which overloads the reserved `@param` tag and triggers IDE/Intelephense false positives (P1133). The legacy `@param` form still parses.
 - **Doc-gen path-param fix**: URL `{name}` path params were auto-derived only when *no* params were documented, so a route with a query param plus a `{id}` lost its path param from the spec. Path params are now always derived and merged (de-duped by name; explicit docblock wins). `routes/resource.php` migrated to `@queryParam`.
