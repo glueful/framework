@@ -6,6 +6,10 @@ namespace Glueful\Extensions;
 
 use Psr\Container\ContainerInterface;
 use Glueful\Database\Migrations\MigrationManager;
+use Glueful\Notifications\Contracts\NotificationChannel;
+use Glueful\Notifications\Contracts\NotificationExtension;
+use Glueful\Notifications\Services\ChannelManager;
+use Glueful\Notifications\Services\NotificationDispatcher;
 use Glueful\Routing\Router;
 use Glueful\Bootstrap\ApplicationContext;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -125,6 +129,41 @@ abstract class ServiceProvider
                 throw $e;
             }
         }
+    }
+
+    /**
+     * Register a notification channel into the shared {@see ChannelManager}.
+     *
+     * Call from `boot()`. No-ops when the notification subsystem isn't present in the container.
+     * Throws {@see \Glueful\Notifications\Exceptions\ChannelAlreadyRegisteredException} if a
+     * *different* channel class already holds this channel's name (a real package conflict) — use
+     * `ChannelManager::replaceChannel()` for intentional overrides.
+     */
+    protected function registerNotificationChannel(NotificationChannel $channel): void
+    {
+        if (!$this->app->has(ChannelManager::class)) {
+            return;
+        }
+
+        /** @var ChannelManager $manager */
+        $manager = $this->app->get(ChannelManager::class);
+        $manager->registerChannel($channel);
+    }
+
+    /**
+     * Register a {@see NotificationExtension} (before/after-send hooks) on the shared dispatcher.
+     *
+     * Call from `boot()`. No-ops when the dispatcher isn't present in the container.
+     */
+    protected function registerNotificationExtension(NotificationExtension $extension): void
+    {
+        if (!$this->app->has(NotificationDispatcher::class)) {
+            return;
+        }
+
+        /** @var NotificationDispatcher $dispatcher */
+        $dispatcher = $this->app->get(NotificationDispatcher::class);
+        $dispatcher->registerExtension($extension);
     }
 
     /**

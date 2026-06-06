@@ -7,10 +7,10 @@ namespace Glueful\Notifications\Results;
 /**
  * Result of a single channel delivery attempt.
  *
- * A richer alternative to the legacy `bool` return of {@see \Glueful\Notifications\Contracts\NotificationChannel::send()}.
- * Channels implementing {@see \Glueful\Notifications\Contracts\RichNotificationChannel} return one
- * of these so the dispatcher can record a provider message id, error code/message, retryability,
- * and latency. Legacy bool-returning channels are normalized via {@see self::fromBool()}.
+ * A richer alternative to the legacy `bool` return of `NotificationChannel::send()`. Channels
+ * implementing {@see \Glueful\Notifications\Contracts\RichNotificationChannel} return one of these
+ * so the dispatcher can record a provider message id, error code/message, retryability, and
+ * latency. Legacy bool-returning channels are normalized via {@see self::fromBool()}.
  *
  * @package Glueful\Notifications\Results
  */

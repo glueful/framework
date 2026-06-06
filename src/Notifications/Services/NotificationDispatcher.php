@@ -343,8 +343,8 @@ class NotificationDispatcher
             return $defaultChannels;
         }
 
-        // As a last resort, use all available channels
-        return $this->channelManager->getAvailableChannels();
+        // As a last resort, use all registered channels
+        return $this->channelManager->getRegisteredChannelNames();
     }
 
     /**

@@ -6,11 +6,9 @@ namespace Glueful\Console\Commands\Notifications;
 
 use Glueful\Console\BaseCommand;
 use Glueful\Logging\LogManager;
+use Glueful\Notifications\Exceptions\NotificationContextRequiredException;
 use Glueful\Notifications\Services\NotificationService;
 use Glueful\Notifications\Services\NotificationRetryService;
-use Glueful\Repository\NotificationRepository;
-use Glueful\Notifications\Services\NotificationDispatcher;
-use Glueful\Notifications\Services\ChannelManager;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -130,33 +128,29 @@ class ProcessRetriesCommand extends BaseCommand
     {
         // Initialize logger properly
         $this->logger = new LogManager();
+        $context = $this->getContext();
 
-        // Capability-aware store: a NullNotificationStore when persistence is disabled, so the
-        // retry service throws cleanly instead of querying a gated table.
-        $store = app($this->getContext(), \Glueful\Notifications\Contracts\NotificationStoreInterface::class);
-        if (!$store instanceof \Glueful\Notifications\Contracts\NotificationStoreInterface) {
-            $store = new NotificationRepository();
+        // Resolve the container's shared notification service (its dispatcher carries core +
+        // extension-registered channels/hooks) — no ad-hoc managers, no hardcoded extension wiring.
+        $container = container($context);
+        $service = $container->has(NotificationService::class)
+            ? $container->get(NotificationService::class)
+            : null;
+        if (!$service instanceof NotificationService) {
+            throw NotificationContextRequiredException::forConsumer(self::class);
         }
+        $this->notificationService = $service;
 
-        // Set up notification service
-        $this->notificationService = new NotificationService(
-            new NotificationDispatcher(
-                new ChannelManager(),
-                null,
-                [],
-                app($this->getContext(), \Glueful\Events\EventService::class)
-            ),
-            $store,
-            context: $this->getContext()
-        );
-
-        // Initialize retry service with the same capability-aware store and context
+        // Retry service: capability-aware store (NullNotificationStore when persistence is off, so
+        // it throws cleanly instead of querying a gated table) + context.
+        $store = app($context, \Glueful\Notifications\Contracts\NotificationStoreInterface::class);
+        $retryConfig = config($context, 'notifications.retry');
         $this->retryService = new NotificationRetryService(
             $this->logger,
-            $store,
-            // Align with extension config namespace used by EmailNotification
-            config($this->getContext(), 'emailnotification.retry') ?? [],
-            $this->getContext()
+            $store instanceof \Glueful\Notifications\Contracts\NotificationStoreInterface ? $store : null,
+            // Channel-agnostic core retry config (falls back to the service's own defaults).
+            is_array($retryConfig) ? $retryConfig : [],
+            $context
         );
     }
 

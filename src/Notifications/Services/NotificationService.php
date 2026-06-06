@@ -938,8 +938,8 @@ class NotificationService implements ConfigurableInterface
      */
     public function getPerformanceMetrics(): array
     {
-        // Get all active channels
-        $channels = $this->dispatcher->getChannelManager()->getAvailableChannels();
+        // Get all registered channels
+        $channels = $this->dispatcher->getChannelManager()->getRegisteredChannelNames();
 
         // Get metrics for all channels
         return $this->metricsService->getAllMetrics($channels);

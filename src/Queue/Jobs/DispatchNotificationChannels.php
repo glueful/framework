@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Queue\Jobs;
 
 use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Notifications\Exceptions\NotificationContextRequiredException;
 use Glueful\Notifications\Services\NotificationService;
 use Glueful\Queue\Job;
 
@@ -50,57 +51,21 @@ class DispatchNotificationChannels extends Job
 
     private function resolveNotificationService(): NotificationService
     {
-        try {
-            $container = $this->context !== null ? container($this->context) : null;
-            if ($container !== null && $container->has(NotificationService::class)) {
-                $service = $container->get(NotificationService::class);
-                if ($service instanceof NotificationService) {
-                    return $service;
-                }
-            }
-        } catch (\Throwable) {
+        // Notification dispatch resolves through the container's shared service (whose dispatcher
+        // carries core + extension-registered channels/hooks). No ad-hoc managers, and no
+        // hardcoded extension wiring — extensions self-register via their ServiceProvider::boot().
+        if ($this->context === null) {
+            throw NotificationContextRequiredException::forConsumer(self::class);
         }
 
-        $channelManager = new \Glueful\Notifications\Services\ChannelManager();
-        $events = null;
-        try {
-            $container = $this->context !== null ? container($this->context) : null;
-            if ($container !== null && $container->has(\Glueful\Events\EventService::class)) {
-                $events = $container->get(\Glueful\Events\EventService::class);
-            }
-        } catch (\Throwable) {
-            $events = null;
+        $container = container($this->context);
+        $service = $container->has(NotificationService::class)
+            ? $container->get(NotificationService::class)
+            : null;
+        if (!$service instanceof NotificationService) {
+            throw NotificationContextRequiredException::forConsumer(self::class);
         }
 
-        $dispatcher = new \Glueful\Notifications\Services\NotificationDispatcher(
-            $channelManager,
-            null,
-            [],
-            $events instanceof \Glueful\Events\EventService ? $events : null
-        );
-
-        $emailProviderClass = '\\Glueful\\Extensions\\EmailNotification\\EmailNotificationProvider';
-        if (class_exists($emailProviderClass)) {
-            $emailProvider = new $emailProviderClass();
-            $emailProvider->initialize();
-            if (method_exists($emailProvider, 'register')) {
-                $emailProvider->register($channelManager);
-            }
-            $name = method_exists($emailProvider, 'getExtensionName')
-                ? $emailProvider->getExtensionName()
-                : 'email_notification';
-            if ($dispatcher->getExtension($name) === null) {
-                $dispatcher->registerExtension($emailProvider);
-            }
-        }
-
-        // Resolve the capability-aware store from the container (NullNotificationStore when
-        // persistence is disabled) rather than hardcoding a repository.
-        $store = app($this->context, \Glueful\Notifications\Contracts\NotificationStoreInterface::class);
-        if (!$store instanceof \Glueful\Notifications\Contracts\NotificationStoreInterface) {
-            $store = new \Glueful\Repository\NotificationRepository();
-        }
-
-        return new NotificationService($dispatcher, $store, context: $this->context);
+        return $service;
     }
 }

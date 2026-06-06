@@ -7,11 +7,9 @@ namespace Glueful\Tasks;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Logging\LogManager;
 use Glueful\Notifications\Contracts\NotificationStoreInterface;
+use Glueful\Notifications\Exceptions\NotificationContextRequiredException;
 use Glueful\Notifications\Services\NotificationRetryService;
 use Glueful\Notifications\Services\NotificationService;
-use Glueful\Notifications\Services\NotificationDispatcher;
-use Glueful\Notifications\Services\ChannelManager;
-use Glueful\Repository\NotificationRepository;
 
 /**
  * NotificationRetryProcessor
@@ -53,26 +51,30 @@ class NotificationRetryTask
     ) {
         $this->logger = $logger;
 
-        // Notification service: prefer an injected one, then the container-wired service
-        // (capability-aware store + the registered `database` channel); fall back to a minimal
-        // build only when no container context is available.
+        // Notification service: prefer an injected one, else resolve the container-wired service
+        // (capability-aware store + the registered `database` channel + extension channels).
+        // No ad-hoc fallback: dispatch requires a container context.
         if ($notificationService !== null) {
             $this->notificationService = $notificationService;
         } else {
-            $resolved = $context !== null ? app($context, NotificationService::class) : null;
-            if ($resolved instanceof NotificationService) {
-                $this->notificationService = $resolved;
-            } else {
-                $dispatcher = new NotificationDispatcher(new ChannelManager(), $logger, [], null);
-                $this->notificationService = new NotificationService($dispatcher, new NotificationRepository());
+            if ($context === null) {
+                throw NotificationContextRequiredException::forConsumer(self::class);
             }
+            $resolved = app($context, NotificationService::class);
+            if (!$resolved instanceof NotificationService) {
+                throw NotificationContextRequiredException::forConsumer(self::class);
+            }
+            $this->notificationService = $resolved;
         }
 
-        // Retry service: build with the capability-aware store when context is available, so it
-        // throws cleanly (rather than hitting a gated table) when persistence is disabled.
+        // Retry service: prefer an injected one, else build with the capability-aware store (so it
+        // throws cleanly when persistence is off). Also requires a context.
         if ($retryService !== null) {
             $this->retryService = $retryService;
-        } elseif ($context !== null) {
+        } else {
+            if ($context === null) {
+                throw NotificationContextRequiredException::forConsumer(self::class);
+            }
             $store = app($context, NotificationStoreInterface::class);
             $this->retryService = new NotificationRetryService(
                 $logger,
@@ -80,8 +82,6 @@ class NotificationRetryTask
                 [],
                 $context
             );
-        } else {
-            $this->retryService = new NotificationRetryService($logger);
         }
     }
 
