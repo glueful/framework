@@ -116,9 +116,13 @@
 
 ---
 
-## Phase 5 — Channel auto-registration (separate spec, not implemented here)
+## Phase 5 — Channel auto-registration ✅ implemented (own spec + plan)
 
-Write `docs/superpowers/specs/2026-06-XX-notification-channel-registration-design.md`: route channel packages through the existing Glueful service-provider/extension lifecycle into the shared `ChannelManager` (§G7); scope/fold the `NotificationExtension` contract so there is no parallel system; optionally introduce `getRegisteredChannelNames()` / `getActiveChannelNames()` with the current methods kept as aliases (§7). No code in this plan.
+Routed to its own design + implementation docs:
+- Spec: `docs/superpowers/specs/2026-06-06-notification-channel-registration-design.md`
+- Plan: `docs/superpowers/plans/2026-06-06-notification-channel-registration.md`
+
+Delivered: channels/hooks register via `ServiceProvider::boot()` helpers into the shared `ChannelManager`/dispatcher (§G7); the four fallback consumers were rewired to the shared services and now require an `ApplicationContext`; `ChannelManager::registerChannel()` is idempotent / conflict-throwing with `replaceChannel()`. **Note vs §7:** the registry rename is a *clean break* (no aliases) — superseded the earlier "keep aliases" note (project not live).
 
 ---
 
