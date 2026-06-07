@@ -4,7 +4,8 @@ namespace Glueful\Queue\Jobs;
 
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Queue\QueueManager;
-use Glueful\Queue\Monitoring\WorkerMonitor;
+use Glueful\Queue\Contracts\WorkerMonitorInterface;
+use Glueful\Queue\Monitoring\NullWorkerMonitor;
 use Glueful\Queue\Failed\FailedJobProvider;
 
 /**
@@ -28,8 +29,8 @@ class QueueMaintenance
     /** @var QueueManager Queue manager instance */
     private QueueManager $queueManager;
 
-    /** @var WorkerMonitor Worker monitor instance */
-    private WorkerMonitor $workerMonitor;
+    /** @var WorkerMonitorInterface Worker monitor instance */
+    private WorkerMonitorInterface $workerMonitor;
 
     /** @var FailedJobProvider Failed job provider instance */
     private FailedJobProvider $failedJobProvider;
@@ -45,7 +46,12 @@ class QueueMaintenance
     {
         $this->context = $context;
         $this->queueManager = new QueueManager([], $this->context);
-        $this->workerMonitor = new WorkerMonitor(null, true, $this->context);
+        // Resolve the worker monitor through the container interface seam when a
+        // context is available; otherwise no-op via NullWorkerMonitor so cleanup
+        // steps degrade gracefully instead of fataling.
+        $this->workerMonitor = $this->context !== null
+            ? container($this->context)->get(WorkerMonitorInterface::class)
+            : new NullWorkerMonitor();
         $this->failedJobProvider = new FailedJobProvider(null, 'queue_failed_jobs', 5, 30, $this->context);
         $this->stats = [
             'start_time' => time(),

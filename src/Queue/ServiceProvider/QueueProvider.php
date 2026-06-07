@@ -27,6 +27,12 @@ final class QueueProvider extends BaseServiceProvider
             $this->autowire(\Glueful\Queue\QueueManager::class);
         $defs[\Glueful\Queue\Monitoring\WorkerMonitor::class] =
             $this->autowire(\Glueful\Queue\Monitoring\WorkerMonitor::class);
+        // Interface seam → resolves to the same concrete WorkerMonitor (transitional).
+        $defs[\Glueful\Queue\Contracts\WorkerMonitorInterface::class] =
+            $this->alias(
+                \Glueful\Queue\Contracts\WorkerMonitorInterface::class,
+                \Glueful\Queue\Monitoring\WorkerMonitor::class
+            );
         $defs[\Glueful\Queue\Failed\FailedJobProvider::class] =
             $this->autowire(\Glueful\Queue\Failed\FailedJobProvider::class);
         $defs[\Glueful\Scheduler\JobScheduler::class] =
