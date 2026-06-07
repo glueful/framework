@@ -67,6 +67,22 @@ final class StorageProvider extends BaseServiceProvider
             }
         );
 
+        // Image security validator (kept resolvable after ImageProvider removal;
+        // reads image.security/image.limits which the media extension merges in,
+        // defaulting to [] when the extension is absent)
+        $defs[\Glueful\Services\ImageSecurityValidator::class] = new FactoryDefinition(
+            \Glueful\Services\ImageSecurityValidator::class,
+            function (): \Glueful\Services\ImageSecurityValidator {
+                $security = \function_exists('config')
+                    ? (array) \config($this->context, 'image.security', [])
+                    : [];
+                $limits = \function_exists('config')
+                    ? (array) \config($this->context, 'image.limits', [])
+                    : [];
+                return new \Glueful\Services\ImageSecurityValidator(\array_merge($security, $limits));
+            }
+        );
+
         // UploadController
         $defs[\Glueful\Controllers\UploadController::class] = new FactoryDefinition(
             \Glueful\Controllers\UploadController::class,
