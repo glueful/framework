@@ -52,7 +52,8 @@ The framework ships its capability migrations under `framework/migrations/<capab
 | **notifications** | `notifications`, `notification_deliveries`, `notification_preferences`, `notification_templates`, `notification_retry_queue` | `capabilities.notifications` | **on** |
 | **metrics** | `api_metrics`, `api_metrics_daily`, `api_rate_limits` | `capabilities.metrics` | **on** |
 | **locks** | `locks` | `lock.default === 'database'` | off (file driver) |
-| **archive** | `archive_registry`, `archive_search_index`, `archive_table_stats` | `capabilities.archive` | **off** (opt-in) |
+
+> **Archive** is no longer a core capability — it was extracted to the **`glueful/archive` extension**, which owns its own `archive_registry`/`archive_search_index`/`archive_table_stats` schema. Install it with `composer require glueful/archive`.
 
 A capability that's off registers nothing — its tables are never created, and `migrate:status` won't list them.
 
@@ -76,7 +77,6 @@ return [
     'scheduler'     => env('SCHEDULE_DATABASE_STORE', true),
     'notifications' => env('NOTIFICATIONS_DATABASE_STORE', true),
     'metrics'       => env('METRICS_DATABASE_STORE', true),
-    'archive'       => env('ARCHIVE_DATABASE_SCHEMA', false), // opt-in
 ];
 ```
 
@@ -86,7 +86,6 @@ Toggle via env (no file edit needed):
 SCHEDULE_DATABASE_STORE=false      # don't install scheduler tables
 NOTIFICATIONS_DATABASE_STORE=false
 METRICS_DATABASE_STORE=false
-ARCHIVE_DATABASE_SCHEMA=true        # opt in to archive tables
 ```
 
 …or override `config/capabilities.php` in your app for full control. After changing a gate, run `php glueful migrate:run` to apply (or `migrate:rollback` if you turned one off and want to drop its tables).

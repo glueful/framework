@@ -33,7 +33,6 @@ use Glueful\Helpers\CacheHelper;
 use Glueful\Helpers\ConfigManager;
 use Glueful\Helpers\RoutesManager;
 use Glueful\Http\SecureErrorResponse;
-use Glueful\Services\ImageProcessor;
 
 /**
  * Consolidated Framework class - handles all bootstrapping logic
@@ -329,7 +328,6 @@ class Framework
         CacheHelper::setContext($this->context);
         SecureErrorResponse::setContext($this->context);
         RoutesManager::setContext($this->context);
-        ImageProcessor::setContext($this->context);
 
         // Initialize Cache Driver
         Utils::initializeCacheDriver();

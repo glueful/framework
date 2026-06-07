@@ -1,5 +1,7 @@
 # Platform Schema Ownership Implementation Plan
 
+> **Superseded (archive): see docs/superpowers/specs/2026-06-06-extract-archive-design.md** — archive is now the glueful/archive extension, not a core/skeleton system table.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Move the schema for six framework-core subsystems (locks, uploads/blobs, queue, scheduler, notifications, archive) out of the api-skeleton into **core-owned capability migrations**, each registered **conditionally on config** under its **own source name**, and remove the competing runtime DDL — so the package that owns the code owns the (versioned, source-tracked) schema.

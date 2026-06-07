@@ -53,7 +53,7 @@ final class StorageProvider extends BaseServiceProvider
         // FileUploader with config-driven defaults
         $defs[\Glueful\Uploader\FileUploader::class] = new FactoryDefinition(
             \Glueful\Uploader\FileUploader::class,
-            function (): \Glueful\Uploader\FileUploader {
+            function (\Psr\Container\ContainerInterface $c): \Glueful\Uploader\FileUploader {
                 $uploadsDir = (string) (\function_exists('config')
                     ? \config($this->context, 'uploads.path_prefix', 'uploads')
                     : 'uploads');
@@ -63,7 +63,36 @@ final class StorageProvider extends BaseServiceProvider
                 $disk = (string) (\function_exists('config')
                     ? \config($this->context, 'uploads.disk', 'uploads')
                     : 'uploads');
-                return new \Glueful\Uploader\FileUploader($uploadsDir, $cdnBaseUrl, $disk, $this->context);
+
+                // Optional rich-media seam — bound only by the glueful/media
+                // extension. Absent → FileUploader uses its no-op fallback.
+                $media = $c->has(\Glueful\Uploader\Contracts\MediaProcessorInterface::class)
+                    ? $c->get(\Glueful\Uploader\Contracts\MediaProcessorInterface::class)
+                    : null;
+
+                return new \Glueful\Uploader\FileUploader(
+                    $uploadsDir,
+                    $cdnBaseUrl,
+                    $disk,
+                    $this->context,
+                    $media
+                );
+            }
+        );
+
+        // Image security validator (kept resolvable after ImageProvider removal;
+        // reads image.security/image.limits which the media extension merges in,
+        // defaulting to [] when the extension is absent)
+        $defs[\Glueful\Services\ImageSecurityValidator::class] = new FactoryDefinition(
+            \Glueful\Services\ImageSecurityValidator::class,
+            function (): \Glueful\Services\ImageSecurityValidator {
+                $security = \function_exists('config')
+                    ? (array) \config($this->context, 'image.security', [])
+                    : [];
+                $limits = \function_exists('config')
+                    ? (array) \config($this->context, 'image.limits', [])
+                    : [];
+                return new \Glueful\Services\ImageSecurityValidator(\array_merge($security, $limits));
             }
         );
 
@@ -75,7 +104,13 @@ final class StorageProvider extends BaseServiceProvider
                 $c->get(\Glueful\Uploader\FileUploader::class),
                 $c->get(\Glueful\Repository\BlobRepository::class),
                 $c->get(\Glueful\Storage\StorageManager::class),
-                $c->get(\Glueful\Storage\Support\UrlGenerator::class)
+                $c->get(\Glueful\Storage\Support\UrlGenerator::class),
+                // Optional rich-media seam — bound only by the glueful/media
+                // extension. Absent → on-demand variants fall back to serving
+                // the original (or 415 for explicit format conversion).
+                $c->has(\Glueful\Uploader\Contracts\MediaProcessorInterface::class)
+                    ? $c->get(\Glueful\Uploader\Contracts\MediaProcessorInterface::class)
+                    : null
             )
         );
 

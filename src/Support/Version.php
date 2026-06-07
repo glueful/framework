@@ -13,15 +13,15 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.51.0';
+    public const VERSION = '1.52.0';
 
 
     /** Release code name */
-    public const NAME = 'Larawag';
+    public const NAME = 'Mizar';
 
 
     /** Release date */
-    public const RELEASE_DATE = '2026-06-06';
+    public const RELEASE_DATE = '2026-06-07';
 
     /** Minimum required PHP version */
     public const MIN_PHP_VERSION = '8.3.0';

@@ -190,20 +190,6 @@ final class CapabilityMigrationsTest extends MigrationTestCase
         );
     }
 
-    public function test_archive_capability_gated_on_database_schema(): void
-    {
-        // OFF by default (archive.database_schema=false): not registered, no archive tables.
-        $off = $this->app()->getContainer()->get(MigrationManager::class);
-        self::assertArrayNotHasKey('glueful/framework:archive', $this->registeredSources($off));
-
-        // ON: ARCHIVE_DATABASE_SCHEMA=true → registered + the three archive tables.
-        $this->assertGatedCapability(
-            'glueful/framework:archive',
-            ['ARCHIVE_DATABASE_SCHEMA' => 'true'],
-            ['archive_registry', 'archive_search_index', 'archive_table_stats']
-        );
-    }
-
     public function test_metrics_capability_gated_on_database_store(): void
     {
         // ON by default (metrics.database_store=true): registered + tables created.

@@ -720,7 +720,8 @@ class HealthController extends BaseController
     {
         try {
             $queueManager = container($this->getContext())->get(\Glueful\Queue\QueueManager::class);
-            $workerMonitor = container($this->getContext())->get(\Glueful\Queue\Monitoring\WorkerMonitor::class);
+            $workerMonitor = container($this->getContext())
+                ->get(\Glueful\Queue\Contracts\WorkerMonitorInterface::class);
 
             // Aggregate queue stats (all queues)
             $stats = $queueManager->getStats();

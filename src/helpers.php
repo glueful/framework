@@ -465,26 +465,6 @@ if (!function_exists('get_service_ids')) {
     }
 }
 
-if (!function_exists('image')) {
-    /**
-     * Create image processor instance
-     *
-     * Convenience function to create and configure image processor instances.
-     * Returns the ImageProcessorInterface for fluent image operations.
-     *
-     * @param \Glueful\Bootstrap\ApplicationContext $context Application context
-     * @param string $source Image source path or URL
-     * @return \Glueful\Services\ImageProcessorInterface
-     */
-    function image(
-        \Glueful\Bootstrap\ApplicationContext $context,
-        string $source
-    ): \Glueful\Services\ImageProcessorInterface {
-        $processor = app($context, \Glueful\Services\ImageProcessorInterface::class);
-        return $processor::make($source);
-    }
-}
-
 if (!function_exists('storage_path')) {
     /**
      * Get storage directory path

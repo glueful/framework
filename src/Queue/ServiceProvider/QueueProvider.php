@@ -25,8 +25,13 @@ final class QueueProvider extends BaseServiceProvider
         // Manager and helpers
         $defs[\Glueful\Queue\QueueManager::class] =
             $this->autowire(\Glueful\Queue\QueueManager::class);
-        $defs[\Glueful\Queue\Monitoring\WorkerMonitor::class] =
-            $this->autowire(\Glueful\Queue\Monitoring\WorkerMonitor::class);
+        // Lean job-draining worker (the only worker loop in core).
+        $defs[\Glueful\Queue\QueueWorker::class] =
+            $this->autowire(\Glueful\Queue\QueueWorker::class);
+        // Interface seam → no-op NullWorkerMonitor by default. Real persistence
+        // lives in the queue-ops capability, which overrides this binding.
+        $defs[\Glueful\Queue\Contracts\WorkerMonitorInterface::class] =
+            $this->autowire(\Glueful\Queue\Monitoring\NullWorkerMonitor::class);
         $defs[\Glueful\Queue\Failed\FailedJobProvider::class] =
             $this->autowire(\Glueful\Queue\Failed\FailedJobProvider::class);
         $defs[\Glueful\Scheduler\JobScheduler::class] =

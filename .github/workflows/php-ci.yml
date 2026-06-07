@@ -20,7 +20,7 @@ jobs:
     name: Lint & Style
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
@@ -74,16 +74,17 @@ jobs:
       matrix:
         php: ['8.3', '8.4']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
           extensions: mbstring, intl, zip, pdo_mysql
           tools: composer:v2
-          ini-values: memory_limit=1G, max_execution_time=0, xdebug.mode=off
+          coverage: none
+          ini-values: memory_limit=1G, max_execution_time=0
       - name: Cache Composer packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: vendor
           key: ${{ runner.os }}-php-${{ matrix.php }}-${{ hashFiles('**/composer.lock') }}
@@ -114,7 +115,7 @@ jobs:
     name: PHPStan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
@@ -136,7 +137,7 @@ jobs:
     # Informational only — coverage tooling flakiness must not block merges/releases.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Setup PHP (with Xdebug)
         uses: shivammathur/setup-php@v2
         with:
@@ -150,7 +151,7 @@ jobs:
           mkdir -p build/logs
           vendor/bin/phpunit --coverage-clover build/logs/clover.xml
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: coverage
           path: build/logs/clover.xml

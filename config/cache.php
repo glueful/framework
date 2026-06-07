@@ -76,16 +76,6 @@ return [
     'enable_tags' => env('CACHE_TAGS', true),
     'tags_store' => 'redis',
 
-    // Edge caching configuration
-    'edge' => [
-        'enabled' => env('EDGE_CACHE_ENABLED', false),
-        'provider' => env('EDGE_CACHE_PROVIDER', 'cloudflare'),
-        'default_ttl' => env('EDGE_CACHE_TTL', 3600),
-        'rules' => [
-            // Route-specific cache rules can be defined here
-        ],
-    ],
-
     // Distributed caching configuration
     'distributed' => [
         'enabled' => env('DISTRIBUTED_CACHE_ENABLED', false),
