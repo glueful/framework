@@ -1,5 +1,41 @@
 # Upgrade Notes
 
+## Command cache (production) — required whenever a command is removed
+
+Several upgrades below **remove** console commands from core — `archive:manage`
+(Archive), `cache:purge` (CDN), and `queue:autoscale` (Queue ops). In production
+Glueful caches its discovered command list to
+`storage/cache/glueful_commands_manifest.php`; a manifest generated *before* the
+upgrade still references the removed class and **breaks CLI boot**, e.g.:
+
+```
+Class "Glueful\Console\Commands\Queue\AutoScaleCommand" does not exist
+```
+
+Once that happens every `php glueful …` call fails — including the cache commands
+themselves. Refresh the **command** manifest as part of any deploy that removes (or
+adds) a command:
+
+```bash
+# Before deploying: clear the cached manifest so the next (post-deploy) boot
+# regenerates it without the removed command.
+php glueful commands:cache --clear
+```
+
+If the upgrade is **already deployed** and the CLI is erroring on a removed command
+class, the broken CLI can't clear its own cache — delete the manifest by hand, then
+regenerate:
+
+```bash
+rm -f storage/cache/glueful_commands_manifest.php
+php glueful commands:cache
+```
+
+> `php glueful cache:clear` (the general application cache) does **not** clear the
+> command manifest — use `commands:cache` for that. `cache:clear` remains useful for
+> *other* caches (e.g. dropping a compiled-container binding for a removed service,
+> as noted in the CDN section).
+
 ## Archive extracted to `glueful/archive`
 
 The archive subsystem is no longer part of the framework core. Its code, schema,
@@ -40,11 +76,12 @@ follow these steps.
    `capabilities.archive` gate). If you publish a `config/capabilities.php`, drop
    any `archive` key from it — the core switchboard no longer reads it.
 
-6. **Clear the command cache.** So a cached command manifest doesn't reference the
-   removed core `archive:manage` command:
+6. **Refresh the command manifest** so a cached manifest doesn't reference the
+   removed core `archive:manage` command (see [Command cache (production)](#command-cache-production--required-whenever-a-command-is-removed)
+   — `cache:clear` does **not** clear it):
 
    ```bash
-   php glueful cache:clear
+   php glueful commands:cache --clear
    ```
 
 7. **Update imports.** Any application or extension code referencing the archive
@@ -115,12 +152,15 @@ These two are distinct — do not read them as "the CLI returns false":
    block, move those settings to the extension's `cdn` config key. The
    `EDGE_CACHE_*` environment variables are now read only by the extension.
 
-4. **Clear the command cache** so a cached command manifest doesn't reference the
-   removed core `cache:purge` command (and the compiled container doesn't carry a
-   stale `EdgeCacheService` binding):
+4. **Refresh the command manifest and clear the application cache.** The command
+   manifest must be regenerated so it doesn't reference the removed core
+   `cache:purge` command (see [Command cache (production)](#command-cache-production--required-whenever-a-command-is-removed)),
+   and the general cache cleared so the compiled container doesn't carry a stale
+   `EdgeCacheService` binding:
 
    ```bash
-   php glueful cache:clear
+   php glueful commands:cache --clear   # command manifest (cache:clear does NOT cover this)
+   php glueful cache:clear              # application cache / compiled-container binding
    ```
 
 ## Queue ops (supervised fleets / autoscaling / metrics) extracted to `glueful/queue-ops`
@@ -165,6 +205,11 @@ extension.
   Core retains `Glueful\Queue\Monitoring\NullWorkerMonitor` and
   `Glueful\Queue\Contracts\WorkerMonitorInterface` (bound to the null monitor).
 
+> **Deploying this removal breaks CLI boot if the production command manifest is
+> stale** (it still references the deleted `AutoScaleCommand`). Refresh it — see
+> [Command cache (production)](#command-cache-production--required-whenever-a-command-is-removed)
+> at the top of this file.
+
 ### Restoring supervised fleets / autoscaling / metrics
 
 1. Install the extension:
@@ -176,11 +221,11 @@ extension.
    It is auto-discovered via `extra.glueful` and restores `queue:supervise`
    (supervisor + leaf workers) and `queue:autoscale`.
 
-2. **Clear the command cache** so a cached command manifest doesn't reference the
-   removed core `queue:autoscale` command:
+2. **Refresh the command manifest** so it picks up the extension's `queue:supervise`
+   / `queue:autoscale` commands (see [Command cache (production)](#command-cache-production--required-whenever-a-command-is-removed)):
 
    ```bash
-   php glueful cache:clear
+   php glueful commands:cache --clear
    ```
 
 ### Additive (already shipped this cycle — no action needed)
