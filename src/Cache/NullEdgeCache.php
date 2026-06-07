@@ -9,9 +9,9 @@ namespace Glueful\Cache;
  *
  * Bound in core so that {@see \Glueful\Cache\Contracts\EdgeCacheInterface}
  * always resolves even when no CDN integration is installed. Every method
- * mirrors {@see EdgeCacheService}'s disabled-state returns, so behaviour with
- * no integration installed is identical to today's behaviour with edge caching
- * disabled: headers are empty and purges are silent no-ops.
+ * returns the disabled-state value (edge caching off): headers are empty and
+ * purges are silent no-ops. Installing the {@code glueful/cdn} extension rebinds
+ * this interface to a real edge/CDN implementation.
  */
 final class NullEdgeCache implements Contracts\EdgeCacheInterface
 {

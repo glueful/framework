@@ -53,3 +53,72 @@ follow these steps.
    ```
    Glueful\Services\Archive\*  →  Glueful\Extensions\Archive\*
    ```
+
+## CDN / edge cache extracted to `glueful/cdn`
+
+The edge-cache / CDN integration was removed from core and now lives in the
+`glueful/cdn` extension. Core retains only the seam: the
+`Glueful\Cache\Contracts\EdgeCacheInterface` contract and its no-op default
+`Glueful\Cache\NullEdgeCache`. Response caching (`ResponseCachingTrait`) runs
+against that interface, so it keeps working with or without the extension.
+
+**What was removed from core:**
+
+```
+Glueful\Cache\EdgeCacheService                 →  Glueful\Extensions\Cdn\EdgeCachePurger
+Glueful\Cache\CDN\CDNAdapterInterface          →  Glueful\Extensions\Cdn\Adapters\CDNAdapterInterface
+Glueful\Cache\CDN\AbstractCDNAdapter           →  Glueful\Extensions\Cdn\Adapters\AbstractCDNAdapter
+Glueful\Console\Commands\Cache\PurgeCommand    →  (the cache:purge command, now shipped by the extension)
+Glueful\Helpers\CDNAdapterManager              →  deleted (dead trait, no replacement)
+```
+
+The `EdgeCacheService` container binding and the `cache.edge` config block were
+also removed.
+
+### Behavior without the extension installed
+
+These two are distinct — do not read them as "the CLI returns false":
+
+- **CLI:** `php glueful cache:purge` is **absent** — it is not registered at all,
+  so invoking it is a *command-not-found* error (not a command that runs and
+  returns `false`).
+- **Programmatic:** resolving `Glueful\Cache\Contracts\EdgeCacheInterface` from
+  the container yields `Glueful\Cache\NullEdgeCache`. `isEnabled()` returns
+  `false`, `getProvider()` returns `null`, `generateCacheHeaders()` returns `[]`
+  (response caching still emits its surrogate keys), and all purge calls return
+  `false`. Nothing throws.
+
+### Enabling edge caching again
+
+1. Install the extension:
+
+   ```bash
+   composer require glueful/cdn
+   ```
+
+   It is auto-discovered via `extra.glueful`; its `CdnServiceProvider` rebinds
+   `EdgeCacheInterface` to `EdgeCachePurger` and registers the `cache:purge`
+   command.
+
+2. Configure a provider in the extension's `cdn` config:
+
+   ```php
+   // config/cdn.php (published by the extension)
+   'provider' => env('EDGE_CACHE_PROVIDER', 'cloudflare'),
+   ```
+
+   and ensure the chosen provider name is mapped to its adapter class in
+   `cdn.adapters` (name → class). Third-party adapters register the same way —
+   by merging their `name => AdapterClass::class` entry into `cdn.adapters`.
+
+3. Move any local config overrides. If you overrode the old core `cache.edge`
+   block, move those settings to the extension's `cdn` config key. The
+   `EDGE_CACHE_*` environment variables are now read only by the extension.
+
+4. **Clear the command cache** so a cached command manifest doesn't reference the
+   removed core `cache:purge` command (and the compiled container doesn't carry a
+   stale `EdgeCacheService` binding):
+
+   ```bash
+   php glueful cache:clear
+   ```

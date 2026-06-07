@@ -9,8 +9,8 @@ use Glueful\Cache\NullEdgeCache;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Verifies the no-op core default mirrors EdgeCacheService's disabled-state
- * returns, so response caching keeps working with no CDN integration installed.
+ * Verifies the no-op core default returns the disabled-state values, so
+ * response caching keeps working with no CDN integration installed.
  */
 final class NullEdgeCacheTest extends TestCase
 {

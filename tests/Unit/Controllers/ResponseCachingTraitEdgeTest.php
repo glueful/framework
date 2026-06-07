@@ -15,8 +15,8 @@ use Symfony\Component\HttpFoundation\Request;
 
 /**
  * Proves ResponseCachingTrait::edgeCacheResponse() runs on the
- * EdgeCacheInterface seam: it resolves the interface (not the concrete
- * EdgeCacheService) from the container and calls ONLY generateCacheHeaders().
+ * EdgeCacheInterface seam: it resolves the interface from the container and
+ * calls ONLY generateCacheHeaders().
  *
  * With the NullEdgeCache no-op bound, generateCacheHeaders() returns [], so no
  * edge cache-control header is emitted and the original Response is returned
