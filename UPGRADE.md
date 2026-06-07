@@ -122,3 +122,80 @@ These two are distinct — do not read them as "the CLI returns false":
    ```bash
    php glueful cache:clear
    ```
+
+## Queue ops (supervised fleets / autoscaling / metrics) extracted to `glueful/queue-ops`
+
+Supervised worker fleets, autoscaling, and worker/job metrics were removed from
+core and now live in the **`glueful/queue-ops`** extension. Core keeps the lean
+worker and the monitoring seam: `Glueful\Queue\Contracts\WorkerMonitorInterface`
+and its no-op default `Glueful\Queue\Monitoring\NullWorkerMonitor` (bound by
+default), so `queue:work` and `QueueMaintenance` keep working with or without the
+extension.
+
+> **Part 1 of a staged breaking series.** This change removes the **commands and
+> classes**. The queue-ops **config keys** relocate in a **follow-up commit** (see
+> the note at the end) — reviewers reading commits individually see the config
+> move as a deliberate second step.
+
+### What changed
+
+- **`php glueful queue:work` is now a single lean worker.** The old `queue:work`
+  sub-actions — `work` (multi/manager mode), `spawn`, `scale`, `status`, `stop`,
+  `restart`, and `health` — are **removed**. The lean command declares no
+  positional `action` argument, so plain `queue:work` runs one worker and passing
+  an action (e.g. `queue:work spawn`) is a console "too many arguments" error.
+- **`queue:autoscale` is removed.** It is no longer registered or discoverable.
+- **No stub.** Invoking a removed sub-action or `queue:autoscale` is a generic
+  command-not-found / unknown-argument error — there is **no** placeholder command
+  printing an actionable "install the extension" message.
+- **Deleted core classes** (moved to the extension):
+
+  ```
+  Glueful\Queue\Monitoring\WorkerMonitor        →  Glueful\Extensions\QueueOps\Monitoring\WorkerMonitor
+  Glueful\Queue\Process\ProcessManager          →  Glueful\Extensions\QueueOps\Process\ProcessManager
+  Glueful\Queue\Process\ProcessFactory          →  Glueful\Extensions\QueueOps\Process\ProcessFactory
+  Glueful\Queue\Process\WorkerProcess           →  Glueful\Extensions\QueueOps\Process\WorkerProcess
+  Glueful\Queue\Process\AutoScaler              →  Glueful\Extensions\QueueOps\Process\AutoScaler
+  Glueful\Queue\Process\ScheduledScaler         →  Glueful\Extensions\QueueOps\Process\ScheduledScaler
+  Glueful\Queue\Process\ResourceMonitor         →  Glueful\Extensions\QueueOps\Process\ResourceMonitor
+  Glueful\Queue\Process\StreamingMonitor        →  Glueful\Extensions\QueueOps\Process\StreamingMonitor
+  Glueful\Console\Commands\Queue\AutoScaleCommand  →  (the queue:autoscale command, now shipped by the extension)
+  ```
+
+  Core retains `Glueful\Queue\Monitoring\NullWorkerMonitor` and
+  `Glueful\Queue\Contracts\WorkerMonitorInterface` (bound to the null monitor).
+
+### Restoring supervised fleets / autoscaling / metrics
+
+1. Install the extension:
+
+   ```bash
+   composer require glueful/queue-ops
+   ```
+
+   It is auto-discovered via `extra.glueful` and restores `queue:supervise`
+   (supervisor + leaf workers) and `queue:autoscale`.
+
+2. **Clear the command cache** so a cached command manifest doesn't reference the
+   removed core `queue:autoscale` command:
+
+   ```bash
+   php glueful cache:clear
+   ```
+
+### Additive (already shipped this cycle — no action needed)
+
+- New `php glueful queue:work --once` (drain and exit) and `--connection=` (target
+  a named queue connection, defaults to `config('queue.default')`) flags.
+- `WorkerOptions` `max-jobs` / `max-runtime` now treat `0` as **unlimited**.
+- `ServeCommand` still shells `queue:work --sleep=3`; that is now one lean worker
+  (previously it was implicitly supervised) — no action required.
+
+### Staged config relocation (follow-up commit)
+
+The queue-ops **config keys** are **not** moved in this commit. In a follow-up,
+`queue.workers.{process,auto_scaling,resource_limits,resource_thresholds,supervisor}`
+and the per-queue `workers` / `max_workers` / `auto_scale` settings relocate to
+the extension's `queue_ops.*` config. Until then, those keys remain in
+`config/queue.php` but are inert on core (nothing reads them once the ops classes
+are gone).

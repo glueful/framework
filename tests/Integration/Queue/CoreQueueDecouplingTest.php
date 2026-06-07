@@ -28,38 +28,37 @@ use Psr\Log\NullLogger;
  * Queue\Process\* type. Real worker persistence and the autoscaler live in the
  * queue-ops capability, installed separately.
  *
- * SCOPE NOTE (WS3, copy-first): two assertions from the plan's Task 3b text are
- * IMPOSSIBLE at WS3 and are DEFERRED to Task 4e (the deletion pass):
+ * COMPLETED AT TASK 4e (the deletion pass): two assertions from the plan's
+ * Task 3b text that were IMPOSSIBLE at WS3 are now achievable and asserted here,
+ * because the ops surface has been deleted from core:
  *
- *   - `queue:autoscale` is NOT yet absent from `commands:list` — AutoScaleCommand
- *     is still present and auto-discovered by ConsoleProvider until 4e.
- *   - The decoupling grep does NOT yet find zero `Queue\Process\*` references
- *     ANYWHERE in core — AutoScaleCommand.php still imports Process/* and the
- *     concrete WorkerMonitor until 4e.
+ *   - `queue:autoscale` is now absent — AutoScaleCommand.php is deleted, so
+ *     ConsoleProvider's #[AsCommand] discovery no longer registers it. Asserted
+ *     by {@see testAutoScaleCommandIsAbsentFromCore()}.
+ *   - The decoupling grep now finds zero `Queue\Process\*` / concrete
+ *     `WorkerMonitor` references ANYWHERE in core — src/Queue/Process/, the
+ *     concrete src/Queue/Monitoring/WorkerMonitor.php, and AutoScaleCommand.php
+ *     are all gone, so NO ops-surface exclusions are needed any more. Asserted
+ *     by {@see testNoConcreteWorkerMonitorOrProcessReferencesRemainInCore()}.
  *
- * The achievable WS3 gate (asserted here) therefore EXCLUDES the still-present,
- * to-be-moved ops surface: src/Queue/Process/, src/Queue/Monitoring/WorkerMonitor.php,
- * and src/Console/Commands/Queue/AutoScaleCommand.php.
- *
- * DOCUMENTED DECOUPLING GREP — run from the framework repo root. With the
- * to-be-moved ops surface, the interface's own @see docblock, and the benign
- * NullWorkerMonitor binding excluded, this MUST return ZERO hits. Any other hit
- * would be a live-path reference to the concrete WorkerMonitor / Process and
- * would mean the gate is NOT met:
+ * DOCUMENTED DECOUPLING GREP — run from the framework repo root. After the 4e
+ * deletions, only the interface's own @see docblock and the benign
+ * NullWorkerMonitor binding remain; this MUST return ZERO hits. Any other hit
+ * would be a live-path reference to a concrete WorkerMonitor / Process and would
+ * mean the gate is NOT met (NOTE: no Process-dir / WorkerMonitor.php /
+ * AutoScaleCommand.php exclusions remain — those files no longer exist):
  *
  *   grep -rn "Queue\\Process\\\|Monitoring\\WorkerMonitor\|WorkerMonitor::class" src/ \
  *     --include="*.php" \
- *     | grep -v "src/Queue/Process/" \
- *     | grep -v "src/Queue/Monitoring/WorkerMonitor.php" \
- *     | grep -v "src/Console/Commands/Queue/AutoScaleCommand.php" \
  *     | grep -v "src/Queue/Contracts/WorkerMonitorInterface.php" \
  *     | grep -v "NullWorkerMonitor"
  *
- * (The `NullWorkerMonitor` exclusion drops the one remaining match — the
- * `WorkerMonitorInterface` → NullWorkerMonitor binding in QueueProvider, which
- * the `WorkerMonitor::class` substring pattern picks up. That binding is the
- * very thing the gate requires to be present, not a concrete reference.)
- * Observed output at WS3: empty.
+ * (The `WorkerMonitorInterface.php` exclusion drops its own `{@see ...WorkerMonitor}`
+ * prose docblock; the `NullWorkerMonitor` exclusion drops the one remaining
+ * match — the `WorkerMonitorInterface` → NullWorkerMonitor binding in
+ * QueueProvider, which the `WorkerMonitor::class` substring pattern picks up.
+ * That binding is the very thing the gate requires to be present, not a concrete
+ * reference.) Observed output at Task 4e: empty.
  */
 final class CoreQueueDecouplingTest extends TestCase
 {
@@ -202,6 +201,116 @@ final class CoreQueueDecouplingTest extends TestCase
             'NullWorkerMonitor must record no active workers after a drain (register/unregister no-oped)'
         );
         self::assertFalse($monitor->isEnabled(), 'the live-path monitor must report itself disabled');
+    }
+
+    /**
+     * Gate 4 (Task 4e): `queue:autoscale` is no longer registered/discoverable in
+     * core. AutoScaleCommand.php has been deleted, so ConsoleProvider's
+     * #[AsCommand] auto-discovery (a recursive scan of src/Console/Commands) can
+     * no longer pick it up.
+     *
+     * Form used (the prompt's acceptable alternative to a full console boot): we
+     * assert (a) the command class no longer exists, and (b) a direct scan of
+     * src/Console/Commands — mirroring ConsoleProvider's discovery — yields no
+     * class declaring `queue:autoscale` via #[AsCommand]. Together these prove the
+     * command is unreachable through the core console kernel.
+     */
+    public function testAutoScaleCommandIsAbsentFromCore(): void
+    {
+        self::assertFalse(
+            class_exists(\Glueful\Console\Commands\Queue\AutoScaleCommand::class),
+            'AutoScaleCommand must be deleted from core (moved to glueful/queue-ops)'
+        );
+
+        $commandsDir = dirname(__DIR__, 3) . '/src/Console/Commands';
+        self::assertDirectoryExists($commandsDir);
+
+        $offenders = [];
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($commandsDir, \FilesystemIterator::SKIP_DOTS)
+        );
+        foreach ($iterator as $file) {
+            /** @var \SplFileInfo $file */
+            if ($file->getExtension() !== 'php') {
+                continue;
+            }
+            $source = (string) file_get_contents($file->getPathname());
+            // ConsoleProvider only registers classes carrying #[AsCommand]; a file
+            // naming 'queue:autoscale' inside such an attribute would re-expose it.
+            if (
+                str_contains($source, 'queue:autoscale')
+                && preg_match('/#\[AsCommand[^]]*queue:autoscale/s', $source) === 1
+            ) {
+                $offenders[] = $file->getPathname();
+            }
+        }
+
+        self::assertSame(
+            [],
+            $offenders,
+            "No core console command may register 'queue:autoscale' (it lives in glueful/queue-ops)"
+        );
+    }
+
+    /**
+     * Gate 5 (Task 4e): the decoupling grep over src/ now finds ZERO references to
+     * the concrete WorkerMonitor or any Queue\Process\* type — with NO ops-surface
+     * exclusions (src/Queue/Process/, src/Queue/Monitoring/WorkerMonitor.php, and
+     * AutoScaleCommand.php no longer exist). Only the interface's own @see docblock
+     * and the benign NullWorkerMonitor binding are excluded.
+     *
+     * Exact command (run from the framework repo root), observed empty at 4e:
+     *
+     *   grep -rn 'Queue\\Process\\\|Monitoring\\WorkerMonitor\|WorkerMonitor::class' src/ \
+     *     --include='*.php' \
+     *     | grep -v 'src/Queue/Contracts/WorkerMonitorInterface.php' \
+     *     | grep -v 'NullWorkerMonitor'
+     */
+    public function testNoConcreteWorkerMonitorOrProcessReferencesRemainInCore(): void
+    {
+        $srcDir = dirname(__DIR__, 3) . '/src';
+        self::assertDirectoryExists($srcDir);
+
+        // The to-be-zero set: any Queue\Process\* reference, the concrete
+        // Monitoring\WorkerMonitor, or a WorkerMonitor::class literal.
+        $needles = ['Queue\\Process\\', 'Monitoring\\WorkerMonitor', 'WorkerMonitor::class'];
+
+        $hits = [];
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($srcDir, \FilesystemIterator::SKIP_DOTS)
+        );
+        foreach ($iterator as $file) {
+            /** @var \SplFileInfo $file */
+            if ($file->getExtension() !== 'php') {
+                continue;
+            }
+            $path = $file->getPathname();
+
+            // Mirrors the documented `grep -v` exclusions:
+            //  - the interface's own {@see ...WorkerMonitor} prose docblock;
+            //  - the NullWorkerMonitor binding/usages (the required seam, not a
+            //    concrete reference — its name contains "WorkerMonitor").
+            if (str_contains($path, 'src/Queue/Contracts/WorkerMonitorInterface.php')) {
+                continue;
+            }
+
+            foreach (file($path, FILE_IGNORE_NEW_LINES) ?: [] as $lineNo => $line) {
+                if (str_contains($line, 'NullWorkerMonitor')) {
+                    continue;
+                }
+                foreach ($needles as $needle) {
+                    if (str_contains($line, $needle)) {
+                        $hits[] = $path . ':' . ($lineNo + 1) . ' ' . trim($line);
+                    }
+                }
+            }
+        }
+
+        self::assertSame(
+            [],
+            $hits,
+            "Core must contain no concrete WorkerMonitor / Queue\\Process references after Task 4e"
+        );
     }
 
     // ---------------------------------------------------------------------
