@@ -153,7 +153,9 @@ final class WorkCommandLeanTest extends TestCase
 
     private function testerWithWorker(object $worker): CommandTester
     {
-        $container = $this->app->getContainer()->with([QueueWorker::class => $worker]);
+        /** @var \Glueful\Container\Container $base */
+        $base = $this->app->getContainer();
+        $container = $base->with([QueueWorker::class => $worker]);
         $command = new WorkCommand($container, $this->context);
 
         return new CommandTester($command);

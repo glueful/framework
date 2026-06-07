@@ -94,7 +94,9 @@ final class StorageProviderFileUploaderMediaTest extends TestCase
 
         $request = new Request();
         $request->attributes->set('user', ['uuid' => 'usr123456789']);
-        $this->context->getContainer()->load([
+        /** @var \Glueful\Container\Container $container */
+        $container = $this->context->getContainer();
+        $container->load([
             'request' => new ValueDefinition('request', $request),
         ]);
     }
@@ -149,7 +151,9 @@ final class StorageProviderFileUploaderMediaTest extends TestCase
         // `$c->has(...) ? $c->get(...) : null` picks it up. load() mutates the
         // booted container's definitions in place — the same mechanism B1 used
         // to inject the `request` service.
-        $this->context->getContainer()->load([
+        /** @var \Glueful\Container\Container $container */
+        $container = $this->context->getContainer();
+        $container->load([
             MediaProcessorInterface::class => new ValueDefinition(MediaProcessorInterface::class, $fake),
         ]);
 

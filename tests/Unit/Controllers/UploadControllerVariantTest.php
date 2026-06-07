@@ -102,7 +102,9 @@ final class UploadControllerVariantTest extends TestCase
 
         $request = new Request();
         $request->attributes->set('user', ['uuid' => 'usr123456789']);
-        $this->context->getContainer()->load([
+        /** @var \Glueful\Container\Container $container */
+        $container = $this->context->getContainer();
+        $container->load([
             'request' => new ValueDefinition('request', $request),
         ]);
 

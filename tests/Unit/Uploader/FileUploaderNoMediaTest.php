@@ -92,7 +92,9 @@ final class FileUploaderNoMediaTest extends TestCase
         // Register a request carrying an authenticated user so the blob row persists.
         $request = new Request();
         $request->attributes->set('user', ['uuid' => 'usr123456789']);
-        $this->context->getContainer()->load([
+        /** @var \Glueful\Container\Container $container */
+        $container = $this->context->getContainer();
+        $container->load([
             'request' => new ValueDefinition('request', $request),
         ]);
 
