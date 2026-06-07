@@ -53,7 +53,7 @@ final class StorageProvider extends BaseServiceProvider
         // FileUploader with config-driven defaults
         $defs[\Glueful\Uploader\FileUploader::class] = new FactoryDefinition(
             \Glueful\Uploader\FileUploader::class,
-            function (): \Glueful\Uploader\FileUploader {
+            function (\Psr\Container\ContainerInterface $c): \Glueful\Uploader\FileUploader {
                 $uploadsDir = (string) (\function_exists('config')
                     ? \config($this->context, 'uploads.path_prefix', 'uploads')
                     : 'uploads');
@@ -63,7 +63,20 @@ final class StorageProvider extends BaseServiceProvider
                 $disk = (string) (\function_exists('config')
                     ? \config($this->context, 'uploads.disk', 'uploads')
                     : 'uploads');
-                return new \Glueful\Uploader\FileUploader($uploadsDir, $cdnBaseUrl, $disk, $this->context);
+
+                // Optional rich-media seam — bound only by the glueful/media
+                // extension. Absent → FileUploader uses its no-op fallback.
+                $media = $c->has(\Glueful\Uploader\Contracts\MediaProcessorInterface::class)
+                    ? $c->get(\Glueful\Uploader\Contracts\MediaProcessorInterface::class)
+                    : null;
+
+                return new \Glueful\Uploader\FileUploader(
+                    $uploadsDir,
+                    $cdnBaseUrl,
+                    $disk,
+                    $this->context,
+                    $media
+                );
             }
         );
 
