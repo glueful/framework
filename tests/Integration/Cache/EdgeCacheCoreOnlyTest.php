@@ -108,10 +108,15 @@ final class EdgeCacheCoreOnlyTest extends TestCase
         // runners, which set xdebug.mode=off), where xdebug_get_headers() exists but
         // returns []. Probe real capture capability so the assertion runs where headers
         // can actually be observed and is a no-op (not a false failure) where they can't.
+        // Reference the optional xdebug function indirectly (as a string callable) so
+        // static analysers don't flag it as undefined when xdebug isn't installed.
+        $xdebugGetHeaders = 'xdebug_get_headers';
         $canCaptureHeaders = false;
-        if (\function_exists('xdebug_get_headers')) {
+        if (\function_exists($xdebugGetHeaders)) {
             @\header('X-Edge-Capture-Probe: 1');
-            foreach (xdebug_get_headers() as $h) {
+            /** @var list<string> $probe */
+            $probe = $xdebugGetHeaders();
+            foreach ($probe as $h) {
                 if (stripos($h, 'X-Edge-Capture-Probe:') === 0) {
                     $canCaptureHeaders = true;
                     break;
@@ -122,7 +127,9 @@ final class EdgeCacheCoreOnlyTest extends TestCase
 
         if ($canCaptureHeaders) {
             $hasSurrogate = false;
-            foreach (xdebug_get_headers() as $h) {
+            /** @var list<string> $emitted */
+            $emitted = $xdebugGetHeaders();
+            foreach ($emitted as $h) {
                 if (stripos($h, 'Surrogate-Key:') === 0) {
                     $hasSurrogate = true;
                 }

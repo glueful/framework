@@ -113,7 +113,6 @@ final class ContainerFactory
     /** @return iterable<BaseServiceProvider> */
     private static function providers(TagCollector $tags, ApplicationContext $context): iterable
     {
-        /** @var array<class-string<BaseServiceProvider>> $classes */
         $classes = [
             \Glueful\Container\Providers\CoreProvider::class,
             \Glueful\Container\Providers\ORMProvider::class,

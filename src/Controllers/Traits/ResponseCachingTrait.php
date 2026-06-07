@@ -15,6 +15,17 @@ use Glueful\Cache\Contracts\EdgeCacheInterface;
  * Provides comprehensive caching functionality for controllers.
  * Handles response caching, query caching, cache invalidation, and CDN integration.
  *
+ * Designed for use inside {@see \Glueful\Controllers\BaseController}, which provides the
+ * members consumed here: the `$repositoryFactory` and `$currentUser` properties, plus the
+ * `isAdmin()` / `can()` authorization helpers from the sibling
+ * {@see \Glueful\Controllers\Traits\AuthorizationTrait}. They are declared below so static
+ * analysers resolve them when the trait is viewed in isolation.
+ *
+ * @property \Glueful\Repository\RepositoryFactory $repositoryFactory
+ * @property \Glueful\Auth\UserIdentity|null $currentUser
+ * @method bool isAdmin()
+ * @method bool can(string $permission, string $resource = 'system', array $context = [])
+ *
  * @package Glueful\Controllers\Traits
  */
 trait ResponseCachingTrait
@@ -69,7 +80,7 @@ trait ResponseCachingTrait
             $key,
             md5(serialize([
                 $this->request->query->all(),
-                $this->currentUser?->uuid ?? null,
+                $this->currentUser?->uuid() ?? null,
                 $this->request->headers->get('Accept'),
                 $this->request->headers->get('Accept-Language')
             ]))
@@ -254,7 +265,7 @@ trait ResponseCachingTrait
         int $defaultTtl = 3600
     ): mixed {
         $ttl = $defaultTtl;
-        $tags = ['user:' . ($this->currentUser?->uuid ?? 'anonymous')];
+        $tags = ['user:' . ($this->currentUser?->uuid() ?? 'anonymous')];
 
         // Adjust cache duration based on user type
         if ($this->isAdmin()) {
@@ -398,7 +409,7 @@ trait ResponseCachingTrait
         // Add surrogate keys for targeted purging
         $surrogateKeys = [
             'controller:' . basename(str_replace('\\', '/', static::class)),
-            'user:' . ($this->currentUser?->uuid ?? 'anonymous'),
+            'user:' . ($this->currentUser?->uuid() ?? 'anonymous'),
             'pattern:' . $pattern
         ];
 
