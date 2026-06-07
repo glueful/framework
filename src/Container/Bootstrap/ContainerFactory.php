@@ -137,7 +137,6 @@ final class ContainerFactory
             \Glueful\Container\Providers\SpaProvider::class,
             \Glueful\Container\Providers\HttpPsr15Provider::class,
             \Glueful\Container\Providers\VarDumperProvider::class,
-            \Glueful\Container\Providers\ImageProvider::class,
             \Glueful\Container\Providers\ControllerProvider::class,
             \Glueful\Container\Providers\LazyProvider::class,
             \Glueful\Security\ServiceProvider\SecurityProvider::class,
