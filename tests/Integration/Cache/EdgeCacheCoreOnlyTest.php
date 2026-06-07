@@ -102,12 +102,27 @@ final class EdgeCacheCoreOnlyTest extends TestCase
         );
 
         // Surrogate-Key is emitted regardless of provider (targeted-purge contract).
-        // xdebug is not loaded in CI, so capture headers when the helper exists and
-        // otherwise assert the path executed without throwing (covered above).
+        // The trait writes it via raw header(); the only way to observe it is xdebug's
+        // header collection — which requires xdebug.mode=develop. function_exists() is
+        // NOT a sufficient guard: xdebug can be loaded with mode=off (as on the CI
+        // runners, which set xdebug.mode=off), where xdebug_get_headers() exists but
+        // returns []. Probe real capture capability so the assertion runs where headers
+        // can actually be observed and is a no-op (not a false failure) where they can't.
+        $canCaptureHeaders = false;
         if (\function_exists('xdebug_get_headers')) {
-            $emitted = xdebug_get_headers();
+            @\header('X-Edge-Capture-Probe: 1');
+            foreach (xdebug_get_headers() as $h) {
+                if (stripos($h, 'X-Edge-Capture-Probe:') === 0) {
+                    $canCaptureHeaders = true;
+                    break;
+                }
+            }
+            @\header_remove('X-Edge-Capture-Probe');
+        }
+
+        if ($canCaptureHeaders) {
             $hasSurrogate = false;
-            foreach ($emitted as $h) {
+            foreach (xdebug_get_headers() as $h) {
                 if (stripos($h, 'Surrogate-Key:') === 0) {
                     $hasSurrogate = true;
                 }
@@ -119,7 +134,7 @@ final class EdgeCacheCoreOnlyTest extends TestCase
             }
             self::assertTrue($hasSurrogate, 'Surrogate-Key header must still be emitted in core-only mode');
         } else {
-            self::assertTrue(true, 'header() capture requires xdebug; seam behavior asserted above');
+            self::assertTrue(true, 'header() capture needs xdebug.mode=develop; seam behavior asserted above');
         }
     }
 
