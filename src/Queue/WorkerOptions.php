@@ -93,12 +93,12 @@ class WorkerOptions
         $this->sleep = max(1, $sleep);
         $this->memory = max(32, $memory);
         $this->timeout = max(1, $timeout);
-        $this->maxJobs = max(1, $maxJobs);
+        $this->maxJobs = max(0, $maxJobs);
         $this->stopWhenEmpty = $stopWhenEmpty;
         $this->maxAttempts = max(1, $maxAttempts);
         $this->heartbeat = max(5, $heartbeat);
         $this->verbose = $verbose;
-        $this->maxRuntime = max(60, $maxRuntime);
+        $this->maxRuntime = max(0, $maxRuntime);
         $this->name = $name !== '' ? $name : 'worker-' . uniqid();
         $this->queuePriorities = $queuePriorities;
         $this->batchSize = max(1, $batchSize);
@@ -299,8 +299,8 @@ class WorkerOptions
             $errors[] = 'Timeout must be at least 1 second';
         }
 
-        if ($this->maxJobs < 1) {
-            $errors[] = 'Max jobs must be at least 1';
+        if ($this->maxJobs < 0) {
+            $errors[] = 'Max jobs must be 0 (unlimited) or greater';
         }
 
         if ($this->maxAttempts < 1) {
@@ -311,8 +311,8 @@ class WorkerOptions
             $errors[] = 'Heartbeat interval must be at least 5 seconds';
         }
 
-        if ($this->maxRuntime < 60) {
-            $errors[] = 'Max runtime must be at least 60 seconds';
+        if ($this->maxRuntime < 0) {
+            $errors[] = 'Max runtime must be 0 (unlimited) or greater';
         }
 
         return $errors;
