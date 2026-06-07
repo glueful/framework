@@ -26,7 +26,4 @@ return [
 
     // API metrics (api_metrics, api_metrics_daily, api_rate_limits).
     'metrics' => env('METRICS_DATABASE_STORE', true),
-
-    // Archive subsystem (archive_registry, archive_search_index, archive_table_stats). Opt-in.
-    'archive' => env('ARCHIVE_DATABASE_SCHEMA', false),
 ];

@@ -6,6 +6,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Breaking Changes
+- **Archive subsystem extracted to the `glueful/archive` extension.** All archive code and schema were removed from core: `src/Services/Archive` (service, `ArchiveServiceInterface`, `ArchiveHealthChecker`, DTOs, and `ServiceProvider/ArchiveProvider`), the `archive:manage` console command (`src/Console/Commands/Archive`), `migrations/archive`, `config/archive.php`, and the `archive` capability (the `capabilities.archive` / `ARCHIVE_DATABASE_SCHEMA` gate). The `ArchiveProvider` is no longer registered in the container. Apps that use archiving must now `composer require glueful/archive` (auto-discovered via `extra.glueful`) and migrate imports `Glueful\Services\Archive\*` → `Glueful\Extensions\Archive\*`. See `UPGRADE.md`. Intentional fix carried into the extension: a configured `archive.storage.path` now actually takes effect — under core, the dead `archive.config` / `storage_path` config keys plus a missing `ApplicationContext` meant the configured storage path was silently never applied.
+
 ---
 
 ## [1.51.0] - 2026-06-06 — Larawag

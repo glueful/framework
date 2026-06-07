@@ -1,5 +1,7 @@
 # Platform Schema Ownership — Design Note (follow-up to the Users extraction)
 
+> **Superseded (archive): see docs/superpowers/specs/2026-06-06-extract-archive-design.md** — archive is now the glueful/archive extension, not a core/skeleton system table.
+
 **Status:** Proposed / deferred. Spun out of the Users-extension extraction (`2026-06-04-users-extension-extraction-design.md`, §8 deferral) and a review of the api-skeleton's remaining migrations.
 
 **Date:** 2026-06-04

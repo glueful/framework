@@ -133,7 +133,6 @@ final class ContainerFactory
             \Glueful\Container\Providers\ExtensionProvider::class,
             \Glueful\Queue\ServiceProvider\QueueProvider::class,
             \Glueful\Container\Providers\LockProvider::class,
-            \Glueful\Services\Archive\ServiceProvider\ArchiveProvider::class,
             \Glueful\Container\Providers\FileProvider::class,
             \Glueful\Container\Providers\SpaProvider::class,
             \Glueful\Container\Providers\HttpPsr15Provider::class,

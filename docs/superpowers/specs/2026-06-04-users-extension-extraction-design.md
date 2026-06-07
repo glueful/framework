@@ -1,5 +1,7 @@
 # Users Extension Extraction — Design Spec
 
+> **Superseded (archive): see docs/superpowers/specs/2026-06-06-extract-archive-design.md** — archive is now the glueful/archive extension, not a core/skeleton system table.
+
 **Date:** 2026-06-04
 **Status:** Approved for planning
 **Related:** [`2026-06-03-extension-permissions-dx-design.md`](2026-06-03-extension-permissions-dx-design.md) (the permissions catalog this design reuses the "contract-in-core / impl-in-extension" pattern from)

@@ -492,7 +492,6 @@ final class CoreProvider extends BaseServiceProvider
                     'scheduler' => (bool) $cfg('capabilities.scheduler', true),
                     'notifications' => (bool) $cfg('capabilities.notifications', true),
                     'metrics' => (bool) $cfg('capabilities.metrics', true),
-                    'archive' => (bool) $cfg('capabilities.archive', false),
                 ];
                 foreach ($gates as $dir => $enabled) {
                     if ($enabled) {
