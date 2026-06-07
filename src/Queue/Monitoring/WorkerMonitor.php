@@ -4,6 +4,7 @@ namespace Glueful\Queue\Monitoring;
 
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Queue\Contracts\JobInterface;
+use Glueful\Queue\Contracts\WorkerMonitorInterface;
 use Glueful\Database\Connection;
 use Glueful\Database\Schema\Interfaces\SchemaBuilderInterface;
 
@@ -24,7 +25,7 @@ use Glueful\Database\Schema\Interfaces\SchemaBuilderInterface;
  *
  * @package Glueful\Queue\Monitoring
  */
-class WorkerMonitor
+class WorkerMonitor implements WorkerMonitorInterface
 {
     /** @var Connection Database connection */
     private Connection $db;
