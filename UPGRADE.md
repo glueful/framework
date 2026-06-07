@@ -272,3 +272,70 @@ a `config/queue_ops.php` override (the extension merges its defaults under
 `priority`/`memory_limit`/`timeout`/`max_jobs`, `workers.performance`, `monitoring`)
 in `config/queue.php`. Apps that never overrode these keys need to do nothing
 beyond installing the extension — the defaults ship with it.
+
+## Rich media → `glueful/media`
+
+Image processing, thumbnail generation, and media metadata extraction were
+removed from core and now live in the **`glueful/media`** extension, along with
+the two heavy dependencies they pulled in (`intervention/image` and
+`james-heinrich/getid3`). The upload pipeline itself stays in core: `FileUploader`,
+the `Glueful\Uploader\Contracts\MediaProcessorInterface` seam, and the core
+`Glueful\Uploader\MediaMetadata` value object are all retained. Without the
+extension, uploads still work — they simply produce no thumbnails and only
+type-level metadata.
+
+**What was removed from core:**
+
+```
+Glueful\Services\ImageProcessor            →  Glueful\Extensions\Media\ImageProcessor
+Glueful\Services\ImageProcessorInterface   →  Glueful\Extensions\Media\Contracts\ImageProcessorInterface
+Glueful\Uploader\ThumbnailGenerator        →  Glueful\Extensions\Media\ThumbnailGenerator
+Glueful\Uploader\MediaMetadataExtractor    →  Glueful\Extensions\Media\MediaMetadataExtractor
+```
+
+`Glueful\Uploader\MediaMetadata` is **unchanged and stays in core**. The
+`FileUploader::getThumbnailGenerator()` / `getMetadataExtractor()` accessors were
+removed (they leaked the moved types). The `image()` global helper and
+`config/image.php` were also removed from core.
+
+### Behavior without the extension installed
+
+- **`image()` helper:** **undefined**. The helper is now registered by the
+  extension; on a plain core install, calling `image(...)` is a *function-not-found*
+  error (not a stub that returns null).
+- **`uploadMedia()`:** still succeeds, but returns `thumb_url: null` and a
+  **type-only** `MediaMetadata` (MIME/type classification only — no dimensions,
+  duration, or codec details, which require getID3).
+- **Blob-resize endpoint:** serves the **original** image unmodified for resize
+  requests. It returns **`415`** only when an explicit **format conversion** is
+  requested (there is no processor to convert with).
+
+### Config — what moves, what stays
+
+- **Moves to the extension:** the `IMAGE_*` environment variables and
+  `config/image.php` (driver, processing limits, quality, security, caching) are
+  now **extension-owned** and published by `glueful/media`.
+- **Stays in core (but inert without the extension):** the
+  `UPLOADS_IMAGE_PROCESSING` / `UPLOADS_THUMBNAILS` keys in `config/uploads.php`
+  and the `uploader.thumbnail_*` keys in `config/filesystem.php` remain in core.
+  They are **media-gated no-ops** — read by the upload pipeline but with no effect
+  until `glueful/media` binds the `MediaProcessorInterface` seam.
+
+### Restoring image processing / thumbnails / metadata
+
+1. Install the extension:
+
+   ```bash
+   composer require glueful/media
+   ```
+
+   It is auto-discovered via `extra.glueful`; its service provider binds the
+   `MediaProcessorInterface` seam, re-registers the `ImageProcessorInterface`
+   graph, and re-defines the `image()` helper.
+
+2. Move any local `config/image.php` overrides and `IMAGE_*` env vars — they are
+   now read by the extension. The core `UPLOADS_*` / `THUMBNAIL_*` keys can stay
+   where they are; they take effect again once the extension is present.
+
+No command cache refresh is needed: this extraction removes **no** console
+command.

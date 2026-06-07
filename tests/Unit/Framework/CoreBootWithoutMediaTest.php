@@ -16,9 +16,11 @@ use PHPUnit\Framework\TestCase;
  * removing the ImageProcessor::setContext() boot poke, the core container must
  * build WITHOUT ever touching the rich-media graph.
  *
- * The concrete ImageProcessor/ImageProvider classes and the heavy deps still
- * exist in core at this phase (deleted only in C1), so this test is purely
- * structural — it proves the wiring no longer pulls them in.
+ * As of Phase C (Task C1) the concrete ImageProcessor/ImageProvider classes and
+ * the heavy deps have been DELETED from core (moved to glueful/media). The
+ * `::class` constants below resolve to plain strings at compile time without
+ * autoloading, so this test stays purely structural — it proves the core
+ * container registers none of those (now-removed) media bindings.
  */
 final class CoreBootWithoutMediaTest extends TestCase
 {
@@ -64,10 +66,10 @@ final class CoreBootWithoutMediaTest extends TestCase
 
     public function test_core_does_not_register_rich_media_classes(): void
     {
-        // After ImageProvider is delisted, the rich-media classes it used to
-        // register (the concrete ImageProcessor graph + Intervention's
-        // ImageManager) are no longer wired into the core container. These move
-        // to the glueful/media extension's provider in Phase D.
+        // After ImageProvider is delisted (and, as of C1, deleted), the
+        // rich-media classes it used to register (the concrete ImageProcessor
+        // graph + Intervention's ImageManager) are no longer wired into the core
+        // container. They now live in the glueful/media extension's provider.
         $container = $this->buildCoreContainer();
 
         $this->assertFalse(
