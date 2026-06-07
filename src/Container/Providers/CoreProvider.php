@@ -458,6 +458,11 @@ final class CoreProvider extends BaseServiceProvider
             )
         );
         $defs[\Glueful\Cache\EdgeCacheService::class] = $this->autowire(\Glueful\Cache\EdgeCacheService::class);
+        // Core's response caching runs on the EdgeCacheInterface seam, defaulting to the
+        // no-op NullEdgeCache when no CDN integration is installed. A real edge/CDN
+        // extension rebinds this interface to its own implementation.
+        $defs[\Glueful\Cache\Contracts\EdgeCacheInterface::class] =
+            $this->autowire(\Glueful\Cache\NullEdgeCache::class);
         $defs[\Glueful\Database\QueryCacheService::class] = $this->autowire(\Glueful\Database\QueryCacheService::class);
 
         // Database migrations. Factory (not bare autowire) so core can register its OWN schema —

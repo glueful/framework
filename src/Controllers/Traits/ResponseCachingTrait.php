@@ -7,7 +7,7 @@ namespace Glueful\Controllers\Traits;
 use Glueful\Http\Response;
 use Glueful\Cache\CacheStore;
 use Glueful\Database\QueryCacheService;
-use Glueful\Cache\EdgeCacheService;
+use Glueful\Cache\Contracts\EdgeCacheInterface;
 
 /**
  * Response Caching Trait
@@ -387,7 +387,7 @@ trait ResponseCachingTrait
         int $ttl = 3600
     ): Response {
         // Add edge cache headers based on route pattern
-        $edgeService = container($this->getContext())->get(EdgeCacheService::class);
+        $edgeService = container($this->getContext())->get(EdgeCacheInterface::class);
         $contentType = $this->request->headers->get('Accept', 'application/json');
         $headers = $edgeService->generateCacheHeaders($pattern, $contentType);
 
