@@ -191,11 +191,39 @@ extension.
 - `ServeCommand` still shells `queue:work --sleep=3`; that is now one lean worker
   (previously it was implicitly supervised) — no action required.
 
-### Staged config relocation (follow-up commit)
+### Config relocation (this completes the staged series)
 
-The queue-ops **config keys** are **not** moved in this commit. In a follow-up,
-`queue.workers.{process,auto_scaling,resource_limits,resource_thresholds,supervisor}`
-and the per-queue `workers` / `max_workers` / `auto_scale` settings relocate to
-the extension's `queue_ops.*` config. Until then, those keys remain in
-`config/queue.php` but are inert on core (nothing reads them once the ops classes
-are gone).
+The queue-ops **config keys** have now moved out of core `config/queue.php` into
+the extension's `queue_ops.*` config (provided via `config/queue_ops.php` +
+`mergeConfig` when `glueful/queue-ops` is installed). This is **part 2 (final)** of
+the staged breaking series — commands were removed in part 1, config relocates here.
+
+**Moved to the extension (`queue_ops.*`):**
+
+- `queue.workers.process`            → `queue_ops.process`
+- `queue.workers.auto_scaling`       → `queue_ops.auto_scaling`
+- `queue.workers.resource_limits`    → `queue_ops.resource_limits`
+- `queue.workers.resource_thresholds`→ `queue_ops.resource_thresholds`
+- `queue.workers.supervisor`         → `queue_ops.supervisor`
+- per-queue `queue.workers.queues.<name>.{workers, max_workers, auto_scale}`
+  → `queue_ops.queues.<name>.{workers, max_workers, auto_scale}`
+
+**Stays in core `config/queue.php`:**
+
+- per-queue `priority` / `memory_limit` / `timeout` / `max_jobs`
+  (`queue.workers.queues.<name>.*`)
+- `queue.workers.performance.*` (read by the lean `QueueWorker`)
+- `queue.monitoring.*`
+
+**Env vars are unchanged.** The same variables (`QUEUE_PROCESS_ENABLED`,
+`QUEUE_AUTO_SCALING`, `QUEUE_SCALE_*`, `QUEUE_WORKER_*`, `QUEUE_MEMORY_*` / `_CPU_` /
+`_DISK_` / `_LOAD_*`, `QUEUE_SUPERVISOR_*`, and the per-queue `*_QUEUE_WORKERS` /
+`*_QUEUE_MAX_WORKERS` / `*_QUEUE_AUTO_SCALE`) now feed `queue_ops.*`, read by
+`glueful/queue-ops`. **No `.env` changes are required.**
+
+**If you published/overrode `config/queue.php`:** move the moved blocks above into
+a `config/queue_ops.php` override (the extension merges its defaults under
+`queue_ops`, and your app config file wins). Leave the kept keys (per-queue
+`priority`/`memory_limit`/`timeout`/`max_jobs`, `workers.performance`, `monitoring`)
+in `config/queue.php`. Apps that never overrode these keys need to do nothing
+beyond installing the extension — the defaults ship with it.
