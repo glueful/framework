@@ -7,6 +7,7 @@ namespace Glueful\Uploader;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Repository\BlobRepository;
 use Glueful\Helpers\Utils;
+use Glueful\Uploader\Contracts\MediaProcessorInterface;
 use Glueful\Uploader\Storage\StorageInterface;
 use Glueful\Uploader\Storage\FlysystemStorage;
 use Glueful\Validation\ValidationException;
@@ -50,21 +51,20 @@ final class FileUploader
 
     private StorageInterface $storage;
     private BlobRepository $blobRepository;
-    private ThumbnailGenerator $thumbnailGenerator;
-    private MediaMetadataExtractor $metadataExtractor;
     private ?ApplicationContext $context;
+    private ?MediaProcessorInterface $media;
 
     public function __construct(
         private readonly string $uploadsDirectory = '',
         private readonly string $cdnBaseUrl = '',
         private readonly ?string $storageDriver = null,
-        ?ApplicationContext $context = null
+        ?ApplicationContext $context = null,
+        ?MediaProcessorInterface $media = null
     ) {
         $this->context = $context;
+        $this->media = $media;
         $this->blobRepository = $this->getContainer()->get(BlobRepository::class);
         $this->storage = $this->initializeStorage();
-        $this->thumbnailGenerator = new ThumbnailGenerator($this->storage, $this->context);
-        $this->metadataExtractor = new MediaMetadataExtractor();
     }
 
     /**
@@ -123,8 +123,10 @@ final class FileUploader
         $mime = $this->detectMime($file['tmp_name']);
         $this->validateMimeType($mime);
 
-        // Extract metadata
-        $metadata = $this->metadataExtractor->extract($file['tmp_name'], $mime);
+        // Extract metadata via the optional media processor; fall back to
+        // dependency-free type-only metadata when no processor is bound.
+        $metadata = $this->media?->extractMetadata($file['tmp_name'], $mime)
+            ?? $this->minimalMetadata($mime);
 
         // Store file
         $filename = $this->generateSecureFilename($file['name'] ?? 'upload', $mime);
@@ -307,22 +309,6 @@ final class FileUploader
     public function getStorage(): StorageInterface
     {
         return $this->storage;
-    }
-
-    /**
-     * Get the thumbnail generator instance
-     */
-    public function getThumbnailGenerator(): ThumbnailGenerator
-    {
-        return $this->thumbnailGenerator;
-    }
-
-    /**
-     * Get the metadata extractor instance
-     */
-    public function getMetadataExtractor(): MediaMetadataExtractor
-    {
-        return $this->metadataExtractor;
     }
 
     // -------------------------------------------------------------------------
@@ -576,6 +562,11 @@ final class FileUploader
         string $mime,
         array $options
     ): ?string {
+        // No processor bound, or it cannot handle this MIME type → no thumbnail.
+        if ($this->media === null || !$this->media->supportsThumbnail($mime)) {
+            return null;
+        }
+
         // Check global config first
         $globalEnabled = (bool) $this->getConfig('filesystem.uploader.thumbnail_enabled', true);
         if (!$globalEnabled) {
@@ -583,18 +574,40 @@ final class FileUploader
         }
 
         // Check per-upload option (defaults to true for supported formats)
-        $shouldGenerate = (bool) ($options['generate_thumbnail']
-            ?? $this->thumbnailGenerator->supports($mime));
+        $shouldGenerate = (bool) ($options['generate_thumbnail'] ?? true);
 
-        if (!$shouldGenerate || !$this->thumbnailGenerator->supports($mime)) {
+        if (!$shouldGenerate) {
             return null;
         }
 
-        return $this->thumbnailGenerator->generate($sourcePath, $storagePath, $filename, [
-            'width' => $options['thumbnail_width'] ?? null,
-            'height' => $options['thumbnail_height'] ?? null,
-            'quality' => $options['thumbnail_quality'] ?? null,
-        ]);
+        return $this->media->generateThumbnail(
+            $this->storage,
+            $sourcePath,
+            $storagePath,
+            $filename,
+            [
+                'width' => $options['thumbnail_width'] ?? null,
+                'height' => $options['thumbnail_height'] ?? null,
+                'quality' => $options['thumbnail_quality'] ?? null,
+            ]
+        );
+    }
+
+    /**
+     * Dependency-free, type-only metadata used when no media processor is bound.
+     * Mirrors the MIME-prefix → type mapping the rich extractor uses; width,
+     * height and duration are intentionally left null.
+     */
+    private function minimalMetadata(string $mime): MediaMetadata
+    {
+        $type = match (true) {
+            str_starts_with($mime, 'image/') => 'image',
+            str_starts_with($mime, 'video/') => 'video',
+            str_starts_with($mime, 'audio/') => 'audio',
+            default => 'file',
+        };
+
+        return new MediaMetadata($type);
     }
 
     /**
