@@ -104,7 +104,13 @@ final class StorageProvider extends BaseServiceProvider
                 $c->get(\Glueful\Uploader\FileUploader::class),
                 $c->get(\Glueful\Repository\BlobRepository::class),
                 $c->get(\Glueful\Storage\StorageManager::class),
-                $c->get(\Glueful\Storage\Support\UrlGenerator::class)
+                $c->get(\Glueful\Storage\Support\UrlGenerator::class),
+                // Optional rich-media seam — bound only by the glueful/media
+                // extension. Absent → on-demand variants fall back to serving
+                // the original (or 415 for explicit format conversion).
+                $c->has(\Glueful\Uploader\Contracts\MediaProcessorInterface::class)
+                    ? $c->get(\Glueful\Uploader\Contracts\MediaProcessorInterface::class)
+                    : null
             )
         );
 

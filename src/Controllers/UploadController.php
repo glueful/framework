@@ -12,10 +12,10 @@ use Glueful\Http\Response;
 use Glueful\Repository\BlobRepository;
 use Glueful\Storage\StorageManager;
 use Glueful\Storage\Support\UrlGenerator;
+use Glueful\Uploader\Contracts\MediaProcessorInterface;
 use Glueful\Uploader\FileUploader;
 use Glueful\Uploader\UploadException;
 use Glueful\Validation\ValidationException;
-use Glueful\Services\ImageProcessor;
 use Glueful\Support\SignedUrl;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -35,7 +35,8 @@ class UploadController extends BaseController
         FileUploader $uploader,
         BlobRepository $blobRepository,
         StorageManager $storage,
-        UrlGenerator $urls
+        UrlGenerator $urls,
+        private readonly ?MediaProcessorInterface $media = null
     ) {
         parent::__construct($context);
         $this->uploader = $uploader;
@@ -91,7 +92,7 @@ class UploadController extends BaseController
             $disk = (string) $this->getConfig('uploads.disk', 'uploads');
             $defaultDisk = (string) $this->getConfig('storage.default', 'uploads');
             $uploader = $disk !== '' && $disk !== $defaultDisk
-                ? new FileUploader(storageDriver: $disk, context: $this->getContext())
+                ? new FileUploader(storageDriver: $disk, context: $this->getContext(), media: $this->media)
                 : $this->uploader;
 
             // Determine visibility
@@ -168,8 +169,21 @@ class UploadController extends BaseController
         $isImage = str_starts_with((string) ($blob['mime_type'] ?? ''), 'image/');
         $resize = $this->getResizeParams($request);
 
-        if ($isImage && $resize !== null && (bool) $this->getConfig('uploads.image_processing.enabled', true)) {
+        if (
+            $isImage
+            && $resize !== null
+            && $this->media !== null
+            && (bool) $this->getConfig('uploads.image_processing.enabled', true)
+        ) {
             return $this->serveResizedImage($request, $uuid, $disk, $path, $resize);
+        }
+
+        // No media processor bound: width/height/quality fall through to serving
+        // the ORIGINAL. An explicit format conversion, however, cannot be honored
+        // without a processor — fail loudly rather than serve a differently-typed
+        // original.
+        if ($isImage && $resize !== null && $this->media === null && ($resize['format'] ?? null) !== null) {
+            return Response::error('Image format conversion is not available', 415);
         }
 
         $mime = (string) ($blob['mime_type'] ?? 'application/octet-stream');
@@ -319,10 +333,12 @@ class UploadController extends BaseController
 
         $temp = $this->readToTempFile($disk, $path);
         try {
-            $processor = ImageProcessor::make($temp, $this->getContext());
-            $this->applyResizeOptions($processor, $resize);
-            $data = $processor->getImageData($resize['format'] ?? null);
-            $mime = $processor->getMimeType();
+            // @phpstan-ignore-next-line — guarded by the `$this->media !== null`
+            // check in show(); serveResizedImage() is never reached with a null seam.
+            ['data' => $data, 'mime' => $mime] = $this->media->renderVariant(
+                $temp,
+                $this->buildVariantOptions($resize)
+            );
 
             // Validate max_variant_bytes
             if ($maxVariantBytes > 0 && strlen($data) > $maxVariantBytes) {
@@ -482,9 +498,18 @@ class UploadController extends BaseController
     }
 
     /**
+     * Assemble the option bag passed to MediaProcessorInterface::renderVariant().
+     *
+     * Merges the request's resize params (width/height/quality/format/fit) with
+     * the core-owned `uploads.image_processing.*` clamps/defaults. The width/height
+     * are clamped to max_width/max_height and quality defaults to default_quality.
+     * The actual resize/encode (fit semantics, format) is performed by the bound
+     * processor in the extension.
+     *
      * @param array<string, int|string|null> $resize
+     * @return array<string, int|string|null>
      */
-    private function applyResizeOptions(ImageProcessor $processor, array $resize): void
+    private function buildVariantOptions(array $resize): array
     {
         $maxWidth = (int) $this->getConfig('uploads.image_processing.max_width', 2048);
         $maxHeight = (int) $this->getConfig('uploads.image_processing.max_height', 2048);
@@ -492,33 +517,25 @@ class UploadController extends BaseController
         $width = $resize['width'] ?? null;
         $height = $resize['height'] ?? null;
 
-        if ($width !== null && $width > $maxWidth) {
+        if (is_int($width) && $width > $maxWidth) {
             $width = $maxWidth;
         }
-        if ($height !== null && $height > $maxHeight) {
+        if (is_int($height) && $height > $maxHeight) {
             $height = $maxHeight;
         }
 
-        $fit = $resize['fit'] ?? 'contain';
-        if ($fit === 'cover' && $width !== null && $height !== null) {
-            $processor->fit($width, $height);
-        } elseif ($fit === 'fill' && ($width !== null || $height !== null)) {
-            $processor->resize($width, $height, false);
-        } elseif ($width !== null || $height !== null) {
-            $processor->resize($width, $height, true);
-        }
-
         $quality = $resize['quality'] ?? null;
-        if ($quality !== null) {
-            $processor->quality($quality);
-        } else {
-            $processor->quality((int) $this->getConfig('uploads.image_processing.default_quality', 85));
+        if ($quality === null) {
+            $quality = (int) $this->getConfig('uploads.image_processing.default_quality', 85);
         }
 
-        $format = $resize['format'] ?? null;
-        if ($format !== null) {
-            $processor->format($format);
-        }
+        return [
+            'width' => $width,
+            'height' => $height,
+            'quality' => $quality,
+            'format' => $resize['format'] ?? null,
+            'fit' => $resize['fit'] ?? null,
+        ];
     }
 
     private function binaryResponse(
