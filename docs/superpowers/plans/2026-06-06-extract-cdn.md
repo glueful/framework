@@ -97,9 +97,9 @@
       },
       "scripts": {
           "test": "vendor/bin/phpunit",
-          "phpcs": "vendor/bin/phpcs --standard=Squiz src",
-          "phpcbf": "vendor/bin/phpcbf --standard=Squiz src",
-          "analyze": "vendor/bin/phpstan analyze src --level=8"
+          "phpcs": "vendor/bin/phpcs --standard=PSR12 src",
+          "phpcbf": "vendor/bin/phpcbf --standard=PSR12 src",
+          "analyze": "vendor/bin/phpstan analyse"
       },
       "extra": {
           "glueful": {
@@ -121,6 +121,7 @@
   (Namespace root is `Glueful\Extensions\Cdn\`. The package ships its own `test`/`phpcs`/`analyze` scripts + dev tooling so the per-task gates run **from the package root**; they do not depend on the framework's composer scripts.)
 - `src/CdnServiceProvider.php` — `final class CdnServiceProvider extends \Glueful\Extensions\ServiceProvider`. Implement skeleton only here (filled by later tasks): `services()` returning `[]`, `register()` merging config, `boot()` discovering commands. (Concrete bindings/config/commands wired in Tasks 4–6.)
 - `phpunit.xml` (extension's own), `tests/` dir with the `Glueful\Extensions\Cdn\Tests` namespace.
+- `phpstan.neon` — `level: 8`, `paths: [src]`, **`treatPhpDocTypesAsCertain: false`**, `reportUnmatchedIgnoredErrors: false`. The `analyze` script runs `phpstan analyse` (config-driven). Mirrors the framework's PHPStan posture so the moved `EdgeCachePurger`/adapters analyze identically to core; without it, level 8 flags pre-existing "always true/false" nits core's config suppresses, forcing code divergence. (Established during the Archive extraction.)
 
 **Steps**
 - [ ] Create `composer.json`, `phpunit.xml`, `src/CdnServiceProvider.php` (skeleton), `tests/.gitkeep`.
@@ -245,6 +246,7 @@
 - [ ] Write the framework `CHANGELOG.md` `[Unreleased]` breaking entry + the `UPGRADE.md` section (CLI-absent vs programmatic-no-op, kept distinct as above).
 - [ ] Author `glueful/cdn/README.md` (constructor change + adapter-registration contract + enable steps).
 - [ ] `composer dump-autoload` (framework).
+- [ ] **Grep `tests/` for string-keyed references to the removed surface** — `EdgeCacheService`, the `cache:purge` verb, `cache.edge`/`EDGE_CACHE_*` config keys, the `cloudflare` provider default — not just FQCNs. **(Archive precedent:** its full-suite run caught an obsolete `CapabilityMigrationsTest` that referenced the removed capability *by string*, which the FQCN grep missed.) Update/remove any obsolete test as part of this atomic commit.
 - [ ] Run `composer test` (framework) → green (Task 8/9 acceptance tests prove the absence; no dangling `EdgeCacheService` binding remains).
 - [ ] `composer run analyse` + `composer run phpcs` (framework) → clean (no dangling imports/refs).
 - [ ] Commit (framework): `chore(cache)!: remove CDN/edge surface from core (extracted to glueful/cdn)` — staging the touched files explicitly (not `CLAUDE.md`).

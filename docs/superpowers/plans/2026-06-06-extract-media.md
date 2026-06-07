@@ -200,6 +200,7 @@ new FileUploader(storageDriver: $disk, context: $this->getContext(), media: $thi
 - [ ] Run `composer remove intervention/image james-heinrich/getid3` (or edit `composer.json` + `composer update`) and delete the six files above + `config/image.php` + the `image()` block.
 - [ ] Write the `CHANGELOG.md` `[Unreleased]` Breaking Changes entry + the `UPGRADE.md` section (content per C2).
 - [ ] Run the **core-only verification grep** as a test/CI assertion (codify in `tests/Unit/Architecture/MediaExtractionBoundaryTest.php`): grep `src/ config/ routes/` (excluding `docs/`, specs, test fixtures) finds **no** match for `ImageProcessor`, `ThumbnailGenerator`, `MediaMetadataExtractor`, or `ImageProvider`; and `composer.json` `require` no longer contains `intervention/image` or `james-heinrich/getid3`. Run → green.
+- [ ] **Grep `tests/` for string-keyed references to the removed surface** — `ImageProcessor`/`ThumbnailGenerator`/`MediaMetadataExtractor`/`ImageProvider` used by string, the `image()` helper, and `image.*`/`IMAGE_*`/`THUMBNAIL_*` config keys — not just FQCNs. **(Archive precedent:** its full-suite run caught an obsolete `CapabilityMigrationsTest` referencing a removed capability *by string*, which the FQCN grep missed.) Update/remove obsolete tests in this commit.
 - [ ] Run full `composer test` → green (proves core boots + uploads work with deps gone). Run `composer run analyse` — expect zero references to the removed classes; fix any stragglers. `phpcs`.
 - [ ] Commit — explicitly `git add` the deleted/modified source files **+ `CHANGELOG.md` + the UPGRADE doc** together (never `git add -A`, never stage `CLAUDE.md`).
 
@@ -233,6 +234,10 @@ new FileUploader(storageDriver: $disk, context: $this->getContext(), media: $thi
 ```
 glueful/media/
   composer.json            # concrete object below
+  phpstan.neon             # level 8 + treatPhpDocTypesAsCertain: false + reportUnmatchedIgnoredErrors: false
+                           #   (mirror the framework's PHPStan posture; analyze script runs `phpstan analyse`).
+                           #   Without it, level 8 flags "always true/false" nits core suppresses → code divergence.
+  phpunit.xml              # Glueful\Extensions\Media\Tests testsuite
   src/MediaServiceProvider.php
   src/Contracts/ImageProcessorInterface.php   # COPY of src/Services/ImageProcessorInterface.php → namespace Glueful\Extensions\Media\Contracts
   src/ImageProcessor.php                       # COPY of src/Services/ImageProcessor.php → namespace Glueful\Extensions\Media; implements Glueful\Extensions\Media\Contracts\ImageProcessorInterface; resolves Glueful\Services\ImageSecurityValidator from CORE
@@ -244,7 +249,7 @@ glueful/media/
   ImageProcessorIntegration.md                 # COPY of src/Services/ImageProcessorIntegration.md — rewritten for the extension
 ```
 
-**`glueful/media/composer.json`** — the canonical Glueful extension manifest (matching the `glueful/email-notification` shape: `name`/`description`/`type`/`license` MIT/`authors`/`keywords`/`homepage`, `glueful/framework` in **require-dev**, dev tooling phpunit/phpcs/phpstan, `autoload`/`autoload-dev`, `test`/`phpcs`(Squiz)/`phpcbf`(Squiz)/`analyze` scripts, rich `extra.glueful`, `config.sort-packages`). This is **strict JSON** (no `//` comments). Like `email-notification` keeps `symfony/mailer` in `require`, Media's two heavy runtime deps (`intervention/image`, `james-heinrich/getid3` — real constraints lifted from core `composer.json:29-30`) go in **`require`**, and the `image()` helper is autoloaded via `autoload.files`:
+**`glueful/media/composer.json`** — the canonical Glueful extension manifest (matching the `glueful/email-notification` shape: `name`/`description`/`type`/`license` MIT/`authors`/`keywords`/`homepage`, `glueful/framework` in **require-dev**, dev tooling phpunit/phpcs/phpstan, `autoload`/`autoload-dev`, `test`/`phpcs`(PSR-12)/`phpcbf`(PSR-12)/`analyze` (`phpstan analyse`, config-driven by `phpstan.neon`) scripts, rich `extra.glueful`, `config.sort-packages`). This is **strict JSON** (no `//` comments). Like `email-notification` keeps `symfony/mailer` in `require`, Media's two heavy runtime deps (`intervention/image`, `james-heinrich/getid3` — real constraints lifted from core `composer.json:29-30`) go in **`require`**, and the `image()` helper is autoloaded via `autoload.files`:
 ```json
 {
     "name": "glueful/media",
@@ -274,9 +279,9 @@ glueful/media/
     },
     "scripts": {
         "test": "vendor/bin/phpunit",
-        "phpcs": "vendor/bin/phpcs --standard=Squiz src",
-        "phpcbf": "vendor/bin/phpcbf --standard=Squiz src",
-        "analyze": "vendor/bin/phpstan analyze src --level=8"
+        "phpcs": "vendor/bin/phpcs --standard=PSR12 src",
+        "phpcbf": "vendor/bin/phpcbf --standard=PSR12 src",
+        "analyze": "vendor/bin/phpstan analyse"
     },
     "extra": {
         "glueful": {

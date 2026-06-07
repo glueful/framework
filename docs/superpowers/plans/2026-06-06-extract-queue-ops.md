@@ -278,9 +278,9 @@ Stand up the new extension and **copy** `Process/*` (7 classes), the concrete `W
       },
       "scripts": {
           "test": "vendor/bin/phpunit",
-          "phpcs": "vendor/bin/phpcs --standard=Squiz src",
-          "phpcbf": "vendor/bin/phpcbf --standard=Squiz src",
-          "analyze": "vendor/bin/phpstan analyze src --level=8"
+          "phpcs": "vendor/bin/phpcs --standard=PSR12 src",
+          "phpcbf": "vendor/bin/phpcbf --standard=PSR12 src",
+          "analyze": "vendor/bin/phpstan analyse"
       },
       "extra": {
           "glueful": {
@@ -300,6 +300,7 @@ Stand up the new extension and **copy** `Process/*` (7 classes), the concrete `W
   **Strict JSON** (no comments) and **keep the `migrations/` classmap** — `queue-ops` ships proper migrations because the concrete `WorkerMonitor` lazily `CREATE TABLE`s `queue_workers`/`queue_job_metrics` today (WS5 replaces that with real migrations, hence the `migrations/` classmap). The `^1.52.0` constraint is the **coordinated breaking release** that performs the core removal (Task 4e lands there) — fill in the real version once it is cut. The package ships its own `test`/`phpcs`/`phpcbf`/`analyze` scripts + dev tooling so the per-task gates run **from the package root**; they do not depend on the framework's composer scripts. Local pre-release development resolves `glueful/framework` from a **project-level path repository** (as `create:extension` wires up) — that is a developer-machine convenience and is **not committed** in this manifest.
 - Create: `src/QueueOpsServiceProvider.php` extending `Glueful\Extensions\ServiceProvider` — `services()` (DI defs, filled in 4b–4d), `register()` (mergeConfig + migrations, WS5), `boot()` (`discoverCommands`, 4d).
 - Create: `tests/` harness mirroring the framework's SQLite `Connection` setup.
+- Create: `phpstan.neon` — `level: 8`, `paths: [src]`, **`treatPhpDocTypesAsCertain: false`**, `reportUnmatchedIgnoredErrors: false`. The `analyze` script runs `phpstan analyse` (config-driven). Mirrors the framework's PHPStan posture so the moved `WorkerMonitor`/`Process/*` analyze identically to core; without it, level 8 flags "always true/false" nits core's config suppresses, forcing divergence. (Established during the Archive extraction — expect more level-8 cleanup here given the size of the Process tree.)
 
 **Steps**
 - [ ] Create the manifest + empty provider with `services(): []`, `register()`, `boot()` no-ops. Add a smoke test that the provider class loads and `services()` returns an array. Run `composer install` in the package; run the smoke test — green. Commit (in the extension repo).
@@ -373,6 +374,7 @@ The single, atomic **code/command** removal commit. Tasks 4b–4d copied every o
 - [ ] Confirm the WS3 decoupling grep over `src/` (excluding `docs/`/fixtures) is **zero** references to the concrete `Glueful\Queue\Monitoring\WorkerMonitor` and `Glueful\Queue\Process\*` **before** deleting — proving nothing core-side will break when the files vanish. Record the command + output.
 - [ ] Delete the concrete `WorkerMonitor`, the 7 `Process/*` files (+ dir), and `AutoScaleCommand` from core.
 - [ ] Write the `CHANGELOG.md` `[Unreleased]` command-surface entry + the `UPGRADE.md` section (staged-series note included).
+- [ ] **Grep `tests/` for string-keyed references to the removed surface** — the `queue:autoscale` verb and the removed `queue:work` sub-actions (`spawn/scale/status/...`), `Glueful\Queue\Monitoring\WorkerMonitor`/`Process\*` by string, and (for 5b) the `queue.workers.{process,auto_scaling,...}` config keys — not just FQCNs. **(Archive precedent:** its full-suite run caught an obsolete `CapabilityMigrationsTest` referencing a removed capability *by string*, which the FQCN grep missed.) Update/remove obsolete tests in this commit.
 - [ ] Run core `composer test` — green (core boots on `NullWorkerMonitor`; `queue:work` is the only worker entrypoint; `queue:autoscale` and the removed `queue:work` sub-actions are absent → command-not-found). Run `composer run analyse` (no dangling `Glueful\Queue\Process\*` / concrete-`WorkerMonitor` references) + `composer run phpcs` — clean.
 - [ ] Commit (`feat(queue)!: remove ops tree from core (extracted to glueful/queue-ops)`) — explicitly `git add` the deleted source paths **+ `CHANGELOG.md` + the UPGRADE doc**; **do not stage `CLAUDE.md`**.
 

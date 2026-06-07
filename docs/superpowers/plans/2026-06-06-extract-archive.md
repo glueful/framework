@@ -66,9 +66,9 @@ Create the empty extension shell so subsequent moves have a home. No archive log
       },
       "scripts": {
           "test": "vendor/bin/phpunit",
-          "phpcs": "vendor/bin/phpcs --standard=Squiz src",
-          "phpcbf": "vendor/bin/phpcbf --standard=Squiz src",
-          "analyze": "vendor/bin/phpstan analyze src --level=8"
+          "phpcs": "vendor/bin/phpcs --standard=PSR12 src",
+          "phpcbf": "vendor/bin/phpcbf --standard=PSR12 src",
+          "analyze": "vendor/bin/phpstan analyse"
       },
       "extra": {
           "glueful": {
@@ -90,6 +90,7 @@ Create the empty extension shell so subsequent moves have a home. No archive log
   (Namespace root is `Glueful\Extensions\Archive\` — the `Services\` segment is dropped per Decision §4. The package ships its own `test`/`phpcs`/`phpcbf`/`analyze` scripts + dev tooling so the per-task gates run **from the package root**; they do not depend on the framework's composer scripts.)
 - `glueful/archive/src/ArchiveServiceProvider.php` — minimal `final class ArchiveServiceProvider extends \Glueful\Extensions\ServiceProvider` with empty `services(): array { return []; }`, empty `register(ApplicationContext $context): void {}`, empty `boot(ApplicationContext $context): void {}`. (Fleshed out in Tasks 4–6.)
 - `glueful/archive/phpunit.xml` — minimal config with a `tests/` test suite.
+- `glueful/archive/phpstan.neon` — `level: 8`, `paths: [src]`, **`treatPhpDocTypesAsCertain: false`**, `reportUnmatchedIgnoredErrors: false`. The `analyze` script runs `phpstan analyse` (config-driven, not `--level=8` on the CLI). This **mirrors the framework's own PHPStan posture** so extracted code analyzes identically to how core analyzes it. **Without it, level 8 flags pre-existing "always true/false" nits (e.g. `strtotime('-7 days') === false` dead guards) that core's config suppresses — forcing needless code divergence.** (Verified in execution: cleared the 5 `ArchiveHealthChecker` findings with no code change.)
 - `glueful/archive/tests/SkeletonTest.php` — a trivial `final class SkeletonTest extends \PHPUnit\Framework\TestCase` asserting the provider class exists and is a `ServiceProvider` subclass.
 
 **Steps**
