@@ -395,7 +395,10 @@ class WhereClause implements WhereClauseInterface
                     // Remove table prefix if present (e.g., "users.name" becomes "name")
                     if (strpos($column, '.') !== false) {
                         $parts = explode('.', $column);
-                        $column = end($parts);
+                        // Re-strip wrap chars: trimming the full qualified identifier
+                        // leaves inner quotes around the dot (e.g. `"t"."col"` -> `t"."col`),
+                        // so the bare last part can still carry a stray quote. Strip again.
+                        $column = trim(end($parts), '`"[]');
                     }
 
                     // Get the corresponding binding value
@@ -421,7 +424,10 @@ class WhereClause implements WhereClauseInterface
                     $column = trim($matches[1], '`"[]');
                     if (strpos($column, '.') !== false) {
                         $parts = explode('.', $column);
-                        $column = end($parts);
+                        // Re-strip wrap chars: trimming the full qualified identifier
+                        // leaves inner quotes around the dot (e.g. `"t"."col"` -> `t"."col`),
+                        // so the bare last part can still carry a stray quote. Strip again.
+                        $column = trim(end($parts), '`"[]');
                     }
 
                     $simpleConditions[$column] = [
@@ -438,7 +444,10 @@ class WhereClause implements WhereClauseInterface
                     $column = trim($matches[1], '`"[]');
                     if (strpos($column, '.') !== false) {
                         $parts = explode('.', $column);
-                        $column = end($parts);
+                        // Re-strip wrap chars: trimming the full qualified identifier
+                        // leaves inner quotes around the dot (e.g. `"t"."col"` -> `t"."col`),
+                        // so the bare last part can still carry a stray quote. Strip again.
+                        $column = trim(end($parts), '`"[]');
                     }
 
                     $simpleConditions[$column] = [
@@ -454,7 +463,10 @@ class WhereClause implements WhereClauseInterface
 
                     if (strpos($column, '.') !== false) {
                         $parts = explode('.', $column);
-                        $column = end($parts);
+                        // Re-strip wrap chars: trimming the full qualified identifier
+                        // leaves inner quotes around the dot (e.g. `"t"."col"` -> `t"."col`),
+                        // so the bare last part can still carry a stray quote. Strip again.
+                        $column = trim(end($parts), '`"[]');
                     }
 
                     if (isset($this->bindings[$bindingIndex])) {
