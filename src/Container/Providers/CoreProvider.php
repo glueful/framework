@@ -213,6 +213,15 @@ final class CoreProvider extends BaseServiceProvider
         // Tag database for background warmup
         $this->tag('database', 'lazy.background', 0);
 
+        // Alias the concrete Connection class id to the 'database' service so the
+        // documented accessors db($ctx) and app($ctx, Connection::class) resolve
+        // (mirrors the QueryBuilder::class / SchemaBuilderInterface::class aliases
+        // below). Returns the same shared 'database' instance — no re-instantiation.
+        $defs[\Glueful\Database\Connection::class] = new FactoryDefinition(
+            \Glueful\Database\Connection::class,
+            fn(\Psr\Container\ContainerInterface $c) => $c->get('database')
+        );
+
         // QueryBuilder and SchemaBuilder via database
         $defs[\Glueful\Database\QueryBuilder::class] = new FactoryDefinition(
             \Glueful\Database\QueryBuilder::class,
