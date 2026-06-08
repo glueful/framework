@@ -212,13 +212,16 @@ class SecureSerializer
             throw new \InvalidArgumentException('Invalid PHP serialized data format');
         }
 
-        // Check for potentially dangerous classes
+        // Check for potentially dangerous classes (wildcard- and C:-aware).
+        // Throws on any disallowed class BEFORE the native call below.
         $this->validateSerializedClasses($data, $additionalAllowedClasses);
 
-        // Use unserialize with allowed_classes option (PHP 7.0+)
+        // PHP's allowed_classes option cannot express wildcards, so resolve a
+        // concrete, validated list from the blob + non-wildcard literals.
         $allowedClasses = array_merge($this->allowedClasses, $additionalAllowedClasses);
+        $concrete = $this->resolveConcreteAllowedClasses($data, $allowedClasses);
 
-        return unserialize($data, ['allowed_classes' => $allowedClasses]);
+        return unserialize($data, ['allowed_classes' => $concrete]);
     }
 
     /**
@@ -280,19 +283,69 @@ class SecureSerializer
      */
     private function validateSerializedClasses(string $data, array $additionalAllowedClasses = []): void
     {
-        // Extract class names from serialized data
-        if (preg_match_all('/O:[0-9]+:"([^"]+)"/', $data, $matches)) {
-            $foundClasses = $matches[1];
-            $allowedClasses = array_merge($this->allowedClasses, $additionalAllowedClasses);
+        $allowedClasses = array_merge($this->allowedClasses, $additionalAllowedClasses);
 
-            foreach ($foundClasses as $className) {
-                if (!$this->isClassAllowed($className, $allowedClasses)) {
-                    throw new \InvalidArgumentException(
-                        "Class '$className' is not allowed for deserialization"
-                    );
-                }
+        foreach ($this->extractSerializedClasses($data) as $className) {
+            if (!$this->isClassAllowed($className, $allowedClasses)) {
+                throw new \InvalidArgumentException(
+                    "Class '$className' is not allowed for deserialization"
+                );
             }
         }
+    }
+
+    /**
+     * Extract every serialized class token from a PHP serialized blob.
+     *
+     * Covers both standard objects (O:NN:"Class") and Serializable
+     * implementations (C:NN:"Class") so both are subject to allowlist checks.
+     *
+     * @param string $data Serialized data
+     * @return array<int, string> Distinct class names referenced in the blob
+     */
+    private function extractSerializedClasses(string $data): array
+    {
+        $classes = [];
+        if (preg_match_all('/[OC]:[0-9]+:"([^"]+)"/', $data, $matches)) {
+            $classes = $matches[1];
+        }
+
+        return array_values(array_unique($classes));
+    }
+
+    /**
+     * Resolve the concrete allow list to hand to native unserialize().
+     *
+     * PHP's allowed_classes option cannot express wildcards, so we never pass
+     * pattern entries to it. validateSerializedClasses() has already thrown on
+     * any disallowed class, so here we simply collect the actual class tokens
+     * present in the blob that pass isClassAllowed() (wildcard-aware) and merge
+     * them with the non-wildcard literal allowlist entries. Any '*' entries are
+     * stripped. The result restricts native unserialize() to exactly the
+     * validated classes — wildcards work, C: classes are covered, and we never
+     * fall back to allowed_classes => true.
+     *
+     * @param string $data Serialized data
+     * @param array<string> $allowedClasses Merged allowlist (may contain patterns)
+     * @return array<int, string> Concrete, validated class names
+     */
+    private function resolveConcreteAllowedClasses(string $data, array $allowedClasses): array
+    {
+        // Literal (non-wildcard) entries are always safe to pass through.
+        $concrete = array_values(array_filter(
+            $allowedClasses,
+            static fn(string $class): bool => !str_ends_with($class, '*')
+        ));
+
+        // Add the actual classes present in the blob that the (wildcard-aware)
+        // allowlist permits — these are what make wildcard entries effective.
+        foreach ($this->extractSerializedClasses($data) as $className) {
+            if ($this->isClassAllowed($className, $allowedClasses)) {
+                $concrete[] = $className;
+            }
+        }
+
+        return array_values(array_unique($concrete));
     }
 
     /**
@@ -304,9 +357,22 @@ class SecureSerializer
      */
     private function isClassAllowed(string $className, array $allowedClasses): bool
     {
-        // Check explicit whitelist first
-        if (in_array($className, $allowedClasses, true)) {
-            return true;
+        foreach ($allowedClasses as $allowed) {
+            // Prefix-wildcard entry: a trailing '*' (optionally preceded by a
+            // namespace separator) marks a namespace prefix. Match any class
+            // whose fully-qualified name starts with that prefix.
+            if (str_ends_with($allowed, '*')) {
+                $prefix = substr($allowed, 0, -1);
+                if ($prefix === '' || str_starts_with($className, $prefix)) {
+                    return true;
+                }
+                continue;
+            }
+
+            // Exact, concrete whitelist entry.
+            if ($className === $allowed) {
+                return true;
+            }
         }
 
         // Allow safe framework model classes
