@@ -41,6 +41,59 @@ class QueryExecutor implements QueryExecutorInterface
     }
 
     /**
+     * Chainable, process-level pre-execution query interceptors.
+     *
+     * Registered once at boot (e.g. by an extension's service provider). All run,
+     * in registration order, before every statement executes; any may throw to
+     * prevent the query. They carry no per-request state themselves — they read
+     * request-scoped context at call time.
+     *
+     * @var array<int, QueryInterceptorInterface>
+     */
+    private static array $interceptors = [];
+
+    public static function addQueryInterceptor(QueryInterceptorInterface $interceptor): void
+    {
+        self::$interceptors[] = $interceptor;
+    }
+
+    /**
+     * Convenience registration for a closure (used by tests and simple hooks).
+     */
+    public static function addQueryInterceptorCallback(callable $callback): void
+    {
+        self::$interceptors[] = new class ($callback) implements QueryInterceptorInterface {
+            /** @var callable */
+            private $callback;
+
+            public function __construct(callable $callback)
+            {
+                $this->callback = $callback;
+            }
+
+            public function before(string $sql, array $bindings): void
+            {
+                ($this->callback)($sql, $bindings);
+            }
+        };
+    }
+
+    public static function clearQueryInterceptors(): void
+    {
+        self::$interceptors = [];
+    }
+
+    /**
+     * @param array<int|string, mixed> $bindings
+     */
+    private function runInterceptors(string $sql, array $bindings): void
+    {
+        foreach (self::$interceptors as $interceptor) {
+            $interceptor->before($sql, $bindings);
+        }
+    }
+
+    /**
      * Execute a SELECT query and return all results
      *
      * @param array<mixed> $bindings
@@ -162,6 +215,10 @@ class QueryExecutor implements QueryExecutorInterface
      */
     public function executeStatement(string $sql, array $bindings = []): PDOStatement
     {
+        // Pre-execution interceptors run BEFORE prepare/execute and may throw to
+        // prevent the query (e.g. tenant-scope enforcement). No-op when none registered.
+        $this->runInterceptors($sql, $bindings);
+
         // Start timing the query
         $timerId = $this->logger->startTiming($this->debugMode ? 'query_with_debug' : 'query');
 
