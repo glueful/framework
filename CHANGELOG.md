@@ -6,6 +6,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Added
+- **Pre-execution query interceptors (generic DB seam).** `Glueful\Database\Execution\QueryExecutor::addQueryInterceptor()` / `addQueryInterceptorCallback()` / `clearQueryInterceptors()` register **chainable** hooks (implementing `Glueful\Database\Execution\QueryInterceptorInterface`) that run in `executeStatement()` **before** a statement is prepared/executed; throwing from a hook **prevents** the query. All registered interceptors run in registration order (no last-writer-wins). Unlike the existing post-execution query log/event (observation only), this can *veto* a query — a general extension point for query-level enforcement: access/scope guards, read-only modes, SQL allow/deny policies, audit vetoes, and row-level multi-tenancy. No-op when none are registered (zero behavior change on a plain install).
+- **`Connection::table()` decorator hooks (generic DB seam).** `Glueful\Database\Connection::addTableHook()` / `clearTableHooks()` register **chainable** decorators applied to the `QueryBuilder` returned by `Connection::table()`, each receiving `(QueryBuilder $qb, string $table, Connection $conn)` and running in registration order. A general seam for auto-applying scopes/conditions/columns to *raw* query-builder access keyed by table (e.g. raw-level soft-deletes, org/tenant scoping, environment filtering). No-op when none are registered. *(Both seams land first as the prerequisite for the forthcoming `glueful/tenancy` extension, but are intentionally generic core extension points.)*
+
 ---
 
 ## [1.52.0] - 2026-06-07 — Mizar
