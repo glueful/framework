@@ -535,9 +535,34 @@ class Connection implements DatabaseInterface
      * @throws \Glueful\Http\Exceptions\Domain\DatabaseException If connection or QueryBuilder initialization fails
      * @throws \RuntimeException If any required QueryBuilder component cannot be instantiated
      */
+    /**
+     * Chainable, process-level hooks applied to the QueryBuilder returned by table().
+     *
+     * Registered once at boot (e.g. by an extension's service provider). All run, in
+     * registration order, so multiple extensions can decorate table() without clobbering
+     * each other. Each receives (QueryBuilder $qb, string $table, Connection $conn).
+     *
+     * @var array<int, \Closure(QueryBuilder, string, Connection):void>
+     */
+    private static array $tableHooks = [];
+
+    public static function addTableHook(\Closure $hook): void
+    {
+        self::$tableHooks[] = $hook;
+    }
+
+    public static function clearTableHooks(): void
+    {
+        self::$tableHooks = [];
+    }
+
     public function table(string $table): QueryBuilder
     {
-        return $this->createQueryBuilder()->from($table);
+        $qb = $this->createQueryBuilder()->from($table);
+        foreach (self::$tableHooks as $hook) {
+            $hook($qb, $table, $this);
+        }
+        return $qb;
     }
 
     /**
