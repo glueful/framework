@@ -6,6 +6,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+- **Container precedence: extension definitions now override core defaults.** `ContainerFactory` merged extension service definitions with `+=`, which kept the core binding on key collision and silently dropped extension overrides -- making core default bindings (`UserProviderInterface -> NullUserProvider`, and every "core default + extension override" seam) un-overridable through the normal provider path. Now merged with `array_replace` (extension-over-core); `ApplicationContext` is re-pinned post-merge so a framework-managed key cannot be clobbered. Within-extension precedence is unchanged.
+
 ## [1.53.0] - 2026-06-08 — Nunki
 
 ### Added
