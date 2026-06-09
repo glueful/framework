@@ -29,8 +29,12 @@ final class ContainerFactory
         // Make ApplicationContext available for autowiring.
         $defs[ApplicationContext::class] = new ValueDefinition(ApplicationContext::class, $context);
 
-        // Merge extension-provided service definitions (typed or DSL)
-        $defs += self::loadExtensionDefinitions($tags, $context, $prod);
+        // Merge extension-provided service definitions (typed or DSL).
+        // Extensions OVERRIDE core defaults for the same id (real seams); see mergeExtensionDefs.
+        $defs = self::mergeExtensionDefs($defs, self::loadExtensionDefinitions($tags, $context, $prod));
+
+        // Re-pin framework-reserved keys that an extension must not clobber.
+        $defs[ApplicationContext::class] = new ValueDefinition(ApplicationContext::class, $context);
 
         $defs['param.bag'] = new ValueDefinition('param.bag', new ParamBag([
             'env' => $prod ? 'prod' : 'dev',
@@ -84,6 +88,24 @@ final class ContainerFactory
         }
 
         return $container;
+    }
+
+    /**
+     * Merge extension-provided definitions OVER the core defaults.
+     *
+     * Extension bindings override core bindings for the same id (last-layer-wins),
+     * which is what makes core defaults (NullUserProvider, and any seam) real,
+     * overridable seams. `array_replace` -- NOT `+=`, which keeps the core key and
+     * silently drops the extension's override.
+     *
+     * @internal
+     * @param array<string,mixed> $coreDefs
+     * @param array<string,mixed> $extDefs
+     * @return array<string,mixed>
+     */
+    public static function mergeExtensionDefs(array $coreDefs, array $extDefs): array
+    {
+        return array_replace($coreDefs, $extDefs);
     }
 
     private static function loadPrecompiledIfAvailable(): ?ContainerInterface
