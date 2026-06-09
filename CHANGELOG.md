@@ -6,6 +6,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Added
+- **Entitlement seam (`Glueful\Entitlements`).** New core extension point: `EntitlementCheckerInterface` (`allows()` / `limit()`, explicit tenant uuid) with an absent-allow `NullEntitlementChecker` default bound in `CoreProvider`. Lets extensions and app code gate commercial capabilities without depending on any specific subscriptions package. Core ships the contract only -- no consumer, no tenant/plan awareness. `glueful/subscriptions` provides the real checker. (Override of the default relies on the container precedence fix in the same release.)
+
 ### Fixed
 - **Container precedence: extension definitions now override core defaults.** `ContainerFactory` merged extension service definitions with `+=`, which kept the core binding on key collision and silently dropped extension overrides -- making core default bindings (`UserProviderInterface -> NullUserProvider`, and every "core default + extension override" seam) un-overridable through the normal provider path. Now merged with `array_replace` (extension-over-core); `ApplicationContext` is re-pinned post-merge so a framework-managed key cannot be clobbered. Within-extension precedence is unchanged.
 
