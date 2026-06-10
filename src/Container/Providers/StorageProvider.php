@@ -7,6 +7,8 @@ namespace Glueful\Container\Providers;
 use Glueful\Container\Definition\DefinitionInterface;
 use Glueful\Container\Definition\FactoryDefinition;
 use Glueful\Container\Definition\AliasDefinition;
+use Glueful\Storage\Contracts\StorageDriverRegistryInterface;
+use Glueful\Storage\StorageDriverRegistry;
 
 final class StorageProvider extends BaseServiceProvider
 {
@@ -27,13 +29,46 @@ final class StorageProvider extends BaseServiceProvider
             }
         );
 
+        // Storage driver registry: built-ins first, then tagged extension factories.
+        // TaggedIteratorDefinition yields higher priorities first; registering
+        // the reversed list preserves registry last-wins semantics for priority.
+        // Equal-priority ties should not be used for same-driver overrides.
+        $defs[StorageDriverRegistryInterface::class] = new FactoryDefinition(
+            StorageDriverRegistryInterface::class,
+            function (\Psr\Container\ContainerInterface $c): StorageDriverRegistryInterface {
+                $logger = $c->has(\Psr\Log\LoggerInterface::class)
+                    ? $c->get(\Psr\Log\LoggerInterface::class)
+                    : null;
+
+                $registry = StorageDriverRegistry::withBuiltIns($logger);
+
+                if ($c->has('storage.driver_factory')) {
+                    /** @var iterable<\Glueful\Storage\Contracts\StorageDriverFactoryInterface> $factories */
+                    $factories = $c->get('storage.driver_factory');
+                    if ($factories instanceof \Traversable) {
+                        $factories = iterator_to_array($factories);
+                    }
+
+                    foreach (array_reverse((array) $factories) as $factory) {
+                        $registry->register($factory->driver(), $factory);
+                    }
+                }
+
+                return $registry;
+            }
+        );
+
         // StorageManager built from config/storage.php
         $defs[\Glueful\Storage\StorageManager::class] = new FactoryDefinition(
             \Glueful\Storage\StorageManager::class,
-            function (): \Glueful\Storage\StorageManager {
+            function (\Psr\Container\ContainerInterface $c): \Glueful\Storage\StorageManager {
                 /** @var array<string,mixed> $cfg */
                 $cfg = (array) (\function_exists('config') ? \config($this->context, 'storage') : []);
-                return new \Glueful\Storage\StorageManager($cfg, new \Glueful\Storage\PathGuard());
+                return new \Glueful\Storage\StorageManager(
+                    $cfg,
+                    new \Glueful\Storage\PathGuard(),
+                    $c->get(StorageDriverRegistryInterface::class)
+                );
             }
         );
 
