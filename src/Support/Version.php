@@ -13,15 +13,15 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.53.0';
+    public const VERSION = '1.54.0';
 
 
     /** Release code name */
-    public const NAME = 'Nunki';
+    public const NAME = 'Okab';
 
 
     /** Release date */
-    public const RELEASE_DATE = '2026-06-08';
+    public const RELEASE_DATE = '2026-06-10';
 
     /** Minimum required PHP version */
     public const MIN_PHP_VERSION = '8.3.0';
