@@ -10,6 +10,8 @@ use Glueful\Helpers\RequestHelper;
 use Glueful\Helpers\Utils;
 use Glueful\Http\Response;
 use Glueful\Repository\BlobRepository;
+use Glueful\Storage\Contracts\NativeSignedUrlProviderInterface;
+use Glueful\Storage\Contracts\StorageDriverRegistryInterface;
 use Glueful\Storage\StorageManager;
 use Glueful\Storage\Support\UrlGenerator;
 use Glueful\Uploader\Contracts\MediaProcessorInterface;
@@ -137,7 +139,13 @@ class UploadController extends BaseController
             return Response::notFound('Blob not found');
         }
 
+        $rawPath = (string) ($blob['url'] ?? '');
         $blob['url'] = $this->resolveBlobUrl($blob);
+
+        $native = $this->maybeNativeUrl($blob, $rawPath);
+        if ($native !== null) {
+            $blob['native_url'] = $native;
+        }
 
         return Response::success($blob, 'Blob metadata');
     }
@@ -224,12 +232,20 @@ class UploadController extends BaseController
         $baseUrl = $request->getSchemeAndHttpHost() . '/blobs/' . $uuid;
         $signedUrl = SignedUrl::make($this->getContext())->generate($baseUrl, $ttl);
 
-        return Response::success([
+        $rawPath = (string) ($blob['url'] ?? '');
+        $native = $this->maybeNativeUrl($blob, $rawPath);
+
+        $payload = [
             'uuid' => $uuid,
             'signed_url' => $signedUrl,
             'expires_in' => $ttl,
             'expires_at' => date('Y-m-d H:i:s', time() + $ttl),
-        ], 'Signed URL generated');
+        ];
+        if ($native !== null) {
+            $payload['native_url'] = $native;
+        }
+
+        return Response::success($payload, 'Signed URL generated');
     }
 
     public function delete(Request $request, string $uuid): Response
@@ -601,6 +617,115 @@ class UploadController extends BaseController
         $disk = $this->resolveDisk($blob);
 
         return $path !== '' ? $this->urls->url($path, $disk) : '';
+    }
+
+    /**
+     * Decide whether to expose a native object-store URL for a blob, and mint it.
+     *
+     * @param array<string, mixed> $policy
+     * @param callable(int): (string|null) $signer
+     */
+    public static function nativeUrlFor(
+        array $policy,
+        string $disk,
+        string $visibility,
+        callable $signer,
+        int $defaultTtl
+    ): ?string {
+        /** @var array<string, array<string, mixed>> $disks */
+        $disks = (array) ($policy['disks'] ?? []);
+        $diskPolicy = $disks[$disk] ?? null;
+        if (!is_array($diskPolicy) || ($diskPolicy['enabled'] ?? false) !== true) {
+            return null;
+        }
+
+        if ($visibility === 'public') {
+            if (($diskPolicy['public'] ?? false) !== true) {
+                return null;
+            }
+
+            return $signer($defaultTtl);
+        }
+
+        if (($diskPolicy['private'] ?? false) !== true) {
+            return null;
+        }
+
+        $maxTtl = (int) ($policy['max_private_ttl'] ?? 900);
+        $ttl = (int) ($diskPolicy['private_ttl'] ?? $defaultTtl);
+        if ($ttl <= 0 || $ttl > $maxTtl) {
+            $ttl = $maxTtl;
+        }
+
+        return $signer($ttl);
+    }
+
+    /**
+     * Resolve a disk factory and sign the raw stored object path.
+     *
+     * @param array<string, mixed> $policy
+     * @param array<string, mixed> $diskConfig
+     */
+    public static function nativeUrlViaRegistry(
+        StorageDriverRegistryInterface $registry,
+        array $policy,
+        string $disk,
+        array $diskConfig,
+        string $visibility,
+        string $rawPath,
+        int $defaultTtl
+    ): ?string {
+        if ($rawPath === '') {
+            return null;
+        }
+
+        $driver = (string) ($diskConfig['driver'] ?? '');
+        if (!$registry->has($driver)) {
+            return null;
+        }
+
+        $factory = $registry->get($driver);
+        if (!$factory instanceof NativeSignedUrlProviderInterface) {
+            return null;
+        }
+
+        return self::nativeUrlFor(
+            $policy,
+            $disk,
+            $visibility,
+            function (int $ttl) use ($factory, $rawPath, $diskConfig): ?string {
+                try {
+                    return $factory->temporaryUrl($rawPath, $ttl, $diskConfig);
+                } catch (\Throwable) {
+                    return null;
+                }
+            },
+            $defaultTtl
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $blob
+     */
+    private function maybeNativeUrl(array $blob, string $rawPath): ?string
+    {
+        /** @var array<string, mixed> $policy */
+        $policy = (array) $this->getConfig('uploads.native_urls', []);
+        if (($policy['disks'] ?? []) === []) {
+            return null;
+        }
+
+        $disk = $this->resolveDisk($blob);
+
+        return self::nativeUrlViaRegistry(
+            $this->storage->drivers(),
+            $policy,
+            $disk,
+            (array) $this->urls->diskConfig($disk),
+            (string) ($blob['visibility'] ?? 'private'),
+            $rawPath,
+            (int) $this->getConfig('uploads.signed_urls.ttl', 3600)
+        );
     }
 
     /**

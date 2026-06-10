@@ -39,6 +39,26 @@ return [
         'ttl' => (int) env('UPLOADS_SIGNED_TTL', 3600), // 1 hour default
     ],
 
+    // Native object-store URLs (opt-in, per-disk, visibility-scoped).
+    //
+    // When enabled for a disk whose storage factory implements
+    // NativeSignedUrlProviderInterface, blob metadata/signed-url responses may
+    // include an additive `native_url` field that points straight at the bucket
+    // or CDN. This is an addition, never a replacement: the app-signed
+    // /blobs/{uuid} path stays the always-available, access-controlled URL.
+    //
+    // Security: a native presigned URL is a time-boxed bearer token that bypasses
+    // app-side access control and revocation. Public blobs may return a direct
+    // URL for bandwidth offload. Private blobs may only opt in with a bounded TTL.
+    'native_urls' => [
+        // Map of disk name => policy, keyed under 'disks'. Absent disk = disabled.
+        'disks' => [
+            // 'media' => ['enabled' => true, 'public' => true, 'private' => false, 'private_ttl' => 300],
+        ],
+        // Hard ceiling on the TTL handed to a native private signer (seconds).
+        'max_private_ttl' => (int) env('UPLOADS_NATIVE_MAX_PRIVATE_TTL', 900),
+    ],
+
     // Image processing settings
     'image_processing' => [
         'enabled' => env('UPLOADS_IMAGE_PROCESSING', true),

@@ -365,6 +365,15 @@ final class CoreProvider extends BaseServiceProvider
             fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Auth\NullUserProvider()
         );
 
+        // Absent-allow default: entitlements are commercial gates, not security boundaries,
+        // so the absence of a subscriptions/entitlements extension must never lock an app out
+        // of its own routes (the opposite of UserProviderInterface, which fails closed).
+        // glueful/subscriptions (or any provider) overrides this with a real tenant-aware checker.
+        $defs[\Glueful\Entitlements\Contracts\EntitlementCheckerInterface::class] = new FactoryDefinition(
+            \Glueful\Entitlements\Contracts\EntitlementCheckerInterface::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Entitlements\NullEntitlementChecker()
+        );
+
         // IdentityResolver folds every service tagged 'identity.claims_provider' (priority-sorted),
         // same consumption pattern as 'console.commands'. Status gate + additive claims fold.
         $defs[\Glueful\Auth\IdentityResolver::class] = new FactoryDefinition(
