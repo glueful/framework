@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Uploader\Storage;
 
+use Glueful\Storage\Contracts\NativeSignedUrlProviderInterface;
 use Glueful\Storage\StorageManager;
 use Glueful\Storage\Support\UrlGenerator;
 use Glueful\Uploader\UploadException;
@@ -26,14 +27,7 @@ class FlysystemStorage implements StorageInterface
         }
 
         try {
-            if ($this->isCloudDisk()) {
-                // Cloud storage (S3/R2/GCS): write directly — atomic temp+move
-                // pattern causes CopyObject failures on some S3-compatible stores
-                $this->storage->disk($this->disk)->writeStream($destinationPath, $stream);
-            } else {
-                // Local storage: use atomic temp+move for crash safety
-                $this->storage->putStream($destinationPath, $stream, $this->disk);
-            }
+            $this->storage->putStream($destinationPath, $stream, $this->disk);
         } catch (\Throwable $e) {
             throw new UploadException('Storage write failed: ' . $e->getMessage(), 0, $e);
         } finally {
@@ -43,13 +37,6 @@ class FlysystemStorage implements StorageInterface
         }
 
         return $destinationPath;
-    }
-
-    private function isCloudDisk(): bool
-    {
-        $cfg = $this->urls->diskConfig($this->disk);
-        $driver = $cfg['driver'] ?? 'local';
-        return in_array($driver, ['s3', 'gcs', 'azure'], true);
     }
 
     public function storeContent(string $content, string $destinationPath): string
@@ -92,39 +79,22 @@ class FlysystemStorage implements StorageInterface
 
     public function getSignedUrl(string $path, int $expiry = 3600): string
     {
-        // Adapter-specific support: S3 presigned URL via AWS SDK when configured
         $cfg = $this->urls->diskConfig($this->disk);
-        if (
-            ($cfg['driver'] ?? null) === 's3'
-            && class_exists('Aws\\S3\\S3Client')
-        ) {
-            try {
-                $clientCfg = ['version' => 'latest', 'region' => (string)($cfg['region'] ?? 'us-east-1')];
-                if (isset($cfg['endpoint']) && $cfg['endpoint'] !== '') {
-                    $clientCfg['endpoint'] = (string)$cfg['endpoint'];
-                }
-                if (isset($cfg['key'], $cfg['secret']) && $cfg['key'] !== '' && $cfg['secret'] !== '') {
-                    $clientCfg['credentials'] = ['key' => (string)$cfg['key'], 'secret' => (string)$cfg['secret']];
-                }
-                if (isset($cfg['use_path_style_endpoint'])) {
-                    $clientCfg['use_path_style_endpoint'] = (bool)$cfg['use_path_style_endpoint'];
-                }
+        $driver = (string) ($cfg['driver'] ?? '');
 
-                $bucket = (string)($cfg['bucket'] ?? '');
-                if ($bucket === '') {
-                    return $this->getUrl($path);
-                }
+        if ($driver !== '' && $this->storage->drivers()->has($driver)) {
+            $factory = $this->storage->drivers()->get($driver);
+            if ($factory instanceof NativeSignedUrlProviderInterface) {
+                $ttl = $expiry > 0 ? $expiry : (int) ($cfg['signed_ttl'] ?? 3600);
 
-                $clientClass = 'Aws\\S3\\S3Client';
-                /** @var object $client */
-                $client = new $clientClass($clientCfg);
-                $ttl = $expiry > 0 ? $expiry : (int)($cfg['signed_ttl'] ?? 3600);
-                $command = $client->getCommand('GetObject', ['Bucket' => $bucket, 'Key' => $path]);
-                $request = $client->createPresignedRequest($command, "+{$ttl} seconds");
-                return (string) $request->getUri();
-            } catch (\Throwable) {
-                // Fall back to plain URL on any failure
-                return $this->getUrl($path);
+                try {
+                    $url = $factory->temporaryUrl($path, $ttl, $cfg);
+                    if ($url !== null && $url !== '') {
+                        return $url;
+                    }
+                } catch (\Throwable) {
+                    // Fall through to the public/app URL.
+                }
             }
         }
 
