@@ -27,6 +27,7 @@ final class FileUploaderNoMediaTest extends TestCase
 {
     private string $appPath;
     private string $uploadsRoot;
+    private string $assetsRoot;
     private string $dbFile;
     private Application $app;
     private ApplicationContext $context;
@@ -37,10 +38,12 @@ final class FileUploaderNoMediaTest extends TestCase
 
         $this->appPath = sys_get_temp_dir() . '/glueful-uploader-' . uniqid('', true);
         $this->uploadsRoot = $this->appPath . '/disk';
+        $this->assetsRoot = $this->appPath . '/assets-disk';
         $this->dbFile = $this->appPath . '/app.sqlite';
         $cfg = $this->appPath . '/config';
         mkdir($cfg, 0755, true);
         mkdir($this->uploadsRoot, 0755, true);
+        mkdir($this->assetsRoot, 0755, true);
 
         // Force a file-backed SQLite so every Connection (migrations + repository)
         // shares one database. The phpunit env default (DB_DATABASE=:memory:) would
@@ -69,8 +72,12 @@ final class FileUploaderNoMediaTest extends TestCase
         // Local `uploads` disk rooted in a temp dir so we can assert on-disk storage.
         file_put_contents(
             $cfg . '/storage.php',
-            "<?php\nreturn ['default' => 'uploads', 'disks' => ['uploads' => "
-            . "['driver' => 'local', 'root' => '" . $this->uploadsRoot . "', 'visibility' => 'private']]];\n"
+            "<?php\nreturn ['default' => 'uploads', 'disks' => ["
+            . "'uploads' => ['driver' => 'local', 'root' => '" . $this->uploadsRoot . "', "
+            . "'visibility' => 'private'], "
+            . "'assets' => ['driver' => 'local', 'root' => '" . $this->assetsRoot . "', "
+            . "'visibility' => 'private']"
+            . "]];\n"
         );
         file_put_contents(
             $cfg . '/uploads.php',
@@ -157,6 +164,37 @@ final class FileUploaderNoMediaTest extends TestCase
             ->first();
         $this->assertIsArray($row);
         $this->assertSame('image/png', $row['mime_type']);
+    }
+
+    public function testExplicitStorageDriverIsPersistedAsBlobStorageType(): void
+    {
+        $uploader = new FileUploader(storageDriver: 'assets', context: $this->context);
+
+        $tmp = $this->createPngFixture();
+
+        $result = $uploader->uploadMedia(
+            [
+                'name' => 'pic.png',
+                'type' => 'image/png',
+                'tmp_name' => $tmp,
+                'error' => UPLOAD_ERR_OK,
+                'size' => filesize($tmp),
+            ],
+            'entries/uuid456',
+            ['save_to_blobs' => true]
+        );
+
+        $this->assertArrayHasKey('path', $result);
+        $this->assertFileExists($this->assetsRoot . '/' . $result['path']);
+        $this->assertFileDoesNotExist($this->uploadsRoot . '/' . $result['path']);
+
+        $connection = new Connection();
+        $row = $connection->table('blobs')
+            ->where('uuid', $result['blob_uuid'])
+            ->first();
+
+        $this->assertIsArray($row);
+        $this->assertSame('assets', $row['storage_type']);
     }
 
     public function testAccessorsForMovedConcreteTypesAreRemoved(): void

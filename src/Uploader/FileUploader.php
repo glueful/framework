@@ -317,9 +317,7 @@ final class FileUploader
 
     private function initializeStorage(): StorageInterface
     {
-        $diskName = $this->storageDriver !== null && $this->storageDriver !== ''
-            ? $this->storageDriver
-            : (string) ($this->getConfig('storage.default', 'uploads'));
+        $diskName = $this->effectiveDisk();
 
         try {
             /** @var StorageManager $storageManager */
@@ -344,11 +342,10 @@ final class FileUploader
                 if ($this->uploadsDirectory !== '') {
                     $storageConfig['disks'][$diskName]['root'] = $this->uploadsDirectory;
                 }
-                if ($this->cdnBaseUrl !== '') {
-                    $storageConfig['disks'][$diskName]['base_url'] = $this->cdnBaseUrl;
-                }
-            } elseif (($diskCfg['driver'] ?? null) === 's3' && $this->cdnBaseUrl !== '') {
-                $storageConfig['disks'][$diskName]['cdn_base_url'] = $this->cdnBaseUrl;
+            }
+
+            if ($this->cdnBaseUrl !== '') {
+                $storageConfig['disks'][$diskName]['base_url'] = $this->cdnBaseUrl;
             }
         }
 
@@ -356,6 +353,25 @@ final class FileUploader
         $urlGenerator = new UrlGenerator($storageConfig, new \Glueful\Storage\PathGuard());
 
         return new FlysystemStorage($storageManager, $urlGenerator, $diskName);
+    }
+
+    private function effectiveDisk(): string
+    {
+        if ($this->storageDriver !== null && $this->storageDriver !== '') {
+            return $this->storageDriver;
+        }
+
+        $uploadDisk = $this->getConfig('uploads.disk');
+        if (is_string($uploadDisk) && $uploadDisk !== '') {
+            return $uploadDisk;
+        }
+
+        $defaultDisk = $this->getConfig('storage.default');
+        if (is_string($defaultDisk) && $defaultDisk !== '') {
+            return $defaultDisk;
+        }
+
+        return 'uploads';
     }
 
     /**
@@ -623,7 +639,7 @@ final class FileUploader
             'name' => $file['name'],
             'mime_type' => $file['type'],
             'url' => $filename,
-            'storage_type' => (string) ($this->getConfig('uploads.disk', $this->storageDriver) ?? 'uploads'),
+            'storage_type' => $this->effectiveDisk(),
             'created_by' => $user['uuid'] ?? null,
             'size' => $file['size'],
             'status' => 'active',
@@ -649,7 +665,7 @@ final class FileUploader
             'name' => $file['name'] ?? basename($path),
             'mime_type' => $mime,
             'url' => $path,
-            'storage_type' => (string) ($this->getConfig('uploads.disk', $this->storageDriver) ?? 'uploads'),
+            'storage_type' => $this->effectiveDisk(),
             'created_by' => $user['uuid'] ?? null,
             'size' => $file['size'] ?? 0,
             'status' => 'active',
