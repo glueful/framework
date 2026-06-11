@@ -647,6 +647,10 @@ class Router
         // #[RequireScope] config, #[RateLimit] config) without re-resolving.
         $request->attributes->set('_route', $route);
         $request->attributes->set('_route_params', $params);
+        $handlerMeta = $this->handlerMeta($route->getHandler());
+        if ($handlerMeta !== null) {
+            $request->attributes->set('handler_meta', $handlerMeta);
+        }
 
         // Build middleware pipeline (with caching)
         $pipeline = $this->buildMiddlewarePipeline($route);
@@ -708,11 +712,39 @@ class Router
         };
     }
 
+    /**
+     * @return array{class:string,method?:string}|null
+     */
+    private function handlerMeta(mixed $handler): ?array
+    {
+        if (is_array($handler) && isset($handler[0], $handler[1]) && is_string($handler[1])) {
+            $class = is_object($handler[0]) ? $handler[0]::class : $handler[0];
+            if (is_string($class) && $class !== '') {
+                return ['class' => $class, 'method' => $handler[1]];
+            }
+        }
+
+        if (is_string($handler) && str_contains($handler, '::')) {
+            [$class, $method] = explode('::', $handler, 2);
+            if ($class !== '' && $method !== '') {
+                return ['class' => $class, 'method' => $method];
+            }
+        }
+
+        if (is_string($handler) && class_exists($handler)) {
+            return ['class' => $handler, 'method' => '__invoke'];
+        }
+
+        return null;
+    }
+
     // Cached reflection lookup for performance
     private function getReflection(mixed $handler): \ReflectionFunction|\ReflectionMethod
     {
         $key = match (true) {
-            is_array($handler) => $handler[0] . '::' . $handler[1],
+            // $handler[0] may be an object (instance handler); derive its class for the
+            // cache key rather than stringifying the object (which would throw).
+            is_array($handler) => (is_object($handler[0]) ? $handler[0]::class : $handler[0]) . '::' . $handler[1],
             is_string($handler) && str_contains($handler, '::') => $handler,
             is_string($handler) && class_exists($handler) => $handler . '::__invoke',
             default => spl_object_id($handler) // For closures and other callables

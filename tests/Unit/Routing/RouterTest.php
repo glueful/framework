@@ -5,14 +5,17 @@ declare(strict_types=1);
 namespace Glueful\Tests\Unit\Routing;
 
 use PHPUnit\Framework\TestCase;
+use Glueful\Auth\Attributes\RequiresPermission;
+use Glueful\Auth\UserIdentity;
 use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Permissions\Middleware\GateAttributeMiddleware;
+use Glueful\Permissions\PermissionManager;
 use Glueful\Routing\Router;
 use Glueful\Routing\RouteCache;
 use Psr\Container\ContainerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\JsonResponse;
- 
 
 class RouterTest extends TestCase
 {
@@ -34,15 +37,51 @@ class RouterTest extends TestCase
         $this->container = new class implements ContainerInterface {
             /** @var array<string,mixed> */
             private array $services = [];
-            public function has(string $id): bool { return array_key_exists($id, $this->services); }
-            public function get(string $id): mixed {
-                if ($this->has($id)) { return $this->services[$id]; }
-                throw new class("Service '".$id."' not found") extends \RuntimeException implements \Psr\Container\NotFoundExceptionInterface {};
+
+            public function has(string $id): bool
+            {
+                return array_key_exists($id, $this->services);
             }
-            public function set(string $id, mixed $service): void { $this->services[$id] = $service; }
+
+            public function get(string $id): mixed
+            {
+                if ($this->has($id)) {
+                    return $this->services[$id];
+                }
+
+                throw new class (
+                    "Service '" . $id . "' not found"
+                ) extends \RuntimeException implements \Psr\Container\NotFoundExceptionInterface {
+                };
+            }
+
+            public function set(string $id, mixed $service): void
+            {
+                $this->services[$id] = $service;
+            }
         };
         $this->container->set(ApplicationContext::class, $context);
         $this->router = new Router($this->container);
+    }
+
+    /**
+     * getReflection() must build a cache key for an [object, method] handler without
+     * stringifying the object (which would throw "Object could not be converted to string").
+     */
+    public function testGetReflectionHandlesObjectHandler(): void
+    {
+        $controller = new class {
+            public function show(): string
+            {
+                return 'ok';
+            }
+        };
+
+        $method = new \ReflectionMethod($this->router, 'getReflection');
+        $method->setAccessible(true);
+        $reflection = $method->invoke($this->router, [$controller, 'show']);
+
+        $this->assertInstanceOf(\ReflectionMethod::class, $reflection);
     }
 
     /**
@@ -234,6 +273,29 @@ class RouterTest extends TestCase
         $this->assertEquals(200, $response->getStatusCode());
     }
 
+    public function testDispatchPopulatesHandlerMetaForGateAttributeMiddleware(): void
+    {
+        $manager = $this->createMock(PermissionManager::class);
+        $manager->expects($this->once())
+            ->method('can')
+            ->with('user-1', 'router.secure', 'system', $this->anything())
+            ->willReturn(false);
+
+        $this->container->set('gate_permissions', new GateAttributeMiddleware($manager));
+        $this->container->set(SecuredRouterFixtureController::class, new SecuredRouterFixtureController());
+
+        $this->router
+            ->get('/secure', [SecuredRouterFixtureController::class, 'index'])
+            ->middleware(['gate_permissions']);
+
+        $request = Request::create('/secure', 'GET');
+        $request->attributes->set('auth.user', new UserIdentity('user-1'));
+
+        $response = $this->router->dispatch($request);
+
+        $this->assertSame(403, $response->getStatusCode());
+    }
+
     /**
      * Test OPTIONS request for CORS
      */
@@ -405,6 +467,15 @@ class RouterTest extends TestCase
         $this->assertTrue($data['active']);
         $this->assertEquals('integer', $data['types']['id']);
         $this->assertEquals('boolean', $data['types']['active']);
+    }
+}
+
+final class SecuredRouterFixtureController // phpcs:ignore PSR1.Classes.ClassDeclaration.MultipleClasses
+{
+    #[RequiresPermission('router.secure')]
+    public function index(): Response
+    {
+        return new Response('secure');
     }
 }
 

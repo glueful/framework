@@ -8,6 +8,7 @@ use Glueful\Api\RateLimiting\Attributes\RateLimit;
 use Glueful\Api\RateLimiting\Attributes\RateLimitCost;
 use Glueful\Routing\Attributes\RequireScope;
 use Glueful\Routing\Attributes\{Route, Controller, Middleware, Get, Post, Put, Patch, Delete, Options, Fields};
+use Glueful\Auth\Attributes\{RequiresPermission, RequiresRole};
 
 class AttributeRouteLoader
 {
@@ -178,6 +179,9 @@ class AttributeRouteLoader
 
                 // Process RequireScope attributes for this route
                 $this->processRequireScopeAttributes($method, $registered);
+
+                // Process RequiresPermission/RequiresRole — auto-attach the gate
+                $this->processGateAttributes($className, $method, $registered);
             }
         }
 
@@ -240,6 +244,9 @@ class AttributeRouteLoader
 
                 // Process RequireScope attributes for this route
                 $this->processRequireScopeAttributes($method, $route);
+
+                // Process RequiresPermission/RequiresRole — auto-attach the gate
+                $this->processGateAttributes($className, $method, $route);
             }
         }
     }
@@ -398,5 +405,53 @@ class AttributeRouteLoader
 
         $route->setRequireScopeConfig($configs);
         $route->middleware('require_scope');
+    }
+
+    /**
+     * Auto-attach the 'gate_permissions' middleware when a route's handler carries
+     * #[RequiresPermission] or #[RequiresRole] — at the method level OR the class
+     * level. Without the middleware the attributes are decorative and the route
+     * fails open (GateAttributeMiddleware never runs, so PermissionManager::can()
+     * is never consulted).
+     *
+     * Detection is against the route's handler class ($className), mirroring what
+     * GateAttributeMiddleware reflects at request time, so a class-level attribute
+     * on the concrete controller is honoured even for inherited methods.
+     */
+    private function processGateAttributes(
+        string $className,
+        \ReflectionMethod $method,
+        \Glueful\Routing\Route $route
+    ): void {
+        if ($this->hasGateAttributes($className, $method)) {
+            $route->middleware('gate_permissions');
+        }
+    }
+
+    /**
+     * True when #[RequiresPermission] or #[RequiresRole] is present on the method
+     * or on the handler class.
+     */
+    private function hasGateAttributes(string $className, \ReflectionMethod $method): bool
+    {
+        foreach ([RequiresPermission::class, RequiresRole::class] as $attribute) {
+            if (count($method->getAttributes($attribute)) > 0) {
+                return true;
+            }
+        }
+
+        try {
+            $class = new \ReflectionClass($className);
+        } catch (\ReflectionException) {
+            return false;
+        }
+
+        foreach ([RequiresPermission::class, RequiresRole::class] as $attribute) {
+            if (count($class->getAttributes($attribute)) > 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
