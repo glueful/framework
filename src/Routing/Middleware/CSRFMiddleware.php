@@ -617,7 +617,7 @@ class CSRFMiddleware implements RouteMiddleware
     private function checkRateLimit(Request $request): bool
     {
         if ($this->cache === null) {
-            return true; // Can't rate limit without cache
+            return $this->rateLimitUnavailableResult(); // Can't rate limit without cache
         }
 
         $ip = $request->getClientIp() ?? 'unknown';
@@ -633,8 +633,19 @@ class CSRFMiddleware implements RouteMiddleware
             $this->cache->set($key, (string)($attempts + 1), $this->rateLimitWindow);
             return true;
         } catch (\Exception) {
-            return true; // Fail open if cache is unavailable
+            return $this->rateLimitUnavailableResult(); // Cache unavailable
         }
+    }
+
+    /**
+     * Result when the rate limiter cannot run (no cache, or a cache error). Defaults to
+     * fail-OPEN (allow) to preserve availability -- a cache outage should not lock out all
+     * token generation. Opt into fail-CLOSED (deny) via security.csrf.rate_limit_fail_closed
+     * for a stricter posture.
+     */
+    private function rateLimitUnavailableResult(): bool
+    {
+        return !((bool) $this->getConfig('security.csrf.rate_limit_fail_closed', false));
     }
 
     /**
