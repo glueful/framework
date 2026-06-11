@@ -72,6 +72,18 @@ class Connection implements DatabaseInterface
     private static ?ConnectionPoolManager $poolManager = null;
 
     /**
+     * @var int Monotonic sequence used to mint a unique soft-delete cache namespace
+     *          per Connection instance (never reused, unlike spl_object_id).
+     */
+    private static int $instanceSequence = 0;
+
+    /**
+     * @var string|null Lazily-assigned per-connection namespace for the soft-delete
+     *                  column-existence cache.
+     */
+    private ?string $softDeleteCacheNamespace = null;
+
+    /**
      * @var PDO Active database connection
      */
     protected PDO $pdo;
@@ -622,11 +634,15 @@ class Connection implements DatabaseInterface
         $updateBuilder = new \Glueful\Database\Query\UpdateBuilder($this->driver, $queryExecutor);
         $deleteBuilder = new \Glueful\Database\Query\DeleteBuilder($this->driver, $queryExecutor);
 
-        // SoftDeleteHandler needs PDO, driver, and UpdateBuilder
+        // SoftDeleteHandler needs PDO, driver, and UpdateBuilder. The fourth arg scopes
+        // its (process-static) deleted_at-column cache to THIS connection, so connections
+        // to different databases that share a table name cannot poison each other's
+        // soft-vs-hard-delete decision.
         $softDeleteHandler = new \Glueful\Database\Features\SoftDeleteHandler(
             $this->getPDO(),  // Use getPDO() to leverage connection pooling
             $this->driver,
-            $updateBuilder
+            $updateBuilder,
+            $this->softDeleteCacheNamespace()
         );
 
         // Get shared TransactionManager (lazy-initialized)
@@ -656,6 +672,21 @@ class Connection implements DatabaseInterface
             $queryValidator,
             $queryPurpose
         );
+    }
+
+    /**
+     * A stable, unique namespace for THIS connection's soft-delete column cache.
+     *
+     * SoftDeleteHandler is recreated per query and its column-existence cache is
+     * process-static, so the cache must be partitioned by connection. A monotonic
+     * per-instance id guarantees two connections never share a partition (so a
+     * same-named table in a different database cannot poison the decision), while
+     * a single connection reuses one namespace across all its queries (so the cache
+     * still amortizes the schema lookup).
+     */
+    private function softDeleteCacheNamespace(): string
+    {
+        return $this->softDeleteCacheNamespace ??= 'conn:' . (++self::$instanceSequence);
     }
 
     /**

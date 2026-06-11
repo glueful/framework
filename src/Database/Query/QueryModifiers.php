@@ -70,7 +70,8 @@ class QueryModifiers implements QueryModifiersInterface
         $this->having[] = [
             'type' => 'basic',
             'column' => $column,
-            'operator' => strtoupper($operator),
+            // Operator is interpolated raw into the HAVING SQL; allow-list it.
+            'operator' => SqlOperators::assertOperator((string) $operator, SqlOperators::COMPARISON_AND_LIKE),
             'value' => $value,
             'boolean' => 'AND'
         ];
@@ -305,7 +306,8 @@ class QueryModifiers implements QueryModifiersInterface
         $this->having[] = [
             'type' => 'basic',
             'column' => $column,
-            'operator' => strtoupper($operator),
+            // Operator is interpolated raw into the HAVING SQL; allow-list it.
+            'operator' => SqlOperators::assertOperator((string) $operator, SqlOperators::COMPARISON_AND_LIKE),
             'value' => $value,
             'boolean' => 'OR'
         ];

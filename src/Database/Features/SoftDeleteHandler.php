@@ -23,10 +23,18 @@ class SoftDeleteHandler implements SoftDeleteHandlerInterface
     private bool $onlyTrashed = false;
     private string $deletedAtColumn = 'deleted_at';
 
+    /**
+     * @param string $cacheNamespace Per-connection key prefix for the column-existence
+     *   cache. The cache is process-static (so it survives across the short-lived handler
+     *   instances created per query), so it MUST be namespaced by the owning connection --
+     *   otherwise two connections to different databases that share a table name poison each
+     *   other's soft-vs-hard-delete decision. Defaults to '' for standalone construction.
+     */
     public function __construct(
         private PDO $pdo,
         private DatabaseDriver $driver,
-        private UpdateBuilderInterface $updateBuilder
+        private UpdateBuilderInterface $updateBuilder,
+        private string $cacheNamespace = ''
     ) {
     }
 
@@ -214,11 +222,16 @@ class SoftDeleteHandler implements SoftDeleteHandlerInterface
     private function tableHasDeletedAtColumn(string $table): bool
     {
         try {
-            // Cache the column check to avoid repeated queries
+            // Cache the column check to avoid repeated queries. The cache is static so
+            // it survives the per-query handler instances, so it is keyed by the owning
+            // connection's namespace (+ table + column) to prevent cross-connection /
+            // cross-database poisoning of the soft-vs-hard-delete decision.
             static $columnCache = [];
 
-            if (isset($columnCache[$table])) {
-                return $columnCache[$table];
+            $cacheKey = $this->cacheNamespace . "\0" . $table . "\0" . $this->deletedAtColumn;
+
+            if (isset($columnCache[$cacheKey])) {
+                return $columnCache[$cacheKey];
             }
 
             // Use database information schema to check if column exists
@@ -246,11 +259,11 @@ class SoftDeleteHandler implements SoftDeleteHandlerInterface
 
                     foreach ($columns as $column) {
                         if ($column['name'] === $this->deletedAtColumn) {
-                            $columnCache[$table] = true;
+                            $columnCache[$cacheKey] = true;
                             return true;
                         }
                     }
-                    $columnCache[$table] = false;
+                    $columnCache[$cacheKey] = false;
                     return false;
 
                 default:
@@ -259,7 +272,7 @@ class SoftDeleteHandler implements SoftDeleteHandlerInterface
                        " WHERE " . $this->driver->wrapIdentifier($this->deletedAtColumn) . " IS NULL LIMIT 0";
                     $stmt = $this->pdo->prepare($sql);
                     $stmt->execute();
-                    $columnCache[$table] = true;
+                    $columnCache[$cacheKey] = true;
                     return true;
             }
 
@@ -268,11 +281,11 @@ class SoftDeleteHandler implements SoftDeleteHandlerInterface
             $stmt->execute($params);
             $count = $stmt->fetchColumn();
             $hasColumn = $count > 0;
-            $columnCache[$table] = $hasColumn;
+            $columnCache[$cacheKey] = $hasColumn;
             return $hasColumn;
         } catch (\PDOException) {
             // If query fails, assume column doesn't exist
-            $columnCache[$table] = false;
+            $columnCache[$cacheKey] = false;
             return false;
         }
     }

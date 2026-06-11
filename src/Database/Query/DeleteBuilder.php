@@ -122,37 +122,17 @@ class DeleteBuilder implements DeleteBuilderInterface
         foreach ($conditions as $column => $condition) {
             $wrappedColumn = $this->driver->wrapIdentifier((string) $column);
 
-            if (is_array($condition) && isset($condition['__op'])) {
-                $op = strtoupper(trim((string) $condition['__op']));
-
-                if ($op === 'IS NULL' || $op === 'IS NOT NULL') {
-                    $whereClauses[] = "{$wrappedColumn} {$op}";
-                    continue;
+            // Multiple predicates on the same column (e.g. a range id > 1 AND id < 3) are
+            // folded into a __multi list by WhereClause; emit each AND-joined so the range
+            // is preserved rather than collapsed to a single predicate.
+            if (is_array($condition) && isset($condition['__multi'])) {
+                foreach ($condition['__multi'] as $entry) {
+                    $whereClauses[] = $this->predicateSql($wrappedColumn, (string) $column, $entry);
                 }
-
-                if ($op === 'IN' || $op === 'NOT IN') {
-                    $values = $condition['__value'] ?? null;
-                    if (!is_array($values) || count($values) === 0) {
-                        throw new \InvalidArgumentException(
-                            "Condition '{$column}' with operator '{$op}' must provide a non-empty array"
-                        );
-                    }
-
-                    $placeholders = implode(', ', array_fill(0, count($values), '?'));
-                    $whereClauses[] = "{$wrappedColumn} {$op} ({$placeholders})";
-                    continue;
-                }
-
-                $whereClauses[] = "{$wrappedColumn} {$op} ?";
                 continue;
             }
 
-            if ($condition === null) {
-                $whereClauses[] = "{$wrappedColumn} IS NULL";
-                continue;
-            }
-
-            $whereClauses[] = "{$wrappedColumn} = ?";
+            $whereClauses[] = $this->predicateSql($wrappedColumn, (string) $column, $condition);
         }
 
         return implode(' AND ', $whereClauses);
@@ -168,35 +148,84 @@ class DeleteBuilder implements DeleteBuilderInterface
         $bindings = [];
 
         foreach ($conditions as $condition) {
-            if (is_array($condition) && isset($condition['__op'])) {
-                $op = strtoupper(trim((string) $condition['__op']));
-
-                if ($op === 'IS NULL' || $op === 'IS NOT NULL') {
-                    continue;
-                }
-
-                if ($op === 'IN' || $op === 'NOT IN') {
-                    $values = $condition['__value'] ?? null;
-                    if (is_array($values)) {
-                        foreach ($values as $value) {
-                            $bindings[] = $value;
-                        }
+            if (is_array($condition) && isset($condition['__multi'])) {
+                foreach ($condition['__multi'] as $entry) {
+                    foreach ($this->predicateBindings($entry) as $binding) {
+                        $bindings[] = $binding;
                     }
-                    continue;
                 }
-
-                $bindings[] = $condition['__value'] ?? null;
                 continue;
             }
 
-            if ($condition === null) {
-                continue;
+            foreach ($this->predicateBindings($condition) as $binding) {
+                $bindings[] = $binding;
             }
-
-            $bindings[] = $condition;
         }
 
         return $bindings;
+    }
+
+    /**
+     * SQL fragment for a single WHERE predicate (column + operator + placeholders).
+     */
+    private function predicateSql(string $wrappedColumn, string $column, mixed $condition): string
+    {
+        if (is_array($condition) && isset($condition['__op'])) {
+            $op = strtoupper(trim((string) $condition['__op']));
+
+            if ($op === 'IS NULL' || $op === 'IS NOT NULL') {
+                return "{$wrappedColumn} {$op}";
+            }
+
+            if ($op === 'IN' || $op === 'NOT IN') {
+                $values = $condition['__value'] ?? null;
+                if (!is_array($values) || count($values) === 0) {
+                    throw new \InvalidArgumentException(
+                        "Condition '{$column}' with operator '{$op}' must provide a non-empty array"
+                    );
+                }
+
+                $placeholders = implode(', ', array_fill(0, count($values), '?'));
+                return "{$wrappedColumn} {$op} ({$placeholders})";
+            }
+
+            return "{$wrappedColumn} {$op} ?";
+        }
+
+        if ($condition === null) {
+            return "{$wrappedColumn} IS NULL";
+        }
+
+        return "{$wrappedColumn} = ?";
+    }
+
+    /**
+     * Bindings contributed by a single WHERE predicate, in placeholder order.
+     *
+     * @return array<int, mixed>
+     */
+    private function predicateBindings(mixed $condition): array
+    {
+        if (is_array($condition) && isset($condition['__op'])) {
+            $op = strtoupper(trim((string) $condition['__op']));
+
+            if ($op === 'IS NULL' || $op === 'IS NOT NULL') {
+                return [];
+            }
+
+            if ($op === 'IN' || $op === 'NOT IN') {
+                $values = $condition['__value'] ?? null;
+                return is_array($values) ? array_values($values) : [];
+            }
+
+            return [$condition['__value'] ?? null];
+        }
+
+        if ($condition === null) {
+            return [];
+        }
+
+        return [$condition];
     }
 
     /**
