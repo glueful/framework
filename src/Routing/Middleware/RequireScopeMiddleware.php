@@ -35,6 +35,16 @@ final class RequireScopeMiddleware implements RouteMiddleware
             return $next($request);
         }
 
+        // A #[RequireScope] route requires scope-bearing (API-key) authentication. If the
+        // request carries no api_key_scopes attribute at all, it was not authenticated via
+        // a path that grants scopes (e.g. a JWT request) -- deny, rather than letting the
+        // "empty scopes = unrestricted key" rule treat the absence as full access.
+        if (!$request->attributes->has('api_key_scopes')) {
+            throw new InsufficientScopeException(
+                'Insufficient scope: this route requires a scoped API key'
+            );
+        }
+
         $granted = $request->attributes->get('api_key_scopes', []);
         if (!is_array($granted)) {
             $granted = [];
