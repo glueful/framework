@@ -6,6 +6,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.55.0] - 2026-06-11 — Peacock
+
+> **Theme: Security & correctness hardening.** A focused pass over the framework's security-sensitive surfaces (routing/permissions, auth, storage paths, the query write-path, deserialization, and the container/extension boundary). Most items are bug fixes, but several change behavior or defaults -- see **Upgrade Notes** -- and one (range UPDATE/DELETE predicates) is a new capability, so this ships as a minor. Staying in 1.x per the pre-public policy.
+
 ### Added
 - **Range predicates on UPDATE/DELETE.** Two predicates on the same column now both apply on writes -- `->where('id','>',1)->where('id','<',3)->update([...])` / `->delete()` updates/deletes only the in-range rows. Previously the write-path condition reparser keyed conditions by column name, so the second predicate silently overwrote the first (the range collapsed to a single bound, affecting more rows than intended). Repeated columns are now folded into a `__multi` list that the update/delete builders emit AND-joined, preserving binding order. (SELECT was always correct; this only affected UPDATE/DELETE.)
 
@@ -30,6 +34,17 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - **Data integrity: wrong-row UPDATE/DELETE from a duplicate-column WHERE.** See the range-predicate item under Added -- the silent predicate collapse could delete/update more rows than the query specified; it now applies both predicates.
 - **Data integrity: soft-delete column cache is no longer shared across connections.** The "does this table have a `deleted_at` column?" cache was process-static and keyed by table name alone, so two connections to different databases (e.g. multiple tenants) that share a table name poisoned each other's soft-vs-hard-delete decision -- causing irreversible hard-deletes of would-be-soft rows, soft-deleted rows leaking into reads, or a "no such column" error. The cache key is now namespaced per `Connection` instance (and includes the configured `deleted_at` column), so connections cannot poison each other while a single connection still amortizes the schema lookup across its queries.
 - **Data integrity: pooled connections are cleaned before reuse.** `ConnectionPool::release()` now rolls back any transaction left open on the underlying PDO (checking the raw PDO, since direct use bypasses the wrapper's tracked flag) and clears per-session state (`DISCARD ALL` on PostgreSQL, `RESET CONNECTION` on MySQL; no-op on SQLite/unknown, disabled gracefully if unsupported) before returning the connection to the pool. Previously a borrower that left a transaction open could have its uncommitted write committed by the next borrower, or leak uncommitted/cross-tenant rows. A connection that cannot be cleaned is retired rather than reused. (Connection pooling is opt-in via `DB_POOLING_ENABLED`, default off.)
+
+### Upgrade Notes
+
+Most changes are backward-compatible bug fixes. The following can change behavior for an existing app -- review them before upgrading:
+
+- **`#[RequiresPermission]` / `#[RequiresRole]` now actually enforce.** These attributes were silently unenforced; routes annotated with them now require the permission/role. **A route annotated with a permission attribute but running without a permission provider bound will now return 403 instead of allowing the request.** Bind a provider (e.g. `glueful/aegis`), grant the required permissions, or remove the attribute from routes that should be open. This includes `glueful/users`' admin surfaces. (`#[RequireScope]` was already auto-attached and is unaffected by this change, but see the next item.)
+- **`#[RequireScope]` now denies requests that carry no API-key scopes.** A scoped route reached by a non-API-key request (e.g. JWT) previously passed (absent scopes were treated as an unrestricted key); it now denies. If you intend JWT users to clear scoped routes, gate those routes differently (scopes are an API-key concept).
+- **API key via `?api_key=` query string is now OFF by default.** If your clients authenticate with the key in the query string, either move them to the `X-API-Key` header (recommended) or set `security.api_keys.allow_query_param = true`. The header path is unchanged.
+- **Signed URLs fail closed without a secret.** If neither `uploads.signed_urls.secret` / `SIGNED_URL_SECRET` nor `app.key` / `APP_KEY` is configured, generating or validating a signed URL now throws instead of using a hardcoded default key. Configure a signing secret (use a **distinct** value per environment -- signatures are host-agnostic).
+- **Extensions fail loud at boot outside production.** A provider whose `services()`/`defs()`/`tags()` throws is now rethrown (naming the provider) outside production, and a DSL service bound to a bare interface/abstract is rejected at load. In production these are logged at WARNING and recorded in `ContainerFactory::failedProviders()` and boot continues. If you have an extension that was silently failing to register, it will now surface -- fix the binding (a non-instantiable id needs `['class' => Concrete::class]` or a factory).
+- **New config keys (both optional, secure defaults):** `security.api_keys.allow_query_param` (default `false`) and `security.csrf.rate_limit_fail_closed` (default `false`). No new env vars; no migrations.
 
 ## [1.54.0] - 2026-06-10 — Okab
 
