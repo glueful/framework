@@ -118,6 +118,21 @@ class StorageManager
         }
     }
 
+    /**
+     * Write raw string content to a path. PathGuard-validated, like putJson()/putStream(),
+     * so callers writing a user-influenced destination cannot bypass the traversal /
+     * absolute-path / null-byte guard with a direct disk()->write().
+     */
+    public function put(string $path, string $contents, ?string $disk = null): void
+    {
+        $path = $this->pathGuard->validate($path);
+        try {
+            $this->disk($disk)->write($path, $contents);
+        } catch (FilesystemException $e) {
+            throw StorageException::fromFlysystem($e, $path);
+        }
+    }
+
     public function getJson(string $path, ?string $disk = null): mixed
     {
         $path = $this->pathGuard->validate($path);
@@ -127,6 +142,34 @@ class StorageManager
             throw StorageException::fromFlysystem($e, $path);
         }
         return json_decode($content, true, 512, JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * PathGuard-validated existence check (so callers never probe with an unvalidated,
+     * user-influenced path).
+     */
+    public function fileExists(string $path, ?string $disk = null): bool
+    {
+        $path = $this->pathGuard->validate($path);
+        try {
+            return $this->disk($disk)->fileExists($path);
+        } catch (FilesystemException $e) {
+            throw StorageException::fromFlysystem($e, $path);
+        }
+    }
+
+    /**
+     * PathGuard-validated delete (so a delete can never target an unvalidated,
+     * user-influenced path).
+     */
+    public function delete(string $path, ?string $disk = null): void
+    {
+        $path = $this->pathGuard->validate($path);
+        try {
+            $this->disk($disk)->delete($path);
+        } catch (FilesystemException $e) {
+            throw StorageException::fromFlysystem($e, $path);
+        }
     }
 
     /**

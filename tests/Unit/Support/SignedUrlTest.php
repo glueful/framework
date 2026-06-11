@@ -185,4 +185,74 @@ final class SignedUrlTest extends TestCase
 
         $this->assertEqualsWithDelta($expires2 - $expires1, 82800, 5);
     }
+
+    /**
+     * Fail closed: with no secret passed and none in the environment, construction
+     * must throw rather than fall back to a hardcoded default key (which would let
+     * anyone forge signatures against a publicly known secret).
+     */
+    public function testConstructionFailsClosedWhenNoSecretConfigured(): void
+    {
+        $restore = $this->clearSecretEnv();
+
+        try {
+            $this->expectException(\RuntimeException::class);
+            new SignedUrl();
+        } finally {
+            $restore();
+        }
+    }
+
+    /**
+     * A secret provided via the environment is still resolved (no regression on the
+     * legitimate no-arg construction path).
+     */
+    public function testConstructionResolvesSecretFromEnvironment(): void
+    {
+        $restore = $this->clearSecretEnv();
+        putenv('SIGNED_URL_SECRET=env-provided-secret');
+        $_ENV['SIGNED_URL_SECRET'] = 'env-provided-secret';
+
+        try {
+            $signed = new SignedUrl();
+            $url = $signed->generate('https://example.com/blobs/abc123', 3600);
+            $this->assertTrue($signed->validate($url));
+        } finally {
+            $restore();
+        }
+    }
+
+    /**
+     * Clear SIGNED_URL_SECRET/APP_KEY from both $_ENV and getenv, returning a
+     * restorer closure.
+     *
+     * @return callable():void
+     */
+    private function clearSecretEnv(): callable
+    {
+        $keys = ['SIGNED_URL_SECRET', 'APP_KEY'];
+        $savedSuperglobal = [];
+        $savedGetenv = [];
+        foreach ($keys as $key) {
+            $savedSuperglobal[$key] = $_ENV[$key] ?? null;
+            $savedGetenv[$key] = getenv($key);
+            unset($_ENV[$key]);
+            putenv($key);
+        }
+
+        return function () use ($keys, $savedSuperglobal, $savedGetenv): void {
+            foreach ($keys as $key) {
+                if ($savedSuperglobal[$key] !== null) {
+                    $_ENV[$key] = $savedSuperglobal[$key];
+                } else {
+                    unset($_ENV[$key]);
+                }
+                if ($savedGetenv[$key] !== false) {
+                    putenv($key . '=' . $savedGetenv[$key]);
+                } else {
+                    putenv($key);
+                }
+            }
+        };
+    }
 }

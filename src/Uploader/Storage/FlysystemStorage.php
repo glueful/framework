@@ -42,7 +42,9 @@ class FlysystemStorage implements StorageInterface
     public function storeContent(string $content, string $destinationPath): string
     {
         try {
-            $this->storage->disk($this->disk)->write($destinationPath, $content);
+            // Route through StorageManager::put() so the destination is PathGuard-validated
+            // (traversal / absolute / null-byte rejected) -- never a direct disk()->write().
+            $this->storage->put($destinationPath, $content, $this->disk);
         } catch (\Throwable $e) {
             if ($e instanceof FilesystemException) {
                 throw new UploadException('Storage write failed: ' . $e->getMessage(), 0, $e);
@@ -61,7 +63,8 @@ class FlysystemStorage implements StorageInterface
     public function exists(string $path): bool
     {
         try {
-            return $this->storage->disk($this->disk)->fileExists($path);
+            // PathGuard-validated; a traversal/absolute path resolves to "does not exist".
+            return $this->storage->fileExists($path, $this->disk);
         } catch (\Throwable) {
             return false;
         }
@@ -70,7 +73,8 @@ class FlysystemStorage implements StorageInterface
     public function delete(string $path): bool
     {
         try {
-            $this->storage->disk($this->disk)->delete($path);
+            // PathGuard-validated; a traversal/absolute path is rejected (nothing deleted).
+            $this->storage->delete($path, $this->disk);
             return true;
         } catch (\Throwable) {
             return false;
