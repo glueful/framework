@@ -12,10 +12,24 @@ use Glueful\Container\Compile\ContainerCompiler;
 use Glueful\Container\Providers\{TagCollector, BaseServiceProvider};
 use Glueful\Container\Loader\{ServicesLoader, DefaultServicesLoader};
 use Glueful\Extensions\ProviderClassResolver;
+use Glueful\Container\Exception\ContainerException;
 use Psr\Container\ContainerInterface;
 
 final class ContainerFactory
 {
+    /**
+     * Service ids the framework owns and re-pins AFTER the extension merge, so an extension
+     * binding the same id cannot clobber them. `ApplicationContext` and `param.bag` are
+     * re-pinned in pinReservedDefinitions() before construction; `ContainerInterface` is
+     * self-registered on the built container. Listed here as the single reviewable record
+     * of the protected surface.
+     */
+    private const RESERVED_KEYS = [
+        ApplicationContext::class,
+        'param.bag',
+        ContainerInterface::class,
+    ];
+
     public static function create(ApplicationContext $context, bool $prod = false): ContainerInterface
     {
         $tags = new TagCollector();
@@ -33,13 +47,13 @@ final class ContainerFactory
         // Extensions OVERRIDE core defaults for the same id (real seams); see mergeExtensionDefs.
         $defs = self::mergeExtensionDefs($defs, self::loadExtensionDefinitions($tags, $context, $prod));
 
-        // Re-pin framework-reserved keys that an extension must not clobber.
-        $defs[ApplicationContext::class] = new ValueDefinition(ApplicationContext::class, $context);
+        // Re-pin framework-reserved keys (see RESERVED_KEYS) that an extension must not clobber.
+        self::pinReservedDefinitions($defs, $context, $prod);
 
-        $defs['param.bag'] = new ValueDefinition('param.bag', new ParamBag([
-            'env' => $prod ? 'prod' : 'dev',
-        ]));
-
+        // Only tags that at least one service contributed to get a TaggedIteratorDefinition.
+        // A tag with zero contributors has no binding, so `$c->get('some.tag')` throws
+        // NotFoundException rather than returning [] -- consumers of an optional, extension-
+        // contributed tag must `has()`-check (or catch) before iterating it on a fresh install.
         foreach ($tags->all() as $name => $entries) {
             $defs[$name] = new TaggedIteratorDefinition($name, $entries);
         }
@@ -82,8 +96,13 @@ final class ContainerFactory
                     return $compiled;
                 }
             } catch (\Throwable $e) {
-                // Best-effort compilation. Continue with runtime container if unsupported definitions exist.
-                // Optionally log: error_log('[ContainerFactory] compile skipped: ' . $e->getMessage());
+                // Best-effort compilation: fall back to the runtime container if a definition
+                // cannot be compiled (e.g. a closure factory). Log loudly -- a silent fallback
+                // means production runs uncompiled (slower) with no signal as to why.
+                error_log(
+                    '[Container][WARNING] container compilation failed; '
+                    . 'falling back to the runtime container: ' . $e->getMessage()
+                );
             }
         }
 
@@ -203,9 +222,11 @@ final class ContainerFactory
                     $typed = (array) $providerClass::defs();
                     $defs += $typed;
                     // Optional: apply tags declared by provider
-                    self::applyProviderTags($providerClass, $tags);
+                    self::applyProviderTags($providerClass, $tags, $prod);
+                } catch (ContainerException $e) {
+                    throw $e; // already handled (e.g. by applyProviderTags); don't re-wrap
                 } catch (\Throwable $e) {
-                    error_log("[Container] Failed loading defs() from {$providerClass}: " . $e->getMessage());
+                    self::handleProviderLoadFailure($providerClass, 'defs()', $e, $prod);
                 }
                 // If both defs() and services() exist, defs() wins; skip DSL
                 continue;
@@ -221,12 +242,95 @@ final class ContainerFactory
                     $compiled = $loader->load($dsl, $providerClass, $prod);
                     $defs += $compiled;
                 } catch (\Throwable $e) {
-                    error_log("[Container] Failed loading services() from {$providerClass}: " . $e->getMessage());
+                    self::handleProviderLoadFailure($providerClass, 'services()', $e, $prod);
                 }
             }
         }
 
         return $defs;
+    }
+
+    /**
+     * @var array<int, array{provider: string, phase: string, error: string}>
+     *      Providers whose definitions failed to load during the last container build.
+     *      Populated only in production (outside production a failure is rethrown). Lets
+     *      diagnostics (extensions:diagnose / a health endpoint) surface partial boot.
+     */
+    private static array $failedProviders = [];
+
+    /**
+     * Providers that failed to load (production only -- non-production fails loud).
+     *
+     * @return array<int, array{provider: string, phase: string, error: string}>
+     */
+    public static function failedProviders(): array
+    {
+        return self::$failedProviders;
+    }
+
+    public static function clearFailedProviders(): void
+    {
+        self::$failedProviders = [];
+    }
+
+    /**
+     * Handle an extension provider failing to contribute its definitions/tags.
+     *
+     * Outside production: rethrow (wrapped, naming the provider + phase) so the broken
+     * extension is caught at boot instead of surfacing as a missing service -- or a
+     * silently-served core default -- at runtime. In production: record it and log loudly,
+     * but keep booting so one broken extension cannot take the whole app down.
+     */
+    private static function handleProviderLoadFailure(
+        string $providerClass,
+        string $phase,
+        \Throwable $e,
+        bool $prod
+    ): void {
+        self::$failedProviders[] = [
+            'provider' => $providerClass,
+            'phase' => $phase,
+            'error' => $e->getMessage(),
+        ];
+
+        if (!$prod) {
+            throw new ContainerException(
+                "Extension provider {$providerClass} failed to load ({$phase}): {$e->getMessage()}",
+                0,
+                $e
+            );
+        }
+
+        error_log(
+            "[Container][WARNING] Extension provider {$providerClass} failed to load ({$phase}) "
+            . "and was skipped: {$e->getMessage()}"
+        );
+    }
+
+    /**
+     * Framework-owned service ids that extensions cannot override (re-pinned post-merge).
+     * The single reviewable record of the protected surface.
+     *
+     * @return array<int, string>
+     */
+    public static function reservedKeys(): array
+    {
+        return self::RESERVED_KEYS;
+    }
+
+    /**
+     * Re-pin the framework-owned definitions (see RESERVED_KEYS) after the extension merge,
+     * so an extension that binds the same id cannot replace them. Runs before container
+     * construction; `ContainerInterface` is self-registered separately on the built container.
+     *
+     * @param array<string, mixed> $defs
+     */
+    private static function pinReservedDefinitions(array &$defs, ApplicationContext $context, bool $prod): void
+    {
+        $defs[ApplicationContext::class] = new ValueDefinition(ApplicationContext::class, $context);
+        $defs['param.bag'] = new ValueDefinition('param.bag', new ParamBag([
+            'env' => $prod ? 'prod' : 'dev',
+        ]));
     }
 
     private static function dslLoader(): ServicesLoader
@@ -266,7 +370,7 @@ final class ContainerFactory
      * tags() may return:
      *  [ 'tag.name' => [ 'service.id', ['service' => 'id', 'priority' => 10], ... ], ... ]
      */
-    private static function applyProviderTags(string $providerClass, TagCollector $tags): void
+    private static function applyProviderTags(string $providerClass, TagCollector $tags, bool $prod = true): void
     {
         if (!method_exists($providerClass, 'tags')) {
             return;
@@ -275,7 +379,7 @@ final class ContainerFactory
             /** @var array<string, array<int, string|array<string,mixed>>> $map */
             $map = (array) $providerClass::tags();
         } catch (\Throwable $e) {
-            error_log("[Container] Failed reading tags() from {$providerClass}: " . $e->getMessage());
+            self::handleProviderLoadFailure($providerClass, 'tags()', $e, $prod);
             return;
         }
 
