@@ -31,11 +31,15 @@ class PostgreSQLDriver implements DatabaseDriver
      */
     public function wrapIdentifier(string $identifier): string
     {
+        // Double any embedded double-quote so a quote character inside an identifier cannot
+        // terminate the wrapping and inject SQL (defense-in-depth behind QueryValidator).
+        $wrap = static fn(string $part): string => '"' . str_replace('"', '""', $part) . '"';
+
         // Handle table aliases: "table AS alias" or "table alias"
         if (preg_match('/^(.+?)\s+(?:AS\s+)?([a-zA-Z_][a-zA-Z0-9_]*)$/i', $identifier, $matches)) {
             $tableName = trim($matches[1]);
             $alias = $matches[2];
-            return "\"$tableName\" AS \"$alias\"";
+            return $wrap($tableName) . ' AS ' . $wrap($alias);
         }
 
         // Handle qualified column names: "alias.column" or "table.column"
@@ -43,10 +47,10 @@ class PostgreSQLDriver implements DatabaseDriver
         if (str_contains($identifier, '.') && !str_contains($identifier, ' ')) {
             $parts = explode('.', $identifier);
             // Quote each part: f.created_at -> "f"."created_at"
-            return implode('.', array_map(fn($part) => "\"$part\"", $parts));
+            return implode('.', array_map($wrap, $parts));
         }
 
-        return "\"$identifier\"";
+        return $wrap($identifier);
     }
 
     /**

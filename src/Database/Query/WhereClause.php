@@ -168,6 +168,8 @@ class WhereClause implements WhereClauseInterface
      */
     public function whereJsonContains(string $column, string $searchValue, ?string $path = null): void
     {
+        $path = $this->assertJsonPath($path);
+
         // Wrap column identifier properly
         $wrappedColumn = $this->wrapColumn($column);
 
@@ -221,6 +223,8 @@ class WhereClause implements WhereClauseInterface
      */
     public function buildJsonCondition(string $column, string $searchValue, ?string $path = null): array
     {
+        $path = $this->assertJsonPath($path);
+
         $wrappedColumn = $this->wrapColumn($column);
         $driverClass = get_class($this->driver);
 
@@ -405,12 +409,12 @@ class WhereClause implements WhereClauseInterface
                     if (isset($this->bindings[$bindingIndex])) {
                         $bindingValue = $this->bindings[$bindingIndex];
                         if ($operator === '=') {
-                            $simpleConditions[$column] = $bindingValue;
+                            $this->assignSimpleCondition($simpleConditions, $column, $bindingValue);
                         } else {
-                            $simpleConditions[$column] = [
+                            $this->assignSimpleCondition($simpleConditions, $column, [
                                 '__op' => $operator,
                                 '__value' => $bindingValue,
-                            ];
+                            ]);
                         }
                     }
                 } else {
@@ -430,9 +434,9 @@ class WhereClause implements WhereClauseInterface
                         $column = trim(end($parts), '`"[]');
                     }
 
-                    $simpleConditions[$column] = [
+                    $this->assignSimpleCondition($simpleConditions, $column, [
                         '__op' => isset($matches[2]) && trim($matches[2]) !== '' ? 'IS NOT NULL' : 'IS NULL',
-                    ];
+                    ]);
                 } else {
                     $complexConditions[] = $condition;
                 }
@@ -450,9 +454,9 @@ class WhereClause implements WhereClauseInterface
                         $column = trim(end($parts), '`"[]');
                     }
 
-                    $simpleConditions[$column] = [
+                    $this->assignSimpleCondition($simpleConditions, $column, [
                         '__op' => isset($matches[2]) && trim($matches[2]) !== '' ? 'IS NOT NULL' : 'IS NULL',
-                    ];
+                    ]);
                     continue;
                 }
 
@@ -472,12 +476,12 @@ class WhereClause implements WhereClauseInterface
                     if (isset($this->bindings[$bindingIndex])) {
                         $bindingValue = $this->bindings[$bindingIndex];
                         if ($operator === '=') {
-                            $simpleConditions[$column] = $bindingValue;
+                            $this->assignSimpleCondition($simpleConditions, $column, $bindingValue);
                         } else {
-                            $simpleConditions[$column] = [
+                            $this->assignSimpleCondition($simpleConditions, $column, [
                                 '__op' => $operator,
                                 '__value' => $bindingValue,
-                            ];
+                            ]);
                         }
                     }
                     $bindingIndex++;
@@ -506,6 +510,53 @@ class WhereClause implements WhereClauseInterface
         }
 
         return $simpleConditions;
+    }
+
+    /**
+     * Assign a reparsed simple condition, preserving repeated columns.
+     *
+     * getConditionsArray() returns a column-keyed map, so a naive `[$column] = $value`
+     * silently overwrote any earlier predicate on the same column -- e.g.
+     * `where('id','>',1)->where('id','<',3)` collapsed to `id < 3`, making UPDATE/DELETE
+     * affect MORE rows than intended. A repeated column is now folded into a `__multi`
+     * list so the write builders emit BOTH predicates (AND-joined), keeping the range.
+     *
+     * @param array<string, mixed> $simpleConditions
+     */
+    private function assignSimpleCondition(array &$simpleConditions, string $column, mixed $value): void
+    {
+        if (!array_key_exists($column, $simpleConditions)) {
+            $simpleConditions[$column] = $value;
+            return;
+        }
+
+        $existing = $simpleConditions[$column];
+        if (is_array($existing) && isset($existing['__multi'])) {
+            $existing['__multi'][] = $value;
+            $simpleConditions[$column] = $existing;
+            return;
+        }
+
+        $simpleConditions[$column] = ['__multi' => [$existing, $value]];
+    }
+
+    /**
+     * Validate a JSON path before it is interpolated raw into a JSON_CONTAINS/JSON_EXTRACT
+     * SQL literal (MySQL takes the path as a string literal, not a bound parameter). Only a
+     * conservative path grammar is allowed -- `$`, dots, bracketed indices, identifier chars
+     * and `*` -- so a path like `x') OR 1=1 -- ` cannot break out of the quotes.
+     */
+    private function assertJsonPath(?string $path): ?string
+    {
+        if ($path === null) {
+            return null;
+        }
+
+        if (preg_match('/^[$\[\]\w.*]+$/', $path) !== 1) {
+            throw new \InvalidArgumentException("Invalid JSON path: '{$path}'");
+        }
+
+        return $path;
     }
 
     /**

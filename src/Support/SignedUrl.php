@@ -11,6 +11,12 @@ use Glueful\Bootstrap\ApplicationContext;
  *
  * Generates time-limited URLs with HMAC signatures for secure
  * temporary access to protected resources.
+ *
+ * Security: the signature covers the request path + query string, NOT the host/scheme. A
+ * signature is therefore valid on any host that shares the signing secret. Deployments MUST
+ * use a DISTINCT signing secret per environment (a per-environment `APP_KEY`, or an explicit
+ * `uploads.signed_urls.secret` / `SIGNED_URL_SECRET`). Reusing one `APP_KEY` across
+ * staging/prod allows a signed URL minted in one environment to be replayed in another.
  */
 class SignedUrl
 {
@@ -165,7 +171,13 @@ class SignedUrl
             return $key;
         }
 
-        // Fallback - not secure, should configure properly
-        return 'glueful-default-signing-key';
+        // Fail closed. A hardcoded fallback would make every signed URL forgeable
+        // against a publicly known secret, bypassing auth on private blobs. Refuse
+        // to sign or validate rather than do so insecurely.
+        throw new \RuntimeException(
+            'SignedUrl has no signing secret. Configure uploads.signed_urls.secret '
+            . 'or app.key (or set the SIGNED_URL_SECRET / APP_KEY environment variable). '
+            . 'Refusing to sign or validate URLs with an insecure default key.'
+        );
     }
 }

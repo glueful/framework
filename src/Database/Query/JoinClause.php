@@ -124,11 +124,13 @@ class JoinClause implements JoinClauseInterface
      */
     protected function addJoin(string $type, string $table, string $first, string $operator, string $second): void
     {
+        // Type and operator are interpolated raw into the JOIN SQL (not bound), so they
+        // must come from a fixed allow-list -- never arbitrary request input.
         $this->joins[] = [
-            'type' => $type,
+            'type' => SqlOperators::assertJoinType($type),
             'table' => $table,
             'first' => $first,
-            'operator' => $operator,
+            'operator' => SqlOperators::assertOperator($operator),
             'second' => $second
         ];
     }

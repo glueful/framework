@@ -84,6 +84,18 @@ final class DefaultServicesLoader implements ServicesLoader
                 );
             }
 
+            // This path emits a `new $class(...)` factory, so $class MUST be instantiable.
+            // An interface/abstract inferred from the id (no explicit class/factory/autowire)
+            // would otherwise load green and fatal with "Cannot instantiate interface" at
+            // first resolution -- possibly in production, on a cold path. Reject it now.
+            if (interface_exists($class) || (class_exists($class) && (new \ReflectionClass($class))->isAbstract())) {
+                throw new \InvalidArgumentException($this->ctx(
+                    $providerClass,
+                    "Service '$id' resolves to non-instantiable '$class' with no 'class', 'factory', "
+                    . "or 'autowire'. Bind it to a concrete class (['class' => Concrete::class]) or a factory."
+                ));
+            }
+
             $args = $this->normalizeArguments(($spec['arguments'] ?? []), $providerClass, $id, $prod);
             // Emit a factory that resolves '@id' at runtime and constructs the object
             $factory = function (\Psr\Container\ContainerInterface $c) use ($class, $args) {
@@ -189,6 +201,20 @@ final class DefaultServicesLoader implements ServicesLoader
     }
 
     /**
+     * Register the `'alias'` ids of a service.
+     *
+     * DIRECTION (read carefully -- this is a common footgun): `Id => ['alias' => X]` makes
+     * the NAME `X` resolve to `Id`. The alias points AT `$id`; it does NOT make `$id`
+     * resolve to `X`. So to bind an interface to a concrete class you write it on the
+     * CONCRETE entry:
+     *
+     *     Concrete::class => ['class' => Concrete::class, 'alias' => [SomeInterface::class]]
+     *
+     * The intuitive-looking `SomeInterface::class => ['alias' => Concrete::class]` does the
+     * OPPOSITE -- it leaves `SomeInterface` bound to `new SomeInterface()` (which the
+     * load-time non-instantiable guard in load() now rejects) and creates an alias named
+     * `Concrete` pointing back at the interface.
+     *
      * @param array<string, mixed> $spec
      * @param array<string, DefinitionInterface> $out
      */

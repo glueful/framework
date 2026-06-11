@@ -33,9 +33,13 @@ return [
     'default_visibility' => env('UPLOADS_DEFAULT_VISIBILITY', 'private'),
 
     // Signed URLs for temporary access to private blobs
+    // Signed URLs are HMAC'd over the path + query only (not the host), so a signature is
+    // valid on ANY host that shares the signing secret. Use a DISTINCT signing secret per
+    // environment (set UPLOADS_SIGNED_SECRET, or a per-environment APP_KEY) -- reusing one
+    // APP_KEY across staging/prod lets a URL minted in one environment be replayed in another.
     'signed_urls' => [
         'enabled' => env('UPLOADS_SIGNED_URLS', true),
-        'secret' => env('UPLOADS_SIGNED_SECRET'), // Falls back to APP_KEY if not set
+        'secret' => env('UPLOADS_SIGNED_SECRET'), // Falls back to APP_KEY if not set; use a per-env value
         'ttl' => (int) env('UPLOADS_SIGNED_TTL', 3600), // 1 hour default
     ],
 

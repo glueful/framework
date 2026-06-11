@@ -813,6 +813,10 @@ class Builder
         string $boolean,
         ?Closure $callback
     ): void {
+        // The operator is interpolated raw into the COUNT(*) comparison subquery, so it
+        // must come from a fixed allow-list -- never arbitrary request input.
+        $operator = \Glueful\Database\Query\SqlOperators::assertOperator($operator);
+
         // Get the base relation
         $parts = explode('.', $relation);
         $baseName = array_shift($parts);

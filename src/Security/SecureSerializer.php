@@ -404,6 +404,28 @@ class SecureSerializer
 
         foreach ($safePatterns as $pattern) {
             if (str_starts_with($className, $pattern)) {
+                return !$this->hasUnserializeGadget($className);
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * A namespace match only auto-allows a class if it is a plain data container. A class
+     * declaring a deserialization-trigger magic method (__wakeup / __destruct /
+     * __unserialize) is a potential POP gadget, so it must be explicitly allow-listed
+     * rather than trusted by namespace alone.
+     */
+    private function hasUnserializeGadget(string $className): bool
+    {
+        if (!class_exists($className)) {
+            // Cannot be a live gadget (unserialize would fail to instantiate it anyway).
+            return false;
+        }
+
+        foreach (['__wakeup', '__destruct', '__unserialize'] as $magic) {
+            if (method_exists($className, $magic)) {
                 return true;
             }
         }
@@ -424,7 +446,7 @@ class SecureSerializer
             str_starts_with($className, 'Glueful\\Extensions\\') &&
             (str_contains($className, '\\Models\\') || str_contains($className, '\\DTOs\\'))
         ) {
-            return true;
+            return !$this->hasUnserializeGadget($className);
         }
 
         return false;

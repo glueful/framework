@@ -152,10 +152,14 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
             return $apiKey;
         }
 
-        // Check for API key in the query string
-        $apiKey = $request->query->get('api_key');
-        if (is_string($apiKey) && $apiKey !== '') {
-            return $apiKey;
+        // Check for API key in the query string -- only when explicitly enabled. Query
+        // strings leak into access logs, proxies, browser history, and Referer headers, so
+        // this is off by default (mirrors the JWT security.tokens.allow_query_param gate).
+        if ($this->queryParamAllowed()) {
+            $apiKey = $request->query->get('api_key');
+            if (is_string($apiKey) && $apiKey !== '') {
+                return $apiKey;
+            }
         }
 
         // Check for API key in the Authorization header with "ApiKey" prefix
@@ -165,6 +169,19 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
         }
 
         return null;
+    }
+
+    /**
+     * Whether the `?api_key=` query parameter is allowed as a key source.
+     * Off unless `security.api_keys.allow_query_param` is explicitly enabled.
+     */
+    private function queryParamAllowed(): bool
+    {
+        if ($this->context === null) {
+            return false;
+        }
+
+        return (bool) config($this->context, 'security.api_keys.allow_query_param', false);
     }
 
     /**

@@ -9,6 +9,7 @@ use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Routing\Router;
 use Glueful\Routing\AttributeRouteLoader;
 use Glueful\Routing\Attributes\{Controller, Get, Post, Put, Patch, Delete, Options, Middleware, Route};
+use Glueful\Auth\Attributes\{RequiresPermission, RequiresRole};
 use Psr\Container\ContainerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -73,6 +74,60 @@ class AttributeRouteLoaderTest extends TestCase
         $middleware = $route->getMiddleware();
         $this->assertContains('api', $middleware);
         $this->assertContains('throttle:60,1', $middleware);
+    }
+
+    /**
+     * A method-level #[RequiresPermission] must auto-attach the gate_permissions
+     * middleware so the route is actually enforced. Without the attach the
+     * attribute is decorative and the route fails open.
+     */
+    public function testRequiresPermissionAutoAttachesGateMiddleware(): void
+    {
+        $this->loader->processClass(GateAttrController::class);
+
+        $route = $this->router->match(Request::create('/secured/with-permission', 'GET'))['route'];
+
+        $this->assertContains('gate_permissions', $route->getMiddleware());
+    }
+
+    /**
+     * A method-level #[RequiresRole] must likewise auto-attach gate_permissions.
+     */
+    public function testRequiresRoleAutoAttachesGateMiddleware(): void
+    {
+        $this->loader->processClass(GateAttrController::class);
+
+        $route = $this->router->match(Request::create('/secured/with-role', 'GET'))['route'];
+
+        $this->assertContains('gate_permissions', $route->getMiddleware());
+    }
+
+    /**
+     * A route with neither attribute must NOT carry gate_permissions (no needless
+     * permission check on unguarded routes).
+     */
+    public function testPlainRouteHasNoGateMiddleware(): void
+    {
+        $this->loader->processClass(GateAttrController::class);
+
+        $route = $this->router->match(Request::create('/secured/plain', 'GET'))['route'];
+
+        $this->assertNotContains('gate_permissions', $route->getMiddleware());
+    }
+
+    /**
+     * A class-level #[RequiresPermission] must attach gate_permissions to every
+     * route in the class — the GateAttributeMiddleware reflects class-level
+     * attributes, so the auto-attach detection must too (the scope handler,
+     * which only inspects methods, would miss this).
+     */
+    public function testClassLevelRequiresPermissionAttachesGateToAllRoutes(): void
+    {
+        $this->loader->processClass(ClassGateAttrController::class);
+
+        $route = $this->router->match(Request::create('/class-secured/inherits', 'GET'))['route'];
+
+        $this->assertContains('gate_permissions', $route->getMiddleware());
     }
 
     /**
@@ -335,5 +390,46 @@ class TestNestedController
     public function dashboard(): string
     {
         return 'admin dashboard';
+    }
+}
+
+/**
+ * Exercises method-level #[RequiresPermission]/#[RequiresRole] auto-attach.
+ */
+#[Controller(prefix: '/secured')]
+class GateAttrController
+{
+    #[Get('/with-permission')]
+    #[RequiresPermission('posts.read')]
+    public function withPermission(): JsonResponse
+    {
+        return new JsonResponse(['ok' => true]);
+    }
+
+    #[Get('/with-role')]
+    #[RequiresRole('admin')]
+    public function withRole(): JsonResponse
+    {
+        return new JsonResponse(['ok' => true]);
+    }
+
+    #[Get('/plain')]
+    public function plain(): JsonResponse
+    {
+        return new JsonResponse(['ok' => true]);
+    }
+}
+
+/**
+ * Exercises class-level #[RequiresPermission] propagating to all routes.
+ */
+#[Controller(prefix: '/class-secured')]
+#[RequiresPermission('admin.access')]
+class ClassGateAttrController
+{
+    #[Get('/inherits')]
+    public function inherits(): JsonResponse
+    {
+        return new JsonResponse(['ok' => true]);
     }
 }

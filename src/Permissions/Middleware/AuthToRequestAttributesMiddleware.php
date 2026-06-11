@@ -142,25 +142,17 @@ final class AuthToRequestAttributesMiddleware implements RouteMiddleware
      */
     private function extractJwtClaims(string $token): ?array
     {
+        // Only ever trust claims from a SIGNATURE-VERIFIED token. There is deliberately no
+        // unverified base64-decode fallback: decoding the payload without verifying the
+        // signature would let a forged token inject claims (scope/role) that flow into the
+        // gate. If the JWT service is somehow unavailable, return no claims rather than
+        // trusting unverified data.
+        if (!class_exists('\\Glueful\\Auth\\JWTService')) {
+            return null;
+        }
+
         try {
-            // Use framework's JWT service if available
-            if (class_exists('\\Glueful\\Auth\\JWTService')) {
-                return \Glueful\Auth\JWTService::decode($token);
-            }
-
-            // Fallback: basic JWT decode (for development)
-            $parts = explode('.', $token);
-            if (count($parts) !== 3) {
-                return null;
-            }
-
-            $payload = base64_decode(str_replace(['-', '_'], ['+', '/'], $parts[1]), true);
-            if ($payload === false) {
-                return null;
-            }
-
-            $decoded = json_decode($payload, true);
-            return is_array($decoded) ? $decoded : null;
+            return \Glueful\Auth\JWTService::decode($token);
         } catch (\Throwable) {
             return null;
         }

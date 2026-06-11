@@ -75,4 +75,61 @@ final class QualifiedColumnWriteTest extends TestCase
         self::assertSame(1, $conn->table('items')->where('tenant_uuid', 'tenantBBBBBB')->count());
         self::assertSame(0, $conn->table('items')->where('tenant_uuid', 'tenantAAAAAA')->count());
     }
+
+    /**
+     * Two predicates on the SAME column (a range `id > 1 AND id < 3`) must BOTH apply.
+     * The old reparse keyed conditions by column name and silently collapsed them to the
+     * last predicate (`id < 3`), deleting MORE rows than intended. They are now folded
+     * into a __multi list so the write builders emit both predicates AND-joined.
+     */
+    public function test_range_predicate_on_delete_affects_only_matching_rows(): void
+    {
+        $conn = $this->sqliteConnection();
+        // ids are 1, 2, 3. The range "id > 1 AND id < 3" matches only id = 2.
+        $deleted = $conn->table('items')
+            ->where('id', '>', 1)
+            ->where('id', '<', 3)
+            ->delete();
+
+        self::assertSame(1, $deleted, 'only the single in-range row (id = 2) should be deleted');
+        // ids 1 and 3 survive; a collapse to "id < 3" would have wrongly removed id 1.
+        self::assertSame(2, $conn->table('items')->count());
+        $remaining = array_column($conn->table('items')->orderBy('id')->get(), 'id');
+        self::assertSame([1, 3], array_map('intval', $remaining));
+    }
+
+    /**
+     * The same range support must hold for UPDATE.
+     */
+    public function test_range_predicate_on_update_affects_only_matching_rows(): void
+    {
+        $conn = $this->sqliteConnection();
+
+        $affected = $conn->table('items')
+            ->where('id', '>', 1)
+            ->where('id', '<', 3)
+            ->update(['name' => 'ranged']);
+
+        self::assertSame(1, $affected, 'only id = 2 should be updated');
+        self::assertSame('ranged', $conn->table('items')->where('id', 2)->first()['name']);
+        self::assertNotSame('ranged', $conn->table('items')->where('id', 1)->first()['name']);
+        self::assertNotSame('ranged', $conn->table('items')->where('id', 3)->first()['name']);
+    }
+
+    /**
+     * Regression guard: predicates on DISTINCT columns must keep working after the
+     * duplicate-column guard is added.
+     */
+    public function test_distinct_column_predicates_still_work_on_delete(): void
+    {
+        $conn = $this->sqliteConnection();
+
+        $deleted = $conn->table('items')
+            ->where('tenant_uuid', 'tenantAAAAAA')
+            ->where('name', 'a-one')
+            ->delete();
+
+        self::assertSame(1, $deleted);
+        self::assertSame(2, $conn->table('items')->count());
+    }
 }

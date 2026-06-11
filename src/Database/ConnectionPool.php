@@ -40,6 +40,12 @@ class ConnectionPool
     private array $activeConnections = [];
 
     /**
+     * @var bool Set once if the driver/version rejects the session-reset statement, so
+     *           subsequent releases skip it instead of churning the pool.
+     */
+    private bool $sessionResetUnsupported = false;
+
+    /**
      * @var array<string, mixed> Pool configuration
      */
     private array $config;
@@ -238,6 +244,22 @@ class ConnectionPool
         // Remove from active connections
         unset($this->activeConnections[$connectionId]);
 
+        // Never return a connection mid-transaction. A borrower that left a transaction
+        // open (an exception bypassing TransactionManager, or direct raw-PDO use) would
+        // otherwise leak uncommitted state into the next borrower -- whose commit() would
+        // commit the prior write, or whose reads would see uncommitted cross-tenant rows.
+        // The wrapper's own inTransaction flag is bypassed by direct use, so check the RAW
+        // PDO. If cleanup fails, the connection is in an unknown state and must be retired.
+        if (!$this->rollbackOpenTransaction($connection)) {
+            $this->destroyConnection($connection);
+            return;
+        }
+
+        // Clear residual session state (SET vars, user variables, temp tables, prepared
+        // statements) so the next borrower cannot observe the previous borrower's session.
+        // Runs AFTER the rollback -- PostgreSQL's DISCARD ALL cannot run in a transaction.
+        $this->resetSession($connection);
+
         // Check if connection should be recycled
         if ($this->shouldRecycleConnection($connection)) {
             $this->destroyConnection($connection);
@@ -248,6 +270,71 @@ class ConnectionPool
         $connection->markIdle();
         $this->availableConnections[] = $connection;
         $this->stats['total_releases']++;
+    }
+
+    /**
+     * Roll back any in-flight transaction on the underlying PDO before the connection is
+     * reused or pooled. Consults the raw PDO (not the wrapper's tracked flag, which is
+     * bypassed when callers use the PDO directly).
+     *
+     * @return bool True if the connection is clean (no transaction, or successfully rolled
+     *              back); false if cleanup failed and the connection must not be reused.
+     */
+    private function rollbackOpenTransaction(PooledConnection $connection): bool
+    {
+        try {
+            $pdo = $connection->getPDO();
+            if ($pdo === null) {
+                return false;
+            }
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            return true;
+        } catch (\Throwable $e) {
+            error_log(
+                'ConnectionPool: failed to roll back open transaction on release: ' . $e->getMessage()
+            );
+            return false;
+        }
+    }
+
+    /**
+     * Reset per-session state on a connection before it is reused by another borrower.
+     *
+     * Issues the driver's session-reset statement (PostgreSQL `DISCARD ALL`, MySQL
+     * `RESET CONNECTION` -- which restores the DSN's default database). SQLite and unknown
+     * drivers have no session-level state to clear and are a no-op. If the driver/version
+     * rejects the statement it is disabled for the pool's lifetime (the transaction
+     * rollback remains the data-integrity guarantee; session-variable isolation degrades
+     * gracefully rather than churning the pool).
+     */
+    private function resetSession(PooledConnection $connection): void
+    {
+        if ($this->sessionResetUnsupported) {
+            return;
+        }
+
+        $pdo = $connection->getPDO();
+        if ($pdo === null) {
+            return;
+        }
+
+        try {
+            $driverName = (string) $pdo->getAttribute(\PDO::ATTR_DRIVER_NAME);
+            $sql = match ($driverName) {
+                'pgsql' => 'DISCARD ALL',
+                'mysql' => 'RESET CONNECTION',
+                default => null,
+            };
+
+            if ($sql !== null) {
+                $pdo->exec($sql);
+            }
+        } catch (\Throwable $e) {
+            $this->sessionResetUnsupported = true;
+            error_log('ConnectionPool: session reset unsupported, disabling: ' . $e->getMessage());
+        }
     }
 
     /**

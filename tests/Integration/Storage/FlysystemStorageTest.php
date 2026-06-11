@@ -10,6 +10,7 @@ use Glueful\Storage\StorageDriverRegistry;
 use Glueful\Storage\StorageManager;
 use Glueful\Storage\Support\UrlGenerator;
 use Glueful\Uploader\Storage\FlysystemStorage;
+use Glueful\Uploader\UploadException;
 use League\Flysystem\Filesystem;
 use League\Flysystem\FilesystemOperator;
 use League\Flysystem\InMemory\InMemoryFilesystemAdapter;
@@ -52,6 +53,53 @@ final class FlysystemStorageTest extends TestCase
 
         $this->assertTrue($fs->delete($dest));
         $this->assertFalse($fs->exists($dest));
+    }
+
+    public function testExistsAndDeleteRejectUnsafePaths(): void
+    {
+        $fs = new FlysystemStorage($this->storage, $this->urls, $this->disk);
+
+        // An absolute / traversal path must not be probed or deleted with a raw path.
+        self::assertFalse($fs->exists('/etc/passwd'), 'exists() must reject an unsafe path');
+        self::assertFalse($fs->delete('/etc/passwd'), 'delete() must reject an unsafe path');
+
+        // A valid path round-trips normally.
+        $fs->storeContent('data', 'uploads/keep.txt');
+        self::assertTrue($fs->exists('uploads/keep.txt'));
+        self::assertTrue($fs->delete('uploads/keep.txt'));
+        self::assertFalse($fs->exists('uploads/keep.txt'));
+    }
+
+    public function testStoreContentWritesValidPath(): void
+    {
+        $fs = new FlysystemStorage($this->storage, $this->urls, $this->disk);
+
+        $stored = $fs->storeContent('hello-content', 'uploads/note.txt');
+
+        $this->assertSame('uploads/note.txt', $stored);
+        $this->assertTrue($fs->exists('uploads/note.txt'));
+    }
+
+    /**
+     * storeContent() must route through PathGuard (like store()), so an absolute /
+     * traversal / null-byte destination is rejected before any write -- it must not
+     * write directly to the disk with an unvalidated, user-influenced path. An absolute
+     * path is the case Flysystem's own normalizer does NOT reject (it relativizes it),
+     * so it is the real cloud-driver hole the PathGuard invariant closes.
+     */
+    public function testStoreContentRejectsUnsafePath(): void
+    {
+        $fs = new FlysystemStorage($this->storage, $this->urls, $this->disk);
+
+        $threw = false;
+        try {
+            $fs->storeContent('payload', '/etc/evil');
+        } catch (UploadException) {
+            $threw = true;
+        }
+
+        $this->assertTrue($threw, 'storeContent must reject an absolute destination path');
+        $this->assertFalse($fs->exists('/etc/evil'), 'no content may be written for a rejected path');
     }
 
     public function testSignedUrlUsesNativeProviderCapability(): void
