@@ -99,6 +99,9 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
         'otp',
     ];
 
+    /** @var string Redacted placeholder used in logs */
+    private const REDACTED = '[REDACTED]';
+
     /** @var string What to log (request, response, both) */
     private string $logMode;
 
@@ -288,13 +291,13 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
             'type' => 'http_request',
             'correlation_id' => $this->correlationId,
             'method' => $request->getMethod(),
-            'uri' => $request->getRequestUri(),
+            'uri' => $this->sanitizeUrl($request->getRequestUri()),
             'path' => $request->getPathInfo(),
-            'query_string' => $request->getQueryString(),
+            'query_string' => $this->sanitizeQueryString($request->getQueryString()),
             'scheme' => $request->getScheme(),
             'client_ip' => $this->getClientIp($request),
             'user_agent' => $request->headers->get('User-Agent'),
-            'referer' => $request->headers->get('Referer'),
+            'referer' => $this->sanitizeUrl($request->headers->get('Referer')),
             'timestamp' => date('c'),
             'environment' => $this->environment,
         ];
@@ -334,8 +337,8 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
         // Add request body if enabled
         $logBodies = (bool)($config['log_bodies'] ?? false);
         if ($logBodies) {
-            $logData['body'] = $this->sanitizeBody($request->getContent());
             $logData['content_type'] = $request->headers->get('Content-Type');
+            $logData['body'] = $this->sanitizeBody($request->getContent(), $logData['content_type']);
             $logData['content_length'] = $request->headers->get('Content-Length');
         }
 
@@ -365,7 +368,7 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
             'type' => 'http_response',
             'correlation_id' => $this->correlationId,
             'method' => $request->getMethod(),
-            'uri' => $request->getRequestUri(),
+            'uri' => $this->sanitizeUrl($request->getRequestUri()),
             'status_code' => $statusCode,
             'reason_phrase' => Response::$statusTexts[$statusCode] ?? 'Unknown',
             'duration_ms' => round($duration * 1000, 2),
@@ -408,7 +411,7 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
             'type' => 'slow_request',
             'correlation_id' => $this->correlationId,
             'method' => $request->getMethod(),
-            'uri' => $request->getRequestUri(),
+            'uri' => $this->sanitizeUrl($request->getRequestUri()),
             'duration_ms' => round($duration * 1000, 2),
             'threshold_ms' => $config['slow_threshold'],
             'status_code' => $response instanceof Response ? $response->getStatusCode() : null,
@@ -433,7 +436,7 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
             'type' => 'request_failure',
             'correlation_id' => $this->correlationId,
             'method' => $request->getMethod(),
-            'uri' => $request->getRequestUri(),
+            'uri' => $this->sanitizeUrl($request->getRequestUri()),
             'duration_ms' => round($duration * 1000, 2),
             'error' => $exception->getMessage(),
             'error_class' => get_class($exception),
@@ -466,7 +469,7 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
         foreach ($headers as $name => $value) {
             $lowerName = strtolower($name);
             if (in_array($lowerName, self::SENSITIVE_HEADERS, true)) {
-                $sanitized[$name] = '[REDACTED]';
+                $sanitized[$name] = self::REDACTED;
             } else {
                 $sanitized[$name] = $value;
             }
@@ -475,9 +478,67 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
     }
 
     /**
+     * Sanitize a URL or request URI before logging.
+     */
+    private function sanitizeUrl(?string $url): ?string
+    {
+        if ($url === null || $url === '') {
+            return $url;
+        }
+
+        $parts = parse_url($url);
+        if ($parts === false) {
+            return self::REDACTED;
+        }
+
+        $sanitized = '';
+        if (isset($parts['scheme'])) {
+            $sanitized .= $parts['scheme'] . '://';
+        }
+
+        if (isset($parts['host'])) {
+            $sanitized .= $parts['host'];
+        }
+
+        if (isset($parts['port'])) {
+            $sanitized .= ':' . $parts['port'];
+        }
+
+        $sanitized .= $parts['path'] ?? '';
+
+        $query = $this->sanitizeQueryString($parts['query'] ?? null);
+        if ($query !== null && $query !== '') {
+            $sanitized .= '?' . $query;
+        }
+
+        return $sanitized !== '' ? $sanitized : $url;
+    }
+
+    /**
+     * Sanitize a URL query string by redacting sensitive parameter names.
+     */
+    private function sanitizeQueryString(?string $query): ?string
+    {
+        if ($query === null || $query === '') {
+            return $query;
+        }
+
+        $params = [];
+        parse_str($query, $params);
+
+        if ($params === []) {
+            return $query;
+        }
+
+        $this->sanitizeArray($params);
+
+        return http_build_query($params);
+    }
+
+    /**
      * Sanitize request/response body
      */
-    private function sanitizeBody(string $body): string
+    private function sanitizeBody(string $body, ?string $contentType = null): string
     {
         // Limit body size for logging
         if (strlen($body) > $this->bodySizeLimit) {
@@ -489,6 +550,15 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
         if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
             $this->sanitizeArray($decoded, self::SENSITIVE_FIELDS);
             return json_encode($decoded, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        }
+
+        if ($this->isFormUrlEncoded($contentType)) {
+            $decoded = [];
+            parse_str($body, $decoded);
+            if ($decoded !== []) {
+                $this->sanitizeArray($decoded, self::SENSITIVE_FIELDS);
+                return http_build_query($decoded);
+            }
         }
 
         return $body;
@@ -503,12 +573,35 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
     private function sanitizeArray(array &$array, array $sensitiveFields = self::SENSITIVE_FIELDS): void
     {
         foreach ($array as $key => &$value) {
-            if (is_array($value)) {
+            if ($this->isSensitiveFieldName((string) $key, $sensitiveFields)) {
+                $value = self::REDACTED;
+            } elseif (is_array($value)) {
                 $this->sanitizeArray($value, $sensitiveFields);
-            } elseif (in_array(strtolower((string)$key), $sensitiveFields, true)) {
-                $value = '[REDACTED]';
             }
         }
+    }
+
+    /**
+     * @param array<string> $sensitiveFields
+     */
+    private function isSensitiveFieldName(string $name, array $sensitiveFields = self::SENSITIVE_FIELDS): bool
+    {
+        $normalized = strtolower($name);
+        if (in_array($normalized, $sensitiveFields, true)) {
+            return true;
+        }
+
+        return str_contains($normalized, 'token')
+            || str_contains($normalized, 'key')
+            || str_contains($normalized, 'secret')
+            || $normalized === 'signature'
+            || $normalized === 'code';
+    }
+
+    private function isFormUrlEncoded(?string $contentType): bool
+    {
+        return $contentType !== null
+            && str_contains(strtolower($contentType), 'application/x-www-form-urlencoded');
     }
 
     /**
