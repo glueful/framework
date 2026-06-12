@@ -6,6 +6,7 @@ namespace Glueful\Routing\Middleware;
 
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Routing\RouteMiddleware;
+use Glueful\Support\SensitiveParamRedactor;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Psr\Log\LoggerInterface;
@@ -80,27 +81,8 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
         'x-elevated-auth',
     ];
 
-    /** @var array<string> Sensitive request fields to redact */
-    private const SENSITIVE_FIELDS = [
-        'password',
-        'secret',
-        'token',
-        'api_key',
-        'access_token',
-        'refresh_token',
-        'client_secret',
-        'private_key',
-        'credit_card',
-        'ssn',
-        'social_security_number',
-        'cvv',
-        'cvc',
-        'pin',
-        'otp',
-    ];
-
     /** @var string Redacted placeholder used in logs */
-    private const REDACTED = '[REDACTED]';
+    private const REDACTED = SensitiveParamRedactor::REDACTED;
 
     /** @var string What to log (request, response, both) */
     private string $logMode;
@@ -482,36 +464,7 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
      */
     private function sanitizeUrl(?string $url): ?string
     {
-        if ($url === null || $url === '') {
-            return $url;
-        }
-
-        $parts = parse_url($url);
-        if ($parts === false) {
-            return self::REDACTED;
-        }
-
-        $sanitized = '';
-        if (isset($parts['scheme'])) {
-            $sanitized .= $parts['scheme'] . '://';
-        }
-
-        if (isset($parts['host'])) {
-            $sanitized .= $parts['host'];
-        }
-
-        if (isset($parts['port'])) {
-            $sanitized .= ':' . $parts['port'];
-        }
-
-        $sanitized .= $parts['path'] ?? '';
-
-        $query = $this->sanitizeQueryString($parts['query'] ?? null);
-        if ($query !== null && $query !== '') {
-            $sanitized .= '?' . $query;
-        }
-
-        return $sanitized !== '' ? $sanitized : $url;
+        return SensitiveParamRedactor::sanitizeUrl($url);
     }
 
     /**
@@ -519,20 +472,7 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
      */
     private function sanitizeQueryString(?string $query): ?string
     {
-        if ($query === null || $query === '') {
-            return $query;
-        }
-
-        $params = [];
-        parse_str($query, $params);
-
-        if ($params === []) {
-            return $query;
-        }
-
-        $this->sanitizeArray($params);
-
-        return http_build_query($params);
+        return SensitiveParamRedactor::sanitizeQueryString($query);
     }
 
     /**
@@ -548,7 +488,7 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
         // Try to parse as JSON and sanitize sensitive fields
         $decoded = json_decode($body, true);
         if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-            $this->sanitizeArray($decoded, self::SENSITIVE_FIELDS);
+            $this->sanitizeArray($decoded);
             return json_encode($decoded, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         }
 
@@ -556,7 +496,7 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
             $decoded = [];
             parse_str($body, $decoded);
             if ($decoded !== []) {
-                $this->sanitizeArray($decoded, self::SENSITIVE_FIELDS);
+                $this->sanitizeArray($decoded);
                 return http_build_query($decoded);
             }
         }
@@ -568,34 +508,10 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
      * Recursively sanitize array fields
      *
      * @param array<string, mixed> $array
-     * @param array<string> $sensitiveFields
      */
-    private function sanitizeArray(array &$array, array $sensitiveFields = self::SENSITIVE_FIELDS): void
+    private function sanitizeArray(array &$array): void
     {
-        foreach ($array as $key => &$value) {
-            if ($this->isSensitiveFieldName((string) $key, $sensitiveFields)) {
-                $value = self::REDACTED;
-            } elseif (is_array($value)) {
-                $this->sanitizeArray($value, $sensitiveFields);
-            }
-        }
-    }
-
-    /**
-     * @param array<string> $sensitiveFields
-     */
-    private function isSensitiveFieldName(string $name, array $sensitiveFields = self::SENSITIVE_FIELDS): bool
-    {
-        $normalized = strtolower($name);
-        if (in_array($normalized, $sensitiveFields, true)) {
-            return true;
-        }
-
-        return str_contains($normalized, 'token')
-            || str_contains($normalized, 'key')
-            || str_contains($normalized, 'secret')
-            || $normalized === 'signature'
-            || $normalized === 'code';
+        SensitiveParamRedactor::sanitizeArray($array);
     }
 
     private function isFormUrlEncoded(?string $contentType): bool

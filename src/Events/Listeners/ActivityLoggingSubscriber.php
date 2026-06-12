@@ -11,6 +11,7 @@ use Glueful\Events\Auth\SessionDestroyedEvent;
 use Glueful\Events\Auth\RateLimitExceededEvent;
 use Glueful\Events\Security\AdminSecurityViolationEvent;
 use Glueful\Logging\LogManager;
+use Glueful\Support\SensitiveParamRedactor;
 
 /**
  * Activity Logging Event Subscriber
@@ -123,7 +124,7 @@ class ActivityLoggingSubscriber implements EventSubscriberInterface
             // Event details
             'violation_type' => $event->violationType,
             'message' => $event->message,
-            'request_uri' => $event->request->getRequestUri(),
+            'request_uri' => SensitiveParamRedactor::sanitizeUrl($event->request->getRequestUri()),
             'request_method' => $event->request->getMethod(),
             'client_ip' => $event->request->getClientIp(),
             'event_id' => $event->getEventId(),

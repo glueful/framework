@@ -30,6 +30,7 @@ use Glueful\Http\Exceptions\Domain\HttpAuthException;
 use Glueful\Http\Exceptions\Domain\HttpProtocolException;
 use Glueful\Http\Exceptions\Domain\ExtensionException;
 use Glueful\Http\Exceptions\Domain\ProvisioningException;
+use Glueful\Support\SensitiveParamRedactor;
 use Glueful\Validation\ValidationException;
 use Glueful\Events\EventService;
 use Glueful\Events\Http\ExceptionEvent;
@@ -55,9 +56,6 @@ use Throwable;
  */
 class Handler implements ExceptionHandlerInterface
 {
-    /** @var string Redacted placeholder used in logs */
-    private const REDACTED = '[REDACTED]';
-
     /**
      * Exceptions that should not be reported
      *
@@ -414,36 +412,7 @@ class Handler implements ExceptionHandlerInterface
      */
     private function sanitizeUrl(?string $url): ?string
     {
-        if ($url === null || $url === '') {
-            return $url;
-        }
-
-        $parts = parse_url($url);
-        if ($parts === false) {
-            return self::REDACTED;
-        }
-
-        $sanitized = '';
-        if (isset($parts['scheme'])) {
-            $sanitized .= $parts['scheme'] . '://';
-        }
-
-        if (isset($parts['host'])) {
-            $sanitized .= $parts['host'];
-        }
-
-        if (isset($parts['port'])) {
-            $sanitized .= ':' . $parts['port'];
-        }
-
-        $sanitized .= $parts['path'] ?? '';
-
-        $query = $this->sanitizeQueryString($parts['query'] ?? null);
-        if ($query !== null && $query !== '') {
-            $sanitized .= '?' . $query;
-        }
-
-        return $sanitized !== '' ? $sanitized : $url;
+        return SensitiveParamRedactor::sanitizeUrl($url);
     }
 
     /**
@@ -451,45 +420,7 @@ class Handler implements ExceptionHandlerInterface
      */
     private function sanitizeQueryString(?string $query): ?string
     {
-        if ($query === null || $query === '') {
-            return $query;
-        }
-
-        $params = [];
-        parse_str($query, $params);
-
-        if ($params === []) {
-            return $query;
-        }
-
-        $this->sanitizeArray($params);
-
-        return http_build_query($params);
-    }
-
-    /**
-     * @param array<string, mixed> $array
-     */
-    private function sanitizeArray(array &$array): void
-    {
-        foreach ($array as $key => &$value) {
-            if ($this->isSensitiveFieldName((string) $key)) {
-                $value = self::REDACTED;
-            } elseif (is_array($value)) {
-                $this->sanitizeArray($value);
-            }
-        }
-    }
-
-    private function isSensitiveFieldName(string $name): bool
-    {
-        $normalized = strtolower($name);
-
-        return str_contains($normalized, 'token')
-            || str_contains($normalized, 'key')
-            || str_contains($normalized, 'secret')
-            || $normalized === 'signature'
-            || $normalized === 'code';
+        return SensitiveParamRedactor::sanitizeQueryString($query);
     }
 
     /**

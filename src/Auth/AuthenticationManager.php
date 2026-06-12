@@ -6,6 +6,7 @@ namespace Glueful\Auth;
 
 use Symfony\Component\HttpFoundation\Request;
 use Glueful\Auth\Interfaces\AuthenticationProviderInterface;
+use Glueful\Support\SensitiveParamRedactor;
 
 /**
  * Authentication Manager
@@ -21,8 +22,6 @@ use Glueful\Auth\Interfaces\AuthenticationProviderInterface;
  */
 class AuthenticationManager
 {
-    private const REDACTED = '[REDACTED]';
-
     /** @var array<string, AuthenticationProviderInterface> */
     private array $providers = [];
 
@@ -288,72 +287,6 @@ class AuthenticationManager
 
     private function sanitizeLogUri(string $uri): string
     {
-        $parts = parse_url($uri);
-        if ($parts === false) {
-            return self::REDACTED;
-        }
-
-        $sanitized = '';
-        if (isset($parts['scheme'])) {
-            $sanitized .= $parts['scheme'] . '://';
-        }
-        if (isset($parts['host'])) {
-            $sanitized .= $parts['host'];
-        }
-        if (isset($parts['port'])) {
-            $sanitized .= ':' . $parts['port'];
-        }
-
-        $sanitized .= $parts['path'] ?? '';
-        $query = $this->sanitizeQueryString($parts['query'] ?? null);
-        if ($query !== null && $query !== '') {
-            $sanitized .= '?' . $query;
-        }
-
-        return $sanitized !== '' ? $sanitized : $uri;
-    }
-
-    private function sanitizeQueryString(?string $query): ?string
-    {
-        if ($query === null || $query === '') {
-            return $query;
-        }
-
-        $params = [];
-        parse_str($query, $params);
-        if ($params === []) {
-            return $query;
-        }
-
-        $this->sanitizeArray($params);
-        return http_build_query($params);
-    }
-
-    /**
-     * @param array<mixed> $data
-     */
-    private function sanitizeArray(array &$data): void
-    {
-        foreach ($data as $key => &$value) {
-            if (is_array($value)) {
-                $this->sanitizeArray($value);
-                continue;
-            }
-
-            if ($this->isSensitiveKey((string) $key)) {
-                $value = self::REDACTED;
-            }
-        }
-        unset($value);
-    }
-
-    private function isSensitiveKey(string $key): bool
-    {
-        $normalized = strtolower($key);
-        return str_contains($normalized, 'token')
-            || str_contains($normalized, 'key')
-            || str_contains($normalized, 'secret')
-            || $normalized === 'signature'
-            || $normalized === 'code';
+        return SensitiveParamRedactor::sanitizeUrl($uri) ?? $uri;
     }
 }
