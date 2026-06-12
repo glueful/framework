@@ -55,6 +55,9 @@ use Throwable;
  */
 class Handler implements ExceptionHandlerInterface
 {
+    /** @var string Redacted placeholder used in logs */
+    private const REDACTED = '[REDACTED]';
+
     /**
      * Exceptions that should not be reported
      *
@@ -372,7 +375,7 @@ class Handler implements ExceptionHandlerInterface
             if ($request !== null) {
                 $context['request'] = [
                     'method' => $request->getMethod(),
-                    'uri' => $request->getRequestUri(),
+                    'uri' => $this->sanitizeUrl($request->getRequestUri()),
                     'ip' => $request->getClientIp(),
                 ];
             }
@@ -384,13 +387,13 @@ class Handler implements ExceptionHandlerInterface
         if ($request !== null) {
             $context['request'] = [
                 'method' => $request->getMethod(),
-                'uri' => $request->getRequestUri(),
+                'uri' => $this->sanitizeUrl($request->getRequestUri()),
                 'ip' => $request->getClientIp(),
                 'user_agent' => $request->headers->get('User-Agent', 'unknown'),
             ];
 
             if ($this->verboseContext) {
-                $context['request']['query_string'] = $request->getQueryString();
+                $context['request']['query_string'] = $this->sanitizeQueryString($request->getQueryString());
                 $context['request']['content_type'] = $request->getContentTypeFormat();
             }
         }
@@ -404,6 +407,89 @@ class Handler implements ExceptionHandlerInterface
         }
 
         return $context;
+    }
+
+    /**
+     * Sanitize a URL or request URI before logging.
+     */
+    private function sanitizeUrl(?string $url): ?string
+    {
+        if ($url === null || $url === '') {
+            return $url;
+        }
+
+        $parts = parse_url($url);
+        if ($parts === false) {
+            return self::REDACTED;
+        }
+
+        $sanitized = '';
+        if (isset($parts['scheme'])) {
+            $sanitized .= $parts['scheme'] . '://';
+        }
+
+        if (isset($parts['host'])) {
+            $sanitized .= $parts['host'];
+        }
+
+        if (isset($parts['port'])) {
+            $sanitized .= ':' . $parts['port'];
+        }
+
+        $sanitized .= $parts['path'] ?? '';
+
+        $query = $this->sanitizeQueryString($parts['query'] ?? null);
+        if ($query !== null && $query !== '') {
+            $sanitized .= '?' . $query;
+        }
+
+        return $sanitized !== '' ? $sanitized : $url;
+    }
+
+    /**
+     * Sanitize a URL query string by redacting sensitive parameter names.
+     */
+    private function sanitizeQueryString(?string $query): ?string
+    {
+        if ($query === null || $query === '') {
+            return $query;
+        }
+
+        $params = [];
+        parse_str($query, $params);
+
+        if ($params === []) {
+            return $query;
+        }
+
+        $this->sanitizeArray($params);
+
+        return http_build_query($params);
+    }
+
+    /**
+     * @param array<string, mixed> $array
+     */
+    private function sanitizeArray(array &$array): void
+    {
+        foreach ($array as $key => &$value) {
+            if ($this->isSensitiveFieldName((string) $key)) {
+                $value = self::REDACTED;
+            } elseif (is_array($value)) {
+                $this->sanitizeArray($value);
+            }
+        }
+    }
+
+    private function isSensitiveFieldName(string $name): bool
+    {
+        $normalized = strtolower($name);
+
+        return str_contains($normalized, 'token')
+            || str_contains($normalized, 'key')
+            || str_contains($normalized, 'secret')
+            || $normalized === 'signature'
+            || $normalized === 'code';
     }
 
     /**
