@@ -86,6 +86,48 @@ final class ClientTransformOptionsTest extends TestCase
         $this->assertSame(0, $fake->captured['max_redirects'] ?? null);
     }
 
+    public function testSafeFetchAllowsPrivateHostWhenOptedIn(): void
+    {
+        $fake = $this->capturingClient();
+        $client = new Client($fake, new NullLogger());
+
+        $response = $client->safeFetch('http://10.0.0.5/health', ['allow_private_hosts' => true]);
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame(['10.0.0.5' => '10.0.0.5'], $fake->captured['resolve'] ?? null);
+        $this->assertArrayNotHasKey('allow_private_hosts', $fake->captured);
+    }
+
+    public function testSafeRequestAsyncRejectsPrivateIpBeforeRequest(): void
+    {
+        $fake = $this->capturingClient();
+        $client = new Client($fake, new NullLogger());
+
+        $this->expectException(\Glueful\Http\Exceptions\HttpClientException::class);
+        $this->expectExceptionMessage('Unsafe URL');
+
+        try {
+            $client->safeRequestAsync('POST', 'http://169.254.169.254/hook');
+        } finally {
+            $this->assertSame([], $fake->captured);
+        }
+    }
+
+    public function testSafeRequestAsyncPinsHostAndDisablesRedirects(): void
+    {
+        $fake = $this->capturingClient();
+        $client = new Client($fake, new NullLogger());
+
+        $response = $client->safeRequestAsync('POST', 'https://93.184.216.34/hook', ['json' => ['a' => 1]]);
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame(
+            ['93.184.216.34' => '93.184.216.34'],
+            $fake->captured['resolve'] ?? null
+        );
+        $this->assertSame(0, $fake->captured['max_redirects'] ?? null);
+    }
+
     /**
      * A Symfony HttpClientInterface that records the (already Glueful-transformed)
      * options and returns a trivial 200 response so Client::request() can read the

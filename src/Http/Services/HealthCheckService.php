@@ -62,7 +62,13 @@ class HealthCheckService
                 ]
             ]);
 
-            $response = $client->safeFetch($healthEndpoint);
+            // Health endpoints are operator-configured, and checking an internal
+            // dependency (10.x service, localhost sidecar) is the common case —
+            // so private hosts are allowed unless the caller opts back into the
+            // strict SSRF posture via 'allow_private_hosts' => false.
+            $response = $client->safeFetch($healthEndpoint, [
+                'allow_private_hosts' => (bool) ($options['allow_private_hosts'] ?? true),
+            ]);
             $responseTime = round((microtime(true) - $startTime) * 1000, 2);
 
             $result['response_time_ms'] = $responseTime;

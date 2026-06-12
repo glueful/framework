@@ -108,26 +108,52 @@ class WebhookDeliveryService
     public function deliverBatchWebhooks(array $webhooks): array
     {
         $responses = [];
+        $pending = [];
+        $batchStart = microtime(true);
 
+        // Start every delivery before consuming any response so the batch runs
+        // concurrently. Each URL is SSRF-validated and IP-pinned up front via
+        // safeRequestAsync(); a URL that fails validation only fails its own
+        // entry. Redirects are not followed (a 3xx counts as a failed delivery).
         foreach ($webhooks as $key => $webhook) {
-            $startTime = microtime(true);
-            $client = $this->createWebhookClient($webhook['options'] ?? []);
-            $requestOptions = $this->buildRequestOptions(
-                $webhook['payload'],
-                $webhook['options'] ?? []
-            );
+            try {
+                $client = $this->createWebhookClient($webhook['options'] ?? []);
+                $requestOptions = $this->buildRequestOptions(
+                    $webhook['payload'],
+                    $webhook['options'] ?? []
+                );
+
+                $pending[$key] = $client->safeRequestAsync('POST', $webhook['url'], $requestOptions);
+            } catch (\Exception $e) {
+                $responses[$key] = [
+                    'success' => false,
+                    'error' => $e->getMessage(),
+                    'duration_ms' => round((microtime(true) - $batchStart) * 1000, 2)
+                ];
+
+                $this->events?->dispatch(new WebhookFailedEvent(
+                    $webhook['url'],
+                    $webhook['payload'],
+                    0,
+                    $e->getMessage(),
+                    $responses[$key]['duration_ms']
+                ));
+            }
+        }
+
+        foreach ($pending as $key => $asyncResponse) {
+            $webhook = $webhooks[$key];
 
             try {
-                $response = $client->safeRequest('POST', $webhook['url'], $requestOptions);
-                $statusCode = $response->getStatusCode();
-                $duration = round((microtime(true) - $startTime) * 1000, 2);
+                $statusCode = $asyncResponse->getStatusCode();
+                $duration = round((microtime(true) - $batchStart) * 1000, 2);
                 $success = $statusCode >= 200 && $statusCode < 300;
 
                 $responses[$key] = [
                     'success' => $success,
                     'status_code' => $statusCode,
                     'duration_ms' => $duration,
-                    'response' => $response->getContent()
+                    'response' => $asyncResponse->getContent(false)
                 ];
 
                 if ($success) {
@@ -150,7 +176,7 @@ class WebhookDeliveryService
                 $responses[$key] = [
                     'success' => false,
                     'error' => $e->getMessage(),
-                    'duration_ms' => round((microtime(true) - $startTime) * 1000, 2)
+                    'duration_ms' => round((microtime(true) - $batchStart) * 1000, 2)
                 ];
 
                 $this->events?->dispatch(new WebhookFailedEvent(

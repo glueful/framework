@@ -96,11 +96,12 @@ class Client
     public function safeRequest(string $method, string $url, array $options = []): Response
     {
         $maxRedirects = (int) ($options['max_redirects'] ?? $this->getConfig('http.safe_fetch.max_redirects', 3));
-        unset($options['max_redirects']);
+        $allowPrivateHosts = (bool) ($options['allow_private_hosts'] ?? false);
+        unset($options['max_redirects'], $options['allow_private_hosts']);
 
         $currentUrl = $url;
         for ($redirects = 0;; $redirects++) {
-            $resolution = $this->assertSafeFetchUrl($currentUrl);
+            $resolution = $this->assertSafeFetchUrl($currentUrl, $allowPrivateHosts);
 
             $symfonyOptions = $this->transformOptions($options);
             $symfonyOptions['max_redirects'] = 0;
@@ -131,6 +132,30 @@ class Client
                 throw new HttpClientException($e->getMessage(), $e->getCode());
             }
         }
+    }
+
+    /**
+     * Start an SSRF-validated request without blocking on the response.
+     *
+     * The URL is validated and IP-pinned like safeRequest(), but redirects are
+     * not followed at all (a 3xx comes back as-is) so no unvalidated hop can be
+     * fetched while the response is consumed asynchronously. Use this to issue
+     * several safe requests concurrently and read them afterwards.
+     *
+     * @param array<string, mixed> $options
+     */
+    public function safeRequestAsync(string $method, string $url, array $options = []): ResponseInterface
+    {
+        $allowPrivateHosts = (bool) ($options['allow_private_hosts'] ?? false);
+        unset($options['max_redirects'], $options['allow_private_hosts']);
+
+        $resolution = $this->assertSafeFetchUrl($url, $allowPrivateHosts);
+
+        $symfonyOptions = $this->transformOptions($options);
+        $symfonyOptions['max_redirects'] = 0;
+        $symfonyOptions['resolve'][$resolution['host']] = $resolution['ip'];
+
+        return $this->httpClient->request($method, $url, $symfonyOptions);
     }
 
     /**
@@ -361,9 +386,16 @@ class Client
     }
 
     /**
+     * Validate a URL for safe fetching and resolve its host for IP pinning.
+     *
+     * With $allowPrivateHosts the private/reserved-range rejection is skipped
+     * (for operator-configured endpoints such as internal health checks); the
+     * scheme allowlist and DNS resolution still apply so the connection can be
+     * pinned to the validated address.
+     *
      * @return array{host: string, ip: string}
      */
-    private function assertSafeFetchUrl(string $url): array
+    private function assertSafeFetchUrl(string $url, bool $allowPrivateHosts = false): array
     {
         $parts = parse_url($url);
         if ($parts === false) {
@@ -376,7 +408,7 @@ class Client
         }
 
         $host = strtolower(trim((string) ($parts['host'] ?? ''), "[] \t\n\r\0\x0B"));
-        if ($host === '' || $host === 'localhost') {
+        if ($host === '' || (!$allowPrivateHosts && $host === 'localhost')) {
             throw new HttpClientException('Unsafe URL: host is not allowed');
         }
 
@@ -385,15 +417,17 @@ class Client
             throw new HttpClientException('Unsafe URL: host could not be resolved');
         }
 
-        foreach ($ips as $ip) {
-            if (
-                filter_var(
-                    $ip,
-                    FILTER_VALIDATE_IP,
-                    FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
-                ) === false
-            ) {
-                throw new HttpClientException('Unsafe URL: host resolves to a private or reserved address');
+        if (!$allowPrivateHosts) {
+            foreach ($ips as $ip) {
+                if (
+                    filter_var(
+                        $ip,
+                        FILTER_VALIDATE_IP,
+                        FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+                    ) === false
+                ) {
+                    throw new HttpClientException('Unsafe URL: host resolves to a private or reserved address');
+                }
             }
         }
 
