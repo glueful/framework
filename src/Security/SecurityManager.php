@@ -429,8 +429,8 @@ class SecurityManager
         $limit = $this->config['rate_limit']['default_limit'] ?? 1000;      // 1000 requests
         $window = $this->config['rate_limit']['window_seconds'] ?? 3600;     // per hour
 
-        // Generate cache key for this IP's rate limit counter
-        $key = "rate_limit:" . Utils::sanitizeCacheKey($ip);
+        // Generate cache key for this IP's rate limit counter without exposing the raw IP to the backend.
+        $key = "rate_limit:" . hash('sha256', $ip);
         $current = $this->getCacheValue($key, 0);
 
         // Check if current request count exceeds the limit
