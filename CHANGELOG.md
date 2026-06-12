@@ -7,6 +7,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ## [Unreleased]
 
 ### Fixed
+- **Security: Symfony requests now honor configured trusted proxies.** `RequestProvider` now applies `security.trusted_proxies` / `TRUSTED_PROXIES` before creating the global Symfony request, so `Request::getClientIp()` can resolve the real client behind trusted load balancers instead of collapsing all traffic into the proxy IP.
 - **Security: rate-limit cache keys no longer expose raw request dimensions.** IP, user, endpoint path, and custom-pattern rate-limit keys are now hashed before storage so cache backends do not receive raw client IPs, reset-token paths, invite codes, or user identifiers as key material.
 - **Security: `serve --open` now shell-quotes the browser URL.** The development server already starts PHP via Symfony Process argv, but the optional browser opener interpolated a host-derived URL into an OS shell command. The generated `open` / `xdg-open` / `start` command now quotes the URL before execution.
 - **Security: migration rollback now rejects non-basename history filenames.** Rollback no longer resolves `migrations.migration` values containing path traversal or null bytes against a source directory, preventing a tampered migration-history row from including a PHP file outside the registered migration path.

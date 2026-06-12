@@ -23,6 +23,10 @@ return [
         'allow_query_param' => env('TOKEN_ALLOW_QUERY_PARAM', false),
     ],
 
+    // Comma-separated trusted reverse proxies/load balancers. Leave empty unless
+    // the app is deployed behind infrastructure that owns X-Forwarded-* headers.
+    'trusted_proxies' => array_filter(array_map('trim', explode(',', env('TRUSTED_PROXIES', '')))),
+
     // Security level definitions
     'levels' => [
         'flexible' => 1,    // Basic token validation only
