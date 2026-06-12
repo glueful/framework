@@ -7,6 +7,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ## [Unreleased]
 
 ### Fixed
+- **Security: `serve --open` now shell-quotes the browser URL.** The development server already starts PHP via Symfony Process argv, but the optional browser opener interpolated a host-derived URL into an OS shell command. The generated `open` / `xdg-open` / `start` command now quotes the URL before execution.
 - **Security: migration rollback now rejects non-basename history filenames.** Rollback no longer resolves `migrations.migration` values containing path traversal or null bytes against a source directory, preventing a tampered migration-history row from including a PHP file outside the registered migration path.
 - **Security: AuthMiddleware fallback extraction now respects the JWT query-token gate.** The direct fallback path no longer accepts `?token=` unless `security.tokens.allow_query_param` is explicitly enabled, matching `TokenManager` and the JWT provider behavior.
 - **Security: JWT decoding now requires bounded temporal claims.** `JWTService::decode()` now rejects tokens without an `exp` claim, tokens with expired/non-numeric `exp`, future `nbf`, and future/non-numeric `iat` values. Missing `exp` no longer creates a signature-valid token that never expires.
