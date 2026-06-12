@@ -285,10 +285,13 @@ class AuthMiddleware implements RouteMiddleware
             return $matches[1];
         }
 
-        // Check query parameter as fallback
-        $token = $request->query->get('token');
-        if ($token !== null && is_string($token)) {
-            return $token;
+        // Query-string bearer tokens leak into logs, history, and Referer; keep
+        // this legacy fallback behind the same explicit JWT query-param gate.
+        if ((bool) config($this->context, 'security.tokens.allow_query_param', false) === true) {
+            $token = $request->query->get('token');
+            if ($token !== null && is_string($token)) {
+                return $token;
+            }
         }
 
         return null;
