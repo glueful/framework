@@ -145,7 +145,8 @@ final class StorageProvider extends BaseServiceProvider
                 // the original (or 415 for explicit format conversion).
                 $c->has(\Glueful\Uploader\Contracts\MediaProcessorInterface::class)
                     ? $c->get(\Glueful\Uploader\Contracts\MediaProcessorInterface::class)
-                    : null
+                    : null,
+                $c->get(\Glueful\Services\ImageSecurityValidator::class)
             )
         );
 
