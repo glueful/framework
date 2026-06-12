@@ -79,8 +79,12 @@ class EnhancedRateLimiterMiddleware implements RouteMiddleware
         // Get route from request attributes
         $route = $request->attributes->get('_route');
 
-        // Get rate limit configuration from route
+        // Get rate limit configuration from route; fall back to middleware
+        // string params ("rate_limit:attempts,windowSeconds")
         $limits = $this->getLimitsFromRoute($route);
+        if ($limits === []) {
+            $limits = $this->getLimitsFromParams($params);
+        }
 
         // Get cost multiplier from route
         $cost = $this->getCostFromRoute($route);
@@ -136,6 +140,36 @@ class EnhancedRateLimiterMiddleware implements RouteMiddleware
         $config = $route->getRateLimitConfig();
 
         return count($config) > 0 ? $config : [];
+    }
+
+    /**
+     * Build a limit config from "rate_limit:attempts,windowSeconds" middleware params.
+     *
+     * Route-level config (`->rateLimit()` builder or #[RateLimit] attribute) takes
+     * precedence; this only applies when the route carries no rate limit config.
+     * The window param is in seconds (matching the documented string form) and
+     * defaults to 60.
+     *
+     * @param array<int|string, mixed> $params
+     * @return array<array<string, mixed>>
+     */
+    private function getLimitsFromParams(array $params): array
+    {
+        if ($params === [] || !is_numeric($params[0] ?? null)) {
+            return [];
+        }
+
+        $attempts = (int) $params[0];
+        if ($attempts <= 0) {
+            return [];
+        }
+
+        $window = isset($params[1]) && is_numeric($params[1]) ? max(1, (int) $params[1]) : 60;
+
+        return [[
+            'attempts' => $attempts,
+            'decaySeconds' => $window,
+        ]];
     }
 
     /**
