@@ -103,6 +103,40 @@ class ImageSecurityValidator
     }
 
     /**
+     * Validate an image file before handing it to an image decoder.
+     *
+     * This uses server-detected MIME and getimagesize() dimensions so callers do
+     * not have to trust client-provided MIME metadata or decode the image before
+     * enforcing dimensional limits.
+     *
+     * @throws BusinessLogicException If the file is not an allowed image
+     */
+    public function validateImageFile(string $path, ?string $format = null): bool
+    {
+        if (!is_file($path)) {
+            throw BusinessLogicException::operationNotAllowed(
+                'image_processing',
+                'Image file does not exist'
+            );
+        }
+
+        $format ??= strtolower((string) pathinfo($path, PATHINFO_EXTENSION));
+        $mimeType = $this->detectMime($path);
+
+        $this->validateFormat($format, $mimeType);
+
+        $dimensions = @getimagesize($path);
+        if ($dimensions === false) {
+            throw BusinessLogicException::operationNotAllowed(
+                'image_processing',
+                'Invalid image file'
+            );
+        }
+
+        return $this->validateDimensions($dimensions[0], $dimensions[1]);
+    }
+
+    /**
      * Validate image dimensions
      *
      * @param int $width Image width
@@ -250,28 +284,86 @@ class ImageSecurityValidator
      */
     private function isSuspiciousUrl(string $url): bool
     {
-        $suspiciousPatterns = [
-            'localhost',
-            '127.0.0.1',
-            '192.168.',
-            '10.',
-            '172.16.',
-            'file://',
-            'ftp://',
-            'data:',
-            'javascript:',
-            'vbscript:',
-        ];
+        $parts = parse_url($url);
+        if ($parts === false) {
+            return true;
+        }
 
-        $url = strtolower($url);
+        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+        if ($scheme !== '' && !in_array($scheme, ['http', 'https'], true)) {
+            return true;
+        }
 
-        foreach ($suspiciousPatterns as $pattern) {
-            if (str_contains($url, $pattern)) {
+        if (!$this->isExternalUrl($url)) {
+            return false;
+        }
+
+        $host = $this->normalizeHost((string) ($parts['host'] ?? ''));
+        if ($host === '' || $host === 'localhost') {
+            return true;
+        }
+
+        $resolvedIps = $this->resolveHostIps($host);
+        if ($resolvedIps === []) {
+            return true;
+        }
+
+        foreach ($resolvedIps as $ip) {
+            if (!$this->isPublicIp($ip)) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private function detectMime(string $path): string
+    {
+        $finfo = new \finfo(FILEINFO_MIME_TYPE);
+        $mime = $finfo->file($path);
+
+        return is_string($mime) && $mime !== '' ? $mime : 'application/octet-stream';
+    }
+
+    private function normalizeHost(string $host): string
+    {
+        return strtolower(trim($host, "[] \t\n\r\0\x0B"));
+    }
+
+    /**
+     * @return array<string>
+     */
+    private function resolveHostIps(string $host): array
+    {
+        if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
+            return [$host];
+        }
+
+        $ips = [];
+        $ipv4 = @gethostbynamel($host);
+        if (is_array($ipv4)) {
+            $ips = array_merge($ips, $ipv4);
+        }
+
+        $aaaa = @dns_get_record($host, DNS_AAAA);
+        if (is_array($aaaa)) {
+            foreach ($aaaa as $record) {
+                if (isset($record['ipv6']) && is_string($record['ipv6'])) {
+                    $ips[] = $record['ipv6'];
+                }
+            }
+        }
+
+        return array_values(array_unique($ips));
+    }
+
+    private function isPublicIp(string $ip): bool
+    {
+        return filter_var(
+            $ip,
+            FILTER_VALIDATE_IP,
+            FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+        ) !== false;
     }
 
     /**

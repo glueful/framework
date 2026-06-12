@@ -156,10 +156,41 @@ final class UploadControllerVariantTest extends TestCase
         $this->assertNotSame(500, $response->getStatusCode());
         $this->assertSame(200, $response->getStatusCode());
         $this->assertSame('image/png', $response->headers->get('Content-Type'));
+        $this->assertSame('nosniff', $response->headers->get('X-Content-Type-Options'));
+        $this->assertStringStartsNotWith('attachment', (string) $response->headers->get('Content-Disposition'));
 
         $body = $this->bodyOf($response);
         $this->assertSame(strlen($this->originalBytes), strlen($body));
         $this->assertSame($this->originalBytes, $body);
+    }
+
+    public function testUnsafeBlobMimeIsServedAsAttachmentWithNosniff(): void
+    {
+        $uuid = 'blob00000002';
+        $relPath = 'posts/page.html';
+        $full = $this->uploadsRoot . '/' . $relPath;
+        file_put_contents($full, '<script>alert(1)</script>');
+
+        \Glueful\Database\Connection::fromContext($this->context)
+            ->table('blobs')
+            ->insert([
+                'uuid' => $uuid,
+                'name' => 'page.html',
+                'mime_type' => 'text/html',
+                'size' => filesize($full),
+                'url' => $relPath,
+                'storage_type' => 'uploads',
+                'visibility' => 'public',
+                'status' => 'active',
+                'created_by' => 'usr123456789',
+            ]);
+
+        $response = $this->makeController(null)->show(Request::create('/blobs/' . $uuid), $uuid);
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertStringStartsWith('text/html', (string) $response->headers->get('Content-Type'));
+        $this->assertSame('nosniff', $response->headers->get('X-Content-Type-Options'));
+        $this->assertStringStartsWith('attachment;', (string) $response->headers->get('Content-Disposition'));
     }
 
     public function testNoMediaFormatReturns415(): void
