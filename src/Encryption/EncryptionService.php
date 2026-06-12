@@ -14,6 +14,8 @@ class EncryptionService
 {
     private const PREFIX = '$glueful$';
     private const VERSION = 'v1';
+    private const STREAM_VERSION = 'stream-v1';
+    private const STREAM_CHUNK_SIZE = 1048576;
     private const NONCE_LENGTH = 12;
     private const TAG_LENGTH = 16;
     private const KEY_LENGTH = 32;
@@ -127,27 +129,43 @@ class EncryptionService
 
     public function encryptFile(string $sourcePath, string $destPath): void
     {
-        $data = @file_get_contents($sourcePath);
-        if ($data === false) {
+        $input = @fopen($sourcePath, 'rb');
+        if ($input === false) {
             throw new EncryptionException('Failed to read source file.');
         }
 
-        $encrypted = $this->encryptBinary($data);
-        if (@file_put_contents($destPath, $encrypted) === false) {
+        $output = @fopen($destPath, 'wb');
+        if ($output === false) {
+            fclose($input);
             throw new EncryptionException('Failed to write encrypted file.');
+        }
+
+        try {
+            $this->encryptStreamTo($input, $output);
+        } finally {
+            fclose($input);
+            fclose($output);
         }
     }
 
     public function decryptFile(string $sourcePath, string $destPath): void
     {
-        $data = @file_get_contents($sourcePath);
-        if ($data === false) {
+        $input = @fopen($sourcePath, 'rb');
+        if ($input === false) {
             throw new DecryptionException('Failed to read encrypted file.');
         }
 
-        $decrypted = $this->decryptBinary($data);
-        if (@file_put_contents($destPath, $decrypted) === false) {
+        $output = @fopen($destPath, 'wb');
+        if ($output === false) {
+            fclose($input);
             throw new DecryptionException('Failed to write decrypted file.');
+        }
+
+        try {
+            $this->decryptStreamTo($input, $output);
+        } finally {
+            fclose($input);
+            fclose($output);
         }
     }
 
@@ -156,12 +174,21 @@ class EncryptionService
      */
     public function encryptStream($inputStream): string
     {
-        $data = stream_get_contents($inputStream);
-        if ($data === false) {
-            throw new EncryptionException('Failed to read stream.');
+        $output = fopen('php://temp', 'w+b');
+        if ($output === false) {
+            throw new EncryptionException('Failed to open encrypted output stream.');
         }
 
-        return $this->encryptBinary($data);
+        $this->encryptStreamTo($inputStream, $output);
+        rewind($output);
+        $encrypted = stream_get_contents($output);
+        fclose($output);
+
+        if ($encrypted === false) {
+            throw new EncryptionException('Failed to read encrypted stream.');
+        }
+
+        return $encrypted;
     }
 
     private function encryptRaw(string $value, ?string $aad, string $key, string $keyId): string
@@ -225,17 +252,33 @@ class EncryptionService
      */
     private function parseEncrypted(string $value): ?array
     {
-        if (!str_starts_with($value, self::PREFIX . self::VERSION . '$')) {
+        if (
+            !str_starts_with($value, self::PREFIX . self::VERSION . '$')
+            && !str_starts_with($value, self::PREFIX . self::STREAM_VERSION . '$')
+        ) {
             return null;
         }
 
         $parts = explode('$', $value);
+        $prefix = $parts[1] ?? '';
+        $version = $parts[2] ?? '';
+
+        if ($version === self::STREAM_VERSION) {
+            if (count($parts) < 5 || '$' . $prefix . '$' !== self::PREFIX || ($parts[3] ?? '') === '') {
+                return null;
+            }
+
+            return [
+                'key_id' => $parts[3],
+                'nonce' => '',
+                'ciphertext' => '',
+                'tag' => '',
+            ];
+        }
+
         if (count($parts) < 7) {
             return null;
         }
-
-        $prefix = $parts[1] ?? '';
-        $version = $parts[2] ?? '';
 
         if ('$' . $prefix . '$' !== self::PREFIX || $version !== self::VERSION) {
             return null;
@@ -304,7 +347,157 @@ class EncryptionService
             ));
         }
 
+        if (hash_equals(str_repeat("\0", self::KEY_LENGTH), $key)) {
+            throw new InvalidKeyException('Encryption key is weak.');
+        }
+
         return $key;
+    }
+
+    /**
+     * @param resource $input
+     * @param resource $output
+     */
+    private function encryptStreamTo($input, $output): void
+    {
+        $this->ensureSecretstreamAvailable();
+
+        [$state, $header] = sodium_crypto_secretstream_xchacha20poly1305_init_push($this->key);
+        $this->writeAll($output, $this->formatStreamHeader($this->keyId, $header));
+
+        while (!feof($input)) {
+            $chunk = fread($input, self::STREAM_CHUNK_SIZE);
+            if ($chunk === false) {
+                throw new EncryptionException('Failed to read source stream.');
+            }
+
+            $tag = feof($input)
+                ? SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_FINAL
+                : SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_MESSAGE;
+            $encrypted = sodium_crypto_secretstream_xchacha20poly1305_push($state, $chunk, '', $tag);
+            $this->writeAll($output, $this->base64UrlEncode(chr($tag) . $encrypted) . "\n");
+        }
+    }
+
+    /**
+     * @param resource $input
+     * @param resource $output
+     */
+    private function decryptStreamTo($input, $output): void
+    {
+        $firstLine = fgets($input);
+        if ($firstLine === false) {
+            throw new DecryptionException('Invalid encrypted file.');
+        }
+
+        $header = $this->parseStreamHeader(rtrim($firstLine, "\r\n"));
+        if ($header === null) {
+            rewind($input);
+            $data = stream_get_contents($input);
+            if ($data === false) {
+                throw new DecryptionException('Failed to read encrypted file.');
+            }
+
+            $this->writeAll($output, $this->decryptBinary($data));
+            return;
+        }
+
+        $this->ensureSecretstreamAvailable();
+
+        $key = $this->keyMap[$header['key_id']] ?? null;
+        if ($key === null) {
+            throw new KeyNotFoundException('Unknown key ID - encryption key may have been rotated out.');
+        }
+
+        $state = sodium_crypto_secretstream_xchacha20poly1305_init_pull($header['header'], $key);
+        $sawFinal = false;
+
+        while (($line = fgets($input)) !== false) {
+            $line = rtrim($line, "\r\n");
+            if ($line === '') {
+                continue;
+            }
+
+            $decoded = $this->base64UrlDecode($line);
+            if ($decoded === null || strlen($decoded) < 2) {
+                throw new DecryptionException('Invalid encrypted stream chunk.');
+            }
+
+            $expectedTag = ord($decoded[0]);
+            $ciphertext = substr($decoded, 1);
+            $result = sodium_crypto_secretstream_xchacha20poly1305_pull($state, $ciphertext);
+            if ($result === false) {
+                throw new DecryptionException('Decryption failed.');
+            }
+
+            [$plaintext, $actualTag] = $result;
+            if ($actualTag !== $expectedTag) {
+                throw new DecryptionException('Invalid encrypted stream chunk tag.');
+            }
+
+            $this->writeAll($output, $plaintext);
+            if ($actualTag === SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_FINAL) {
+                $sawFinal = true;
+                break;
+            }
+        }
+
+        if (!$sawFinal) {
+            throw new DecryptionException('Encrypted stream missing final chunk.');
+        }
+    }
+
+    private function formatStreamHeader(string $keyId, string $header): string
+    {
+        return self::PREFIX . self::STREAM_VERSION . '$' . $keyId . '$' . $this->base64UrlEncode($header) . "\n";
+    }
+
+    /**
+     * @return array{key_id:string,header:string}|null
+     */
+    private function parseStreamHeader(string $line): ?array
+    {
+        if (!str_starts_with($line, self::PREFIX . self::STREAM_VERSION . '$')) {
+            return null;
+        }
+
+        $parts = explode('$', $line);
+        if (count($parts) !== 5 || ($parts[3] ?? '') === '' || ($parts[4] ?? '') === '') {
+            return null;
+        }
+
+        $header = $this->base64UrlDecode($parts[4]);
+        if ($header === null || strlen($header) !== SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_HEADERBYTES) {
+            return null;
+        }
+
+        return [
+            'key_id' => $parts[3],
+            'header' => $header,
+        ];
+    }
+
+    /**
+     * @param resource $stream
+     */
+    private function writeAll($stream, string $bytes): void
+    {
+        $offset = 0;
+        $length = strlen($bytes);
+        while ($offset < $length) {
+            $written = fwrite($stream, substr($bytes, $offset));
+            if ($written === false || $written === 0) {
+                throw new EncryptionException('Failed to write encrypted stream.');
+            }
+            $offset += $written;
+        }
+    }
+
+    private function ensureSecretstreamAvailable(): void
+    {
+        if (!function_exists('sodium_crypto_secretstream_xchacha20poly1305_init_push')) {
+            throw new EncryptionException('Streaming file encryption requires the sodium extension.');
+        }
     }
 
     private function deriveKeyId(string $key): string
