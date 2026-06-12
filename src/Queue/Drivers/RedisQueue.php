@@ -8,6 +8,7 @@ use Glueful\Queue\Contracts\JobInterface;
 use Glueful\Queue\Contracts\DriverInfo;
 use Glueful\Queue\Contracts\HealthStatus;
 use Glueful\Queue\Jobs\RedisJob;
+use Glueful\Queue\QueuePayloadSigner;
 use Glueful\Helpers\Utils;
 use Glueful\Http\Exceptions\Domain\BusinessLogicException;
 use Glueful\Http\Exceptions\Domain\DatabaseException;
@@ -243,7 +244,7 @@ class RedisQueue implements QueueDriverInterface
         $now = time();
         $availableAt = $now + $delay;
 
-        $jobData = [
+        $jobData = $this->signPayload([
             'uuid' => $uuid,
             'displayName' => $job,
             'job' => $job,
@@ -256,7 +257,7 @@ class RedisQueue implements QueueDriverInterface
             'priority' => $data['priority'] ?? 0,
             'batchUuid' => $batchUuid,
             'queue' => $queue
-        ];
+        ]);
 
         // Use Redis transaction for atomicity
         $this->redis->multi();
@@ -505,7 +506,7 @@ class RedisQueue implements QueueDriverInterface
             $delay = $jobDef['delay'] ?? 0;
             $availableAt = $now + $delay;
 
-            $jobData = [
+            $jobData = $this->signPayload([
                 'uuid' => $uuid,
                 'displayName' => $jobDef['job'],
                 'job' => $jobDef['job'],
@@ -518,7 +519,7 @@ class RedisQueue implements QueueDriverInterface
                 'priority' => $jobDef['data']['priority'] ?? 0,
                 'batchUuid' => $jobDef['batch_uuid'] ?? null,
                 'queue' => $queue
-            ];
+            ]);
 
             // Store job data
             $this->redis->hMset("job:{$uuid}", $jobData);
@@ -755,5 +756,14 @@ class RedisQueue implements QueueDriverInterface
     public function failed(JobInterface $job, \Exception $exception): void
     {
         $this->fail($job, $exception);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function signPayload(array $payload): array
+    {
+        return (new QueuePayloadSigner($this->context))->sign($payload);
     }
 }

@@ -9,6 +9,7 @@ use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use Glueful\Framework;
 use Glueful\Queue\Contracts\WorkerMonitorInterface;
+use Glueful\Queue\Job;
 use Glueful\Queue\Jobs\QueueMaintenance;
 use Glueful\Queue\Monitoring\NullWorkerMonitor;
 use Glueful\Queue\QueueManager;
@@ -363,12 +364,11 @@ final class CoreQueueDecouplingTest extends TestCase
 /**
  * Job that records its executions, used to prove the lean worker drained a job.
  */
-final class DecouplingProbeJob
+final class DecouplingProbeJob extends Job
 {
     public static int $ran = 0;
 
-    /** @param array<string,mixed> $data */
-    public function handle(array $data): void
+    public function handle(): void
     {
         self::$ran++;
     }

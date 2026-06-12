@@ -9,6 +9,7 @@ use Glueful\Database\Connection;
 use Glueful\Helpers\Utils;
 use Glueful\Lock\LockManagerInterface;
 use Glueful\Queue\JobHandlerResolver;
+use Glueful\Queue\QueuePayloadSigner;
 use Symfony\Component\Lock\Exception\LockConflictedException;
 
 /**
@@ -160,7 +161,8 @@ class JobScheduler
             'name' => $name,
             'schedule' => $schedule,
             'handler_class' => $handlerClass,
-            'parameters' => json_encode($parameters),
+            'parameters' => (new QueuePayloadSigner($this->context))
+                ->encodeScheduledParameters($handlerClass, $parameters),
             'is_enabled' => 1,
             'next_run' => $nextRunTime,
             'created_at' => date('Y-m-d H:i:s'),
@@ -196,8 +198,14 @@ class JobScheduler
                 // Create a callback for database jobs that uses the handler_class
                 $callback = function () use ($job) {
                     $handlerClass = $job['handler_class'];
-                    $parameters = json_decode($job['parameters'] ?? '{}', true);
-                    $parameters = is_array($parameters) ? $parameters : [];
+
+                    try {
+                        $parameters = (new QueuePayloadSigner($this->context))
+                            ->decodeScheduledParameters($handlerClass, $job['parameters'] ?? null);
+                    } catch (\Throwable $e) {
+                        error_log("Refusing to run scheduled job handler '{$handlerClass}': " . $e->getMessage());
+                        return false;
+                    }
 
                     // The handler class name comes from a stored row — gate it
                     // through the resolver (JobInterface required) instead of

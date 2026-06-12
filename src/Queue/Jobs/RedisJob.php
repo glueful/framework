@@ -6,6 +6,7 @@ use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Queue\Contracts\JobInterface;
 use Glueful\Queue\Contracts\QueueDriverInterface;
 use Glueful\Queue\JobHandlerResolver;
+use Glueful\Queue\QueuePayloadSigner;
 
 /**
  * Redis Job Implementation
@@ -32,6 +33,9 @@ class RedisJob implements JobInterface
 
     /** @var array<string, mixed> Decoded payload data */
     private array $payload;
+
+    /** @var array<string, mixed>|null Verified payload cache */
+    private ?array $verifiedPayload = null;
 
     /** @var string Queue name */
     private string $queue;
@@ -124,7 +128,8 @@ class RedisJob implements JobInterface
      */
     public function fire(): void
     {
-        $jobClass = $this->payload['job'] ?? null;
+        $payload = $this->verifiedPayload();
+        $jobClass = $payload['job'] ?? null;
 
         if ($jobClass === null) {
             throw new \RuntimeException("Job payload has no job class");
@@ -135,7 +140,7 @@ class RedisJob implements JobInterface
 
         // Execute job with data
         if (method_exists($job, 'handle')) {
-            $job->handle($this->payload['data'] ?? []);
+            $job->handle($payload['data'] ?? []);
         } else {
             throw new \RuntimeException("Job class '{$jobClass}' must have a 'handle' method");
         }
@@ -154,7 +159,8 @@ class RedisJob implements JobInterface
      */
     private function resolve(string $class): JobInterface
     {
-        return JobHandlerResolver::resolve($class, $this->payload['data'] ?? [], $this->context);
+        $payload = $this->verifiedPayload();
+        return JobHandlerResolver::resolve($class, $payload['data'] ?? [], $this->context);
     }
 
     /**
@@ -192,7 +198,14 @@ class RedisJob implements JobInterface
         $this->driver->failed($this, $exception);
 
         // Call failed method on job class if exists
-        $jobClass = $this->payload['job'] ?? null;
+        try {
+            $payload = $this->verifiedPayload();
+        } catch (\Throwable $e) {
+            error_log("Skipping job failed handler for invalid payload: " . $e->getMessage());
+            return;
+        }
+
+        $jobClass = $payload['job'] ?? null;
         if ($jobClass !== null) {
             try {
                 $this->resolve($jobClass)->failed($exception);
@@ -210,7 +223,13 @@ class RedisJob implements JobInterface
      */
     public function getMaxAttempts(): int
     {
-        return (int) ($this->payload['maxAttempts'] ?? 3);
+        try {
+            $payload = $this->verifiedPayload();
+        } catch (\Throwable) {
+            return 1;
+        }
+
+        return (int) ($payload['maxAttempts'] ?? 3);
     }
 
     /**
@@ -220,7 +239,13 @@ class RedisJob implements JobInterface
      */
     public function getTimeout(): int
     {
-        return (int) ($this->payload['timeout'] ?? 60);
+        try {
+            $payload = $this->verifiedPayload();
+        } catch (\Throwable) {
+            $payload = $this->payload;
+        }
+
+        return (int) ($payload['timeout'] ?? 60);
     }
 
     /**
@@ -260,7 +285,13 @@ class RedisJob implements JobInterface
      */
     public function getName(): string
     {
-        return $this->payload['displayName'] ?? $this->payload['job'] ?? 'Unknown';
+        try {
+            $payload = $this->verifiedPayload();
+        } catch (\Throwable) {
+            $payload = $this->payload;
+        }
+
+        return $payload['displayName'] ?? $payload['job'] ?? 'Unknown';
     }
 
     /**
@@ -300,7 +331,13 @@ class RedisJob implements JobInterface
      */
     public function getPushedAt(): int
     {
-        return (int) ($this->payload['pushedAt'] ?? $this->getCreatedAt());
+        try {
+            $payload = $this->verifiedPayload();
+        } catch (\Throwable) {
+            $payload = $this->payload;
+        }
+
+        return (int) ($payload['pushedAt'] ?? $this->getCreatedAt());
     }
 
     /**
@@ -382,7 +419,13 @@ class RedisJob implements JobInterface
      */
     public function getDescription(): string
     {
-        return $this->payload['description'] ?? $this->getName();
+        try {
+            $payload = $this->verifiedPayload();
+        } catch (\Throwable) {
+            $payload = $this->payload;
+        }
+
+        return $payload['description'] ?? $this->getName();
     }
 
     /**
@@ -404,5 +447,17 @@ class RedisJob implements JobInterface
     public function setDriver(QueueDriverInterface $driver): void
     {
         $this->driver = $driver;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function verifiedPayload(): array
+    {
+        if ($this->verifiedPayload === null) {
+            $this->verifiedPayload = (new QueuePayloadSigner($this->context))->verify($this->payload);
+        }
+
+        return $this->verifiedPayload;
     }
 }

@@ -7,6 +7,7 @@ use Glueful\Queue\Contracts\JobInterface;
 use Glueful\Queue\Contracts\DriverInfo;
 use Glueful\Queue\Contracts\HealthStatus;
 use Glueful\Queue\Jobs\DatabaseJob;
+use Glueful\Queue\QueuePayloadSigner;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use Glueful\Database\Schema\Interfaces\SchemaBuilderInterface;
@@ -216,19 +217,21 @@ class DatabaseQueue implements QueueDriverInterface
             $availableAt->add(new \DateInterval("PT{$delay}S"));
         }
 
+        $payload = $this->signPayload([
+            'uuid' => $uuid,
+            'displayName' => $job,
+            'job' => $job,
+            'data' => $data,
+            'attempts' => 0,
+            'maxAttempts' => $data['maxAttempts'] ?? 3,
+            'timeout' => $data['timeout'] ?? 60,
+            'pushedAt' => $now->getTimestamp()
+        ]);
+
         $this->db->table($this->table)->insert([
             'uuid' => $uuid,
             'queue' => $queue ?? 'default',
-            'payload' => json_encode([
-                'uuid' => $uuid,
-                'displayName' => $job,
-                'job' => $job,
-                'data' => $data,
-                'attempts' => 0,
-                'maxAttempts' => $data['maxAttempts'] ?? 3,
-                'timeout' => $data['timeout'] ?? 60,
-                'pushedAt' => $now->getTimestamp()
-            ]),
+            'payload' => json_encode($payload),
             'attempts' => 0,
             'available_at' => $availableAt->format('Y-m-d H:i:s'),
             'created_at' => $now->format('Y-m-d H:i:s'),
@@ -378,19 +381,21 @@ class DatabaseQueue implements QueueDriverInterface
                 $availableAt->add(new \DateInterval("PT{$delay}S"));
             }
 
+            $payload = $this->signPayload([
+                'uuid' => $uuid,
+                'displayName' => $jobDef['job'],
+                'job' => $jobDef['job'],
+                'data' => $jobDef['data'] ?? [],
+                'attempts' => 0,
+                'maxAttempts' => $jobDef['data']['maxAttempts'] ?? 3,
+                'timeout' => $jobDef['data']['timeout'] ?? 60,
+                'pushedAt' => $now->getTimestamp()
+            ]);
+
             $rows[] = [
                 'uuid' => $uuid,
                 'queue' => $queue ?? 'default',
-                'payload' => json_encode([
-                    'uuid' => $uuid,
-                    'displayName' => $jobDef['job'],
-                    'job' => $jobDef['job'],
-                    'data' => $jobDef['data'] ?? [],
-                    'attempts' => 0,
-                    'maxAttempts' => $jobDef['data']['maxAttempts'] ?? 3,
-                    'timeout' => $jobDef['data']['timeout'] ?? 60,
-                    'pushedAt' => $now->getTimestamp()
-                ]),
+                'payload' => json_encode($payload),
                 'attempts' => 0,
                 'available_at' => $availableAt->format('Y-m-d H:i:s'),
                 'created_at' => $now->format('Y-m-d H:i:s'),
@@ -548,6 +553,15 @@ class DatabaseQueue implements QueueDriverInterface
     public function failed(JobInterface $job, \Exception $exception): void
     {
         $this->fail($job, $exception);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function signPayload(array $payload): array
+    {
+        return (new QueuePayloadSigner($this->context))->sign($payload);
     }
 
     /**
