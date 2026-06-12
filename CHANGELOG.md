@@ -7,6 +7,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ## [Unreleased]
 
 ### Fixed
+- **Security: migration rollback now rejects non-basename history filenames.** Rollback no longer resolves `migrations.migration` values containing path traversal or null bytes against a source directory, preventing a tampered migration-history row from including a PHP file outside the registered migration path.
 - **Security: AuthMiddleware fallback extraction now respects the JWT query-token gate.** The direct fallback path no longer accepts `?token=` unless `security.tokens.allow_query_param` is explicitly enabled, matching `TokenManager` and the JWT provider behavior.
 - **Security: JWT decoding now requires bounded temporal claims.** `JWTService::decode()` now rejects tokens without an `exp` claim, tokens with expired/non-numeric `exp`, future `nbf`, and future/non-numeric `iat` values. Missing `exp` no longer creates a signature-valid token that never expires.
 - **Security: file encryption now uses chunked authenticated streaming and rejects all-zero keys.** `EncryptionService::encryptFile()` / `decryptFile()` no longer buffer whole files into memory for new payloads; file encryption now writes a sodium secretstream envelope and decryption keeps a legacy single-payload fallback for older encrypted files. Key validation now rejects the all-zero 32-byte key instead of accepting any byte string with the right length.

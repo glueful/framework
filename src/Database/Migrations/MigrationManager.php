@@ -568,6 +568,10 @@ class MigrationManager
      */
     private function rollbackMigration(string $filename, string $source): array
     {
+        if ($filename !== basename($filename) || str_contains($filename, "\0")) {
+            return ['success' => false, 'file' => $filename, 'error' => 'Invalid migration filename'];
+        }
+
         // Resolve the file within the directory that owns this source.
         $file = null;
         foreach ($this->allSources() as $src) {
