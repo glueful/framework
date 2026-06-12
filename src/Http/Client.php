@@ -100,10 +100,11 @@ class Client
 
         $currentUrl = $url;
         for ($redirects = 0;; $redirects++) {
-            $this->assertSafeFetchUrl($currentUrl);
+            $resolution = $this->assertSafeFetchUrl($currentUrl);
 
             $symfonyOptions = $this->transformOptions($options);
             $symfonyOptions['max_redirects'] = 0;
+            $symfonyOptions['resolve'][$resolution['host']] = $resolution['ip'];
 
             try {
                 $response = $this->httpClient->request($method, $currentUrl, $symfonyOptions);
@@ -359,7 +360,10 @@ class Client
         return $symfonyOptions;
     }
 
-    private function assertSafeFetchUrl(string $url): void
+    /**
+     * @return array{host: string, ip: string}
+     */
+    private function assertSafeFetchUrl(string $url): array
     {
         $parts = parse_url($url);
         if ($parts === false) {
@@ -392,6 +396,11 @@ class Client
                 throw new HttpClientException('Unsafe URL: host resolves to a private or reserved address');
             }
         }
+
+        return [
+            'host' => $host,
+            'ip' => $ips[0],
+        ];
     }
 
     /**

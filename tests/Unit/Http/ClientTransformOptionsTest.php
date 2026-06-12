@@ -72,6 +72,20 @@ final class ClientTransformOptionsTest extends TestCase
         $client->safeFetch('https://93.184.216.34/image.png');
     }
 
+    public function testSafeFetchPinsValidatedHostToResolvedIp(): void
+    {
+        $fake = $this->capturingClient();
+        $client = new Client($fake, new NullLogger());
+
+        $client->safeFetch('https://93.184.216.34/image.png');
+
+        $this->assertSame(
+            ['93.184.216.34' => '93.184.216.34'],
+            $fake->captured['resolve'] ?? null
+        );
+        $this->assertSame(0, $fake->captured['max_redirects'] ?? null);
+    }
+
     /**
      * A Symfony HttpClientInterface that records the (already Glueful-transformed)
      * options and returns a trivial 200 response so Client::request() can read the

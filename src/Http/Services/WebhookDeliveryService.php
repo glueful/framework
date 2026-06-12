@@ -41,7 +41,7 @@ class WebhookDeliveryService
             $client = $this->createWebhookClient($options);
             $requestOptions = $this->buildRequestOptions($payload, $options);
 
-            $response = $client->post($url, $requestOptions);
+            $response = $client->safeRequest('POST', $url, $requestOptions);
             $duration = round((microtime(true) - $startTime) * 1000, 2);
 
             if ($response->isSuccessful()) {
@@ -108,32 +108,17 @@ class WebhookDeliveryService
     public function deliverBatchWebhooks(array $webhooks): array
     {
         $responses = [];
-        $requests = [];
 
-        // Prepare all requests
         foreach ($webhooks as $key => $webhook) {
+            $startTime = microtime(true);
             $client = $this->createWebhookClient($webhook['options'] ?? []);
             $requestOptions = $this->buildRequestOptions(
                 $webhook['payload'],
                 $webhook['options'] ?? []
             );
 
-            $requests[$key] = [
-                'method' => 'POST',
-                'url' => $webhook['url'],
-                'options' => $requestOptions
-            ];
-        }
-
-        // Execute batch requests
-        $asyncResponses = $this->httpClient->requestBatch($requests);
-
-        // Process responses
-        foreach ($asyncResponses as $key => $response) {
-            $webhook = $webhooks[$key];
-            $startTime = microtime(true);
-
             try {
+                $response = $client->safeRequest('POST', $webhook['url'], $requestOptions);
                 $statusCode = $response->getStatusCode();
                 $duration = round((microtime(true) - $startTime) * 1000, 2);
                 $success = $statusCode >= 200 && $statusCode < 300;

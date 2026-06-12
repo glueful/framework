@@ -225,7 +225,9 @@ class ImageSecurityValidator
      */
     private function isExternalUrl(string $url): bool
     {
-        return str_starts_with($url, 'http://') || str_starts_with($url, 'https://');
+        $scheme = strtolower((string) (parse_url($url, PHP_URL_SCHEME) ?? ''));
+
+        return $scheme === 'http' || $scheme === 'https';
     }
 
     /**

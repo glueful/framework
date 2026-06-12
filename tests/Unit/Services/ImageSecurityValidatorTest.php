@@ -34,6 +34,18 @@ final class ImageSecurityValidatorTest extends TestCase
         $validator->validateUrl('http://169.254.169.254/latest/meta-data');
     }
 
+    public function testValidateUrlTreatsUppercaseHttpSchemeAsExternal(): void
+    {
+        $validator = new ImageSecurityValidator([
+            'disable_external_urls' => true,
+        ]);
+
+        $this->expectException(BusinessLogicException::class);
+        $this->expectExceptionMessage('External image URLs are disabled');
+
+        $validator->validateUrl('HTTP://example.com/image.png');
+    }
+
     public function testValidateImageFileUsesDetectedMimeAndDimensions(): void
     {
         $validator = new ImageSecurityValidator([

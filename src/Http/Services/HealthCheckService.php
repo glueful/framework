@@ -62,7 +62,7 @@ class HealthCheckService
                 ]
             ]);
 
-            $response = $client->get($healthEndpoint);
+            $response = $client->safeFetch($healthEndpoint);
             $responseTime = round((microtime(true) - $startTime) * 1000, 2);
 
             $result['response_time_ms'] = $responseTime;
