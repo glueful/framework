@@ -92,17 +92,62 @@ final class ConnectionPoolReleaseTest extends TestCase
         self::assertNotContains('RESET CONNECTION', $pdo->execLog);
     }
 
+    public function test_pg_release_reapplies_search_path_after_discard_all(): void
+    {
+        [$pool, $pdo] = $this->poolWithFakePdo('pgsql', dbConfig: ['schema' => 'tenant_a']);
+        $connection = new PooledConnection($pdo, $pool);
+        $this->setPrivate($pool, 'activeConnections', [$connection->getId() => $connection]);
+
+        $pool->release($connection);
+
+        $discardAt = array_search('DISCARD ALL', $pdo->execLog, true);
+        $searchPathAt = array_search("SET search_path TO 'tenant_a'", $pdo->execLog, true);
+        self::assertNotFalse($discardAt, 'precondition: DISCARD ALL must run on release');
+        self::assertNotFalse(
+            $searchPathAt,
+            'DISCARD ALL wipes search_path; release must re-SET it or a reused connection queries the wrong schema'
+        );
+        self::assertGreaterThan($discardAt, $searchPathAt, 'search_path must be reapplied AFTER the discard');
+    }
+
+    public function test_mysql_release_reapplies_init_command_after_reset_connection(): void
+    {
+        $initCommand = "SET sql_mode='STRICT_ALL_TABLES'";
+        [$pool, $pdo] = $this->poolWithFakePdo(
+            'mysql',
+            options: [\PDO::MYSQL_ATTR_INIT_COMMAND => $initCommand]
+        );
+        $connection = new PooledConnection($pdo, $pool);
+        $this->setPrivate($pool, 'activeConnections', [$connection->getId() => $connection]);
+
+        $pool->release($connection);
+
+        $resetAt = array_search('RESET CONNECTION', $pdo->execLog, true);
+        $initAt = array_search($initCommand, $pdo->execLog, true);
+        self::assertNotFalse($resetAt, 'precondition: RESET CONNECTION must run on release');
+        self::assertNotFalse(
+            $initAt,
+            'RESET CONNECTION wipes sql_mode; release must re-run the init command or strict mode is silently lost'
+        );
+        self::assertGreaterThan($resetAt, $initAt, 'init command must be reapplied AFTER the reset');
+    }
+
     /**
      * Build a constructor-less pool plus a fake PDO that reports the given driver name and
      * records every exec() (so the test can assert which session-reset statement ran).
      *
+     * @param array<string, mixed> $dbConfig
+     * @param array<int, mixed> $options
      * @return array{0: ConnectionPool, 1: \PDO}
      */
-    private function poolWithFakePdo(string $driverName): array
+    private function poolWithFakePdo(string $driverName, array $dbConfig = [], array $options = []): array
     {
         $pool = (new \ReflectionClass(ConnectionPool::class))->newInstanceWithoutConstructor();
         $this->setPrivate($pool, 'config', ['max_lifetime' => -1, 'idle_timeout' => -1]);
         $this->setPrivate($pool, 'availableConnections', []);
+        $this->setPrivate($pool, 'dsn', $driverName . ':');
+        $this->setPrivate($pool, 'dbConfig', $dbConfig);
+        $this->setPrivate($pool, 'options', $options);
         $this->setPrivate($pool, 'stats', [
             'total_releases' => 0,
             'total_destroyed' => 0,

@@ -6,6 +6,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+- **Pooled-connection session reset no longer drops per-connection init (regression in 1.55.0's pool cleanup).** The `DISCARD ALL` (PostgreSQL) / `RESET CONNECTION` (MySQL) issued on `ConnectionPool::release()` also wipes the pool's own per-connection setup -- the PostgreSQL `search_path` and MySQL's `MYSQL_ATTR_INIT_COMMAND` (`sql_mode='STRICT_ALL_TABLES'`) -- which were only applied at PDO creation. A reused connection therefore ran against the default schema (PostgreSQL with a custom `DB_PGSQL_SCHEMA`) or without strict mode (MySQL default sql_mode -> silent data truncation). `resetSession()` now reapplies the session init (re-`SET search_path` / replay of the init command) after a successful reset; if the reapply fails the connection is marked unhealthy and retired instead of being pooled in a wrong-schema/non-strict state. Connection creation routes through the same init helper so the two paths cannot drift.
+
 ## [1.55.0] - 2026-06-11 — Peacock
 
 > **Theme: Security & correctness hardening.** A focused pass over the framework's security-sensitive surfaces (routing/permissions, auth, storage paths, the query write-path, deserialization, and the container/extension boundary). Most items are bug fixes, but several change behavior or defaults -- see **Upgrade Notes** -- and one (range UPDATE/DELETE predicates) is a new capability, so this ships as a minor. Staying in 1.x per the pre-public policy.
