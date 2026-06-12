@@ -74,30 +74,60 @@ final class QueuePayloadSigner
     }
 
     /**
+     * Encode scheduled-job parameters in a signed envelope.
+     *
+     * The signature also covers the handler class plus — when provided — the
+     * row's name and cron schedule, so a tampered `scheduled_jobs` row cannot
+     * swap the handler, clone a signed (handler, parameters) pair into another
+     * row, or reschedule the job (e.g. to every minute) without breaking the
+     * HMAC.
+     *
      * @param array<string, mixed> $parameters
      */
-    public function encodeScheduledParameters(string $handlerClass, array $parameters): string
-    {
+    public function encodeScheduledParameters(
+        string $handlerClass,
+        array $parameters,
+        ?string $name = null,
+        ?string $schedule = null
+    ): string {
         if (!$this->shouldSign()) {
             return (string) json_encode($parameters);
         }
 
-        $signedPayload = $this->sign([
+        $payload = [
             'handler_class' => $handlerClass,
             'parameters' => $parameters,
-        ]);
+        ];
+        if ($name !== null) {
+            $payload['name'] = $name;
+        }
+        if ($schedule !== null) {
+            $payload['schedule'] = $schedule;
+        }
 
         return (string) json_encode([
             self::SCHEDULED_PAYLOAD_KEY => true,
-            'payload' => $signedPayload,
+            'payload' => $this->sign($payload),
         ]);
     }
 
     /**
+     * Decode and verify a scheduled-job parameter envelope.
+     *
+     * $name / $schedule are the values currently stored on the row; when the
+     * signed envelope carries them they must match. Envelopes signed before
+     * the binding existed lack the keys and skip the check — an attacker
+     * cannot strip the keys from a bound envelope without invalidating the
+     * signature.
+     *
      * @return array<string, mixed>
      */
-    public function decodeScheduledParameters(string $handlerClass, ?string $encoded): array
-    {
+    public function decodeScheduledParameters(
+        string $handlerClass,
+        ?string $encoded,
+        ?string $name = null,
+        ?string $schedule = null
+    ): array {
         $decoded = json_decode($encoded ?? '{}', true);
         if (!is_array($decoded)) {
             $decoded = [];
@@ -120,6 +150,18 @@ final class QueuePayloadSigner
         $verified = $this->verify($payload);
         if (($verified['handler_class'] ?? null) !== $handlerClass) {
             throw new \RuntimeException('Scheduled job handler signature mismatch');
+        }
+
+        if (array_key_exists('name', $verified) && $name !== null && $verified['name'] !== $name) {
+            throw new \RuntimeException('Scheduled job name signature mismatch');
+        }
+
+        if (
+            array_key_exists('schedule', $verified)
+            && $schedule !== null
+            && $verified['schedule'] !== $schedule
+        ) {
+            throw new \RuntimeException('Scheduled job schedule signature mismatch');
         }
 
         $parameters = $verified['parameters'] ?? [];

@@ -162,7 +162,7 @@ class JobScheduler
             'schedule' => $schedule,
             'handler_class' => $handlerClass,
             'parameters' => (new QueuePayloadSigner($this->context))
-                ->encodeScheduledParameters($handlerClass, $parameters),
+                ->encodeScheduledParameters($handlerClass, $parameters, $name, $schedule),
             'is_enabled' => 1,
             'next_run' => $nextRunTime,
             'created_at' => date('Y-m-d H:i:s'),
@@ -201,7 +201,12 @@ class JobScheduler
 
                     try {
                         $parameters = (new QueuePayloadSigner($this->context))
-                            ->decodeScheduledParameters($handlerClass, $job['parameters'] ?? null);
+                            ->decodeScheduledParameters(
+                                $handlerClass,
+                                $job['parameters'] ?? null,
+                                isset($job['name']) ? (string) $job['name'] : null,
+                                isset($job['schedule']) ? (string) $job['schedule'] : null
+                            );
                     } catch (\Throwable $e) {
                         error_log("Refusing to run scheduled job handler '{$handlerClass}': " . $e->getMessage());
                         return false;

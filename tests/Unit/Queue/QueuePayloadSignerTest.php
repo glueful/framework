@@ -68,4 +68,49 @@ final class QueuePayloadSignerTest extends TestCase
 
         $signer->decodeScheduledParameters('OtherJob', $encoded);
     }
+
+    public function testScheduledEnvelopeBindsNameAndSchedule(): void
+    {
+        $signer = new QueuePayloadSigner();
+        $encoded = $signer->encodeScheduledParameters('ExampleJob', ['id' => 1], 'nightly-report', '0 2 * * *');
+
+        self::assertSame(
+            ['id' => 1],
+            $signer->decodeScheduledParameters('ExampleJob', $encoded, 'nightly-report', '0 2 * * *')
+        );
+    }
+
+    public function testScheduledEnvelopeRejectsRescheduledRow(): void
+    {
+        $signer = new QueuePayloadSigner();
+        $encoded = $signer->encodeScheduledParameters('ExampleJob', ['id' => 1], 'nightly-report', '0 2 * * *');
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('schedule signature mismatch');
+
+        $signer->decodeScheduledParameters('ExampleJob', $encoded, 'nightly-report', '* * * * *');
+    }
+
+    public function testScheduledEnvelopeRejectsClonedRowName(): void
+    {
+        $signer = new QueuePayloadSigner();
+        $encoded = $signer->encodeScheduledParameters('ExampleJob', ['id' => 1], 'nightly-report', '0 2 * * *');
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('name signature mismatch');
+
+        $signer->decodeScheduledParameters('ExampleJob', $encoded, 'other-job', '0 2 * * *');
+    }
+
+    public function testLegacyEnvelopeWithoutBindingStillDecodes(): void
+    {
+        $signer = new QueuePayloadSigner();
+        // Envelope created before name/schedule binding existed.
+        $encoded = $signer->encodeScheduledParameters('ExampleJob', ['id' => 1]);
+
+        self::assertSame(
+            ['id' => 1],
+            $signer->decodeScheduledParameters('ExampleJob', $encoded, 'nightly-report', '0 2 * * *')
+        );
+    }
 }
