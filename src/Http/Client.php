@@ -76,6 +76,63 @@ class Client
     }
 
     /**
+     * Fetch a URL only after SSRF-oriented URL validation.
+     *
+     * Redirects are handled manually so each Location hop is resolved and
+     * re-validated before a follow-up request is made. This method is intended
+     * for user-provided URLs; ordinary first-party integration calls can keep
+     * using get()/request().
+     *
+     * @param array<string, mixed> $options
+     */
+    public function safeFetch(string $url, array $options = []): Response
+    {
+        return $this->safeRequest('GET', $url, $options);
+    }
+
+    /**
+     * @param array<string, mixed> $options
+     */
+    public function safeRequest(string $method, string $url, array $options = []): Response
+    {
+        $maxRedirects = (int) ($options['max_redirects'] ?? $this->getConfig('http.safe_fetch.max_redirects', 3));
+        unset($options['max_redirects']);
+
+        $currentUrl = $url;
+        for ($redirects = 0;; $redirects++) {
+            $this->assertSafeFetchUrl($currentUrl);
+
+            $symfonyOptions = $this->transformOptions($options);
+            $symfonyOptions['max_redirects'] = 0;
+
+            try {
+                $response = $this->httpClient->request($method, $currentUrl, $symfonyOptions);
+                $statusCode = $response->getStatusCode();
+
+                if ($statusCode < 300 || $statusCode >= 400) {
+                    return new Response($response);
+                }
+
+                $headers = $response->getHeaders(false);
+                $location = $headers['location'][0] ?? $headers['Location'][0] ?? null;
+                if (!is_string($location) || $location === '') {
+                    return new Response($response);
+                }
+
+                if ($redirects >= $maxRedirects) {
+                    throw new HttpClientException('Maximum safeFetch redirects exceeded', $statusCode);
+                }
+
+                $currentUrl = $this->resolveRedirectUrl($currentUrl, $location);
+            } catch (HttpClientException $e) {
+                throw $e;
+            } catch (\Exception $e) {
+                throw new HttpClientException($e->getMessage(), $e->getCode());
+            }
+        }
+    }
+
+    /**
      * Send an HTTP request
      * @param array<string, mixed> $options
      */
@@ -295,7 +352,98 @@ class Client
             $symfonyOptions['user_data'] = ['sink' => $options['sink']];
         }
 
+        if (isset($options['max_redirects'])) {
+            $symfonyOptions['max_redirects'] = $options['max_redirects'];
+        }
+
         return $symfonyOptions;
+    }
+
+    private function assertSafeFetchUrl(string $url): void
+    {
+        $parts = parse_url($url);
+        if ($parts === false) {
+            throw new HttpClientException('Unsafe URL: invalid URL');
+        }
+
+        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            throw new HttpClientException('Unsafe URL: only http and https schemes are allowed');
+        }
+
+        $host = strtolower(trim((string) ($parts['host'] ?? ''), "[] \t\n\r\0\x0B"));
+        if ($host === '' || $host === 'localhost') {
+            throw new HttpClientException('Unsafe URL: host is not allowed');
+        }
+
+        $ips = $this->resolveHostIps($host);
+        if ($ips === []) {
+            throw new HttpClientException('Unsafe URL: host could not be resolved');
+        }
+
+        foreach ($ips as $ip) {
+            if (
+                filter_var(
+                    $ip,
+                    FILTER_VALIDATE_IP,
+                    FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+                ) === false
+            ) {
+                throw new HttpClientException('Unsafe URL: host resolves to a private or reserved address');
+            }
+        }
+    }
+
+    /**
+     * @return array<string>
+     */
+    private function resolveHostIps(string $host): array
+    {
+        if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
+            return [$host];
+        }
+
+        $ips = [];
+        $ipv4 = @gethostbynamel($host);
+        if (is_array($ipv4)) {
+            $ips = array_merge($ips, $ipv4);
+        }
+
+        $aaaa = @dns_get_record($host, DNS_AAAA);
+        if (is_array($aaaa)) {
+            foreach ($aaaa as $record) {
+                if (isset($record['ipv6']) && is_string($record['ipv6'])) {
+                    $ips[] = $record['ipv6'];
+                }
+            }
+        }
+
+        return array_values(array_unique($ips));
+    }
+
+    private function resolveRedirectUrl(string $baseUrl, string $location): string
+    {
+        $parts = parse_url($location);
+        if (is_array($parts) && isset($parts['scheme'])) {
+            return $location;
+        }
+
+        $base = parse_url($baseUrl);
+        if (!is_array($base) || !isset($base['scheme'], $base['host'])) {
+            throw new HttpClientException('Unsafe URL: invalid redirect base URL');
+        }
+
+        $origin = $base['scheme'] . '://' . $base['host']
+            . (isset($base['port']) ? ':' . $base['port'] : '');
+
+        if (str_starts_with($location, '/')) {
+            return $origin . $location;
+        }
+
+        $path = $base['path'] ?? '/';
+        $dir = preg_replace('#/[^/]*$#', '/', $path) ?? '/';
+
+        return $origin . $dir . $location;
     }
 
     /**
