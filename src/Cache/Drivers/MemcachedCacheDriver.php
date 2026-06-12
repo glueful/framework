@@ -8,12 +8,16 @@ use Memcached;
 use Psr\SimpleCache\InvalidArgumentException;
 use Glueful\Exceptions\CacheException;
 use Glueful\Cache\CacheStore;
+use Glueful\Security\SecureSerializer;
 
 /**
  * Memcached Cache Driver
  *
  * Implements cache operations using Memcached backend.
  * Provides sorted set emulation using stored arrays.
+ *
+ * Values are stored as SecureSerializer-encoded strings so the Memcached
+ * extension never runs its internal (ungated) unserialize on payloads.
  *
  * @template TValue
  * @implements CacheStore<TValue>
@@ -23,6 +27,9 @@ class MemcachedCacheDriver implements CacheStore
     /** @var Memcached Memcached connection instance */
     private Memcached $memcached;
 
+    /** @var SecureSerializer Secure serialization service */
+    private SecureSerializer $serializer;
+
     /**
      * Constructor
      *
@@ -31,6 +38,7 @@ class MemcachedCacheDriver implements CacheStore
     public function __construct(Memcached $memcached)
     {
         $this->memcached = $memcached;
+        $this->serializer = SecureSerializer::forCache();
     }
 
     /**
@@ -44,11 +52,11 @@ class MemcachedCacheDriver implements CacheStore
      */
     public function zadd(string $key, array $scoreValues): bool
     {
-        $timestamps = $this->memcached->get($key) ?? [];
+        $timestamps = $this->getScoreSet($key);
         foreach ($scoreValues as $member => $score) {
             $timestamps[$member] = $score;
         }
-        return $this->memcached->set($key, $timestamps);
+        return $this->memcached->set($key, $this->serializer->serialize($timestamps));
     }
 
     /**
@@ -63,9 +71,9 @@ class MemcachedCacheDriver implements CacheStore
      */
     public function zremrangebyscore(string $key, string $min, string $max): int
     {
-        $timestamps = $this->memcached->get($key) ?? [];
+        $timestamps = $this->getScoreSet($key);
         $filtered = array_filter($timestamps, fn($score) => $score > (int) $max);
-        $this->memcached->set($key, $filtered);
+        $this->memcached->set($key, $this->serializer->serialize($filtered));
         return count($timestamps) - count($filtered);
     }
 
@@ -77,7 +85,7 @@ class MemcachedCacheDriver implements CacheStore
      */
     public function zcard(string $key): int
     {
-        return count($this->memcached->get($key) ?? []);
+        return count($this->getScoreSet($key));
     }
 
     /**
@@ -92,9 +100,9 @@ class MemcachedCacheDriver implements CacheStore
      */
     public function zrange(string $key, int $start, int $stop): array
     {
-        $timestamps = $this->memcached->get($key) ?? [];
+        $timestamps = $this->getScoreSet($key);
         asort($timestamps); // sort by score ascending
-        return array_slice(array_keys($timestamps), $start, $stop - $start + 1);
+        return array_map('strval', array_slice(array_keys($timestamps), $start, $stop - $start + 1));
     }
 
     /**
@@ -132,7 +140,10 @@ class MemcachedCacheDriver implements CacheStore
     {
         $this->validateKey($key);
         $value = $this->memcached->get($key);
-        return $this->memcached->getResultCode() === Memcached::RES_NOTFOUND ? $default : $value;
+        if ($this->memcached->getResultCode() === Memcached::RES_NOTFOUND) {
+            return $default;
+        }
+        return $this->decode($value);
     }
 
     /**
@@ -148,7 +159,7 @@ class MemcachedCacheDriver implements CacheStore
     {
         $this->validateKey($key);
         $seconds = $this->normalizeTtl($ttl);
-        return $this->memcached->set($key, $value, $seconds ?? 3600);
+        return $this->memcached->set($key, $this->serializer->serialize($value), $seconds ?? 3600);
     }
 
     /**
@@ -164,7 +175,7 @@ class MemcachedCacheDriver implements CacheStore
     public function setNx(string $key, mixed $value, int $ttl = 3600): bool
     {
         // Memcached's add() method only sets if key doesn't exist
-        return $this->memcached->add($key, $value, $ttl);
+        return $this->memcached->add($key, $this->serializer->serialize($value), $ttl);
     }
 
     /**
@@ -184,7 +195,7 @@ class MemcachedCacheDriver implements CacheStore
 
         // Return values indexed by key; include missing keys with null
         foreach ($keys as $key) {
-            $result[$key] = $values[$key] ?? null;
+            $result[$key] = isset($values[$key]) ? $this->decode($values[$key]) : null;
         }
 
         return $result;
@@ -204,7 +215,8 @@ class MemcachedCacheDriver implements CacheStore
         }
 
         // Memcached setMulti returns true if all keys were stored successfully
-        return $this->memcached->setMulti($values, $ttl);
+        $encoded = array_map(fn($value) => $this->serializer->serialize($value), $values);
+        return $this->memcached->setMulti($encoded, $ttl);
     }
 
     /**
@@ -424,7 +436,7 @@ class MemcachedCacheDriver implements CacheStore
         $result = [];
 
         foreach ($keyArray as $key) {
-            $result[$key] = $values[$key] ?? $default;
+            $result[$key] = isset($values[$key]) ? $this->decode($values[$key]) : $default;
         }
 
         return $result;
@@ -569,6 +581,44 @@ class MemcachedCacheDriver implements CacheStore
         $this->set($key, $value, $ttl ?? 3600);
 
         return $value;
+    }
+
+    /**
+     * Decode a stored value through the gadget-gated serializer.
+     *
+     * Values written by this driver are SecureSerializer-encoded strings.
+     * Non-string values (legacy entries the Memcached extension already
+     * materialized) are passed through unchanged.
+     *
+     * @param mixed $value Raw value from Memcached
+     * @return mixed Decoded value
+     */
+    private function decode(mixed $value): mixed
+    {
+        return is_string($value) ? $this->serializer->unserialize($value) : $value;
+    }
+
+    /**
+     * Read an emulated sorted set, treating unreadable payloads as empty.
+     *
+     * @param string $key Set key
+     * @return array<string, int|float> Member => score pairs
+     */
+    private function getScoreSet(string $key): array
+    {
+        $value = $this->memcached->get($key);
+
+        if (!is_string($value)) {
+            return is_array($value) ? $value : [];
+        }
+
+        try {
+            $decoded = $this->serializer->unserialize($value);
+        } catch (\Throwable) {
+            return [];
+        }
+
+        return is_array($decoded) ? $decoded : [];
     }
 
     /**
