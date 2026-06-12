@@ -141,8 +141,18 @@ class JWTService
             return null;
         }
 
-        // Verify expiration
-        if (isset($payload['exp']) && $payload['exp'] < time()) {
+        $now = time();
+
+        // Verify required expiration and optional temporal bounds.
+        if (!self::isNumericDate($payload['exp'] ?? null) || (int) $payload['exp'] <= $now) {
+            return null;
+        }
+
+        if (isset($payload['nbf']) && (!self::isNumericDate($payload['nbf']) || (int) $payload['nbf'] > $now)) {
+            return null;
+        }
+
+        if (isset($payload['iat']) && (!self::isNumericDate($payload['iat']) || (int) $payload['iat'] > $now)) {
             return null;
         }
 
@@ -189,6 +199,11 @@ class JWTService
         $b64 .= str_repeat('=', (4 - strlen($b64) % 4) % 4);
         $decoded = base64_decode($b64, true);
         return $decoded === false ? '' : $decoded;
+    }
+
+    private static function isNumericDate(mixed $value): bool
+    {
+        return is_int($value) || (is_string($value) && ctype_digit($value));
     }
 
     /**
