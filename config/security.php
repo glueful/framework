@@ -66,7 +66,9 @@ return [
         'allowed_headers' => ['Content-Type', 'Authorization', 'X-Requested-With'],
         'expose_headers' => ['X-Total-Count', 'X-Page-Count'],
         'max_age' => 86400,
-        'supports_credentials' => true,
+        // Credentials are opt-in (cookies/auth on cross-origin requests). Mirrors
+        // config/cors.php's allow_credentials; never honored with wildcard origins.
+        'supports_credentials' => (bool) env('CORS_SUPPORTS_CREDENTIALS', false),
     ],
 
     // CSRF Protection Configuration
