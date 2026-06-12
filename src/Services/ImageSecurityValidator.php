@@ -441,7 +441,11 @@ class ImageSecurityValidator
     private function getDefaultConfig(): array
     {
         return [
-            'allowed_domains' => ['*'],
+            // Fail closed when no image.security config is present: remote image fetching is
+            // opt-in. These defaults matter precisely when the media extension's config (which
+            // sets the same fail-closed values) has NOT been merged — an empty/missing config
+            // must never mean "fetch from anywhere".
+            'allowed_domains' => [],
             'allowed_formats' => ['jpeg', 'jpg', 'png', 'gif', 'webp'],
             'allowed_mime_types' => [
                 'image/jpeg',
@@ -453,7 +457,7 @@ class ImageSecurityValidator
             'max_width' => 2048,
             'max_height' => 2048,
             'max_filesize' => '10M',
-            'disable_external_urls' => false,
+            'disable_external_urls' => true,
         ];
     }
 }

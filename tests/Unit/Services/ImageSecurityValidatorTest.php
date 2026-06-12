@@ -26,12 +26,29 @@ final class ImageSecurityValidatorTest extends TestCase
 
     public function testValidateUrlRejectsLinkLocalMetadataIp(): void
     {
-        $validator = new ImageSecurityValidator();
+        // Open the external-URL gate so the suspicious-URL check itself is what's under test:
+        // the metadata IP must be rejected even when remote fetching is explicitly enabled.
+        $validator = new ImageSecurityValidator([
+            'disable_external_urls' => false,
+            'allowed_domains' => ['*'],
+        ]);
 
         $this->expectException(BusinessLogicException::class);
         $this->expectExceptionMessage('Suspicious URL detected');
 
         $validator->validateUrl('http://169.254.169.254/latest/meta-data');
+    }
+
+    public function testValidateUrlFailsClosedWithDefaultConfig(): void
+    {
+        // With NO config at all (e.g. the media extension's config never merged), the defaults
+        // must deny external fetching outright — an empty config must never mean "fetch anywhere".
+        $validator = new ImageSecurityValidator();
+
+        $this->expectException(BusinessLogicException::class);
+        $this->expectExceptionMessage('External image URLs are disabled');
+
+        $validator->validateUrl('https://example.com/image.png');
     }
 
     public function testValidateUrlTreatsUppercaseHttpSchemeAsExternal(): void
