@@ -208,9 +208,12 @@ class SessionStore implements SessionStoreInterface
             }
         }
 
-        // DB fallback via JWT session claims (sid/ver)
-        $sessionUuid = $this->extractSessionIdFromAccessToken($accessToken);
-        if ($sessionUuid === null || $sessionUuid === '') {
+        // DB fallback via JWT session claims (sid/ver). Claims are only trusted after
+        // full signature + expiry verification -- identity resolution must never read
+        // an unverified payload (a forged token would resolve a real session).
+        $claims = $this->verifiedAccessTokenClaims($accessToken);
+        $sessionUuid = isset($claims['sid']) && is_string($claims['sid']) ? $claims['sid'] : '';
+        if ($claims === null || $sessionUuid === '') {
             $this->requestCache[$requestCacheKey] = null;
             return null;
         }
@@ -226,7 +229,7 @@ class SessionStore implements SessionStoreInterface
             $this->requestCache[$requestCacheKey] = null;
             return null;
         }
-        if (!$this->matchesSessionClaims($accessToken, $session)) {
+        if (!$this->matchesSessionClaims($claims, $session)) {
             $this->requestCache[$requestCacheKey] = null;
             return null;
         }
@@ -632,19 +635,26 @@ class SessionStore implements SessionStoreInterface
         return $result !== [] ? $result[0] : null;
     }
 
-    private function extractSessionIdFromAccessToken(string $accessToken): ?string
+    /**
+     * Decode and verify the access token, returning its claims.
+     *
+     * Uses JWTService::decode() (signature + expiry verification), never the unvalidated
+     * payload. Fails closed -- returns null for a malformed token, a bad signature, an
+     * expired token, or when the JWT key is unavailable.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function verifiedAccessTokenClaims(string $accessToken): ?array
     {
         if (substr_count($accessToken, '.') !== 2) {
             return null;
         }
 
-        $claims = JWTService::getPayloadWithoutValidation($accessToken);
-        if (!is_array($claims)) {
+        try {
+            return JWTService::decode($accessToken);
+        } catch (\Throwable) {
             return null;
         }
-
-        $sid = $claims['sid'] ?? null;
-        return is_string($sid) && $sid !== '' ? $sid : null;
     }
 
     private function getJwtTokenExpiration(string $jwtToken): string
@@ -678,17 +688,13 @@ class SessionStore implements SessionStoreInterface
     }
 
     /**
-     * Ensure access token claims match server-side session versioning.
+     * Ensure (verified) access token claims match server-side session versioning.
      *
+     * @param array<string, mixed> $claims Claims from verifiedAccessTokenClaims()
      * @param array<string, mixed> $session
      */
-    private function matchesSessionClaims(string $accessToken, array $session): bool
+    private function matchesSessionClaims(array $claims, array $session): bool
     {
-        $claims = JWTService::getPayloadWithoutValidation($accessToken);
-        if (!is_array($claims)) {
-            return true;
-        }
-
         $sid = isset($claims['sid']) ? (string) $claims['sid'] : '';
         $ver = isset($claims['ver']) ? (int) $claims['ver'] : 0;
         if ($sid === '' || $ver <= 0) {
