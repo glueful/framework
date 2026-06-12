@@ -7,6 +7,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ## [Unreleased]
 
 ### Fixed
+- **Security: authentication access logs now redact sensitive request URI parameters.** `AuthenticationManager::logAccess()` now sanitizes `request_uri` before logging, redacting query values whose names contain `token`, `key`, or `secret`, plus `signature` and OAuth-style `code` parameters.
 - **Redis queue retries preserve signed payload validity.** `RedisQueue` now re-signs job hashes whenever it mutates signed fields such as `attempts`, `reservedAt`, or `availableAt` during pop, release, and expired-reservation recovery. Legitimately retried Redis jobs no longer fail payload verification on their second delivery when queue payload signing is enabled.
 - **Security: Symfony requests now honor configured trusted proxies.** `RequestProvider` now applies `security.trusted_proxies` / `TRUSTED_PROXIES` before creating the global Symfony request, so `Request::getClientIp()` can resolve the real client behind trusted load balancers instead of collapsing all traffic into the proxy IP.
 - **Security: rate-limit cache keys no longer expose raw request dimensions.** IP, user, endpoint path, and custom-pattern rate-limit keys are now hashed before storage so cache backends do not receive raw client IPs, reset-token paths, invite codes, or user identifiers as key material.
