@@ -434,23 +434,37 @@ class AttributeRouteLoader
      */
     private function hasGateAttributes(string $className, \ReflectionMethod $method): bool
     {
-        foreach ([RequiresPermission::class, RequiresRole::class] as $attribute) {
-            if (count($method->getAttributes($attribute)) > 0) {
-                return true;
-            }
-        }
-
         try {
             $class = new \ReflectionClass($className);
         } catch (\ReflectionException) {
             return false;
         }
 
-        foreach ([RequiresPermission::class, RequiresRole::class] as $attribute) {
-            if (count($class->getAttributes($attribute)) > 0) {
-                return true;
+        $methodName = $method->getName();
+        $seenMethods = [];
+
+        do {
+            foreach ([RequiresPermission::class, RequiresRole::class] as $attribute) {
+                if (count($class->getAttributes($attribute)) > 0) {
+                    return true;
+                }
             }
-        }
+
+            if ($class->hasMethod($methodName)) {
+                $reflectedMethod = $class->getMethod($methodName);
+                $methodKey = $reflectedMethod->getDeclaringClass()->getName() . '::' . $reflectedMethod->getName();
+                if (!isset($seenMethods[$methodKey])) {
+                    $seenMethods[$methodKey] = true;
+                    foreach ([RequiresPermission::class, RequiresRole::class] as $attribute) {
+                        if (count($reflectedMethod->getAttributes($attribute)) > 0) {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            $class = $class->getParentClass();
+        } while ($class !== false);
 
         return false;
     }

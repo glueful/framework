@@ -296,6 +296,27 @@ class RouterTest extends TestCase
         $this->assertSame(403, $response->getStatusCode());
     }
 
+    public function testDispatchAutoAppliesGateMiddlewareForAttributedManualRoutes(): void
+    {
+        $manager = $this->createMock(PermissionManager::class);
+        $manager->expects($this->once())
+            ->method('can')
+            ->with('user-1', 'router.secure', 'system', $this->anything())
+            ->willReturn(false);
+
+        $this->container->set('gate_permissions', new GateAttributeMiddleware($manager));
+        $this->container->set(SecuredRouterFixtureController::class, new SecuredRouterFixtureController());
+
+        $this->router->get('/secure-auto', [SecuredRouterFixtureController::class, 'index']);
+
+        $request = Request::create('/secure-auto', 'GET');
+        $request->attributes->set('auth.user', new UserIdentity('user-1'));
+
+        $response = $this->router->dispatch($request);
+
+        $this->assertSame(403, $response->getStatusCode());
+    }
+
     /**
      * Test OPTIONS request for CORS
      */

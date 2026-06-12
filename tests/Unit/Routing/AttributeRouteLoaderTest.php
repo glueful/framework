@@ -130,6 +130,15 @@ class AttributeRouteLoaderTest extends TestCase
         $this->assertContains('gate_permissions', $route->getMiddleware());
     }
 
+    public function testParentClassRequiresPermissionAttachesGateToChildRoutes(): void
+    {
+        $this->loader->processClass(ChildClassGateAttrController::class);
+
+        $route = $this->router->match(Request::create('/parent-secured/inherits', 'GET'))['route'];
+
+        $this->assertContains('gate_permissions', $route->getMiddleware());
+    }
+
     /**
      * Test route with parameters and constraints
      */
@@ -426,6 +435,21 @@ class GateAttrController
 #[Controller(prefix: '/class-secured')]
 #[RequiresPermission('admin.access')]
 class ClassGateAttrController
+{
+    #[Get('/inherits')]
+    public function inherits(): JsonResponse
+    {
+        return new JsonResponse(['ok' => true]);
+    }
+}
+
+#[RequiresPermission('parent.access')]
+abstract class ParentGateAttrController
+{
+}
+
+#[Controller(prefix: '/parent-secured')]
+class ChildClassGateAttrController extends ParentGateAttrController
 {
     #[Get('/inherits')]
     public function inherits(): JsonResponse

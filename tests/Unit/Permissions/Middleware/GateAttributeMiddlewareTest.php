@@ -79,6 +79,23 @@ final class GateAttributeMiddlewareTest extends TestCase
             fn(Request $req) => new Response('ok')
         );
     }
+
+    public function test_parent_class_permission_attribute_is_enforced(): void
+    {
+        $manager = $this->createMock(PermissionManager::class);
+        $manager->expects(self::once())
+            ->method('can')
+            ->with('u1', 'parent.manage', 'system', self::anything())
+            ->willReturn(false);
+
+        $mw = new GateAttributeMiddleware($manager);
+        $resp = $mw->handle(
+            $this->requestFor(ChildPermissionFixtureController::class, 'index'),
+            fn(Request $req) => new Response('ok')
+        );
+
+        self::assertSame(403, $resp->getStatusCode());
+    }
 }
 
 #[\Glueful\Auth\Attributes\RequiresPermission('blog.publish')]
@@ -100,6 +117,18 @@ final class RoleFixtureController
 final class DottedRoleFixtureController
 {
     #[\Glueful\Auth\Attributes\RequiresRole('role.admin')]
+    public function index(): void
+    {
+    }
+}
+
+#[\Glueful\Auth\Attributes\RequiresPermission('parent.manage')]
+abstract class ParentPermissionFixtureController
+{
+}
+
+final class ChildPermissionFixtureController extends ParentPermissionFixtureController
+{
     public function index(): void
     {
     }
