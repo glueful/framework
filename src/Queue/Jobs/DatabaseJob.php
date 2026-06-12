@@ -2,8 +2,10 @@
 
 namespace Glueful\Queue\Jobs;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Queue\Contracts\JobInterface;
 use Glueful\Queue\Contracts\QueueDriverInterface;
+use Glueful\Queue\JobHandlerResolver;
 
 /**
  * Database Job Implementation
@@ -40,18 +42,27 @@ class DatabaseJob implements JobInterface
     /** @var bool Whether job has been released */
     private bool $released = false;
 
+    /** @var ApplicationContext|null Application context for handler resolution */
+    private ?ApplicationContext $context;
+
     /**
      * Create new database job instance
      *
      * @param QueueDriverInterface $driver Database queue driver
      * @param array<string, mixed> $rawData Raw job data from database
      * @param string $queue Queue name
+     * @param ApplicationContext|null $context Application context for handler resolution
      */
-    public function __construct(QueueDriverInterface $driver, array $rawData, string $queue)
-    {
+    public function __construct(
+        QueueDriverInterface $driver,
+        array $rawData,
+        string $queue,
+        ?ApplicationContext $context = null
+    ) {
         $this->driver = $driver;
         $this->rawData = $rawData;
         $this->queue = $queue;
+        $this->context = $context;
         $decodedPayload = json_decode($rawData['payload'], true);
         $this->payload = $decodedPayload !== null ? $decodedPayload : [];
     }
@@ -116,11 +127,11 @@ class DatabaseJob implements JobInterface
     {
         $jobClass = $this->payload['job'] ?? null;
 
-        if ($jobClass === null || !class_exists($jobClass)) {
-            throw new \RuntimeException("Job class '{$jobClass}' not found");
+        if ($jobClass === null) {
+            throw new \RuntimeException("Job payload has no job class");
         }
 
-        // Create job instance
+        // Create job instance (gated: must implement JobInterface)
         $job = $this->resolve($jobClass);
 
         // Execute job with data
@@ -140,12 +151,11 @@ class DatabaseJob implements JobInterface
      * Resolve job class instance
      *
      * @param string $class Job class name
-     * @return object Job instance
+     * @return JobInterface Job instance
      */
-    private function resolve(string $class): object
+    private function resolve(string $class): JobInterface
     {
-        // Simple instantiation - can be enhanced with dependency injection
-        return new $class();
+        return JobHandlerResolver::resolve($class, $this->payload['data'] ?? [], $this->context);
     }
 
     /**
@@ -184,13 +194,10 @@ class DatabaseJob implements JobInterface
 
         // Call failed method on job class if exists
         $jobClass = $this->payload['job'] ?? null;
-        if ($jobClass !== null && class_exists($jobClass)) {
+        if ($jobClass !== null) {
             try {
-                $job = $this->resolve($jobClass);
-                if (method_exists($job, 'failed')) {
-                    $job->failed($this->payload['data'] ?? [], $exception);
-                }
-            } catch (\Exception $e) {
+                $this->resolve($jobClass)->failed($exception);
+            } catch (\Throwable $e) {
                 // Log but don't throw - job is already failed
                 error_log("Error in job failed handler: " . $e->getMessage());
             }

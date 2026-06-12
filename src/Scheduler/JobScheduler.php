@@ -8,6 +8,7 @@ use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use Glueful\Helpers\Utils;
 use Glueful\Lock\LockManagerInterface;
+use Glueful\Queue\JobHandlerResolver;
 use Symfony\Component\Lock\Exception\LockConflictedException;
 
 /**
@@ -196,14 +197,23 @@ class JobScheduler
                 $callback = function () use ($job) {
                     $handlerClass = $job['handler_class'];
                     $parameters = json_decode($job['parameters'] ?? '{}', true);
+                    $parameters = is_array($parameters) ? $parameters : [];
 
-                    if (class_exists($handlerClass) && method_exists($handlerClass, 'handle')) {
-                        $handler = new $handlerClass();
+                    // The handler class name comes from a stored row — gate it
+                    // through the resolver (JobInterface required) instead of
+                    // instantiating whatever the table names.
+                    try {
+                        $handler = JobHandlerResolver::resolve($handlerClass, $parameters, $this->context);
+                    } catch (\Throwable $e) {
+                        error_log("Refusing to run scheduled job handler '{$handlerClass}': " . $e->getMessage());
+                        return false;
+                    }
+
+                    if (method_exists($handler, 'handle')) {
                         return $handler->handle($parameters);
                     }
 
-                    // Log error if handler doesn't exist
-                    error_log("Job handler not found: {$job['handler_class']}");
+                    error_log("Job handler '{$handlerClass}' has no handle() method");
                     return false;
                 };
 

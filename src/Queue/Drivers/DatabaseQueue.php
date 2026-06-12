@@ -276,7 +276,7 @@ class DatabaseQueue implements QueueDriverInterface
                 'attempts' => $job['attempts'] + 1
             ]);
 
-            return new DatabaseJob($this, $job, $queue);
+            return new DatabaseJob($this, $job, $queue, $this->context);
         });
     }
 

@@ -2,6 +2,7 @@
 
 namespace Glueful\Queue\Drivers;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Queue\Contracts\QueueDriverInterface;
 use Glueful\Queue\Contracts\JobInterface;
 use Glueful\Queue\Contracts\DriverInfo;
@@ -49,6 +50,9 @@ class RedisQueue implements QueueDriverInterface
     /** @var int Job expiration in seconds */
     private int $jobExpiration;
 
+    /** @var ApplicationContext|null Application context for job handler resolution */
+    private ?ApplicationContext $context = null;
+
     /**
      * Get driver information
      *
@@ -92,6 +96,7 @@ class RedisQueue implements QueueDriverInterface
             );
         }
 
+        $this->context = $config['context'] ?? null;
         $this->redis = new \Redis();
 
         // Connect to Redis
@@ -323,7 +328,7 @@ class RedisQueue implements QueueDriverInterface
         $this->redis->zAdd("queue:{$queue}:reserved", $reservedAt + $this->retryAfter, $uuid);
         $this->redis->exec();
 
-        return new RedisJob($this, $jobData, $queue);
+        return new RedisJob($this, $jobData, $queue, $this->context);
     }
 
     /**

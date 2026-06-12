@@ -430,10 +430,10 @@ abstract class Job implements JobInterface
             );
         }
 
-        if (!class_exists($props['class'])) {
+        if (!class_exists($props['class']) || !is_subclass_of($props['class'], self::class)) {
             throw BusinessLogicException::operationNotAllowed(
                 'job_instantiation',
-                "Job class '{$props['class']}' not found"
+                "Job class '{$props['class']}' not found or is not a queue job"
             );
         }
 
@@ -455,10 +455,10 @@ abstract class Job implements JobInterface
      */
     public static function fromArray(array $data): self
     {
-        if (!isset($data['job']) || !class_exists($data['job'])) {
+        if (!isset($data['job']) || !class_exists($data['job']) || !is_subclass_of($data['job'], self::class)) {
             throw BusinessLogicException::operationNotAllowed(
                 'job_instantiation',
-                "Job class '{$data['job']}' not found"
+                "Job class '{$data['job']}' not found or is not a queue job"
             );
         }
 

@@ -11,6 +11,7 @@ use Glueful\Framework;
 use Glueful\Queue\Contracts\JobInterface;
 use Glueful\Queue\Contracts\QueueDriverInterface;
 use Glueful\Queue\Contracts\WorkerMonitorInterface;
+use Glueful\Queue\Job;
 use Glueful\Queue\QueueManager;
 use Glueful\Queue\QueueWorker;
 use Glueful\Queue\WorkerOptions;
@@ -416,12 +417,11 @@ final class QueueWorkerTest extends TestCase
 /**
  * Job that records its executions.
  */
-final class TestSuccessJob
+final class TestSuccessJob extends Job
 {
     public static int $ran = 0;
 
-    /** @param array<string,mixed> $data */
-    public function handle(array $data): void
+    public function handle(): void
     {
         self::$ran++;
     }
