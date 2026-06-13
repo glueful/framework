@@ -42,6 +42,15 @@ class AuthenticationGuard
     }
 
     /**
+     * Clear the per-request resolved user cache.
+     */
+    public function reset(): void
+    {
+        $this->currentUser = null;
+        $this->userResolved = false;
+    }
+
+    /**
      * Get current user ID
      */
     public function id(): mixed

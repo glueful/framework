@@ -10,6 +10,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - **`docs/SECURITY_NOTES.md` — accepted security trade-offs and known limitations.** Records the residual limitations reviewed and accepted during the June 2026 hardening pass (log-redaction scope, SSRF filter-flag fringe ranges, JWT clock strictness, signing/scan boundaries, etc.) with rationale and the work item that would close each, plus the operator checklist of config-dependent protections (`APP_KEY`, `TRUSTED_PROXIES`, CORS origins).
 
 ### Fixed
+- **Security: shared authentication guards are reset at request end.**
+  `AuthenticationGuard` cached the first resolved user for the lifetime of the
+  shared container instance, which is unsafe in long-running runtimes. The guard
+  now exposes `reset()`, and the request lifecycle clears it alongside the
+  token/session request caches so a reused worker resolves the next request's
+  identity instead of reusing the previous user.
 - **Security: ORM terminal query-builder methods now apply global scopes before proxying.**
   `Database\ORM\Builder::__call()` previously delegated terminal methods such as
   `paginate()` and `max()` straight to the underlying query builder without

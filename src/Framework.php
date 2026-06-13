@@ -24,6 +24,7 @@ use Glueful\Events\QueueContextHolder;
 use Glueful\Helpers\Utils;
 use Glueful\Security\SecurityManager;
 use Psr\Log\LoggerInterface;
+use Glueful\Auth\AuthenticationGuard;
 use Glueful\Auth\SessionStore;
 use Glueful\Auth\TokenManager;
 use Glueful\Http\RequestContext;
@@ -288,6 +289,13 @@ class Framework
                 $tm = $container->get(TokenManager::class);
                 if (method_exists($tm, 'resetRequestCache')) {
                     $tm->resetRequestCache();
+                }
+            }
+
+            if ($container->has(AuthenticationGuard::class)) {
+                $guard = $container->get(AuthenticationGuard::class);
+                if (method_exists($guard, 'reset')) {
+                    $guard->reset();
                 }
             }
 
