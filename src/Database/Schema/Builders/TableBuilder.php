@@ -802,17 +802,13 @@ class TableBuilder implements TableBuilderInterface, TableBuilderContextInterfac
         // In a full implementation, this would handle all types of alterations
         $tableDefinition = new TableDefinition(
             name: $this->tableName,
-            columns: $this->columns,
-            indexes: $this->indexes,
-            foreignKeys: $this->foreignKeys,
-            primaryKey: $this->primaryKey,
-            options: $this->options,
             comment: $this->comment
         );
 
         $changes = [
             'add_columns' => $this->columns,
             'add_indexes' => $this->indexes,
+            'drop_indexes' => $this->options['_drop_indexes'] ?? [],
             'add_foreign_keys' => $this->foreignKeys
         ];
 

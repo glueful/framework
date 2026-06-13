@@ -143,6 +143,19 @@ class SchemaBuilder implements SchemaBuilderInterface
     }
 
     /**
+     * Start a fluent alteration builder with a concrete return type.
+     */
+    private function alterTableBuilder(string $name): TableBuilderInterface
+    {
+        $tableBuilder = $this->alterTable($name);
+        if (!$tableBuilder instanceof TableBuilderInterface) {
+            throw new \RuntimeException('Expected table builder for table alteration');
+        }
+
+        return $tableBuilder;
+    }
+
+    /**
      * Drop a table
      *
      * @param  string $name Table name
@@ -526,7 +539,7 @@ class SchemaBuilder implements SchemaBuilderInterface
     public function addColumn(string $table, string $column, array $definition): array
     {
         try {
-            $tableBuilder = $this->alterTable($table);
+            $tableBuilder = $this->alterTableBuilder($table);
 
             // Map the definition to fluent API calls
             $columnBuilder = $tableBuilder->addColumn($column, $definition['type'] ?? 'string');
@@ -556,7 +569,7 @@ class SchemaBuilder implements SchemaBuilderInterface
     public function dropColumn(string $table, string $column): array
     {
         try {
-            $this->alterTable($table)->dropColumn($column)->execute();
+            $this->alterTableBuilder($table)->dropColumn($column)->execute();
             return ['success' => true];
         } catch (\Exception $e) {
             return ['success' => false, 'error' => $e->getMessage()];
@@ -577,7 +590,7 @@ class SchemaBuilder implements SchemaBuilderInterface
                 $column = $index['column'];
                 $type = $index['type'] ?? 'index';
 
-                $tableBuilder = $this->alterTable($table);
+                $tableBuilder = $this->alterTableBuilder($table);
 
                 if ($type === 'unique') {
                     $tableBuilder->unique($column, $index['name'] ?? null);
@@ -604,9 +617,13 @@ class SchemaBuilder implements SchemaBuilderInterface
     public function dropIndex(string $table, string $index): bool
     {
         try {
-            $this->alterTable($table)->dropIndex($index)->execute();
+            $tableBuilder = $this->alterTableBuilder($table);
+            $schemaBuilder = $tableBuilder->dropIndex($index)->execute();
+            $schemaBuilder->execute();
+
             return true;
         } catch (\Exception $e) {
+            $this->reset();
             error_log("Failed to drop index: " . $e->getMessage());
             return false;
         }
@@ -628,8 +645,9 @@ class SchemaBuilder implements SchemaBuilderInterface
                 $on = $fk['on'] ?? $fk['reference_table'];
                 $name = $fk['name'] ?? null;
 
-                $this->alterTable($table)
-                    ->foreign($column)
+                $tableBuilder = $this->alterTableBuilder($table);
+                $foreignKeyBuilder = $tableBuilder->foreign($column);
+                $foreignKeyBuilder
                     ->references($references)
                     ->on($on)
                     ->execute();
@@ -651,7 +669,7 @@ class SchemaBuilder implements SchemaBuilderInterface
     public function dropForeignKey(string $table, string $constraint): bool
     {
         try {
-            $this->alterTable($table)->dropForeign($constraint)->execute();
+            $this->alterTableBuilder($table)->dropForeign($constraint)->execute();
             return true;
         } catch (\Exception $e) {
             error_log("Failed to drop foreign key: " . $e->getMessage());
@@ -766,14 +784,14 @@ class SchemaBuilder implements SchemaBuilderInterface
             try {
                 switch ($op['type']) {
                     case 'drop_column':
-                        $this->alterTable($op['table'])->dropColumn($op['column_name'])->execute();
+                        $this->alterTableBuilder($op['table'])->dropColumn($op['column_name'])->execute();
                         $results[] = "Dropped column {$op['column_name']} from {$op['table']}";
                         break;
 
                     case 'add_column':
-                        $this->alterTable($op['table'])
-                        ->addColumn($op['column_name'], 'string')
-                        ->execute();
+                        $this->alterTableBuilder($op['table'])
+                            ->addColumn($op['column_name'], 'string')
+                            ->execute();
                         $results[] = "Added column {$op['column_name']} to {$op['table']}";
                         break;
 
