@@ -10,6 +10,16 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - **`docs/SECURITY_NOTES.md` — accepted security trade-offs and known limitations.** Records the residual limitations reviewed and accepted during the June 2026 hardening pass (log-redaction scope, SSRF filter-flag fringe ranges, JWT clock strictness, signing/scan boundaries, etc.) with rationale and the work item that would close each, plus the operator checklist of config-dependent protections (`APP_KEY`, `TRUSTED_PROXIES`, CORS origins).
 
 ### Fixed
+- **Security: ORM terminal query-builder methods now apply global scopes before proxying.**
+  `Database\ORM\Builder::__call()` previously delegated terminal methods such as
+  `paginate()` and `max()` straight to the underlying query builder without
+  `applyScopes()`, bypassing model global scopes including tenancy's fail-closed tenant
+  scope. Scoped terminal methods now apply global scopes before delegation.
+- **Security: extension provider register/boot failures fail loud outside production.**
+  `ExtensionManager` still logs provider `register()` / `boot()` failures, but now
+  rethrows them when the active environment is not `production`; production keeps the
+  previous log-and-continue posture. This prevents load-bearing providers from silently
+  missing enforcement hooks during development and test runs.
 - **SchemaBuilder alter-index operations now work on existing tables.** `alterTable(...)->index()` no longer validates new indexes against only the columns declared inside the alteration callback, so adding an index to an existing column works; `dropIndex()` now flushes the generated drop statement instead of returning success while leaving the index in place, and a tolerated missing-index drop no longer leaves failed SQL queued for the next schema operation.
 - **Security: the `rate_limit:attempts,window` middleware string form now enforces its parameters.** `EnhancedRateLimiterMiddleware::handle()` accepted `...$params` but ignored them — limits came only from `Route::getRateLimitConfig()` (the `->rateLimit()` builder / `#[RateLimit]` attribute), so every route registered as `'rate_limit:5,60'` (including the framework's own auth, blobs, and health routes) silently fell back to tier/global defaults instead of the stated per-route limit. The params are now parsed as `attempts,windowSeconds` (window defaults to 60) and applied when the route carries no rate limit config; builder/attribute config still takes precedence, and non-numeric or non-positive params keep the previous default-limits behavior.
 - **Security: `ImageSecurityValidator` defaults are fail-closed.** With no `image.security` config present (e.g. the `glueful/media` extension not installed, or its config not yet merged), the validator defaulted to `allowed_domains: ['*']` and `disable_external_urls: false` — an empty config meant "fetch images from anywhere". The defaults are now an empty allow-list with external URLs disabled, matching the media extension's fail-closed posture; remote image fetching is opt-in everywhere.
