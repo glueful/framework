@@ -13,15 +13,15 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.55.0';
+    public const VERSION = '1.56.0';
 
 
     /** Release code name */
-    public const NAME = 'Peacock';
+    public const NAME = 'Rastaban';
 
 
     /** Release date */
-    public const RELEASE_DATE = '2026-06-11';
+    public const RELEASE_DATE = '2026-06-13';
 
     /** Minimum required PHP version */
     public const MIN_PHP_VERSION = '8.3.0';
