@@ -122,6 +122,7 @@ final class FileUploader
         $this->validateFileSize($file['size'] ?? 0);
         $mime = $this->detectMime($file['tmp_name']);
         $this->validateMimeType($mime);
+        $this->validateFileContent($file, $mime);
 
         // Extract metadata via the optional media processor; fall back to
         // dependency-free type-only metadata when no processor is bound.

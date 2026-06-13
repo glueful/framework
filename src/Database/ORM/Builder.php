@@ -1324,6 +1324,10 @@ class Builder
             return $this->callScope('scope' . ucfirst($method), $parameters);
         }
 
+        if ($this->isTerminalQueryBuilderMethod($method)) {
+            $this->applyScopes();
+        }
+
         // Proxy to the underlying query builder
         $result = $this->query->$method(...$parameters);
 
@@ -1333,6 +1337,15 @@ class Builder
         }
 
         return $result;
+    }
+
+    private function isTerminalQueryBuilderMethod(string $method): bool
+    {
+        return in_array($method, [
+            'paginate',
+            'max',
+            'pluck',
+        ], true);
     }
 
     /**

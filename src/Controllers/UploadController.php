@@ -9,7 +9,9 @@ use Glueful\Cache\CacheStore;
 use Glueful\Helpers\RequestHelper;
 use Glueful\Helpers\Utils;
 use Glueful\Http\Response;
+use Glueful\Http\Exceptions\Domain\BusinessLogicException;
 use Glueful\Repository\BlobRepository;
+use Glueful\Services\ImageSecurityValidator;
 use Glueful\Storage\Contracts\NativeSignedUrlProviderInterface;
 use Glueful\Storage\Contracts\StorageDriverRegistryInterface;
 use Glueful\Storage\StorageManager;
@@ -21,6 +23,7 @@ use Glueful\Validation\ValidationException;
 use Glueful\Support\SignedUrl;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class UploadController extends BaseController
@@ -38,7 +41,8 @@ class UploadController extends BaseController
         BlobRepository $blobRepository,
         StorageManager $storage,
         UrlGenerator $urls,
-        private readonly ?MediaProcessorInterface $media = null
+        private readonly ?MediaProcessorInterface $media = null,
+        private readonly ?ImageSecurityValidator $imageSecurity = null
     ) {
         parent::__construct($context);
         $this->uploader = $uploader;
@@ -175,6 +179,7 @@ class UploadController extends BaseController
         }
 
         $isImage = str_starts_with((string) ($blob['mime_type'] ?? ''), 'image/');
+        $mime = (string) ($blob['mime_type'] ?? 'application/octet-stream');
         $resize = $this->getResizeParams($request);
 
         if (
@@ -183,7 +188,7 @@ class UploadController extends BaseController
             && $this->media !== null
             && (bool) $this->getConfig('uploads.image_processing.enabled', true)
         ) {
-            return $this->serveResizedImage($request, $uuid, $disk, $path, $resize);
+            return $this->serveResizedImage($request, $uuid, $disk, $path, $resize, $mime);
         }
 
         // No media processor bound: width/height/quality fall through to serving
@@ -194,7 +199,6 @@ class UploadController extends BaseController
             return Response::error('Image format conversion is not available', 415);
         }
 
-        $mime = (string) ($blob['mime_type'] ?? 'application/octet-stream');
         $size = isset($blob['size']) ? (int) $blob['size'] : null;
 
         return $this->serveFile($request, $disk, $path, $mime, $size);
@@ -302,7 +306,8 @@ class UploadController extends BaseController
         string $uuid,
         string $disk,
         string $path,
-        array $resize
+        array $resize,
+        string $sourceMime
     ): Response|\Symfony\Component\HttpFoundation\Response {
         $cacheEnabled = (bool) $this->getConfig('uploads.image_processing.cache_enabled', true);
         $cacheTtl = (int) $this->getConfig('uploads.image_processing.cache_ttl', 604800);
@@ -330,6 +335,7 @@ class UploadController extends BaseController
                 return new \Symfony\Component\HttpFoundation\Response('', 304, [
                     'ETag' => $etag,
                     'Cache-Control' => $this->getCacheControl($cacheTtl),
+                    'X-Content-Type-Options' => 'nosniff',
                 ]);
             }
         }
@@ -349,6 +355,12 @@ class UploadController extends BaseController
 
         $temp = $this->readToTempFile($disk, $path);
         try {
+            try {
+                $this->imageSecurity?->validateImageFile($temp, $this->formatFromMime($sourceMime));
+            } catch (BusinessLogicException $e) {
+                return Response::error($e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
             // @phpstan-ignore-next-line — guarded by the `$this->media !== null`
             // check in show(); serveResizedImage() is never reached with a null seam.
             ['data' => $data, 'mime' => $mime] = $this->media->renderVariant(
@@ -399,6 +411,7 @@ class UploadController extends BaseController
                 $response = new BinaryFileResponse($fullPath);
                 $response->headers->set('Content-Type', $mime);
                 $response->headers->set('Cache-Control', $cacheControl);
+                $this->applyBlobSecurityHeaders($response, $mime, basename($path));
 
                 if ($etagEnabled) {
                     $etag = '"' . md5($fullPath . filemtime($fullPath)) . '"';
@@ -409,6 +422,7 @@ class UploadController extends BaseController
                         return new \Symfony\Component\HttpFoundation\Response('', 304, [
                             'ETag' => $etag,
                             'Cache-Control' => $cacheControl,
+                            'X-Content-Type-Options' => 'nosniff',
                         ]);
                     }
                 }
@@ -442,6 +456,8 @@ class UploadController extends BaseController
         $headers = [
             'Content-Type' => $mime,
             'Cache-Control' => $cacheControl,
+            'X-Content-Type-Options' => 'nosniff',
+            'Content-Disposition' => $this->contentDispositionFor($mime, basename($path)),
         ];
 
         if ($etagEnabled && $fileSize > 0) {
@@ -454,6 +470,7 @@ class UploadController extends BaseController
                 return new \Symfony\Component\HttpFoundation\Response('', 304, [
                     'ETag' => $etag,
                     'Cache-Control' => $cacheControl,
+                    'X-Content-Type-Options' => 'nosniff',
                 ]);
             }
         }
@@ -564,6 +581,8 @@ class UploadController extends BaseController
             'Content-Type' => $mime,
             'Cache-Control' => $this->getCacheControl($cacheTtl),
             'Content-Length' => (string) strlen($data),
+            'X-Content-Type-Options' => 'nosniff',
+            'Content-Disposition' => $this->contentDispositionFor($mime, 'variant'),
         ];
 
         if ($etag !== null) {
@@ -571,6 +590,33 @@ class UploadController extends BaseController
         }
 
         return new \Symfony\Component\HttpFoundation\Response($data, 200, $headers);
+    }
+
+    private function applyBlobSecurityHeaders(
+        \Symfony\Component\HttpFoundation\Response $response,
+        string $mime,
+        string $filename
+    ): void {
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
+        $response->headers->set('Content-Disposition', $this->contentDispositionFor($mime, $filename));
+    }
+
+    private function contentDispositionFor(string $mime, string $filename): string
+    {
+        $disposition = $this->isSafeInlineMime($mime)
+            ? ResponseHeaderBag::DISPOSITION_INLINE
+            : ResponseHeaderBag::DISPOSITION_ATTACHMENT;
+
+        $safeFilename = $filename !== '' ? $filename : 'download';
+
+        return (new ResponseHeaderBag())->makeDisposition($disposition, $safeFilename);
+    }
+
+    private function isSafeInlineMime(string $mime): bool
+    {
+        $normalized = strtolower(trim(explode(';', $mime, 2)[0]));
+
+        return in_array($normalized, ['image/jpeg', 'image/png', 'image/gif', 'image/webp'], true);
     }
 
     /**
@@ -871,6 +917,19 @@ class UploadController extends BaseController
             'gif' => 'image/gif',
             'webp' => 'image/webp',
             default => 'application/octet-stream',
+        };
+    }
+
+    private function formatFromMime(string $mime): ?string
+    {
+        $mime = strtolower(trim(explode(';', $mime, 2)[0]));
+
+        return match ($mime) {
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/gif' => 'gif',
+            'image/webp' => 'webp',
+            default => null,
         };
     }
 

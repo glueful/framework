@@ -320,6 +320,10 @@ return [
             'enabled' => env('QUEUE_IP_WHITELIST', false),
             'allowed_ips' => explode(',', env('QUEUE_ALLOWED_IPS', '127.0.0.1,::1')),
         ],
+        'payload_signing' => [
+            'enabled' => env('QUEUE_PAYLOAD_SIGNING', true),
+            'require_signed' => env('QUEUE_REQUIRE_SIGNED_PAYLOADS', true),
+        ],
     ],
 
     /*

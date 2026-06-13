@@ -30,6 +30,7 @@ use Glueful\Http\Exceptions\Domain\HttpAuthException;
 use Glueful\Http\Exceptions\Domain\HttpProtocolException;
 use Glueful\Http\Exceptions\Domain\ExtensionException;
 use Glueful\Http\Exceptions\Domain\ProvisioningException;
+use Glueful\Support\SensitiveParamRedactor;
 use Glueful\Validation\ValidationException;
 use Glueful\Events\EventService;
 use Glueful\Events\Http\ExceptionEvent;
@@ -372,7 +373,7 @@ class Handler implements ExceptionHandlerInterface
             if ($request !== null) {
                 $context['request'] = [
                     'method' => $request->getMethod(),
-                    'uri' => $request->getRequestUri(),
+                    'uri' => $this->sanitizeUrl($request->getRequestUri()),
                     'ip' => $request->getClientIp(),
                 ];
             }
@@ -384,13 +385,13 @@ class Handler implements ExceptionHandlerInterface
         if ($request !== null) {
             $context['request'] = [
                 'method' => $request->getMethod(),
-                'uri' => $request->getRequestUri(),
+                'uri' => $this->sanitizeUrl($request->getRequestUri()),
                 'ip' => $request->getClientIp(),
                 'user_agent' => $request->headers->get('User-Agent', 'unknown'),
             ];
 
             if ($this->verboseContext) {
-                $context['request']['query_string'] = $request->getQueryString();
+                $context['request']['query_string'] = $this->sanitizeQueryString($request->getQueryString());
                 $context['request']['content_type'] = $request->getContentTypeFormat();
             }
         }
@@ -404,6 +405,22 @@ class Handler implements ExceptionHandlerInterface
         }
 
         return $context;
+    }
+
+    /**
+     * Sanitize a URL or request URI before logging.
+     */
+    private function sanitizeUrl(?string $url): ?string
+    {
+        return SensitiveParamRedactor::sanitizeUrl($url);
+    }
+
+    /**
+     * Sanitize a URL query string by redacting sensitive parameter names.
+     */
+    private function sanitizeQueryString(?string $query): ?string
+    {
+        return SensitiveParamRedactor::sanitizeQueryString($query);
     }
 
     /**

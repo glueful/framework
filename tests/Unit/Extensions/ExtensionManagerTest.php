@@ -6,6 +6,7 @@ namespace Glueful\Tests\Unit\Extensions;
 
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\MockObject\MockObject;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Extensions\ExtensionManager;
 use Glueful\Extensions\ServiceProvider;
 use Glueful\Extensions\OrderedProvider;
@@ -176,5 +177,81 @@ class ExtensionManagerTest extends TestCase
         $this->assertIsInt($summary['total_providers']);
         $this->assertIsBool($summary['booted']);
         $this->assertIsBool($summary['cache_used']);
+    }
+
+    public function testBootRethrowsProviderFailureOutsideProduction(): void
+    {
+        $context = new ApplicationContext(sys_get_temp_dir(), 'testing');
+        $container = $this->containerWithContext($context);
+        $manager = new ExtensionManager($container);
+
+        $provider = new class ($container) extends ServiceProvider {
+            public function boot(ApplicationContext $context): void
+            {
+                throw new \RuntimeException('boot exploded');
+            }
+        };
+
+        $this->setManagerProviders($manager, ['Failing\\Provider' => $provider]);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('boot exploded');
+
+        $manager->boot();
+    }
+
+    public function testRegisterRethrowsProviderFailureOutsideProduction(): void
+    {
+        $context = new ApplicationContext(sys_get_temp_dir(), 'testing');
+        $container = $this->containerWithContext($context);
+        $manager = new ExtensionManager($container);
+
+        $provider = new class ($container) extends ServiceProvider {
+            public function register(ApplicationContext $context): void
+            {
+                throw new \RuntimeException('register exploded');
+            }
+        };
+
+        $this->setManagerProviders($manager, ['Failing\\Provider' => $provider]);
+
+        $reflection = new \ReflectionClass($manager);
+        $method = $reflection->getMethod('registerProviders');
+        $method->setAccessible(true);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('register exploded');
+
+        $method->invoke($manager);
+    }
+
+    private function setManagerProviders(ExtensionManager $manager, array $providers): void
+    {
+        $reflection = new \ReflectionClass($manager);
+        $property = $reflection->getProperty('providers');
+        $property->setAccessible(true);
+        $property->setValue($manager, $providers);
+    }
+
+    private function containerWithContext(ApplicationContext $context): ContainerInterface
+    {
+        return new class ($context) implements ContainerInterface {
+            public function __construct(private ApplicationContext $context)
+            {
+            }
+
+            public function get(string $id): mixed
+            {
+                if ($id === ApplicationContext::class) {
+                    return $this->context;
+                }
+                throw new \RuntimeException("Unknown service: {$id}");
+            }
+
+            public function has(string $id): bool
+            {
+                return $id === ApplicationContext::class;
+            }
+        };
     }
 }

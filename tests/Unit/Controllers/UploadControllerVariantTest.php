@@ -10,6 +10,7 @@ use Glueful\Container\Definition\ValueDefinition;
 use Glueful\Controllers\UploadController;
 use Glueful\Framework;
 use Glueful\Repository\BlobRepository;
+use Glueful\Services\ImageSecurityValidator;
 use Glueful\Routing\RouteManifest;
 use Glueful\Storage\StorageManager;
 use Glueful\Storage\Support\UrlGenerator;
@@ -156,10 +157,41 @@ final class UploadControllerVariantTest extends TestCase
         $this->assertNotSame(500, $response->getStatusCode());
         $this->assertSame(200, $response->getStatusCode());
         $this->assertSame('image/png', $response->headers->get('Content-Type'));
+        $this->assertSame('nosniff', $response->headers->get('X-Content-Type-Options'));
+        $this->assertStringStartsNotWith('attachment', (string) $response->headers->get('Content-Disposition'));
 
         $body = $this->bodyOf($response);
         $this->assertSame(strlen($this->originalBytes), strlen($body));
         $this->assertSame($this->originalBytes, $body);
+    }
+
+    public function testUnsafeBlobMimeIsServedAsAttachmentWithNosniff(): void
+    {
+        $uuid = 'blob00000002';
+        $relPath = 'posts/page.html';
+        $full = $this->uploadsRoot . '/' . $relPath;
+        file_put_contents($full, '<script>alert(1)</script>');
+
+        \Glueful\Database\Connection::fromContext($this->context)
+            ->table('blobs')
+            ->insert([
+                'uuid' => $uuid,
+                'name' => 'page.html',
+                'mime_type' => 'text/html',
+                'size' => filesize($full),
+                'url' => $relPath,
+                'storage_type' => 'uploads',
+                'visibility' => 'public',
+                'status' => 'active',
+                'created_by' => 'usr123456789',
+            ]);
+
+        $response = $this->makeController(null)->show(Request::create('/blobs/' . $uuid), $uuid);
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertStringStartsWith('text/html', (string) $response->headers->get('Content-Type'));
+        $this->assertSame('nosniff', $response->headers->get('X-Content-Type-Options'));
+        $this->assertStringStartsWith('attachment;', (string) $response->headers->get('Content-Disposition'));
     }
 
     public function testNoMediaFormatReturns415(): void
@@ -185,6 +217,61 @@ final class UploadControllerVariantTest extends TestCase
         $this->assertSame(VariantFakeMediaProcessor::DATA, $this->bodyOf($response));
     }
 
+    public function testVariantNotModifiedResponseIncludesNosniff(): void
+    {
+        $controller = $this->makeController(new VariantFakeMediaProcessor());
+
+        $resize = [
+            'width' => 100,
+            'height' => null,
+            'quality' => null,
+            'format' => null,
+            'fit' => null,
+        ];
+        $cacheKey = 'blob_variant:' . sha1($this->blobUuid . '|' . json_encode($resize));
+        $etag = '"' . md5($cacheKey) . '"';
+
+        $request = Request::create('/blobs/' . $this->blobUuid, 'GET', ['width' => 100]);
+        $request->headers->set('If-None-Match', $etag);
+
+        $response = $controller->show($request, $this->blobUuid);
+
+        $this->assertSame(304, $response->getStatusCode());
+        $this->assertSame($etag, $response->headers->get('ETag'));
+        $this->assertSame('nosniff', $response->headers->get('X-Content-Type-Options'));
+    }
+
+    public function testVariantRejectsInvalidSourceImageBeforeMediaProcessor(): void
+    {
+        $uuid = 'blob00000003';
+        $relPath = 'posts/spoofed.png';
+        $full = $this->uploadsRoot . '/' . $relPath;
+        file_put_contents($full, '<script>alert(1)</script>');
+
+        \Glueful\Database\Connection::fromContext($this->context)
+            ->table('blobs')
+            ->insert([
+                'uuid' => $uuid,
+                'name' => 'spoofed.png',
+                'mime_type' => 'image/png',
+                'size' => filesize($full),
+                'url' => $relPath,
+                'storage_type' => 'uploads',
+                'visibility' => 'public',
+                'status' => 'active',
+                'created_by' => 'usr123456789',
+            ]);
+
+        $fake = new VariantFakeMediaProcessor();
+        $response = $this->makeController($fake)->show(
+            Request::create('/blobs/' . $uuid, 'GET', ['width' => 100]),
+            $uuid
+        );
+
+        $this->assertSame(422, $response->getStatusCode());
+        $this->assertSame(0, $fake->renderCalls);
+    }
+
     private function makeController(?MediaProcessorInterface $media): UploadController
     {
         $c = $this->context->getContainer();
@@ -195,7 +282,8 @@ final class UploadControllerVariantTest extends TestCase
             $c->get(BlobRepository::class),
             $c->get(StorageManager::class),
             $c->get(UrlGenerator::class),
-            $media
+            $media,
+            new ImageSecurityValidator()
         );
     }
 
@@ -276,6 +364,8 @@ final class VariantFakeMediaProcessor implements MediaProcessorInterface
     public const DATA = 'SENTINEL-VARIANT-BYTES';
     public const MIME = 'image/avif';
 
+    public int $renderCalls = 0;
+
     public function extractMetadata(string $filepath, string $mimeType): MediaMetadata
     {
         return new MediaMetadata('image', 1, 1);
@@ -305,6 +395,8 @@ final class VariantFakeMediaProcessor implements MediaProcessorInterface
      */
     public function renderVariant(string $sourcePath, array $options): array
     {
+        $this->renderCalls++;
+
         return ['data' => self::DATA, 'mime' => self::MIME];
     }
 }

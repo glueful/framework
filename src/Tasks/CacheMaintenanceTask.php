@@ -5,6 +5,7 @@ namespace Glueful\Tasks;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Cache\CacheFactory;
 use Glueful\Cache\CacheStore;
+use Glueful\Security\SecureSerializer;
 
 class CacheMaintenanceTask
 {
@@ -20,11 +21,13 @@ class CacheMaintenanceTask
     /** @var CacheStore<mixed> */
     private CacheStore $cache;
     private ?ApplicationContext $context;
+    private SecureSerializer $serializer;
 
     public function __construct(?ApplicationContext $context = null)
     {
         $this->context = $context;
         $this->cache = CacheFactory::create('', $this->context);
+        $this->serializer = SecureSerializer::forCache();
     }
 
     public function clearExpiredKeys(): void
@@ -63,7 +66,7 @@ class CacheMaintenanceTask
 
             try {
                 $content = file_get_contents($file);
-                $data = unserialize($content);
+                $data = $this->safeUnserialize($content);
 
                 // Check if cache entry has expired
                 if (is_array($data) && isset($data['expires_at'])) {
@@ -83,6 +86,25 @@ class CacheMaintenanceTask
                 // Skip files that can't be processed
                 continue;
             }
+        }
+    }
+
+    /**
+     * Deserialize a cache blob through the gadget-gated serializer.
+     *
+     * Returns false (like native unserialize()) on unreadable, malformed,
+     * or disallowed-class payloads so callers treat them as malformed files.
+     */
+    private function safeUnserialize(string|false $content): mixed
+    {
+        if ($content === false) {
+            return false;
+        }
+
+        try {
+            return $this->serializer->unserialize($content);
+        } catch (\Throwable) {
+            return false;
         }
     }
 
@@ -147,7 +169,7 @@ class CacheMaintenanceTask
 
             try {
                 $content = file_get_contents($file);
-                $data = unserialize($content);
+                $data = $this->safeUnserialize($content);
 
                 // Only keep valid, non-expired cache entries
                 if (is_array($data) && isset($data['expires_at']) && $data['expires_at'] > $now) {

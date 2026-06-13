@@ -452,13 +452,7 @@ class ServeCommand extends BaseCommand
     private function openBrowser(string $host, int $port): void
     {
         $url = "http://{$host}:{$port}";
-
-        $command = match (PHP_OS_FAMILY) {
-            'Darwin' => "open '{$url}'",
-            'Windows' => "start '{$url}'",
-            'Linux' => "xdg-open '{$url}'",
-            default => null
-        };
+        $command = $this->browserOpenCommand(PHP_OS_FAMILY, $url);
 
         if ($command !== null) {
             $this->line('Opening browser...');
@@ -467,6 +461,18 @@ class ServeCommand extends BaseCommand
             $this->warning('Could not detect OS to open browser automatically.');
             $this->line("Please open: {$url}");
         }
+    }
+
+    private function browserOpenCommand(string $osFamily, string $url): ?string
+    {
+        $escapedUrl = escapeshellarg($url);
+
+        return match ($osFamily) {
+            'Darwin' => "open {$escapedUrl}",
+            'Windows' => "start \"\" {$escapedUrl}",
+            'Linux' => "xdg-open {$escapedUrl}",
+            default => null
+        };
     }
 
     /**

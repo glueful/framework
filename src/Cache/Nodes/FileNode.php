@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Glueful\Cache\Nodes;
 
+use Glueful\Security\SecureSerializer;
+
 /**
  * File Node
  *
@@ -18,6 +20,9 @@ class FileNode extends CacheNode
     /** @var bool Directory status */
     private $initialized = false;
 
+    /** @var SecureSerializer Gadget-gated serializer for cache payloads */
+    private SecureSerializer $serializer;
+
     /**
      * Initialize File node
      *
@@ -29,6 +34,7 @@ class FileNode extends CacheNode
         parent::__construct($id, $config);
 
         $this->path = rtrim($config['path'] ?? sys_get_temp_dir() . '/glueful_cache', '/') . '/';
+        $this->serializer = SecureSerializer::forCache();
         $this->initialize();
     }
 
@@ -120,7 +126,7 @@ class FileNode extends CacheNode
 
         try {
             // Store value
-            $success = file_put_contents($filePath, serialize($value)) !== false;
+            $success = file_put_contents($filePath, $this->serializer->serialize($value)) !== false;
 
             // Store metadata
             if ($success) {
@@ -175,7 +181,12 @@ class FileNode extends CacheNode
             }
 
             // Return value
-            return unserialize(file_get_contents($filePath));
+            $content = file_get_contents($filePath);
+            if ($content === false) {
+                return null;
+            }
+
+            return $this->serializer->unserialize($content);
         } catch (\Exception $e) {
             error_log("File cache get error for node {$this->id}: " . $e->getMessage());
             return null;
@@ -388,7 +399,8 @@ class FileNode extends CacheNode
             $tagSet = [];
 
             if (file_exists($tagPath)) {
-                $result = unserialize(file_get_contents($tagPath));
+                $content = file_get_contents($tagPath);
+                $result = $content === false ? null : $this->serializer->unserialize($content);
                 $tagSet = is_array($result) ? $result : [];
             }
 
@@ -396,7 +408,7 @@ class FileNode extends CacheNode
             $tagSet[$key] = $score;
 
             // Write updated tag set
-            return file_put_contents($tagPath, serialize($tagSet)) !== false;
+            return file_put_contents($tagPath, $this->serializer->serialize($tagSet)) !== false;
         } catch (\Exception $e) {
             error_log("File cache addTaggedKey error for node {$this->id}: " . $e->getMessage());
             return false;
@@ -422,7 +434,8 @@ class FileNode extends CacheNode
         }
 
         try {
-            $result = unserialize(file_get_contents($tagPath));
+            $content = file_get_contents($tagPath);
+            $result = $content === false ? null : $this->serializer->unserialize($content);
             $tagSet = is_array($result) ? $result : [];
             return array_keys($tagSet);
         } catch (\Exception $e) {

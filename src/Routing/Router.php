@@ -6,6 +6,7 @@ namespace Glueful\Routing;
 
 use Psr\Container\ContainerInterface;
 use Symfony\Component\HttpFoundation\{Request, Response, JsonResponse, StreamedResponse, BinaryFileResponse};
+use Glueful\Auth\Attributes\{RequiresPermission, RequiresRole};
 use Glueful\Routing\Internal\Psr15MiddlewareResolverTrait;
 use Psr\Http\Server\MiddlewareInterface as Psr15Middleware;
 use Glueful\Http\Response as ApiResponse;
@@ -888,9 +889,55 @@ class Router
         }
 
         $middleware = $route->getMiddleware();
+        if (!in_array('gate_permissions', $middleware, true) && $this->handlerHasGateAttributes($route->getHandler())) {
+            $middleware[] = 'gate_permissions';
+        }
+
         $this->pipelineCache[$routeId] = $middleware;
 
         return $middleware;
+    }
+
+    private function handlerHasGateAttributes(mixed $handler): bool
+    {
+        $meta = $this->handlerMeta($handler);
+        if ($meta === null) {
+            return false;
+        }
+
+        try {
+            $class = new \ReflectionClass($meta['class']);
+        } catch (\ReflectionException) {
+            return false;
+        }
+
+        $methodName = $meta['method'] ?? null;
+        $seenMethods = [];
+
+        do {
+            foreach ([RequiresPermission::class, RequiresRole::class] as $attribute) {
+                if (count($class->getAttributes($attribute)) > 0) {
+                    return true;
+                }
+            }
+
+            if ($methodName !== null && $class->hasMethod($methodName)) {
+                $method = $class->getMethod($methodName);
+                $methodKey = $method->getDeclaringClass()->getName() . '::' . $method->getName();
+                if (!isset($seenMethods[$methodKey])) {
+                    $seenMethods[$methodKey] = true;
+                    foreach ([RequiresPermission::class, RequiresRole::class] as $attribute) {
+                        if (count($method->getAttributes($attribute)) > 0) {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            $class = $class->getParentClass();
+        } while ($class !== false);
+
+        return false;
     }
 
     // Execute request through middleware pipeline

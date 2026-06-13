@@ -9,6 +9,7 @@ use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Console\Commands\Queue\WorkCommand;
 use Glueful\Database\Connection;
 use Glueful\Framework;
+use Glueful\Queue\Job;
 use Glueful\Queue\QueueManager;
 use Glueful\Queue\QueueWorker;
 use Glueful\Routing\RouteManifest;
@@ -203,12 +204,11 @@ final class WorkCommandLeanTest extends TestCase
 /**
  * Job that records its executions.
  */
-final class LeanWorkJob
+final class LeanWorkJob extends Job
 {
     public static int $ran = 0;
 
-    /** @param array<string,mixed> $data */
-    public function handle(array $data): void
+    public function handle(): void
     {
         self::$ran++;
     }

@@ -11,6 +11,7 @@ use Glueful\Framework;
 use Glueful\Queue\Contracts\JobInterface;
 use Glueful\Queue\Contracts\QueueDriverInterface;
 use Glueful\Queue\Contracts\WorkerMonitorInterface;
+use Glueful\Queue\Job;
 use Glueful\Queue\QueueManager;
 use Glueful\Queue\QueueWorker;
 use Glueful\Queue\WorkerOptions;
@@ -45,7 +46,7 @@ final class QueueWorkerTest extends TestCase
         $cfg = $this->appPath . '/config';
         mkdir($cfg, 0755, true);
 
-        file_put_contents($cfg . '/app.php', "<?php\nreturn ['name' => 'T', 'version_full' => '1.0.0', 'env' => 'testing', 'debug' => true];\n");
+        file_put_contents($cfg . '/app.php', "<?php\nreturn ['name' => 'T', 'version_full' => '1.0.0', 'env' => 'testing', 'debug' => true, 'key' => 'test-queue-signing-key'];\n");
         file_put_contents(
             $cfg . '/database.php',
             "<?php\nreturn ['engine' => 'sqlite', 'sqlite' => ['primary' => '" . $this->dbFile . "'], "
@@ -92,6 +93,35 @@ final class QueueWorkerTest extends TestCase
         self::assertTrue($ran, 'runOnce should report a job ran');
         self::assertSame(1, TestSuccessJob::$ran, 'job fire() should have executed exactly once');
         self::assertSame(0, $this->queueSize('default'), 'job should be removed from the queue');
+    }
+
+    public function testRunOnceRejectsTamperedSignedPayload(): void
+    {
+        TestSuccessJob::$ran = 0;
+        $manager = $this->manager();
+        $manager->push(TestSuccessJob::class, ['n' => 1, 'maxAttempts' => 1], 'default');
+
+        $connection = Connection::fromContext($this->context);
+        $row = $connection->table('queue_jobs')->where('queue', '=', 'default')->first();
+        self::assertIsArray($row);
+
+        $payload = json_decode((string) $row['payload'], true);
+        self::assertIsArray($payload);
+        self::assertArrayHasKey('_glueful_signature', $payload);
+
+        $payload['data']['n'] = 999;
+        $connection->table('queue_jobs')
+            ->where('uuid', '=', $row['uuid'])
+            ->update(['payload' => json_encode($payload)]);
+
+        $spy = new SpyWorkerMonitor();
+        $worker = new QueueWorker($manager, $spy, new NullLogger(), $this->context);
+
+        self::assertTrue($worker->runOnce('database', ['default'], $this->options()));
+        self::assertSame(0, TestSuccessJob::$ran, 'tampered payload must not execute the job handler');
+        self::assertSame('recordJobFailure', $spy->calls[1][0]);
+        self::assertInstanceOf(\RuntimeException::class, $spy->failureException);
+        self::assertStringContainsString('signature mismatch', $spy->failureException->getMessage());
     }
 
     public function testRunOnceReturnsFalseWhenQueueEmpty(): void
@@ -376,7 +406,7 @@ final class QueueWorkerTest extends TestCase
         $path = sys_get_temp_dir() . '/glueful-qworker-bo-' . uniqid('', true);
         $cfg = $path . '/config';
         mkdir($cfg, 0755, true);
-        file_put_contents($cfg . '/app.php', "<?php\nreturn ['name' => 'T', 'version_full' => '1.0.0', 'env' => 'testing', 'debug' => true];\n");
+        file_put_contents($cfg . '/app.php', "<?php\nreturn ['name' => 'T', 'version_full' => '1.0.0', 'env' => 'testing', 'debug' => true, 'key' => 'test-queue-signing-key'];\n");
         file_put_contents($cfg . '/database.php', "<?php\nreturn ['engine' => 'sqlite', 'sqlite' => ['primary' => ':memory:'], 'pooling' => ['enabled' => false]];\n");
         file_put_contents($cfg . '/cache.php', "<?php\nreturn ['enabled' => true, 'default' => 'array', 'stores' => ['array' => ['driver' => 'array']]];\n");
         file_put_contents($cfg . '/security.php', "<?php\nreturn ['csrf' => ['enabled' => false]];\n");
@@ -416,12 +446,11 @@ final class QueueWorkerTest extends TestCase
 /**
  * Job that records its executions.
  */
-final class TestSuccessJob
+final class TestSuccessJob extends Job
 {
     public static int $ran = 0;
 
-    /** @param array<string,mixed> $data */
-    public function handle(array $data): void
+    public function handle(): void
     {
         self::$ran++;
     }

@@ -8,6 +8,8 @@ use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use Glueful\Helpers\Utils;
 use Glueful\Lock\LockManagerInterface;
+use Glueful\Queue\JobHandlerResolver;
+use Glueful\Queue\QueuePayloadSigner;
 use Symfony\Component\Lock\Exception\LockConflictedException;
 
 /**
@@ -159,7 +161,8 @@ class JobScheduler
             'name' => $name,
             'schedule' => $schedule,
             'handler_class' => $handlerClass,
-            'parameters' => json_encode($parameters),
+            'parameters' => (new QueuePayloadSigner($this->context))
+                ->encodeScheduledParameters($handlerClass, $parameters, $name, $schedule),
             'is_enabled' => 1,
             'next_run' => $nextRunTime,
             'created_at' => date('Y-m-d H:i:s'),
@@ -195,15 +198,35 @@ class JobScheduler
                 // Create a callback for database jobs that uses the handler_class
                 $callback = function () use ($job) {
                     $handlerClass = $job['handler_class'];
-                    $parameters = json_decode($job['parameters'] ?? '{}', true);
 
-                    if (class_exists($handlerClass) && method_exists($handlerClass, 'handle')) {
-                        $handler = new $handlerClass();
+                    try {
+                        $parameters = (new QueuePayloadSigner($this->context))
+                            ->decodeScheduledParameters(
+                                $handlerClass,
+                                $job['parameters'] ?? null,
+                                isset($job['name']) ? (string) $job['name'] : null,
+                                isset($job['schedule']) ? (string) $job['schedule'] : null
+                            );
+                    } catch (\Throwable $e) {
+                        error_log("Refusing to run scheduled job handler '{$handlerClass}': " . $e->getMessage());
+                        return false;
+                    }
+
+                    // The handler class name comes from a stored row — gate it
+                    // through the resolver (JobInterface required) instead of
+                    // instantiating whatever the table names.
+                    try {
+                        $handler = JobHandlerResolver::resolve($handlerClass, $parameters, $this->context);
+                    } catch (\Throwable $e) {
+                        error_log("Refusing to run scheduled job handler '{$handlerClass}': " . $e->getMessage());
+                        return false;
+                    }
+
+                    if (method_exists($handler, 'handle')) {
                         return $handler->handle($parameters);
                     }
 
-                    // Log error if handler doesn't exist
-                    error_log("Job handler not found: {$job['handler_class']}");
+                    error_log("Job handler '{$handlerClass}' has no handle() method");
                     return false;
                 };
 

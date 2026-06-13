@@ -107,14 +107,26 @@ final class GateAttributeMiddleware implements RouteMiddleware
         $instances = [];
         try {
             $rc = new \ReflectionClass($meta['class']);
-            foreach ($rc->getAttributes($attributeFqcn) as $a) {
-                $instances[] = $a->newInstance();
-            }
-            if (isset($meta['method']) && $rc->hasMethod($meta['method'])) {
-                foreach ($rc->getMethod($meta['method'])->getAttributes($attributeFqcn) as $a) {
+            $seenMethods = [];
+
+            do {
+                foreach ($rc->getAttributes($attributeFqcn) as $a) {
                     $instances[] = $a->newInstance();
                 }
-            }
+
+                if (isset($meta['method']) && $rc->hasMethod($meta['method'])) {
+                    $method = $rc->getMethod($meta['method']);
+                    $methodKey = $method->getDeclaringClass()->getName() . '::' . $method->getName();
+                    if (!isset($seenMethods[$methodKey])) {
+                        $seenMethods[$methodKey] = true;
+                        foreach ($method->getAttributes($attributeFqcn) as $a) {
+                            $instances[] = $a->newInstance();
+                        }
+                    }
+                }
+
+                $rc = $rc->getParentClass();
+            } while ($rc !== false);
         } catch (\Throwable) {
             // Attribute class absent or reflection failure — treat as no requirements.
         }

@@ -621,7 +621,7 @@ class CSRFMiddleware implements RouteMiddleware
         }
 
         $ip = $request->getClientIp() ?? 'unknown';
-        $key = self::RATE_LIMIT_PREFIX . $ip;
+        $key = self::RATE_LIMIT_PREFIX . hash('sha256', $ip);
 
         try {
             $attempts = (int) $this->cache->get($key, 0);

@@ -2,11 +2,13 @@
 
 namespace Glueful\Queue\Drivers;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Queue\Contracts\QueueDriverInterface;
 use Glueful\Queue\Contracts\JobInterface;
 use Glueful\Queue\Contracts\DriverInfo;
 use Glueful\Queue\Contracts\HealthStatus;
 use Glueful\Queue\Jobs\RedisJob;
+use Glueful\Queue\QueuePayloadSigner;
 use Glueful\Helpers\Utils;
 use Glueful\Http\Exceptions\Domain\BusinessLogicException;
 use Glueful\Http\Exceptions\Domain\DatabaseException;
@@ -48,6 +50,9 @@ class RedisQueue implements QueueDriverInterface
 
     /** @var int Job expiration in seconds */
     private int $jobExpiration;
+
+    /** @var ApplicationContext|null Application context for job handler resolution */
+    private ?ApplicationContext $context = null;
 
     /**
      * Get driver information
@@ -92,6 +97,7 @@ class RedisQueue implements QueueDriverInterface
             );
         }
 
+        $this->context = $config['context'] ?? null;
         $this->redis = new \Redis();
 
         // Connect to Redis
@@ -238,7 +244,7 @@ class RedisQueue implements QueueDriverInterface
         $now = time();
         $availableAt = $now + $delay;
 
-        $jobData = [
+        $jobData = $this->signPayload([
             'uuid' => $uuid,
             'displayName' => $job,
             'job' => $job,
@@ -251,7 +257,7 @@ class RedisQueue implements QueueDriverInterface
             'priority' => $data['priority'] ?? 0,
             'batchUuid' => $batchUuid,
             'queue' => $queue
-        ];
+        ]);
 
         // Use Redis transaction for atomicity
         $this->redis->multi();
@@ -313,17 +319,20 @@ class RedisQueue implements QueueDriverInterface
             return null;
         }
 
-        // Mark as reserved with timestamp
+        // Mark as reserved with timestamp. The job hash is signed, so any
+        // mutation of stored fields must be re-signed before the next delivery.
         $reservedAt = time();
-        $this->redis->multi();
-        $this->redis->hMset("job:{$uuid}", [
-            'attempts' => $jobData['attempts'] + 1,
+        $jobData = $this->signedJobData($uuid, $jobData, [
+            'attempts' => (int) ($jobData['attempts'] ?? 0) + 1,
             'reservedAt' => $reservedAt
         ]);
+
+        $this->redis->multi();
+        $this->redis->hMset("job:{$uuid}", $jobData);
         $this->redis->zAdd("queue:{$queue}:reserved", $reservedAt + $this->retryAfter, $uuid);
         $this->redis->exec();
 
-        return new RedisJob($this, $jobData, $queue);
+        return new RedisJob($this, $jobData, $queue, $this->context);
     }
 
     /**
@@ -370,6 +379,14 @@ class RedisQueue implements QueueDriverInterface
             return;
         }
 
+        $updates = [];
+        foreach ($expiredJobs as $uuid) {
+            $current = $this->redis->hGetAll("job:{$uuid}");
+            if (is_array($current) && count($current) > 0) {
+                $updates[(string) $uuid] = $this->signedJobData((string) $uuid, $current, [], ['reservedAt']);
+            }
+        }
+
         $this->redis->multi();
 
         foreach ($expiredJobs as $uuid) {
@@ -378,6 +395,9 @@ class RedisQueue implements QueueDriverInterface
             $this->redis->rPush("queue:{$queue}", $uuid);
 
             // Reset reserved timestamp
+            if (isset($updates[(string) $uuid])) {
+                $this->redis->hMset("job:{$uuid}", $updates[(string) $uuid]);
+            }
             $this->redis->hDel("job:{$uuid}", 'reservedAt');
         }
 
@@ -400,6 +420,10 @@ class RedisQueue implements QueueDriverInterface
         $uuid = $job->getUuid();
         $queue = $job->getQueue();
         $availableAt = time() + $delay;
+        $current = $this->redis->hGetAll("job:{$uuid}");
+        $jobData = is_array($current) && count($current) > 0
+            ? $this->signedJobData($uuid, $current, ['availableAt' => $availableAt], ['reservedAt'])
+            : null;
 
         $this->redis->multi();
 
@@ -407,9 +431,9 @@ class RedisQueue implements QueueDriverInterface
         $this->redis->zRem("queue:{$queue}:reserved", $uuid);
 
         // Update job data
-        $this->redis->hMset("job:{$uuid}", [
-            'availableAt' => $availableAt
-        ]);
+        if ($jobData !== null) {
+            $this->redis->hMset("job:{$uuid}", $jobData);
+        }
         $this->redis->hDel("job:{$uuid}", 'reservedAt');
 
         if ($delay > 0) {
@@ -500,7 +524,7 @@ class RedisQueue implements QueueDriverInterface
             $delay = $jobDef['delay'] ?? 0;
             $availableAt = $now + $delay;
 
-            $jobData = [
+            $jobData = $this->signPayload([
                 'uuid' => $uuid,
                 'displayName' => $jobDef['job'],
                 'job' => $jobDef['job'],
@@ -513,7 +537,7 @@ class RedisQueue implements QueueDriverInterface
                 'priority' => $jobDef['data']['priority'] ?? 0,
                 'batchUuid' => $jobDef['batch_uuid'] ?? null,
                 'queue' => $queue
-            ];
+            ]);
 
             // Store job data
             $this->redis->hMset("job:{$uuid}", $jobData);
@@ -750,5 +774,30 @@ class RedisQueue implements QueueDriverInterface
     public function failed(JobInterface $job, \Exception $exception): void
     {
         $this->fail($job, $exception);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function signPayload(array $payload): array
+    {
+        return (new QueuePayloadSigner($this->context))->sign($payload);
+    }
+
+    /**
+     * @param array<string, mixed> $current
+     * @param array<string, mixed> $changes
+     * @param array<int, string> $remove
+     * @return array<string, mixed>
+     */
+    private function signedJobData(string $uuid, array $current, array $changes, array $remove = []): array
+    {
+        $updated = array_merge($current, $changes);
+        foreach ($remove as $field) {
+            unset($updated[$field]);
+        }
+
+        return $this->signPayload($updated);
     }
 }

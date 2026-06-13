@@ -2,8 +2,11 @@
 
 namespace Glueful\Queue\Jobs;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Queue\Contracts\JobInterface;
 use Glueful\Queue\Contracts\QueueDriverInterface;
+use Glueful\Queue\JobHandlerResolver;
+use Glueful\Queue\QueuePayloadSigner;
 
 /**
  * Database Job Implementation
@@ -31,6 +34,9 @@ class DatabaseJob implements JobInterface
     /** @var array<string, mixed> Decoded payload data */
     private array $payload;
 
+    /** @var array<string, mixed>|null Verified payload cache */
+    private ?array $verifiedPayload = null;
+
     /** @var string Queue name */
     private string $queue;
 
@@ -40,18 +46,27 @@ class DatabaseJob implements JobInterface
     /** @var bool Whether job has been released */
     private bool $released = false;
 
+    /** @var ApplicationContext|null Application context for handler resolution */
+    private ?ApplicationContext $context;
+
     /**
      * Create new database job instance
      *
      * @param QueueDriverInterface $driver Database queue driver
      * @param array<string, mixed> $rawData Raw job data from database
      * @param string $queue Queue name
+     * @param ApplicationContext|null $context Application context for handler resolution
      */
-    public function __construct(QueueDriverInterface $driver, array $rawData, string $queue)
-    {
+    public function __construct(
+        QueueDriverInterface $driver,
+        array $rawData,
+        string $queue,
+        ?ApplicationContext $context = null
+    ) {
         $this->driver = $driver;
         $this->rawData = $rawData;
         $this->queue = $queue;
+        $this->context = $context;
         $decodedPayload = json_decode($rawData['payload'], true);
         $this->payload = $decodedPayload !== null ? $decodedPayload : [];
     }
@@ -114,18 +129,19 @@ class DatabaseJob implements JobInterface
      */
     public function fire(): void
     {
-        $jobClass = $this->payload['job'] ?? null;
+        $payload = $this->verifiedPayload();
+        $jobClass = $payload['job'] ?? null;
 
-        if ($jobClass === null || !class_exists($jobClass)) {
-            throw new \RuntimeException("Job class '{$jobClass}' not found");
+        if ($jobClass === null) {
+            throw new \RuntimeException("Job payload has no job class");
         }
 
-        // Create job instance
+        // Create job instance (gated: must implement JobInterface)
         $job = $this->resolve($jobClass);
 
         // Execute job with data
         if (method_exists($job, 'handle')) {
-            $job->handle($this->payload['data'] ?? []);
+            $job->handle($payload['data'] ?? []);
         } else {
             throw new \RuntimeException("Job class '{$jobClass}' must have a 'handle' method");
         }
@@ -140,12 +156,12 @@ class DatabaseJob implements JobInterface
      * Resolve job class instance
      *
      * @param string $class Job class name
-     * @return object Job instance
+     * @return JobInterface Job instance
      */
-    private function resolve(string $class): object
+    private function resolve(string $class): JobInterface
     {
-        // Simple instantiation - can be enhanced with dependency injection
-        return new $class();
+        $payload = $this->verifiedPayload();
+        return JobHandlerResolver::resolve($class, $payload['data'] ?? [], $this->context);
     }
 
     /**
@@ -183,14 +199,18 @@ class DatabaseJob implements JobInterface
         $this->driver->failed($this, $exception);
 
         // Call failed method on job class if exists
-        $jobClass = $this->payload['job'] ?? null;
-        if ($jobClass !== null && class_exists($jobClass)) {
+        try {
+            $payload = $this->verifiedPayload();
+        } catch (\Throwable $e) {
+            error_log("Skipping job failed handler for invalid payload: " . $e->getMessage());
+            return;
+        }
+
+        $jobClass = $payload['job'] ?? null;
+        if ($jobClass !== null) {
             try {
-                $job = $this->resolve($jobClass);
-                if (method_exists($job, 'failed')) {
-                    $job->failed($this->payload['data'] ?? [], $exception);
-                }
-            } catch (\Exception $e) {
+                $this->resolve($jobClass)->failed($exception);
+            } catch (\Throwable $e) {
                 // Log but don't throw - job is already failed
                 error_log("Error in job failed handler: " . $e->getMessage());
             }
@@ -204,7 +224,13 @@ class DatabaseJob implements JobInterface
      */
     public function getMaxAttempts(): int
     {
-        return $this->payload['maxAttempts'] ?? 3;
+        try {
+            $payload = $this->verifiedPayload();
+        } catch (\Throwable) {
+            return 1;
+        }
+
+        return (int) ($payload['maxAttempts'] ?? 3);
     }
 
     /**
@@ -214,7 +240,13 @@ class DatabaseJob implements JobInterface
      */
     public function getTimeout(): int
     {
-        return $this->payload['timeout'] ?? 60;
+        try {
+            $payload = $this->verifiedPayload();
+        } catch (\Throwable) {
+            $payload = $this->payload;
+        }
+
+        return (int) ($payload['timeout'] ?? 60);
     }
 
     /**
@@ -254,7 +286,13 @@ class DatabaseJob implements JobInterface
      */
     public function getName(): string
     {
-        return $this->payload['displayName'] ?? $this->payload['job'] ?? 'Unknown';
+        try {
+            $payload = $this->verifiedPayload();
+        } catch (\Throwable) {
+            $payload = $this->payload;
+        }
+
+        return $payload['displayName'] ?? $payload['job'] ?? 'Unknown';
     }
 
     /**
@@ -294,7 +332,13 @@ class DatabaseJob implements JobInterface
      */
     public function getPushedAt(): int
     {
-        return $this->payload['pushedAt'] ?? $this->getCreatedAt();
+        try {
+            $payload = $this->verifiedPayload();
+        } catch (\Throwable) {
+            $payload = $this->payload;
+        }
+
+        return (int) ($payload['pushedAt'] ?? $this->getCreatedAt());
     }
 
     /**
@@ -315,7 +359,13 @@ class DatabaseJob implements JobInterface
      */
     public function getDescription(): string
     {
-        return $this->payload['description'] ?? $this->getName();
+        try {
+            $payload = $this->verifiedPayload();
+        } catch (\Throwable) {
+            $payload = $this->payload;
+        }
+
+        return $payload['description'] ?? $this->getName();
     }
 
     /**
@@ -337,5 +387,17 @@ class DatabaseJob implements JobInterface
     public function setDriver(QueueDriverInterface $driver): void
     {
         $this->driver = $driver;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function verifiedPayload(): array
+    {
+        if ($this->verifiedPayload === null) {
+            $this->verifiedPayload = (new QueuePayloadSigner($this->context))->verify($this->payload);
+        }
+
+        return $this->verifiedPayload;
     }
 }

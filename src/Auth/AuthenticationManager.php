@@ -6,6 +6,7 @@ namespace Glueful\Auth;
 
 use Symfony\Component\HttpFoundation\Request;
 use Glueful\Auth\Interfaces\AuthenticationProviderInterface;
+use Glueful\Support\SensitiveParamRedactor;
 
 /**
  * Authentication Manager
@@ -266,7 +267,7 @@ class AuthenticationManager
             'ip_address' => $request->getClientIp(),
             'user_agent' => $request->headers->get('User-Agent'),
             'timestamp' => date('Y-m-d H:i:s'),
-            'request_uri' => $request->getRequestUri(),
+            'request_uri' => $this->sanitizeLogUri($request->getRequestUri()),
             'method' => $request->getMethod()
         ];
 
@@ -282,5 +283,10 @@ class AuthenticationManager
                 // Silently fail if logging fails
             }
         }
+    }
+
+    private function sanitizeLogUri(string $uri): string
+    {
+        return SensitiveParamRedactor::sanitizeUrl($uri) ?? $uri;
     }
 }

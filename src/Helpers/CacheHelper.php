@@ -219,8 +219,7 @@ class CacheHelper
      */
     public static function rateLimitKey(string $identifier, string $type = 'default'): string
     {
-        $sanitized = Utils::sanitizeCacheKey($identifier);
-        return self::key("rate_limit:{$type}:{$sanitized}");
+        return self::key("rate_limit:{$type}:" . hash('sha256', $identifier));
     }
 
     /**

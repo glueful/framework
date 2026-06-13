@@ -166,6 +166,29 @@ final class FileUploaderNoMediaTest extends TestCase
         $this->assertSame('image/png', $row['mime_type']);
     }
 
+    public function testUploadMediaRunsContentHazardScanOnLivePath(): void
+    {
+        /** @var FileUploader $uploader */
+        $uploader = $this->context->getContainer()->get(FileUploader::class);
+
+        $tmp = $this->createPngFixture();
+        file_put_contents($tmp, '<script>alert(1)</script>', FILE_APPEND);
+
+        $this->expectException(\Glueful\Validation\ValidationException::class);
+
+        $uploader->uploadMedia(
+            [
+                'name' => 'pic.png',
+                'type' => 'image/png',
+                'tmp_name' => $tmp,
+                'error' => UPLOAD_ERR_OK,
+                'size' => filesize($tmp),
+            ],
+            'posts/uuid123',
+            ['save_to_blobs' => false]
+        );
+    }
+
     public function testExplicitStorageDriverIsPersistedAsBlobStorageType(): void
     {
         $uploader = new FileUploader(storageDriver: 'assets', context: $this->context);

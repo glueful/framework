@@ -269,6 +269,16 @@ final class EncryptionServiceTest extends TestCase
         new EncryptionService($this->makeContext());
     }
 
+    public function testThrowsOnAllZeroKey(): void
+    {
+        $_ENV['APP_KEY'] = 'base64:' . base64_encode(str_repeat("\0", 32));
+        putenv('APP_KEY=' . $_ENV['APP_KEY']);
+
+        $this->expectException(InvalidKeyException::class);
+        $this->expectExceptionMessage('weak');
+        new EncryptionService($this->makeContext());
+    }
+
     // =========================================================================
     // Binary Handling Tests
     // =========================================================================
@@ -398,6 +408,7 @@ final class EncryptionServiceTest extends TestCase
 
             $this->assertFileExists($dest);
             $encrypted = file_get_contents($dest);
+            $this->assertStringStartsWith('$glueful$stream-v1$', $encrypted);
             $this->assertTrue($service->isEncrypted($encrypted));
         } finally {
             @unlink($source);
@@ -423,6 +434,25 @@ final class EncryptionServiceTest extends TestCase
             $this->assertSame($original, file_get_contents($decrypted));
         } finally {
             @unlink($source);
+            @unlink($encrypted);
+            @unlink($decrypted);
+        }
+    }
+
+    public function testDecryptFileSupportsLegacySinglePayloadFiles(): void
+    {
+        $service = new EncryptionService($this->makeContext());
+
+        $encrypted = tempnam(sys_get_temp_dir(), 'enc_legacy_');
+        $decrypted = tempnam(sys_get_temp_dir(), 'enc_out_');
+
+        try {
+            file_put_contents($encrypted, $service->encryptBinary('legacy file content'));
+
+            $service->decryptFile($encrypted, $decrypted);
+
+            $this->assertSame('legacy file content', file_get_contents($decrypted));
+        } finally {
             @unlink($encrypted);
             @unlink($decrypted);
         }

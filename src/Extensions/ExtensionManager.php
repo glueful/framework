@@ -114,6 +114,9 @@ final class ExtensionManager
                     "Provider failed during boot()",
                     ['provider' => $providerClass, 'error' => $e->getMessage()]
                 );
+                if ($context->getEnvironment() !== 'production') {
+                    throw $e;
+                }
             }
         }
 
@@ -247,6 +250,9 @@ final class ExtensionManager
                     "Provider failed during register()",
                     ['provider' => $providerClass, 'error' => $e->getMessage()]
                 );
+                if ($context->getEnvironment() !== 'production') {
+                    throw $e;
+                }
             }
         }
     }

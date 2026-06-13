@@ -308,6 +308,11 @@ class ConnectionPool
      * rejects the statement it is disabled for the pool's lifetime (the transaction
      * rollback remains the data-integrity guarantee; session-variable isolation degrades
      * gracefully rather than churning the pool).
+     *
+     * The reset also wipes this pool's own per-connection init (PostgreSQL search_path,
+     * MySQL init command / sql_mode), so a successful reset is followed by reapplying it.
+     * If the reapply fails the connection is marked unhealthy -- pooling it with a default
+     * search_path or non-strict sql_mode would be a silent correctness bug.
      */
     private function resetSession(PooledConnection $connection): void
     {
@@ -328,12 +333,44 @@ class ConnectionPool
                 default => null,
             };
 
-            if ($sql !== null) {
-                $pdo->exec($sql);
+            if ($sql === null) {
+                return;
             }
+
+            $pdo->exec($sql);
         } catch (\Throwable $e) {
             $this->sessionResetUnsupported = true;
             error_log('ConnectionPool: session reset unsupported, disabling: ' . $e->getMessage());
+            return;
+        }
+
+        try {
+            $this->applySessionInit($pdo, $driverName);
+        } catch (\Throwable $e) {
+            $connection->markUnhealthy();
+            error_log('ConnectionPool: failed to reapply session init after reset: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Apply this pool's per-connection session init: the PostgreSQL search_path and the
+     * MySQL init command (sql_mode). Runs at connection creation and again after every
+     * session reset, since DISCARD ALL / RESET CONNECTION restore server defaults.
+     */
+    private function applySessionInit(PDO $pdo, string $driverName): void
+    {
+        if ($driverName === 'pgsql' && isset($this->dbConfig['schema'])) {
+            $schema = (string) $this->dbConfig['schema'];
+            $pdo->exec('SET search_path TO ' . $pdo->quote($schema));
+        }
+
+        if ($driverName === 'mysql') {
+            // PDO only runs MYSQL_ATTR_INIT_COMMAND when the connection is established;
+            // after RESET CONNECTION it must be replayed manually.
+            $initCommand = $this->options[PDO::MYSQL_ATTR_INIT_COMMAND] ?? null;
+            if (is_string($initCommand) && $initCommand !== '') {
+                $pdo->exec($initCommand);
+            }
         }
     }
 
@@ -366,10 +403,10 @@ class ConnectionPool
             $pdo = new PDO($this->dsn, $this->username, $this->password, $this->options);
             $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-            // Set PostgreSQL search_path after connection
-            if (str_starts_with($this->dsn, 'pgsql:') && isset($this->dbConfig['schema'])) {
-                $schema = $this->dbConfig['schema'] ?? 'public';
-                $pdo->exec("SET search_path TO " . $pdo->quote($schema));
+            // Set PostgreSQL search_path after connection. MySQL's init command is not
+            // replayed here -- PDO already ran MYSQL_ATTR_INIT_COMMAND during connect.
+            if (str_starts_with($this->dsn, 'pgsql:')) {
+                $this->applySessionInit($pdo, 'pgsql');
             }
         } catch (\PDOException $e) {
             // Add debugging information for connection failures

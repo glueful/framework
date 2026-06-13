@@ -217,7 +217,7 @@ final class RateLimitManager
         // Custom key pattern
         $keyPattern = $limitConfig['key'] ?? null;
         if (is_string($keyPattern) && $keyPattern !== '') {
-            return $this->resolveKeyPattern($keyPattern, $request, $tier);
+            return 'custom:' . $this->hashKeyPart($this->resolveKeyPattern($keyPattern, $request, $tier));
         }
 
         $by = $limitConfig['by'] ?? 'ip';
@@ -238,7 +238,7 @@ final class RateLimitManager
      */
     private function getIpKey(Request $request): string
     {
-        return 'ip:' . ($request->getClientIp() ?? '0.0.0.0');
+        return 'ip:' . $this->hashKeyPart($request->getClientIp() ?? '0.0.0.0');
     }
 
     /**
@@ -260,7 +260,7 @@ final class RateLimitManager
             return null;
         }
 
-        return $userId !== null ? "user:{$userId}" : null;
+        return $userId !== null ? 'user:' . $this->hashKeyPart((string) $userId) : null;
     }
 
     /**
@@ -272,7 +272,7 @@ final class RateLimitManager
         $method = $request->getMethod();
         $identifier = $this->getUserKey($request) ?? $this->getIpKey($request);
 
-        return "endpoint:{$method}:{$path}:{$identifier}";
+        return "endpoint:{$method}:" . $this->hashKeyPart($path) . ":{$identifier}";
     }
 
     /**
@@ -289,6 +289,11 @@ final class RateLimitManager
         ];
 
         return str_replace(array_keys($replacements), array_values($replacements), $pattern);
+    }
+
+    private function hashKeyPart(string $value): string
+    {
+        return hash('sha256', $value);
     }
 
     /**

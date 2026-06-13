@@ -20,7 +20,7 @@ use Symfony\Component\HttpFoundation\Request;
  * - Factory methods for common scenarios (development, production, universal)
  * - Fluent interface for method chaining and dynamic configuration
  * - Automatic string-to-array conversion for environment variables
- * - Sensible defaults with wildcard fallback for quick setup
+ * - Fail-closed defaults: no configured origins means no cross-origin access
  * - Proper preflight request handling (OPTIONS method)
  * - Configurable origin validation and method/header restrictions
  * - Credential support with security considerations
@@ -85,7 +85,6 @@ class Cors
      *
      * The constructor automatically handles:
      * - String-to-array conversion for environment variables
-     * - Wildcard fallback when no origins are configured
      * - Merging of configuration sources with proper precedence
      *
      * Configuration Sources:
@@ -94,7 +93,11 @@ class Cors
      * - security.cors.allowed_headers: Array of allowed request headers
      * - security.cors.expose_headers: Array of headers to expose to client
      * - security.cors.max_age: Cache duration for preflight responses
-     * - security.cors.supports_credentials: Boolean for credential support
+     * - security.cors.supports_credentials / cors.allow_credentials: Boolean for credential support
+     *
+     * Security: when no origins are configured the handler fails closed (denies all
+     * cross-origin requests) -- it does NOT fall back to a wildcard. Allowing every
+     * origin requires an explicit '*' / allow_all_origins in config.
      *
      * @param array<string, mixed> $config Override configuration options
      */
@@ -106,6 +109,21 @@ class Cors
             $corsConfig = $this->getConfig('security.cors', []);
         }
 
+        // Merge configuration with defaults, giving precedence to constructor params
+        $this->config = array_merge(
+            $this->resolveConfig(is_array($corsConfig) ? $corsConfig : []),
+            $config
+        );
+    }
+
+    /**
+     * Resolve the raw cors / security.cors config array into the handler's config shape.
+     *
+     * @param array<string, mixed> $corsConfig
+     * @return array<string, mixed>
+     */
+    private function resolveConfig(array $corsConfig): array
+    {
         $allowedOrigins = $corsConfig['allowed_origins'] ?? [];
         $allowAllOrigins = (bool) ($corsConfig['allow_all_origins'] ?? false);
 
@@ -113,13 +131,9 @@ class Cors
             $allowedOrigins = ['*'];
         } elseif (is_string($allowedOrigins)) {
             $allowedOrigins = array_map('trim', explode(',', $allowedOrigins));
-            $allowedOrigins = array_filter($allowedOrigins);
+            $allowedOrigins = array_values(array_filter($allowedOrigins));
         } elseif (!is_array($allowedOrigins)) {
             $allowedOrigins = [];
-        }
-
-        if (count($allowedOrigins) === 0) {
-            $allowedOrigins = ['*'];
         }
 
         $allowedHeaders = $corsConfig['allow_headers'] ?? $corsConfig['allowed_headers'] ?? [
@@ -142,8 +156,7 @@ class Cors
             $exposedHeaders = [];
         }
 
-        // Merge configuration with defaults, giving precedence to constructor params
-        $this->config = array_merge([
+        return [
             'allowedOrigins' => $allowedOrigins,
             'allowedMethods' => $corsConfig['allowed_methods'] ?? $this->getConfig('security.cors.allowed_methods', [
                 'GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'
@@ -151,9 +164,12 @@ class Cors
             'allowedHeaders' => $allowedHeaders,
             'exposedHeaders' => $exposedHeaders,
             'maxAge' => $corsConfig['max_age'] ?? $this->getConfig('security.cors.max_age', 86400), // 24 hours
-            'supportsCredentials' => $corsConfig['supports_credentials']
-                ?? $this->getConfig('security.cors.supports_credentials', true),
-        ], $config);
+            // config/cors.php uses allow_credentials, security.cors uses supports_credentials;
+            // honor both. Credentials are opt-in: the unconfigured default is disabled.
+            'supportsCredentials' => $corsConfig['allow_credentials']
+                ?? $corsConfig['supports_credentials']
+                ?? $this->getConfig('security.cors.supports_credentials', false),
+        ];
     }
 
     /**
@@ -244,16 +260,34 @@ class Cors
 
         // Send preflight response
         http_response_code(204);
-        header('Access-Control-Allow-Origin: ' . $origin);
-        header('Access-Control-Allow-Methods: ' . implode(', ', $this->config['allowedMethods']));
-        header('Access-Control-Allow-Headers: ' . implode(', ', $this->config['allowedHeaders']));
-        header('Access-Control-Max-Age: ' . $this->config['maxAge']);
-
-        if ($this->config['supportsCredentials'] === true) {
-            header('Access-Control-Allow-Credentials: true');
+        foreach ($this->preflightCorsHeaders($origin) as $name => $value) {
+            header($name . ': ' . $value);
         }
 
         exit; // End preflight request
+    }
+
+    /**
+     * Build the header map for a preflight (OPTIONS) response to an allowed origin.
+     *
+     * @return array<string, string>
+     */
+    private function preflightCorsHeaders(string $origin): array
+    {
+        // The response reflects the request Origin, so caches must key on it.
+        $headers = [
+            'Vary' => 'Origin',
+            'Access-Control-Allow-Origin' => $origin,
+            'Access-Control-Allow-Methods' => implode(', ', $this->config['allowedMethods']),
+            'Access-Control-Allow-Headers' => implode(', ', $this->config['allowedHeaders']),
+            'Access-Control-Max-Age' => (string) $this->config['maxAge'],
+        ];
+
+        if ($this->credentialsAllowed()) {
+            $headers['Access-Control-Allow-Credentials'] = 'true';
+        }
+
+        return $headers;
     }
 
     /**
@@ -277,16 +311,47 @@ class Cors
             return;
         }
 
-        header('Access-Control-Allow-Origin: ' . $origin);
+        foreach ($this->responseCorsHeaders($origin) as $name => $value) {
+            header($name . ': ' . $value);
+        }
+    }
 
-        // Add optional CORS headers
+    /**
+     * Build the header map for a regular (non-preflight) response to an allowed origin.
+     *
+     * @return array<string, string>
+     */
+    private function responseCorsHeaders(string $origin): array
+    {
+        // The response reflects the request Origin, so caches must key on it.
+        $headers = [
+            'Vary' => 'Origin',
+            'Access-Control-Allow-Origin' => $origin,
+        ];
+
         if (count($this->config['exposedHeaders']) > 0) {
-            header('Access-Control-Expose-Headers: ' . implode(', ', $this->config['exposedHeaders']));
+            $headers['Access-Control-Expose-Headers'] = implode(', ', $this->config['exposedHeaders']);
         }
 
-        if ($this->config['supportsCredentials'] === true) {
-            header('Access-Control-Allow-Credentials: true');
+        if ($this->credentialsAllowed()) {
+            $headers['Access-Control-Allow-Credentials'] = 'true';
         }
+
+        return $headers;
+    }
+
+    /**
+     * Whether Access-Control-Allow-Credentials may be emitted.
+     *
+     * Credentials must never combine with a wildcard origin: the handler reflects the
+     * request Origin into Allow-Origin, so wildcard + credentials would let any website
+     * make credentialed (cookie/auth) requests. Checked at emit time so no configuration
+     * or fluent-mutation order can re-enable the combination.
+     */
+    private function credentialsAllowed(): bool
+    {
+        return $this->config['supportsCredentials'] === true
+            && !in_array('*', $this->config['allowedOrigins'], true);
     }
 
     private function getConfig(string $key, mixed $default = null): mixed

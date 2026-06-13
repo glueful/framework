@@ -83,4 +83,25 @@ final class MigrationOrderingTest extends MigrationTestCase
         self::assertNotNull($appRow, 'app history row must remain');
         self::assertNull($pkgRow, 'pkg history row must be deleted by (source, migration)');
     }
+
+    public function test_rollback_rejects_traversal_filename_from_history(): void
+    {
+        $outside = dirname($this->tempMigrationsDir()) . '/evil.php';
+        $this->writeFixture(dirname($outside), basename($outside), 'evil_tbl');
+
+        $mm = new MigrationManager($this->tempMigrationsDir(), null, $this->context());
+        $db = Connection::fromContext($this->context());
+        $db->table('migrations')->insert([
+            'migration' => '../evil.php',
+            'source' => 'app',
+            'batch' => 1,
+            'checksum' => hash_file('sha256', $outside),
+            'description' => 'evil',
+        ]);
+
+        $result = $mm->rollback(1);
+
+        self::assertSame([], $result['reverted']);
+        self::assertSame(['../evil.php'], $result['failed']);
+    }
 }
