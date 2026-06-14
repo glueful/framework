@@ -9,6 +9,7 @@ use Glueful\Http\Contracts\ResponseData;
 use Glueful\Http\Responses\CollectionResponse;
 use Glueful\Http\Responses\PaginatedResponse;
 use Glueful\Routing\Attributes\ApiOperation;
+use Glueful\Routing\Attributes\ApiRequestBody;
 use Glueful\Routing\Attributes\ApiResponse;
 use Glueful\Routing\Attributes\QueryParam;
 use Glueful\Routing\Attributes\ResponseStatus;
@@ -291,6 +292,31 @@ final class RouteReflectionDocGenerator
     }
 
     /**
+     * Read the first `#[ApiRequestBody]` from a route handler, or null.
+     *
+     * Resolves the handler's {@see \ReflectionMethod} with the same guarded
+     * resolver used for `#[ApiOperation]`/`#[Validate]`. Returns null when the
+     * handler cannot be reflected or carries no `#[ApiRequestBody]`. The
+     * attribute's OWN `InvalidArgumentException` (a misused
+     * `#[ApiRequestBody(contentType: 'application/json')]`) is deliberately NOT
+     * caught here — it must surface, matching the fail-loud convention.
+     */
+    private function apiRequestBodyFor(mixed $handler): ?ApiRequestBody
+    {
+        $reflection = $this->handlerReflection($handler);
+        if ($reflection === null) {
+            return null;
+        }
+
+        $attributes = $reflection->getAttributes(ApiRequestBody::class);
+        if ($attributes === []) {
+            return null;
+        }
+
+        return $attributes[0]->newInstance();
+    }
+
+    /**
      * Assemble a single OpenAPI response object from one `#[ApiResponse]`.
      *
      * @return array<string, mixed>
@@ -524,8 +550,11 @@ final class RouteReflectionDocGenerator
     /**
      * Infer a JSON request body from the handler's typed input.
      *
-     * Only body-bearing verbs (POST/PUT/PATCH) produce a request body. A typed
-     * {@see RequestData} parameter takes precedence: when the handler accepts one,
+     * Only body-bearing verbs (POST/PUT/PATCH) produce a request body. A
+     * `#[ApiRequestBody]` attribute wins over everything else — it is the
+     * deliberate escape hatch for non-JSON (multipart/file) bodies a typed DTO
+     * cannot model. Otherwise a typed {@see RequestData} parameter takes
+     * precedence: when the handler accepts one,
      * its constructor-promoted `#[Rule]` attributes plus the DTO's reflected shape
      * drive the body (see {@see buildRequestBodyFromRequestData()}). Otherwise a
      * `#[Validate]` attribute describes the JSON payload (on GET/DELETE that
@@ -540,6 +569,20 @@ final class RouteReflectionDocGenerator
     {
         if (!in_array(strtoupper($method), ['POST', 'PUT', 'PATCH'], true)) {
             return null;
+        }
+
+        $apiRequestBody = $this->apiRequestBodyFor($route->getHandler());
+        if ($apiRequestBody !== null) {
+            $body = [
+                'required' => $apiRequestBody->required,
+                'content' => [
+                    $apiRequestBody->contentType => ['schema' => $apiRequestBody->schema],
+                ],
+            ];
+            if ($apiRequestBody->description !== '') {
+                $body['description'] = $apiRequestBody->description;
+            }
+            return $body;
         }
 
         $fromDto = $this->buildRequestBodyFromRequestData($route->getHandler());
