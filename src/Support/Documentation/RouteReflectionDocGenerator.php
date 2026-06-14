@@ -8,6 +8,7 @@ use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Http\Contracts\ResponseData;
 use Glueful\Http\Responses\CollectionResponse;
 use Glueful\Http\Responses\PaginatedResponse;
+use Glueful\Routing\Attributes\ApiOperation;
 use Glueful\Routing\Attributes\ApiResponse;
 use Glueful\Routing\Attributes\ResponseStatus;
 use Glueful\Routing\Route;
@@ -105,10 +106,27 @@ final class RouteReflectionDocGenerator
         $isSecured = $security !== [];
         $rateLimited = $route->getRateLimitConfig() !== [];
 
+        $apiOperation = $this->apiOperationFor($route->getHandler());
+
+        $summary = $this->deriveSummary($route);
+        $tags = [$this->deriveTag($path)];
+
+        if ($apiOperation !== null) {
+            if ($apiOperation->summary !== '') {
+                $summary = $apiOperation->summary;
+            }
+            if ($apiOperation->tags !== []) {
+                $tags = $apiOperation->tags;
+            }
+            if ($apiOperation->operationId !== null) {
+                $operationId = $apiOperation->operationId;
+            }
+        }
+
         $operation = [
             'operationId' => $operationId,
-            'summary' => $this->deriveSummary($route),
-            'tags' => [$this->deriveTag($path)],
+            'summary' => $summary,
+            'tags' => $tags,
         ];
 
         $parameters = array_merge(
@@ -123,9 +141,25 @@ final class RouteReflectionDocGenerator
             $operation['security'] = $security;
         }
 
-        $description = $this->buildScopeDescription($route);
+        $scopeDescription = $this->buildScopeDescription($route);
+        $attributeDescription = $apiOperation !== null ? $apiOperation->description : '';
+
+        // Lead with the hand-authored description; append the auto scope prose so
+        // both survive when present. Either alone falls back to existing behavior.
+        if ($attributeDescription !== '' && $scopeDescription !== '') {
+            $description = $attributeDescription . "\n\n" . $scopeDescription;
+        } elseif ($attributeDescription !== '') {
+            $description = $attributeDescription;
+        } else {
+            $description = $scopeDescription;
+        }
+
         if ($description !== '') {
             $operation['description'] = $description;
+        }
+
+        if ($apiOperation !== null && $apiOperation->deprecated) {
+            $operation['deprecated'] = true;
         }
 
         $requestBody = $this->buildRequestBody($route, $method);
@@ -217,6 +251,33 @@ final class RouteReflectionDocGenerator
         }
 
         return $responses;
+    }
+
+    /**
+     * Read the first `#[ApiOperation]` from a route handler, or null.
+     *
+     * Resolves the handler's {@see \ReflectionMethod} with the same guarded
+     * resolver used for `#[Validate]`/`#[ApiResponse]`. Returns null when the
+     * handler cannot be reflected, carries no `#[ApiOperation]`, or attribute
+     * instantiation fails — so operation building never throws.
+     */
+    private function apiOperationFor(mixed $handler): ?ApiOperation
+    {
+        $reflection = $this->handlerReflection($handler);
+        if ($reflection === null) {
+            return null;
+        }
+
+        try {
+            $attributes = $reflection->getAttributes(ApiOperation::class);
+            if ($attributes === []) {
+                return null;
+            }
+
+            return $attributes[0]->newInstance();
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**
