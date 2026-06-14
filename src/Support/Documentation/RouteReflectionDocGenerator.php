@@ -8,7 +8,9 @@ use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Routing\Attributes\ApiResponse;
 use Glueful\Routing\Route;
 use Glueful\Routing\Router;
+use Glueful\Validation\Attributes\Rule;
 use Glueful\Validation\Attributes\Validate;
+use Glueful\Validation\Contracts\RequestData;
 
 /**
  * Code-first OpenAPI path generator.
@@ -252,14 +254,17 @@ final class RouteReflectionDocGenerator
     }
 
     /**
-     * Infer a JSON request body from the handler's `#[Validate]` rules.
+     * Infer a JSON request body from the handler's typed input.
      *
-     * Only body-bearing verbs (POST/PUT/PATCH) produce a request body; on those
-     * verbs `#[Validate]` describes the JSON payload, whereas on GET/DELETE it
-     * validates the query string (out of scope here). The handler's
-     * {@see \ReflectionMethod} is resolved from `[Class, 'method']` or
+     * Only body-bearing verbs (POST/PUT/PATCH) produce a request body. A typed
+     * {@see RequestData} parameter takes precedence: when the handler accepts one,
+     * its constructor-promoted `#[Rule]` attributes plus the DTO's reflected shape
+     * drive the body (see {@see buildRequestBodyFromRequestData()}). Otherwise a
+     * `#[Validate]` attribute describes the JSON payload (on GET/DELETE that
+     * attribute validates the query string, which is out of scope here). The
+     * handler's {@see \ReflectionMethod} is resolved from `[Class, 'method']` or
      * `"Class::method"`; closures, invokables and unresolvable handlers are
-     * skipped. Reflection is fully guarded so generation never throws.
+     * skipped. All reflection is guarded so generation never throws.
      *
      * @return array<string, mixed>|null
      */
@@ -267,6 +272,11 @@ final class RouteReflectionDocGenerator
     {
         if (!in_array(strtoupper($method), ['POST', 'PUT', 'PATCH'], true)) {
             return null;
+        }
+
+        $fromDto = $this->buildRequestBodyFromRequestData($route->getHandler());
+        if ($fromDto !== null) {
+            return $fromDto;
         }
 
         $rules = $this->validationRules($route->getHandler());
@@ -286,6 +296,171 @@ final class RouteReflectionDocGenerator
                 ], static fn ($v): bool => $v !== null),
             ],
         ];
+    }
+
+    /**
+     * Build a request body from a handler's typed {@see RequestData} parameter.
+     *
+     * The DTO's reflected shape (via {@see ClassSchemaReflector}) is authoritative
+     * for property TYPES and structure (nested DTOs, enums, arrays). The DTO's
+     * constructor-promoted `#[Rule]` strings (via {@see ValidationRuleSchema}) then
+     * overlay validation constraints (`format`, `enum`, length/bounds/item counts)
+     * and supply the rule-driven `required` list. When the handler has no
+     * RequestData parameter — or any reflection fails — null is returned so the
+     * caller falls through to the `#[Validate]` path.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function buildRequestBodyFromRequestData(mixed $handler): ?array
+    {
+        $reflection = $this->handlerReflection($handler);
+        if ($reflection === null) {
+            return null;
+        }
+
+        try {
+            $dtoClass = $this->findRequestDataParam($reflection);
+            if ($dtoClass === null) {
+                return null;
+            }
+
+            $rules = $this->collectRuleStrings(new \ReflectionClass($dtoClass));
+
+            $shape = ClassSchemaReflector::toSchema($dtoClass);
+            $rulesSchema = ValidationRuleSchema::toObjectSchema($rules);
+
+            $merged = $this->mergeShapeWithRules($shape, $rulesSchema);
+            $required = $rulesSchema['required'] ?? [];
+            $example = (new ExampleDeriver())->fromValidationRules($rules);
+
+            return [
+                'required' => $required !== [],
+                'content' => [
+                    'application/json' => array_filter([
+                        'schema' => $merged,
+                        'example' => $example !== [] ? $example : null,
+                    ], static fn ($v): bool => $v !== null),
+                ],
+            ];
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Find the first parameter whose type implements {@see RequestData}.
+     *
+     * @return class-string<RequestData>|null
+     */
+    private function findRequestDataParam(\ReflectionMethod $method): ?string
+    {
+        foreach ($method->getParameters() as $param) {
+            $type = $param->getType();
+            if (!$type instanceof \ReflectionNamedType || $type->isBuiltin()) {
+                continue;
+            }
+
+            $name = $type->getName();
+            if (class_exists($name) && is_a($name, RequestData::class, true)) {
+                /** @var class-string<RequestData> $name */
+                return $name;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Collect a DTO's constructor-promoted `#[Rule]` strings, keyed by param name.
+     *
+     * Mirrors the hydrator: v1 reads `#[Rule]` only from constructor parameters
+     * (promoted properties carry the attribute on the parameter).
+     *
+     * @param  \ReflectionClass<object> $dto
+     * @return array<string, string>
+     */
+    private function collectRuleStrings(\ReflectionClass $dto): array
+    {
+        $ctor = $dto->getConstructor();
+        if ($ctor === null) {
+            return [];
+        }
+
+        $rules = [];
+        foreach ($ctor->getParameters() as $param) {
+            foreach ($param->getAttributes(Rule::class) as $attr) {
+                $rules[$param->getName()] = $attr->newInstance()->rules;
+            }
+        }
+
+        return $rules;
+    }
+
+    /**
+     * Merge a reflected DTO shape with rule-derived constraints.
+     *
+     * Property TYPES/structure come from the shape (`type`, `items`, nested
+     * objects win); validation constraint keys (`format`, `enum`, `minLength`,
+     * `maxLength`, `minimum`, `maximum`, `minItems`, `maxItems`) are overlaid from
+     * the rule schema. The rule schema's `required` list is authoritative for the
+     * request body (property nullability is ignored — `required` is rule-driven).
+     *
+     * @param  array<string, mixed> $shape
+     * @param  array{
+     *     type: string,
+     *     properties: array<string, array<string, mixed>>,
+     *     required?: list<string>
+     * } $rulesSchema
+     * @return array<string, mixed>
+     */
+    private function mergeShapeWithRules(array $shape, array $rulesSchema): array
+    {
+        $constraintKeys = [
+            'format',
+            'enum',
+            'minLength',
+            'maxLength',
+            'minimum',
+            'maximum',
+            'minItems',
+            'maxItems',
+        ];
+
+        /** @var array<string, array<string, mixed>> $properties */
+        $properties = is_array($shape['properties'] ?? null) ? $shape['properties'] : [];
+        $ruleProperties = $rulesSchema['properties'];
+
+        foreach ($properties as $field => $propertySchema) {
+            $ruleProperty = $ruleProperties[$field] ?? null;
+            if (!is_array($ruleProperty)) {
+                continue;
+            }
+            foreach ($constraintKeys as $key) {
+                if (array_key_exists($key, $ruleProperty)) {
+                    $propertySchema[$key] = $ruleProperty[$key];
+                }
+            }
+            $properties[$field] = $propertySchema;
+        }
+
+        $merged = [
+            'type' => is_string($shape['type'] ?? null) ? $shape['type'] : 'object',
+            'properties' => $properties,
+        ];
+
+        // Keep `required` ⊆ documented properties. `#[Rule]` is collected from ALL
+        // constructor-promoted params, but ClassSchemaReflector only documents PUBLIC
+        // properties — so a non-public promoted #[Rule] param would otherwise leave
+        // `required` referencing a property that isn't there (invalid OpenAPI).
+        $required = array_values(array_intersect(
+            is_array($rulesSchema['required'] ?? null) ? $rulesSchema['required'] : [],
+            array_keys($properties),
+        ));
+        if ($required !== []) {
+            $merged['required'] = $required;
+        }
+
+        return $merged;
     }
 
     /**
