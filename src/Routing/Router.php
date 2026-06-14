@@ -659,11 +659,14 @@ class Router
         // Create controller invoker with proper parameter resolution
         $invoker = $this->createControllerInvoker($route->getHandler(), $params, $request);
 
+        // Status used when enveloping a ResponseData return value (200 unless #[ResponseStatus]).
+        $successStatus = $this->responseStatusFor($route->getHandler());
+
         // Execute through middleware or directly
         if ($pipeline !== []) {
-            $response = $this->executeWithMiddleware($request, $pipeline, $invoker);
+            $response = $this->executeWithMiddleware($request, $pipeline, $invoker, $successStatus);
         } else {
-            $response = $this->normalizeResponse($invoker());
+            $response = $this->normalizeResponse($invoker(), $successStatus);
         }
 
         // Handle HEAD requests (remove body but keep headers)
@@ -774,6 +777,33 @@ class Router
         }
 
         throw new \RuntimeException("Unable to reflect handler: " . gettype($handler));
+    }
+
+    /**
+     * Resolve the success HTTP status used to envelope a ResponseData return value.
+     *
+     * Returns 200 unless the handler method declares a #[ResponseStatus]. Only the
+     * reflection resolution is guarded (a closure/unresolvable handler → 200); the
+     * attribute's own 2xx validation is allowed to throw (fail loud for that route).
+     */
+    private function responseStatusFor(mixed $handler): int
+    {
+        try {
+            $reflection = $this->getReflection($handler);
+        } catch (\Throwable) {
+            return 200;
+        }
+
+        if ($reflection instanceof \ReflectionMethod) {
+            $attributes = $reflection->getAttributes(\Glueful\Routing\Attributes\ResponseStatus::class);
+            if ($attributes !== []) {
+                // newInstance() runs the attribute constructor: a malformed (non-2xx)
+                // #[ResponseStatus] throws InvalidArgumentException here, by design.
+                return $attributes[0]->newInstance()->status;
+            }
+        }
+
+        return 200;
     }
 
     // Robust parameter resolution with type casting and DI
@@ -977,8 +1007,12 @@ class Router
     /**
      * @param array<string> $middlewareStack
      */
-    private function executeWithMiddleware(Request $request, array $middlewareStack, callable $core): Response
-    {
+    private function executeWithMiddleware(
+        Request $request,
+        array $middlewareStack,
+        callable $core,
+        int $successStatus = 200
+    ): Response {
         $next = $core;
 
         // Build pipeline inside-out to minimize allocations
@@ -987,7 +1021,7 @@ class Router
             $next = fn(Request $req) => $middleware($req, $next);
         }
 
-        return $this->normalizeResponse($next($request));
+        return $this->normalizeResponse($next($request), $successStatus);
     }
 
     // Resolve middleware from container with parameter support
@@ -1039,7 +1073,7 @@ class Router
         };
     }
 
-    private function normalizeResponse(mixed $result): Response
+    private function normalizeResponse(mixed $result, int $successStatus = 200): Response
     {
         // Pass through all Response types unchanged
         if ($result instanceof Response) {
@@ -1048,6 +1082,22 @@ class Router
 
         if (is_string($result)) {
             return new Response($result);
+        }
+
+        // Envelope a ResponseData DTO into the standard Glueful response with the
+        // declared success status. Must precede the generic array/object fallback.
+        if ($result instanceof \Glueful\Http\Contracts\ResponseData) {
+            $data = (new \Glueful\Serialization\ResponseDataSerializer())->toArray($result);
+            return match ($successStatus) {
+                200 => ApiResponse::success($data),
+                201 => ApiResponse::created($data),
+                // Build the envelope with its final status in one place (preferred
+                // over mutating success()).
+                default => new ApiResponse(
+                    ['success' => true, 'message' => 'Success', 'data' => $data],
+                    $successStatus
+                ),
+            };
         }
 
         if (is_array($result) || is_object($result)) {
