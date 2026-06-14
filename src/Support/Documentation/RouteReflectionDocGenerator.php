@@ -145,6 +145,14 @@ final class RouteReflectionDocGenerator
             }
         }
 
+        // A handler with a typed RequestData parameter runs validation, so a 422
+        // is possible — auto-emit it. Slotted before the attribute overlay so an
+        // explicit #[ApiResponse(422)] (applied last) still wins.
+        $handlerReflection = $this->handlerReflection($route->getHandler());
+        if ($handlerReflection !== null && $this->findRequestDataParam($handlerReflection) !== null) {
+            $defaults['422'] = $this->buildValidationErrorResponse();
+        }
+
         $operation['responses'] = $this->mergeAttributeResponses($defaults, $route->getHandler());
 
         return $operation;
@@ -966,6 +974,33 @@ final class RouteReflectionDocGenerator
         }
 
         return $responses;
+    }
+
+    /**
+     * The auto-derived 422 response for a handler that takes a RequestData param.
+     * Mirrors the runtime body of
+     * {@see \Glueful\Http\Exceptions\Handler::renderValidationException()}:
+     * `{success:false, message:string, errors:{<field>:[string]}}`.
+     *
+     * @return array<string, mixed>
+     */
+    private function buildValidationErrorResponse(): array
+    {
+        return [
+            'description' => 'Validation failed',
+            'content' => ['application/json' => ['schema' => [
+                'type' => 'object',
+                'properties' => [
+                    'success' => ['type' => 'boolean', 'example' => false],
+                    'message' => ['type' => 'string'],
+                    'errors' => [
+                        'type' => 'object',
+                        'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']],
+                    ],
+                ],
+                'required' => ['success', 'message', 'errors'],
+            ]]],
+        ];
     }
 
     /**
