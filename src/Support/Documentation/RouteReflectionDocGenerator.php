@@ -10,6 +10,7 @@ use Glueful\Http\Responses\CollectionResponse;
 use Glueful\Http\Responses\PaginatedResponse;
 use Glueful\Routing\Attributes\ApiOperation;
 use Glueful\Routing\Attributes\ApiResponse;
+use Glueful\Routing\Attributes\QueryParam;
 use Glueful\Routing\Attributes\ResponseStatus;
 use Glueful\Routing\Route;
 use Glueful\Routing\Router;
@@ -129,10 +130,19 @@ final class RouteReflectionDocGenerator
             'tags' => $tags,
         ];
 
-        $parameters = array_merge(
+        $ordered = array_merge(
             $this->buildParameters($route),
             $this->buildFieldSelectionParameters($route),
+            $this->buildQueryParamAttributes($route->getHandler()),
         );
+        // Dedupe by (in, name); later entries win, so an explicit #[QueryParam]
+        // overrides a generated query param (e.g. field-selection) of the same
+        // name. Path params (in: path) never collide with query params.
+        $byKey = [];
+        foreach ($ordered as $param) {
+            $byKey[($param['in'] ?? '') . ':' . ($param['name'] ?? '')] = $param;
+        }
+        $parameters = array_values($byKey);
         if ($parameters !== []) {
             $operation['parameters'] = $parameters;
         }
@@ -948,6 +958,56 @@ final class RouteReflectionDocGenerator
                 'schema' => ['type' => 'string'],
             ],
         ];
+    }
+
+    /**
+     * Build query-parameter objects from a handler's `#[QueryParam]` attributes.
+     *
+     * Resolves the handler's {@see \ReflectionMethod} with the same guarded
+     * resolver used for `#[Validate]`/`#[ApiResponse]`/`#[ApiOperation]`. Each
+     * (repeatable) attribute becomes an `in: query` parameter; a description is
+     * only emitted when non-empty, and `format`/`enum` only when set. Reflection
+     * and attribute instantiation are fully guarded so generation never throws.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function buildQueryParamAttributes(mixed $handler): array
+    {
+        $reflection = $this->handlerReflection($handler);
+        if ($reflection === null) {
+            return [];
+        }
+
+        $parameters = [];
+        foreach ($reflection->getAttributes(QueryParam::class) as $attribute) {
+            try {
+                $instance = $attribute->newInstance();
+            } catch (\Throwable) {
+                continue;
+            }
+
+            $schema = ['type' => $instance->type];
+            if ($instance->format !== null) {
+                $schema['format'] = $instance->format;
+            }
+            if ($instance->enum !== null) {
+                $schema['enum'] = $instance->enum;
+            }
+
+            $parameter = [
+                'name' => $instance->name,
+                'in' => 'query',
+                'required' => $instance->required,
+            ];
+            if ($instance->description !== '') {
+                $parameter['description'] = $instance->description;
+            }
+            $parameter['schema'] = $schema;
+
+            $parameters[] = $parameter;
+        }
+
+        return $parameters;
     }
 
     /**
