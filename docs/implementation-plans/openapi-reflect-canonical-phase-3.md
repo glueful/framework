@@ -1,6 +1,6 @@
 # OpenAPI Generator — Phase 3: Make `reflect` Canonical, Remove `comments`
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax. **Only Stage 1 is execute-ready; Stages 2–3 are scoped + sized outlines to be detailed after Stage 1 lands** (the migration uses the attributes Stage 1 builds — fully specifying it before they exist would be fabricated detail).
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Steps use checkbox (`- [x]`) syntax. **Only Stage 1 is execute-ready; Stages 2–3 are scoped + sized outlines to be detailed after Stage 1 lands** (the migration uses the attributes Stage 1 builds — fully specifying it before they exist would be fabricated detail).
 
 **Goal:** Make the code-first `reflect` generator the canonical and only OpenAPI generator: close its hand-authoring gaps with a *minimal, typed* attribute surface, migrate the framework's own route files off docblocks, then flip the default and delete `CommentsDocGenerator` + the `comments` config + the route `@*` docblocks.
 
@@ -42,9 +42,9 @@ All three attributes are method-level, read by `RouteReflectionDocGenerator` for
 
 **Files:** Create `src/Routing/Attributes/ApiOperation.php`; modify `src/Support/Documentation/RouteReflectionDocGenerator.php` (`buildOperation()` ~88–159, where `deriveSummary`/`deriveTag`/`buildScopeDescription` are applied); Test `tests/Unit/Support/Documentation/ApiOperationAttributeTest.php`.
 
-- [ ] **Step 1: Failing test** — register a route to a fixture controller method carrying `#[ApiOperation(summary: 'Sign in', description: 'Auth a user.', tags: ['Authentication'], deprecated: true)]`; generate; assert the operation's `summary === 'Sign in'`, `description` contains `'Auth a user.'`, `tags === ['Authentication']`, `deprecated === true`. Add a second method with NO attribute → assert the derived summary/tag still apply (no regression). Mirror `tests/Unit/Support/Documentation/RouteReflectionDocGeneratorTest.php`'s harness. Run → fail.
+- [x] **Step 1: Failing test** — register a route to a fixture controller method carrying `#[ApiOperation(summary: 'Sign in', description: 'Auth a user.', tags: ['Authentication'], deprecated: true)]`; generate; assert the operation's `summary === 'Sign in'`, `description` contains `'Auth a user.'`, `tags === ['Authentication']`, `deprecated === true`. Add a second method with NO attribute → assert the derived summary/tag still apply (no regression). Mirror `tests/Unit/Support/Documentation/RouteReflectionDocGeneratorTest.php`'s harness. Run → fail.
 
-- [ ] **Step 2: Create the attribute:**
+- [x] **Step 2: Create the attribute:**
 ```php
 <?php
 
@@ -74,9 +74,9 @@ final class ApiOperation
 }
 ```
 
-- [ ] **Step 3: Wire into `buildOperation()`** — add a guarded reader (reuse the existing `handlerReflection()`/`getReflection()` helper) that reads `#[ApiOperation]` once, and overlay: non-empty `summary` replaces `deriveSummary()`; non-empty `tags` replaces `[deriveTag()]`; non-empty `description` replaces/leads `buildScopeDescription()` (append the scope prose after it if present); non-null `operationId` replaces the generated id; `deprecated === true` adds `'deprecated' => true`. Keep all derivations as the default when the attribute (or a field) is absent. Reflection guarded — never throw.
+- [x] **Step 3: Wire into `buildOperation()`** — add a guarded reader (reuse the existing `handlerReflection()`/`getReflection()` helper) that reads `#[ApiOperation]` once, and overlay: non-empty `summary` replaces `deriveSummary()`; non-empty `tags` replaces `[deriveTag()]`; non-empty `description` replaces/leads `buildScopeDescription()` (append the scope prose after it if present); non-null `operationId` replaces the generated id; `deprecated === true` adds `'deprecated' => true`. Keep all derivations as the default when the attribute (or a field) is absent. Reflection guarded — never throw.
 
-- [ ] **Step 4: Run → pass** (override + no-attribute-derives-as-before). **Step 5: gates. Step 6: commit** `Add #[ApiOperation] for hand-authored summary/description/tags in reflect docs`.
+- [x] **Step 4: Run → pass** (override + no-attribute-derives-as-before). **Step 5: gates. Step 6: commit** `Add #[ApiOperation] for hand-authored summary/description/tags in reflect docs`.
 
 ## Task 1.2: `#[QueryParam]` — arbitrary query parameters
 
@@ -84,9 +84,9 @@ final class ApiOperation
 
 **Files:** Create `src/Routing/Attributes/QueryParam.php`; modify `RouteReflectionDocGenerator.php` (`buildParameters()` / a new `buildQueryParamAttributes()` merged into `$parameters` ~114–120); Test `tests/Unit/Support/Documentation/QueryParamAttributeTest.php`.
 
-- [ ] **Step 1: Failing test** — a method with `#[QueryParam('days', 'integer', description: 'Window in days', required: false)]` and `#[QueryParam('status', enum: ['active','paused'])]` (repeatable) → assert two `in: query` parameters with the right `name`/`schema.type`/`description`/`required`/`enum`. PLUS a **duplicate-policy test:** a method with both a `#[Fields]` config (which generates a `fields` query param) AND `#[QueryParam('fields', description: 'override')]` → assert the result has exactly ONE `(name:'fields', in:'query')` parameter and it is the explicit override (description `'override'`), proving `#[QueryParam]` wins over the generated one and there is no duplicate. Run → fail.
+- [x] **Step 1: Failing test** — a method with `#[QueryParam('days', 'integer', description: 'Window in days', required: false)]` and `#[QueryParam('status', enum: ['active','paused'])]` (repeatable) → assert two `in: query` parameters with the right `name`/`schema.type`/`description`/`required`/`enum`. PLUS a **duplicate-policy test:** a method with both a `#[Fields]` config (which generates a `fields` query param) AND `#[QueryParam('fields', description: 'override')]` → assert the result has exactly ONE `(name:'fields', in:'query')` parameter and it is the explicit override (description `'override'`), proving `#[QueryParam]` wins over the generated one and there is no duplicate. Run → fail.
 
-- [ ] **Step 2: Create the attribute** (`#[Attribute(TARGET_METHOD | IS_REPEATABLE)]`):
+- [x] **Step 2: Create the attribute** (`#[Attribute(TARGET_METHOD | IS_REPEATABLE)]`):
 ```php
 final class QueryParam
 {
@@ -103,7 +103,7 @@ final class QueryParam
 }
 ```
 
-- [ ] **Step 3: Wire** — a guarded `buildQueryParamAttributes($handler): array` reading all `#[QueryParam]` attrs into OpenAPI parameter objects (`{name, in: 'query', required, description?, schema: {type, format?, enum?}}`). Merge order: path params → field-selection params → `#[QueryParam]`, then **dedupe by `(name, in)` with later entries winning** — so `#[QueryParam]` (merged last) overrides a generated query param of the same name, and a later `#[QueryParam]` overrides an earlier one. Implement the dedupe explicitly (e.g. key an assoc map by `"$in:$name"` and overwrite). **Step 4–6:** pass (incl. the duplicate-policy test), gates, commit `Add #[QueryParam] for arbitrary query parameters (override-by-name) in reflect docs`.
+- [x] **Step 3: Wire** — a guarded `buildQueryParamAttributes($handler): array` reading all `#[QueryParam]` attrs into OpenAPI parameter objects (`{name, in: 'query', required, description?, schema: {type, format?, enum?}}`). Merge order: path params → field-selection params → `#[QueryParam]`, then **dedupe by `(name, in)` with later entries winning** — so `#[QueryParam]` (merged last) overrides a generated query param of the same name, and a later `#[QueryParam]` overrides an earlier one. Implement the dedupe explicitly (e.g. key an assoc map by `"$in:$name"` and overwrite). **Step 4–6:** pass (incl. the duplicate-policy test), gates, commit `Add #[QueryParam] for arbitrary query parameters (override-by-name) in reflect docs`.
 
 ## Task 1.3: `#[ApiRequestBody]` — non-JSON / multipart bodies (the one inline exception)
 
@@ -111,9 +111,9 @@ final class QueryParam
 
 **Files:** Create `src/Routing/Attributes/ApiRequestBody.php`; modify `RouteReflectionDocGenerator.php` (`buildRequestBody()` ~ where RequestData/`#[Validate]` inference happens — the attribute, when present, OVERRIDES inference); Test `tests/Unit/Support/Documentation/ApiRequestBodyAttributeTest.php`.
 
-- [ ] **Step 1: Failing test** — (a) a method with `#[ApiRequestBody(schema: ['type'=>'object','properties'=>['file'=>['type'=>'string','format'=>'binary'],'visibility'=>['type'=>'string']],'required'=>['file']])]` (default content type) → assert `requestBody.content['multipart/form-data'].schema` equals that inline schema and `required` is honored. (b) A **rejection test:** constructing `new ApiRequestBody(schema: [...], contentType: 'application/json')` throws `InvalidArgumentException` (JSON bodies must use a `RequestData` DTO, not this attribute). Run → fail.
+- [x] **Step 1: Failing test** — (a) a method with `#[ApiRequestBody(schema: ['type'=>'object','properties'=>['file'=>['type'=>'string','format'=>'binary'],'visibility'=>['type'=>'string']],'required'=>['file']])]` (default content type) → assert `requestBody.content['multipart/form-data'].schema` equals that inline schema and `required` is honored. (b) A **rejection test:** constructing `new ApiRequestBody(schema: [...], contentType: 'application/json')` throws `InvalidArgumentException` (JSON bodies must use a `RequestData` DTO, not this attribute). Run → fail.
 
-- [ ] **Step 2: Create the attribute** — default content type is **`multipart/form-data`**, and the constructor **hard-rejects** `application/json` (fail-loud, mirroring `#[ResponseStatus]`):
+- [x] **Step 2: Create the attribute** — default content type is **`multipart/form-data`**, and the constructor **hard-rejects** `application/json` (fail-loud, mirroring `#[ResponseStatus]`):
 ```php
 #[\Attribute(\Attribute::TARGET_METHOD)]
 final class ApiRequestBody
@@ -141,7 +141,7 @@ final class ApiRequestBody
 }
 ```
 
-- [ ] **Step 3: Wire** — in `buildRequestBody()`, if `#[ApiRequestBody]` is present it WINS over RequestData/`#[Validate]` inference: emit `{required, content: {<contentType>: {schema}}}` (+ description). Guarded. **Step 4–6:** pass, full `tests/Unit/Support/Documentation` green, gates, commit `Add #[ApiRequestBody] for multipart/non-JSON request bodies in reflect docs`.
+- [x] **Step 3: Wire** — in `buildRequestBody()`, if `#[ApiRequestBody]` is present it WINS over RequestData/`#[Validate]` inference: emit `{required, content: {<contentType>: {schema}}}` (+ description). Guarded. **Step 4–6:** pass, full `tests/Unit/Support/Documentation` green, gates, commit `Add #[ApiRequestBody] for multipart/non-JSON request bodies in reflect docs`.
 
 ## Task 1.4: `#[ApiResponse]` `body:` extension — non-JSON responses (binary / text / html)
 
@@ -149,25 +149,25 @@ final class ApiRequestBody
 
 **Files:** modify `src/Routing/Attributes/ApiResponse.php` (add an optional `body:` param, backward-compatible); modify `RouteReflectionDocGenerator.php` (`buildResponseObject()` — honor `body` when `schema` is null); Test `tests/Unit/Support/Documentation/ApiResponseBinaryBodyTest.php`.
 
-- [ ] **Step 1: Failing test** — methods with:
+- [x] **Step 1: Failing test** — methods with:
   - `#[ApiResponse(200, contentType: 'application/octet-stream', body: 'binary')]` → assert `responses['200'].content['application/octet-stream'].schema === ['type'=>'string','format'=>'binary']`.
   - `#[ApiResponse(200, contentType: 'text/html', body: 'text')]` → `schema === ['type'=>'string']`.
   - `#[ApiResponse(200, description: 'No body')]` (neither schema nor body) → still description-only (no `content`) — **regression guard**.
   Run → fail.
 
-- [ ] **Step 2: Extend the attribute** — add `public readonly ?string $body = null` to `ApiResponse` (after the existing params, default null → backward-compatible). Allowed values `'binary'|'text'|'object'` (validate in the constructor; throw `InvalidArgumentException` on an unknown value, mirroring `#[ResponseStatus]`'s fail-loud).
+- [x] **Step 2: Extend the attribute** — add `public readonly ?string $body = null` to `ApiResponse` (after the existing params, default null → backward-compatible). Allowed values `'binary'|'text'|'object'` (validate in the constructor; throw `InvalidArgumentException` on an unknown value, mirroring `#[ResponseStatus]`'s fail-loud).
 
-- [ ] **Step 3: Wire** — `buildResponseObject()` currently does `if ($schema === null) { return $object; }` (an early return that ignores `contentType`). REPLACE that early return with a three-way branch so the `body` case is handled before falling back to description-only:
+- [x] **Step 3: Wire** — `buildResponseObject()` currently does `if ($schema === null) { return $object; }` (an early return that ignores `contentType`). REPLACE that early return with a three-way branch so the `body` case is handled before falling back to description-only:
   1. **`$schema !== null`** → existing DTO-schema behavior (reflect the class, apply `collection`/`envelope`, set `content`).
   2. **else if `$body !== null`** → set `content: {<contentType>: {schema: <map>}}` where the map is `binary → ['type'=>'string','format'=>'binary']`, `text → ['type'=>'string']`, `object → ['type'=>'object']`.
   3. **else** → description-only (return `$object` with no `content`, as today).
   When BOTH `schema` and `body` are set, the class `schema` wins (case 1; document it). Run → pass (incl. the description-only regression guard, which exercises case 3).
 
-- [ ] **Step 4: gates. Step 5: commit** `Add #[ApiResponse] body: extension for binary/text/non-JSON responses`.
+- [x] **Step 4: gates. Step 5: commit** `Add #[ApiResponse] body: extension for binary/text/non-JSON responses`.
 
 ## Task 1.5: Stage-1 docs + CHANGELOG
 
-- [ ] Document the four additions (`#[ApiOperation]`, `#[QueryParam]`, `#[ApiRequestBody]`, `#[ApiResponse]` `body:`) AND the rules from "Settled design decisions" (DTO-first for JSON; `#[ApiRequestBody]`/`body:` are the narrow non-JSON exceptions; `@return CollectionResponse<Item>` is type metadata; `#[QueryParam]` override policy) in the reflect-generator docs. CHANGELOG `### Added`. Commit. **At this point `reflect` is feature-complete vs `comments`** — this is the gate to start Stage 2.
+- [x] Document the four additions (`#[ApiOperation]`, `#[QueryParam]`, `#[ApiRequestBody]`, `#[ApiResponse]` `body:`) AND the rules from "Settled design decisions" (DTO-first for JSON; `#[ApiRequestBody]`/`body:` are the narrow non-JSON exceptions; `@return CollectionResponse<Item>` is type metadata; `#[QueryParam]` override policy) in the reflect-generator docs. CHANGELOG `### Added`. Commit. **At this point `reflect` is feature-complete vs `comments`** — this is the gate to start Stage 2.
 
 ---
 
@@ -177,12 +177,12 @@ final class ApiRequestBody
 
 **Approach (per route file):** for each route, switch the generator to `reflect` locally (or assert via `RouteReflectionDocGenerator` directly in a test), and migrate its docs so the reflect spec is **≥** the current comment spec: types/DTOs for request+response shapes, `#[ApiOperation]` for prose/tags, `#[QueryParam]` for query params, `#[ApiResponse]` for error variants, `#[ApiRequestBody]` for multipart. Use a **characterization test** per route (capture the current comment-generated operation; assert the reflect-generated operation carries at least the same summary/description/params/security/request+response schema). Then delete that route's `@*` docblock.
 
-- [ ] **2.1 `routes/auth.php` + `AuthController`** — login (polymorphic → superset `LoginResultData` DTO or `#[ApiResponse]` + `#[ApiOperation]`; `#[ApiRequestBody]` not needed, JSON), refreshToken (already typed — add `#[ApiOperation]`), logout/validateToken/refreshPermissions/csrfToken (`#[ApiOperation]` + simple response DTOs or `#[ApiResponse]`). *(Effort M — auth is prose- and variant-heavy.)*
-- [ ] **2.2 `routes/resource.php` + `ResourceController`** — index (`#[QueryParam]` for page/per_page/sort/order/fields; response = a typed DTO or `#[ApiResponse]` for the `successWithMeta` shape), show/store/update/destroy (`#[ApiOperation]`). The polymorphic JSON write bodies (store/update/bulk) are documented **doc-only** with `#[ApiRequestBody(schema: ResourceCreateData::class)]` etc. — small generic DTOs (`ResourceCreateData`/`ResourceUpdateData`/`BulkDeleteData`/`BulkUpdateData`, typed `array<string,mixed>` for the dynamic columns) reflected for docs WITHOUT changing the controller's manual runtime (per Settled Decision #1). *(Effort M — polymorphic + query-param heavy.)*
-- [ ] **2.3 `routes/blobs.php` + `UploadController`** — upload (`#[ApiRequestBody(contentType: 'multipart/form-data', schema: …)]` — the canonical multipart case), info/signedUrl/delete (already typed in Phase D — add `#[ApiOperation]`), show (binary/stream → `#[ApiResponse(200, contentType: 'application/octet-stream', body: 'binary')]` via the Task-1.4 extension). *(Effort M.)*
-- [ ] **2.4 `routes/health.php` + `HealthController`** — probes + checks: `#[ApiOperation]` + small response DTOs (readiness already done) or `#[ApiResponse]`; bare probes documented via `#[ApiResponse]`. *(Effort S–M.)*
-- [ ] **2.5 `routes/docs.php` + any remaining route files** — `#[ApiOperation]` + `#[ApiResponse(200, contentType: 'text/html', body: 'text')]` / `#[ApiResponse(200, contentType: 'application/json', body: 'object')]` for the served HTML / OpenAPI-JSON files (Task-1.4 extension). *(Effort S.)*
-- [ ] **2.6 Extension route docs** — repeat the pattern for extension routes the framework ships/scans. *(Effort S–M, depends on which extensions are in-repo.)*
+- [x] **2.1 `routes/auth.php` + `AuthController`** — login (polymorphic → superset `LoginResultData` DTO or `#[ApiResponse]` + `#[ApiOperation]`; `#[ApiRequestBody]` not needed, JSON), refreshToken (already typed — add `#[ApiOperation]`), logout/validateToken/refreshPermissions/csrfToken (`#[ApiOperation]` + simple response DTOs or `#[ApiResponse]`). *(Effort M — auth is prose- and variant-heavy.)*
+- [x] **2.2 `routes/resource.php` + `ResourceController`** — index (`#[QueryParam]` for page/per_page/sort/order/fields; response = a typed DTO or `#[ApiResponse]` for the `successWithMeta` shape), show/store/update/destroy (`#[ApiOperation]`). The polymorphic JSON write bodies (store/update/bulk) are documented **doc-only** with `#[ApiRequestBody(schema: ResourceCreateData::class)]` etc. — small generic DTOs (`ResourceCreateData`/`ResourceUpdateData`/`BulkDeleteData`/`BulkUpdateData`, typed `array<string,mixed>` for the dynamic columns) reflected for docs WITHOUT changing the controller's manual runtime (per Settled Decision #1). *(Effort M — polymorphic + query-param heavy.)*
+- [x] **2.3 `routes/blobs.php` + `UploadController`** — upload (`#[ApiRequestBody(contentType: 'multipart/form-data', schema: …)]` — the canonical multipart case), info/signedUrl/delete (already typed in Phase D — add `#[ApiOperation]`), show (binary/stream → `#[ApiResponse(200, contentType: 'application/octet-stream', body: 'binary')]` via the Task-1.4 extension). *(Effort M.)*
+- [x] **2.4 `routes/health.php` + `HealthController`** — probes + checks: `#[ApiOperation]` + small response DTOs (readiness already done) or `#[ApiResponse]`; bare probes documented via `#[ApiResponse]`. *(Effort S–M.)*
+- [x] **2.5 `routes/docs.php` + any remaining route files** — `#[ApiOperation]` + `#[ApiResponse(200, contentType: 'text/html', body: 'text')]` / `#[ApiResponse(200, contentType: 'application/json', body: 'object')]` for the served HTML / OpenAPI-JSON files (Task-1.4 extension). *(Effort S.)*
+- [x] **2.6 Extension route docs** — repeat the pattern for extension routes the framework ships/scans. *(Effort S–M, depends on which extensions are in-repo.)*
 
 **Stage-2 exit gate:** a full-spec comparison test — generate the spec in `reflect` mode for the whole route table and assert no operation is *worse* than the comment-generated one (same paths, ≥ the summary/description/params/security/request+response coverage). This is the green light for Stage 3.
 
