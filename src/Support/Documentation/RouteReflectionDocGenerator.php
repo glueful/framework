@@ -238,8 +238,10 @@ final class RouteReflectionDocGenerator
      * `{description, content: {<contentType>: {schema}}}`, where the body schema
      * is reflected from the typed DTO via {@see ClassSchemaReflector} and then
      * optionally wrapped as a collection and/or Glueful's success envelope. A
-     * schema-less attribute yields a description-only response. Reflection and
-     * attribute instantiation are fully guarded, so generation never throws.
+     * schema-less attribute yields a description-only response, unless its
+     * constrained `body` escape hatch is set (binary/text/object) — then it emits
+     * a non-JSON content schema. Reflection and attribute instantiation are fully
+     * guarded, so generation never throws.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -330,6 +332,15 @@ final class RouteReflectionDocGenerator
         ];
 
         if ($response->schema === null) {
+            if ($response->body !== null) {
+                $object['content'] = [
+                    $response->contentType => ['schema' => match ($response->body) {
+                        'binary' => ['type' => 'string', 'format' => 'binary'],
+                        'text' => ['type' => 'string'],
+                        'object' => ['type' => 'object'],
+                    }],
+                ];
+            }
             return $object;
         }
 
