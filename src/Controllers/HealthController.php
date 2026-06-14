@@ -4,8 +4,15 @@ declare(strict_types=1);
 
 namespace Glueful\Controllers;
 
+use Glueful\Controllers\DTOs\CacheHealthData;
+use Glueful\Controllers\DTOs\DatabaseHealthData;
+use Glueful\Controllers\DTOs\LivenessData;
+use Glueful\Controllers\DTOs\QueueHealthData;
 use Glueful\Controllers\DTOs\ReadinessData;
+use Glueful\Controllers\DTOs\StartupData;
 use Glueful\Http\Response;
+use Glueful\Routing\Attributes\ApiOperation;
+use Glueful\Routing\Attributes\ApiResponse;
 use Glueful\Services\HealthService;
 use Glueful\Repository\RepositoryFactory;
 use Glueful\Auth\AuthenticationManager;
@@ -38,6 +45,13 @@ class HealthController extends BaseController
      *
      * @return mixed HTTP response with health check results
      */
+    #[ApiOperation(
+        summary: 'System Health Check',
+        description: 'Get overall system health status including database, cache, extensions, and configuration',
+        tags: ['Health'],
+    )]
+    #[ApiResponse(200, body: 'object', description: 'System health check completed')]
+    #[ApiResponse(503, description: 'System health check failed')]
     public function index()
     {
         // Cache response with short TTL for monitoring tools
@@ -83,6 +97,13 @@ class HealthController extends BaseController
      *
      * @return Response HTTP response with database health
      */
+    #[ApiOperation(
+        summary: 'Database Health Check',
+        description: 'Check database connectivity and functionality using QueryBuilder abstraction',
+        tags: ['Health'],
+    )]
+    #[ApiResponse(200, DatabaseHealthData::class, description: 'Database is healthy')]
+    #[ApiResponse(503, description: 'Database is unhealthy')]
     public function database(): Response
     {
         // NOTE: intentionally NOT migrated to a typed ResponseData. This endpoint
@@ -113,6 +134,13 @@ class HealthController extends BaseController
      *
      * @return mixed HTTP response with cache health
      */
+    #[ApiOperation(
+        summary: 'Cache Health Check',
+        description: 'Check cache connectivity and functionality',
+        tags: ['Health'],
+    )]
+    #[ApiResponse(200, CacheHealthData::class, description: 'Cache is healthy')]
+    #[ApiResponse(503, description: 'Cache is unhealthy')]
     public function cache()
     {
         $health = HealthService::checkCache($this->context);
@@ -138,6 +166,13 @@ class HealthController extends BaseController
      * Simple check that the service is running. Returns 200 if the process
      * is alive and able to respond. No dependency checks - just "am I alive?"
      */
+    #[ApiOperation(
+        summary: 'Liveness Probe (k8s convention)',
+        description: 'Kubernetes-conventional liveness endpoint. Returns 200 if the process is alive'
+            . ' and can respond. No dependency checks.',
+        tags: ['Health'],
+    )]
+    #[ApiResponse(200, LivenessData::class, description: 'Service is alive', envelope: false)]
     public function liveness(): Response
     {
         return new Response(['status' => 'ok']);
@@ -150,6 +185,14 @@ class HealthController extends BaseController
      * the service is able to handle traffic, 503 otherwise. Avoids heavy work
      * to keep probe fast and reliable.
      */
+    #[ApiOperation(
+        summary: 'Readiness Probe (k8s convention)',
+        description: 'Kubernetes-conventional readiness endpoint. Returns 200 when the service is ready'
+            . ' to serve traffic (database, cache, and config checks pass), 503 otherwise.',
+        tags: ['Health'],
+    )]
+    #[ApiResponse(200, ReadinessData::class, description: 'Service is ready')]
+    #[ApiResponse(503, description: 'Service not ready')]
     public function readiness(): ReadinessData|Response
     {
         $db = HealthService::checkDatabase($this->context);
@@ -193,6 +236,13 @@ class HealthController extends BaseController
      * Long-running runtimes (Swoole, RoadRunner) can extend the check via the
      * application's own boot signal if they need a warmer threshold.
      */
+    #[ApiOperation(
+        summary: 'Startup Probe (k8s convention)',
+        description: 'Kubernetes-conventional startup endpoint. Returns 200 once the framework'
+            . ' has finished initializing.',
+        tags: ['Health'],
+    )]
+    #[ApiResponse(200, StartupData::class, description: 'Service has started', envelope: false)]
     public function startup(): Response
     {
         return new Response(['status' => 'started']);
@@ -206,6 +256,14 @@ class HealthController extends BaseController
      *
      * @return Response HTTP response with detailed health metrics
      */
+    #[ApiOperation(
+        summary: 'Detailed Health Metrics',
+        description: 'Get comprehensive health metrics with detailed system information',
+        tags: ['Health'],
+    )]
+    #[ApiResponse(200, description: 'Detailed health metrics retrieved successfully')]
+    #[ApiResponse(403, description: 'Insufficient permissions for detailed health metrics')]
+    #[ApiResponse(503, description: 'System health check failed')]
     public function detailed(): Response
     {
         // Require permission for detailed health monitoring
@@ -230,6 +288,14 @@ class HealthController extends BaseController
      *
      * @return Response HTTP response with middleware health status
      */
+    #[ApiOperation(
+        summary: 'Middleware Pipeline Health',
+        description: 'Check the health and status of the middleware pipeline',
+        tags: ['Health'],
+    )]
+    #[ApiResponse(200, description: 'Middleware health check completed')]
+    #[ApiResponse(403, description: 'Insufficient permissions for middleware health')]
+    #[ApiResponse(503, description: 'Middleware health check failed')]
     public function middleware(): Response
     {
         $this->requirePermission('system.middleware.health', 'health:middleware');
@@ -251,6 +317,14 @@ class HealthController extends BaseController
      *
      * @return Response HTTP response with Response API performance data
      */
+    #[ApiOperation(
+        summary: 'Response API Health',
+        description: 'Check the health and performance of the Response API system',
+        tags: ['Health'],
+    )]
+    #[ApiResponse(200, description: 'Response API health check completed')]
+    #[ApiResponse(403, description: 'Insufficient permissions for Response API health')]
+    #[ApiResponse(503, description: 'Response API health check failed')]
     public function responseApi(): Response
     {
         $this->requirePermission('system.response_api.metrics', 'health:response_api');
@@ -771,6 +845,13 @@ class HealthController extends BaseController
     /**
      * Public queue health endpoint.
      */
+    #[ApiOperation(
+        summary: 'Queue Health',
+        description: 'Get queue sizes, worker activity, and simple readiness signals',
+        tags: ['Health'],
+    )]
+    #[ApiResponse(200, QueueHealthData::class, description: 'Queue health status')]
+    #[ApiResponse(503, description: 'Queue health check failed')]
     public function queue(): Response
     {
         $data = $this->getQueueHealth();
