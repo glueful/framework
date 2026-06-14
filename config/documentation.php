@@ -208,6 +208,12 @@ return [
         // Generate resource/table routes (CRUD endpoints for all database tables)
         // Set to false to disable automatic generation of table-based API endpoints
         'include_resource_routes' => env('API_DOCS_INCLUDE_RESOURCE_ROUTES', false),
+
+        // Drop default component schemas (LoginRequest, User, Notification, ...) that
+        // no path/webhook references, so the spec carries only schemas it actually uses.
+        // Default false: the built-in defaults are kept for backward compatibility.
+        // Explicitly-documented schemas (from route/extension fragments) are always kept.
+        'prune_unreferenced_schemas' => env('API_DOCS_PRUNE_UNREFERENCED_SCHEMAS', false),
     ],
 
     /*

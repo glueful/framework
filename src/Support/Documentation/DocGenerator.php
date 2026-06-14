@@ -791,6 +791,21 @@ class DocGenerator
             $baseUrl = '/';
         }
 
+        // Build webhooks first so the optional schema prune can see the $refs they carry.
+        $webhooks = [];
+        $webhooksConfig = $this->getConfig('documentation.webhooks', []);
+        if (is_array($webhooksConfig) && $webhooksConfig !== [] && $this->isOpenApi31()) {
+            $webhooks = (new WebhookDocsBuilder())->build($webhooksConfig);
+        }
+
+        // Default component schemas are unioned for convenience. When opted in, drop the
+        // ones nothing references so SDK/codegen tools don't emit dead types. Schemas that
+        // came from route/extension fragments ($this->schemas) are always kept.
+        $schemas = array_merge($this->getDefaultSchemas(), $this->schemas);
+        if ((bool) $this->getConfig('documentation.options.prune_unreferenced_schemas', false)) {
+            $schemas = self::pruneUnreferencedSchemas($schemas, $this->schemas, $this->paths, $webhooks);
+        }
+
         $swagger = [
             'openapi' => $this->openApiVersion,
             'info' => $this->buildInfoSection(),
@@ -802,9 +817,7 @@ class DocGenerator
             ]),
             'components' => [
                 'securitySchemes' => $this->securitySchemes(),
-                'schemas' => $this->transformSchemas(
-                    array_merge($this->getDefaultSchemas(), $this->schemas)
-                )
+                'schemas' => $this->transformSchemas($schemas)
             ],
             'paths' => $this->paths,
             'tags' => $this->generateTags()
@@ -815,12 +828,99 @@ class DocGenerator
             $swagger['jsonSchemaDialect'] = 'https://json-schema.org/draft/2020-12/schema';
         }
 
-        $webhooksConfig = $this->getConfig('documentation.webhooks', []);
-        if (is_array($webhooksConfig) && $webhooksConfig !== [] && $this->isOpenApi31()) {
-            $swagger['webhooks'] = (new WebhookDocsBuilder())->build($webhooksConfig);
+        if ($webhooks !== []) {
+            $swagger['webhooks'] = $webhooks;
         }
 
         return json_encode($swagger, JSON_PRETTY_PRINT);
+    }
+
+    /**
+     * Drop component schemas that nothing references.
+     *
+     * Computes the set of schemas reachable (transitively) from the operations
+     * (`$paths`), the `$webhooks`, and the always-kept schemas, then returns only those
+     * — except every schema in `$alwaysKeep` is retained regardless (those came from
+     * route/extension fragments and were documented on purpose). This targets the
+     * unconditional default-schema grab-bag without touching explicitly-documented types.
+     *
+     * Pure + static so it can be unit-tested directly, independent of config/context.
+     *
+     * @param array<string, mixed> $allSchemas  default schemas merged with $alwaysKeep
+     * @param array<string, mixed> $alwaysKeep  schemas from fragments — never pruned
+     * @param array<string, mixed> $paths       OpenAPI paths object
+     * @param array<string, mixed> $webhooks    OpenAPI webhooks object (may be empty)
+     * @return array<string, mixed> the pruned schema map (original key order preserved)
+     */
+    public static function pruneUnreferencedSchemas(
+        array $allSchemas,
+        array $alwaysKeep,
+        array $paths,
+        array $webhooks
+    ): array {
+        // Seed reachability from the paths, the webhooks, and every always-kept schema —
+        // anything they reference (directly) must survive.
+        $reachable = self::collectSchemaRefs($paths);
+        foreach (self::collectSchemaRefs($webhooks) as $name => $_) {
+            $reachable[$name] = true;
+        }
+        foreach ($alwaysKeep as $schema) {
+            foreach (self::collectSchemaRefs($schema) as $name => $_) {
+                $reachable[$name] = true;
+            }
+        }
+
+        // Expand transitively through referenced schemas until the set stops growing.
+        $changed = true;
+        while ($changed) {
+            $changed = false;
+            foreach (array_keys($reachable) as $name) {
+                if (!isset($allSchemas[$name])) {
+                    continue;
+                }
+                foreach (self::collectSchemaRefs($allSchemas[$name]) as $dep => $_) {
+                    if (!isset($reachable[$dep])) {
+                        $reachable[$dep] = true;
+                        $changed = true;
+                    }
+                }
+            }
+        }
+
+        $kept = [];
+        foreach ($allSchemas as $name => $def) {
+            if (isset($alwaysKeep[$name]) || isset($reachable[$name])) {
+                $kept[$name] = $def;
+            }
+        }
+        return $kept;
+    }
+
+    /**
+     * Collect every `#/components/schemas/<Name>` reference found anywhere in a node.
+     *
+     * @param mixed $node
+     * @return array<string, true> set of referenced schema names
+     */
+    private static function collectSchemaRefs(mixed $node): array
+    {
+        $found = [];
+        if (is_array($node)) {
+            foreach ($node as $key => $value) {
+                if (
+                    $key === '$ref'
+                    && is_string($value)
+                    && preg_match('~^#/components/schemas/(.+)$~', $value, $m) === 1
+                ) {
+                    $found[$m[1]] = true;
+                } elseif (is_array($value)) {
+                    foreach (self::collectSchemaRefs($value) as $name => $_) {
+                        $found[$name] = true;
+                    }
+                }
+            }
+        }
+        return $found;
     }
 
     /**
