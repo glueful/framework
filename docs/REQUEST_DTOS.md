@@ -138,6 +138,41 @@ The same rules that drive validation (`required`, `string`, `integer`, `email`, 
 
 If no `RequestData` parameter is found, the generator falls back to `#[Validate]` inference as before — so existing handlers are unaffected.
 
+### Auto-derived 422 response
+
+In reflect mode, a handler whose parameter list includes a `RequestData` parameter automatically documents a `422 Unprocessable Entity` response. No annotation is needed — the generator detects the parameter and emits the standard validation-error body shape:
+
+```json
+{
+  "success": false,
+  "message": "Validation failed",
+  "errors": {
+    "title": ["The title field is required."]
+  }
+}
+```
+
+To override the auto-derived 422 (for example to add a custom description or a different body schema), add `#[ApiResponse(422, description: 'Custom validation error')]` to the handler — the explicit attribute wins.
+
+---
+
+## Scaffolding a DTO
+
+`scaffold:dto` generates a ready-to-use DTO stub in one command:
+
+```bash
+# Request DTO (implements RequestData, with a sample #[Rule] property)
+php glueful scaffold:dto CreatePostData
+
+# Response DTO (implements ResponseData)
+php glueful scaffold:dto PostData --response
+
+# Overwrite an existing file without prompting
+php glueful scaffold:dto CreatePostData --force
+```
+
+The generated file is placed in `app/DTOs/` (namespace `App\DTOs`) when an `app/` directory exists, or `src/DTOs/` (namespace `Glueful\DTOs`) for framework-development contexts. The class name must be a valid PHP identifier.
+
 ---
 
 ## v1 limitations
@@ -167,7 +202,6 @@ Until a later phase converts these to 422, the rule of thumb is: **keep v1 DTOs 
 ## What is not in v1
 
 - **Non-promoted / non-public properties.** Only constructor-promoted properties are read for construction. For OpenAPI docs, only **public** promoted properties appear — a `protected`/`private` promoted `#[Rule]` param is validated at runtime but does NOT appear in the documented schema. Use public promoted properties for anything that should be part of the contract.
-- **Response DTOs (`ResponseData`).** Automatic response enveloping from a typed return value is a planned later phase.
-- **Route / query-parameter merging.** Merging path params or query params into the DTO is also a later phase.
+- **Route / query-parameter merging.** Merging path params or query params into the DTO is a later phase.
 
-Both are described in `docs/proposals/types-first-dto-io.md`.
+See `docs/proposals/types-first-dto-io.md` for the full typed-I/O roadmap. Response DTOs (`ResponseData`, `CollectionResponse`, `PaginatedResponse`) are implemented — see `docs/RESPONSE_DTOS.md`.

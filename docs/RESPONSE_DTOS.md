@@ -214,6 +214,151 @@ public function storeWithDocs(CreatePostData $input): PostData { ... }
 
 ---
 
+## Collections & pagination
+
+### Returning a list: `CollectionResponse`
+
+Use `Glueful\Http\Responses\CollectionResponse` when a handler should return a flat list of items wrapped in the standard success envelope. Items are typically `ResponseData` DTOs; plain arrays and scalars pass through unchanged via `ResponseDataSerializer`.
+
+```php
+use Glueful\Http\Responses\CollectionResponse;
+use Glueful\Routing\Attributes\ResponseStatus;
+
+class PostController extends BaseController
+{
+    /**
+     * @return CollectionResponse<PostData>
+     */
+    public function index(): CollectionResponse
+    {
+        $posts = $this->posts->all();
+
+        return new CollectionResponse(
+            array_map(fn ($p) => new PostData(
+                uuid:        $p['uuid'],
+                title:       $p['title'],
+                status:      PostStatus::from($p['status']),
+                author:      new AuthorData($p['author_uuid'], $p['author_name']),
+                publishedAt: new \DateTimeImmutable($p['published_at']),
+            ), $posts)
+        );
+    }
+
+    /**
+     * @return CollectionResponse<PostData>
+     */
+    #[ResponseStatus(201)]
+    public function bulkCreate(BulkCreatePostsData $input): CollectionResponse
+    {
+        $posts = $this->posts->bulkCreate($input);
+        return new CollectionResponse(/* ... */);
+    }
+}
+```
+
+The resulting HTTP response (200 for the first handler, 201 for the second — `#[ResponseStatus]` is honored):
+
+```json
+HTTP 200 OK
+{
+  "success": true,
+  "message": "Success",
+  "data": [
+    {
+      "uuid": "018e4c12-...",
+      "title": "Hello, World",
+      "status": "published",
+      "author": { "uuid": "018e3a00-...", "name": "Alice" },
+      "publishedAt": "2026-06-14T09:00:00+00:00"
+    }
+  ]
+}
+```
+
+### Returning a paginated list: `PaginatedResponse`
+
+Use `Glueful\Http\Responses\PaginatedResponse` when a handler should return a paginated result. The constructor takes `($items, $page, $perPage, $total)` and renders Glueful's flat pagination envelope (identical to `Response::paginated()`).
+
+```php
+use Glueful\Http\Responses\PaginatedResponse;
+
+class PostController extends BaseController
+{
+    /**
+     * @return PaginatedResponse<PostData>
+     */
+    public function index(int $page = 1, int $perPage = 25): PaginatedResponse
+    {
+        $result = $this->posts->paginate(page: $page, perPage: $perPage);
+
+        $items = array_map(fn ($p) => new PostData(
+            uuid:        $p['uuid'],
+            title:       $p['title'],
+            status:      PostStatus::from($p['status']),
+            author:      new AuthorData($p['author_uuid'], $p['author_name']),
+            publishedAt: new \DateTimeImmutable($p['published_at']),
+        ), $result['data']);
+
+        return new PaginatedResponse(
+            items:   $items,
+            page:    $page,
+            perPage: $perPage,
+            total:   $result['total'],
+        );
+    }
+}
+```
+
+The resulting HTTP response:
+
+```json
+HTTP 200 OK
+{
+  "success": true,
+  "message": "Success",
+  "data": [ { "uuid": "...", "title": "..." } ],
+  "current_page": 1,
+  "per_page": 25,
+  "total": 87,
+  "total_pages": 4,
+  "has_next_page": true,
+  "has_previous_page": false
+}
+```
+
+**`PaginatedResponse` always renders at HTTP 200.** `Response::paginated()` has no status parameter, so a `#[ResponseStatus]` attribute on a handler returning a `PaginatedResponse` has no effect. If you need a non-200 collection response, use `CollectionResponse` instead.
+
+### Constructor validation
+
+`PaginatedResponse` validates its metadata arguments at construction time:
+
+- `page` must be `>= 1`
+- `perPage` must be `>= 1` (prevents a division-by-zero in `Response::paginated()`)
+- `total` must be `>= 0`
+
+Any violation throws `\InvalidArgumentException` immediately.
+
+### OpenAPI schema inference (reflect mode)
+
+In `documentation.generator='reflect'` mode the `@return` docblock generic type parameter drives the generated item schema:
+
+```php
+/** @return CollectionResponse<PostData> */
+public function index(): CollectionResponse { ... }
+
+/** @return PaginatedResponse<PostData> */
+public function paginated(): PaginatedResponse { ... }
+```
+
+- A **fully-qualified class name** (`\App\DTOs\PostData`) or a **same-namespace short name** (`PostData`, resolved against the method's declaring class namespace) is reflected via `ClassSchemaReflector::toSchema()`.
+- **`use`-statement aliases are not resolved.** If you write `use App\DTOs\PostData as PostDto` and then `@return CollectionResponse<PostDto>`, the generator cannot resolve `PostDto` and falls back to `{type: object}`. Write the FQCN or the plain class name in the same namespace, or use an explicit `#[ApiResponse]`.
+- When no docblock is present, or the type cannot be resolved, the items schema falls back to `{type: object}`.
+- An explicit `#[ApiResponse]` at the same status always overrides the inferred schema.
+
+A `CollectionResponse` handler documents an envelope-wrapped array schema at the `#[ResponseStatus]` status (default 200). A `PaginatedResponse` handler documents a flat paginated schema (all pagination keys in `required`) always at status 200.
+
+---
+
 ## v1 boundaries
 
 ### `ResponseData` only — Resources are a separate path
@@ -231,24 +376,11 @@ public function storeWithDocs(CreatePostData $input): PostData { ... }
 
 Error and 4xx responses are not produced from a `ResponseData` return. They still come from `#[ApiResponse]` (for documented error shapes) or from exceptions thrown inside the handler (caught and converted by the exception handler).
 
-### Collections and pagination are not first-class
+### Collections and pagination are first-class via dedicated wrappers
 
-There is no built-in `ResponseData` wrapper for a paginated list. The idiomatic workaround is a plain array property on the DTO:
+`CollectionResponse` and `PaginatedResponse` are the idiomatic way to return lists. A plain `ResponseData` DTO with an array property is still valid for custom list shapes, but the wrappers give you the standard envelopes and OpenAPI inference out of the box.
 
-```php
-final class PostListData implements ResponseData
-{
-    /** @param PostData[] $items */
-    public function __construct(
-        public readonly array $items,
-        public readonly int   $total,
-        public readonly int   $page,
-        public readonly int   $perPage,
-    ) {}
-}
-```
-
-For full pagination link generation and `ResourceCollection` semantics, use the Resource path instead.
+For full pagination link generation and `ResourceCollection` semantics (conditional fields, `whenLoaded`, pivots), use the Resource path instead.
 
 ### Public typed properties only
 
