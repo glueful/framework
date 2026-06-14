@@ -285,7 +285,11 @@ final class ClassSchemaReflector
             return null;
         }
 
-        if (preg_match('/@var\s+\S+\s+(.+?)\s*(?:\n|\*\/)/', $doc, $m) === 1) {
+        // The description must be SAME-LINE text after `@var <type>` — `[ \t]+`
+        // (not `\s+`) so a `@var array<string,mixed>` with the type on its own line
+        // does NOT capture the next docblock line (e.g. the closing `*/`) as a
+        // bogus single-character description.
+        if (preg_match('/@var\s+\S+[ \t]+([^\n]+?)\s*(?:\n|\*\/)/', $doc, $m) === 1) {
             $description = trim($m[1], " \t*");
             if (strlen($description) > 0) {
                 return $description;

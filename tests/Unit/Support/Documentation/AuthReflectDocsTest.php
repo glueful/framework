@@ -123,11 +123,17 @@ final class AuthReflectDocsTest extends TestCase
         // Request body: doc-only LoginInputData schema (login stays manual at runtime).
         $jsonSchema = $op['requestBody']['content']['application/json']['schema'];
         self::assertEquals(ClassSchemaReflector::toSchema(LoginInputData::class), $jsonSchema);
+        // Structural pins so the test fails if the reflector ever falls back to a
+        // bare {type:object} (which would still equal itself above).
+        self::assertSame('object', $jsonSchema['type']);
+        self::assertSame('string', $jsonSchema['properties']['username']['type']);
+        self::assertSame('string', $jsonSchema['properties']['password']['type']);
 
         // 200 success enveloped around LoginResultData.
         self::assertSame('Login successful', $op['responses']['200']['description']);
         $data = $op['responses']['200']['content']['application/json']['schema']['properties']['data'];
         self::assertEquals(ClassSchemaReflector::toSchema(LoginResultData::class), $data);
+        self::assertSame('string', $data['properties']['access_token']['type']);
 
         // Documented error statuses.
         self::assertSame('Invalid credentials', $op['responses']['401']['description']);

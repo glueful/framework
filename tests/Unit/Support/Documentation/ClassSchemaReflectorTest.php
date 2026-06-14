@@ -135,6 +135,15 @@ final class ClassSchemaReflectorTest extends TestCase
         self::assertSame('The display title', $props['title']['description']);
     }
 
+    public function testVarWithoutInlineDescriptionEmitsNoDescription(): void
+    {
+        // A `@var array<string,mixed>` whose type is on its own line must NOT leak
+        // the next docblock line (e.g. the closing `*/`) as a bogus description.
+        $props = ClassSchemaReflector::toSchema(DescribedDto::class)['properties'];
+
+        self::assertArrayNotHasKey('description', $props['meta']);
+    }
+
     /**
      * @param  array<string, mixed> $schema
      * @return array<string, mixed>
@@ -221,4 +230,11 @@ final class DescribedDto
 {
     /** @var string The display title */
     public string $title = '';
+
+    /**
+     * Prose lives above the tag; the `@var` line itself has no inline description.
+     *
+     * @var array<string,mixed>
+     */
+    public array $meta = [];
 }
