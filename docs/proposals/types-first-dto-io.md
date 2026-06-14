@@ -1,6 +1,6 @@
 # Proposal: Types-First Request/Response DTOs
 
-**Status:** Draft — runtime seams tightened after review; ready to become an implementation plan.
+**Status:** Implemented — Phase A (request DTOs) and Phase B (response DTOs) both shipped on `dev`. See `docs/REQUEST_DTOS.md` and `docs/RESPONSE_DTOS.md`. The remaining items below (Resource auto-normalizer, collection/pagination return types) are deliberately out of scope and tracked as future enhancements.
 **Release shape:** Shippable **incrementally in a minor release**, not major-only — it is marker-interface opt-in and the router/dispatch changes are strictly *additive* (a class that doesn't implement `RequestData`/`ResponseData` behaves exactly as today).
 **Scope:** `src/Routing/` (parameter resolution + return handling), `src/Validation/`, `src/Http/`, `src/Support/Documentation/` (generator integration), new `RequestData`/`ResponseData` contracts.
 **Relationship to other work:** Builds directly on [`openapi-generator-redesign.md`](./openapi-generator-redesign.md). That effort shipped the reflect generator (Phase 1) and the schema machinery — `ClassSchemaReflector` (typed class → OpenAPI schema) and `ValidationRuleSchema` (rules → schema). This proposal adds the **runtime I/O convention** those reflectors were built to read, moving Glueful from annotation-first to types-first API documentation.

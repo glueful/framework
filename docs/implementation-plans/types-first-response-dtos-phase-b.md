@@ -1,6 +1,6 @@
 # Types-First Response DTOs — Phase B Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Let a controller method *return* a typed `ResponseData` DTO (`function show(...): PostData`); the dispatcher envelopes it into Glueful's standard `{success, message, data}` response with the right status, and the reflect OpenAPI generator infers that route's response-body schema from the return type — no `#[ApiResponse]` for the success case.
 
@@ -42,7 +42,7 @@ tests/Unit/Support/Documentation/ResponseDataSchemaTest.php# NEW
 
 `ResponseData` is a pure marker (no methods). `#[ResponseStatus(n)]` is a method attribute (default 200 when absent). The serializer converts a DTO's PUBLIC typed properties to an array, mirroring `ClassSchemaReflector`'s type handling so values match the documented schema.
 
-- [ ] **Step 1: Write the failing test** — fixtures + assertions:
+- [x] **Step 1: Write the failing test** — fixtures + assertions:
 ```php
 <?php
 declare(strict_types=1);
@@ -120,8 +120,8 @@ final class ResponseDataSerializerTest extends TestCase
 }
 ```
 Also add: `(new \Glueful\Routing\Attributes\ResponseStatus(404))` throws `\InvalidArgumentException` (non-2xx rejected), and `new ResponseStatus(201)` is accepted. Run → fail.
-- [ ] **Step 2: Run → fail.**
-- [ ] **Step 3: Implement.**
+- [x] **Step 2: Run → fail.**
+- [x] **Step 3: Implement.**
   - `ResponseData` (HTTP/output semantics → under `Glueful\Http\Contracts`):
     ```php
     namespace Glueful\Http\Contracts;
@@ -145,8 +145,8 @@ Also add: `(new \Glueful\Routing\Attributes\ResponseStatus(404))` throws `\Inval
     }
     ```
   - `ResponseDataSerializer::toArray(\Glueful\Http\Contracts\ResponseData $dto): array` — if `method_exists($dto, 'toArray')` use it (escape hatch); else reflect PUBLIC properties (skip static), mapping each value: scalar/null → as-is; backed enum → `->value`, pure enum → `->name`; `DateTimeInterface` → `->format('c')`; nested `ResponseData` → recurse; array → map each element (recursing `ResponseData`/enum/DateTime); other object → best-effort. **Two mandatory guards:** (a) skip any property where `ReflectionProperty::isInitialized($dto)` is false — reading an uninitialized typed property throws; (b) a cycle/depth guard (a `visited` object set, or a max depth ~5 matching `ClassSchemaReflector`) so a self-referential DTO terminates. With both guards it does not throw on a well-formed DTO.
-- [ ] **Step 4: Run → pass.**
-- [ ] **Step 5: Commit** `Add ResponseData marker + #[ResponseStatus] + ResponseDataSerializer`.
+- [x] **Step 4: Run → pass.**
+- [x] **Step 5: Commit** `Add ResponseData marker + #[ResponseStatus] + ResponseDataSerializer`.
 
 ---
 
@@ -156,9 +156,9 @@ Also add: `(new \Glueful\Routing\Attributes\ResponseStatus(404))` throws `\Inval
 
 `dispatch()` resolves the handler's `#[ResponseStatus]` once and threads it to `normalizeResponse` on both paths; `normalizeResponse` gains a `ResponseData` branch.
 
-- [ ] **Step 1: Write the failing test** — mirror `tests/Unit/Routing/RouterTest.php` setup. Register `GET /post` → a fixture controller method `show(): PostData` (returns a `ResponseData`); dispatch; assert the response is the enveloped DTO: status 200, JSON body `{success:true, message:..., data:{...DTO...}}`. Add: a method with `#[ResponseStatus(201)] store(): PostData` → status 201, enveloped. Add a **regression** assertion: a handler returning a plain `Response`, a `string`, an `array`, and a `JsonResource` are all normalized EXACTLY as before (unchanged) — the ResponseData branch must not alter them. Run → fail.
-- [ ] **Step 2: Run → fail.**
-- [ ] **Step 3: Implement.**
+- [x] **Step 1: Write the failing test** — mirror `tests/Unit/Routing/RouterTest.php` setup. Register `GET /post` → a fixture controller method `show(): PostData` (returns a `ResponseData`); dispatch; assert the response is the enveloped DTO: status 200, JSON body `{success:true, message:..., data:{...DTO...}}`. Add: a method with `#[ResponseStatus(201)] store(): PostData` → status 201, enveloped. Add a **regression** assertion: a handler returning a plain `Response`, a `string`, an `array`, and a `JsonResource` are all normalized EXACTLY as before (unchanged) — the ResponseData branch must not alter them. Run → fail.
+- [x] **Step 2: Run → fail.**
+- [x] **Step 3: Implement.**
   - Add `private function responseStatusFor(mixed $handler): int` — `getReflection($handler)`; if it's a `ReflectionMethod` carrying `#[ResponseStatus]`, return `newInstance()->status` and **let any exception propagate** (a malformed `#[ResponseStatus(404)]`'s constructor throws → that route fails loudly, by design — do NOT swallow). If there is no `#[ResponseStatus]` (or the handler is a closure/unresolvable), return `200` (absence is the default). Guard only the reflection resolution, never the attribute's own 2xx validation.
   - In `dispatch()` (after building the invoker, ~line 660): `$successStatus = $this->responseStatusFor($route->getHandler());` Pass it to BOTH normalize paths:
     - no-middleware (line 666): `$response = $this->normalizeResponse($invoker(), $successStatus);`
@@ -177,8 +177,8 @@ Also add: `(new \Glueful\Routing\Attributes\ResponseStatus(404))` throws `\Inval
     }
     ```
   - Verify-point: the `ResponseData` check is BEFORE `is_array($result) || is_object($result)` (the `new JsonResponse` fallback, currently ~`Router.php:1053`) so a DTO never falls through unenveloped; `Response::success`/`created` produce the envelope and the direct-constructor path matches it.
-- [ ] **Step 4: Run → pass.** **Run the FULL `tests/Unit/Routing` suite** — strictly additive: every existing normalize case (Response/string/array/JsonResource) must be byte-identical. (Confirm the `int $successStatus = 200` defaults mean no other caller of `executeWithMiddleware`/`normalizeResponse` breaks.)
-- [ ] **Step 5: Commit** `Envelope ResponseData returns in Router::normalizeResponse (status-aware)`.
+- [x] **Step 4: Run → pass.** **Run the FULL `tests/Unit/Routing` suite** — strictly additive: every existing normalize case (Response/string/array/JsonResource) must be byte-identical. (Confirm the `int $successStatus = 200` defaults mean no other caller of `executeWithMiddleware`/`normalizeResponse` breaks.)
+- [x] **Step 5: Commit** `Envelope ResponseData returns in Router::normalizeResponse (status-aware)`.
 
 ---
 
@@ -188,11 +188,11 @@ Also add: `(new \Glueful\Routing\Attributes\ResponseStatus(404))` throws `\Inval
 
 When a handler's RETURN TYPE implements `ResponseData`, document the success response from that DTO — envelope-wrapped, at the `#[ResponseStatus]` status (default 200) — reusing the existing `#[ApiResponse]` envelope builder. `#[ApiResponse]` entries still overlay by status (an explicit `#[ApiResponse(200,...)]` overrides the inferred 200; error responses 4xx/etc. come from `#[ApiResponse]` as before).
 
-- [ ] **Step 1: Write the failing test** — register `GET /posts/{id}` → fixture `show(string $id): PostData` (`PostData implements ResponseData` with typed props incl. a nested DTO + enum + nullable). Assert the operation's `responses['200'].content.application/json.schema` is the **envelope** `{type:object, properties:{success, message, data}}` where `data` is `ClassSchemaReflector::toSchema(PostData::class)` (nested author object, enum, nullable rendered as 3.1 `["string","null"]`). Assert a `#[ResponseStatus(201)] store(): PostData` → the response is under `201`. Assert a handler with BOTH a `ResponseData` return AND `#[ApiResponse(200, OtherData::class)]` → the explicit `#[ApiResponse]` wins for 200. Assert a handler returning a plain `Response` (no ResponseData) → response inference unchanged (existing behavior). Run → fail.
-- [ ] **Step 2: Run → fail.**
-- [ ] **Step 3: Implement.** In the response-building path (where `#[ApiResponse]` responses are merged onto the defaults): resolve the handler `ReflectionMethod` (reuse `handlerReflection()`); read its return type; if it's a class implementing `ResponseData`, build a success response (status from `#[ResponseStatus]`, default 200) whose schema is the envelope-wrapped `ClassSchemaReflector::toSchema($returnClass)` — reuse the same envelope helper the `#[ApiResponse]` path uses. Overlay order: defaults → inferred-return-type response → `#[ApiResponse]` responses (explicit wins). Guard reflection (never throw).
-- [ ] **Step 4: Run → pass.** Keep ALL existing `tests/Unit/Support/Documentation` tests green (esp. the `#[ApiResponse]` and request-DTO tests).
-- [ ] **Step 5: Commit** `Infer reflect-mode response schema from a ResponseData return type`.
+- [x] **Step 1: Write the failing test** — register `GET /posts/{id}` → fixture `show(string $id): PostData` (`PostData implements ResponseData` with typed props incl. a nested DTO + enum + nullable). Assert the operation's `responses['200'].content.application/json.schema` is the **envelope** `{type:object, properties:{success, message, data}}` where `data` is `ClassSchemaReflector::toSchema(PostData::class)` (nested author object, enum, nullable rendered as 3.1 `["string","null"]`). Assert a `#[ResponseStatus(201)] store(): PostData` → the response is under `201`. Assert a handler with BOTH a `ResponseData` return AND `#[ApiResponse(200, OtherData::class)]` → the explicit `#[ApiResponse]` wins for 200. Assert a handler returning a plain `Response` (no ResponseData) → response inference unchanged (existing behavior). Run → fail.
+- [x] **Step 2: Run → fail.**
+- [x] **Step 3: Implement.** In the response-building path (where `#[ApiResponse]` responses are merged onto the defaults): resolve the handler `ReflectionMethod` (reuse `handlerReflection()`); read its return type; if it's a class implementing `ResponseData`, build a success response (status from `#[ResponseStatus]`, default 200) whose schema is the envelope-wrapped `ClassSchemaReflector::toSchema($returnClass)` — reuse the same envelope helper the `#[ApiResponse]` path uses. Overlay order: defaults → inferred-return-type response → `#[ApiResponse]` responses (explicit wins). Guard reflection (never throw).
+- [x] **Step 4: Run → pass.** Keep ALL existing `tests/Unit/Support/Documentation` tests green (esp. the `#[ApiResponse]` and request-DTO tests).
+- [x] **Step 5: Commit** `Infer reflect-mode response schema from a ResponseData return type`.
 
 ---
 
@@ -200,10 +200,10 @@ When a handler's RETURN TYPE implements `ResponseData`, document the success res
 
 **Files:** Modify `CHANGELOG.md`; Create `docs/RESPONSE_DTOS.md` (or extend `docs/REQUEST_DTOS.md`).
 
-- [ ] **Step 1:** CHANGELOG `[Unreleased] → Added`: response DTOs — a method returning a `ResponseData` is enveloped into `{success, message, data}` (status via `#[ResponseStatus]`, default 200); in reflect mode the response schema is inferred from the return type. State v1 boundaries: **`ResponseData` only** (Resources still return manually via `->toResponse()` — NOT auto-enveloped); public typed properties serialized (or a custom `toArray()`); success response only (error/4xx responses still via `#[ApiResponse]`); collections/pagination not first-class yet.
-- [ ] **Step 2:** `docs/RESPONSE_DTOS.md` — worked example (`PostData implements ResponseData` returned from a controller), the envelope + `#[ResponseStatus]`, reflect-mode inference, and the boundaries above. Note the Resources-coexist position (simple DTO path vs rich Resource path) from the proposal.
-- [ ] **Step 3:** Run the FULL `vendor/bin/phpunit tests/Unit` → green (the change touches core `Router.php`; confirm no regression). `composer phpcs` clean. Report totals.
-- [ ] **Step 4: Commit** `Document typed response DTOs (Phase B wrap-up)`.
+- [x] **Step 1:** CHANGELOG `[Unreleased] → Added`: response DTOs — a method returning a `ResponseData` is enveloped into `{success, message, data}` (status via `#[ResponseStatus]`, default 200); in reflect mode the response schema is inferred from the return type. State v1 boundaries: **`ResponseData` only** (Resources still return manually via `->toResponse()` — NOT auto-enveloped); public typed properties serialized (or a custom `toArray()`); success response only (error/4xx responses still via `#[ApiResponse]`); collections/pagination not first-class yet.
+- [x] **Step 2:** `docs/RESPONSE_DTOS.md` — worked example (`PostData implements ResponseData` returned from a controller), the envelope + `#[ResponseStatus]`, reflect-mode inference, and the boundaries above. Note the Resources-coexist position (simple DTO path vs rich Resource path) from the proposal.
+- [x] **Step 3:** Run the FULL `vendor/bin/phpunit tests/Unit` → green (the change touches core `Router.php`; confirm no regression). `composer phpcs` clean. Report totals.
+- [x] **Step 4: Commit** `Document typed response DTOs (Phase B wrap-up)`.
 
 ---
 
