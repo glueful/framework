@@ -137,6 +137,18 @@ final class ApiResponseBinaryBodyTest extends TestCase
 
         new ApiResponse(200, body: 'video');
     }
+
+    public function testInvalidBodyKindFailsLoudDuringGeneration(): void
+    {
+        // A misused #[ApiResponse(body: 'video')] must surface its
+        // InvalidArgumentException when the generator reads the attribute — NOT be
+        // silently swallowed (consistent with #[ApiRequestBody]/#[ResponseStatus]).
+        $router = $this->makeRouter();
+        $router->get('/bad', [BinBodyController::class, 'invalidBody']);
+
+        $this->expectException(\InvalidArgumentException::class);
+        (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+    }
 }
 
 /**
@@ -178,6 +190,12 @@ final class BinBodyController
 
     #[ApiResponse(200, BinBodyDtoData::class, body: 'binary')]
     public function both(): \Glueful\Http\Response
+    {
+        return new \Glueful\Http\Response();
+    }
+
+    #[ApiResponse(200, body: 'video')]
+    public function invalidBody(): \Glueful\Http\Response
     {
         return new \Glueful\Http\Response();
     }

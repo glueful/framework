@@ -240,8 +240,11 @@ final class RouteReflectionDocGenerator
      * optionally wrapped as a collection and/or Glueful's success envelope. A
      * schema-less attribute yields a description-only response, unless its
      * constrained `body` escape hatch is set (binary/text/object) — then it emits
-     * a non-JSON content schema. Reflection and attribute instantiation are fully
-     * guarded, so generation never throws.
+     * a non-JSON content schema. Handler reflection is guarded (an unresolvable
+     * handler yields no responses), but the attribute's OWN constructor validation
+     * fails loud: a malformed `#[ApiResponse(body: 'video')]` surfaces its
+     * `InvalidArgumentException` rather than being silently dropped (consistent
+     * with `#[ApiRequestBody]`/`#[ResponseStatus]`).
      *
      * @return array<int, array<string, mixed>>
      */
@@ -254,8 +257,12 @@ final class RouteReflectionDocGenerator
 
         $responses = [];
         foreach ($reflection->getAttributes(ApiResponse::class) as $attribute) {
+            // Let attribute-author misuse (e.g. an invalid `body`) fail loud; only
+            // tolerate genuinely-unresolvable reflection.
             try {
                 $instance = $attribute->newInstance();
+            } catch (\InvalidArgumentException $e) {
+                throw $e;
             } catch (\Throwable) {
                 continue;
             }
