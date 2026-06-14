@@ -1072,6 +1072,19 @@ class Router
         return $this->namedRoutes;
     }
 
+    /**
+     * Whether the route table was reconstructed from the compiled route cache.
+     *
+     * Routes hydrated from cache lose closure handlers and some per-route
+     * metadata (where/name/rateLimit/requireScope/fields). Code-first
+     * documentation generation needs fresh Route objects, so it consults this
+     * flag to decide whether to rebuild the manifest before reflecting.
+     */
+    public function wasLoadedFromCache(): bool
+    {
+        return $this->routesLoadedFromCache;
+    }
+
     // Get all routes for CLI RouteListCommand
     /**
      * @return array<array<string, mixed>>

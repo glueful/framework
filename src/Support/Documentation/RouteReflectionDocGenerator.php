@@ -1,0 +1,428 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Glueful\Support\Documentation;
+
+use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Routing\Route;
+use Glueful\Routing\Router;
+
+/**
+ * Code-first OpenAPI path generator.
+ *
+ * Derives OpenAPI operations directly from the live {@see Router} route table
+ * rather than from PHPDoc/JSON fragments. Each registered {@see Route} becomes a
+ * single operation: security is computed from the route's middleware (via the
+ * {@see SecuritySchemeRegistry}), path parameters from its param/constraint maps,
+ * and a minimal-but-valid response set from its rate-limit/scope configuration.
+ *
+ * The result is a plain OpenAPI `paths` map that callers merge into a spec via
+ * {@see DocGenerator::mergePaths()}. This class deliberately does not know about
+ * schemas or prose descriptions — those are a later phase.
+ */
+final class RouteReflectionDocGenerator
+{
+    private OperationIdGenerator $operationIds;
+
+    public function __construct(
+        private readonly SecuritySchemeRegistry $registry,
+        private readonly ?ApplicationContext $context = null,
+    ) {
+        $this->operationIds = new OperationIdGenerator();
+    }
+
+    /**
+     * Build an OpenAPI `paths` map from every route registered on the router.
+     *
+     * @return array<string, array<string, array<string, mixed>>>
+     */
+    public function generate(Router $router): array
+    {
+        // Reset the operationId counters so calling generate() more than once on
+        // the same instance does not carry collision suffixes across runs.
+        $this->operationIds = new OperationIdGenerator();
+
+        $paths = [];
+
+        foreach ($this->collectRoutes($router) as $route) {
+            if (!$this->shouldInclude($route)) {
+                continue;
+            }
+
+            $path = $route->getPath();
+            $verb = strtolower($route->getMethod());
+            $paths[$path][$verb] = $this->buildOperation($route);
+        }
+
+        return $paths;
+    }
+
+    /**
+     * Collect every Route object from the static and dynamic route tables.
+     *
+     * @return list<Route>
+     */
+    private function collectRoutes(Router $router): array
+    {
+        $routes = array_values($router->getStaticRoutes());
+
+        foreach ($router->getDynamicRoutes() as $bucket) {
+            foreach ($bucket as $route) {
+                $routes[] = $route;
+            }
+        }
+
+        return $routes;
+    }
+
+    /**
+     * Build a single OpenAPI operation object for a route.
+     *
+     * @return array<string, mixed>
+     */
+    private function buildOperation(Route $route): array
+    {
+        $method = $route->getMethod();
+        $path = $route->getPath();
+        $name = $route->getName();
+
+        $operationId = $this->operationIds->register(
+            ($name !== null && $name !== '')
+                ? $this->operationIds->fromRouteName($name)
+                : $this->operationIds->fromMethodAndPath($method, $path)
+        );
+
+        $security = $this->buildSecurity($route);
+        $isSecured = $security !== [];
+        $rateLimited = $route->getRateLimitConfig() !== [];
+
+        $operation = [
+            'operationId' => $operationId,
+            'summary' => $this->deriveSummary($route),
+            'tags' => [$this->deriveTag($path)],
+        ];
+
+        $parameters = array_merge(
+            $this->buildParameters($route),
+            $this->buildFieldSelectionParameters($route),
+        );
+        if ($parameters !== []) {
+            $operation['parameters'] = $parameters;
+        }
+
+        if ($isSecured) {
+            $operation['security'] = $security;
+        }
+
+        $description = $this->buildScopeDescription($route);
+        if ($description !== '') {
+            $operation['description'] = $description;
+        }
+
+        $operation['responses'] = $this->buildResponses($isSecured, $rateLimited);
+
+        return $operation;
+    }
+
+    /**
+     * Derive a readable one-line summary for an operation.
+     */
+    private function deriveSummary(Route $route): string
+    {
+        $name = $route->getName();
+        if ($name !== null && $name !== '') {
+            $words = preg_split('/[._\-\/]+/', $name) ?: [];
+            $words = array_filter($words, static fn (string $w): bool => $w !== '');
+            if ($words !== []) {
+                return ucwords(implode(' ', $words));
+            }
+        }
+
+        return $route->getMethod() . ' ' . $route->getPath();
+    }
+
+    /**
+     * Derive an OpenAPI tag from the path's first meaningful segment.
+     *
+     * Strips a leading version segment (e.g. `v1`) and any path parameters,
+     * title-casing the result. Falls back to "Default" when nothing remains.
+     */
+    private function deriveTag(string $path): string
+    {
+        $segments = array_values(array_filter(
+            explode('/', $path),
+            static fn (string $s): bool => $s !== '',
+        ));
+
+        foreach ($segments as $segment) {
+            // Skip path parameters like {id}.
+            if (str_starts_with($segment, '{')) {
+                continue;
+            }
+            // Skip a leading version segment like v1, v2, v10.
+            if (preg_match('/^v\d+$/', $segment) === 1) {
+                continue;
+            }
+            return ucwords(str_replace(['-', '_'], ' ', $segment));
+        }
+
+        return 'Default';
+    }
+
+    /**
+     * Build path parameter objects from the route's param names and constraints.
+     *
+     * Path parameters are always required. A `where()` constraint, if present,
+     * is surfaced as the schema `pattern`.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function buildParameters(Route $route): array
+    {
+        $constraints = $route->getConstraints();
+        $parameters = [];
+
+        foreach ($route->getParamNames() as $param) {
+            $schema = ['type' => 'string'];
+            if (isset($constraints[$param]) && $constraints[$param] !== '') {
+                $schema['pattern'] = $constraints[$param];
+            }
+
+            $parameters[] = [
+                'name' => $param,
+                'in' => 'path',
+                'required' => true,
+                'description' => '',
+                'schema' => $schema,
+            ];
+        }
+
+        return $parameters;
+    }
+
+    /**
+     * Build `fields` and `expand` query parameters when the route advertises
+     * GraphQL-style field selection via {@see Route::getFieldsConfig()}.
+     *
+     * When the config declares an `allowed` whitelist, the permitted field names
+     * are listed in the `fields` parameter description.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function buildFieldSelectionParameters(Route $route): array
+    {
+        $config = $route->getFieldsConfig();
+        if ($config === null) {
+            return [];
+        }
+
+        $description = 'Comma-separated list of fields to include in the response.';
+        $allowed = $config['allowed'] ?? null;
+        if (is_array($allowed) && $allowed !== []) {
+            $names = array_values(array_filter(
+                array_map(static fn ($f): string => is_string($f) ? $f : '', $allowed),
+                static fn (string $f): bool => $f !== '',
+            ));
+            if ($names !== []) {
+                $description .= ' Allowed fields: ' . implode(', ', $names) . '.';
+            }
+        }
+
+        return [
+            [
+                'name' => 'fields',
+                'in' => 'query',
+                'required' => false,
+                'description' => $description,
+                'schema' => ['type' => 'string'],
+            ],
+            [
+                'name' => 'expand',
+                'in' => 'query',
+                'required' => false,
+                'description' => 'Comma-separated list of related resources to expand.',
+                'schema' => ['type' => 'string'],
+            ],
+        ];
+    }
+
+    /**
+     * Compute the OpenAPI security requirement for a route from its middleware.
+     *
+     * Route middleware may carry runtime parameters (e.g.
+     * `require_content_scope:read:content`, `rate_limit:60,1`); these are
+     * stripped to their bare name before the registry lookup, which keys on
+     * exact middleware names.
+     *
+     * @return list<array<string, list<string>>>
+     */
+    private function buildSecurity(Route $route): array
+    {
+        $bareNames = [];
+        foreach ($route->getMiddleware() as $middleware) {
+            $bareNames[] = explode(':', $middleware, 2)[0];
+        }
+
+        return $this->registry->securityFor($bareNames);
+    }
+
+    /**
+     * Render the route's required-scope configuration as a description sentence.
+     *
+     * OpenAPI apiKey schemes cannot carry scopes natively, so required scopes
+     * are documented in prose. The outer list is AND; each inner list is OR.
+     */
+    private function buildScopeDescription(Route $route): string
+    {
+        $groups = $route->getRequireScopeConfig();
+        if ($groups === []) {
+            return '';
+        }
+
+        $rendered = [];
+        foreach ($groups as $orGroup) {
+            $scopes = array_values(array_filter($orGroup, static fn (string $s): bool => $s !== ''));
+            if ($scopes === []) {
+                continue;
+            }
+            $rendered[] = count($scopes) === 1
+                ? $scopes[0]
+                : '(' . implode(' OR ', $scopes) . ')';
+        }
+
+        if ($rendered === []) {
+            return '';
+        }
+
+        return 'Requires scope: ' . implode(' AND ', $rendered) . '.';
+    }
+
+    /**
+     * Build a minimal but valid responses object.
+     *
+     * Always includes a 200. Secured routes add 401/403. Rate-limited routes
+     * add a 429 carrying the standard rate-limit headers.
+     *
+     * @return array<int|string, mixed>
+     */
+    private function buildResponses(bool $isSecured, bool $rateLimited): array
+    {
+        $responses = [
+            '200' => ['description' => 'Successful response'],
+        ];
+
+        if ($isSecured) {
+            $responses['401'] = ['description' => 'Unauthenticated'];
+            $responses['403'] = ['description' => 'Forbidden'];
+        }
+
+        if ($rateLimited) {
+            $responses['429'] = [
+                'description' => 'Too Many Requests',
+                'headers' => [
+                    'Retry-After' => [
+                        'description' => 'Seconds to wait before retrying.',
+                        'schema' => ['type' => 'integer'],
+                    ],
+                    'X-RateLimit-Limit' => [
+                        'description' => 'Request quota for the current window.',
+                        'schema' => ['type' => 'integer'],
+                    ],
+                    'X-RateLimit-Remaining' => [
+                        'description' => 'Requests remaining in the current window.',
+                        'schema' => ['type' => 'integer'],
+                    ],
+                ],
+            ];
+        }
+
+        return $responses;
+    }
+
+    /**
+     * Decide whether a route should be documented, honouring origin scoping.
+     *
+     * App routes are always included. Framework routes (`Glueful\…`) require
+     * `documentation.sources.include_framework_routes`; extension/vendor routes
+     * require `documentation.options.include_extensions`. Both default to true
+     * (including when no context is available).
+     */
+    private function shouldInclude(Route $route): bool
+    {
+        $origin = self::originOf($this->handlerClass($route->getHandler()));
+
+        return match ($origin) {
+            'framework' => $this->flag('documentation.sources.include_framework_routes'),
+            'extension' => $this->flag('documentation.options.include_extensions'),
+            default => true,
+        };
+    }
+
+    /**
+     * Resolve a fully-qualified controller class name from a route handler, if any.
+     *
+     * Returns null for closures or handlers whose class cannot be determined.
+     */
+    private function handlerClass(mixed $handler): ?string
+    {
+        if (is_array($handler) && isset($handler[0])) {
+            $controller = $handler[0];
+            if (is_object($controller)) {
+                return $controller::class;
+            }
+            if (is_string($controller)) {
+                return $controller;
+            }
+            return null;
+        }
+
+        if (is_string($handler)) {
+            // "Class::method" or an invokable class-string.
+            return str_contains($handler, '::')
+                ? explode('::', $handler, 2)[0]
+                : $handler;
+        }
+
+        return null;
+    }
+
+    /**
+     * Classify a handler class by origin: app, framework, or extension.
+     *
+     * Pure function (no state) so it is directly unit-testable. A null or
+     * unresolvable class (e.g. a closure handler) is treated as an app route
+     * and therefore included.
+     *
+     * @return 'app'|'framework'|'extension'
+     */
+    public static function originOf(?string $handlerClass): string
+    {
+        if ($handlerClass === null || $handlerClass === '') {
+            return 'app';
+        }
+
+        $class = ltrim($handlerClass, '\\');
+
+        if (str_starts_with($class, 'App\\')) {
+            return 'app';
+        }
+        if (str_starts_with($class, 'Glueful\\')) {
+            return 'framework';
+        }
+
+        return 'extension';
+    }
+
+    /**
+     * Read a boolean documentation flag from config, defaulting to true.
+     */
+    private function flag(string $key): bool
+    {
+        if ($this->context === null) {
+            return true;
+        }
+
+        return (bool) $this->context->getConfig($key, true);
+    }
+}

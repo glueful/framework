@@ -40,6 +40,34 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Documentation Generator
+    |--------------------------------------------------------------------------
+    |
+    | Selects how OpenAPI paths are derived:
+    |
+    |   'comments' (default) - Parse PHPDoc/JSON route fragments. Descriptions,
+    |                          request/response schemas, and examples come from
+    |                          the docblocks and json-definitions you author.
+    |
+    |   'reflect'            - Code-first generation from the LIVE route table.
+    |                          Paths, per-route security (from real middleware),
+    |                          path parameters, field-selection params, scope
+    |                          requirements, and rate-limit 429s are derived
+    |                          directly from the registered routes. Supersedes
+    |                          docblock/fragment parsing. Best run with the route
+    |                          cache disabled (ROUTE_CACHE=false): app + framework
+    |                          routes are rebuilt fresh when a cache is detected,
+    |                          but extension routes registered via a ServiceProvider
+    |                          would otherwise carry only cache-stripped metadata.
+    |
+    | Resource-route expansion (include_resource_routes) is orthogonal and still
+    | applies in both modes.
+    |
+    */
+    'generator' => env('API_DOCS_GENERATOR', 'comments'),
+
+    /*
+    |--------------------------------------------------------------------------
     | API Information
     |--------------------------------------------------------------------------
     |

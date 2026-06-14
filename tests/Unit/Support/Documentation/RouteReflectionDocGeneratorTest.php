@@ -1,0 +1,321 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Glueful\Tests\Unit\Support\Documentation;
+
+use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Routing\RouteCache;
+use Glueful\Routing\Router;
+use Glueful\Support\Documentation\RouteReflectionDocGenerator;
+use Glueful\Support\Documentation\SecuritySchemeRegistry;
+use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
+
+/**
+ * @covers \Glueful\Support\Documentation\RouteReflectionDocGenerator
+ */
+final class RouteReflectionDocGeneratorTest extends TestCase
+{
+    /** Security schemes used across tests. */
+    private const SCHEMES = [
+        'BearerAuth' => ['type' => 'http', 'scheme' => 'bearer', 'bearerFormat' => 'JWT'],
+        'ApiKeyAuth' => ['type' => 'apiKey', 'in' => 'header', 'name' => 'X-API-Key'],
+    ];
+
+    /** Middleware-to-scheme map mirroring an app that adds scope middleware. */
+    private const MIDDLEWARE_MAP = [
+        'auth' => ['BearerAuth'],
+        'require_content_scope' => ['ApiKeyAuth'],
+    ];
+
+    private function makeRouter(?ApplicationContext $context = null): Router
+    {
+        $context ??= new ApplicationContext(sys_get_temp_dir() . '/reflectdoc_' . uniqid());
+
+        // Ensure no stale compiled route cache leaks across tests.
+        (new RouteCache($context))->clear();
+
+        $container = new class ($context) implements ContainerInterface {
+            /** @var array<string, mixed> */
+            private array $services;
+
+            public function __construct(ApplicationContext $context)
+            {
+                $this->services = [ApplicationContext::class => $context];
+            }
+
+            public function has(string $id): bool
+            {
+                return array_key_exists($id, $this->services);
+            }
+
+            public function get(string $id): mixed
+            {
+                if ($this->has($id)) {
+                    return $this->services[$id];
+                }
+                throw new class ("Service '$id' not found")
+                    extends \RuntimeException
+                    implements \Psr\Container\NotFoundExceptionInterface {
+                };
+            }
+        };
+
+        return new Router($container);
+    }
+
+    private function registry(): SecuritySchemeRegistry
+    {
+        return new SecuritySchemeRegistry(self::SCHEMES, self::MIDDLEWARE_MAP);
+    }
+
+    public function testSecurityDerivedFromBearerMiddleware(): void
+    {
+        $router = $this->makeRouter();
+        $router->get('/v1/profile', [SampleAppController::class, 'show'])
+            ->middleware(['auth']);
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        $op = $paths['/v1/profile']['get'];
+        self::assertArrayHasKey('security', $op);
+        self::assertSame([['BearerAuth' => []]], $op['security']);
+        // Secured operations advertise 401/403.
+        self::assertArrayHasKey('401', $op['responses']);
+        self::assertArrayHasKey('403', $op['responses']);
+    }
+
+    public function testParameterizedMiddlewareIsStrippedBeforeRegistryLookup(): void
+    {
+        $router = $this->makeRouter();
+        $router->get('/v1/content/{type}', [SampleAppController::class, 'show'])
+            ->middleware(['auth', 'require_content_scope:read:content', 'rate_limit:60,1']);
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        $op = $paths['/v1/content/{type}']['get'];
+        // Both schemes resolve; `require_content_scope:read:content` must map despite its params.
+        self::assertContains(['BearerAuth' => []], $op['security']);
+        self::assertContains(['ApiKeyAuth' => []], $op['security']);
+    }
+
+    public function testRouteWithoutAuthHasNoSecurityKey(): void
+    {
+        $router = $this->makeRouter();
+        $router->get('/health', [SampleAppController::class, 'show']);
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        $op = $paths['/health']['get'];
+        self::assertArrayNotHasKey('security', $op);
+        self::assertArrayNotHasKey('401', $op['responses']);
+    }
+
+    public function testPathParameterCarriesConstraintPattern(): void
+    {
+        $router = $this->makeRouter();
+        $router->get('/users/{id}', [SampleAppController::class, 'show'])
+            ->where('id', '\d+');
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        $params = $paths['/users/{id}']['get']['parameters'];
+        $idParam = $this->paramNamed($params, 'id');
+        self::assertNotNull($idParam);
+        self::assertSame('path', $idParam['in']);
+        self::assertTrue($idParam['required']);
+        self::assertSame('\d+', $idParam['schema']['pattern']);
+    }
+
+    public function testRateLimitProduces429WithHeaders(): void
+    {
+        $router = $this->makeRouter();
+        $router->post('/v1/messages', [SampleAppController::class, 'show'])
+            ->rateLimit(60, 1);
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        $op = $paths['/v1/messages']['post'];
+        self::assertArrayHasKey('429', $op['responses']);
+        $headers = $op['responses']['429']['headers'];
+        self::assertArrayHasKey('Retry-After', $headers);
+        self::assertArrayHasKey('X-RateLimit-Limit', $headers);
+        self::assertArrayHasKey('X-RateLimit-Remaining', $headers);
+        self::assertSame('integer', $headers['Retry-After']['schema']['type']);
+    }
+
+    public function testFieldsConfigAddsFieldsAndExpandParameters(): void
+    {
+        $router = $this->makeRouter();
+        $route = $router->get('/v1/posts/{id}', [SampleAppController::class, 'show']);
+        $route->setFieldsConfig(['allowed' => ['id', 'title', 'comments'], 'strict' => true]);
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        $params = $paths['/v1/posts/{id}']['get']['parameters'];
+        $fields = $this->paramNamed($params, 'fields');
+        $expand = $this->paramNamed($params, 'expand');
+        self::assertNotNull($fields);
+        self::assertNotNull($expand);
+        self::assertSame('query', $fields['in']);
+        self::assertStringContainsString('id, title, comments', $fields['description']);
+    }
+
+    public function testRequireScopeAppendsReadableDescription(): void
+    {
+        $router = $this->makeRouter();
+        $route = $router->get('/v1/admin', [SampleAppController::class, 'show'])
+            ->middleware(['auth']);
+        // Outer = AND, inner = OR.
+        $route->setRequireScopeConfig([['write:posts', 'admin'], ['publish']]);
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        $description = $paths['/v1/admin']['get']['description'];
+        self::assertStringContainsString('(write:posts OR admin) AND publish', $description);
+    }
+
+    public function testTagDerivedFromPathStrippingVersion(): void
+    {
+        $router = $this->makeRouter();
+        $router->get('/v1/content/{type}', [SampleAppController::class, 'show']);
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        self::assertSame(['Content'], $paths['/v1/content/{type}']['get']['tags']);
+    }
+
+    public function testFrameworkRoutesExcludedWhenFlagDisabled(): void
+    {
+        $context = new ApplicationContext(sys_get_temp_dir() . '/reflectdoc_fw_' . uniqid());
+        $context->mergeConfigDefaults('documentation', [
+            'sources' => ['include_framework_routes' => false],
+        ]);
+
+        $router = $this->makeRouter($context);
+        // App route stays; framework-namespaced handler is filtered out.
+        $router->get('/v1/app-thing', 'App\\Http\\AppController::show');
+        $router->get('/v1/fw-thing', 'Glueful\\Some\\FrameworkController::show');
+
+        $paths = (new RouteReflectionDocGenerator($this->registry(), $context))->generate($router);
+
+        self::assertArrayHasKey('/v1/app-thing', $paths);
+        self::assertArrayNotHasKey('/v1/fw-thing', $paths);
+    }
+
+    public function testOriginOfIsAPureClassifier(): void
+    {
+        self::assertSame('app', RouteReflectionDocGenerator::originOf('App\\Http\\FooController'));
+        self::assertSame('framework', RouteReflectionDocGenerator::originOf('Glueful\\Controllers\\Bar'));
+        self::assertSame('extension', RouteReflectionDocGenerator::originOf('Acme\\Blog\\PostController'));
+        self::assertSame('app', RouteReflectionDocGenerator::originOf(null));
+        self::assertSame('framework', RouteReflectionDocGenerator::originOf('\\Glueful\\Leading\\Slash'));
+    }
+
+    public function testOperationIdsAreUnique(): void
+    {
+        $router = $this->makeRouter();
+        // Two distinct paths sharing the same route name collide on operationId
+        // and must be de-duped.
+        // Distinct names that humanize to the same operationId stem (itemsList).
+        $router->get('/items', [SampleAppController::class, 'show'])->name('items.list');
+        $router->get('/things', [SampleAppController::class, 'index'])->name('items_list');
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        $ids = [];
+        foreach ($paths as $verbs) {
+            foreach ($verbs as $op) {
+                $ids[] = $op['operationId'];
+            }
+        }
+
+        self::assertCount(count($ids), array_unique($ids), 'operationIds must be unique: ' . implode(',', $ids));
+    }
+
+    public function testGenerateIsRepeatableWithoutOperationIdDrift(): void
+    {
+        $router = $this->makeRouter();
+        $router->get('/items', [SampleAppController::class, 'show'])->name('items.list');
+        $router->get('/things', [SampleAppController::class, 'index'])->name('items_list');
+
+        $generator = new RouteReflectionDocGenerator($this->registry());
+
+        $first = $generator->generate($router);
+        $second = $generator->generate($router);
+
+        // Calling generate() twice must not carry collision suffixes forward:
+        // the second run produces byte-identical operationIds to the first.
+        self::assertSame($this->extractIds($first), $this->extractIds($second));
+
+        // And within a single run, ids remain unique.
+        $ids = $this->extractIds($second);
+        self::assertCount(count($ids), array_unique($ids));
+    }
+
+    /**
+     * @param array<string, array<string, array<string, mixed>>> $paths
+     * @return list<string>
+     */
+    private function extractIds(array $paths): array
+    {
+        $ids = [];
+        foreach ($paths as $verbs) {
+            foreach ($verbs as $op) {
+                $ids[] = (string) $op['operationId'];
+            }
+        }
+        sort($ids);
+        return $ids;
+    }
+
+    public function testEveryOperationIsStructurallyValid(): void
+    {
+        $router = $this->makeRouter();
+        $router->get('/v1/users/{id}', [SampleAppController::class, 'show'])
+            ->where('id', '\d+')
+            ->middleware(['auth'])
+            ->rateLimit(30, 1);
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        foreach ($paths as $verbs) {
+            foreach ($verbs as $op) {
+                self::assertArrayHasKey('operationId', $op);
+                self::assertArrayHasKey('summary', $op);
+                self::assertArrayHasKey('tags', $op);
+                self::assertArrayHasKey('responses', $op);
+                self::assertArrayHasKey('200', $op['responses']);
+            }
+        }
+    }
+
+    /**
+     * @param list<array<string, mixed>> $params
+     * @return array<string, mixed>|null
+     */
+    private function paramNamed(array $params, string $name): ?array
+    {
+        foreach ($params as $param) {
+            if (($param['name'] ?? null) === $name) {
+                return $param;
+            }
+        }
+        return null;
+    }
+}
+
+/**
+ * App-namespaced controller stub so routes resolve to origin "app".
+ */
+final class SampleAppController
+{
+    public function show(): void
+    {
+    }
+
+    public function index(): void
+    {
+    }
+}

@@ -7,6 +7,9 @@ namespace Glueful\Support\Documentation;
 use Glueful\Extensions\ExtensionManager;
 use Glueful\Services\FileFinder;
 use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Routing\AttributeRouteLoader;
+use Glueful\Routing\RouteManifest;
+use Glueful\Routing\Router;
 
 /**
  * OpenAPI Generator
@@ -28,6 +31,12 @@ class OpenApiGenerator
     private $progressCallback = null;
 
     private ApplicationContext $context;
+
+    /**
+     * The configured security registry, shared between the DocGenerator and the
+     * reflect-mode generator. Null when no security schemes are configured.
+     */
+    private ?SecuritySchemeRegistry $securityRegistry = null;
 
     /**
      * Constructor
@@ -79,6 +88,7 @@ class OpenApiGenerator
             is_array($middlewareMap) ? $middlewareMap : [],
         );
 
+        $this->securityRegistry = $registry;
         $this->docGenerator->setSecurityRegistry($registry);
         $this->commentsGenerator->setSecurityRegistry($registry);
     }
@@ -108,11 +118,16 @@ class OpenApiGenerator
             $this->log("Skipping resource routes generation (disabled in config)");
         }
 
-        // Step 2: Process custom API doc definitions
-        $this->processCustomApiDocs();
+        if ($this->usesReflectGenerator()) {
+            // Step 2-4 (reflect mode): derive paths from the live route table.
+            $this->generateFromRouteReflection();
+        } else {
+            // Step 2: Process custom API doc definitions
+            $this->processCustomApiDocs();
 
-        // Step 3 & 4: Generate and process extension/route documentation
-        $this->processExtensionAndRouteDocs($force);
+            // Step 3 & 4: Generate and process extension/route documentation
+            $this->processExtensionAndRouteDocs($force);
+        }
 
         // Step 5: Write final openapi.json
         $outputPath = $this->writeSwaggerJson();
@@ -149,13 +164,91 @@ class OpenApiGenerator
     {
         $this->log("Generating OpenAPI specification...");
 
+        // Resource-route expansion is orthogonal DB-table synthesis and applies
+        // in both generator modes (still gated by include_resource_routes).
         if ($this->shouldIncludeResourceRoutes()) {
             $this->expandResourceRoutes();
         }
-        $this->processCustomApiDocs();
-        $this->processExtensionAndRouteDocs($force);
+
+        if ($this->usesReflectGenerator()) {
+            // Code-first mode supersedes docblock/fragment parsing entirely.
+            $this->generateFromRouteReflection();
+        } else {
+            $this->processCustomApiDocs();
+            $this->processExtensionAndRouteDocs($force);
+        }
 
         return $this->writeSwaggerJson();
+    }
+
+    /**
+     * Whether the configured generator is the code-first reflect generator.
+     */
+    private function usesReflectGenerator(): bool
+    {
+        return config($this->context, 'documentation.generator', 'comments') === 'reflect';
+    }
+
+    /**
+     * Derive OpenAPI paths from the live route table and merge them into the spec.
+     *
+     * Loads the route table (mirroring route:debug), guards against the compiled
+     * route cache (which loses per-route metadata), and reuses the same
+     * SecuritySchemeRegistry already wired into the DocGenerator so both share
+     * one source of truth for schemes and middleware mapping.
+     */
+    private function generateFromRouteReflection(): void
+    {
+        $router = $this->obtainRouter();
+        if ($router === null) {
+            $this->log("Reflect generator: Router unavailable; no paths generated.");
+            return;
+        }
+
+        $registry = $this->securityRegistry ?? new SecuritySchemeRegistry([], []);
+        $reflect = new RouteReflectionDocGenerator($registry, $this->context);
+
+        $this->docGenerator->mergePaths($reflect->generate($router));
+        $this->log("Reflect generator: derived paths from the live route table.");
+    }
+
+    /**
+     * Resolve and populate the application Router from the container.
+     *
+     * Mirrors route:debug's load sequence: RouteManifest::load() (idempotent)
+     * plus attribute-route scanning of app/Controllers. If the router was built
+     * from the compiled route cache (which strips where/name/rateLimit/scope/
+     * fields metadata needed for reflection), the manifest is reset and reloaded
+     * so reflection sees fresh Route objects.
+     */
+    private function obtainRouter(): ?Router
+    {
+        $container = container($this->context);
+        if (!$container->has(Router::class)) {
+            return null;
+        }
+
+        /** @var Router $router */
+        $router = $container->get(Router::class);
+
+        if ($router->wasLoadedFromCache()) {
+            $this->log(
+                "Reflect generator: route cache detected; rebuilding fresh routes "
+                . "(ROUTE_CACHE strips per-route metadata)."
+            );
+            RouteManifest::reset();
+        }
+
+        RouteManifest::load($router, $this->context);
+
+        $controllers = base_path($this->context, 'app/Controllers');
+        if (is_dir($controllers) && $container->has(AttributeRouteLoader::class)) {
+            /** @var AttributeRouteLoader $loader */
+            $loader = $container->get(AttributeRouteLoader::class);
+            $loader->scanDirectory($controllers);
+        }
+
+        return $router;
     }
 
     /**

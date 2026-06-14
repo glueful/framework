@@ -112,6 +112,26 @@ class DocGenerator
         $this->paths[$path][$verb] = $existing;
     }
 
+    /**
+     * Merge a map of OpenAPI paths into the spec.
+     *
+     * Built for external path sources (e.g. {@see RouteReflectionDocGenerator})
+     * to contribute operations alongside existing ones. The merge is per-method,
+     * so an external source can add a verb to a path that already carries others
+     * without clobbering them. Within a single path+verb, the supplied operation
+     * wins (last write).
+     *
+     * @param array<string, mixed> $paths map of path => (verb => operation)
+     */
+    public function mergePaths(array $paths): void
+    {
+        foreach ($paths as $path => $methods) {
+            foreach ((array) $methods as $verb => $operation) {
+                $this->paths[$path][$verb] = $operation;
+            }
+        }
+    }
+
     /** @return array<string, array<string, mixed>> */
     private function securitySchemes(): array
     {
