@@ -190,11 +190,11 @@ final class ApiRequestBody
 
 # STAGE 3 — Flip default + remove `comments` (scoped; detail after Stage 2)
 
-- [ ] **3.1 Flip the default** — `config/documentation.php`: `'generator' => env('API_DOCS_GENERATOR', 'reflect')`. Update `DocumentationConfigTest`. *(Effort S.)*
-- [ ] **3.2 Remove the comment engine** — delete `src/Support/Documentation/CommentsDocGenerator.php`; remove the `comments` branch + `$commentsGenerator` member/wiring from `OpenApiGenerator` (the `usesReflectGenerator()` fork collapses to reflect-only); remove the `generator` config switch (or keep it accepting only `reflect`); delete the comment-path tests (`CommentsDocGenerator*Test`, the flag-gating + comments-mode tests). *(Effort M — verify nothing else references the class; the command-manifest/console wiring may need a touch.)*
-- [ ] **3.3 Strip the route `@*` docblocks** — remove the now-dead `@route/@summary/@description/@tag/@requestBody/@response/@queryParam` blocks from the route files migrated in Stage 2 (their content now lives in types/attributes). *(Effort S — mechanical, but only after 2.x proves coverage.)*
-- [ ] **3.4 Docs/env** — remove `API_DOCS_GENERATOR=comments` from `.env.example`/docs; document `reflect` as the (only) generator + the attribute override surface. *(Effort S.)*
-- [ ] **3.5 Full-suite + spec regen gate** — `composer test` green; regenerate the framework's own OpenAPI and eyeball it; confirm extension doc generation still passes. *(Effort S.)*
+- [x] **3.1 Flip the default** — `config/documentation.php`: `'generator' => env('API_DOCS_GENERATOR', 'reflect')`. Update `DocumentationConfigTest`. *(Effort S.)*
+- [x] **3.2 Remove the comment engine** — delete `src/Support/Documentation/CommentsDocGenerator.php`; remove the `comments` branch + `$commentsGenerator` member/wiring from `OpenApiGenerator` (the `usesReflectGenerator()` fork collapses to reflect-only); remove the `generator` config switch (or keep it accepting only `reflect`); delete the comment-path tests (`CommentsDocGenerator*Test`, the flag-gating + comments-mode tests). *(Effort M — verify nothing else references the class; the command-manifest/console wiring may need a touch.)*
+- [x] **3.3 Strip the route `@*` docblocks** — remove the now-dead `@route/@summary/@description/@tag/@requestBody/@response/@queryParam` blocks from the route files migrated in Stage 2 (their content now lives in types/attributes). *(Effort S — mechanical, but only after 2.x proves coverage.)*
+- [x] **3.4 Docs/env** — remove `API_DOCS_GENERATOR=comments` from `.env.example`/docs; document `reflect` as the (only) generator + the attribute override surface. *(Effort S.)*
+- [x] **3.5 Full-suite + spec regen gate** — `composer test` green; regenerate the framework's own OpenAPI and eyeball it; confirm extension doc generation still passes. *(Effort S.)*
 
 **Stage-3 exit:** one generator, no `comments`, route files carry zero doc markup, the spec is produced from types + the minimal attribute surface.
 
