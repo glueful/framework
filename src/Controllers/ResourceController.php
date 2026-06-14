@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Controllers;
 
 use Glueful\Http\Response;
+use Glueful\Controllers\DTOs\ResourceDeletedData;
 use Glueful\Auth\PasswordHasher;
 use Glueful\Repository\RepositoryFactory;
 use Glueful\Constants\ErrorCodes;
@@ -283,7 +284,7 @@ class ResourceController extends BaseController
      *
      * @route DELETE /data/{table}/{uuid}
      */
-    public function destroy(Request $request): Response
+    public function destroy(Request $request): ResourceDeletedData|Response
     {
         $table = $request->attributes->get('table', '');
         $uuid = $request->attributes->get('uuid', '');
@@ -317,13 +318,13 @@ class ResourceController extends BaseController
         // Invalidate cache after deletion
         $this->invalidateTableCache($table, $uuid);
 
-        $result = [
-            'affected' => 1,
-            'success' => true,
-            'message' => 'Record deleted successfully'
-        ];
-
-        return Response::success($result, 'Resource deleted successfully');
+        // The `data` payload keeps its own `success`/`message` keys (public props),
+        // distinct from the envelope message supplied via responseMessage().
+        return new ResourceDeletedData(
+            affected: 1,
+            success: true,
+            message: 'Record deleted successfully',
+        );
     }
 
 
