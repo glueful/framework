@@ -45,11 +45,11 @@ return [
     |
     | Selects how OpenAPI paths are derived:
     |
-    |   'comments' (default) - Parse PHPDoc/JSON route fragments. Descriptions,
+    |   'comments'           - Parse PHPDoc/JSON route fragments. Descriptions,
     |                          request/response schemas, and examples come from
     |                          the docblocks and json-definitions you author.
     |
-    |   'reflect'            - Code-first generation from the LIVE route table.
+    |   'reflect' (default)  - Code-first generation from the LIVE route table.
     |                          Paths, per-route security (from real middleware),
     |                          path parameters, field-selection params, scope
     |                          requirements, and rate-limit 429s are derived
@@ -64,7 +64,7 @@ return [
     | applies in both modes.
     |
     */
-    'generator' => env('API_DOCS_GENERATOR', 'comments'),
+    'generator' => env('API_DOCS_GENERATOR', 'reflect'),
 
     /*
     |--------------------------------------------------------------------------

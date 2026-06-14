@@ -131,8 +131,8 @@ final class OpenApiGeneratorReflectModeTest extends TestCase
     }
 
     /**
-     * Sanity: in the default 'comments' mode the reflect path is NOT taken, so
-     * routes registered on the live router do not leak into the spec.
+     * Sanity: in 'comments' mode the reflect path is NOT taken, so routes
+     * registered on the live router do not leak into the spec.
      */
     public function testCommentsModeDoesNotReflectLiveRoutes(): void
     {
