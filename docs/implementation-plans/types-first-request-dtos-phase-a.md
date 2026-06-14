@@ -1,6 +1,6 @@
 # Types-First Request DTOs — Phase A Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Let a controller method declare a typed request DTO parameter (`function store(CreatePostData $input)`) that the router hydrates-and-validates from the JSON body, and have the reflect OpenAPI generator infer that route's request-body schema from the DTO — with no `#[Validate]`/`#[ApiResponse]` annotation.
 
@@ -40,7 +40,7 @@ tests/Unit/Support/Documentation/RequestDataSchemaTest.php # NEW (or extend Rout
 
 **Files:** Create `src/Validation/Attributes/Rule.php`, `src/Validation/Contracts/RequestData.php`; Test `tests/Unit/Validation/RuleAttributeTest.php`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 ```php
 <?php
 declare(strict_types=1);
@@ -69,8 +69,8 @@ final class RuleAttributeTest extends TestCase
     }
 }
 ```
-- [ ] **Step 2: Run → fail** (`vendor/bin/phpunit tests/Unit/Validation/RuleAttributeTest.php`).
-- [ ] **Step 3: Implement**
+- [x] **Step 2: Run → fail** (`vendor/bin/phpunit tests/Unit/Validation/RuleAttributeTest.php`).
+- [x] **Step 3: Implement**
 ```php
 <?php
 declare(strict_types=1);
@@ -91,8 +91,8 @@ namespace Glueful\Validation\Contracts;
 /** Marker: a parameter typed as a RequestData is hydrated + validated from the request body. */
 interface RequestData {}
 ```
-- [ ] **Step 4: Run → pass.**
-- [ ] **Step 5: Commit** `Add #[Rule] attribute + RequestData marker for typed request DTOs`.
+- [x] **Step 4: Run → pass.**
+- [x] **Step 5: Commit** `Add #[Rule] attribute + RequestData marker for typed request DTOs`.
 
 ---
 
@@ -102,7 +102,7 @@ interface RequestData {}
 
 **v1 scope: constructor-promoted DTOs only.** The hydrator: (1) collect `#[Rule]` strings from the DTO's **constructor parameters** (promoted properties carry the attribute on the parameter; non-promoted public properties are out of scope for v1); (2) `RuleParser::parse()` → `Validator::validate()` (returns errors) → throw `ValidationException` if any → take sanitized values from `filtered()`; (3) construct the DTO mapping values to constructor params by name, coercing builtins, using defaults for missing optionals.
 
-- [ ] **Step 1: Write the failing test** — use an inline fixture DTO with promoted properties + `#[Rule]`:
+- [x] **Step 1: Write the failing test** — use an inline fixture DTO with promoted properties + `#[Rule]`:
 ```php
 <?php
 declare(strict_types=1);
@@ -151,8 +151,8 @@ final class RequestDataHydratorTest extends TestCase
     }
 }
 ```
-- [ ] **Step 2: Run → fail.**
-- [ ] **Step 3: Implement**
+- [x] **Step 2: Run → fail.**
+- [x] **Step 3: Implement**
 ```php
 <?php
 declare(strict_types=1);
@@ -235,8 +235,8 @@ final class RequestDataHydrator
 }
 ```
 > `Validator` / `ValidationException` need no `use` — they share the hydrator's `Glueful\Validation` namespace. Contract (verified): `validate()` returns the error map (empty = valid, never throws), `filtered()` returns the sanitized values from the last run.
-- [ ] **Step 4: Run → pass.**
-- [ ] **Step 5: Commit** `Add RequestDataHydrator (body -> RuleParser/Validator -> typed DTO)`.
+- [x] **Step 4: Run → pass.**
+- [x] **Step 5: Commit** `Add RequestDataHydrator (body -> RuleParser/Validator -> typed DTO)`.
 
 ---
 
@@ -246,9 +246,9 @@ final class RequestDataHydrator
 
 Insert the branch **after** the `Request` check (`:803`) and **before** `container->has()` (`:823`), so a `RequestData` type is never container-resolved as a service.
 
-- [ ] **Step 1: Write the failing test** — register a route whose handler takes a `RequestData` param, dispatch a `Request` with a JSON body, assert the handler received a populated DTO. For the invalid-body case, assert `Router::dispatch()` **throws `ValidationException`** — NOT a 422 response: the router throws; the 422 envelope is produced later by the exception handler/middleware, which a unit test of `dispatch()` does not wire. (Also test malformed JSON → `ValidationException`.) Mirror `tests/Unit/Routing/RouterTest.php` for Router construction + a `Request::create(..., content: json)` dispatch.
-- [ ] **Step 2: Run → fail.**
-- [ ] **Step 3: Implement** — in the non-builtin block of `resolveMethodParameters`, right after the `Request` branch:
+- [x] **Step 1: Write the failing test** — register a route whose handler takes a `RequestData` param, dispatch a `Request` with a JSON body, assert the handler received a populated DTO. For the invalid-body case, assert `Router::dispatch()` **throws `ValidationException`** — NOT a 422 response: the router throws; the 422 envelope is produced later by the exception handler/middleware, which a unit test of `dispatch()` does not wire. (Also test malformed JSON → `ValidationException`.) Mirror `tests/Unit/Routing/RouterTest.php` for Router construction + a `Request::create(..., content: json)` dispatch.
+- [x] **Step 2: Run → fail.**
+- [x] **Step 3: Implement** — in the non-builtin block of `resolveMethodParameters`, right after the `Request` branch:
 ```php
 // Hydrate + validate a typed request DTO from the JSON body (before container resolution,
 // so a RequestData class is never treated as a service). v1 is JSON body only — no form fallback.
@@ -277,8 +277,8 @@ private function requestDataHydrator(): \Glueful\Validation\RequestDataHydrator
     return new \Glueful\Validation\RequestDataHydrator();
 }
 ```
-- [ ] **Step 4: Run → pass.** Re-run the full `tests/Unit/Routing` suite — existing param-resolution behavior must be unchanged (a non-`RequestData` class still container-resolves).
-- [ ] **Step 5: Commit** `Inject + validate RequestData DTOs in Router::resolveMethodParameters`.
+- [x] **Step 4: Run → pass.** Re-run the full `tests/Unit/Routing` suite — existing param-resolution behavior must be unchanged (a non-`RequestData` class still container-resolves).
+- [x] **Step 5: Commit** `Inject + validate RequestData DTOs in Router::resolveMethodParameters`.
 
 ---
 
@@ -288,11 +288,11 @@ private function requestDataHydrator(): \Glueful\Validation\RequestDataHydrator
 
 For POST/PUT/PATCH, if the handler method has a parameter whose type implements `RequestData`, build the request body from that class: `ClassSchemaReflector::toSchema()` for the property shape, merged with the `#[Rule]`-derived constraints (`ValidationRuleSchema::toObjectSchema()` over the collected rules) so `required`/`format`/`enum`/bounds appear. A `RequestData` param takes precedence over (or coexists with) a `#[Validate]` attribute — pick: **`RequestData` param wins when present**.
 
-- [ ] **Step 1: Write the failing test** — a fixture controller method `store(CreatePostFixture $input)` registered as a POST route; assert the operation's `requestBody.content.application/json.schema` has the DTO's properties with `required: [title, body]`, `status` enum `[draft, published]`, and a `maxLength` on `title`.
-- [ ] **Step 2: Run → fail.**
-- [ ] **Step 3: Implement** — in `buildRequestBody(Route $route, string $method)`, before the existing `#[Validate]` path: resolve the handler `ReflectionMethod` (reuse the shared `handlerReflection()`), scan its parameters for a type implementing `RequestData`; if found, `$shape = ClassSchemaReflector::toSchema($dtoClass)`, `$constraints = ValidationRuleSchema::toObjectSchema($collectedRules)`, deep-merge constraints onto the shape (constraints win on `required`/`format`/`enum`/min-max), and emit `{required: bool, content: {application/json: {schema}}}`. Reuse `ExampleDeriver::fromValidationRules($collectedRules)` for the example. Guard all reflection (never throw).
-- [ ] **Step 4: Run → pass.** Keep all existing `tests/Unit/Support/Documentation` tests green.
-- [ ] **Step 5: Commit** `Infer reflect-mode request body from a typed RequestData parameter`.
+- [x] **Step 1: Write the failing test** — a fixture controller method `store(CreatePostFixture $input)` registered as a POST route; assert the operation's `requestBody.content.application/json.schema` has the DTO's properties with `required: [title, body]`, `status` enum `[draft, published]`, and a `maxLength` on `title`.
+- [x] **Step 2: Run → fail.**
+- [x] **Step 3: Implement** — in `buildRequestBody(Route $route, string $method)`, before the existing `#[Validate]` path: resolve the handler `ReflectionMethod` (reuse the shared `handlerReflection()`), scan its parameters for a type implementing `RequestData`; if found, `$shape = ClassSchemaReflector::toSchema($dtoClass)`, `$constraints = ValidationRuleSchema::toObjectSchema($collectedRules)`, deep-merge constraints onto the shape (constraints win on `required`/`format`/`enum`/min-max), and emit `{required: bool, content: {application/json: {schema}}}`. Reuse `ExampleDeriver::fromValidationRules($collectedRules)` for the example. Guard all reflection (never throw).
+- [x] **Step 4: Run → pass.** Keep all existing `tests/Unit/Support/Documentation` tests green.
+- [x] **Step 5: Commit** `Infer reflect-mode request body from a typed RequestData parameter`.
 
 ---
 
@@ -300,10 +300,10 @@ For POST/PUT/PATCH, if the handler method has a parameter whose type implements 
 
 **Files:** Modify `CHANGELOG.md`; (optional) a short usage note in `docs/`.
 
-- [ ] **Step 1:** Add a `CHANGELOG.md [Unreleased] → Added` entry: typed request DTOs (`RequestData` + `#[Rule]`) auto-hydrated/validated by the router and reflected into the OpenAPI request body; JSON body only; opt-in and additive.
-- [ ] **Step 2:** Run the FULL suite `composer test` (or `vendor/bin/phpunit`) + `composer phpcs` + the phpstan gate on the changed files → all green/clean.
-- [ ] **Step 3:** (Optional A4) Note `make:dto` scaffolder as a follow-up — not built here.
-- [ ] **Step 4: Commit** `Document typed request DTOs (Phase A)`.
+- [x] **Step 1:** Add a `CHANGELOG.md [Unreleased] → Added` entry: typed request DTOs (`RequestData` + `#[Rule]`) auto-hydrated/validated by the router and reflected into the OpenAPI request body; JSON body only; opt-in and additive.
+- [x] **Step 2:** Run the FULL suite `composer test` (or `vendor/bin/phpunit`) + `composer phpcs` + the phpstan gate on the changed files → all green/clean.
+- [x] **Step 3:** (Optional A4) Note `make:dto` scaffolder as a follow-up — not built here.
+- [x] **Step 4: Commit** `Document typed request DTOs (Phase A)`.
 
 ---
 
