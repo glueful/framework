@@ -197,10 +197,7 @@ return [
     |
     */
     'options' => [
-        // Include route-based documentation from PHPDoc comments
-        'include_routes' => true,
-
-        // Include extension documentation
+        // Include extension routes in the generated spec (read by the reflect generator)
         'include_extensions' => true,
 
         // Pretty print JSON output

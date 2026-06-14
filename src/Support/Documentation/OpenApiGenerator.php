@@ -254,11 +254,15 @@ class OpenApiGenerator
     }
 
     /**
-     * Process custom API documentation files
+     * Merge hand-authored OpenAPI JSON fragments.
      *
-     * Processes JSON files in the json-definitions directory, excluding
-     * 'extensions/' and 'routes/' subdirectories which are handled separately
-     * by generateFromExtensions() and generateFromRoutes().
+     * Merges every `*.json` at the TOP LEVEL of the `json-definitions/` directory —
+     * this is the supported location for an app/extension to ship a hand-written
+     * OpenAPI fragment. The `extensions/` and `routes/` subdirectories are
+     * deliberately excluded: they were the (now-removed) comment generator's
+     * per-file OUTPUT, so anything there is stale machine output, and re-merging it
+     * would resurrect routes the reflect generator already derives from the live
+     * route table.
      */
     private function processCustomApiDocs(): void
     {
@@ -272,7 +276,7 @@ class OpenApiGenerator
         $docFiles = $finder->files()
             ->in($definitionsDocPath)
             ->name('*.json')
-            ->exclude(['extensions', 'routes']); // These are processed separately
+            ->exclude(['extensions', 'routes']); // legacy comment-generator output — never merged
 
         foreach ($docFiles as $file) {
             try {
