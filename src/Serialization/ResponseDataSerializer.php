@@ -10,9 +10,16 @@ use Glueful\Http\Contracts\ResponseData;
  * Converts a {@see ResponseData} DTO into a plain array payload.
  *
  * Resolution rules, in order:
- *  - Escape hatch: if the DTO declares its own `toArray()` method, that result
- *    is returned verbatim (the DTO controls its own shape). The {@see ResponseData}
- *    interface does NOT declare `toArray()` — this is an optional method check.
+ *  - Escape hatch: if the DTO declares its own `toArray()` method AND it returns
+ *    an array, that result is returned verbatim (the DTO controls its own shape).
+ *    The {@see ResponseData} interface does NOT declare `toArray()` — this is an
+ *    optional method check. A `toArray()` that returns a non-array (e.g. an
+ *    inherited method with a different contract) is ignored and reflection is used
+ *    instead, so a misdeclared method degrades gracefully rather than throwing.
+ *    NOTE: the escape hatch opts OUT of payload↔schema symmetry — the reflect-mode
+ *    doc generator ({@see \Glueful\Support\Documentation\ClassSchemaReflector})
+ *    always reflects the public properties, so a custom `toArray()` shape will not
+ *    be reflected in the generated OpenAPI schema. Use it only when you accept that.
  *  - Otherwise the DTO's PUBLIC, non-static properties are reflected. An
  *    uninitialized typed property is SKIPPED (reading one throws a PHP Error).
  *  - Each value is mapped: scalar/null as-is; backed enum → `->value`; pure enum
@@ -52,11 +59,16 @@ final class ResponseDataSerializer
      */
     private function serializeDto(ResponseData $dto, \SplObjectStorage $visited, int $depth): array
     {
-        // Escape hatch: let a DTO control its own shape.
+        // Escape hatch: let a DTO control its own shape. Only honoured when the
+        // method actually yields an array — an inherited/misdeclared `toArray()`
+        // with another return contract falls through to property reflection
+        // rather than tripping this method's own `: array` return type.
         if (method_exists($dto, 'toArray')) {
-            /** @var array<string, mixed> $result */
-            $result = $dto->toArray();
-            return $result;
+            $custom = $dto->toArray();
+            if (is_array($custom)) {
+                /** @var array<string, mixed> $custom */
+                return $custom;
+            }
         }
 
         $visited->attach($dto);

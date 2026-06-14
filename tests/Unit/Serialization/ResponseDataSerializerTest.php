@@ -59,6 +59,22 @@ final class ResponseDataSerializerTest extends TestCase
         self::assertSame(['custom' => true], (new ResponseDataSerializer())->toArray($dto));
     }
 
+    public function testNonArrayToArrayFallsThroughToReflection(): void
+    {
+        // A `toArray()` whose contract is not array<...> (e.g. inherited from a
+        // base class) must NOT be honoured as the escape hatch — reflection is
+        // used instead, so the serializer's own `: array` return never throws.
+        $dto = new class implements ResponseData {
+            public string $kept = 'yes';
+            public function toArray(): string
+            {
+                return 'not-an-array';
+            }
+        };
+        $out = (new ResponseDataSerializer())->toArray($dto);
+        self::assertSame(['kept' => 'yes'], $out);
+    }
+
     public function testSkipsUninitializedTypedProperties(): void
     {
         $dto = new class implements ResponseData {

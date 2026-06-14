@@ -137,7 +137,9 @@ public function show(string $uuid): PostData { ... }
 
 ### Escape hatch — custom `toArray()`
 
-If the DTO class declares its own `toArray()` method, that result is returned verbatim. The `ResponseData` interface does NOT require `toArray()` — this is an optional escape hatch for DTOs that need full control over their serialized shape (e.g. camelCase keys, computed fields, omitting nulls).
+If the DTO class declares its own `toArray()` method **and it returns an array**, that result is returned verbatim. The `ResponseData` interface does NOT require `toArray()` — this is an optional escape hatch for DTOs that need full control over their serialized shape (e.g. camelCase keys, computed fields, omitting nulls). A `toArray()` that returns a non-array (for instance, one inherited from a base class with a different contract) is ignored and the reflection path is used instead.
+
+> **Symmetry caveat:** the escape hatch opts OUT of payload↔schema symmetry. The reflect-mode doc generator (`ClassSchemaReflector`) always reflects the DTO's public typed properties, so a custom `toArray()` shape is NOT reflected in the generated OpenAPI schema — the documented shape will describe the properties, not your `toArray()` output. Use the escape hatch only when you accept that divergence (or document the response explicitly with `#[ApiResponse]`).
 
 ```php
 final class PostData implements ResponseData
