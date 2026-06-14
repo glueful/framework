@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Controllers;
 
+use Glueful\Controllers\DTOs\ReadinessData;
 use Glueful\Http\Response;
 use Glueful\Services\HealthService;
 use Glueful\Repository\RepositoryFactory;
@@ -80,10 +81,16 @@ class HealthController extends BaseController
     /**
      * Get database health status only
      *
-     * @return mixed HTTP response with database health
+     * @return Response HTTP response with database health
      */
-    public function database()
+    public function database(): Response
     {
+        // NOTE: intentionally NOT migrated to a typed ResponseData. This endpoint
+        // wraps its success response in privateCached() to attach Cache-Control
+        // headers for monitoring tools, and the ResponseData return path cannot
+        // carry response-level headers — so a DTO migration would silently drop
+        // them. Endpoints that set headers (caching, etc.) stay manual (a documented
+        // convention boundary).
         $health = HealthService::checkDatabase($this->context);
 
         if ($health['status'] === 'error') {
@@ -143,7 +150,7 @@ class HealthController extends BaseController
      * the service is able to handle traffic, 503 otherwise. Avoids heavy work
      * to keep probe fast and reliable.
      */
-    public function readiness(): Response
+    public function readiness(): ReadinessData|Response
     {
         $db = HealthService::checkDatabase($this->context);
         $cache = HealthService::checkCache($this->context);
@@ -170,13 +177,10 @@ class HealthController extends BaseController
             );
         }
 
-        return Response::success(
-            [
-                'status' => 'ready',
-                'timestamp' => date('c'),
-                'checks' => $checks
-            ],
-            'Service is ready'
+        return new ReadinessData(
+            status: 'ready',
+            timestamp: date('c'),
+            checks: $checks,
         );
     }
 
