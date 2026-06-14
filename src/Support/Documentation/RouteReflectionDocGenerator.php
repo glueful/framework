@@ -6,6 +6,8 @@ namespace Glueful\Support\Documentation;
 
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Http\Contracts\ResponseData;
+use Glueful\Http\Responses\CollectionResponse;
+use Glueful\Http\Responses\PaginatedResponse;
 use Glueful\Routing\Attributes\ApiResponse;
 use Glueful\Routing\Attributes\ResponseStatus;
 use Glueful\Routing\Route;
@@ -286,27 +288,130 @@ final class RouteReflectionDocGenerator
         }
 
         $class = $returnType->getName();
+
+        // Collection / pagination return types document a list of items; the
+        // item class comes from the `@return Type<Item>` docblock when present.
+        if ($class === CollectionResponse::class) {
+            $status = $this->returnStatus($reflection);
+            $schema = $this->wrapInEnvelope([
+                'type' => 'array',
+                'items' => $this->collectionItemSchema($reflection),
+            ]);
+            return [$status => [
+                'description' => self::reasonPhrase($status),
+                'content' => ['application/json' => ['schema' => $schema]],
+            ]];
+        }
+
+        if ($class === PaginatedResponse::class) {
+            // Pagination always renders at 200 (ApiResponse::paginated()).
+            $schema = $this->wrapInPaginatedEnvelope($this->collectionItemSchema($reflection));
+            return [200 => [
+                'description' => self::reasonPhrase(200),
+                'content' => ['application/json' => ['schema' => $schema]],
+            ]];
+        }
+
         if (!class_exists($class) || !is_subclass_of($class, ResponseData::class)) {
             return null;
         }
 
-        $status = 200;
-        $statusAttributes = $reflection->getAttributes(ResponseStatus::class);
-        if ($statusAttributes !== []) {
-            // Intentionally not guarded: a malformed #[ResponseStatus] must surface.
-            $status = $statusAttributes[0]->newInstance()->status;
-        }
-
+        $status = $this->returnStatus($reflection);
         $envelope = $this->wrapInEnvelope(ClassSchemaReflector::toSchema($class));
 
+        return [$status => [
+            'description' => self::reasonPhrase($status),
+            'content' => ['application/json' => ['schema' => $envelope]],
+        ]];
+    }
+
+    /**
+     * The success status for a return-type-inferred response: the method's
+     * #[ResponseStatus] value, or 200 when absent. The attribute constructor's
+     * own validation is intentionally NOT caught — a malformed #[ResponseStatus]
+     * must surface (consistent with the runtime fail-loud rule).
+     */
+    private function returnStatus(\ReflectionMethod $reflection): int
+    {
+        $statusAttributes = $reflection->getAttributes(ResponseStatus::class);
+        if ($statusAttributes !== []) {
+            return $statusAttributes[0]->newInstance()->status;
+        }
+        return 200;
+    }
+
+    /**
+     * Wrap an item schema in Glueful's flat pagination envelope, mirroring the
+     * runtime keys produced by {@see \Glueful\Http\Response::paginated()} — which
+     * always emits every key, so all are marked `required`. (This is a DISTINCT
+     * shape from {@see PaginationSchemaBuilder::envelopeFor()}, the Resource-path
+     * envelope, which carries `from`/`to`/`links` and no `message`.)
+     *
+     * @param  array<string, mixed> $itemSchema
+     * @return array<string, mixed>
+     */
+    private function wrapInPaginatedEnvelope(array $itemSchema): array
+    {
         return [
-            $status => [
-                'description' => self::reasonPhrase($status),
-                'content' => [
-                    'application/json' => ['schema' => $envelope],
-                ],
+            'type' => 'object',
+            'properties' => [
+                'success' => ['type' => 'boolean'],
+                'message' => ['type' => 'string'],
+                'data' => ['type' => 'array', 'items' => $itemSchema],
+                'current_page' => ['type' => 'integer'],
+                'per_page' => ['type' => 'integer'],
+                'total' => ['type' => 'integer'],
+                'total_pages' => ['type' => 'integer'],
+                'has_next_page' => ['type' => 'boolean'],
+                'has_previous_page' => ['type' => 'boolean'],
+            ],
+            'required' => [
+                'success', 'message', 'data', 'current_page', 'per_page',
+                'total', 'total_pages', 'has_next_page', 'has_previous_page',
             ],
         ];
+    }
+
+    /**
+     * Resolve the item schema for a CollectionResponse/PaginatedResponse return.
+     * The item class comes from a `@return Type<Item>` docblock; absent or
+     * unresolvable, the items fall back to a generic object schema.
+     *
+     * @return array<string, mixed>
+     */
+    private function collectionItemSchema(\ReflectionMethod $reflection): array
+    {
+        $itemClass = $this->itemClassFromReturnDocblock($reflection);
+        if ($itemClass !== null && class_exists($itemClass)) {
+            return ClassSchemaReflector::toSchema($itemClass);
+        }
+        return ['type' => 'object'];
+    }
+
+    /**
+     * Parse a `@return CollectionResponse<Item>` / `@return PaginatedResponse<Item>`
+     * docblock and resolve the item class. A fully-qualified name is used as-is; a
+     * short name is resolved against the method's declaring-class namespace (same
+     * approach as ClassSchemaReflector for `@var` array item types). Returns null
+     * when there is no such docblock or the name doesn't resolve. (Use-statement
+     * aliases on the item type are not resolved — write the FQCN or a same-namespace
+     * name, or document explicitly with #[ApiResponse].)
+     */
+    private function itemClassFromReturnDocblock(\ReflectionMethod $reflection): ?string
+    {
+        $doc = $reflection->getDocComment();
+        if ($doc === false) {
+            return null;
+        }
+        if (preg_match('/@return\s+\\\\?(?:CollectionResponse|PaginatedResponse)<\\\\?([\\\\\w]+)>/', $doc, $m) !== 1) {
+            return null;
+        }
+        $name = $m[1];
+        if (class_exists($name)) {
+            return $name;
+        }
+        $fqcn = $reflection->getDeclaringClass()->getNamespaceName() . '\\' . $name;
+        return class_exists($fqcn) ? $fqcn : null;
     }
 
     /**
