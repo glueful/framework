@@ -7,7 +7,6 @@ namespace Glueful\Tests\Unit\Support\Documentation;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Container\Container;
 use Glueful\Container\Definition\ValueDefinition;
-use Glueful\Extensions\ExtensionManager;
 use Glueful\Routing\RouteCache;
 use Glueful\Routing\RouteManifest;
 use Glueful\Routing\Router;
@@ -19,14 +18,14 @@ use Glueful\Support\Documentation\SecuritySchemeRegistry;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Exercises the documentation.generator='reflect' branch.
+ * Exercises the reflect-based generation pipeline (the only generator).
  *
  * Two seams are covered:
  *  1. The narrow seam: RouteReflectionDocGenerator -> DocGenerator::mergePaths()
  *     -> getSwaggerJson(), proving paths + security + securitySchemes round-trip.
- *  2. The OpenApiGenerator orchestration: with generator='reflect' and a real
- *     Router registered in the container, generateOpenApiSpec() routes through
- *     the reflect generator and writes a spec built from the live route table.
+ *  2. The OpenApiGenerator orchestration: with a real Router registered in the
+ *     container, generateOpenApiSpec() routes through the reflect generator and
+ *     writes a spec built from the live route table.
  *
  * @covers \Glueful\Support\Documentation\OpenApiGenerator
  * @covers \Glueful\Support\Documentation\RouteReflectionDocGenerator
@@ -62,7 +61,7 @@ final class OpenApiGeneratorReflectModeTest extends TestCase
      */
     public function testReflectedPathsRoundTripThroughDocGenerator(): void
     {
-        $context = $this->makeContext('comments'); // generator value irrelevant here
+        $context = $this->makeContext();
         $router = $this->makeRouter($context);
         $router->get('/v1/profile', [SampleAppController::class, 'show'])->middleware(['auth']);
         $router->get('/v1/users/{id}', [SampleAppController::class, 'show'])->where('id', '\d+');
@@ -97,7 +96,7 @@ final class OpenApiGeneratorReflectModeTest extends TestCase
      */
     public function testGenerateOpenApiSpecUsesReflectGenerator(): void
     {
-        $context = $this->makeContext('reflect');
+        $context = $this->makeContext();
         $router = $this->registerRouter($context);
 
         // Register routes BEFORE generation; RouteManifest::load() is a no-op
@@ -108,7 +107,6 @@ final class OpenApiGeneratorReflectModeTest extends TestCase
         $generator = new OpenApiGenerator(
             $context,
             new DocGenerator(context: $context),
-            null,
             new FileFinder(),
             true,
         );
@@ -131,39 +129,13 @@ final class OpenApiGeneratorReflectModeTest extends TestCase
     }
 
     /**
-     * Sanity: in 'comments' mode the reflect path is NOT taken, so routes
-     * registered on the live router do not leak into the spec.
-     */
-    public function testCommentsModeDoesNotReflectLiveRoutes(): void
-    {
-        $context = $this->makeContext('comments');
-        $router = $this->registerRouter($context);
-        $router->get('/v1/should-not-appear', [SampleAppController::class, 'index']);
-
-        $generator = new OpenApiGenerator(
-            $context,
-            new DocGenerator(context: $context),
-            null,
-            new FileFinder(),
-            true,
-        );
-        $generator->onProgress(static function (): void {
-        });
-
-        $outputPath = $generator->generateOpenApiSpec();
-        $spec = json_decode((string) file_get_contents($outputPath), true);
-
-        self::assertArrayNotHasKey('/v1/should-not-appear', $spec['paths'] ?? []);
-    }
-
-    /**
      * A reflected DTO whose nullable property must render as the OpenAPI 3.1
      * `type: ["string", "null"]` array form once the spec is emitted — proving
      * DocGenerator transforms inline path schemas (not just components.schemas).
      */
     public function testNullableReflectedPropertyRendersAs31ArrayForm(): void
     {
-        $context = $this->makeContext('comments');
+        $context = $this->makeContext();
         $router = $this->makeRouter($context);
         $router->get('/v1/nullable', [SampleAppController::class, 'nullableResponse']);
 
@@ -183,7 +155,7 @@ final class OpenApiGeneratorReflectModeTest extends TestCase
         self::assertArrayNotHasKey('nullable', $nickname);
     }
 
-    private function makeContext(string $generator): ApplicationContext
+    private function makeContext(): ApplicationContext
     {
         $context = new ApplicationContext($this->tmpDir);
         $container = new Container();
@@ -191,18 +163,8 @@ final class OpenApiGeneratorReflectModeTest extends TestCase
             ApplicationContext::class => new ValueDefinition(ApplicationContext::class, $context),
         ]);
         $context->setContainer($container);
-        // The OpenApiGenerator constructor builds a default CommentsDocGenerator,
-        // which resolves an ExtensionManager from the container even in reflect
-        // mode (it just isn't used there).
-        $container->load([
-            ExtensionManager::class => new ValueDefinition(
-                ExtensionManager::class,
-                new ExtensionManager($container),
-            ),
-        ]);
 
         $context->mergeConfigDefaults('documentation', [
-            'generator' => $generator,
             'openapi_version' => '3.1.0',
             'security_schemes' => self::SCHEMES,
             'middleware_map' => self::MIDDLEWARE_MAP,

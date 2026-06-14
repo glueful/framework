@@ -4,7 +4,8 @@
  * Documentation Generation Configuration
  *
  * Centralizes all settings for OpenAPI/Swagger documentation generation.
- * Used by ResourceRouteExpander, DocGenerator, CommentsDocGenerator, and OpenApiGenerator.
+ * Used by ResourceRouteExpander, DocGenerator, RouteReflectionDocGenerator,
+ * and OpenApiGenerator.
  */
 
 $root = dirname(__DIR__);
@@ -37,34 +38,6 @@ return [
     |
     */
     'openapi_version' => env('OPENAPI_VERSION', '3.1.0'),
-
-    /*
-    |--------------------------------------------------------------------------
-    | Documentation Generator
-    |--------------------------------------------------------------------------
-    |
-    | Selects how OpenAPI paths are derived:
-    |
-    |   'comments'           - Parse PHPDoc/JSON route fragments. Descriptions,
-    |                          request/response schemas, and examples come from
-    |                          the docblocks and json-definitions you author.
-    |
-    |   'reflect' (default)  - Code-first generation from the LIVE route table.
-    |                          Paths, per-route security (from real middleware),
-    |                          path parameters, field-selection params, scope
-    |                          requirements, and rate-limit 429s are derived
-    |                          directly from the registered routes. Supersedes
-    |                          docblock/fragment parsing. Best run with the route
-    |                          cache disabled (ROUTE_CACHE=false): app + framework
-    |                          routes are rebuilt fresh when a cache is detected,
-    |                          but extension routes registered via a ServiceProvider
-    |                          would otherwise carry only cache-stripped metadata.
-    |
-    | Resource-route expansion (include_resource_routes) is orthogonal and still
-    | applies in both modes.
-    |
-    */
-    'generator' => env('API_DOCS_GENERATOR', 'reflect'),
 
     /*
     |--------------------------------------------------------------------------

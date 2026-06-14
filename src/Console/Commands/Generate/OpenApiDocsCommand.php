@@ -83,7 +83,7 @@ class OpenApiDocsCommand extends BaseCommand
             }
 
             $this->info('Initializing OpenAPI Documentation Generator...');
-            $generator = new OpenApiGenerator($this->getContext(), null, null, null, true);
+            $generator = new OpenApiGenerator($this->getContext(), null, null, true);
 
             // Display generation scope
             $this->displayGenerationScope($force, $ui);

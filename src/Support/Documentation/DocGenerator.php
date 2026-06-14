@@ -333,8 +333,8 @@ class DocGenerator
      * produced by the current generation run, eliminating stale-fragment leakage.
      *
      * The extension name (used as the schema prefix) is derived from the parent
-     * directory of each fragment, matching the layout written by
-     * CommentsDocGenerator::generateForExtension() ({extDir}/{name}/{name}.json).
+     * directory of each fragment, matching the {extDir}/{name}/{name}.json layout
+     * used for hand-authored extension OpenAPI fragments.
      *
      * @param list<string> $files Absolute paths to extension fragment JSON files
      */

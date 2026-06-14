@@ -31,41 +31,12 @@ final class DocumentationConfigTest extends TestCase
         self::assertSame(['ApiKeyAuth'], $config['middleware_map']['api_key']);
     }
 
-    public function testGeneratorDefaultsToReflect(): void
+    public function testGeneratorSwitchKeyIsRemoved(): void
     {
-        // Ensure the env override is absent so the default is exercised.
-        $previous = getenv('API_DOCS_GENERATOR');
-        putenv('API_DOCS_GENERATOR');
-        unset($_ENV['API_DOCS_GENERATOR'], $_SERVER['API_DOCS_GENERATOR']);
+        // The comments generator was removed; reflect is the only generator, so
+        // there is no longer a 'generator' switch key in the config.
+        $config = require dirname(__DIR__, 4) . '/config/documentation.php';
 
-        try {
-            $config = require dirname(__DIR__, 4) . '/config/documentation.php';
-
-            self::assertArrayHasKey('generator', $config);
-            self::assertSame('reflect', $config['generator']);
-        } finally {
-            if ($previous !== false) {
-                putenv('API_DOCS_GENERATOR=' . $previous);
-            }
-        }
-    }
-
-    public function testCommentsGeneratorRemainsSelectableViaEnv(): void
-    {
-        $previous = getenv('API_DOCS_GENERATOR');
-        putenv('API_DOCS_GENERATOR=comments');
-        $_ENV['API_DOCS_GENERATOR'] = 'comments';
-        $_SERVER['API_DOCS_GENERATOR'] = 'comments';
-
-        try {
-            $config = require dirname(__DIR__, 4) . '/config/documentation.php';
-
-            self::assertSame('comments', $config['generator']);
-        } finally {
-            putenv($previous !== false ? 'API_DOCS_GENERATOR=' . $previous : 'API_DOCS_GENERATOR');
-            if ($previous === false) {
-                unset($_ENV['API_DOCS_GENERATOR'], $_SERVER['API_DOCS_GENERATOR']);
-            }
-        }
+        self::assertArrayNotHasKey('generator', $config);
     }
 }

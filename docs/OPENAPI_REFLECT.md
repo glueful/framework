@@ -1,6 +1,6 @@
 # OpenAPI: `reflect` Generator
 
-The `reflect` generator (`documentation.generator='reflect'`, or `API_DOCS_GENERATOR=reflect`) builds the OpenAPI spec from the **live route table and PHP types** rather than from PHPDoc/JSON fragments.
+The `reflect` generator builds the OpenAPI spec from the **live route table and PHP types** rather than from PHPDoc/JSON fragments. It is the only generator — there is no configuration switch to enable it.
 
 ---
 
@@ -19,7 +19,7 @@ The following are derived without any annotation:
 | `ResponseData` / `CollectionResponse` / `PaginatedResponse` return type | Success-response schema, status code (from `#[ResponseStatus]`) |
 | `#[Validate]` attribute | Fallback JSON `requestBody` schema when no `RequestData` parameter is present |
 
-> **Configuration:** set `API_DOCS_GENERATOR=reflect` in `.env` or `'generator' => 'reflect'` in `config/documentation.php`. Leave `ROUTE_CACHE=false` during generation so extension routes registered via `ServiceProvider` are included.
+> **Configuration:** no switch is needed — `reflect` is the only generator. Leave `ROUTE_CACHE=false` during generation so extension routes registered via `ServiceProvider` are included.
 
 ---
 
