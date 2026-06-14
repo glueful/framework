@@ -404,3 +404,122 @@ For full pagination link generation and `ResourceCollection` semantics (conditio
 ### Public typed properties only
 
 The serializer reflects `public` non-static properties. `protected`/`private` properties are not serialized, and the escape hatch (`toArray()`) must be used if the DTO needs to expose computed or visibility-restricted fields.
+
+---
+
+## Reference adoption & the convention boundary
+
+This section documents which framework controller methods were migrated to typed response DTOs (Phase D), what was deliberately left manual and why, and the `HasResponseMessage` pattern that makes the migration byte-identical.
+
+### `HasResponseMessage` — custom envelope messages
+
+By default, the router supplies a generic envelope `message` for each HTTP status (`'Success'` for 200, `'Created successfully'` for 201, etc.). Implementing `Glueful\Http\Contracts\HasResponseMessage` on a `ResponseData` DTO lets the DTO supply its own message instead.
+
+```php
+interface HasResponseMessage
+{
+    public function responseMessage(): string;
+}
+```
+
+**The canonical pattern:** store the message in a **private** promoted property so it is not serialized into the `data` payload by `ResponseDataSerializer` (which reflects public properties only).
+
+Here is the actual `ResourceDeletedData` DTO as a reference — it also illustrates a case where the `data` payload has its own inner `message` key that is entirely distinct from the envelope message:
+
+```php
+use Glueful\Http\Contracts\HasResponseMessage;
+use Glueful\Http\Contracts\ResponseData;
+
+final class ResourceDeletedData implements ResponseData, HasResponseMessage
+{
+    public function __construct(
+        public readonly int $affected,
+        public readonly bool $success,
+        public readonly string $message,           // inner data message — serialized into `data`
+        private readonly string $envelopeMessage = 'Resource deleted successfully',  // private — NOT in `data`
+    ) {}
+
+    public function responseMessage(): string
+    {
+        return $this->envelopeMessage;
+    }
+}
+```
+
+The resulting envelope:
+
+```json
+{
+  "success": true,
+  "message": "Resource deleted successfully",
+  "data": {
+    "affected": 1,
+    "success": true,
+    "message": "Record deleted successfully"
+  }
+}
+```
+
+`HasResponseMessage` only takes effect when the returned value is enveloped by the router (a `ResponseData`, `CollectionResponse`, or `PaginatedResponse`). **Two caveats:**
+
+1. **No-op on non-enveloped returns.** Implementing `HasResponseMessage` on a plain object/array (returned as a raw `JsonResponse`) or on a `JsonResource` (which owns its own envelope) has no effect — the message is ignored.
+2. **`toArray()` escape hatch must not include the message.** A DTO that uses the `toArray()` escape hatch bypasses the private-property guard. Its `toArray()` implementation must not include the message field, or the field leaks into the `data` payload.
+
+### Worked examples — reference migrations
+
+The following framework controller methods were migrated as characterization-tested reference examples. Each migration is byte-identical: the enveloped response body is identical to the pre-migration `Response::success(...)` call.
+
+#### Auth — `AuthController::refreshToken`
+
+- **Request:** `Glueful\DTOs\RefreshTokenData` (implements `RequestData`) — a single `refresh_token` string field. The hydrator binds JSON keys to constructor params by exact name, so the property is named `refresh_token` (snake_case), matching the JSON key.
+- **Response:** `Glueful\DTOs\RefreshedTokenData` (implements `ResponseData` + `HasResponseMessage`) — public properties `access_token`, `refresh_token`, `expires_in`, `token_type`, `user`; private `$message = 'Token refreshed successfully'`.
+
+#### Upload — `UploadController::info`, `signedUrl`, `delete`
+
+- **`info` → `Glueful\Controllers\DTOs\BlobInfoData`:** The blob row is an arbitrary column set from the database, so `BlobInfoData` uses the `toArray()` escape hatch to pass the row through verbatim (preserving column order and the conditional `native_url` key). Its private `$message = 'Blob metadata'` is excluded from `toArray()`.
+- **`signedUrl` → `Glueful\Controllers\DTOs\SignedUrlData`:** Standard promoted public properties for the fixed fields (`uuid`, `signed_url`, `expires_in`, `expires_at`). The optional `native_url` is declared as an **uninitialized typed property** after the constructor — `ResponseDataSerializer` skips uninitialized properties, so the key is omitted when absent and emitted last when set via `withNativeUrl()`.
+- **`delete` → `Glueful\Controllers\DTOs\BlobDeletedData`:** Single public `$uuid` property; private `$message = 'Blob deleted'`.
+
+#### Resource — `ResourceController::destroy`
+
+- **Response:** `Glueful\Controllers\DTOs\ResourceDeletedData` — see the example above.
+
+#### Health — `HealthController::readiness`
+
+- **Response (200 success path):** `Glueful\Controllers\DTOs\ReadinessData` (implements `ResponseData` + `HasResponseMessage`) — public properties `status`, `timestamp`, `checks`; private `$message = 'Service is ready'`. The 503 "not ready" branch still returns a plain `Response::error(...)`.
+
+### Convention boundary — where typed DTOs do not apply
+
+Typed request/response DTOs were deliberately **not** applied to the following categories. The reason is given for each.
+
+| Category | Examples | Why manual |
+|---|---|---|
+| **Polymorphic request bodies** | `AuthController::login` (token vs credentials vs 2FA), `ResourceController::store`/`update`/`bulk` (arbitrary table columns) | `RequestData` types a fixed constructor parameter set; a body whose shape varies at runtime cannot be statically typed |
+| **Multipart / base64 input** | `UploadController::upload` | `RequestDataHydrator` decodes only JSON bodies; multipart form data and base64 blobs are not in scope |
+| **Binary / stream responses** | `UploadController::show`, `DocsController` | Return value is a `BinaryFileResponse` or `StreamedResponse` — not an envelope |
+| **Header-based auth, no JSON body** | `AuthController::logout`, `validateToken`, `refreshPermissions`, `csrfToken` | No JSON request body to type; response shapes are small utilities or contain non-static fields |
+| **Bare non-envelope probes** | `HealthController::liveness`, `startup` | Return a raw `Response` with no envelope; converting to `ResponseData` would add an envelope that breaks the probe contract |
+| **Free-form / dynamic response blobs** | `HealthController::index`/`cache`/`detailed`/`queue`, `MetricsController` | Response shape is large and data-driven; a fixed-property DTO cannot represent it faithfully |
+| **Response-level headers / caching** | `HealthController::database`, `HealthController::cache` | **Key boundary.** These endpoints wrap their success response in `privateCached()` to attach `Cache-Control` headers. A `ResponseData` return controls body, status, and envelope message — it cannot carry response-level headers. Endpoints that must set `Cache-Control`, `ETag`, or other response headers stay manual. |
+| **Not route-wired** | `WebhookController`, `ConfigController`, `ExtensionsController` | Routes not registered; migration is deferred to the wiring decision |
+
+The full per-method decision table (including every route-wired method and the rationale for each decision) is in `docs/implementation-plans/phase-d-controller-inventory.md`.
+
+#### The headers/caching boundary in detail
+
+This is the subtlest boundary and deserves emphasis. `HealthController::database()` is a straightforward, fixed-shape success response — on the surface it looks like a good `ResponseData` candidate. It was not migrated because:
+
+```php
+// HealthController::database() — intentionally NOT migrated
+public function database(): Response
+{
+    // ... build $data ...
+
+    // privateCached() sets Cache-Control: private, max-age=30
+    return $this->privateCached(Response::success($data, 'Database health OK'), 30);
+}
+```
+
+`privateCached()` wraps the response to add a `Cache-Control` header. The `ResponseData` return path (`Router::normalizeResponse()`) creates its own `Response` object from the DTO — there is no hook to attach headers to that response before it is sent. Returning a `ResponseData` from this method would lose the caching header entirely.
+
+**The rule:** if an endpoint needs to set response-level headers (caching, `ETag`, custom `X-*` headers, `Location`, etc.), return a `Response` object directly. `ResponseData` is for body + status + envelope message only.

@@ -175,6 +175,43 @@ The generated file is placed in `app/DTOs/` (namespace `App\DTOs`) when an `app/
 
 ---
 
+## Reference adoption — worked example
+
+`AuthController::refreshToken` is the canonical shipped example of a request DTO in the framework itself. It shows the key naming rule:
+
+```php
+use Glueful\Validation\Contracts\RequestData;
+use Glueful\Validation\Attributes\Rule;
+
+final class RefreshTokenData implements RequestData
+{
+    public function __construct(
+        #[Rule('required|string')]
+        public readonly string $refresh_token,   // snake_case — matches the JSON key exactly
+    ) {}
+}
+```
+
+And the controller:
+
+```php
+// Glueful\Controllers\AuthController
+public function refreshToken(RefreshTokenData $input): RefreshedTokenData
+{
+    $result = $this->authService->refreshTokens($input->refresh_token);
+    // ...
+    return new RefreshedTokenData(
+        access_token:  $result['access_token'],
+        refresh_token: $result['refresh_token'],
+        // ...
+    );
+}
+```
+
+**Key reminder — exact-name binding:** `RequestDataHydrator` maps JSON body keys to constructor parameters by **exact name** — there is no snake_case↔camelCase conversion. A JSON key `refresh_token` must be a constructor param named `refresh_token`. If a JSON key is camelCase (e.g. `refreshToken`), the param must also be camelCase. The property name IS the JSON key.
+
+---
+
 ## v1 limitations
 
 ### Explicit `null` can produce a `TypeError` rather than a 422
