@@ -40,69 +40,18 @@ $getMw[] = "rate_limit:{$retrievalPerMin},60";
 $deleteMw[] = 'rate_limit:20,60';
 
 $router->group(['prefix' => '/blobs'], function (Router $router) use ($postMw, $getMw, $deleteMw) {
-    /**
-     * @route POST /blobs
-     * @summary Upload File
-     * @description Upload a file via multipart form data or base64 encoding.
-     * @tag Blobs
-     * @response 201 application/json "Upload successful"
-     * @response 400 "Missing file upload or invalid base64 data"
-     * @response 401 "Authentication required"
-     * @response 413 "File too large"
-     * @response 415 "Unsupported file type"
-     */
     $router->post('', [UploadController::class, 'upload'])
         ->middleware($postMw);
 
-    /**
-     * @route GET /blobs/{uuid}
-     * @summary Retrieve Blob
-     * @description Retrieve blob file content with optional image resizing.
-     * @tag Blobs
-     * @response 200 "File content with appropriate Content-Type header"
-     * @response 401 "Authentication required for private blob"
-     * @response 404 "Blob not found"
-     */
     $router->get('/{uuid}', [UploadController::class, 'show'])
         ->middleware($getMw);
 
-    /**
-     * @route GET /blobs/{uuid}/info
-     * @summary Blob Metadata
-     * @description Retrieve blob metadata without downloading the file content
-     * @tag Blobs
-     * @response 200 application/json "Blob metadata retrieved"
-     * @response 401 "Authentication required"
-     * @response 404 "Blob not found"
-     */
     $router->get('/{uuid}/info', [UploadController::class, 'info'])
         ->middleware($getMw);
 
-    /**
-     * @route DELETE /blobs/{uuid}
-     * @summary Delete Blob
-     * @description Soft-delete a blob and remove its underlying file from storage
-     * @tag Blobs
-     * @requiresAuth true
-     * @response 200 application/json "Blob deleted"
-     * @response 401 "Authentication required"
-     * @response 404 "Blob not found"
-     */
     $router->delete('/{uuid}', [UploadController::class, 'delete'])
         ->middleware($deleteMw);
 
-    /**
-     * @route POST /blobs/{uuid}/signed-url
-     * @summary Generate Signed URL
-     * @description Generate a temporary signed URL for accessing a private blob.
-     * @tag Blobs
-     * @requiresAuth true
-     * @queryParam ttl:integer="URL lifetime in seconds (default: 3600, max: 604800)"
-     * @response 200 application/json "Signed URL generated"
-     * @response 400 "Signed URLs are disabled"
-     * @response 401 "Authentication required"
-     * @response 404 "Blob not found"
-     */
     $router->post('/{uuid}/signed-url', [UploadController::class, 'signedUrl'])
         ->middleware(['auth']);
 });

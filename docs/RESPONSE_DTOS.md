@@ -183,7 +183,7 @@ Recursion is capped at depth 5 (matching `ClassSchemaReflector`). An object alre
 
 ## OpenAPI documentation (reflect mode)
 
-With `documentation.generator='reflect'` (env `API_DOCS_GENERATOR=reflect`), `RouteReflectionDocGenerator` infers the success-response OpenAPI schema from the handler method's `ResponseData` return type — the same DTO drives both the runtime payload and the generated spec.
+With the `reflect` generator, `RouteReflectionDocGenerator` infers the success-response OpenAPI schema from the handler method's `ResponseData` return type — the same DTO drives both the runtime payload and the generated spec.
 
 **What is inferred automatically:**
 

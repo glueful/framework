@@ -132,7 +132,7 @@ Reach for the DTO when you want a typed, self-documenting body; keep `#[Validate
 
 ## OpenAPI documentation (reflect mode)
 
-With `documentation.generator='reflect'` (env `API_DOCS_GENERATOR=reflect`), the `RouteReflectionDocGenerator` inspects the handler's `RequestData` parameter and builds the `requestBody` schema from the DTO's constructor parameters and their `#[Rule]` constraints — no `#[Validate]` attribute is needed.
+With the `reflect` generator, the `RouteReflectionDocGenerator` inspects the handler's `RequestData` parameter and builds the `requestBody` schema from the DTO's constructor parameters and their `#[Rule]` constraints — no `#[Validate]` attribute is needed.
 
 The same rules that drive validation (`required`, `string`, `integer`, `email`, `uuid`, `in:`, `min:`, `max:`, …) are mapped to OpenAPI properties by `ValidationRuleSchema::toObjectSchema()`. An example payload is also derived automatically.
 
