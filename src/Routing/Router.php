@@ -1127,6 +1127,24 @@ class Router
             };
         }
 
+        // Auto-normalize a returned framework API Resource through its OWN toResponse().
+        // The Resource owns its envelope/semantics — do NOT re-wrap it in the
+        // ResponseData envelope. Must precede the generic object/array fallback (a
+        // ResourceCollection is an iterable object that would otherwise be JSON-encoded
+        // raw). Only the known framework Resource types are matched — never an arbitrary
+        // object that merely has a toResponse() method. A Resource the controller already
+        // turned into a Response is caught by the Response passthrough above. Unlike the
+        // PaginatedResponse DTO branch above (always 200), a PaginatedResourceResponse
+        // Resource DOES honor #[ResponseStatus] via its own toResponse($status) — the
+        // asymmetry is intentional (the Resource owns its status semantics).
+        if (
+            $result instanceof \Glueful\Http\Resources\JsonResource
+            || $result instanceof \Glueful\Http\Resources\ResourceCollection
+            || $result instanceof \Glueful\Http\Resources\PaginatedResourceResponse
+        ) {
+            return $result->toResponse($successStatus);
+        }
+
         if (is_array($result) || is_object($result)) {
             return new JsonResponse($result);
         }

@@ -361,16 +361,35 @@ A `CollectionResponse` handler documents an envelope-wrapped array schema at the
 
 ## v1 boundaries
 
-### `ResponseData` only — Resources are a separate path
+### Typed DTOs vs Resources — the boundary
 
-`JsonResource`, `ModelResource`, and `ResourceCollection` (the "rich transformation path" with conditional fields, relationship loading, and pivot access) still return via `->toResponse()` and are **not auto-enveloped**. The two paths coexist and are intended for different use cases:
+Both paths are first-class and coexist. They differ in **who owns the envelope** and **how the response is shaped**:
 
 | | Simple DTO path | Rich Resource path |
 |---|---|---|
-| **Contract** | `implements ResponseData` | extends `JsonResource` / `ResourceCollection` |
-| **Serialization** | Automatic (reflection or `toArray()`) | Manual (`->toResponse()`) |
-| **Docs (reflect mode)** | Inferred from return type | Annotate with `#[ApiResponse]` |
-| **Best for** | Small typed outputs, symmetry with request DTOs | Conditional fields, relationships, pagination, `whenLoaded` |
+| **Contract** | `implements ResponseData` (+ `CollectionResponse` / `PaginatedResponse` wrappers) | extends `JsonResource` / `ModelResource` / `ResourceCollection`, or `PaginatedResourceResponse` |
+| **Serialization** | Automatic (reflection or `toArray()`); router applies the `ResponseData` envelope | The Resource's own `toArray()` transform; the Resource owns its envelope |
+| **Return style** | Return the DTO — auto-enveloped | Return the Resource — auto-normalized through its own `->toResponse()` |
+| **Docs (reflect mode)** | Inferred from return type | Annotate with `#[ApiResponse(...)]` |
+| **Best for** | Simple, statically-typed outputs where one class drives both the runtime payload and the OpenAPI schema | Transformation-heavy responses: conditional fields, `whenLoaded()`, relationship / pivot shaping |
+
+**Returning a Resource is now auto-normalized.** A controller that returns a `JsonResource`, `ResourceCollection`, or `PaginatedResourceResponse` (or any subclass such as `ModelResource` / `AnonymousResourceCollection`) no longer needs a manual `->toResponse()` call — the router calls it for you and threads `#[ResponseStatus(n)]` through as the status:
+
+```php
+use Glueful\Routing\Attributes\{Post, ResponseStatus};
+
+#[Post('/posts')]
+#[ResponseStatus(201)]
+#[ApiResponse(201, description: 'Post created')] // Resource bodies are not reflectable — document explicitly
+public function store(): JsonResource
+{
+    return PostResource::make($post); // router auto-calls ->toResponse(201)
+}
+```
+
+The Resource keeps its own `{success, data, ...}` envelope; the router does **not** apply the `ResponseData` envelope on top of it. A Resource that the controller has already turned into a `Response` (by calling `->toResponse()` itself) passes through unchanged — there is no double-wrapping.
+
+**OpenAPI note:** a Resource body is a runtime `toArray()` transform with no static schema, so `documentation.generator='reflect'` mode does **not** infer a schema from a Resource return type. Document Resource-returning endpoints explicitly with `#[ApiResponse(...)]`. (Typed `ResponseData` DTO returns remain auto-documented.)
 
 ### Success response only
 
