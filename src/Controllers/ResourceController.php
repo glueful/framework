@@ -93,8 +93,6 @@ class ResourceController extends BaseController
 
     /**
      * Get resource list with pagination
-     *
-     * @route GET /data/{table}
      */
     #[ApiOperation(
         summary: 'List Resources',
@@ -158,8 +156,6 @@ class ResourceController extends BaseController
 
     /**
      * Get single resource by UUID
-     *
-     * @route GET /data/{table}/{uuid}
      */
     #[ApiOperation(
         summary: 'Get Single Resource',
@@ -208,8 +204,6 @@ class ResourceController extends BaseController
 
     /**
      * Create new resource
-     *
-     * @route POST /data/{table}
      */
     #[ApiOperation(
         summary: 'Create Resource',
@@ -262,8 +256,6 @@ class ResourceController extends BaseController
 
     /**
      * Update existing resource
-     *
-     * @route PUT /data/{table}/{uuid}
      */
     #[ApiOperation(
         summary: 'Update Resource',
@@ -331,8 +323,6 @@ class ResourceController extends BaseController
 
     /**
      * Delete resource
-     *
-     * @route DELETE /data/{table}/{uuid}
      */
     #[ApiOperation(
         summary: 'Delete Resource',
@@ -531,8 +521,6 @@ class ResourceController extends BaseController
 
     /**
      * Bulk delete resources
-     *
-     * @route DELETE /data/{table}/bulk
      */
     #[ApiOperation(
         summary: 'Bulk Delete Resources',
@@ -555,8 +543,6 @@ class ResourceController extends BaseController
 
     /**
      * Bulk update resources
-     *
-     * @route PUT /data/{table}/bulk
      */
     #[ApiOperation(
         summary: 'Bulk Update Resources',

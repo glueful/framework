@@ -6,7 +6,9 @@
 
 ---
 
-## 1. How the generator works today
+## 1. How the generator worked (the former comment pipeline — now removed)
+
+> **Historical.** §1–§5 describe the original `comments` (docblock-parsing) pipeline and the rationale for replacing it. That generator was **removed in Phase 3** — `reflect` is now the only generator (see the status header). These sections are kept as the root-cause/design record.
 
 Three stages, orchestrated by `OpenApiGenerator`:
 
@@ -95,7 +97,7 @@ Make the **live route table the single source of truth**:
    | request body schema/example | request DTO / validation rules → `ExampleDeriver::fromValidationRules()` |
    | response schema | `JsonResource`/`ModelResource` return type, or a response attribute |
 
-3. **Layer human metadata** (summary/description/examples/response prose) via **typed attributes** (`#[ApiOperation(...)]`, `#[ApiResponse(200, resource: PostResource::class)]`) — reflected reliably, IDE/type-checked, co-located with the handler. Docblocks remain an optional override so existing annotations are not discarded.
+3. **Layer human metadata** (summary/description/tags/prose) via **typed attributes** (`#[ApiOperation(...)]`, `#[ApiResponse(200, SomeData::class)]`, `#[QueryParam]`, `#[ApiRequestBody]`) — reflected reliably, IDE/type-checked, co-located with the handler. *(Shipped in Phase 3. Route docblocks are NOT an override path — the comment parser was removed; doc tags in route/controller files are inert.)*
 
 This is the model behind FastAPI (type hints + Pydantic), NestJS (decorators + reflection), and Laravel Scramble (route/controller analysis).
 
@@ -116,8 +118,8 @@ This is the model behind FastAPI (type hints + Pydantic), NestJS (decorators + r
 
 - **Phase 0 — ✅ implemented (`6822eb3` + `8b7f97b`):** config flags honored, `--clean` recurses, no stale-fragment leakage, and opt-in unreferenced-schema pruning. Complete.
 - **Phase 1 — ✅ implemented (`8e846ff`):** code-first path/security/params/rate-limit from the route table, behind `documentation.generator => 'reflect'`, alongside the existing comment generator. Per-route security comes from the *real* effective middleware (no docblock tag), and scoping is structural. Response/request body *schemas* are deferred to Phase 2.
-- **Phase 2 — in progress:** request/response schema inference for reflect mode is **done** — request bodies from `#[Validate]` rules (`23ed4d3`, `ValidationRuleSchema`) and response bodies from `#[ApiResponse]` + typed DTOs (`f0b83be`, `ClassSchemaReflector`); `ExampleDeriver::fromValidationRules()` is now used for request examples, and the 3.1 nullable transform was extended over inline path schemas. **Remaining (comment-path polish, lower priority now that reflect is the direction):** the `@example` balanced-brace fix (#5) and the docblock-grammar additions (`format`/nullable/response-`required`, #6).
-- **Phase 3:** docblocks/attributes become override-only; deprecate the regex parser.
+- **Phase 2 — ✅ implemented:** request/response schema inference for reflect mode — request bodies from `#[Validate]` rules (`23ed4d3`, `ValidationRuleSchema`) and response bodies from `#[ApiResponse]` + typed DTOs (`f0b83be`, `ClassSchemaReflector`); `ExampleDeriver::fromValidationRules()` used for request examples; the 3.1 nullable transform extended over inline path schemas. *(The comment-path polish items #5/#6 were never done — superseded by Phase 3's removal of the comment parser; see §7.)*
+- **Phase 3 — ✅ implemented (make `reflect` canonical, remove `comments`):** added a minimal typed override surface (`#[ApiOperation]`, `#[QueryParam]`, `#[ApiRequestBody]`, `#[ApiResponse]` `body:`), migrated all 5 route-wired controllers off `@*` docblocks, proved `reflect ⊇ comment` over the live route table, then **deleted `CommentsDocGenerator` + the `documentation.generator` switch + the route docblocks**. Reflect is the only generator; route/controller doc tags are inert. See `docs/implementation-plans/openapi-reflect-canonical-phase-3.md`.
 
 **Downstream note:** apps consume the *vendored* framework, so each phase reaches an app only after a framework release + version pin bump. An app-side post-processor remains the bridge until then and shrinks phase by phase.
 
@@ -131,9 +133,10 @@ This is the model behind FastAPI (type hints + Pydantic), NestJS (decorators + r
 | 2 | Opt-in prune of unreferenced default schemas (`options.prune_unreferenced_schemas`) | 0 | S | Low (opt-in) | ✅ Done (`8b7f97b`) |
 | 3 | Per-route security from real middleware → existing registry (via reflect generator) | 1 | M | Low | ✅ Done (`8e846ff`) |
 | 4 | Code-first path/param/rate-limit builder from the route table (`RouteReflectionDocGenerator`) | 1 | L | Med | ✅ Done (`8e846ff`) |
-| 5 | `@example` balanced-brace capture (`findMatchingBrace`) — comment path | 2 | S | Low | ⬜ Open (next target) |
-| 6 | Grammar: `format`, nullable, response-level `required` — comment path (inline-path `transformSchema` ✅ done in `f0b83be`) | 2 | M | Low | ◐ Partial |
+| 5 | `@example` balanced-brace capture — comment path | 2 | S | Low | 🚫 Superseded — comment generator removed (Phase 3) |
+| 6 | Grammar: `format`, nullable, response-level `required` — comment path | 2 | M | Low | 🚫 Superseded — comment generator removed (Phase 3) |
 | 7 | DTO/attribute schema inference (`#[Validate]` requests, `#[ApiResponse]`+`ClassSchemaReflector` responses; `ExampleDeriver` used) | 2 | L | Med | ✅ Done (`23ed4d3` + `f0b83be`) |
-| 8 | Consolidate dual parsers / fragment assembler; remove `3.0.0` hardcode | 2 | M | Low | ⬜ Open |
+| 8 | ~~Consolidate dual parsers~~ / remove `3.0.0` hardcode | 2/3 | M | Low | 🚫 Superseded — the comment parser was DELETED (Phase 3), so there is one generator; the `3.0.0` fragment hardcode died with `CommentsDocGenerator` |
+| 9 | Make `reflect` canonical + remove `comments` (gap-closing attributes, migrate route files, delete the parser) | 3 | L | Med | ✅ Done — see `openapi-reflect-canonical-phase-3.md` |
 
-**Next design target:** the reflect generator now produces full specs (paths, security, params, request + response schemas). Remaining work is **comment-path polish** — #5 (`@example` brace fix) and the rest of #6 (docblock `format`/nullable/`required` grammar) — for teams who keep authoring docblocks; and #8 (consolidate the dual parsers). These are lower priority now that `reflect` is a complete code-first generator. (Phases 0–1 and the Phase-2 schema-inference item #7 are complete.)
+**Outcome:** the proposal is COMPLETE. `reflect` is the sole, code-first generator. The comment-path polish (#5/#6) and parser-consolidation (#8) were **superseded by deletion** — rather than fix/refactor the regex parser, it was removed entirely (consolidation-by-deletion). Types are the source of truth; attributes document only what types can't express.
