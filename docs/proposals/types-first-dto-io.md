@@ -1,6 +1,6 @@
 # Proposal: Types-First Request/Response DTOs
 
-**Status:** Implemented — Phase A (request DTOs) and Phase B (response DTOs) both shipped on `dev`. See `docs/REQUEST_DTOS.md` and `docs/RESPONSE_DTOS.md`. The remaining items below (Resource auto-normalizer, collection/pagination return types) are deliberately out of scope and tracked as future enhancements.
+**Status:** Implemented — Phases A (request DTOs), B (response DTOs), and C (collections/pagination + auto-422 + `scaffold:dto`) all shipped on `dev`. See `docs/REQUEST_DTOS.md` and `docs/RESPONSE_DTOS.md`. Open question #1 (collections & pagination) is RESOLVED by `CollectionResponse`/`PaginatedResponse` + `@return Type<Item>` schema inference. The remaining item (open question #2 — Resource auto-normalizer) is deliberately out of scope and tracked as a future enhancement.
 **Release shape:** Shippable **incrementally in a minor release**, not major-only — it is marker-interface opt-in and the router/dispatch changes are strictly *additive* (a class that doesn't implement `RequestData`/`ResponseData` behaves exactly as today).
 **Scope:** `src/Routing/` (parameter resolution + return handling), `src/Validation/`, `src/Http/`, `src/Support/Documentation/` (generator integration), new `RequestData`/`ResponseData` contracts.
 **Relationship to other work:** Builds directly on [`openapi-generator-redesign.md`](./openapi-generator-redesign.md). That effort shipped the reflect generator (Phase 1) and the schema machinery — `ClassSchemaReflector` (typed class → OpenAPI schema) and `ValidationRuleSchema` (rules → schema). This proposal adds the **runtime I/O convention** those reflectors were built to read, moving Glueful from annotation-first to types-first API documentation.
@@ -226,8 +226,8 @@ Each phase is independently shippable and behind opt-in adoption (defining a `Re
 - **Response status** — `#[ResponseStatus(n)]`, default 200.
 - **Resources interplay** — coexist (simple `ResponseData` path vs rich Resource path); Resources stay manual `->toResponse()`.
 
-**Open questions (remaining):**
-1. **Collections & pagination** — a first-class typed collection/paginated return type, or keep `#[ApiResponse(collection: true)]`.
-2. **Resource auto-normalizer** — whether/when to route returned `JsonResource`/`ResourceCollection` through `toResponse()` automatically (separate additive enhancement, post-Phase-B).
+**Open questions:**
+1. ~~**Collections & pagination**~~ — RESOLVED in Phase C: first-class `CollectionResponse`/`PaginatedResponse` return types (runtime envelopes + reflect-mode schema from a `@return Type<Item>` docblock). `#[ApiResponse(collection: true)]` remains as the override.
+2. **Resource auto-normalizer** (remaining) — whether/when to route returned `JsonResource`/`ResourceCollection` through `toResponse()` automatically (separate additive enhancement, post-Phase-C).
 
 **Recommendation.** Pursue this as Glueful's types-first direction; the doc-generator work is the foundation (reflectors built; this adds the runtime binding + signature reflection). **Ship Phase A first** (request DTOs) for immediate, low-surface value, then Phase B (response DTOs + the return normalizer). It's especially timely for **Glueful + Lemma**: Lemma's admin/editor APIs carry many structured payloads where typed request DTOs cut controller noise and make the OpenAPI docs markedly cleaner. If the near-term goal is *just* docs, the shipped attributes already deliver — this is the deliberate next step up.

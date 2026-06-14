@@ -1,6 +1,6 @@
 # Types-First DTO I/O — Phase C Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Complete the typed-I/O story — typed collection/pagination response DTOs, an auto-derived `422` validation-error response in reflect-mode docs, and a `scaffold:dto` generator command.
 
@@ -48,7 +48,7 @@
 - Create: `src/Http/Responses/PaginatedResponse.php`
 - Test: `tests/Unit/Http/Responses/CollectionAndPaginatedResponseTest.php`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```php
 <?php
@@ -100,9 +100,9 @@ final class CollectionAndPaginatedResponseTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run → fail** (`vendor/bin/phpunit tests/Unit/Http/Responses/CollectionAndPaginatedResponseTest.php`) — Expected: error, classes not found.
+- [x] **Step 2: Run → fail** (`vendor/bin/phpunit tests/Unit/Http/Responses/CollectionAndPaginatedResponseTest.php`) — Expected: error, classes not found.
 
-- [ ] **Step 3: Implement the two value objects**
+- [x] **Step 3: Implement the two value objects**
 
 `src/Http/Responses/CollectionResponse.php`:
 ```php
@@ -181,11 +181,11 @@ final class PaginatedResponse
 }
 ```
 
-- [ ] **Step 4: Run → pass.**
+- [x] **Step 4: Run → pass.**
 
-- [ ] **Step 5: Gates** — `composer phpcs src/Http/Responses/CollectionResponse.php src/Http/Responses/PaginatedResponse.php`; `vendor/bin/phpstan analyse src/Http/Responses/CollectionResponse.php src/Http/Responses/PaginatedResponse.php --level=6 --no-progress`.
+- [x] **Step 5: Gates** — `composer phpcs src/Http/Responses/CollectionResponse.php src/Http/Responses/PaginatedResponse.php`; `vendor/bin/phpstan analyse src/Http/Responses/CollectionResponse.php src/Http/Responses/PaginatedResponse.php --level=6 --no-progress`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 ```bash
 git add src/Http/Responses/ tests/Unit/Http/Responses/
 git commit -m "Add CollectionResponse + PaginatedResponse value objects"
@@ -226,7 +226,7 @@ private function normalizeResponse(mixed $result, int $successStatus = 200): Res
 ```
 NOTE: in `Router.php`, `Response` is aliased to Symfony's response and the Glueful response is imported `use Glueful\Http\Response as ApiResponse;`. Use `ApiResponse` for envelopes (this is what the Phase B branch already does). `ApiResponse::paginated(array $items, int $total, int $page, int $perPage, ?SerializationContext $context = null, string $message = 'Data retrieved successfully'): self` exists on `Glueful\Http\Response` and produces the flat pagination envelope with keys `current_page, per_page, total, total_pages, has_next_page, has_previous_page`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```php
 <?php
@@ -352,9 +352,9 @@ final class CollectionResponseNormalizationTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run → fail** (`vendor/bin/phpunit tests/Unit/Routing/CollectionResponseNormalizationTest.php`) — collection/paginated returns currently fall through to `new JsonResponse($result)`, so `data` won't be the serialized list and pagination keys are absent.
+- [x] **Step 2: Run → fail** (`vendor/bin/phpunit tests/Unit/Routing/CollectionResponseNormalizationTest.php`) — collection/paginated returns currently fall through to `new JsonResponse($result)`, so `data` won't be the serialized list and pagination keys are absent.
 
-- [ ] **Step 3: Implement** — add a helper and two branches.
+- [x] **Step 3: Implement** — add a helper and two branches.
 
 Add this private helper next to `normalizeResponse()`:
 ```php
@@ -401,11 +401,11 @@ if ($result instanceof \Glueful\Http\Responses\CollectionResponse) {
 }
 ```
 
-- [ ] **Step 4: Run → pass.**
+- [x] **Step 4: Run → pass.**
 
-- [ ] **Step 5: Regression gate (critical — strictly additive)** — run the FULL `tests/Unit/Routing` suite: `vendor/bin/phpunit tests/Unit/Routing`. Every existing dispatch/normalize case (Response/string/array/object/ResponseData) must stay green. Then `composer phpcs src/Routing/Router.php` and `vendor/bin/phpstan analyse src/Routing/Router.php --level=6 --no-progress` (no NEW errors vs baseline).
+- [x] **Step 5: Regression gate (critical — strictly additive)** — run the FULL `tests/Unit/Routing` suite: `vendor/bin/phpunit tests/Unit/Routing`. Every existing dispatch/normalize case (Response/string/array/object/ResponseData) must stay green. Then `composer phpcs src/Routing/Router.php` and `vendor/bin/phpstan analyse src/Routing/Router.php --level=6 --no-progress` (no NEW errors vs baseline).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 ```bash
 git add src/Routing/Router.php tests/Unit/Routing/CollectionResponseNormalizationTest.php
 git commit -m "Envelope CollectionResponse/PaginatedResponse returns in Router"
@@ -451,7 +451,7 @@ private function buildResponseFromReturnType(mixed $handler): ?array
 ```
 `wrapInEnvelope(array $schema): array` returns `{type:object, properties:{success:boolean, message:string, data:$schema}}`. `ClassSchemaReflector::toSchema(string $class): array` reflects public typed props (and already resolves `@var Foo[]`/`@var array<Foo>` docblocks for array properties by matching the short name against the declaring class namespace).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```php
 <?php
@@ -657,9 +657,9 @@ final class CollectionResponseSchemaTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run → fail** (`vendor/bin/phpunit tests/Unit/Support/Documentation/CollectionResponseSchemaTest.php`) — today `buildResponseFromReturnType()` returns null for non-`ResponseData` return types, so no inferred response exists for the collection/paginated returns.
+- [x] **Step 2: Run → fail** (`vendor/bin/phpunit tests/Unit/Support/Documentation/CollectionResponseSchemaTest.php`) — today `buildResponseFromReturnType()` returns null for non-`ResponseData` return types, so no inferred response exists for the collection/paginated returns.
 
-- [ ] **Step 3: Implement** — extract a `returnStatus()` helper (DRY with the existing inline status read), then branch on the two container types in `buildResponseFromReturnType()`, and add three helpers.
+- [x] **Step 3: Implement** — extract a `returnStatus()` helper (DRY with the existing inline status read), then branch on the two container types in `buildResponseFromReturnType()`, and add three helpers.
 
 Add `use Glueful\Http\Responses\CollectionResponse;` and `use Glueful\Http\Responses\PaginatedResponse;` at the top of the file.
 
@@ -788,11 +788,11 @@ private function itemClassFromReturnDocblock(\ReflectionMethod $reflection): ?st
 
 NOTE on overlay order: `buildOperation()` already applies `buildResponseFromReturnType()` BEFORE `mergeAttributeResponses()`, so an explicit `#[ApiResponse(200, ...)]` overrides the inferred collection response (covered by `testExplicitApiResponseOverridesInferredCollection`). Do not change the assembly order.
 
-- [ ] **Step 4: Run → pass.**
+- [x] **Step 4: Run → pass.**
 
-- [ ] **Step 5: Regression gate** — full `tests/Unit/Support/Documentation` suite green (`vendor/bin/phpunit tests/Unit/Support/Documentation`); `composer phpcs src/Support/Documentation/RouteReflectionDocGenerator.php`; `vendor/bin/phpstan analyse src/Support/Documentation/RouteReflectionDocGenerator.php --level=6 --no-progress` (no NEW errors).
+- [x] **Step 5: Regression gate** — full `tests/Unit/Support/Documentation` suite green (`vendor/bin/phpunit tests/Unit/Support/Documentation`); `composer phpcs src/Support/Documentation/RouteReflectionDocGenerator.php`; `vendor/bin/phpstan analyse src/Support/Documentation/RouteReflectionDocGenerator.php --level=6 --no-progress` (no NEW errors).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 ```bash
 git add src/Support/Documentation/RouteReflectionDocGenerator.php tests/Unit/Support/Documentation/CollectionResponseSchemaTest.php
 git commit -m "Infer reflect-mode list schema from CollectionResponse/PaginatedResponse returns"
@@ -828,7 +828,7 @@ if ($inferred !== null) {
 $operation['responses'] = $this->mergeAttributeResponses($defaults, $route->getHandler());
 ```
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```php
 <?php
@@ -946,9 +946,9 @@ final class ValidationErrorResponseTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run → fail** (`vendor/bin/phpunit tests/Unit/Support/Documentation/ValidationErrorResponseTest.php`) — no `422` is emitted today.
+- [x] **Step 2: Run → fail** (`vendor/bin/phpunit tests/Unit/Support/Documentation/ValidationErrorResponseTest.php`) — no `422` is emitted today.
 
-- [ ] **Step 3: Implement** — inject the 422 into `$defaults` after the inferred overlay and before `mergeAttributeResponses()` (so an explicit `#[ApiResponse(422)]` still wins via the attribute overlay):
+- [x] **Step 3: Implement** — inject the 422 into `$defaults` after the inferred overlay and before `mergeAttributeResponses()` (so an explicit `#[ApiResponse(422)]` still wins via the attribute overlay):
 ```php
         if ($this->findRequestDataParam($route->getHandler()) !== null) {
             $defaults['422'] = $this->buildValidationErrorResponse();
@@ -988,11 +988,11 @@ private function buildValidationErrorResponse(): array
 
 NOTE: `findRequestDataParam()` is a private method on this class — verify its exact name/signature against HEAD (it returns the `\ReflectionParameter` or null). If it is named differently, use the actual finder that `buildRequestBodyFromRequestData()` uses.
 
-- [ ] **Step 4: Run → pass.**
+- [x] **Step 4: Run → pass.**
 
-- [ ] **Step 5: Regression gate** — full `tests/Unit/Support/Documentation` suite green; `composer phpcs` on the file; `vendor/bin/phpstan analyse src/Support/Documentation/RouteReflectionDocGenerator.php --level=6 --no-progress` (no NEW errors).
+- [x] **Step 5: Regression gate** — full `tests/Unit/Support/Documentation` suite green; `composer phpcs` on the file; `vendor/bin/phpstan analyse src/Support/Documentation/RouteReflectionDocGenerator.php --level=6 --no-progress` (no NEW errors).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 ```bash
 git add src/Support/Documentation/RouteReflectionDocGenerator.php tests/Unit/Support/Documentation/ValidationErrorResponseTest.php
 git commit -m "Auto-derive the 422 response from a RequestData handler param"
@@ -1014,7 +1014,7 @@ git commit -m "Auto-derive the 422 response from a RequestData handler param"
 - Confirm how an existing Scaffold command is constructed in its test (CommandTester) — match that exactly (e.g. `new RequestCommand($container, $context)` or `new RequestCommand($context)`).
 - Registration is automatic: `ConsoleProvider` discovers any class in `src/Console/Commands/` carrying `#[AsCommand]`. No manual registration. (Production needs `php glueful commands:cache` to refresh `storage/cache/glueful_commands_manifest.php`, but tests instantiate the command directly so discovery is not exercised.)
 
-- [ ] **Step 1: Write the failing test** — adapt the container/constructor wiring to whatever `RequestCommand` uses (the skeleton below assumes the `CreateExtensionTest` style `new DtoCommand($container, $context)`; change if RequestCommand differs).
+- [x] **Step 1: Write the failing test** — adapt the container/constructor wiring to whatever `RequestCommand` uses (the skeleton below assumes the `CreateExtensionTest` style `new DtoCommand($container, $context)`; change if RequestCommand differs).
 
 ```php
 <?php
@@ -1102,9 +1102,9 @@ final class DtoCommandTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run → fail** (`vendor/bin/phpunit tests/Unit/Console/Scaffold/DtoCommandTest.php`) — `DtoCommand` not found.
+- [x] **Step 2: Run → fail** (`vendor/bin/phpunit tests/Unit/Console/Scaffold/DtoCommandTest.php`) — `DtoCommand` not found.
 
-- [ ] **Step 3: Implement** — model the constructor + file-writing on `RequestCommand`/`ControllerCommand`. The command logic + stubs (the valuable part) are below; adapt the constructor/`makeStorage` wiring to the existing scaffold convention.
+- [x] **Step 3: Implement** — model the constructor + file-writing on `RequestCommand`/`ControllerCommand`. The command logic + stubs (the valuable part) are below; adapt the constructor/`makeStorage` wiring to the existing scaffold convention.
 
 ```php
 <?php
@@ -1248,11 +1248,11 @@ NOTE on heredoc indentation: the closing `PHP;` is indented to the method-body l
 
 NOTE on constructor: if `RequestCommand`'s constructor is `__construct(ContainerInterface $container, ApplicationContext $context)` (the `CreateCommand` shape), `DtoCommand` inherits it from `BaseCommand` and the test's `new DtoCommand($container, $context)` works. If the scaffold base differs, match it and update the test instantiation accordingly.
 
-- [ ] **Step 4: Run → pass.**
+- [x] **Step 4: Run → pass.**
 
-- [ ] **Step 5: Gates** — `vendor/bin/phpunit tests/Unit/Console/Scaffold/DtoCommandTest.php`; `composer phpcs src/Console/Commands/Scaffold/DtoCommand.php`; `vendor/bin/phpstan analyse src/Console/Commands/Scaffold/DtoCommand.php --level=6 --no-progress` (no NEW errors). Also confirm the command is discoverable: `php glueful list | grep scaffold:dto` should show it (run from the framework root; if it doesn't appear, it's a discovery/manifest issue, not a code issue — note it).
+- [x] **Step 5: Gates** — `vendor/bin/phpunit tests/Unit/Console/Scaffold/DtoCommandTest.php`; `composer phpcs src/Console/Commands/Scaffold/DtoCommand.php`; `vendor/bin/phpstan analyse src/Console/Commands/Scaffold/DtoCommand.php --level=6 --no-progress` (no NEW errors). Also confirm the command is discoverable: `php glueful list | grep scaffold:dto` should show it (run from the framework root; if it doesn't appear, it's a discovery/manifest issue, not a code issue — note it).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 ```bash
 git add src/Console/Commands/Scaffold/DtoCommand.php tests/Unit/Console/Scaffold/DtoCommandTest.php
 git commit -m "Add scaffold:dto command for request/response DTO stubs"
@@ -1269,19 +1269,19 @@ git commit -m "Add scaffold:dto command for request/response DTO stubs"
 - Modify: `docs/RESPONSE_DTOS.md`
 - Modify: `docs/REQUEST_DTOS.md`
 
-- [ ] **Step 1: CHANGELOG** — under `## [Unreleased] → ### Added`, add entries:
+- [x] **Step 1: CHANGELOG** — under `## [Unreleased] → ### Added`, add entries:
   - **Collection & pagination response DTOs:** returning a `Glueful\Http\Responses\CollectionResponse` envelopes the serialized items as `{success, message, data: [...]}` (honoring `#[ResponseStatus]`); returning a `PaginatedResponse` renders Glueful's flat pagination envelope (`current_page/per_page/total/total_pages/has_next_page/has_previous_page`) via `Response::paginated()`. In reflect mode the list item schema is inferred from a `@return CollectionResponse<Item>` / `@return PaginatedResponse<Item>` docblock (generic object items otherwise; `#[ApiResponse]` still overrides).
   - **Auto-derived 422:** in reflect mode, any handler taking a `RequestData` parameter now documents a `422` validation-error response matching the runtime body (`{success:false, message, errors:{field:[string]}}`); an explicit `#[ApiResponse(422, ...)]` overrides it.
   - **`scaffold:dto` command:** scaffolds a `RequestData` DTO (default) or a `ResponseData` DTO (`--response`).
   - State the boundary: collection/pagination items run through `ResponseDataSerializer` (or pass through if already arrays); the Resource auto-normalizer remains out of scope.
 
-- [ ] **Step 2: `docs/RESPONSE_DTOS.md`** — add a "Collections & pagination" section: worked examples returning `CollectionResponse` and `PaginatedResponse` from a controller, the two resulting envelopes (plain list vs flat paginated), the `@return Type<Item>` docblock for precise OpenAPI item schemas (and the generic-object fallback + `#[ApiResponse]` override), and that pagination always renders at 200. Verify class names/namespaces against the source files created in Tasks A1–A3 before writing them.
+- [x] **Step 2: `docs/RESPONSE_DTOS.md`** — add a "Collections & pagination" section: worked examples returning `CollectionResponse` and `PaginatedResponse` from a controller, the two resulting envelopes (plain list vs flat paginated), the `@return Type<Item>` docblock for precise OpenAPI item schemas (and the generic-object fallback + `#[ApiResponse]` override), and that pagination always renders at 200. Verify class names/namespaces against the source files created in Tasks A1–A3 before writing them.
 
-- [ ] **Step 3: `docs/REQUEST_DTOS.md`** — add a short note that, in reflect mode, a handler taking a `RequestData` param automatically gets a documented `422` validation-error response (no annotation needed; override with `#[ApiResponse(422, ...)]`). Mention `scaffold:dto` as the quick way to create one.
+- [x] **Step 3: `docs/REQUEST_DTOS.md`** — add a short note that, in reflect mode, a handler taking a `RequestData` param automatically gets a documented `422` validation-error response (no annotation needed; override with `#[ApiResponse(422, ...)]`). Mention `scaffold:dto` as the quick way to create one.
 
-- [ ] **Step 4: Full suite gate** — `vendor/bin/phpunit tests/Unit` must be fully green (this phase touched core `Router.php` and the generator). `composer phpcs` clean. Quote the totals.
+- [x] **Step 4: Full suite gate** — `vendor/bin/phpunit tests/Unit` must be fully green (this phase touched core `Router.php` and the generator). `composer phpcs` clean. Quote the totals.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 ```bash
 git add CHANGELOG.md docs/RESPONSE_DTOS.md docs/REQUEST_DTOS.md
 git commit -m "Document Phase C: collections/pagination, auto-422, scaffold:dto"
