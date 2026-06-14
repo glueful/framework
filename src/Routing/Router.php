@@ -1084,6 +1084,12 @@ class Router
             return new Response($result);
         }
 
+        // A returned response object may carry its own envelope message via
+        // HasResponseMessage; otherwise the existing per-status defaults are used.
+        $message = $result instanceof \Glueful\Http\Contracts\HasResponseMessage
+            ? $result->responseMessage()
+            : null;
+
         // A paginated list renders the flat Glueful pagination envelope. Always 200,
         // matching ApiResponse::paginated() (which has no status parameter) — a
         // #[ResponseStatus] on a PaginatedResponse-returning handler has no effect
@@ -1095,6 +1101,8 @@ class Router
                 $result->total,
                 $result->page,
                 $result->perPage,
+                null,
+                $message ?? 'Data retrieved successfully',
             );
         }
 
@@ -1102,10 +1110,10 @@ class Router
         if ($result instanceof \Glueful\Http\Responses\CollectionResponse) {
             $data = $this->serializeResponseItems($result->items);
             return match ($successStatus) {
-                200 => ApiResponse::success($data),
-                201 => ApiResponse::created($data),
+                200 => ApiResponse::success($data, $message ?? 'Success'),
+                201 => ApiResponse::created($data, $message ?? 'Created successfully'),
                 default => new ApiResponse(
-                    ['success' => true, 'message' => 'Success', 'data' => $data],
+                    ['success' => true, 'message' => $message ?? 'Success', 'data' => $data],
                     $successStatus
                 ),
             };
@@ -1116,12 +1124,12 @@ class Router
         if ($result instanceof \Glueful\Http\Contracts\ResponseData) {
             $data = (new \Glueful\Serialization\ResponseDataSerializer())->toArray($result);
             return match ($successStatus) {
-                200 => ApiResponse::success($data),
-                201 => ApiResponse::created($data),
+                200 => ApiResponse::success($data, $message ?? 'Success'),
+                201 => ApiResponse::created($data, $message ?? 'Created successfully'),
                 // Build the envelope with its final status in one place (preferred
                 // over mutating success()).
                 default => new ApiResponse(
-                    ['success' => true, 'message' => 'Success', 'data' => $data],
+                    ['success' => true, 'message' => $message ?? 'Success', 'data' => $data],
                     $successStatus
                 ),
             };
