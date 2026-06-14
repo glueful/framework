@@ -288,6 +288,7 @@ final class HealthReflectDocsTest extends TestCase
         // Structural pins.
         self::assertSame('string', $data['properties']['status']['type']);
         self::assertSame('string', $data['properties']['driver']['type']);
+        self::assertArrayHasKey('database', $data['properties']); // real key from checkDatabase()
         self::assertSame('integer', $data['properties']['migrations_applied']['type']);
         self::assertSame('boolean', $data['properties']['connectivity_test']['type']);
 

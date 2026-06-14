@@ -10,7 +10,7 @@ namespace Glueful\Controllers\DTOs;
  *
  * Mirrors — by exact name AND declaration order — the `data` keys returned by
  * {@see \Glueful\Services\HealthService::checkDatabase()} on the success branch:
- * `status`, `message`, `driver`, `migrations_applied`, `connectivity_test`.
+ * `status`, `message`, `driver`, `database`, `migrations_applied`, `connectivity_test`.
  *
  * This DTO is NEVER constructed at runtime — it is reflected by
  * {@see \Glueful\Support\Documentation\ClassSchemaReflector} purely to document
@@ -27,6 +27,9 @@ final class DatabaseHealthData
 
     /** Database driver name (e.g. sqlite, mysql, pgsql). */
     public string $driver = '';
+
+    /** Current database name (null when it cannot be resolved). */
+    public ?string $database = null;
 
     /** Number of applied migrations. */
     public int $migrations_applied = 0;
