@@ -1,6 +1,6 @@
 # Proposal: OpenAPI Documentation Generator — Root Causes & Redesign
 
-**Status:** Living roadmap — Phase 0 (`6822eb3`, `8b7f97b`) and Phase 1 (`8e846ff`, the code-first `reflect` generator) implemented; Phases 2–3 remain open (see §7).
+**Status:** Living roadmap — Phase 0 (`6822eb3`, `8b7f97b`), Phase 1 (`8e846ff`, the code-first `reflect` generator), and Phase 2's schema inference (`23ed4d3` requests, `f0b83be` responses) implemented. The `reflect` generator now produces full specs; remaining work is comment-path polish (#5, #6) and parser consolidation (#8). See §7.
 **Scope:** `src/Support/Documentation/*`, `src/Console/Commands/Generate/OpenApiDocsCommand.php`, `config/documentation.php`
 **Motivation:** An app (Lemma) annotated its routes and tried to generate an agent-ready OpenAPI 3.1 spec from the framework generator alone. It could not: config flags were ignored, `--clean` did nothing, per-route security could not be expressed, and framework/extension endpoints could not be excluded. The app was forced into an ever-growing post-processing script. This document explains *why*, proposes the corrective fixes, and proposes a better long-term generation model.
 
@@ -116,7 +116,7 @@ This is the model behind FastAPI (type hints + Pydantic), NestJS (decorators + r
 
 - **Phase 0 — ✅ implemented (`6822eb3` + `8b7f97b`):** config flags honored, `--clean` recurses, no stale-fragment leakage, and opt-in unreferenced-schema pruning. Complete.
 - **Phase 1 — ✅ implemented (`8e846ff`):** code-first path/security/params/rate-limit from the route table, behind `documentation.generator => 'reflect'`, alongside the existing comment generator. Per-route security comes from the *real* effective middleware (no docblock tag), and scoping is structural. Response/request body *schemas* are deferred to Phase 2.
-- **Phase 2 — next design target:** request/response schema inference from DTOs/Resources/attributes; wire `ExampleDeriver::fromValidationRules()` and `addRouteWithFieldsAttribute()`. Add `@example` balanced-brace fix and `format`/nullable/response-`required` grammar for anyone staying on docblocks.
+- **Phase 2 — in progress:** request/response schema inference for reflect mode is **done** — request bodies from `#[Validate]` rules (`23ed4d3`, `ValidationRuleSchema`) and response bodies from `#[ApiResponse]` + typed DTOs (`f0b83be`, `ClassSchemaReflector`); `ExampleDeriver::fromValidationRules()` is now used for request examples, and the 3.1 nullable transform was extended over inline path schemas. **Remaining (comment-path polish, lower priority now that reflect is the direction):** the `@example` balanced-brace fix (#5) and the docblock-grammar additions (`format`/nullable/response-`required`, #6).
 - **Phase 3:** docblocks/attributes become override-only; deprecate the regex parser.
 
 **Downstream note:** apps consume the *vendored* framework, so each phase reaches an app only after a framework release + version pin bump. An app-side post-processor remains the bridge until then and shrinks phase by phase.
@@ -131,9 +131,9 @@ This is the model behind FastAPI (type hints + Pydantic), NestJS (decorators + r
 | 2 | Opt-in prune of unreferenced default schemas (`options.prune_unreferenced_schemas`) | 0 | S | Low (opt-in) | ✅ Done (`8b7f97b`) |
 | 3 | Per-route security from real middleware → existing registry (via reflect generator) | 1 | M | Low | ✅ Done (`8e846ff`) |
 | 4 | Code-first path/param/rate-limit builder from the route table (`RouteReflectionDocGenerator`) | 1 | L | Med | ✅ Done (`8e846ff`) |
-| 5 | `@example` balanced-brace capture (`findMatchingBrace`) | 2 | S | Low | ⬜ Open (next target) |
-| 6 | Grammar: `format`, nullable, response-level `required`; run `transformSchema` over inline path schemas | 2 | M | Low | ⬜ Open |
-| 7 | DTO/Resource/attribute schema inference; wire dead `addRouteWithFieldsAttribute` + `ExampleDeriver::fromValidationRules` | 2 | L | Med | ⬜ Open |
+| 5 | `@example` balanced-brace capture (`findMatchingBrace`) — comment path | 2 | S | Low | ⬜ Open (next target) |
+| 6 | Grammar: `format`, nullable, response-level `required` — comment path (inline-path `transformSchema` ✅ done in `f0b83be`) | 2 | M | Low | ◐ Partial |
+| 7 | DTO/attribute schema inference (`#[Validate]` requests, `#[ApiResponse]`+`ClassSchemaReflector` responses; `ExampleDeriver` used) | 2 | L | Med | ✅ Done (`23ed4d3` + `f0b83be`) |
 | 8 | Consolidate dual parsers / fragment assembler; remove `3.0.0` hardcode | 2 | M | Low | ⬜ Open |
 
-**Next design target:** Phase 2 (#5 → #7) — schema/example fidelity: DTO/Resource/attribute inference for request & response bodies (the reflect generator's main remaining gap), plus the `@example` and grammar fixes for anyone on the comment path. (Phases 0 and 1, items #1–#4, are complete.)
+**Next design target:** the reflect generator now produces full specs (paths, security, params, request + response schemas). Remaining work is **comment-path polish** — #5 (`@example` brace fix) and the rest of #6 (docblock `format`/nullable/`required` grammar) — for teams who keep authoring docblocks; and #8 (consolidate the dual parsers). These are lower priority now that `reflect` is a complete code-first generator. (Phases 0–1 and the Phase-2 schema-inference item #7 are complete.)
