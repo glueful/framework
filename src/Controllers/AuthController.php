@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Glueful\Controllers;
 
 use Glueful\Bootstrap\ApplicationContext;
+use Glueful\DTOs\RefreshTokenData;
+use Glueful\DTOs\RefreshedTokenData;
 use Glueful\Http\Response;
 use Glueful\Helpers\RequestHelper;
 use Glueful\Auth\AuthenticationService;
@@ -356,20 +358,21 @@ class AuthController
      * }
      * ```
      *
-     * @return mixed HTTP response with new authentication tokens
+     * **Reference adoption:** the request body is bound + validated into a typed
+     * {@see RefreshTokenData} (the router hydrates it; a missing/blank
+     * `refresh_token` yields a {@see ValidationException} → 422, matching the
+     * previous manual guard) and the success payload is returned as a typed
+     * {@see RefreshedTokenData} the router envelopes (it supplies its own
+     * 'Token refreshed successfully' message via HasResponseMessage). Behaviour
+     * is preserved byte-for-byte.
+     *
+     * @return RefreshedTokenData Enveloped response with new authentication tokens
      * @throws \Glueful\Validation\ValidationException If refresh token missing from request
      * @throws \Glueful\Http\Exceptions\Domain\AuthenticationException If refresh token invalid or expired
      */
-    public function refreshToken(SymfonyRequest $request)
+    public function refreshToken(RefreshTokenData $input): RefreshedTokenData
     {
-        $postData = RequestHelper::getRequestData($request);
-
-        if (!isset($postData['refresh_token'])) {
-            throw ValidationException::forField('refresh_token', 'Refresh token is required');
-        }
-
-        $refreshToken = $postData['refresh_token'];
-        $result = $this->authService->refreshTokens($refreshToken);
+        $result = $this->authService->refreshTokens($input->refresh_token);
 
         if ($result === null) {
             throw new AuthenticationException('Invalid or expired refresh token');
@@ -382,6 +385,12 @@ class AuthController
             $requestContext->updateToken($result['access_token']);
         }
 
-        return Response::success($result, 'Token refreshed successfully');
+        return new RefreshedTokenData(
+            access_token: (string) $result['access_token'],
+            refresh_token: (string) $result['refresh_token'],
+            expires_in: (int) $result['expires_in'],
+            token_type: (string) $result['token_type'],
+            user: (array) $result['user'],
+        );
     }
 }
