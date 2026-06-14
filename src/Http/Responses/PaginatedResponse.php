@@ -17,6 +17,11 @@ use Glueful\Http\Contracts\ResponseData;
  * annotate the handler return with the item type:
  * `@return PaginatedResponse<PostData>`.
  *
+ * The envelope always renders at HTTP 200 — `Response::paginated()` has no status
+ * parameter, so a `#[ResponseStatus]` on a handler returning a PaginatedResponse
+ * has no effect. Reach for {@see CollectionResponse} when you need a non-200
+ * collection success status.
+ *
  * Constructor validation fails loud on invalid pagination metadata: `perPage`
  * must be >= 1 (the downstream {@see \Glueful\Http\Response::paginated()} does
  * `ceil($total / $perPage)`, so `perPage: 0` would be a division-by-zero),

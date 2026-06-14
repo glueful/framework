@@ -1084,6 +1084,33 @@ class Router
             return new Response($result);
         }
 
+        // A paginated list renders the flat Glueful pagination envelope. Always 200,
+        // matching ApiResponse::paginated() (which has no status parameter) — a
+        // #[ResponseStatus] on a PaginatedResponse-returning handler has no effect
+        // (a paginated GET is 200 by nature). Use CollectionResponse for a non-200
+        // collection success status.
+        if ($result instanceof \Glueful\Http\Responses\PaginatedResponse) {
+            return ApiResponse::paginated(
+                $this->serializeResponseItems($result->items),
+                $result->total,
+                $result->page,
+                $result->perPage,
+            );
+        }
+
+        // A plain collection renders {success, message, data: [...]} at the success status.
+        if ($result instanceof \Glueful\Http\Responses\CollectionResponse) {
+            $data = $this->serializeResponseItems($result->items);
+            return match ($successStatus) {
+                200 => ApiResponse::success($data),
+                201 => ApiResponse::created($data),
+                default => new ApiResponse(
+                    ['success' => true, 'message' => 'Success', 'data' => $data],
+                    $successStatus
+                ),
+            };
+        }
+
         // Envelope a ResponseData DTO into the standard Glueful response with the
         // declared success status. Must precede the generic array/object fallback.
         if ($result instanceof \Glueful\Http\Contracts\ResponseData) {
@@ -1105,6 +1132,27 @@ class Router
         }
 
         return new Response((string) $result);
+    }
+
+    /**
+     * Serialize a list of response items: each ResponseData DTO becomes an array
+     * via the serializer; arrays and scalars pass through unchanged. A plain
+     * (non-ResponseData) object also passes through as-is and is later encoded by
+     * json_encode — so it does NOT get the serializer's enum/DateTime/cycle
+     * handling. Wrap such values in a ResponseData DTO if you need that.
+     *
+     * @param  array<int, mixed> $items
+     * @return array<int, mixed>
+     */
+    private function serializeResponseItems(array $items): array
+    {
+        $serializer = new \Glueful\Serialization\ResponseDataSerializer();
+        return array_map(
+            static fn (mixed $item): mixed => $item instanceof \Glueful\Http\Contracts\ResponseData
+                ? $serializer->toArray($item)
+                : $item,
+            $items,
+        );
     }
 
     // URL Generation
