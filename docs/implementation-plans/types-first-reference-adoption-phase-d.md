@@ -1,6 +1,6 @@
 # Types-First DTO I/O — Phase D: Message-Aware Responses + Reference Adoption
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Make typed response DTOs preserve custom envelope messages (a small additive `HasResponseMessage` contract), then adopt the typed-DTO I/O convention across the framework's route-wired controllers as worked reference examples — migrating only where the current envelope/message/status can be preserved **byte-identically**, and documenting every other route-wired method as an explicit "left manual + reason" boundary.
 
@@ -49,7 +49,7 @@ if ($result instanceof \Glueful\Http\Contracts\ResponseData) {
 ```
 `ApiResponse` is `Glueful\Http\Response`. Signatures: `success(mixed $data, string $message = 'Success', ?SerializationContext = null)`, `created(mixed $data, string $message = 'Created successfully', …)`, `paginated(array $items, int $total, int $page, int $perPage, ?SerializationContext = null, string $message = 'Data retrieved successfully')`.
 
-- [ ] **Step 1: Write the failing test** — `tests/Unit/Routing/ResponseMessageTest.php`. Build a Router (mirror `tests/Unit/Routing/ResponseDataNormalizationTest.php`'s container/dispatch harness). Fixtures + cases:
+- [x] **Step 1: Write the failing test** — `tests/Unit/Routing/ResponseMessageTest.php`. Build a Router (mirror `tests/Unit/Routing/ResponseDataNormalizationTest.php`'s container/dispatch harness). Fixtures + cases:
 ```php
 // A plain ResponseData (no HasResponseMessage) — message stays the default.
 final class RmPlainData implements \Glueful\Http\Contracts\ResponseData
@@ -81,7 +81,7 @@ Controller methods returning each (one at 200, one with `#[ResponseStatus(201)]`
 - Default-behavior regression: an existing `ResponseData` (no interface) is byte-identical to before.
 Run → FAIL (message-aware cases get `'Success'`).
 
-- [ ] **Step 2: Create the contract** — `src/Http/Contracts/HasResponseMessage.php`:
+- [x] **Step 2: Create the contract** — `src/Http/Contracts/HasResponseMessage.php`:
 ```php
 <?php
 
@@ -102,7 +102,7 @@ interface HasResponseMessage
 }
 ```
 
-- [ ] **Step 3: Thread the message in `normalizeResponse()`** — read it once and pass it through each branch, defaulting to the existing strings:
+- [x] **Step 3: Thread the message in `normalizeResponse()`** — read it once and pass it through each branch, defaulting to the existing strings:
 ```php
         $message = $result instanceof \Glueful\Http\Contracts\HasResponseMessage
             ? $result->responseMessage()
@@ -137,11 +137,11 @@ interface HasResponseMessage
 ```
 (Compute `$message` AFTER the `Response`/`string` passthroughs but before these three branches.) Note: the reflect generator already documents `message` as `{type: string}` with no fixed value, so NO generator change is needed — a custom message doesn't alter the schema.
 
-- [ ] **Step 4: Run → pass.**
+- [x] **Step 4: Run → pass.**
 
-- [ ] **Step 5: Regression gate** — FULL `tests/Unit/Routing` + `tests/Unit/Serialization` suites green (Task 1 must leave every existing default-message response identical — quote counts). `vendor/bin/phpcs src/Http/Contracts/HasResponseMessage.php src/Routing/Router.php`; `vendor/bin/phpstan analyse src/Http/Contracts/HasResponseMessage.php src/Routing/Router.php --level=6 --no-progress`.
+- [x] **Step 5: Regression gate** — FULL `tests/Unit/Routing` + `tests/Unit/Serialization` suites green (Task 1 must leave every existing default-message response identical — quote counts). `vendor/bin/phpcs src/Http/Contracts/HasResponseMessage.php src/Routing/Router.php`; `vendor/bin/phpstan analyse src/Http/Contracts/HasResponseMessage.php src/Routing/Router.php --level=6 --no-progress`.
 
-- [ ] **Step 6: CHANGELOG + commit** — under `## [Unreleased] → ### Added`: "`Glueful\Http\Contracts\HasResponseMessage` — a `ResponseData`/`CollectionResponse`/`PaginatedResponse` may now supply its own envelope `message` (defaults unchanged when not implemented)."
+- [x] **Step 6: CHANGELOG + commit** — under `## [Unreleased] → ### Added`: "`Glueful\Http\Contracts\HasResponseMessage` — a `ResponseData`/`CollectionResponse`/`PaginatedResponse` may now supply its own envelope `message` (defaults unchanged when not implemented)."
 ```bash
 git add src/Http/Contracts/HasResponseMessage.php src/Routing/Router.php tests/Unit/Routing/ResponseMessageTest.php CHANGELOG.md
 git commit -m "Add HasResponseMessage so typed responses can carry a custom message"
@@ -153,7 +153,7 @@ git commit -m "Add HasResponseMessage so typed responses can carry a custom mess
 
 **Files:** Create `docs/implementation-plans/phase-d-controller-inventory.md` (the authoritative per-method decision table; referenced by the migration tasks). No code.
 
-- [ ] **Step 1: Record the inventory** verbatim below (verified against HEAD). Each route-wired method gets exactly one decision. `Req`=request→`RequestData`, `Resp`=response→`ResponseData`, `Page`=→`PaginatedResponse`, `—`=leave manual (+reason).
+- [x] **Step 1: Record the inventory** verbatim below (verified against HEAD). Each route-wired method gets exactly one decision. `Req`=request→`RequestData`, `Resp`=response→`ResponseData`, `Page`=→`PaginatedResponse`, `—`=leave manual (+reason).
 
 **AuthController** (`src/Controllers/AuthController.php`, routes `routes/auth.php`):
 | Method | Decision | Notes |
@@ -196,9 +196,9 @@ git commit -m "Add HasResponseMessage so typed responses can carry a custom mess
 
 **Not route-wired (documented, not migrated):** `ConfigController` (admin/CLI), `MetricsController` (internal), `ExtensionsController` (no registered routes found).
 
-- [ ] **Step 2: Caveat for `Resp` on dynamic single-records** (`ResourceController::show`): its `data` is arbitrary table columns, so a fixed-property `ResponseData` can't mirror it. Mark `show` as **— (dynamic columns)** unless a generic passthrough DTO is used; prefer documenting it as a boundary. (Recorded here so Task 4 doesn't attempt it.)
+- [x] **Step 2: Caveat for `Resp` on dynamic single-records** (`ResourceController::show`): its `data` is arbitrary table columns, so a fixed-property `ResponseData` can't mirror it. Mark `show` as **— (dynamic columns)** unless a generic passthrough DTO is used; prefer documenting it as a boundary. (Recorded here so Task 4 doesn't attempt it.)
 
-- [ ] **Step 3: Commit** `git add docs/implementation-plans/phase-d-controller-inventory.md && git commit -m "Add Phase D route-method inventory with per-method migration decisions"`
+- [x] **Step 3: Commit** `git add docs/implementation-plans/phase-d-controller-inventory.md && git commit -m "Add Phase D route-method inventory with per-method migration decisions"`
 
 ---
 
@@ -235,8 +235,8 @@ final class BlobDeletedData implements
 
 **Files:** `src/Auth/DTOs/RefreshTokenData.php` (or `Glueful\Controllers\DTOs` — match the controller's namespace neighborhood; verify), `src/Auth/DTOs/RefreshedTokenData.php`; modify `AuthController::refreshToken` (~363) and `login` (~122, request only); test `tests/Integration/ReferenceAdoption/AuthApiTest.php`.
 
-- [ ] **Step 1: Characterization tests** for `POST /auth/login` (valid creds, via the in-memory user-provider seam in `tests/Integration/Auth/AuthenticationServiceSeamTest.php`) and `POST /auth/refresh-token` (valid token) — assert current body+status. Run → PASS.
-- [ ] **Step 2: DTOs** —
+- [x] **Step 1: Characterization tests** for `POST /auth/login` (valid creds, via the in-memory user-provider seam in `tests/Integration/Auth/AuthenticationServiceSeamTest.php`) and `POST /auth/refresh-token` (valid token) — assert current body+status. Run → PASS.
+- [x] **Step 2: DTOs** —
 ```php
 final class RefreshTokenData implements \Glueful\Validation\Contracts\RequestData
 {
@@ -248,9 +248,9 @@ final class RefreshTokenData implements \Glueful\Validation\Contracts\RequestDat
 }
 ```
 `LoginData` (request only) with snake_case `username,password,provider?,remember?` (`#[Rule('required|string')]` on username/password, `string`/`boolean` on the optionals). `RefreshedTokenData` (`ResponseData`+`HasResponseMessage`, private `$message='Token refreshed successfully'`) mirroring `{access_token,refresh_token,token_type,expires_in,user}` — VERIFY the exact keys/`user` shape from the controller before finalizing; if `user` is a nested dynamic array, type it as `array<string,mixed> $user` (serializer passes arrays through).
-- [ ] **Step 3: Migrate** `login(LoginData $input)` (keep the 2FA/shaper RESPONSE untouched — request only) and `refreshToken(RefreshTokenData $input): RefreshedTokenData`.
-- [ ] **Step 4: GREEN + 422** (missing password / missing refresh_token → 422). **Run the entire `tests/Integration/Auth` suite** (auth hot path) + update any test asserting the old error status.
-- [ ] **Step 5: Gates + commit** `git commit -m "Adopt typed request DTOs in AuthController login/refresh (reference example)"`
+- [x] **Step 3: Migrate** `login(LoginData $input)` (keep the 2FA/shaper RESPONSE untouched — request only) and `refreshToken(RefreshTokenData $input): RefreshedTokenData`.
+- [x] **Step 4: GREEN + 422** (missing password / missing refresh_token → 422). **Run the entire `tests/Integration/Auth` suite** (auth hot path) + update any test asserting the old error status.
+- [x] **Step 5: Gates + commit** `git commit -m "Adopt typed request DTOs in AuthController login/refresh (reference example)"`
 
 ---
 
@@ -258,11 +258,11 @@ final class RefreshTokenData implements \Glueful\Validation\Contracts\RequestDat
 
 **Files:** `src/Controllers/DTOs/BlobInfoData.php`, `SignedUrlData.php`, `BlobDeletedData.php`; modify `UploadController::info`/`signedUrl`/`delete`; test `tests/Integration/ReferenceAdoption/UploadResponseTest.php`.
 
-- [ ] **Step 1: Characterization tests** for `GET /blobs/{uuid}/info`, `POST /blobs/{uuid}/signed-url`, `DELETE /blobs/{uuid}` (seed a blob via existing upload-test helpers) — assert current bodies+messages+statuses. Run → PASS.
-- [ ] **Step 2: DTOs** — three `ResponseData`+`HasResponseMessage` classes mirroring the exact keys (`BlobInfoData`: `{uuid,url,mime_type,size,created_at,native_url?}` msg "Blob metadata"; `SignedUrlData`: `{uuid,signed_url,expires_in,expires_at,native_url?}` msg "Signed URL generated"; `BlobDeletedData`: `{uuid}` msg "Blob deleted"). Nullable `native_url` via a nullable prop (serializer includes nulls / skips uninitialized — verify which, and match the current body: if the current body OMITS `native_url` when absent, only set it when present and make the prop uninitialized-when-absent or use a custom `toArray()`).
-- [ ] **Step 3: Migrate** the three methods to return the DTOs (no `#[ResponseStatus]` — all 200).
-- [ ] **Step 4: GREEN** (these are read/delete — no request body, so no 422 to add; just byte-identical).
-- [ ] **Step 5: Gates + commit** `git commit -m "Adopt typed response DTOs for UploadController info/signedUrl/delete (reference example)"`
+- [x] **Step 1: Characterization tests** for `GET /blobs/{uuid}/info`, `POST /blobs/{uuid}/signed-url`, `DELETE /blobs/{uuid}` (seed a blob via existing upload-test helpers) — assert current bodies+messages+statuses. Run → PASS.
+- [x] **Step 2: DTOs** — three `ResponseData`+`HasResponseMessage` classes mirroring the exact keys (`BlobInfoData`: `{uuid,url,mime_type,size,created_at,native_url?}` msg "Blob metadata"; `SignedUrlData`: `{uuid,signed_url,expires_in,expires_at,native_url?}` msg "Signed URL generated"; `BlobDeletedData`: `{uuid}` msg "Blob deleted"). Nullable `native_url` via a nullable prop (serializer includes nulls / skips uninitialized — verify which, and match the current body: if the current body OMITS `native_url` when absent, only set it when present and make the prop uninitialized-when-absent or use a custom `toArray()`).
+- [x] **Step 3: Migrate** the three methods to return the DTOs (no `#[ResponseStatus]` — all 200).
+- [x] **Step 4: GREEN** (these are read/delete — no request body, so no 422 to add; just byte-identical).
+- [x] **Step 5: Gates + commit** `git commit -m "Adopt typed response DTOs for UploadController info/signedUrl/delete (reference example)"`
 
 ---
 
@@ -270,10 +270,10 @@ final class RefreshTokenData implements \Glueful\Validation\Contracts\RequestDat
 
 **Files:** `src/Controllers/DTOs/ResourceDeletedData.php`; modify `ResourceController::index`/`destroy`; test `tests/Integration/ReferenceAdoption/ResourceApiTest.php`.
 
-- [ ] **Step 1: Characterization tests** for `GET /data/{table}` (seed a small table or stub the repository as existing resource tests do) and `DELETE /data/{table}/{uuid}` — assert current `successWithMeta` body + the destroy `{affected,success,message}` body. Run → PASS.
-- [ ] **Step 2: Decide `index`** — compare `successWithMeta`'s exact keys to `PaginatedResponse`'s flat envelope (`current_page,per_page,total,total_pages,has_next_page,has_previous_page`). If identical → migrate `index` to `return new PaginatedResponse($rows, $page, $perPage, $total)` (items are dynamic arrays — passed through) and add a `HasResponseMessage` wrapper only if `successWithMeta`'s message differs from `PaginatedResponse`'s default. If the keys DIFFER (e.g. `successWithMeta` lacks `has_next_page`/`has_previous_page`) → **do NOT reshape**; leave `index` manual and record why (the characterization test stays as the as-is contract). Pick based on the actual keys.
-- [ ] **Step 3:** `destroy` → `ResourceDeletedData` (`ResponseData`+`HasResponseMessage`, `{affected:int,success:bool,message:string}`-mirroring... note the data itself contains a `message` key — keep it as a public prop in `data` AND set the envelope message via `responseMessage()`; they're distinct). Keep characterization green.
-- [ ] **Step 4: Gates + commit** `git commit -m "Adopt PaginatedResponse/typed response in ResourceController index/destroy (reference example)"`
+- [x] **Step 1: Characterization tests** for `GET /data/{table}` (seed a small table or stub the repository as existing resource tests do) and `DELETE /data/{table}/{uuid}` — assert current `successWithMeta` body + the destroy `{affected,success,message}` body. Run → PASS.
+- [x] **Step 2: Decide `index`** — compare `successWithMeta`'s exact keys to `PaginatedResponse`'s flat envelope (`current_page,per_page,total,total_pages,has_next_page,has_previous_page`). If identical → migrate `index` to `return new PaginatedResponse($rows, $page, $perPage, $total)` (items are dynamic arrays — passed through) and add a `HasResponseMessage` wrapper only if `successWithMeta`'s message differs from `PaginatedResponse`'s default. If the keys DIFFER (e.g. `successWithMeta` lacks `has_next_page`/`has_previous_page`) → **do NOT reshape**; leave `index` manual and record why (the characterization test stays as the as-is contract). Pick based on the actual keys.
+- [x] **Step 3:** `destroy` → `ResourceDeletedData` (`ResponseData`+`HasResponseMessage`, `{affected:int,success:bool,message:string}`-mirroring... note the data itself contains a `message` key — keep it as a public prop in `data` AND set the envelope message via `responseMessage()`; they're distinct). Keep characterization green.
+- [x] **Step 4: Gates + commit** `git commit -m "Adopt PaginatedResponse/typed response in ResourceController index/destroy (reference example)"`
 
 ---
 
@@ -281,10 +281,10 @@ final class RefreshTokenData implements \Glueful\Validation\Contracts\RequestDat
 
 **Files:** `src/Controllers/DTOs/ReadinessData.php`, `DatabaseHealthData.php`; modify `HealthController::readiness`/`database`; test `tests/Integration/ReferenceAdoption/HealthDtoTest.php`.
 
-- [ ] **Step 1: Characterization tests** for `GET /health/ready` (both 200 and the 503 path) and `GET /health/database` — assert current bodies+messages+statuses. Run → PASS. (Do NOT touch `liveness`/`startup` — they return bare non-envelope responses; reshaping breaks them. Record that in the test docblock.)
-- [ ] **Step 2: DTOs** mirroring the envelope `data` exactly, `HasResponseMessage` with the current messages ("Service is ready" / "Database health check completed"). The 503 error path stays `Response::error(...)` (a Symfony Response passthrough — only the success path returns the DTO).
-- [ ] **Step 3: Migrate** the success path of each to return the DTO; keep the 503 branch as `Response::error(...)`. Characterization tests green.
-- [ ] **Step 4: Gates + commit** `git commit -m "Adopt typed responses for health readiness/database (reference example)"`
+- [x] **Step 1: Characterization tests** for `GET /health/ready` (both 200 and the 503 path) and `GET /health/database` — assert current bodies+messages+statuses. Run → PASS. (Do NOT touch `liveness`/`startup` — they return bare non-envelope responses; reshaping breaks them. Record that in the test docblock.)
+- [x] **Step 2: DTOs** mirroring the envelope `data` exactly, `HasResponseMessage` with the current messages ("Service is ready" / "Database health check completed"). The 503 error path stays `Response::error(...)` (a Symfony Response passthrough — only the success path returns the DTO).
+- [x] **Step 3: Migrate** the success path of each to return the DTO; keep the 503 branch as `Response::error(...)`. Characterization tests green.
+- [x] **Step 4: Gates + commit** `git commit -m "Adopt typed responses for health readiness/database (reference example)"`
 
 ---
 
@@ -298,10 +298,10 @@ final class RefreshTokenData implements \Glueful\Validation\Contracts\RequestDat
 
 **Files:** `docs/RESPONSE_DTOS.md`, `docs/REQUEST_DTOS.md`, `CHANGELOG.md`.
 
-- [ ] **Step 1: Docs** — a "Reference adoption & the convention boundary" section: document `HasResponseMessage` (with the private-`$message` pattern), the migrated worked examples (auth refresh, upload info/signed/delete, resource index/destroy, health readiness/database), and — citing the Task 2 inventory — **where the convention deliberately does NOT apply and why** (polymorphic table bodies, multipart/base64, binary/stream, header-only auth, bare probes, free-form blobs, unregistered/admin controllers). This boundary IS the deliverable.
-- [ ] **Step 2: CHANGELOG** — `### Changed`: migrated endpoints' validation error status moved **400→422** (call out exactly which); `### Added`: the typed-DTO reference examples + boundary guide.
-- [ ] **Step 3: Full suite** `vendor/bin/phpunit tests/Unit tests/Integration` green; `composer phpcs` clean. Quote totals.
-- [ ] **Step 4: Commit** `git commit -m "Document typed-DTO reference adoption + convention boundary (Phase D wrap-up)"`
+- [x] **Step 1: Docs** — a "Reference adoption & the convention boundary" section: document `HasResponseMessage` (with the private-`$message` pattern), the migrated worked examples (auth refresh, upload info/signed/delete, resource index/destroy, health readiness/database), and — citing the Task 2 inventory — **where the convention deliberately does NOT apply and why** (polymorphic table bodies, multipart/base64, binary/stream, header-only auth, bare probes, free-form blobs, unregistered/admin controllers). This boundary IS the deliverable.
+- [x] **Step 2: CHANGELOG** — `### Changed`: migrated endpoints' validation error status moved **400→422** (call out exactly which); `### Added`: the typed-DTO reference examples + boundary guide.
+- [x] **Step 3: Full suite** `vendor/bin/phpunit tests/Unit tests/Integration` green; `composer phpcs` clean. Quote totals.
+- [x] **Step 4: Commit** `git commit -m "Document typed-DTO reference adoption + convention boundary (Phase D wrap-up)"`
 
 ---
 

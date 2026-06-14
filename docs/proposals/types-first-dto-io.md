@@ -203,8 +203,8 @@ Each phase is independently shippable and behind opt-in adoption (defining a `Re
 - Status selection (201 for create) via `#[ResponseStatus(201)]`, with `#[ApiResponse]` as the docs/error override. *(Effort S.)*
 - Docs/guides; `make:` scaffolding polish. *(Effort S.)*
 
-### Phase D — Reference adoption (optional, validates the convention)
-- Migrate a few core controllers (e.g. auth, a resource controller) to typed DTOs as worked examples + regression coverage. *(Effort M.)*
+### Phase D — Reference adoption (optional, validates the convention) — *shipped*
+- Migrate a few core controllers to typed DTOs as worked examples + regression coverage. *(Effort M.)* **Shipped:** first added `HasResponseMessage` (so a typed response can carry its own envelope message — the prerequisite for byte-identical adoption of custom-message endpoints), then migrated `AuthController::refreshToken` (request+response), `UploadController::info`/`signedUrl`/`delete`, `ResourceController::destroy`, and `HealthController::readiness` — each behavior-preserving via characterization tests. The authoritative per-method survey + boundary is `docs/implementation-plans/phase-d-controller-inventory.md`. **Validated the convention's edges:** typed DTOs deliberately do NOT apply to polymorphic bodies (ResourceController CRUD, AuthController login), multipart/base64 input, binary/stream serving, header-based auth, bare non-envelope probes, free-form blobs, and — newly surfaced — **endpoints that set response-level headers/caching** (the `ResponseData` return path can't carry headers; `HealthController::database` stays manual + `privateCached`). WebhookController adoption was deferred to its own spec (its routes aren't registered — wiring them is an API-surface decision).
 
 **Prerequisites (already done):** `ClassSchemaReflector`, `ValidationRuleSchema`, the reflect generator (`8e846ff`, `23ed4d3`, `f0b83be`).
 
