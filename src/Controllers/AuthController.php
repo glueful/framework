@@ -5,12 +5,20 @@ declare(strict_types=1);
 namespace Glueful\Controllers;
 
 use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Auth\DTOs\CsrfTokenData;
+use Glueful\Auth\DTOs\LoginInputData;
+use Glueful\Auth\DTOs\LoginResultData;
+use Glueful\Auth\DTOs\RefreshedPermissionsData;
+use Glueful\Auth\DTOs\ValidatedTokenData;
 use Glueful\DTOs\RefreshTokenData;
 use Glueful\DTOs\RefreshedTokenData;
 use Glueful\Http\Response;
 use Glueful\Helpers\RequestHelper;
 use Glueful\Auth\AuthenticationService;
 use Glueful\Http\Exceptions\Domain\AuthenticationException;
+use Glueful\Routing\Attributes\ApiOperation;
+use Glueful\Routing\Attributes\ApiRequestBody;
+use Glueful\Routing\Attributes\ApiResponse;
 use Glueful\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
 
@@ -121,6 +129,15 @@ class AuthController
      * @throws \Glueful\Validation\ValidationException If request data is malformed
      * @throws \RuntimeException If authentication system initialization fails
      */
+    #[ApiOperation(
+        summary: 'User Login',
+        description: 'Authenticates a user with username/email and password',
+        tags: ['Authentication'],
+    )]
+    #[ApiRequestBody(schema: LoginInputData::class)]
+    #[ApiResponse(200, LoginResultData::class, description: 'Login successful')]
+    #[ApiResponse(401, description: 'Invalid credentials')]
+    #[ApiResponse(400, description: 'Missing required fields')]
     public function login(SymfonyRequest $request)
     {
         // Get credentials using the getPostData method from our Helper Request class
@@ -215,6 +232,13 @@ class AuthController
      * @throws \Glueful\Validation\ValidationException If no token provided in request
      * @throws \Glueful\Http\Exceptions\Domain\AuthenticationException If logout operation fails
      */
+    #[ApiOperation(
+        summary: 'User Logout',
+        description: 'Invalidates the current authentication token',
+        tags: ['Authentication'],
+    )]
+    #[ApiResponse(200, description: 'Logout successful')]
+    #[ApiResponse(401, description: 'Unauthorized - not logged in')]
     public function logout(SymfonyRequest $request)
     {
         $token = $this->authService->extractTokenFromRequest($request, $this->context);
@@ -242,6 +266,13 @@ class AuthController
      * @param SymfonyRequest $request The HTTP request
      * @return mixed HTTP response with CSRF token data
      */
+    #[ApiOperation(
+        summary: 'Get CSRF Token',
+        description: 'Retrieves a CSRF token for form and AJAX request protection',
+        tags: ['Security'],
+    )]
+    #[ApiResponse(200, CsrfTokenData::class, description: 'CSRF token retrieved successfully')]
+    #[ApiResponse(500, description: 'Failed to generate CSRF token')]
     public function csrfToken(SymfonyRequest $request)
     {
         try {
@@ -260,6 +291,14 @@ class AuthController
      *
      * @return mixed HTTP response
      */
+    #[ApiOperation(
+        summary: 'Refresh User Permissions',
+        description: 'Updates the session with fresh user permissions and returns a new token',
+        tags: ['Authentication'],
+    )]
+    #[ApiResponse(200, RefreshedPermissionsData::class, description: 'Permissions refreshed successfully')]
+    #[ApiResponse(401, description: 'Unauthorized - invalid token')]
+    #[ApiResponse(400, description: 'Missing or invalid token')]
     public function refreshPermissions(SymfonyRequest $request)
     {
         $token = $this->authService->extractTokenFromRequest($request, $this->context);
@@ -297,6 +336,13 @@ class AuthController
      *
      * @return mixed HTTP response
      */
+    #[ApiOperation(
+        summary: 'Validate Token',
+        description: 'Validates the current authentication token',
+        tags: ['Authentication'],
+    )]
+    #[ApiResponse(200, ValidatedTokenData::class, description: 'Token is valid')]
+    #[ApiResponse(401, description: 'Invalid or expired token')]
     public function validateToken(SymfonyRequest $request)
     {
         // Get token from request
@@ -370,6 +416,13 @@ class AuthController
      * @throws \Glueful\Validation\ValidationException If refresh token missing from request
      * @throws \Glueful\Http\Exceptions\Domain\AuthenticationException If refresh token invalid or expired
      */
+    #[ApiOperation(
+        summary: 'Refresh Token',
+        description: 'Generates new access token using a valid refresh token',
+        tags: ['Authentication'],
+    )]
+    #[ApiResponse(401, description: 'Invalid refresh token')]
+    #[ApiResponse(400, description: 'Missing refresh token')]
     public function refreshToken(RefreshTokenData $input): RefreshedTokenData
     {
         $result = $this->authService->refreshTokens($input->refresh_token);
