@@ -802,6 +802,24 @@ class Router
                     continue;
                 }
 
+                // Hydrate + validate a typed request DTO from the JSON body (BEFORE container
+                // resolution, so a RequestData class is never treated as a service).
+                // v1: JSON body only, no form fallback.
+                if (is_a($typeName, \Glueful\Validation\Contracts\RequestData::class, true)) {
+                    $raw = (string) $request->getContent();
+                    if ($raw === '') {
+                        $body = [];
+                    } else {
+                        $decoded = json_decode($raw, true);
+                        if (!is_array($decoded)) {
+                            throw \Glueful\Validation\ValidationException::forField('body', 'Invalid JSON body.');
+                        }
+                        $body = $decoded;
+                    }
+                    $args[] = $this->requestDataHydrator()->hydrate($typeName, $body);
+                    continue;
+                }
+
                 // Inject FieldSelector from request attributes or create from request
                 if ($typeName === \Glueful\Support\FieldSelection\FieldSelector::class) {
                     $selector = $request->attributes->get(\Glueful\Support\FieldSelection\FieldSelector::class);
@@ -860,6 +878,21 @@ class Router
         }
 
         return $args;
+    }
+
+    /**
+     * Resolve the request DTO hydrator (from the container if registered, else construct it).
+     * The hydrator is stateless, so a fresh instance is safe.
+     */
+    private function requestDataHydrator(): \Glueful\Validation\RequestDataHydrator
+    {
+        if ($this->container->has(\Glueful\Validation\RequestDataHydrator::class)) {
+            /** @var \Glueful\Validation\RequestDataHydrator $h */
+            $h = $this->container->get(\Glueful\Validation\RequestDataHydrator::class);
+            return $h;
+        }
+
+        return new \Glueful\Validation\RequestDataHydrator();
     }
 
     // Cast parameter values to declared types
