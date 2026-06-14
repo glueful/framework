@@ -232,40 +232,63 @@ class OpenApiDocsCommand extends BaseCommand
     {
         $fileFinder = $this->getFileFinder();
 
-        try {
-            $apiDocDefinitionsPath = config($this->getContext(), 'documentation.paths.output') . '/json-definitions';
+        $apiDocDefinitionsPath = config($this->getContext(), 'documentation.paths.output') . '/json-definitions';
 
-            // Clean json-definitions directory (including subdirectories)
-            if (is_dir($apiDocDefinitionsPath)) {
-                $this->info("Cleaning API doc definitions from: {$apiDocDefinitionsPath}");
-
-                // First, find and remove all subdirectories
-                $finder = $fileFinder->createFinder();
-                $directories = $finder->directories()->in($apiDocDefinitionsPath)->depth(0);
-
-                $dirCount = 0;
-                foreach ($directories as $directory) {
-                    // Best-effort directory removal
-                    @rmdir($directory->getPathname());
-                    $dirCount++;
-                }
-
-                // Then, remove any remaining JSON files in the root
-                $finder = $fileFinder->createFinder();
-                $jsonFiles = $finder->files()->in($apiDocDefinitionsPath)->name('*.json')->depth(0);
-
-                $fileCount = 0;
-                foreach ($jsonFiles as $file) {
-                    @unlink($file->getPathname());
-                    $fileCount++;
-                }
-
-                $this->line("Removed {$dirCount} directories and {$fileCount} files from {$apiDocDefinitionsPath}");
-            }
-
+        // Clean json-definitions directory recursively (including subdirectories)
+        if (!is_dir($apiDocDefinitionsPath)) {
             $this->success('Definition directories cleaned successfully!');
-        } finally {
-            // no-op
+            return;
         }
+
+        $this->info("Cleaning API doc definitions from: {$apiDocDefinitionsPath}");
+
+        [$dirCount, $fileCount] = self::cleanDirectoryRecursively($apiDocDefinitionsPath, $fileFinder);
+
+        $this->line("Removed {$dirCount} directories and {$fileCount} files from {$apiDocDefinitionsPath}");
+        $this->success('Definition directories cleaned successfully!');
+    }
+
+    /**
+     * Recursively remove every file and (now-empty) subdirectory under $path.
+     *
+     * Files at any depth are unlinked first (Finder recurses by default without
+     * ->depth(0)), catching routes/*.json and extensions/<ext>/*.json fragments
+     * left over from previous runs. Subdirectories are then removed deepest-first
+     * so parents are removed only after their children. Never throws if a path is
+     * already gone.
+     *
+     * @return array{0: int, 1: int} [directoriesRemoved, filesRemoved]
+     */
+    public static function cleanDirectoryRecursively(string $path, FileFinder $fileFinder): array
+    {
+        if (!is_dir($path)) {
+            return [0, 0];
+        }
+
+        // Recursively remove ALL files (any depth).
+        $fileCount = 0;
+        foreach ($fileFinder->createFinder()->files()->in($path) as $file) {
+            if (@unlink($file->getPathname())) {
+                $fileCount++;
+            }
+        }
+
+        // Remove now-empty subdirectories deepest-first.
+        $dirCount = 0;
+        $directories = iterator_to_array(
+            $fileFinder->createFinder()->directories()->in($path)
+        );
+        usort(
+            $directories,
+            static fn ($a, $b): int =>
+                strlen($b->getPathname()) <=> strlen($a->getPathname())
+        );
+        foreach ($directories as $directory) {
+            if (is_dir($directory->getPathname()) && @rmdir($directory->getPathname())) {
+                $dirCount++;
+            }
+        }
+
+        return [$dirCount, $fileCount];
     }
 }

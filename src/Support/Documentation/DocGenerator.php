@@ -305,6 +305,31 @@ class DocGenerator
     }
 
     /**
+     * Merge an explicit list of extension definition fragment files.
+     *
+     * Unlike {@see generateFromExtensions()}, which globs a whole directory and
+     * therefore re-merges fragments left over from previous runs, this method
+     * merges ONLY the files it is given. Callers pass the list of fragment files
+     * produced by the current generation run, eliminating stale-fragment leakage.
+     *
+     * The extension name (used as the schema prefix) is derived from the parent
+     * directory of each fragment, matching the layout written by
+     * CommentsDocGenerator::generateForExtension() ({extDir}/{name}/{name}.json).
+     *
+     * @param list<string> $files Absolute paths to extension fragment JSON files
+     */
+    public function generateFromExtensionFiles(array $files): void
+    {
+        foreach ($files as $file) {
+            if (!is_string($file) || !is_file($file)) {
+                continue;
+            }
+            $extName = basename(dirname($file));
+            $this->mergeExtensionDefinition($file, $extName);
+        }
+    }
+
+    /**
      * Merge extension OpenAPI definition into main documentation
      *
      * @param string $filePath Path to extension definition file
@@ -339,6 +364,27 @@ class DocGenerator
         foreach ($routeFiles as $routeFile) {
             $routeName = basename($routeFile, '.json');
             $this->mergeRouteDefinition($routeFile, $routeName);
+        }
+    }
+
+    /**
+     * Merge an explicit list of route definition fragment files.
+     *
+     * Unlike {@see generateFromRoutes()}, which globs a whole directory and
+     * therefore re-merges fragments left over from previous runs, this method
+     * merges ONLY the files it is given — the fragments produced by the current
+     * generation run — eliminating stale-fragment leakage.
+     *
+     * @param list<string> $files Absolute paths to route fragment JSON files
+     */
+    public function generateFromRouteFiles(array $files): void
+    {
+        foreach ($files as $file) {
+            if (!is_string($file) || !is_file($file)) {
+                continue;
+            }
+            $routeName = basename($file, '.json');
+            $this->mergeRouteDefinition($file, $routeName);
         }
     }
 
