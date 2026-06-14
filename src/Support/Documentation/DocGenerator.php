@@ -839,7 +839,7 @@ class DocGenerator
                 'securitySchemes' => $this->securitySchemes(),
                 'schemas' => $this->transformSchemas($schemas)
             ],
-            'paths' => $this->paths,
+            'paths' => $this->transformPaths($this->paths),
             'tags' => $this->generateTags()
         ];
 
@@ -958,6 +958,90 @@ class DocGenerator
         }
 
         return array_map([$this, 'transformSchema'], $schemas);
+    }
+
+    /**
+     * Transform inline path-operation schemas for OpenAPI 3.1 compatibility.
+     *
+     * {@see transformSchemas()} only normalises `components.schemas`, so inline
+     * schemas declared directly on operations (request bodies, responses,
+     * parameters) kept their 3.0-style `nullable: true`. This walks every
+     * operation's `parameters[].schema`, `requestBody.content.*.schema`, and
+     * `responses.*.content.*.schema` and runs {@see transformSchema()} over them,
+     * so a reflected DTO property emitting `nullable: true` renders as the 3.1
+     * `type: [T, 'null']` array form. A no-op under 3.0.x.
+     *
+     * @param  array<string, mixed> $paths
+     * @return array<string, mixed>
+     */
+    private function transformPaths(array $paths): array
+    {
+        if (!$this->isOpenApi31()) {
+            return $paths;
+        }
+
+        foreach ($paths as $path => $methods) {
+            if (!is_array($methods)) {
+                continue;
+            }
+            foreach ($methods as $verb => $operation) {
+                if (is_array($operation)) {
+                    $paths[$path][$verb] = $this->transformOperationSchemas($operation);
+                }
+            }
+        }
+
+        return $paths;
+    }
+
+    /**
+     * Transform the inline schemas carried by a single operation object.
+     *
+     * @param  array<string, mixed> $operation
+     * @return array<string, mixed>
+     */
+    private function transformOperationSchemas(array $operation): array
+    {
+        if (isset($operation['parameters']) && is_array($operation['parameters'])) {
+            foreach ($operation['parameters'] as $i => $parameter) {
+                if (is_array($parameter) && isset($parameter['schema']) && is_array($parameter['schema'])) {
+                    $operation['parameters'][$i]['schema'] = $this->transformSchema($parameter['schema']);
+                }
+            }
+        }
+
+        if (isset($operation['requestBody']['content']) && is_array($operation['requestBody']['content'])) {
+            $operation['requestBody']['content'] =
+                $this->transformContentSchemas($operation['requestBody']['content']);
+        }
+
+        if (isset($operation['responses']) && is_array($operation['responses'])) {
+            foreach ($operation['responses'] as $status => $response) {
+                if (is_array($response) && isset($response['content']) && is_array($response['content'])) {
+                    $operation['responses'][$status]['content'] =
+                        $this->transformContentSchemas($response['content']);
+                }
+            }
+        }
+
+        return $operation;
+    }
+
+    /**
+     * Run {@see transformSchema()} over each media-type schema in a `content` map.
+     *
+     * @param  array<string, mixed> $content
+     * @return array<string, mixed>
+     */
+    private function transformContentSchemas(array $content): array
+    {
+        foreach ($content as $mediaType => $media) {
+            if (is_array($media) && isset($media['schema']) && is_array($media['schema'])) {
+                $content[$mediaType]['schema'] = $this->transformSchema($media['schema']);
+            }
+        }
+
+        return $content;
     }
 
     /**

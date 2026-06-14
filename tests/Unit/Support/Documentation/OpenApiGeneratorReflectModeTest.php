@@ -156,6 +156,33 @@ final class OpenApiGeneratorReflectModeTest extends TestCase
         self::assertArrayNotHasKey('/v1/should-not-appear', $spec['paths'] ?? []);
     }
 
+    /**
+     * A reflected DTO whose nullable property must render as the OpenAPI 3.1
+     * `type: ["string", "null"]` array form once the spec is emitted — proving
+     * DocGenerator transforms inline path schemas (not just components.schemas).
+     */
+    public function testNullableReflectedPropertyRendersAs31ArrayForm(): void
+    {
+        $context = $this->makeContext('comments');
+        $router = $this->makeRouter($context);
+        $router->get('/v1/nullable', [SampleAppController::class, 'nullableResponse']);
+
+        $registry = new SecuritySchemeRegistry(self::SCHEMES, self::MIDDLEWARE_MAP);
+        $reflect = new RouteReflectionDocGenerator($registry, $context);
+
+        $doc = new DocGenerator(context: $context);
+        $doc->setSecurityRegistry($registry);
+        $doc->mergePaths($reflect->generate($router));
+
+        $spec = json_decode($doc->getSwaggerJson(), true);
+
+        $schema = $spec['paths']['/v1/nullable']['get']['responses']['200']['content']['application/json']['schema'];
+        $nickname = $schema['properties']['data']['properties']['nickname'];
+
+        self::assertSame(['string', 'null'], $nickname['type']);
+        self::assertArrayNotHasKey('nullable', $nickname);
+    }
+
     private function makeContext(string $generator): ApplicationContext
     {
         $context = new ApplicationContext($this->tmpDir);

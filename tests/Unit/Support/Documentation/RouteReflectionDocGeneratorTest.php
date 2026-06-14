@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Tests\Unit\Support\Documentation;
 
 use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Routing\Attributes\ApiResponse;
 use Glueful\Routing\RouteCache;
 use Glueful\Routing\Router;
 use Glueful\Support\Documentation\RouteReflectionDocGenerator;
@@ -349,6 +350,99 @@ final class RouteReflectionDocGeneratorTest extends TestCase
         self::assertArrayNotHasKey('requestBody', $paths['/v1/closure']['post']);
     }
 
+    public function testApiResponseEnvelopeWrapsSchemaAsData(): void
+    {
+        $router = $this->makeRouter();
+        $router->get('/v1/sample', [SampleAppController::class, 'envelopeResponse']);
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        $op = $paths['/v1/sample']['get'];
+        $schema = $op['responses']['200']['content']['application/json']['schema'];
+
+        self::assertSame('object', $schema['type']);
+        self::assertSame('boolean', $schema['properties']['success']['type']);
+        self::assertSame('string', $schema['properties']['message']['type']);
+
+        $data = $schema['properties']['data'];
+        self::assertSame('object', $data['type']);
+        self::assertSame('string', $data['properties']['id']['type']);
+        self::assertSame('string', $data['properties']['name']['type']);
+    }
+
+    public function testApiResponseEnvelopeFalseProducesRawSchema(): void
+    {
+        $router = $this->makeRouter();
+        $router->get('/v1/sample-raw', [SampleAppController::class, 'rawResponse']);
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        $schema = $paths['/v1/sample-raw']['get']['responses']['200']['content']['application/json']['schema'];
+
+        // No envelope: the DTO schema is the body directly.
+        self::assertSame('object', $schema['type']);
+        self::assertArrayNotHasKey('success', $schema['properties']);
+        self::assertSame('string', $schema['properties']['id']['type']);
+    }
+
+    public function testApiResponseCollectionWrapsDataAsArray(): void
+    {
+        $router = $this->makeRouter();
+        $router->get('/v1/sample-list', [SampleAppController::class, 'collectionResponse']);
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        $schema = $paths['/v1/sample-list']['get']['responses']['200']['content']['application/json']['schema'];
+        $data = $schema['properties']['data'];
+
+        self::assertSame('array', $data['type']);
+        self::assertSame('object', $data['items']['type']);
+        self::assertSame('string', $data['items']['properties']['id']['type']);
+    }
+
+    public function testApiResponseDescriptionOnlyHasNoContent(): void
+    {
+        $router = $this->makeRouter();
+        $router->get('/v1/sample-404', [SampleAppController::class, 'notFoundResponse']);
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        $responses = $paths['/v1/sample-404']['get']['responses'];
+        self::assertSame('Not found', $responses['404']['description']);
+        self::assertArrayNotHasKey('content', $responses['404']);
+    }
+
+    public function testApiResponseOverlaysDefaultsKeepingAutoStatuses(): void
+    {
+        $router = $this->makeRouter();
+        $router->get('/v1/secured-sample', [SampleAppController::class, 'envelopeResponse'])
+            ->middleware(['auth'])
+            ->rateLimit(60, 1);
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        $responses = $paths['/v1/secured-sample']['get']['responses'];
+        // Explicit 200 replaced the minimal default (now carries content).
+        self::assertArrayHasKey('content', $responses['200']);
+        // Auto statuses survive alongside the explicit 200.
+        self::assertArrayHasKey('401', $responses);
+        self::assertArrayHasKey('403', $responses);
+        self::assertArrayHasKey('429', $responses);
+    }
+
+    public function testHandlerWithoutApiResponseKeepsDefaultResponses(): void
+    {
+        $router = $this->makeRouter();
+        $router->get('/v1/plain', [SampleAppController::class, 'show'])->middleware(['auth']);
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        $responses = $paths['/v1/plain']['get']['responses'];
+        self::assertSame(['description' => 'Successful response'], $responses['200']);
+        self::assertArrayHasKey('401', $responses);
+        self::assertArrayHasKey('403', $responses);
+    }
+
     /**
      * @param list<array<string, mixed>> $params
      * @return array<string, mixed>|null
@@ -385,4 +479,47 @@ final class SampleAppController
     public function store(): void
     {
     }
+
+    #[ApiResponse(200, SampleData::class)]
+    public function envelopeResponse(): void
+    {
+    }
+
+    #[ApiResponse(200, SampleData::class, envelope: false)]
+    public function rawResponse(): void
+    {
+    }
+
+    #[ApiResponse(200, SampleData::class, collection: true)]
+    public function collectionResponse(): void
+    {
+    }
+
+    #[ApiResponse(404, description: 'Not found')]
+    public function notFoundResponse(): void
+    {
+    }
+
+    #[ApiResponse(200, NullableSampleData::class)]
+    public function nullableResponse(): void
+    {
+    }
+}
+
+/**
+ * Typed DTO used as an #[ApiResponse] body schema.
+ */
+final class SampleData
+{
+    public string $id = '';
+    public string $name = '';
+}
+
+/**
+ * DTO with a nullable property to exercise 3.1 nullable rendering.
+ */
+final class NullableSampleData
+{
+    public string $id = '';
+    public ?string $nickname = null;
 }

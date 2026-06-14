@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Support\Documentation;
 
 use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Routing\Attributes\ApiResponse;
 use Glueful\Routing\Route;
 use Glueful\Routing\Router;
 use Glueful\Validation\Attributes\Validate;
@@ -126,9 +127,128 @@ final class RouteReflectionDocGenerator
             $operation['requestBody'] = $requestBody;
         }
 
-        $operation['responses'] = $this->buildResponses($isSecured, $rateLimited);
+        $defaults = $this->buildResponses($isSecured, $rateLimited);
+        $operation['responses'] = $this->mergeAttributeResponses($defaults, $route->getHandler());
 
         return $operation;
+    }
+
+    /**
+     * Overlay `#[ApiResponse]` attribute responses on top of the default set.
+     *
+     * The generator's defaults (200, plus 401/403 when secured and 429 when
+     * rate-limited) form the base; each `#[ApiResponse]` then REPLACES the entry
+     * for its status. So an explicit `#[ApiResponse(200, …)]` supplants the
+     * minimal default 200 while the auto 401/403/429 remain unless an attribute
+     * overrides them, and a handler with no attributes is left exactly as today.
+     *
+     * @param  array<int|string, mixed> $defaults
+     * @return array<int|string, mixed>
+     */
+    private function mergeAttributeResponses(array $defaults, mixed $handler): array
+    {
+        foreach ($this->buildResponsesFromAttributes($handler) as $status => $response) {
+            $defaults[(string) $status] = $response;
+        }
+
+        return $defaults;
+    }
+
+    /**
+     * Build response objects from a handler method's `#[ApiResponse]` attributes.
+     *
+     * The handler's {@see \ReflectionMethod} is resolved with the same guarded
+     * resolver used for `#[Validate]`. Each attribute becomes
+     * `{description, content: {<contentType>: {schema}}}`, where the body schema
+     * is reflected from the typed DTO via {@see ClassSchemaReflector} and then
+     * optionally wrapped as a collection and/or Glueful's success envelope. A
+     * schema-less attribute yields a description-only response. Reflection and
+     * attribute instantiation are fully guarded, so generation never throws.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildResponsesFromAttributes(mixed $handler): array
+    {
+        $reflection = $this->handlerReflection($handler);
+        if ($reflection === null) {
+            return [];
+        }
+
+        $responses = [];
+        foreach ($reflection->getAttributes(ApiResponse::class) as $attribute) {
+            try {
+                $instance = $attribute->newInstance();
+            } catch (\Throwable) {
+                continue;
+            }
+
+            $responses[$instance->status] = $this->buildResponseObject($instance);
+        }
+
+        return $responses;
+    }
+
+    /**
+     * Assemble a single OpenAPI response object from one `#[ApiResponse]`.
+     *
+     * @return array<string, mixed>
+     */
+    private function buildResponseObject(ApiResponse $response): array
+    {
+        $object = [
+            'description' => $response->description !== ''
+                ? $response->description
+                : self::reasonPhrase($response->status),
+        ];
+
+        if ($response->schema === null) {
+            return $object;
+        }
+
+        $body = ClassSchemaReflector::toSchema($response->schema);
+
+        if ($response->collection) {
+            $body = ['type' => 'array', 'items' => $body];
+        }
+
+        if ($response->envelope) {
+            $body = [
+                'type' => 'object',
+                'properties' => [
+                    'success' => ['type' => 'boolean'],
+                    'message' => ['type' => 'string'],
+                    'data' => $body,
+                ],
+            ];
+        }
+
+        $object['content'] = [
+            $response->contentType => ['schema' => $body],
+        ];
+
+        return $object;
+    }
+
+    /**
+     * Map an HTTP status code to a short reason phrase for a default description.
+     */
+    private static function reasonPhrase(int $status): string
+    {
+        return match ($status) {
+            200 => 'Successful response',
+            201 => 'Created',
+            202 => 'Accepted',
+            204 => 'No Content',
+            400 => 'Bad Request',
+            401 => 'Unauthenticated',
+            403 => 'Forbidden',
+            404 => 'Not Found',
+            409 => 'Conflict',
+            422 => 'Unprocessable Entity',
+            429 => 'Too Many Requests',
+            500 => 'Internal Server Error',
+            default => 'Response',
+        };
     }
 
     /**
@@ -180,15 +300,12 @@ final class RouteReflectionDocGenerator
      */
     private function validationRules(mixed $handler): ?array
     {
-        $resolved = $this->resolveHandlerMethod($handler);
-        if ($resolved === null) {
+        $reflection = $this->handlerReflection($handler);
+        if ($reflection === null) {
             return null;
         }
 
-        [$class, $methodName] = $resolved;
-
         try {
-            $reflection = new \ReflectionMethod($class, $methodName);
             $attributes = $reflection->getAttributes(Validate::class);
             if ($attributes === []) {
                 return null;
@@ -254,6 +371,28 @@ final class RouteReflectionDocGenerator
         }
 
         return [$class, $method];
+    }
+
+    /**
+     * Resolve a route handler to its {@see \ReflectionMethod}, or null.
+     *
+     * Shared by request-body (`#[Validate]`) and response-body (`#[ApiResponse]`)
+     * reflection. Builds on {@see resolveHandlerMethod()} and guards reflection
+     * construction so an unresolvable handler or reflection failure yields null
+     * rather than throwing.
+     */
+    private function handlerReflection(mixed $handler): ?\ReflectionMethod
+    {
+        $resolved = $this->resolveHandlerMethod($handler);
+        if ($resolved === null) {
+            return null;
+        }
+
+        try {
+            return new \ReflectionMethod($resolved[0], $resolved[1]);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**
