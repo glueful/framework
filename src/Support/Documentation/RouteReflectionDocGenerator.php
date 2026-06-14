@@ -141,6 +141,12 @@ final class RouteReflectionDocGenerator
         $inferred = $this->buildResponseFromReturnType($route->getHandler());
         if ($inferred !== null) {
             foreach ($inferred as $status => $response) {
+                // A non-200 inferred success means there is no bare 200 at runtime —
+                // drop the vestigial description-only 200 seeded by buildResponses().
+                // An explicit #[ApiResponse(200)] is re-added later by the attribute overlay.
+                if ((string) $status !== '200') {
+                    unset($defaults['200']);
+                }
                 $defaults[(string) $status] = $response;
             }
         }

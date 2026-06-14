@@ -116,8 +116,9 @@ final class ResponseDataSchemaTest extends TestCase
             ClassSchemaReflector::toSchema(PbPostData::class),
             $responses['201']['content']['application/json']['schema']['properties']['data'],
         );
-        // The default 200 must not carry the inferred content.
-        self::assertSame(['description' => 'Successful response'], $responses['200']);
+        // The vestigial description-only 200 is dropped when the inferred success
+        // status is non-200 — only the 201 is documented.
+        self::assertArrayNotHasKey('200', $responses);
     }
 
     public function testExplicitApiResponseWinsOverInferredReturnType(): void
