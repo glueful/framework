@@ -121,7 +121,7 @@ Effect: validation moves out of the controller body onto the DTO and runs automa
 
 ### 3.2 Response: extend the existing return normalizer
 
-The seam already exists — **`Router::normalizeResponse()`** (`src/Routing/Router.php:~1009`). Today it passes `Response` through unchanged, wraps strings, and falls arrays/objects through to `new JsonResponse($result)`. At proposal time **a returned `JsonResource` was NOT auto-routed to `toResponse()`** — the controller called `->toResponse()` itself. *(Resolved in Phase C2: the router now auto-normalizes a returned `JsonResource`/`ResourceCollection`/`PaginatedResourceResponse` through its own `toResponse()` — see the status note above.)*
+The seam already exists — **`Router::normalizeResponse()`** (`src/Routing/Router.php:~1009`). It passes `Response` through unchanged, wraps strings, falls arrays/objects through to `new JsonResponse($result)`, and — **as shipped in Phase C2** — auto-routes a returned `JsonResource`/`ResourceCollection`/`PaginatedResourceResponse` through its own `toResponse()`. The Phase B design below adds only the `ResponseData` branch; the Resource auto-routing arrived later in C2.
 
 Phase B adds **one branch** for `ResponseData`, inserted before the array/object fallback — strictly additive:
 
@@ -141,7 +141,7 @@ status 201 → Response::created($result->toArray())
 other      → new Response($result->toArray(), $status)
 ```
 
-**Scope: Phase B is `ResponseData` only.** At the time of Phase B, Resources kept their manual `->toResponse()` pattern — the router did not auto-normalize them. A Resource auto-normalizer (routing a returned `JsonResource`/`ResourceCollection` through `toResponse()`) was a worthwhile *separate, additive* enhancement with its own regression tests, deliberately out of scope for Phase B — **and was later shipped in Phase C2.**
+**Scope: Phase B is `ResponseData` only** — it added the `ResponseData` branch and nothing else. Resource auto-normalization (routing a returned `JsonResource`/`ResourceCollection`/`PaginatedResourceResponse` through `toResponse()`) **shipped in Phase C2** as a separate, additive enhancement with its own regression tests.
 
 ---
 
@@ -194,7 +194,7 @@ Each phase is independently shippable and behind opt-in adoption (defining a `Re
 - **A4.** *(Optional)* `make:dto`/`make:request` scaffolder. *(Effort S.)*
 
 ### Phase B — Response DTOs (output enveloping) — *ship second, with a careful return normalizer*
-- **B1.** `ResponseData` marker + `#[ResponseStatus(n)]` method attribute + a new `ResponseData` branch in the existing `Router::normalizeResponse()` (§3.2): `ResponseData`→envelope (200/201 status factory); `Response`/string/array/object paths **unchanged**. Scope is `ResponseData` only — Resources stayed manual `->toResponse()` in Phase B; the Resource auto-normalizer was a separate enhancement (shipped in Phase C2). *(Effort M, Risk Med — touches the dispatch return path; must leave existing paths byte-identical.)*
+- **B1.** `ResponseData` marker + `#[ResponseStatus(n)]` method attribute + a new `ResponseData` branch in the existing `Router::normalizeResponse()` (§3.2): `ResponseData`→envelope (200/201 status factory); `Response`/string/array/object paths **unchanged**. Scope is `ResponseData` only; Resource auto-normalization shipped separately in Phase C2. *(Effort M, Risk Med — touches the dispatch return path; must leave existing paths byte-identical.)*
 - **B2.** Generator: reflect the handler return type → response schema (reuse the `#[ApiResponse]` envelope builder); status from `#[ResponseStatus]`. *(Effort S, Risk Low.)*
 - **B3.** Collection/pagination: a typed collection return (e.g. `ResponseCollection` or `list<PostData>` via return docblock) → array-wrapped schema; otherwise `#[ApiResponse(collection: true)]` stays. *(Effort M, Risk Low.)*
 
@@ -216,7 +216,7 @@ Each phase is independently shippable and behind opt-in adoption (defining a `Re
 
 **Decided — Resources relationship.** `ResponseData` is the **simple typed API-DTO path** (a small data object the generator can reflect); `JsonResource`/`ModelResource`/`ResourceCollection` remain the **rich transformation path** (conditional fields, relationship loading, pivots). They **coexist**; neither replaces the other, and the return normalizer (§3.2) routes each to its handler. Resources stay runtime-opaque to the generator (use `#[ApiResponse]` to document a Resource-returning endpoint); `ResponseData` is what you reach for when you want the shape *and* the docs from one typed object.
 
-**Risk.** Medium overall — Phases A2/B1 change the request/response pipeline for typed-DTO endpoints. Careful handling needed for: validation error mapping (422 body shape), content negotiation (JSON-first), partial/optional fields, PATCH semantics (per-operation required vs optional), and nested DTO hydration. The biggest single regression risk is the **return normalizer** (B1) — it had to leave the existing `Response`/array/object paths byte-identical. *(Phase B did; Phase C2 then deliberately added a Resource branch ahead of the generic object fallback, with regression tests proving plain objects/arrays still serialize exactly as before.)*
+**Risk.** Medium overall — Phases A2/B1 change the request/response pipeline for typed-DTO endpoints. Careful handling needed for: validation error mapping (422 body shape), content negotiation (JSON-first), partial/optional fields, PATCH semantics (per-operation required vs optional), and nested DTO hydration. The biggest single regression risk is the **return normalizer** (B1) — it had to leave the existing `Response`/array/object paths byte-identical, which it did. Phase C2 later added the Resource auto-normalization branch ahead of the generic object fallback, with regression tests proving plain objects/arrays still serialize exactly as before.
 
 **Settled for v1:**
 - **Rule wiring** — `#[Rule]` strings → `RuleParser::parse()` → `Validator` (no new adapter).
@@ -224,7 +224,7 @@ Each phase is independently shippable and behind opt-in adoption (defining a `Re
 - **Hydration source** — JSON **body only**. Route/query params are NOT merged into the DTO; `{id}` etc. stay explicit method args.
 - **PATCH / partial** — **separate DTOs** (`CreatePostData` / `UpdatePostData`), not a framework-level partial flag.
 - **Response status** — `#[ResponseStatus(n)]`, default 200.
-- **Resources interplay** — coexist (simple `ResponseData` path vs rich Resource path). As of Phase C2 a returned Resource is auto-normalized through its own `->toResponse()` (it keeps its own envelope, distinct from the `ResponseData` envelope); OpenAPI for Resource-returning endpoints stays manual via `#[ApiResponse]`.
+- **Resources interplay** — coexist (simple `ResponseData` path vs rich Resource path). As shipped in Phase C2, a returned Resource is auto-normalized through its own `->toResponse()` (it keeps its own envelope, distinct from the `ResponseData` envelope). Their OpenAPI schemas are documented explicitly with `#[ApiResponse]` because Resource bodies are runtime `toArray()` transforms with no static schema to reflect.
 
 **Open questions:**
 1. ~~**Collections & pagination**~~ — RESOLVED in Phase C: first-class `CollectionResponse`/`PaginatedResponse` return types (runtime envelopes + reflect-mode schema from a `@return Type<Item>` docblock). `#[ApiResponse(collection: true)]` remains as the override.
