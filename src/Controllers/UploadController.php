@@ -6,6 +6,9 @@ namespace Glueful\Controllers;
 
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Cache\CacheStore;
+use Glueful\Controllers\DTOs\BlobDeletedData;
+use Glueful\Controllers\DTOs\BlobInfoData;
+use Glueful\Controllers\DTOs\SignedUrlData;
 use Glueful\Helpers\RequestHelper;
 use Glueful\Helpers\Utils;
 use Glueful\Http\Response;
@@ -132,7 +135,7 @@ class UploadController extends BaseController
         }
     }
 
-    public function info(Request $request, string $uuid): Response
+    public function info(Request $request, string $uuid): BlobInfoData|Response
     {
         if ($this->requiresAuthFor('info') && Utils::getUser() === null) {
             return Response::unauthorized('Authentication required');
@@ -151,7 +154,7 @@ class UploadController extends BaseController
             $blob['native_url'] = $native;
         }
 
-        return Response::success($blob, 'Blob metadata');
+        return new BlobInfoData($blob);
     }
 
     /**
@@ -207,7 +210,7 @@ class UploadController extends BaseController
     /**
      * Generate a signed URL for temporary access to a private blob.
      */
-    public function signedUrl(Request $request, string $uuid): Response
+    public function signedUrl(Request $request, string $uuid): SignedUrlData|Response
     {
         if (Utils::getUser() === null) {
             return Response::unauthorized('Authentication required');
@@ -239,20 +242,15 @@ class UploadController extends BaseController
         $rawPath = (string) ($blob['url'] ?? '');
         $native = $this->maybeNativeUrl($blob, $rawPath);
 
-        $payload = [
-            'uuid' => $uuid,
-            'signed_url' => $signedUrl,
-            'expires_in' => $ttl,
-            'expires_at' => date('Y-m-d H:i:s', time() + $ttl),
-        ];
-        if ($native !== null) {
-            $payload['native_url'] = $native;
-        }
-
-        return Response::success($payload, 'Signed URL generated');
+        return (new SignedUrlData(
+            uuid: $uuid,
+            signed_url: $signedUrl,
+            expires_in: $ttl,
+            expires_at: date('Y-m-d H:i:s', time() + $ttl),
+        ))->withNativeUrl($native);
     }
 
-    public function delete(Request $request, string $uuid): Response
+    public function delete(Request $request, string $uuid): BlobDeletedData|Response
     {
         if ($this->requiresAuthFor('delete') && Utils::getUser() === null) {
             return Response::unauthorized('Authentication required');
@@ -271,7 +269,7 @@ class UploadController extends BaseController
 
         $this->blobs->updateStatus($uuid, 'deleted');
 
-        return Response::success(['uuid' => $uuid], 'Blob deleted');
+        return new BlobDeletedData($uuid);
     }
 
     /**
