@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Glueful\Support\Documentation;
 
 use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Http\Contracts\ResponseData;
 use Glueful\Routing\Attributes\ApiResponse;
+use Glueful\Routing\Attributes\ResponseStatus;
 use Glueful\Routing\Route;
 use Glueful\Routing\Router;
 use Glueful\Validation\Attributes\Rule;
@@ -130,6 +132,17 @@ final class RouteReflectionDocGenerator
         }
 
         $defaults = $this->buildResponses($isSecured, $rateLimited);
+
+        // Document the success response from a ResponseData return type, slotted
+        // BETWEEN the defaults and the attribute overlay so an explicit
+        // #[ApiResponse] (applied last) still wins at the same status.
+        $inferred = $this->buildResponseFromReturnType($route->getHandler());
+        if ($inferred !== null) {
+            foreach ($inferred as $status => $response) {
+                $defaults[(string) $status] = $response;
+            }
+        }
+
         $operation['responses'] = $this->mergeAttributeResponses($defaults, $route->getHandler());
 
         return $operation;
@@ -214,14 +227,7 @@ final class RouteReflectionDocGenerator
         }
 
         if ($response->envelope) {
-            $body = [
-                'type' => 'object',
-                'properties' => [
-                    'success' => ['type' => 'boolean'],
-                    'message' => ['type' => 'string'],
-                    'data' => $body,
-                ],
-            ];
+            $body = $this->wrapInEnvelope($body);
         }
 
         $object['content'] = [
@@ -229,6 +235,78 @@ final class RouteReflectionDocGenerator
         ];
 
         return $object;
+    }
+
+    /**
+     * Wrap a body schema in Glueful's standard success envelope.
+     *
+     * Mirrors the runtime envelope (`{success, message, data}`) the router
+     * applies to a returned {@see ResponseData}. Shared by the `#[ApiResponse]`
+     * path and the return-type inference path so both render identically.
+     *
+     * @param  array<string, mixed> $schema
+     * @return array<string, mixed>
+     */
+    private function wrapInEnvelope(array $schema): array
+    {
+        return [
+            'type' => 'object',
+            'properties' => [
+                'success' => ['type' => 'boolean'],
+                'message' => ['type' => 'string'],
+                'data' => $schema,
+            ],
+        ];
+    }
+
+    /**
+     * Infer the success response from a handler's {@see ResponseData} return type.
+     *
+     * When the handler's return type is a single, non-builtin class implementing
+     * {@see ResponseData}, document the success response as the envelope-wrapped
+     * schema of that DTO (via {@see ClassSchemaReflector}) at the status declared
+     * by `#[ResponseStatus]` (default 200). A nullable `?Dto` return type still
+     * infers from `Dto`; union/intersection types, builtins, and non-ResponseData
+     * classes yield null. Reflection is guarded so generation never throws — but
+     * a malformed `#[ResponseStatus]` is allowed to surface (fail-loud), matching
+     * the attribute's own load-time contract.
+     *
+     * @return array<int, array<string, mixed>>|null
+     */
+    private function buildResponseFromReturnType(mixed $handler): ?array
+    {
+        $reflection = $this->handlerReflection($handler);
+        if ($reflection === null) {
+            return null;
+        }
+
+        $returnType = $reflection->getReturnType();
+        if (!$returnType instanceof \ReflectionNamedType || $returnType->isBuiltin()) {
+            return null;
+        }
+
+        $class = $returnType->getName();
+        if (!class_exists($class) || !is_subclass_of($class, ResponseData::class)) {
+            return null;
+        }
+
+        $status = 200;
+        $statusAttributes = $reflection->getAttributes(ResponseStatus::class);
+        if ($statusAttributes !== []) {
+            // Intentionally not guarded: a malformed #[ResponseStatus] must surface.
+            $status = $statusAttributes[0]->newInstance()->status;
+        }
+
+        $envelope = $this->wrapInEnvelope(ClassSchemaReflector::toSchema($class));
+
+        return [
+            $status => [
+                'description' => self::reasonPhrase($status),
+                'content' => [
+                    'application/json' => ['schema' => $envelope],
+                ],
+            ],
+        ];
     }
 
     /**
