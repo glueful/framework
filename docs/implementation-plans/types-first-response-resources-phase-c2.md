@@ -1,6 +1,6 @@
 # Types-First DTO I/O — Phase C2 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Close the remaining typed-response gaps — fix the vestigial `200` documented alongside a non-200 inferred success, and auto-normalize returned API Resources (`JsonResource`/`ResourceCollection`/`PaginatedResourceResponse`) through their own `->toResponse()` so they no longer need a manual call.
 
@@ -64,7 +64,7 @@ $operation['responses'] = $this->mergeAttributeResponses($defaults, $route->getH
 ```
 `buildResponses()` (~line 945) seeds `$responses = ['200' => ['description' => 'Successful response']]`. `$inferred` always has exactly ONE entry (one success status). `mergeAttributeResponses()` applies `#[ApiResponse]` LAST.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/Unit/Support/Documentation/InferredSuccessStatusTest.php`:
 ```php
@@ -205,9 +205,9 @@ final class InferredSuccessStatusTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run → fail** (`vendor/bin/phpunit tests/Unit/Support/Documentation/InferredSuccessStatusTest.php`) — `testNon200InferredSuccessDropsVestigial200` and `testNon200CollectionDropsVestigial200` fail because the bare `200` is still present alongside `201`.
+- [x] **Step 2: Run → fail** (`vendor/bin/phpunit tests/Unit/Support/Documentation/InferredSuccessStatusTest.php`) — `testNon200InferredSuccessDropsVestigial200` and `testNon200CollectionDropsVestigial200` fail because the bare `200` is still present alongside `201`.
 
-- [ ] **Step 3: Implement** — in `buildOperation()`, drop the seeded `200` when the inferred success status is not `200`:
+- [x] **Step 3: Implement** — in `buildOperation()`, drop the seeded `200` when the inferred success status is not `200`:
 ```php
         $inferred = $this->buildResponseFromReturnType($route->getHandler());
         if ($inferred !== null) {
@@ -224,11 +224,11 @@ final class InferredSuccessStatusTest extends TestCase
 ```
 (Leave the `422` injection and `mergeAttributeResponses()` call exactly as they are — the attribute overlay re-adds an explicit `#[ApiResponse(200)]` after this.)
 
-- [ ] **Step 4: Run → pass.**
+- [x] **Step 4: Run → pass.**
 
-- [ ] **Step 5: Regression gate** — run the FULL `tests/Unit/Support/Documentation` suite: `vendor/bin/phpunit tests/Unit/Support/Documentation`. An existing test for a `#[ResponseStatus(201)]`-returning handler may previously have tolerated a stray `200`; if any test now fails because it asserted the vestigial `200` was present, that assertion was wrong — update it to reflect the corrected behavior (no bare 200) and report which test + why. Quote the final count. Then `vendor/bin/phpcs src/Support/Documentation/RouteReflectionDocGenerator.php` (clean) and `vendor/bin/phpstan analyse src/Support/Documentation/RouteReflectionDocGenerator.php --level=6 --no-progress` (no NEW errors).
+- [x] **Step 5: Regression gate** — run the FULL `tests/Unit/Support/Documentation` suite: `vendor/bin/phpunit tests/Unit/Support/Documentation`. An existing test for a `#[ResponseStatus(201)]`-returning handler may previously have tolerated a stray `200`; if any test now fails because it asserted the vestigial `200` was present, that assertion was wrong — update it to reflect the corrected behavior (no bare 200) and report which test + why. Quote the final count. Then `vendor/bin/phpcs src/Support/Documentation/RouteReflectionDocGenerator.php` (clean) and `vendor/bin/phpstan analyse src/Support/Documentation/RouteReflectionDocGenerator.php --level=6 --no-progress` (no NEW errors).
 
-- [ ] **Step 6: CHANGELOG + commit** — add under `## [Unreleased] → ### Fixed` (create the heading if absent): "Reflect-mode docs no longer emit a vestigial description-only `200` response alongside a non-200 inferred success (e.g. a `#[ResponseStatus(201)]` handler now documents only `201`)." Then:
+- [x] **Step 6: CHANGELOG + commit** — add under `## [Unreleased] → ### Fixed` (create the heading if absent): "Reflect-mode docs no longer emit a vestigial description-only `200` response alongside a non-200 inferred success (e.g. a `#[ResponseStatus(201)]` handler now documents only `201`)." Then:
 ```bash
 git add src/Support/Documentation/RouteReflectionDocGenerator.php tests/Unit/Support/Documentation/InferredSuccessStatusTest.php CHANGELOG.md
 git commit -m "Drop vestigial 200 when the inferred success status is non-200"
@@ -265,7 +265,7 @@ git commit -m "Drop vestigial 200 when the inferred success status is non-200"
     }
 ```
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/Unit/Routing/ResourceNormalizationTest.php`:
 ```php
@@ -440,9 +440,9 @@ final class ResourceNormalizationTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run → fail** (`vendor/bin/phpunit tests/Unit/Routing/ResourceNormalizationTest.php`) — the JsonResource/ResourceCollection cases fail: they currently fall through to `new JsonResponse($result)`, which serializes via `JsonSerializable::jsonSerialize()` (no `success` wrapper / wrong shape). The plain-object/array cases pass already (they document the unchanged baseline).
+- [x] **Step 2: Run → fail** (`vendor/bin/phpunit tests/Unit/Routing/ResourceNormalizationTest.php`) — the JsonResource/ResourceCollection cases fail: they currently fall through to `new JsonResponse($result)`, which serializes via `JsonSerializable::jsonSerialize()` (no `success` wrapper / wrong shape). The plain-object/array cases pass already (they document the unchanged baseline).
 
-- [ ] **Step 3: Implement** — add ONE branch in `normalizeResponse()` immediately before the `is_array || is_object` fallback. All three Resource types expose `toResponse(int $status = 200, …): Response`, so one combined `instanceof` branch suffices; passing `$successStatus` lets `#[ResponseStatus]` work uniformly:
+- [x] **Step 3: Implement** — add ONE branch in `normalizeResponse()` immediately before the `is_array || is_object` fallback. All three Resource types expose `toResponse(int $status = 200, …): Response`, so one combined `instanceof` branch suffices; passing `$successStatus` lets `#[ResponseStatus]` work uniformly:
 ```php
         // Auto-normalize a returned framework API Resource through its OWN toResponse().
         // The Resource owns its envelope/semantics — do NOT re-wrap it in the
@@ -460,17 +460,17 @@ final class ResourceNormalizationTest extends TestCase
         }
 ```
 
-- [ ] **Step 4: Run → pass.**
+- [x] **Step 4: Run → pass.**
 
-- [ ] **Step 5: Regression gate (critical — strictly additive)** — run the FULL `tests/Unit/Routing` suite: `vendor/bin/phpunit tests/Unit/Routing`. Every existing dispatch/normalize case (Response passthrough, string, array→JsonResponse, object→JsonResponse, ResponseData/Collection/Paginated) MUST stay green; the two plain-object/array tests prove non-Resources are unchanged. Quote the count. Then `vendor/bin/phpcs src/Routing/Router.php` (clean) and `vendor/bin/phpstan analyse src/Routing/Router.php --level=6 --no-progress` (no NEW errors — the combined `instanceof` narrows `$result` to a union where all three types declare `toResponse()`, so the call type-checks).
+- [x] **Step 5: Regression gate (critical — strictly additive)** — run the FULL `tests/Unit/Routing` suite: `vendor/bin/phpunit tests/Unit/Routing`. Every existing dispatch/normalize case (Response passthrough, string, array→JsonResponse, object→JsonResponse, ResponseData/Collection/Paginated) MUST stay green; the two plain-object/array tests prove non-Resources are unchanged. Quote the count. Then `vendor/bin/phpcs src/Routing/Router.php` (clean) and `vendor/bin/phpstan analyse src/Routing/Router.php --level=6 --no-progress` (no NEW errors — the combined `instanceof` narrows `$result` to a union where all three types declare `toResponse()`, so the call type-checks).
 
-- [ ] **Step 6: Docs** — in `docs/RESPONSE_DTOS.md`, add a "Typed DTOs vs Resources" boundary section:
+- [x] **Step 6: Docs** — in `docs/RESPONSE_DTOS.md`, add a "Typed DTOs vs Resources" boundary section:
   - Returning a `JsonResource`/`ResourceCollection`/`PaginatedResourceResponse` is now auto-normalized through its own `toResponse()` — no manual `->toResponse()` call needed (a `#[ResponseStatus(n)]` is threaded as the status). The Resource keeps its own envelope; the router does not apply the `ResponseData` envelope to it.
   - **When to use which:** reach for a `ResponseData` DTO (and the `CollectionResponse`/`PaginatedResponse` wrappers) for **simple, statically-typed** outputs where you want one class to drive both the runtime payload and the OpenAPI schema. Reach for a **Resource** for **transformation-heavy** responses (conditional fields, `whenLoaded()`, relationship/pivot shaping). Both coexist; neither replaces the other.
   - **OpenAPI note:** Resource bodies are a runtime `toArray()` transform with no static schema, so reflect mode does **not** infer a schema from a Resource return type — document Resource-returning endpoints explicitly with `#[ApiResponse(...)]`. (Typed DTO returns remain auto-documented.)
   Verify class names/namespaces against `src/Http/Resources/*.php` before writing them.
 
-- [ ] **Step 7: CHANGELOG + commit** — add under `## [Unreleased] → ### Added`: "Returning a `JsonResource`, `ResourceCollection`, or `PaginatedResourceResponse` from a controller is now auto-normalized through its own `->toResponse()` (the manual call is no longer required; `#[ResponseStatus]` is threaded as the status). Resource bodies are not reflectable, so document Resource-returning endpoints with `#[ApiResponse]`." Then:
+- [x] **Step 7: CHANGELOG + commit** — add under `## [Unreleased] → ### Added`: "Returning a `JsonResource`, `ResourceCollection`, or `PaginatedResourceResponse` from a controller is now auto-normalized through its own `->toResponse()` (the manual call is no longer required; `#[ResponseStatus]` is threaded as the status). Resource bodies are not reflectable, so document Resource-returning endpoints with `#[ApiResponse]`." Then:
 ```bash
 git add src/Routing/Router.php docs/RESPONSE_DTOS.md CHANGELOG.md tests/Unit/Routing/ResourceNormalizationTest.php
 git commit -m "Auto-normalize returned API Resources through their own toResponse()"
