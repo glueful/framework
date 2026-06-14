@@ -184,8 +184,10 @@ final class ResourceReflectDocsTest extends TestCase
             ClassSchemaReflector::toSchema(ResourceRecordData::class),
             $listSchema['properties']['data']['items'],
         );
-        // Structural pin: the record DTO documents a generic attributes map (array).
-        self::assertSame('array', $listSchema['properties']['data']['items']['properties']['attributes']['type']);
+        // A record is a generic open object (dynamic columns) — `{type:object}`
+        // with no fabricated property keys.
+        self::assertSame('object', $listSchema['properties']['data']['items']['type']);
+        self::assertEquals(new \stdClass(), $listSchema['properties']['data']['items']['properties']);
 
         self::assertSame('Insufficient permissions for resource access', $op['responses']['403']['description']);
         self::assertSame('Resource table not found', $op['responses']['404']['description']);
@@ -202,7 +204,9 @@ final class ResourceReflectDocsTest extends TestCase
         self::assertSame('Resource retrieved successfully', $op['responses']['200']['description']);
         $data = $op['responses']['200']['content']['application/json']['schema']['properties']['data'];
         self::assertEquals(ClassSchemaReflector::toSchema(ResourceRecordData::class), $data);
-        self::assertSame('array', $data['properties']['attributes']['type']);
+        // Generic open object (dynamic columns) — no fabricated keys.
+        self::assertSame('object', $data['type']);
+        self::assertEquals(new \stdClass(), $data['properties']);
 
         self::assertSame('Resource not found', $op['responses']['404']['description']);
         self::assertSame('Insufficient permissions', $op['responses']['403']['description']);

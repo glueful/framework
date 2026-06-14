@@ -71,7 +71,9 @@ final class ClassSchemaReflector
 
         return [
             'type' => 'object',
-            'properties' => $properties,
+            // Emit `{}` (not a malformed `[]`) when a class has no public typed
+            // properties — a propertyless DTO documents a generic open object.
+            'properties' => $properties === [] ? new \stdClass() : $properties,
         ];
     }
 
