@@ -9,6 +9,7 @@ use Glueful\Routing\RouteCache;
 use Glueful\Routing\Router;
 use Glueful\Support\Documentation\RouteReflectionDocGenerator;
 use Glueful\Support\Documentation\SecuritySchemeRegistry;
+use Glueful\Validation\Attributes\Validate;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 
@@ -291,6 +292,63 @@ final class RouteReflectionDocGeneratorTest extends TestCase
         }
     }
 
+    public function testPostHandlerWithValidateProducesRequestBody(): void
+    {
+        $router = $this->makeRouter();
+        $router->post('/v1/users', [SampleAppController::class, 'store']);
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        $op = $paths['/v1/users']['post'];
+        self::assertArrayHasKey('requestBody', $op);
+        self::assertTrue($op['requestBody']['required']);
+
+        $json = $op['requestBody']['content']['application/json'];
+        $schema = $json['schema'];
+        self::assertSame('object', $schema['type']);
+        self::assertSame('email', $schema['properties']['email']['format']);
+        self::assertSame('integer', $schema['properties']['age']['type']);
+        self::assertSame(18, $schema['properties']['age']['minimum']);
+        self::assertSame(255, $schema['properties']['name']['maxLength']);
+        self::assertContains('email', $schema['required']);
+        self::assertContains('age', $schema['required']);
+        self::assertContains('name', $schema['required']);
+
+        self::assertArrayHasKey('example', $json);
+        self::assertSame('user@example.com', $json['example']['email']);
+    }
+
+    public function testGetHandlerWithValidateHasNoRequestBody(): void
+    {
+        $router = $this->makeRouter();
+        $router->get('/v1/users', [SampleAppController::class, 'store']);
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        self::assertArrayNotHasKey('requestBody', $paths['/v1/users']['get']);
+    }
+
+    public function testPostHandlerWithoutValidateHasNoRequestBody(): void
+    {
+        $router = $this->makeRouter();
+        $router->post('/v1/ping', [SampleAppController::class, 'show']);
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        self::assertArrayNotHasKey('requestBody', $paths['/v1/ping']['post']);
+    }
+
+    public function testClosureHandlerProducesNoRequestBodyAndDoesNotCrash(): void
+    {
+        $router = $this->makeRouter();
+        $router->post('/v1/closure', static fn (): array => []);
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        self::assertArrayHasKey('/v1/closure', $paths);
+        self::assertArrayNotHasKey('requestBody', $paths['/v1/closure']['post']);
+    }
+
     /**
      * @param list<array<string, mixed>> $params
      * @return array<string, mixed>|null
@@ -316,6 +374,15 @@ final class SampleAppController
     }
 
     public function index(): void
+    {
+    }
+
+    #[Validate([
+        'email' => 'required|email|unique:users',
+        'age' => 'required|integer|min:18|max:120',
+        'name' => 'required|string|min:1|max:255',
+    ])]
+    public function store(): void
     {
     }
 }

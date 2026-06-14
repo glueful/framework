@@ -7,6 +7,7 @@ namespace Glueful\Support\Documentation;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Routing\Route;
 use Glueful\Routing\Router;
+use Glueful\Validation\Attributes\Validate;
 
 /**
  * Code-first OpenAPI path generator.
@@ -120,9 +121,139 @@ final class RouteReflectionDocGenerator
             $operation['description'] = $description;
         }
 
+        $requestBody = $this->buildRequestBody($route, $method);
+        if ($requestBody !== null) {
+            $operation['requestBody'] = $requestBody;
+        }
+
         $operation['responses'] = $this->buildResponses($isSecured, $rateLimited);
 
         return $operation;
+    }
+
+    /**
+     * Infer a JSON request body from the handler's `#[Validate]` rules.
+     *
+     * Only body-bearing verbs (POST/PUT/PATCH) produce a request body; on those
+     * verbs `#[Validate]` describes the JSON payload, whereas on GET/DELETE it
+     * validates the query string (out of scope here). The handler's
+     * {@see \ReflectionMethod} is resolved from `[Class, 'method']` or
+     * `"Class::method"`; closures, invokables and unresolvable handlers are
+     * skipped. Reflection is fully guarded so generation never throws.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function buildRequestBody(Route $route, string $method): ?array
+    {
+        if (!in_array(strtoupper($method), ['POST', 'PUT', 'PATCH'], true)) {
+            return null;
+        }
+
+        $rules = $this->validationRules($route->getHandler());
+        if ($rules === null || $rules === []) {
+            return null;
+        }
+
+        $schema = ValidationRuleSchema::toObjectSchema($rules);
+        $example = (new ExampleDeriver())->fromValidationRules($rules);
+
+        return [
+            'required' => ($schema['required'] ?? []) !== [],
+            'content' => [
+                'application/json' => array_filter([
+                    'schema' => $schema,
+                    'example' => $example !== [] ? $example : null,
+                ], static fn ($v): bool => $v !== null),
+            ],
+        ];
+    }
+
+    /**
+     * Extract `#[Validate]` rules from a route handler, or null when absent.
+     *
+     * Resolves the handler to a {@see \ReflectionMethod} from an
+     * `[Class, 'method']` pair or a `"Class::method"` string, guarding every
+     * step (`class_exists`/`method_exists` + try/catch) so a missing class,
+     * closure handler, or reflection failure simply yields null.
+     *
+     * @return array<string, string|list<string>>|null
+     */
+    private function validationRules(mixed $handler): ?array
+    {
+        $resolved = $this->resolveHandlerMethod($handler);
+        if ($resolved === null) {
+            return null;
+        }
+
+        [$class, $methodName] = $resolved;
+
+        try {
+            $reflection = new \ReflectionMethod($class, $methodName);
+            $attributes = $reflection->getAttributes(Validate::class);
+            if ($attributes === []) {
+                return null;
+            }
+
+            /** @var mixed $rules */
+            $rules = $attributes[0]->newInstance()->rules;
+            if (!is_array($rules)) {
+                return null;
+            }
+
+            // Keep only string|list<string> rule values; drop Rule-object arrays
+            // and other shapes the schema mapper cannot interpret.
+            $clean = [];
+            foreach ($rules as $field => $rule) {
+                if (is_string($rule)) {
+                    $clean[(string) $field] = $rule;
+                } elseif (is_array($rule) && array_is_list($rule)) {
+                    $stringParts = array_values(array_filter(
+                        $rule,
+                        static fn (mixed $r): bool => is_string($r),
+                    ));
+                    if (count($stringParts) === count($rule)) {
+                        /** @var list<string> $stringParts */
+                        $clean[(string) $field] = $stringParts;
+                    }
+                }
+            }
+
+            return $clean;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Resolve a route handler to a `[class-string, method]` pair, or null.
+     *
+     * Handles `[Class::class, 'method']` arrays and `"Class::method"` strings.
+     * Closures, invokables, bare class-strings, and handlers whose class or
+     * method does not exist all return null.
+     *
+     * @return array{0: class-string, 1: string}|null
+     */
+    private function resolveHandlerMethod(mixed $handler): ?array
+    {
+        $class = null;
+        $method = null;
+
+        if (is_array($handler) && isset($handler[0], $handler[1])) {
+            $controller = $handler[0];
+            $class = is_object($controller) ? $controller::class : (is_string($controller) ? $controller : null);
+            $method = is_string($handler[1]) ? $handler[1] : null;
+        } elseif (is_string($handler) && str_contains($handler, '::')) {
+            [$class, $method] = explode('::', $handler, 2);
+        }
+
+        if ($class === null || $method === null || $method === '') {
+            return null;
+        }
+        if (!class_exists($class) || !method_exists($class, $method)) {
+            return null;
+        }
+
+        return [$class, $method];
     }
 
     /**
