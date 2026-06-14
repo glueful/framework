@@ -306,9 +306,10 @@ final class RouteReflectionDocGenerator
      * Resolves the handler's {@see \ReflectionMethod} with the same guarded
      * resolver used for `#[ApiOperation]`/`#[Validate]`. Returns null when the
      * handler cannot be reflected or carries no `#[ApiRequestBody]`. The
-     * attribute's OWN `InvalidArgumentException` (a misused
-     * `#[ApiRequestBody(contentType: 'application/json')]`) is deliberately NOT
-     * caught here — it must surface, matching the fail-loud convention.
+     * attribute's OWN `InvalidArgumentException` (a misused `#[ApiRequestBody]` —
+     * neither/both of `$schema`/`$inlineSchema`, or `inlineSchema` with
+     * `application/json`) is deliberately NOT caught here — it must surface,
+     * matching the fail-loud convention.
      */
     private function apiRequestBodyFor(mixed $handler): ?ApiRequestBody
     {
@@ -591,10 +592,17 @@ final class RouteReflectionDocGenerator
 
         $apiRequestBody = $this->apiRequestBodyFor($route->getHandler());
         if ($apiRequestBody !== null) {
+            // A DTO class is reflected to a raw object schema (request bodies are
+            // NOT envelope-wrapped — same as buildRequestBodyFromRequestData uses
+            // the DTO shape directly); an inlineSchema is emitted as-is (non-JSON).
+            $bodySchema = $apiRequestBody->schema !== null
+                ? ClassSchemaReflector::toSchema($apiRequestBody->schema)
+                : $apiRequestBody->inlineSchema;
+
             $body = [
                 'required' => $apiRequestBody->required,
                 'content' => [
-                    $apiRequestBody->contentType => ['schema' => $apiRequestBody->schema],
+                    $apiRequestBody->contentType => ['schema' => $bodySchema],
                 ],
             ];
             if ($apiRequestBody->description !== '') {
