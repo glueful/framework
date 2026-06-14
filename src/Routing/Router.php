@@ -659,11 +659,14 @@ class Router
         // Create controller invoker with proper parameter resolution
         $invoker = $this->createControllerInvoker($route->getHandler(), $params, $request);
 
+        // Status used when enveloping a ResponseData return value (200 unless #[ResponseStatus]).
+        $successStatus = $this->responseStatusFor($route->getHandler());
+
         // Execute through middleware or directly
         if ($pipeline !== []) {
-            $response = $this->executeWithMiddleware($request, $pipeline, $invoker);
+            $response = $this->executeWithMiddleware($request, $pipeline, $invoker, $successStatus);
         } else {
-            $response = $this->normalizeResponse($invoker());
+            $response = $this->normalizeResponse($invoker(), $successStatus);
         }
 
         // Handle HEAD requests (remove body but keep headers)
@@ -776,6 +779,33 @@ class Router
         throw new \RuntimeException("Unable to reflect handler: " . gettype($handler));
     }
 
+    /**
+     * Resolve the success HTTP status used to envelope a ResponseData return value.
+     *
+     * Returns 200 unless the handler method declares a #[ResponseStatus]. Only the
+     * reflection resolution is guarded (a closure/unresolvable handler → 200); the
+     * attribute's own 2xx validation is allowed to throw (fail loud for that route).
+     */
+    private function responseStatusFor(mixed $handler): int
+    {
+        try {
+            $reflection = $this->getReflection($handler);
+        } catch (\Throwable) {
+            return 200;
+        }
+
+        if ($reflection instanceof \ReflectionMethod) {
+            $attributes = $reflection->getAttributes(\Glueful\Routing\Attributes\ResponseStatus::class);
+            if ($attributes !== []) {
+                // newInstance() runs the attribute constructor: a malformed (non-2xx)
+                // #[ResponseStatus] throws InvalidArgumentException here, by design.
+                return $attributes[0]->newInstance()->status;
+            }
+        }
+
+        return 200;
+    }
+
     // Robust parameter resolution with type casting and DI
     /**
      * @param array<string, string> $params
@@ -799,6 +829,24 @@ class Router
                 // Inject Request and related objects
                 if ($typeName === Request::class || is_subclass_of($typeName, Request::class)) {
                     $args[] = $request;
+                    continue;
+                }
+
+                // Hydrate + validate a typed request DTO from the JSON body (BEFORE container
+                // resolution, so a RequestData class is never treated as a service).
+                // v1: JSON body only, no form fallback.
+                if (is_a($typeName, \Glueful\Validation\Contracts\RequestData::class, true)) {
+                    $raw = (string) $request->getContent();
+                    if ($raw === '') {
+                        $body = [];
+                    } else {
+                        $decoded = json_decode($raw, true);
+                        if (!is_array($decoded)) {
+                            throw \Glueful\Validation\ValidationException::forField('body', 'Invalid JSON body.');
+                        }
+                        $body = $decoded;
+                    }
+                    $args[] = $this->requestDataHydrator()->hydrate($typeName, $body);
                     continue;
                 }
 
@@ -860,6 +908,21 @@ class Router
         }
 
         return $args;
+    }
+
+    /**
+     * Resolve the request DTO hydrator (from the container if registered, else construct it).
+     * The hydrator is stateless, so a fresh instance is safe.
+     */
+    private function requestDataHydrator(): \Glueful\Validation\RequestDataHydrator
+    {
+        if ($this->container->has(\Glueful\Validation\RequestDataHydrator::class)) {
+            /** @var \Glueful\Validation\RequestDataHydrator $h */
+            $h = $this->container->get(\Glueful\Validation\RequestDataHydrator::class);
+            return $h;
+        }
+
+        return new \Glueful\Validation\RequestDataHydrator();
     }
 
     // Cast parameter values to declared types
@@ -944,8 +1007,12 @@ class Router
     /**
      * @param array<string> $middlewareStack
      */
-    private function executeWithMiddleware(Request $request, array $middlewareStack, callable $core): Response
-    {
+    private function executeWithMiddleware(
+        Request $request,
+        array $middlewareStack,
+        callable $core,
+        int $successStatus = 200
+    ): Response {
         $next = $core;
 
         // Build pipeline inside-out to minimize allocations
@@ -954,7 +1021,7 @@ class Router
             $next = fn(Request $req) => $middleware($req, $next);
         }
 
-        return $this->normalizeResponse($next($request));
+        return $this->normalizeResponse($next($request), $successStatus);
     }
 
     // Resolve middleware from container with parameter support
@@ -1006,7 +1073,7 @@ class Router
         };
     }
 
-    private function normalizeResponse(mixed $result): Response
+    private function normalizeResponse(mixed $result, int $successStatus = 200): Response
     {
         // Pass through all Response types unchanged
         if ($result instanceof Response) {
@@ -1017,11 +1084,101 @@ class Router
             return new Response($result);
         }
 
+        // A returned response object may carry its own envelope message via
+        // HasResponseMessage; otherwise the existing per-status defaults are used.
+        $message = $result instanceof \Glueful\Http\Contracts\HasResponseMessage
+            ? $result->responseMessage()
+            : null;
+
+        // A paginated list renders the flat Glueful pagination envelope. Always 200,
+        // matching ApiResponse::paginated() (which has no status parameter) — a
+        // #[ResponseStatus] on a PaginatedResponse-returning handler has no effect
+        // (a paginated GET is 200 by nature). Use CollectionResponse for a non-200
+        // collection success status.
+        if ($result instanceof \Glueful\Http\Responses\PaginatedResponse) {
+            return ApiResponse::paginated(
+                $this->serializeResponseItems($result->items),
+                $result->total,
+                $result->page,
+                $result->perPage,
+                null,
+                $message ?? 'Data retrieved successfully',
+            );
+        }
+
+        // A plain collection renders {success, message, data: [...]} at the success status.
+        if ($result instanceof \Glueful\Http\Responses\CollectionResponse) {
+            $data = $this->serializeResponseItems($result->items);
+            return match ($successStatus) {
+                200 => ApiResponse::success($data, $message ?? 'Success'),
+                201 => ApiResponse::created($data, $message ?? 'Created successfully'),
+                default => new ApiResponse(
+                    ['success' => true, 'message' => $message ?? 'Success', 'data' => $data],
+                    $successStatus
+                ),
+            };
+        }
+
+        // Envelope a ResponseData DTO into the standard Glueful response with the
+        // declared success status. Must precede the generic array/object fallback.
+        if ($result instanceof \Glueful\Http\Contracts\ResponseData) {
+            $data = (new \Glueful\Serialization\ResponseDataSerializer())->toArray($result);
+            return match ($successStatus) {
+                200 => ApiResponse::success($data, $message ?? 'Success'),
+                201 => ApiResponse::created($data, $message ?? 'Created successfully'),
+                // Build the envelope with its final status in one place (preferred
+                // over mutating success()).
+                default => new ApiResponse(
+                    ['success' => true, 'message' => $message ?? 'Success', 'data' => $data],
+                    $successStatus
+                ),
+            };
+        }
+
+        // Auto-normalize a returned framework API Resource through its OWN toResponse().
+        // The Resource owns its envelope/semantics — do NOT re-wrap it in the
+        // ResponseData envelope. Must precede the generic object/array fallback (a
+        // ResourceCollection is an iterable object that would otherwise be JSON-encoded
+        // raw). Only the known framework Resource types are matched — never an arbitrary
+        // object that merely has a toResponse() method. A Resource the controller already
+        // turned into a Response is caught by the Response passthrough above. Unlike the
+        // PaginatedResponse DTO branch above (always 200), a PaginatedResourceResponse
+        // Resource DOES honor #[ResponseStatus] via its own toResponse($status) — the
+        // asymmetry is intentional (the Resource owns its status semantics).
+        if (
+            $result instanceof \Glueful\Http\Resources\JsonResource
+            || $result instanceof \Glueful\Http\Resources\ResourceCollection
+            || $result instanceof \Glueful\Http\Resources\PaginatedResourceResponse
+        ) {
+            return $result->toResponse($successStatus);
+        }
+
         if (is_array($result) || is_object($result)) {
             return new JsonResponse($result);
         }
 
         return new Response((string) $result);
+    }
+
+    /**
+     * Serialize a list of response items: each ResponseData DTO becomes an array
+     * via the serializer; arrays and scalars pass through unchanged. A plain
+     * (non-ResponseData) object also passes through as-is and is later encoded by
+     * json_encode — so it does NOT get the serializer's enum/DateTime/cycle
+     * handling. Wrap such values in a ResponseData DTO if you need that.
+     *
+     * @param  array<int, mixed> $items
+     * @return array<int, mixed>
+     */
+    private function serializeResponseItems(array $items): array
+    {
+        $serializer = new \Glueful\Serialization\ResponseDataSerializer();
+        return array_map(
+            static fn (mixed $item): mixed => $item instanceof \Glueful\Http\Contracts\ResponseData
+                ? $serializer->toArray($item)
+                : $item,
+            $items,
+        );
     }
 
     // URL Generation
@@ -1070,6 +1227,19 @@ class Router
     public function getNamedRoutes(): array
     {
         return $this->namedRoutes;
+    }
+
+    /**
+     * Whether the route table was reconstructed from the compiled route cache.
+     *
+     * Routes hydrated from cache lose closure handlers and some per-route
+     * metadata (where/name/rateLimit/requireScope/fields). Code-first
+     * documentation generation needs fresh Route objects, so it consults this
+     * flag to decide whether to rebuild the manifest before reflecting.
+     */
+    public function wasLoadedFromCache(): bool
+    {
+        return $this->routesLoadedFromCache;
     }
 
     // Get all routes for CLI RouteListCommand

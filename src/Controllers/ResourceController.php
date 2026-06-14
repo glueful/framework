@@ -5,11 +5,23 @@ declare(strict_types=1);
 namespace Glueful\Controllers;
 
 use Glueful\Http\Response;
+use Glueful\Controllers\DTOs\BulkOperationResultData;
+use Glueful\Controllers\DTOs\BulkUpdateData;
+use Glueful\Controllers\DTOs\ResourceCreateData;
+use Glueful\Controllers\DTOs\ResourceCreatedData;
+use Glueful\Controllers\DTOs\ResourceDeletedData;
+use Glueful\Controllers\DTOs\ResourceRecordData;
+use Glueful\Controllers\DTOs\ResourceUpdateData;
+use Glueful\Controllers\DTOs\ResourceUpdatedData;
 use Glueful\Auth\PasswordHasher;
 use Glueful\Repository\RepositoryFactory;
 use Glueful\Constants\ErrorCodes;
 use Glueful\Controllers\Traits\BulkOperationsTrait;
 use Glueful\Helpers\RequestHelper;
+use Glueful\Routing\Attributes\ApiOperation;
+use Glueful\Routing\Attributes\ApiRequestBody;
+use Glueful\Routing\Attributes\ApiResponse;
+use Glueful\Routing\Attributes\QueryParam;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
@@ -81,9 +93,19 @@ class ResourceController extends BaseController
 
     /**
      * Get resource list with pagination
-     *
-     * @route GET /data/{table}
      */
+    #[ApiOperation(
+        summary: 'List Resources',
+        description: 'Retrieves a paginated list of resources from the specified table',
+        tags: ['Data'],
+    )]
+    #[QueryParam('page', 'integer', 'Page number for pagination')]
+    #[QueryParam('per_page', 'integer', 'Number of items per page (max 100)')]
+    #[QueryParam('sort', 'string', 'Field to sort by')]
+    #[QueryParam('order', 'string', 'Sort order (asc|desc)', enum: ['asc', 'desc'])]
+    #[ApiResponse(200, ResourceRecordData::class, description: 'Resources retrieved successfully', collection: true)]
+    #[ApiResponse(403, description: 'Insufficient permissions for resource access')]
+    #[ApiResponse(404, description: 'Resource table not found')]
     public function index(Request $request): Response
     {
         $table = $request->attributes->get('table', '');
@@ -134,9 +156,15 @@ class ResourceController extends BaseController
 
     /**
      * Get single resource by UUID
-     *
-     * @route GET /data/{table}/{uuid}
      */
+    #[ApiOperation(
+        summary: 'Get Single Resource',
+        description: 'Retrieves a single resource by its UUID',
+        tags: ['Data'],
+    )]
+    #[ApiResponse(200, ResourceRecordData::class, description: 'Resource retrieved successfully')]
+    #[ApiResponse(404, description: 'Resource not found')]
+    #[ApiResponse(403, description: 'Insufficient permissions')]
     public function show(Request $request): Response
     {
         $table = $request->attributes->get('table', '');
@@ -176,9 +204,16 @@ class ResourceController extends BaseController
 
     /**
      * Create new resource
-     *
-     * @route POST /data/{table}
      */
+    #[ApiOperation(
+        summary: 'Create Resource',
+        description: 'Creates a new resource in the specified table',
+        tags: ['Data'],
+    )]
+    #[ApiRequestBody(schema: ResourceCreateData::class)]
+    #[ApiResponse(200, ResourceCreatedData::class, description: 'Resource created successfully')]
+    #[ApiResponse(400, description: 'Invalid input data')]
+    #[ApiResponse(403, description: 'Insufficient permissions')]
     public function store(Request $request): Response
     {
         $table = $request->attributes->get('table', '');
@@ -221,9 +256,17 @@ class ResourceController extends BaseController
 
     /**
      * Update existing resource
-     *
-     * @route PUT /data/{table}/{uuid}
      */
+    #[ApiOperation(
+        summary: 'Update Resource',
+        description: 'Updates an existing resource by UUID',
+        tags: ['Data'],
+    )]
+    #[ApiRequestBody(schema: ResourceUpdateData::class)]
+    #[ApiResponse(200, ResourceUpdatedData::class, description: 'Resource updated successfully')]
+    #[ApiResponse(404, description: 'Resource not found')]
+    #[ApiResponse(400, description: 'Invalid input data')]
+    #[ApiResponse(403, description: 'Insufficient permissions')]
     public function update(Request $request): Response
     {
         $table = $request->attributes->get('table', '');
@@ -280,10 +323,16 @@ class ResourceController extends BaseController
 
     /**
      * Delete resource
-     *
-     * @route DELETE /data/{table}/{uuid}
      */
-    public function destroy(Request $request): Response
+    #[ApiOperation(
+        summary: 'Delete Resource',
+        description: 'Deletes a resource by UUID',
+        tags: ['Data'],
+    )]
+    #[ApiResponse(200, ResourceDeletedData::class, description: 'Resource deleted successfully')]
+    #[ApiResponse(404, description: 'Resource not found')]
+    #[ApiResponse(403, description: 'Insufficient permissions')]
+    public function destroy(Request $request): ResourceDeletedData|Response
     {
         $table = $request->attributes->get('table', '');
         $uuid = $request->attributes->get('uuid', '');
@@ -317,13 +366,13 @@ class ResourceController extends BaseController
         // Invalidate cache after deletion
         $this->invalidateTableCache($table, $uuid);
 
-        $result = [
-            'affected' => 1,
-            'success' => true,
-            'message' => 'Record deleted successfully'
-        ];
-
-        return Response::success($result, 'Resource deleted successfully');
+        // The `data` payload keeps its own `success`/`message` keys (public props),
+        // distinct from the envelope message supplied via responseMessage().
+        return new ResourceDeletedData(
+            affected: 1,
+            success: true,
+            message: 'Record deleted successfully',
+        );
     }
 
 
@@ -472,9 +521,19 @@ class ResourceController extends BaseController
 
     /**
      * Bulk delete resources
-     *
-     * @route DELETE /data/{table}/bulk
      */
+    #[ApiOperation(
+        summary: 'Bulk Delete Resources',
+        description: 'Deletes multiple resources by UUIDs',
+        tags: ['Data'],
+    )]
+    // Note: the bulk-delete body (uuids[]) is carried on a DELETE verb. The reflect
+    // generator only emits a requestBody for body-bearing verbs (POST/PUT/PATCH), so
+    // BulkDeleteData cannot be surfaced here — the legacy docblock's @requestBody is a
+    // reflect/OpenAPI limitation for DELETE, not a migration gap in the prose/responses.
+    #[ApiResponse(200, BulkOperationResultData::class, description: 'Resources deleted successfully')]
+    #[ApiResponse(400, description: 'Invalid input data')]
+    #[ApiResponse(403, description: 'Insufficient permissions or bulk operations disabled')]
     public function destroyBulk(Request $request): Response
     {
         $params = ['resource' => $request->attributes->get('table', '')];
@@ -484,9 +543,16 @@ class ResourceController extends BaseController
 
     /**
      * Bulk update resources
-     *
-     * @route PUT /data/{table}/bulk
      */
+    #[ApiOperation(
+        summary: 'Bulk Update Resources',
+        description: 'Updates multiple resources with provided data',
+        tags: ['Data'],
+    )]
+    #[ApiRequestBody(schema: BulkUpdateData::class)]
+    #[ApiResponse(200, BulkOperationResultData::class, description: 'Resources updated successfully')]
+    #[ApiResponse(400, description: 'Invalid input data')]
+    #[ApiResponse(403, description: 'Insufficient permissions or bulk operations disabled')]
     public function updateBulk(Request $request): Response
     {
         $params = ['resource' => $request->attributes->get('table', '')];

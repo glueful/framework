@@ -245,7 +245,7 @@ class {$controllerName} extends BaseController
 
     /**
      * Handle the main action for this controller
-     * @route GET /api/{$resourceName}
+     *
      * @param Request \$request
      * @return Response
      */
@@ -270,7 +270,7 @@ class {$controllerName} extends BaseController
 
     /**
      * Handle a specific action
-     * @route GET /api/{$resourceName}/{id}
+     *
      * @param array \$params
      * @return Response
      */
@@ -401,7 +401,7 @@ PHP;
         return <<<PHP
     /**
      * Display a listing of {$resourceName} resources
-     * @route GET /api/{$resourceName}
+     *
      * @param Request \$request
      * @return Response
      */
@@ -442,7 +442,7 @@ PHP;
         return <<<PHP
     /**
      * Display the specified {$resourceName} resource
-     * @route GET /api/{$resourceName}/{id}
+     *
      * @param array \$params
      * @return Response
      */
@@ -504,7 +504,7 @@ PHP;
         return <<<PHP
     /**
      * Store a newly created {$resourceName} resource
-     * @route POST /api/{$resourceName}
+     *
      * @param Request \$request
      * @return Response
      */
@@ -574,7 +574,7 @@ PHP;
         return <<<PHP
     /**
      * Update the specified {$resourceName} resource
-     * @route PUT /api/{$resourceName}/{id}
+     *
      * @param array \$params
      * @param Request \$request
      * @return Response
@@ -634,7 +634,7 @@ PHP;
         return <<<PHP
     /**
      * Remove the specified {$resourceName} resource
-     * @route DELETE /api/{$resourceName}/{id}
+     *
      * @param array \$params
      * @return Response
      */

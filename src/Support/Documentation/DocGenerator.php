@@ -112,6 +112,26 @@ class DocGenerator
         $this->paths[$path][$verb] = $existing;
     }
 
+    /**
+     * Merge a map of OpenAPI paths into the spec.
+     *
+     * Built for external path sources (e.g. {@see RouteReflectionDocGenerator})
+     * to contribute operations alongside existing ones. The merge is per-method,
+     * so an external source can add a verb to a path that already carries others
+     * without clobbering them. Within a single path+verb, the supplied operation
+     * wins (last write).
+     *
+     * @param array<string, mixed> $paths map of path => (verb => operation)
+     */
+    public function mergePaths(array $paths): void
+    {
+        foreach ($paths as $path => $methods) {
+            foreach ((array) $methods as $verb => $operation) {
+                $this->paths[$path][$verb] = $operation;
+            }
+        }
+    }
+
     /** @return array<string, array<string, mixed>> */
     private function securitySchemes(): array
     {
@@ -305,6 +325,31 @@ class DocGenerator
     }
 
     /**
+     * Merge an explicit list of extension definition fragment files.
+     *
+     * Unlike {@see generateFromExtensions()}, which globs a whole directory and
+     * therefore re-merges fragments left over from previous runs, this method
+     * merges ONLY the files it is given. Callers pass the list of fragment files
+     * produced by the current generation run, eliminating stale-fragment leakage.
+     *
+     * The extension name (used as the schema prefix) is derived from the parent
+     * directory of each fragment, matching the {extDir}/{name}/{name}.json layout
+     * used for hand-authored extension OpenAPI fragments.
+     *
+     * @param list<string> $files Absolute paths to extension fragment JSON files
+     */
+    public function generateFromExtensionFiles(array $files): void
+    {
+        foreach ($files as $file) {
+            if (!is_string($file) || !is_file($file)) {
+                continue;
+            }
+            $extName = basename(dirname($file));
+            $this->mergeExtensionDefinition($file, $extName);
+        }
+    }
+
+    /**
      * Merge extension OpenAPI definition into main documentation
      *
      * @param string $filePath Path to extension definition file
@@ -339,6 +384,27 @@ class DocGenerator
         foreach ($routeFiles as $routeFile) {
             $routeName = basename($routeFile, '.json');
             $this->mergeRouteDefinition($routeFile, $routeName);
+        }
+    }
+
+    /**
+     * Merge an explicit list of route definition fragment files.
+     *
+     * Unlike {@see generateFromRoutes()}, which globs a whole directory and
+     * therefore re-merges fragments left over from previous runs, this method
+     * merges ONLY the files it is given — the fragments produced by the current
+     * generation run — eliminating stale-fragment leakage.
+     *
+     * @param list<string> $files Absolute paths to route fragment JSON files
+     */
+    public function generateFromRouteFiles(array $files): void
+    {
+        foreach ($files as $file) {
+            if (!is_string($file) || !is_file($file)) {
+                continue;
+            }
+            $routeName = basename($file, '.json');
+            $this->mergeRouteDefinition($file, $routeName);
         }
     }
 
@@ -745,6 +811,21 @@ class DocGenerator
             $baseUrl = '/';
         }
 
+        // Build webhooks first so the optional schema prune can see the $refs they carry.
+        $webhooks = [];
+        $webhooksConfig = $this->getConfig('documentation.webhooks', []);
+        if (is_array($webhooksConfig) && $webhooksConfig !== [] && $this->isOpenApi31()) {
+            $webhooks = (new WebhookDocsBuilder())->build($webhooksConfig);
+        }
+
+        // Default component schemas are unioned for convenience. When opted in, drop the
+        // ones nothing references so SDK/codegen tools don't emit dead types. Schemas that
+        // came from route/extension fragments ($this->schemas) are always kept.
+        $schemas = array_merge($this->getDefaultSchemas(), $this->schemas);
+        if ((bool) $this->getConfig('documentation.options.prune_unreferenced_schemas', false)) {
+            $schemas = self::pruneUnreferencedSchemas($schemas, $this->schemas, $this->paths, $webhooks);
+        }
+
         $swagger = [
             'openapi' => $this->openApiVersion,
             'info' => $this->buildInfoSection(),
@@ -756,11 +837,9 @@ class DocGenerator
             ]),
             'components' => [
                 'securitySchemes' => $this->securitySchemes(),
-                'schemas' => $this->transformSchemas(
-                    array_merge($this->getDefaultSchemas(), $this->schemas)
-                )
+                'schemas' => $this->transformSchemas($schemas)
             ],
-            'paths' => $this->paths,
+            'paths' => $this->transformPaths($this->paths),
             'tags' => $this->generateTags()
         ];
 
@@ -769,12 +848,99 @@ class DocGenerator
             $swagger['jsonSchemaDialect'] = 'https://json-schema.org/draft/2020-12/schema';
         }
 
-        $webhooksConfig = $this->getConfig('documentation.webhooks', []);
-        if (is_array($webhooksConfig) && $webhooksConfig !== [] && $this->isOpenApi31()) {
-            $swagger['webhooks'] = (new WebhookDocsBuilder())->build($webhooksConfig);
+        if ($webhooks !== []) {
+            $swagger['webhooks'] = $webhooks;
         }
 
         return json_encode($swagger, JSON_PRETTY_PRINT);
+    }
+
+    /**
+     * Drop component schemas that nothing references.
+     *
+     * Computes the set of schemas reachable (transitively) from the operations
+     * (`$paths`), the `$webhooks`, and the always-kept schemas, then returns only those
+     * — except every schema in `$alwaysKeep` is retained regardless (those came from
+     * route/extension fragments and were documented on purpose). This targets the
+     * unconditional default-schema grab-bag without touching explicitly-documented types.
+     *
+     * Pure + static so it can be unit-tested directly, independent of config/context.
+     *
+     * @param array<string, mixed> $allSchemas  default schemas merged with $alwaysKeep
+     * @param array<string, mixed> $alwaysKeep  schemas from fragments — never pruned
+     * @param array<string, mixed> $paths       OpenAPI paths object
+     * @param array<string, mixed> $webhooks    OpenAPI webhooks object (may be empty)
+     * @return array<string, mixed> the pruned schema map (original key order preserved)
+     */
+    public static function pruneUnreferencedSchemas(
+        array $allSchemas,
+        array $alwaysKeep,
+        array $paths,
+        array $webhooks
+    ): array {
+        // Seed reachability from the paths, the webhooks, and every always-kept schema —
+        // anything they reference (directly) must survive.
+        $reachable = self::collectSchemaRefs($paths);
+        foreach (self::collectSchemaRefs($webhooks) as $name => $_) {
+            $reachable[$name] = true;
+        }
+        foreach ($alwaysKeep as $schema) {
+            foreach (self::collectSchemaRefs($schema) as $name => $_) {
+                $reachable[$name] = true;
+            }
+        }
+
+        // Expand transitively through referenced schemas until the set stops growing.
+        $changed = true;
+        while ($changed) {
+            $changed = false;
+            foreach (array_keys($reachable) as $name) {
+                if (!isset($allSchemas[$name])) {
+                    continue;
+                }
+                foreach (self::collectSchemaRefs($allSchemas[$name]) as $dep => $_) {
+                    if (!isset($reachable[$dep])) {
+                        $reachable[$dep] = true;
+                        $changed = true;
+                    }
+                }
+            }
+        }
+
+        $kept = [];
+        foreach ($allSchemas as $name => $def) {
+            if (isset($alwaysKeep[$name]) || isset($reachable[$name])) {
+                $kept[$name] = $def;
+            }
+        }
+        return $kept;
+    }
+
+    /**
+     * Collect every `#/components/schemas/<Name>` reference found anywhere in a node.
+     *
+     * @param mixed $node
+     * @return array<string, true> set of referenced schema names
+     */
+    private static function collectSchemaRefs(mixed $node): array
+    {
+        $found = [];
+        if (is_array($node)) {
+            foreach ($node as $key => $value) {
+                if (
+                    $key === '$ref'
+                    && is_string($value)
+                    && preg_match('~^#/components/schemas/(.+)$~', $value, $m) === 1
+                ) {
+                    $found[$m[1]] = true;
+                } elseif (is_array($value)) {
+                    foreach (self::collectSchemaRefs($value) as $name => $_) {
+                        $found[$name] = true;
+                    }
+                }
+            }
+        }
+        return $found;
     }
 
     /**
@@ -792,6 +958,90 @@ class DocGenerator
         }
 
         return array_map([$this, 'transformSchema'], $schemas);
+    }
+
+    /**
+     * Transform inline path-operation schemas for OpenAPI 3.1 compatibility.
+     *
+     * {@see transformSchemas()} only normalises `components.schemas`, so inline
+     * schemas declared directly on operations (request bodies, responses,
+     * parameters) kept their 3.0-style `nullable: true`. This walks every
+     * operation's `parameters[].schema`, `requestBody.content.*.schema`, and
+     * `responses.*.content.*.schema` and runs {@see transformSchema()} over them,
+     * so a reflected DTO property emitting `nullable: true` renders as the 3.1
+     * `type: [T, 'null']` array form. A no-op under 3.0.x.
+     *
+     * @param  array<string, mixed> $paths
+     * @return array<string, mixed>
+     */
+    private function transformPaths(array $paths): array
+    {
+        if (!$this->isOpenApi31()) {
+            return $paths;
+        }
+
+        foreach ($paths as $path => $methods) {
+            if (!is_array($methods)) {
+                continue;
+            }
+            foreach ($methods as $verb => $operation) {
+                if (is_array($operation)) {
+                    $paths[$path][$verb] = $this->transformOperationSchemas($operation);
+                }
+            }
+        }
+
+        return $paths;
+    }
+
+    /**
+     * Transform the inline schemas carried by a single operation object.
+     *
+     * @param  array<string, mixed> $operation
+     * @return array<string, mixed>
+     */
+    private function transformOperationSchemas(array $operation): array
+    {
+        if (isset($operation['parameters']) && is_array($operation['parameters'])) {
+            foreach ($operation['parameters'] as $i => $parameter) {
+                if (is_array($parameter) && isset($parameter['schema']) && is_array($parameter['schema'])) {
+                    $operation['parameters'][$i]['schema'] = $this->transformSchema($parameter['schema']);
+                }
+            }
+        }
+
+        if (isset($operation['requestBody']['content']) && is_array($operation['requestBody']['content'])) {
+            $operation['requestBody']['content'] =
+                $this->transformContentSchemas($operation['requestBody']['content']);
+        }
+
+        if (isset($operation['responses']) && is_array($operation['responses'])) {
+            foreach ($operation['responses'] as $status => $response) {
+                if (is_array($response) && isset($response['content']) && is_array($response['content'])) {
+                    $operation['responses'][$status]['content'] =
+                        $this->transformContentSchemas($response['content']);
+                }
+            }
+        }
+
+        return $operation;
+    }
+
+    /**
+     * Run {@see transformSchema()} over each media-type schema in a `content` map.
+     *
+     * @param  array<string, mixed> $content
+     * @return array<string, mixed>
+     */
+    private function transformContentSchemas(array $content): array
+    {
+        foreach ($content as $mediaType => $media) {
+            if (is_array($media) && isset($media['schema']) && is_array($media['schema'])) {
+                $content[$mediaType]['schema'] = $this->transformSchema($media['schema']);
+            }
+        }
+
+        return $content;
     }
 
     /**

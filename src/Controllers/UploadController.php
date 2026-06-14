@@ -6,11 +6,19 @@ namespace Glueful\Controllers;
 
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Cache\CacheStore;
+use Glueful\Controllers\DTOs\BlobDeletedData;
+use Glueful\Controllers\DTOs\BlobInfoData;
+use Glueful\Controllers\DTOs\SignedUrlData;
+use Glueful\Controllers\DTOs\UploadResultData;
 use Glueful\Helpers\RequestHelper;
 use Glueful\Helpers\Utils;
 use Glueful\Http\Response;
 use Glueful\Http\Exceptions\Domain\BusinessLogicException;
 use Glueful\Repository\BlobRepository;
+use Glueful\Routing\Attributes\ApiOperation;
+use Glueful\Routing\Attributes\ApiRequestBody;
+use Glueful\Routing\Attributes\ApiResponse;
+use Glueful\Routing\Attributes\QueryParam;
 use Glueful\Services\ImageSecurityValidator;
 use Glueful\Storage\Contracts\NativeSignedUrlProviderInterface;
 use Glueful\Storage\Contracts\StorageDriverRegistryInterface;
@@ -52,6 +60,28 @@ class UploadController extends BaseController
         $this->cache = $this->resolveCache();
     }
 
+    #[ApiOperation(
+        summary: 'Upload File',
+        description: 'Upload a file via multipart form data or base64 encoding.',
+        tags: ['Blobs'],
+    )]
+    #[ApiRequestBody(
+        contentType: 'multipart/form-data',
+        inlineSchema: [
+            'type' => 'object',
+            'properties' => [
+                'file' => ['type' => 'string', 'format' => 'binary'],
+                'path_prefix' => ['type' => 'string'],
+                'visibility' => ['type' => 'string', 'enum' => ['public', 'private']],
+            ],
+            'required' => ['file'],
+        ],
+    )]
+    #[ApiResponse(201, UploadResultData::class, description: 'Upload successful')]
+    #[ApiResponse(400, description: 'Missing file upload or invalid base64 data')]
+    #[ApiResponse(401, description: 'Authentication required')]
+    #[ApiResponse(413, description: 'File too large')]
+    #[ApiResponse(415, description: 'Unsupported file type')]
     public function upload(Request $request): Response
     {
         if (!(bool) $this->getConfig('uploads.enabled', true)) {
@@ -132,7 +162,15 @@ class UploadController extends BaseController
         }
     }
 
-    public function info(Request $request, string $uuid): Response
+    #[ApiOperation(
+        summary: 'Blob Metadata',
+        description: 'Retrieve blob metadata without downloading the file content',
+        tags: ['Blobs'],
+    )]
+    #[ApiResponse(200, BlobInfoData::class, description: 'Blob metadata retrieved')]
+    #[ApiResponse(401, description: 'Authentication required')]
+    #[ApiResponse(404, description: 'Blob not found')]
+    public function info(Request $request, string $uuid): BlobInfoData|Response
     {
         if ($this->requiresAuthFor('info') && Utils::getUser() === null) {
             return Response::unauthorized('Authentication required');
@@ -151,12 +189,30 @@ class UploadController extends BaseController
             $blob['native_url'] = $native;
         }
 
-        return Response::success($blob, 'Blob metadata');
+        return new BlobInfoData($blob);
     }
 
     /**
      * @return Response|BinaryFileResponse|StreamedResponse|\Symfony\Component\HttpFoundation\Response
      */
+    #[ApiOperation(
+        summary: 'Retrieve Blob',
+        description: 'Retrieve blob file content with optional image resizing.',
+        tags: ['Blobs'],
+    )]
+    #[QueryParam('width', 'integer', 'Resize target width in pixels (images only)')]
+    #[QueryParam('height', 'integer', 'Resize target height in pixels (images only)')]
+    #[QueryParam('quality', 'integer', 'Output quality 1-100 (images only)')]
+    #[QueryParam('format', 'string', 'Output format for conversion (images only)')]
+    #[QueryParam('fit', 'string', 'Resize fit mode (images only)')]
+    #[ApiResponse(
+        200,
+        contentType: 'application/octet-stream',
+        body: 'binary',
+        description: 'File content with appropriate Content-Type header',
+    )]
+    #[ApiResponse(401, description: 'Authentication required for private blob')]
+    #[ApiResponse(404, description: 'Blob not found')]
     public function show(
         Request $request,
         string $uuid
@@ -207,7 +263,17 @@ class UploadController extends BaseController
     /**
      * Generate a signed URL for temporary access to a private blob.
      */
-    public function signedUrl(Request $request, string $uuid): Response
+    #[ApiOperation(
+        summary: 'Generate Signed URL',
+        description: 'Generate a temporary signed URL for accessing a private blob.',
+        tags: ['Blobs'],
+    )]
+    #[QueryParam('ttl', 'integer', 'URL lifetime in seconds (default: 3600, max: 604800)')]
+    #[ApiResponse(200, SignedUrlData::class, description: 'Signed URL generated')]
+    #[ApiResponse(400, description: 'Signed URLs are disabled')]
+    #[ApiResponse(401, description: 'Authentication required')]
+    #[ApiResponse(404, description: 'Blob not found')]
+    public function signedUrl(Request $request, string $uuid): SignedUrlData|Response
     {
         if (Utils::getUser() === null) {
             return Response::unauthorized('Authentication required');
@@ -239,20 +305,23 @@ class UploadController extends BaseController
         $rawPath = (string) ($blob['url'] ?? '');
         $native = $this->maybeNativeUrl($blob, $rawPath);
 
-        $payload = [
-            'uuid' => $uuid,
-            'signed_url' => $signedUrl,
-            'expires_in' => $ttl,
-            'expires_at' => date('Y-m-d H:i:s', time() + $ttl),
-        ];
-        if ($native !== null) {
-            $payload['native_url'] = $native;
-        }
-
-        return Response::success($payload, 'Signed URL generated');
+        return (new SignedUrlData(
+            uuid: $uuid,
+            signed_url: $signedUrl,
+            expires_in: $ttl,
+            expires_at: date('Y-m-d H:i:s', time() + $ttl),
+        ))->withNativeUrl($native);
     }
 
-    public function delete(Request $request, string $uuid): Response
+    #[ApiOperation(
+        summary: 'Delete Blob',
+        description: 'Soft-delete a blob and remove its underlying file from storage',
+        tags: ['Blobs'],
+    )]
+    #[ApiResponse(200, BlobDeletedData::class, description: 'Blob deleted')]
+    #[ApiResponse(401, description: 'Authentication required')]
+    #[ApiResponse(404, description: 'Blob not found')]
+    public function delete(Request $request, string $uuid): BlobDeletedData|Response
     {
         if ($this->requiresAuthFor('delete') && Utils::getUser() === null) {
             return Response::unauthorized('Authentication required');
@@ -271,7 +340,7 @@ class UploadController extends BaseController
 
         $this->blobs->updateStatus($uuid, 'deleted');
 
-        return Response::success(['uuid' => $uuid], 'Blob deleted');
+        return new BlobDeletedData($uuid);
     }
 
     /**

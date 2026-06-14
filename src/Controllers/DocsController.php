@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Glueful\Controllers;
 
 use Glueful\Http\Response;
+use Glueful\Routing\Attributes\ApiOperation;
+use Glueful\Routing\Attributes\ApiResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
@@ -23,6 +25,13 @@ class DocsController extends BaseController
      * @param Request $request HTTP request
      * @return Response|BinaryFileResponse
      */
+    #[ApiOperation(
+        summary: 'API Documentation UI',
+        description: 'Interactive API documentation interface (Scalar, Swagger UI, or Redoc)',
+        tags: ['Documentation'],
+    )]
+    #[ApiResponse(200, contentType: 'text/html', body: 'text', description: 'Documentation UI HTML page')]
+    #[ApiResponse(404, description: 'Documentation disabled or not generated')]
     public function index(Request $request): Response|BinaryFileResponse
     {
         if (!$this->isDocsEnabled()) {
@@ -56,6 +65,13 @@ class DocsController extends BaseController
      * @param Request $request HTTP request
      * @return Response|BinaryFileResponse
      */
+    #[ApiOperation(
+        summary: 'OpenAPI Specification',
+        description: 'Returns the OpenAPI/Swagger specification in JSON format',
+        tags: ['Documentation'],
+    )]
+    #[ApiResponse(200, contentType: 'application/json', body: 'object', description: 'OpenAPI specification')]
+    #[ApiResponse(404, description: 'Specification not generated or disabled')]
     public function openapi(Request $request): Response|BinaryFileResponse
     {
         if (!$this->isDocsEnabled()) {

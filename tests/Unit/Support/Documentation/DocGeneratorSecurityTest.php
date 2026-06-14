@@ -218,80 +218,6 @@ final class DocGeneratorSecurityTest extends TestCase
         self::assertStringNotContainsString('strict whitelist', $fields[0]['description']);
     }
 
-    public function testCommentsDocGeneratorAttachesExampleToJsonRequestBody(): void
-    {
-        $generator = $this->buildCommentsDocGenerator();
-
-        $reflection = new \ReflectionClass($generator);
-        $method = $reflection->getMethod('buildRequestBody');
-        $method->setAccessible(true);
-
-        $result = $method->invoke($generator, [
-            'type' => 'object',
-            'properties' => [
-                'email' => ['type' => 'string'],
-                'age' => ['type' => 'integer'],
-            ],
-            'required' => ['email'],
-        ]);
-
-        self::assertArrayHasKey('example', $result['content']['application/json']);
-        $example = $result['content']['application/json']['example'];
-        self::assertSame('user@example.com', $example['email']);
-        self::assertIsInt($example['age']);
-    }
-
-    public function testAtExampleAnnotationOverridesDerivedExample(): void
-    {
-        $generator = $this->buildCommentsDocGenerator();
-
-        $reflection = new \ReflectionClass($generator);
-        $method = $reflection->getMethod('buildRequestBody');
-        $method->setAccessible(true);
-
-        $result = $method->invoke($generator, [
-            'type' => 'object',
-            'properties' => [
-                'email' => ['type' => 'string'],
-            ],
-            '_example' => ['email' => 'override@example.com'],
-        ]);
-
-        $example = $result['content']['application/json']['example'];
-        self::assertSame('override@example.com', $example['email']);
-        // Crucially, _example must NOT leak into the schema
-        self::assertArrayNotHasKey('_example', $result['content']['application/json']['schema']);
-    }
-
-    public function testExtractRequestExampleAnnotationParsesJsonObject(): void
-    {
-        $generator = $this->buildCommentsDocGenerator();
-        $reflection = new \ReflectionClass($generator);
-        $method = $reflection->getMethod('extractRequestExampleAnnotation');
-        $method->setAccessible(true);
-
-        $docComment = <<<'DOC'
-/**
- * Create a user
- *
- * @example {"name": "Alice", "age": 30}
- */
-DOC;
-
-        $result = $method->invoke($generator, $docComment);
-        self::assertSame(['name' => 'Alice', 'age' => 30], $result);
-    }
-
-    public function testExtractRequestExampleAnnotationReturnsNullWhenMissing(): void
-    {
-        $generator = $this->buildCommentsDocGenerator();
-        $reflection = new \ReflectionClass($generator);
-        $method = $reflection->getMethod('extractRequestExampleAnnotation');
-        $method->setAccessible(true);
-
-        self::assertNull($method->invoke($generator, '/** Just a comment */'));
-    }
-
     public function testEmitsWebhooksBlockWhenConfigured(): void
     {
         // Inject webhook config via reflection of the getConfig logic
@@ -321,29 +247,6 @@ DOC;
         self::assertArrayHasKey('WebhookEnvelope', $spec['components']['schemas']);
         $envelope = $spec['components']['schemas']['WebhookEnvelope'];
         self::assertSame(['id', 'event', 'created_at', 'data'], $envelope['required']);
-    }
-
-    private function buildCommentsDocGenerator(): \Glueful\Support\Documentation\CommentsDocGenerator
-    {
-        $context = new \Glueful\Bootstrap\ApplicationContext(sys_get_temp_dir() . '/comments_doc_' . uniqid());
-        $container = new \Glueful\Container\Container();
-        $container->load([
-            \Glueful\Bootstrap\ApplicationContext::class => new \Glueful\Container\Definition\ValueDefinition(
-                \Glueful\Bootstrap\ApplicationContext::class,
-                $context
-            ),
-        ]);
-        $context->setContainer($container);
-
-        $extensionsManager = new \Glueful\Extensions\ExtensionManager($container);
-        return new \Glueful\Support\Documentation\CommentsDocGenerator(
-            context: $context,
-            localExtensionsPath: sys_get_temp_dir(),
-            outputPath: sys_get_temp_dir(),
-            routesPath: sys_get_temp_dir(),
-            routesOutputPath: sys_get_temp_dir(),
-            extensionsManager: $extensionsManager,
-        );
     }
 
     public function testOpenApiGeneratorWiresConfiguredSchemesIntoDocGenerator(): void

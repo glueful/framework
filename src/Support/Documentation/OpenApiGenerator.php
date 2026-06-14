@@ -4,21 +4,23 @@ declare(strict_types=1);
 
 namespace Glueful\Support\Documentation;
 
-use Glueful\Extensions\ExtensionManager;
 use Glueful\Services\FileFinder;
 use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Routing\AttributeRouteLoader;
+use Glueful\Routing\RouteManifest;
+use Glueful\Routing\Router;
 
 /**
  * OpenAPI Generator
  *
  * Orchestrates the full API documentation generation pipeline.
- * Coordinates ResourceRouteExpander, DocGenerator, and CommentsDocGenerator
- * to produce a complete OpenAPI/Swagger specification.
+ * Coordinates ResourceRouteExpander, DocGenerator, and the code-first
+ * RouteReflectionDocGenerator to produce a complete OpenAPI/Swagger
+ * specification from the live route table.
  */
 class OpenApiGenerator
 {
     private DocGenerator $docGenerator;
-    private CommentsDocGenerator $commentsGenerator;
     private FileFinder $fileFinder;
     private ResourceRouteExpander $resourceExpander;
 
@@ -30,10 +32,15 @@ class OpenApiGenerator
     private ApplicationContext $context;
 
     /**
+     * The configured security registry, shared between the DocGenerator and the
+     * reflect generator. Null when no security schemes are configured.
+     */
+    private ?SecuritySchemeRegistry $securityRegistry = null;
+
+    /**
      * Constructor
      *
      * @param DocGenerator|null $docGenerator OpenAPI assembler
-     * @param CommentsDocGenerator|null $commentsGenerator Route documentation generator
      * @param FileFinder|null $fileFinder File finder service
      * @param bool $runFromConsole Force console mode
      * @param ResourceRouteExpander|null $resourceExpander Resource route expander
@@ -42,14 +49,12 @@ class OpenApiGenerator
     public function __construct(
         ApplicationContext $context,
         ?DocGenerator $docGenerator = null,
-        ?CommentsDocGenerator $commentsGenerator = null,
         ?FileFinder $fileFinder = null,
         bool $runFromConsole = false,
         ?ResourceRouteExpander $resourceExpander = null
     ) {
         $this->context = $context;
         $this->docGenerator = $docGenerator ?? new DocGenerator(context: $context);
-        $this->commentsGenerator = $commentsGenerator ?? new CommentsDocGenerator($context);
         $this->fileFinder = $fileFinder ?? container($this->context)->get(FileFinder::class);
         $this->runFromConsole = $runFromConsole || $this->isConsole();
         $this->resourceExpander = $resourceExpander ?? new ResourceRouteExpander();
@@ -61,9 +66,9 @@ class OpenApiGenerator
      * Wire the configured SecuritySchemeRegistry into the underlying generators.
      *
      * Reads documentation.security_schemes and documentation.middleware_map from
-     * config and propagates them to both DocGenerator and CommentsDocGenerator so
-     * the emitted spec advertises the configured schemes and per-operation
-     * security requirements.
+     * config and propagates them to the DocGenerator (and, via the shared
+     * registry, the reflect generator) so the emitted spec advertises the
+     * configured schemes and per-operation security requirements.
      */
     private function wireSecurityRegistry(): void
     {
@@ -79,8 +84,8 @@ class OpenApiGenerator
             is_array($middlewareMap) ? $middlewareMap : [],
         );
 
+        $this->securityRegistry = $registry;
         $this->docGenerator->setSecurityRegistry($registry);
-        $this->commentsGenerator->setSecurityRegistry($registry);
     }
 
     /**
@@ -88,12 +93,11 @@ class OpenApiGenerator
      *
      * Runs the full pipeline:
      * 1. Expand resource routes with table schemas (if enabled)
-     * 2. Process custom API docs
-     * 3. Generate extension documentation
-     * 4. Generate route documentation (non-resource routes)
-     * 5. Assemble and write openapi.json
+     * 2. Merge hand-written custom API JSON definitions (if any)
+     * 3. Derive paths from the live route table (reflect)
+     * 4. Assemble and write openapi.json
      *
-     * @param bool $force Force regeneration of all files
+     * @param bool $force Retained for backwards-compatible signature; unused.
      * @return string Path to generated openapi.json
      */
     public function generate(bool $force = false): string
@@ -108,13 +112,15 @@ class OpenApiGenerator
             $this->log("Skipping resource routes generation (disabled in config)");
         }
 
-        // Step 2: Process custom API doc definitions
+        // Step 2: Merge hand-written custom API JSON definitions. This is
+        // independent of route reflection — apps may ship hand-authored
+        // OpenAPI fragments under docs/json-definitions/.
         $this->processCustomApiDocs();
 
-        // Step 3 & 4: Generate and process extension/route documentation
-        $this->processExtensionAndRouteDocs($force);
+        // Step 3: Derive paths from the live route table.
+        $this->generateFromRouteReflection();
 
-        // Step 5: Write final openapi.json
+        // Step 4: Write final openapi.json
         $outputPath = $this->writeSwaggerJson();
 
         $this->log("API documentation generated successfully at: $outputPath");
@@ -142,20 +148,87 @@ class OpenApiGenerator
     /**
      * Generate only the OpenAPI spec
      *
-     * @param bool $force Force regeneration of extension/route docs
+     * @param bool $force Retained for backwards-compatible signature; unused.
      * @return string Path to generated openapi.json
      */
     public function generateOpenApiSpec(bool $force = false): string
     {
         $this->log("Generating OpenAPI specification...");
 
+        // Resource-route expansion is orthogonal DB-table synthesis
+        // (still gated by include_resource_routes).
         if ($this->shouldIncludeResourceRoutes()) {
             $this->expandResourceRoutes();
         }
+
+        // Merge hand-written custom API JSON definitions, then derive paths from
+        // the live route table.
         $this->processCustomApiDocs();
-        $this->processExtensionAndRouteDocs($force);
+        $this->generateFromRouteReflection();
 
         return $this->writeSwaggerJson();
+    }
+
+    /**
+     * Derive OpenAPI paths from the live route table and merge them into the spec.
+     *
+     * Loads the route table (mirroring route:debug), guards against the compiled
+     * route cache (which loses per-route metadata), and reuses the same
+     * SecuritySchemeRegistry already wired into the DocGenerator so both share
+     * one source of truth for schemes and middleware mapping.
+     */
+    private function generateFromRouteReflection(): void
+    {
+        $router = $this->obtainRouter();
+        if ($router === null) {
+            $this->log("Reflect generator: Router unavailable; no paths generated.");
+            return;
+        }
+
+        $registry = $this->securityRegistry ?? new SecuritySchemeRegistry([], []);
+        $reflect = new RouteReflectionDocGenerator($registry, $this->context);
+
+        $this->docGenerator->mergePaths($reflect->generate($router));
+        $this->log("Reflect generator: derived paths from the live route table.");
+    }
+
+    /**
+     * Resolve and populate the application Router from the container.
+     *
+     * Mirrors route:debug's load sequence: RouteManifest::load() (idempotent)
+     * plus attribute-route scanning of app/Controllers. If the router was built
+     * from the compiled route cache (which strips where/name/rateLimit/scope/
+     * fields metadata needed for reflection), the manifest is reset and reloaded
+     * so reflection sees fresh Route objects.
+     */
+    private function obtainRouter(): ?Router
+    {
+        $container = container($this->context);
+        if (!$container->has(Router::class)) {
+            return null;
+        }
+
+        /** @var Router $router */
+        $router = $container->get(Router::class);
+
+        if ($router->wasLoadedFromCache()) {
+            $this->log(
+                "Reflect generator: route cache detected; rebuilding fresh routes "
+                . "(ROUTE_CACHE strips per-route metadata)."
+            );
+            RouteManifest::reset();
+        }
+
+        RouteManifest::load($router, $this->context);
+
+        $controllers = base_path($this->context, 'app/Controllers');
+        if (is_dir($controllers) && $container->has(AttributeRouteLoader::class)) {
+            /** @var AttributeRouteLoader $loader */
+            $loader = $container->get(AttributeRouteLoader::class);
+            $loader->scanDirectory($controllers);
+        }
+
+        return $router;
     }
 
     /**
@@ -181,11 +254,15 @@ class OpenApiGenerator
     }
 
     /**
-     * Process custom API documentation files
+     * Merge hand-authored OpenAPI JSON fragments.
      *
-     * Processes JSON files in the json-definitions directory, excluding
-     * 'extensions/' and 'routes/' subdirectories which are handled separately
-     * by generateFromExtensions() and generateFromRoutes().
+     * Merges every `*.json` at the TOP LEVEL of the `json-definitions/` directory —
+     * this is the supported location for an app/extension to ship a hand-written
+     * OpenAPI fragment. The `extensions/` and `routes/` subdirectories are
+     * deliberately excluded: they were the (now-removed) comment generator's
+     * per-file OUTPUT, so anything there is stale machine output, and re-merging it
+     * would resurrect routes the reflect generator already derives from the live
+     * route table.
      */
     private function processCustomApiDocs(): void
     {
@@ -199,7 +276,7 @@ class OpenApiGenerator
         $docFiles = $finder->files()
             ->in($definitionsDocPath)
             ->name('*.json')
-            ->exclude(['extensions', 'routes']); // These are processed separately
+            ->exclude(['extensions', 'routes']); // legacy comment-generator output — never merged
 
         foreach ($docFiles as $file) {
             try {
@@ -211,231 +288,6 @@ class OpenApiGenerator
         }
     }
 
-    /**
-     * Process extension and route documentation
-     *
-     * @param bool $force Force regeneration
-     */
-    private function processExtensionAndRouteDocs(bool $force): void
-    {
-        $extensionDocsDir = config($this->context, 'documentation.paths.extension_definitions');
-        $routesDocsDir = config($this->context, 'documentation.paths.route_definitions');
-
-        // Ensure directories exist
-        $this->ensureDirectory($extensionDocsDir);
-        $this->ensureDirectory($routesDocsDir);
-
-        try {
-            if ($force) {
-                $this->forceGenerateExtensionDocs();
-                $this->forceGenerateRouteDocs();
-            } else {
-                $generatedFiles = $this->commentsGenerator->generateAll();
-
-                if ($generatedFiles !== []) {
-                    $this->log("Generated documentation for " . count($generatedFiles) . " extension(s)/route(s)");
-                    foreach ($generatedFiles as $file) {
-                        $this->log("Generated: " . basename($file));
-                    }
-                } else {
-                    $this->log("No extension route files found for documentation generation");
-                }
-            }
-
-            // Process the generated documentation
-            $this->docGenerator->generateFromExtensions($extensionDocsDir);
-            $this->log("Processed extension API documentation");
-
-            $this->docGenerator->generateFromRoutes($routesDocsDir);
-            $this->log("Processed main routes API documentation");
-        } catch (\Exception $e) {
-            $this->log("Error generating documentation: " . $e->getMessage());
-        }
-    }
-
-    /**
-     * Force generate extension documentation
-     *
-     * Uses ExtensionManager to discover Composer-installed extensions.
-     */
-    private function forceGenerateExtensionDocs(): void
-    {
-        $this->log("Forcing generation of extension documentation...");
-
-        $extensionManager = container($this->context)->get(ExtensionManager::class);
-        $providers = $extensionManager->getProviders();
-        $meta = $extensionManager->listMeta();
-
-        foreach ($providers as $providerClass => $_provider) {
-            // Skip app-level providers (not true extensions)
-            // These are in the App\ namespace and would incorrectly pick up project routes
-            if (str_starts_with($providerClass, 'App\\')) {
-                continue;
-            }
-
-            $metadata = $meta[$providerClass] ?? [];
-            $extensionName = $metadata['slug'] ?? basename(str_replace('\\', '/', $providerClass));
-
-            // Use reflection to find the extension's routes file
-            $routeFile = $this->findExtensionRoutesFile($providerClass, $extensionName);
-
-            if ($routeFile !== null && file_exists($routeFile)) {
-                $docFile = $this->commentsGenerator->generateForExtension($extensionName, $routeFile, true);
-                if (is_string($docFile) && $docFile !== '') {
-                    $this->log("Generated extension doc: " . basename($docFile));
-                }
-            }
-        }
-    }
-
-    /**
-     * Find the routes file for an extension based on its provider class
-     *
-     * Searches for routes in common locations relative to the provider file:
-     * - Same directory as provider (src/routes.php)
-     * - Package root (routes.php next to composer.json)
-     * - Routes subdirectory (routes/*.php)
-     *
-     * @param string $providerClass The provider class name
-     * @param string $extensionName The extension slug/name
-     * @return string|null Path to routes file or null if not found
-     */
-    private function findExtensionRoutesFile(string $providerClass, string $extensionName): ?string
-    {
-        try {
-            $reflection = new \ReflectionClass($providerClass);
-            $providerFile = $reflection->getFileName();
-
-            if ($providerFile === false) {
-                return null;
-            }
-
-            // Find the package root by looking for composer.json
-            $packageRoot = $this->findPackageRoot(dirname($providerFile));
-            if ($packageRoot === null) {
-                return null;
-            }
-
-            // Common route file locations (in order of preference)
-            $routesPaths = [
-                // Routes in src directory (e.g., aegis/src/routes.php)
-                $packageRoot . '/src/routes.php',
-                // Routes in package root (e.g., payvia/routes.php)
-                $packageRoot . '/routes.php',
-                // Named routes file
-                $packageRoot . '/routes/' . strtolower($extensionName) . '.php',
-                // Generic routes directory
-                $packageRoot . '/routes/routes.php',
-                $packageRoot . '/routes/api.php',
-            ];
-
-            foreach ($routesPaths as $path) {
-                if (file_exists($path)) {
-                    $realPath = realpath($path);
-                    if ($realPath !== false) {
-                        return $realPath;
-                    }
-                }
-            }
-        } catch (\ReflectionException) {
-            // Provider class not found, skip
-        }
-
-        return null;
-    }
-
-    /**
-     * Find the package root directory by looking for composer.json
-     *
-     * @param string $startDir Directory to start searching from
-     * @param int $maxDepth Maximum directory levels to traverse up
-     * @return string|null Package root path or null if not found
-     */
-    private function findPackageRoot(string $startDir, int $maxDepth = 5): ?string
-    {
-        $dir = $startDir;
-
-        for ($i = 0; $i < $maxDepth; $i++) {
-            if (file_exists($dir . '/composer.json')) {
-                return $dir;
-            }
-
-            $parent = dirname($dir);
-            if ($parent === $dir) {
-                // Reached filesystem root
-                break;
-            }
-            $dir = $parent;
-        }
-
-        return null;
-    }
-
-    /**
-     * Force generate route documentation
-     */
-    private function forceGenerateRouteDocs(): void
-    {
-        $routePaths = [config($this->context, 'documentation.sources.routes')];
-
-        // Include framework routes if enabled
-        if ((bool) config($this->context, 'documentation.sources.include_framework_routes', true)) {
-            $frameworkRoutes = $this->resolveFrameworkRoutesPath();
-            if ($frameworkRoutes !== null && is_dir($frameworkRoutes)) {
-                $routePaths[] = $frameworkRoutes;
-                $this->log("Including framework routes from: $frameworkRoutes");
-            }
-        }
-
-        $routeFiles = $this->fileFinder->findRouteFiles($routePaths);
-
-        foreach ($routeFiles as $routeFileObj) {
-            $routeFile = $routeFileObj->getPathname();
-            $routeName = $routeFileObj->getBasename('.php');
-            $docFile = $this->commentsGenerator->generateForRouteFile($routeName, $routeFile, true);
-            if (is_string($docFile) && $docFile !== '') {
-                $this->log("Generated route doc: " . basename($docFile));
-            }
-        }
-    }
-
-    /**
-     * Resolve the framework routes path
-     *
-     * Checks for framework routes in:
-     * 1. Config override (documentation.sources.framework_routes)
-     * 2. Local development symlink (vendor/glueful/framework)
-     * 3. Installed package (vendor/glueful/framework)
-     *
-     * @return string|null Path to framework routes directory or null if not found
-     */
-    private function resolveFrameworkRoutesPath(): ?string
-    {
-        // Check config override first
-        $configPath = config($this->context, 'documentation.sources.framework_routes');
-        if (is_string($configPath) && $configPath !== '' && is_dir($configPath)) {
-            return $configPath;
-        }
-
-        // Check if running from within the framework itself
-        $frameworkSrcDir = dirname(__DIR__, 3); // Go up from src/Support/Documentation to framework root
-        $frameworkRoutesDir = $frameworkSrcDir . '/routes';
-        if (is_dir($frameworkRoutesDir) && file_exists($frameworkSrcDir . '/composer.json')) {
-            // Verify this is actually the framework by checking composer.json
-            $composerJson = @file_get_contents($frameworkSrcDir . '/composer.json');
-            if ($composerJson !== false && str_contains($composerJson, '"glueful/framework"')) {
-                return $frameworkRoutesDir;
-            }
-        }
-
-        // Check vendor directory
-        $vendorFramework = base_path($this->context, 'vendor/glueful/framework/routes');
-        if (is_dir($vendorFramework)) {
-            return $vendorFramework;
-        }
-
-        return null;
-    }
 
     /**
      * Write final openapi.json file
@@ -512,16 +364,6 @@ class OpenApiGenerator
     public function getDocGenerator(): DocGenerator
     {
         return $this->docGenerator;
-    }
-
-    /**
-     * Get the underlying CommentsDocGenerator instance
-     *
-     * @return CommentsDocGenerator
-     */
-    public function getCommentsGenerator(): CommentsDocGenerator
-    {
-        return $this->commentsGenerator;
     }
 
     /**

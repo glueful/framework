@@ -30,4 +30,13 @@ final class DocumentationConfigTest extends TestCase
         self::assertSame(['BearerAuth'], $config['middleware_map']['auth']);
         self::assertSame(['ApiKeyAuth'], $config['middleware_map']['api_key']);
     }
+
+    public function testGeneratorSwitchKeyIsRemoved(): void
+    {
+        // The comments generator was removed; reflect is the only generator, so
+        // there is no longer a 'generator' switch key in the config.
+        $config = require dirname(__DIR__, 4) . '/config/documentation.php';
+
+        self::assertArrayNotHasKey('generator', $config);
+    }
 }
