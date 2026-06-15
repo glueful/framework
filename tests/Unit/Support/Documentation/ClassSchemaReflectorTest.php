@@ -144,6 +144,16 @@ final class ClassSchemaReflectorTest extends TestCase
         self::assertArrayNotHasKey('description', $props['meta']);
     }
 
+    public function testResponseModeHonorsArrayOfForItems(): void
+    {
+        $schema = ClassSchemaReflector::toSchema(
+            \Glueful\Tests\Support\Fixtures\ResponseData\ResponseArrayOfFixture::class
+        );
+        $items = $schema['properties']['schema']['items'];
+        self::assertSame('object', $items['type']);
+        self::assertArrayHasKey('name', $items['properties']); // a ResponseFieldFixture field
+    }
+
     /**
      * @param  array<string, mixed> $schema
      * @return array<string, mixed>

@@ -129,6 +129,12 @@ final class RequestDataHydrator
                 if ($elementClass === null) {
                     continue;
                 }
+                if (!is_a($elementClass, RequestData::class, true)) {
+                    throw new \LogicException(
+                        "#[ArrayOf] on request DTO property '{$name}' must target a class implementing RequestData; "
+                        . "{$elementClass} does not."
+                    );
+                }
                 if ($depth + 1 >= self::MAX_DEPTH) {
                     $errors[$name][] = "The {$name} field is nested too deeply (max " . self::MAX_DEPTH . ').';
                     continue;

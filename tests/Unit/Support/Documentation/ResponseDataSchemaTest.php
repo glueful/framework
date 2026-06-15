@@ -87,6 +87,7 @@ final class ResponseDataSchemaTest extends TestCase
                 'message' => ['type' => 'string'],
                 'data' => ClassSchemaReflector::toSchema(PbPostData::class),
             ],
+            'required' => ['success', 'message', 'data'],
         ], $schema);
 
         // Spot-check the nested structure the envelope carries.

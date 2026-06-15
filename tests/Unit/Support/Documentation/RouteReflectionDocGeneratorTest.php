@@ -350,6 +350,17 @@ final class RouteReflectionDocGeneratorTest extends TestCase
         self::assertArrayNotHasKey('requestBody', $paths['/v1/closure']['post']);
     }
 
+    public function testEnvelopeMarksSuccessMessageDataRequired(): void
+    {
+        $router = $this->makeRouter();
+        $router->get('/v1/widget', [EnvelopeSampleController::class, 'show']);
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        $schema = $paths['/v1/widget']['get']['responses']['200']['content']['application/json']['schema'];
+        self::assertSame(['success', 'message', 'data'], $schema['required']);
+    }
+
     public function testApiResponseEnvelopeWrapsSchemaAsData(): void
     {
         $router = $this->makeRouter();
@@ -522,4 +533,27 @@ final class NullableSampleData
 {
     public string $id = '';
     public ?string $nickname = null;
+}
+
+/**
+ * Minimal ResponseData fixture for the envelope-required test.
+ */
+final class EnvelopeItemFixture implements \Glueful\Http\Contracts\ResponseData
+{
+    public function __construct(
+        public readonly string $id = '',
+    ) {
+    }
+}
+
+/**
+ * Controller stub that documents an enveloped response for the required-keys test.
+ */
+final class EnvelopeSampleController
+{
+    #[ApiResponse(200, EnvelopeItemFixture::class)]
+    public function show(): EnvelopeItemFixture
+    {
+        throw new \LogicException('doc only'); // never executed by the generator
+    }
 }

@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.58.1] - 2026-06-15 — Thuban
+
+> **Theme: OpenAPI response-schema fidelity.** Three additive generator fixes so reflected `ResponseData` DTOs document response bodies accurately: the success envelope marks `success`/`message`/`data` `required`, and `#[ArrayOf]` resolves array `items` in **response** mode (previously request-mode only). `#[ArrayOf]` is relaxed to target any class so response DTO item types need not implement `RequestData`; the request-DTO element constraint moves into the hydrator (fails loud, behavior unchanged). **Patch release; no migrations, no config/env changes.**
+
+### Fixed
+- **OpenAPI: success envelope marks `success`/`message`/`data` as `required`.** The single-object success envelope now matches the flat-pagination envelope, which already marked them. Additive; those keys are always present at runtime.
+- **OpenAPI: `#[ArrayOf]` is honored in response mode.** `ClassSchemaReflector` now resolves array `items` from `#[ArrayOf]` for `ResponseData` DTOs too (previously request-mode only), falling back to the `@var Foo[]` docblock. `#[ArrayOf]` is now the consistent array element-type source for both request and response DTOs. `ArrayOf` itself is relaxed to accept any existing class (not just `RequestData` implementations), so response DTO item types can be decorated without implementing `RequestData`.
+- **Hydrator: `#[ArrayOf]` on a request DTO still requires a `RequestData` element class** — now enforced in the hydrator (the constraint moved off `#[ArrayOf]` so response DTOs can use it). Fails loud (`LogicException`), consistent with the other v2 hydrator structural-misuse guards (dual-source, nested-source-attribute).
+
 ## [1.58.0] - 2026-06-15 — Thuban
 
 > **Theme: Typed request-DTO hydration v2.** `RequestData` DTOs gain array & nested-DTO hydration (failing as a clean `422`, never a `TypeError`/500), path/query field merging via `#[FromRoute]`/`#[FromQuery]`, `#[ArrayOf]` as the sole array element-type source for request DTOs, a `ValidatesSelf` cross-field hook, and app-registered custom rules via a built-in-aware `RuleRegistry`. Fully additive — flat scalar v1 DTOs are byte-identical, with no config or env changes — and closes the request-DTO v1 boundaries shipped in 1.57.0. **Minor release; no migrations.**

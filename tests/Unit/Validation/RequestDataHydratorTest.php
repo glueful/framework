@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Tests\Unit\Validation;
 
+use Glueful\Tests\Support\Fixtures\RequestData\ArrayOfNonRequestDataFixture;
 use Glueful\Tests\Support\Fixtures\RequestData\DualSourceFixture;
 use Glueful\Tests\Support\Fixtures\RequestData\FieldDefFixture;
 use Glueful\Tests\Support\Fixtures\RequestData\HasBadNestedFixture;
@@ -214,5 +215,16 @@ final class RequestDataHydratorTest extends TestCase
         } catch (ValidationException $e) {
             self::assertArrayHasKey('publishedAt', $e->errors());
         }
+    }
+
+    public function testArrayOfNonRequestDataClassThrowsLogicException(): void
+    {
+        // A request DTO whose #[ArrayOf] targets a class that does not implement
+        // RequestData is structural developer misuse — the hydrator must fail loud
+        // (LogicException) rather than silently mis-hydrating, consistent with the
+        // dual-source and nested-source-attribute guards.
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessageMatches('/items.*RequestData.*NonRequestDataFixture|NonRequestDataFixture.*RequestData/i');
+        $this->hydrator->hydrate(ArrayOfNonRequestDataFixture::class, ['items' => [['value' => 'x']]]);
     }
 }

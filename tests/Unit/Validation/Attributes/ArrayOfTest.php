@@ -17,6 +17,9 @@ final class ArrayOfNestedFixture implements RequestData
 
 final class ArrayOfPlainFixture
 {
+    public function __construct(public string $value = '')
+    {
+    }
 }
 
 final class ArrayOfTest extends TestCase
@@ -44,10 +47,12 @@ final class ArrayOfTest extends TestCase
         new ArrayOf('text');
     }
 
-    public function testRejectsClassNotImplementingRequestData(): void
+    public function testAcceptsClassNotImplementingRequestData(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
-        new ArrayOf(ArrayOfPlainFixture::class);
+        // Any existing class is valid — ArrayOf is usable on ResponseData DTOs too.
+        $arrayOf = new ArrayOf(ArrayOfPlainFixture::class);
+        self::assertSame(ArrayOfPlainFixture::class, $arrayOf->dtoClass());
+        self::assertFalse($arrayOf->isScalar());
     }
 
     public function testRejectsNonExistentClass(): void

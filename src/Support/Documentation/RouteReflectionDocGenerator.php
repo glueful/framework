@@ -394,6 +394,7 @@ final class RouteReflectionDocGenerator
                 'message' => ['type' => 'string'],
                 'data' => $schema,
             ],
+            'required' => ['success', 'message', 'data'],
         ];
     }
 
