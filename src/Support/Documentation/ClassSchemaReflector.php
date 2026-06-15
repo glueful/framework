@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace Glueful\Support\Documentation;
 
+use Glueful\Validation\Attributes\ArrayOf;
+use Glueful\Validation\Attributes\FromQuery;
+use Glueful\Validation\Attributes\FromRoute;
+
 /**
  * Reflects a typed DTO class into an OpenAPI object schema.
  *
@@ -30,12 +34,18 @@ final class ClassSchemaReflector
     /**
      * Reflect a DTO class into an OpenAPI object schema.
      *
+     * When `$requestMode` is true (v2 request DTO reflection): an `array` property's
+     * `items` is read from `#[ArrayOf]` ONLY (never `@var`; a bare `array` yields
+     * `items: {}`), and properties annotated `#[FromRoute]` / `#[FromQuery]` are
+     * excluded from the object schema (they are not body). The default mode (used by
+     * `ResponseData` reflection) is unchanged.
+     *
      * @param  class-string        $class
      * @return array<string, mixed>
      */
-    public static function toSchema(string $class): array
+    public static function toSchema(string $class, bool $requestMode = false): array
     {
-        return self::reflect($class, []);
+        return self::reflect($class, [], $requestMode);
     }
 
     /**
@@ -43,7 +53,7 @@ final class ClassSchemaReflector
      * @param  list<string>   $visited  classes already expanded on this branch (cycle guard)
      * @return array<string, mixed>
      */
-    private static function reflect(string $class, array $visited): array
+    private static function reflect(string $class, array $visited, bool $requestMode = false): array
     {
         if (!class_exists($class) || in_array($class, $visited, true) || count($visited) >= self::MAX_DEPTH) {
             return ['type' => 'object'];
@@ -59,7 +69,16 @@ final class ClassSchemaReflector
                 continue;
             }
 
-            $schema = self::propertySchema($property, $visited);
+            // In request mode, route/query-sourced fields are not part of the body.
+            if (
+                $requestMode
+                && ($property->getAttributes(FromRoute::class) !== []
+                    || $property->getAttributes(FromQuery::class) !== [])
+            ) {
+                continue;
+            }
+
+            $schema = self::propertySchema($property, $visited, $requestMode);
 
             $description = self::descriptionFor($property);
             if ($description !== null && !isset($schema['description'])) {
@@ -83,8 +102,11 @@ final class ClassSchemaReflector
      * @param  list<string> $visited
      * @return array<string, mixed>
      */
-    private static function propertySchema(\ReflectionProperty $property, array $visited): array
-    {
+    private static function propertySchema(
+        \ReflectionProperty $property,
+        array $visited,
+        bool $requestMode = false
+    ): array {
         $type = $property->getType();
 
         if (!$type instanceof \ReflectionNamedType) {
@@ -92,7 +114,7 @@ final class ClassSchemaReflector
             return ['type' => 'string'];
         }
 
-        $schema = self::schemaForType($type->getName(), $property, $visited);
+        $schema = self::schemaForType($type->getName(), $property, $visited, $requestMode);
 
         if ($type->allowsNull()) {
             $schema['nullable'] = true;
@@ -107,8 +129,12 @@ final class ClassSchemaReflector
      * @param  list<string> $visited
      * @return array<string, mixed>
      */
-    private static function schemaForType(string $name, \ReflectionProperty $property, array $visited): array
-    {
+    private static function schemaForType(
+        string $name,
+        \ReflectionProperty $property,
+        array $visited,
+        bool $requestMode = false
+    ): array {
         switch ($name) {
             case 'string':
                 return ['type' => 'string'];
@@ -119,7 +145,7 @@ final class ClassSchemaReflector
             case 'bool':
                 return ['type' => 'boolean'];
             case 'array':
-                return self::arraySchema($property, $visited);
+                return self::arraySchema($property, $visited, $requestMode);
             case 'mixed':
             case 'object':
                 return ['type' => 'object'];
@@ -138,17 +164,27 @@ final class ClassSchemaReflector
         }
 
         // Nested DTO — recurse (the reflect() guard handles cycles/depth).
-        return self::reflect($name, $visited);
+        return self::reflect($name, $visited, $requestMode);
     }
 
     /**
-     * Build an array schema, deriving the item type from a `@var` docblock when present.
+     * Build an array schema.
+     *
+     * In request mode, the element type is read from `#[ArrayOf]` ONLY: a scalar
+     * `#[ArrayOf]` maps to a scalar `items`, a DTO-class `#[ArrayOf]` recurses in
+     * request mode, and a bare `array` (no attribute) yields `items: {}`. The `@var`
+     * docblock is never consulted. In the default mode, the item type is derived from
+     * a `@var Foo[]` / `@var array<Foo>` docblock when present.
      *
      * @param  list<string> $visited
      * @return array<string, mixed>
      */
-    private static function arraySchema(\ReflectionProperty $property, array $visited): array
+    private static function arraySchema(\ReflectionProperty $property, array $visited, bool $requestMode = false): array
     {
+        if ($requestMode) {
+            return self::requestArraySchema($property, $visited);
+        }
+
         $itemClass = self::itemClassFromDocblock($property);
 
         if ($itemClass !== null && class_exists($itemClass)) {
@@ -170,6 +206,40 @@ final class ClassSchemaReflector
         }
 
         return ['type' => 'array', 'items' => new \stdClass()];
+    }
+
+    /**
+     * Build a request-mode array schema, resolving `items` from `#[ArrayOf]` only.
+     *
+     * A bare `array` (no `#[ArrayOf]`) is mixed → `items: {}`. A scalar `#[ArrayOf]`
+     * maps to the matching scalar schema; a DTO-class `#[ArrayOf]` recurses in
+     * request mode. The `@var` docblock is never read here.
+     *
+     * @param  list<string> $visited
+     * @return array<string, mixed>
+     */
+    private static function requestArraySchema(\ReflectionProperty $property, array $visited): array
+    {
+        $attributes = $property->getAttributes(ArrayOf::class);
+        if ($attributes === []) {
+            return ['type' => 'array', 'items' => new \stdClass()];
+        }
+
+        $arrayOf = $attributes[0]->newInstance();
+
+        if ($arrayOf->isScalar()) {
+            // ArrayOf's canonical scalar names are int|float|bool|string; scalarSchema
+            // maps `int` → {type: integer} etc. It is non-null for these canonicals.
+            $scalar = self::scalarSchema($arrayOf->type);
+            return ['type' => 'array', 'items' => $scalar ?? new \stdClass()];
+        }
+
+        $dtoClass = $arrayOf->dtoClass();
+        if ($dtoClass === null) {
+            return ['type' => 'array', 'items' => new \stdClass()];
+        }
+
+        return ['type' => 'array', 'items' => self::reflect($dtoClass, $visited, true)];
     }
 
     /**
