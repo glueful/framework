@@ -22,6 +22,8 @@ use Glueful\Validation\Support\RuleRegistry;
  */
 final class RequestDataHydrator
 {
+    private const MAX_DEPTH = 5;
+
     public function __construct(private readonly ?RuleRegistry $ruleRegistry = null)
     {
     }
@@ -122,8 +124,31 @@ final class RequestDataHydrator
                     }
                 }
                 $validated[$name] = $coerced;
+            } else {
+                $elementClass = $of->dtoClass();
+                if ($elementClass === null) {
+                    continue;
+                }
+                if ($depth + 1 >= self::MAX_DEPTH) {
+                    $errors[$name][] = "The {$name} field is nested too deeply (max " . self::MAX_DEPTH . ').';
+                    continue;
+                }
+                $built = [];
+                foreach ($validated[$name] as $i => $element) {
+                    if (!is_array($element)) {
+                        $errors["{$name}.{$i}"][] = "The {$name}.{$i} field must be an object.";
+                        continue;
+                    }
+                    [$child, $childErrors] = $this->build($elementClass, $element, [], [], $depth + 1, nested: true);
+                    foreach ($childErrors as $field => $messages) {
+                        $errors["{$name}.{$i}.{$field}"] = $messages;
+                    }
+                    if ($childErrors === []) {
+                        $built[$i] = $child;
+                    }
+                }
+                $validated[$name] = $built;
             }
-            // nested-DTO arrays handled in Task 7
         }
 
         // 3b. Required presence — a param absent from input with no default and not

@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace Glueful\Tests\Unit\Validation;
 
 use Glueful\Tests\Support\Fixtures\RequestData\DualSourceFixture;
+use Glueful\Tests\Support\Fixtures\RequestData\FieldDefFixture;
+use Glueful\Tests\Support\Fixtures\RequestData\HasBadNestedFixture;
+use Glueful\Tests\Support\Fixtures\RequestData\NestedArrayFixture;
+use Glueful\Tests\Support\Fixtures\RequestData\RecursiveFixture;
 use Glueful\Tests\Support\Fixtures\RequestData\RequiredNoRuleFixture;
 use Glueful\Tests\Support\Fixtures\RequestData\ScalarArrayFixture;
 use Glueful\Tests\Support\Fixtures\RequestData\SourcedFixture;
@@ -129,6 +133,69 @@ final class RequestDataHydratorTest extends TestCase
             self::fail('expected ValidationException');
         } catch (ValidationException $e) {
             self::assertArrayHasKey('ids', $e->errors()); // shallow 'array' rule fired; recursion never ran
+        }
+    }
+
+    public function testHydratesNestedDtoArray(): void
+    {
+        $dto = $this->hydrator->hydrate(NestedArrayFixture::class, [
+            'slug'   => 'post',
+            'schema' => [['name' => 'title', 'type' => 'string'], ['name' => 'body', 'type' => 'text']],
+        ]);
+        self::assertCount(2, $dto->schema);
+        self::assertInstanceOf(FieldDefFixture::class, $dto->schema[0]);
+        self::assertSame('title', $dto->schema[0]->name);
+    }
+
+    public function testInvalidNestedElementIs422WithDotPath(): void
+    {
+        try {
+            $this->hydrator->hydrate(NestedArrayFixture::class, [
+                'slug'   => 'post',
+                'schema' => [['name' => 'title', 'type' => 'string'], ['type' => 'text']],
+            ]);
+            self::fail('expected ValidationException');
+        } catch (ValidationException $e) {
+            self::assertArrayHasKey('schema.1.name', $e->errors());
+        }
+    }
+
+    public function testNonArrayNestedElementIs422WithDotPath(): void
+    {
+        try {
+            $this->hydrator->hydrate(NestedArrayFixture::class, [
+                'slug'   => 'post',
+                'schema' => ['not-an-object'], // element 0 is a scalar, not an object
+            ]);
+            self::fail('expected ValidationException');
+        } catch (ValidationException $e) {
+            self::assertArrayHasKey('schema.0', $e->errors());
+        }
+    }
+
+    public function testNestedSourceAttributeThrowsLogicException(): void
+    {
+        $this->expectException(\LogicException::class);
+        $this->hydrator->hydrate(HasBadNestedFixture::class, ['rows' => [['oops' => 'x']]]);
+    }
+
+    public function testDepthCapProducesValidationErrorNotOverflow(): void
+    {
+        // Build 6-deep nested 'children' (exceeds MAX_DEPTH=5).
+        $payload = [];
+        $node = &$payload;
+        for ($i = 0; $i < 6; $i++) {
+            $node['children'] = [[]];
+            $node = &$node['children'][0];
+        }
+        unset($node);
+
+        try {
+            $this->hydrator->hydrate(RecursiveFixture::class, $payload);
+            self::fail('expected ValidationException from the depth cap');
+        } catch (ValidationException $e) {
+            // The cap fires deterministically at the deepest in-bounds frame (no overflow).
+            self::assertArrayHasKey('children.0.children.0.children.0.children.0.children', $e->errors());
         }
     }
 }
