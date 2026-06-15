@@ -29,6 +29,18 @@ final class ValidationProvider extends BaseServiceProvider
         $defs[\Glueful\Validation\Middleware\ValidationMiddleware::class] =
             $this->autowire(\Glueful\Validation\Middleware\ValidationMiddleware::class);
 
+        // RuleRegistry - holds app-registered custom rules, reserving built-in names
+        $defs[\Glueful\Validation\Support\RuleRegistry::class] = new FactoryDefinition(
+            \Glueful\Validation\Support\RuleRegistry::class,
+            static fn (): \Glueful\Validation\Support\RuleRegistry => new \Glueful\Validation\Support\RuleRegistry(
+                \Glueful\Validation\Support\RuleParser::builtinRuleNames()
+            ),
+        );
+
+        // RequestDataHydrator - hydrates typed RequestData DTOs from request input
+        $defs[\Glueful\Validation\RequestDataHydrator::class] =
+            $this->autowire(\Glueful\Validation\RequestDataHydrator::class);
+
         // ValidatedRequest factory - creates from current request
         $defs[\Glueful\Validation\ValidatedRequest::class] = new FactoryDefinition(
             \Glueful\Validation\ValidatedRequest::class,

@@ -8,8 +8,14 @@ use PHPUnit\Framework\TestCase;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Routing\Router;
 use Glueful\Routing\RouteCache;
+use Glueful\Tests\Support\Fixtures\RequestData\ReservedNameInput;
+use Glueful\Tests\Support\Fixtures\RequestData\SourcedFixture;
+use Glueful\Tests\Support\Fixtures\Validation\ReservedNameRule;
 use Glueful\Validation\Attributes\Rule;
 use Glueful\Validation\Contracts\RequestData;
+use Glueful\Validation\RequestDataHydrator;
+use Glueful\Validation\Support\RuleParser;
+use Glueful\Validation\Support\RuleRegistry;
 use Glueful\Validation\ValidationException;
 use Psr\Container\ContainerInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -39,6 +45,34 @@ class PostFixtureController
     public function store(CreatePostInput $input): array
     {
         return ['title' => $input->title, 'body' => $input->body];
+    }
+}
+
+/**
+ * Fixture controller whose method takes a source-aware RequestData DTO.
+ */
+class SourcedFixtureController
+{
+    /**
+     * @return array<string, mixed>
+     */
+    public function show(SourcedFixture $input): array
+    {
+        return ['uuid' => $input->uuid, 'status' => $input->status, 'title' => $input->title];
+    }
+}
+
+/**
+ * Fixture controller whose DTO field uses an app-registered custom rule.
+ */
+class ReservedNameController
+{
+    /**
+     * @return array<string, mixed>
+     */
+    public function store(ReservedNameInput $input): array
+    {
+        return ['name' => $input->name];
     }
 }
 
@@ -140,6 +174,56 @@ class RequestDataInjectionTest extends TestCase
             [],
             ['CONTENT_TYPE' => 'application/json'],
             'not json'
+        );
+
+        $this->expectException(ValidationException::class);
+        $this->router->dispatch($request);
+    }
+
+    public function testResolvesRouteAndQuerySourcesThroughRouter(): void
+    {
+        $this->container->set(SourcedFixtureController::class, new SourcedFixtureController());
+        $this->router->get('/items/{uuid}', [SourcedFixtureController::class, 'show']);
+
+        $request = Request::create(
+            '/items/abc',
+            'GET',
+            ['status' => 'published'],
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['title' => 'Hi'])
+        );
+        $response = $this->router->dispatch($request);
+
+        $payload = json_decode((string) $response->getContent(), true);
+
+        $this->assertSame('abc', $payload['uuid']);
+        $this->assertSame('published', $payload['status']);
+        $this->assertSame('Hi', $payload['title']);
+    }
+
+    public function testAppRegisteredRuleCarriesThroughRouterAsValidationException(): void
+    {
+        $registry = new RuleRegistry(RuleParser::builtinRuleNames());
+        $registry->register('reserved_name', ReservedNameRule::class);
+
+        $this->container->set(RuleRegistry::class, $registry);
+        $this->container->set(
+            RequestDataHydrator::class,
+            new RequestDataHydrator($registry)
+        );
+        $this->container->set(ReservedNameController::class, new ReservedNameController());
+        $this->router->post('/reserved', [ReservedNameController::class, 'store']);
+
+        $request = Request::create(
+            '/reserved',
+            'POST',
+            [],
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['name' => 'admin'])
         );
 
         $this->expectException(ValidationException::class);
