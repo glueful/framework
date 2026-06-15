@@ -846,7 +846,12 @@ class Router
                         }
                         $body = $decoded;
                     }
-                    $args[] = $this->requestDataHydrator()->hydrate($typeName, $body);
+                    $args[] = $this->requestDataHydrator()->hydrate(
+                        $typeName,
+                        $body,
+                        $params,
+                        $request->query->all(),
+                    );
                     continue;
                 }
 
