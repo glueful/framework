@@ -8,6 +8,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ### Fixed
 - **OpenAPI: success envelope marks `success`/`message`/`data` as `required`.** The single-object success envelope now matches the flat-pagination envelope, which already marked them. Additive; those keys are always present at runtime.
+- **OpenAPI: `#[ArrayOf]` is honored in response mode.** `ClassSchemaReflector` now resolves array `items` from `#[ArrayOf]` for `ResponseData` DTOs too (previously request-mode only), falling back to the `@var Foo[]` docblock. `#[ArrayOf]` is now the consistent array element-type source for both request and response DTOs. `ArrayOf` itself is relaxed to accept any existing class (not just `RequestData` implementations), so response DTO item types can be decorated without implementing `RequestData`.
 
 ## [1.58.0] - 2026-06-15 — Thuban
 

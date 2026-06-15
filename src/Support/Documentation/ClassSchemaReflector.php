@@ -170,19 +170,27 @@ final class ClassSchemaReflector
     /**
      * Build an array schema.
      *
-     * In request mode, the element type is read from `#[ArrayOf]` ONLY: a scalar
-     * `#[ArrayOf]` maps to a scalar `items`, a DTO-class `#[ArrayOf]` recurses in
-     * request mode, and a bare `array` (no attribute) yields `items: {}`. The `@var`
-     * docblock is never consulted. In the default mode, the item type is derived from
-     * a `@var Foo[]` / `@var array<Foo>` docblock when present.
+     * `#[ArrayOf]` is authoritative in BOTH request and response mode when present:
+     * a scalar `#[ArrayOf]` maps to a scalar `items`, a class `#[ArrayOf]` recurses
+     * in the CURRENT mode (so request items are reflected as request DTOs and response
+     * items as response DTOs). When absent: request mode yields `items: {}` (the `@var`
+     * docblock is never read for request DTOs); response mode falls back to the
+     * `@var Foo[]` / `@var array<Foo>` docblock when present, then `items: {}`.
      *
      * @param  list<string> $visited
      * @return array<string, mixed>
      */
     private static function arraySchema(\ReflectionProperty $property, array $visited, bool $requestMode = false): array
     {
+        // #[ArrayOf] is authoritative in BOTH modes when present.
+        $attributes = $property->getAttributes(ArrayOf::class);
+        if ($attributes !== []) {
+            return self::arrayOfSchema($attributes[0]->newInstance(), $visited, $requestMode);
+        }
+
+        // No #[ArrayOf]: request mode is mixed; response mode falls back to @var.
         if ($requestMode) {
-            return self::requestArraySchema($property, $visited);
+            return ['type' => 'array', 'items' => new \stdClass()];
         }
 
         $itemClass = self::itemClassFromDocblock($property);
@@ -209,24 +217,13 @@ final class ClassSchemaReflector
     }
 
     /**
-     * Build a request-mode array schema, resolving `items` from `#[ArrayOf]` only.
-     *
-     * A bare `array` (no `#[ArrayOf]`) is mixed → `items: {}`. A scalar `#[ArrayOf]`
-     * maps to the matching scalar schema; a DTO-class `#[ArrayOf]` recurses in
-     * request mode. The `@var` docblock is never read here.
+     * Resolve a `#[ArrayOf]` to an array schema, recursing DTO items in the CURRENT mode.
      *
      * @param  list<string> $visited
      * @return array<string, mixed>
      */
-    private static function requestArraySchema(\ReflectionProperty $property, array $visited): array
+    private static function arrayOfSchema(ArrayOf $arrayOf, array $visited, bool $requestMode): array
     {
-        $attributes = $property->getAttributes(ArrayOf::class);
-        if ($attributes === []) {
-            return ['type' => 'array', 'items' => new \stdClass()];
-        }
-
-        $arrayOf = $attributes[0]->newInstance();
-
         if ($arrayOf->isScalar()) {
             // ArrayOf's canonical scalar names are int|float|bool|string; scalarSchema
             // maps `int` → {type: integer} etc. It is non-null for these canonicals.
@@ -239,7 +236,7 @@ final class ClassSchemaReflector
             return ['type' => 'array', 'items' => new \stdClass()];
         }
 
-        return ['type' => 'array', 'items' => self::reflect($dtoClass, $visited, true)];
+        return ['type' => 'array', 'items' => self::reflect($dtoClass, $visited, $requestMode)];
     }
 
     /**
