@@ -186,7 +186,13 @@ final class RequestDataHydrator
         /** @var RequestData $instance */
         $instance = $ref->newInstanceArgs($args);
 
-        // 6. ValidatesSelf (Task 8 adds the body).
+        // 6. Cross-field validation hook.
+        if ($instance instanceof ValidatesSelf) {
+            $selfErrors = $instance->validate();
+            if ($selfErrors !== []) {
+                return [null, $selfErrors];
+            }
+        }
 
         return [$instance, []];
     }

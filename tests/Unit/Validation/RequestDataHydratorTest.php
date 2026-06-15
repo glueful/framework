@@ -8,6 +8,7 @@ use Glueful\Tests\Support\Fixtures\RequestData\DualSourceFixture;
 use Glueful\Tests\Support\Fixtures\RequestData\FieldDefFixture;
 use Glueful\Tests\Support\Fixtures\RequestData\HasBadNestedFixture;
 use Glueful\Tests\Support\Fixtures\RequestData\NestedArrayFixture;
+use Glueful\Tests\Support\Fixtures\RequestData\PublishFixture;
 use Glueful\Tests\Support\Fixtures\RequestData\RecursiveFixture;
 use Glueful\Tests\Support\Fixtures\RequestData\RequiredNoRuleFixture;
 use Glueful\Tests\Support\Fixtures\RequestData\ScalarArrayFixture;
@@ -196,6 +197,22 @@ final class RequestDataHydratorTest extends TestCase
         } catch (ValidationException $e) {
             // The cap fires deterministically at the deepest in-bounds frame (no overflow).
             self::assertArrayHasKey('children.0.children.0.children.0.children.0.children', $e->errors());
+        }
+    }
+
+    public function testValidatesSelfPasses(): void
+    {
+        $dto = $this->hydrator->hydrate(PublishFixture::class, ['status' => 'draft']);
+        self::assertInstanceOf(PublishFixture::class, $dto);
+    }
+
+    public function testValidatesSelfErrorsBecome422(): void
+    {
+        try {
+            $this->hydrator->hydrate(PublishFixture::class, ['status' => 'published']);
+            self::fail('expected ValidationException');
+        } catch (ValidationException $e) {
+            self::assertArrayHasKey('publishedAt', $e->errors());
         }
     }
 }
