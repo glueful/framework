@@ -6,6 +6,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+- **OpenAPI: success envelope marks `success`/`message`/`data` as `required`.** The single-object success envelope now matches the flat-pagination envelope, which already marked them. Additive; those keys are always present at runtime.
+
 ## [1.58.0] - 2026-06-15 — Thuban
 
 > **Theme: Typed request-DTO hydration v2.** `RequestData` DTOs gain array & nested-DTO hydration (failing as a clean `422`, never a `TypeError`/500), path/query field merging via `#[FromRoute]`/`#[FromQuery]`, `#[ArrayOf]` as the sole array element-type source for request DTOs, a `ValidatesSelf` cross-field hook, and app-registered custom rules via a built-in-aware `RuleRegistry`. Fully additive — flat scalar v1 DTOs are byte-identical, with no config or env changes — and closes the request-DTO v1 boundaries shipped in 1.57.0. **Minor release; no migrations.**

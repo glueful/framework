@@ -122,6 +122,7 @@ final class CollectionResponseSchemaTest extends TestCase
                 'message' => ['type' => 'string'],
                 'data' => ['type' => 'array', 'items' => ClassSchemaReflector::toSchema(CsPostData::class)],
             ],
+            'required' => ['success', 'message', 'data'],
         ], $schema);
     }
 
