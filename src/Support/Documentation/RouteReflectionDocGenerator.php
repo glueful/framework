@@ -15,6 +15,9 @@ use Glueful\Routing\Attributes\QueryParam;
 use Glueful\Routing\Attributes\ResponseStatus;
 use Glueful\Routing\Route;
 use Glueful\Routing\Router;
+use Glueful\Validation\Attributes\ArrayOf;
+use Glueful\Validation\Attributes\FromQuery;
+use Glueful\Validation\Attributes\FromRoute;
 use Glueful\Validation\Attributes\Rule;
 use Glueful\Validation\Attributes\Validate;
 use Glueful\Validation\Contracts\RequestData;
@@ -135,10 +138,13 @@ final class RouteReflectionDocGenerator
             $this->buildParameters($route),
             $this->buildFieldSelectionParameters($route),
             $this->buildQueryParamAttributes($route->getHandler()),
+            $this->buildRequestDataSourceParameters($route),
         );
         // Dedupe by (in, name); later entries win, so an explicit #[QueryParam]
         // overrides a generated query param (e.g. field-selection) of the same
-        // name. Path params (in: path) never collide with query params.
+        // name, and a #[FromRoute] source param (appended last) replaces the
+        // generic path param of the same name with its rule-derived schema.
+        // Path params (in: path) never collide with query params.
         $byKey = [];
         foreach ($ordered as $param) {
             $byKey[($param['in'] ?? '') . ':' . ($param['name'] ?? '')] = $param;
@@ -663,7 +669,7 @@ final class RouteReflectionDocGenerator
 
             $rules = $this->collectRuleStrings(new \ReflectionClass($dtoClass));
 
-            $shape = ClassSchemaReflector::toSchema($dtoClass);
+            $shape = ClassSchemaReflector::toSchema($dtoClass, requestMode: true);
             $rulesSchema = ValidationRuleSchema::toObjectSchema($rules);
 
             $merged = $this->mergeShapeWithRules($shape, $rulesSchema);
@@ -1077,6 +1083,197 @@ final class RouteReflectionDocGenerator
         }
 
         return $parameters;
+    }
+
+    /**
+     * Build `in: path` / `in: query` parameters from a handler's RequestData DTO
+     * source attributes (`#[FromRoute]` / `#[FromQuery]`).
+     *
+     * For the route's typed {@see RequestData} parameter, each constructor param
+     * carrying a source attribute becomes an OpenAPI parameter:
+     *  - `#[FromRoute]` → `in: path`, always required; the field name MUST match a
+     *    `{placeholder}` in the route path or generation fails loud.
+     *  - `#[FromQuery]` → `in: query`, required when the field's `#[Rule]` declares
+     *    `required` OR the constructor param has no default value.
+     * The per-field schema is derived from the field's `#[Rule]` (carrying
+     * `format`/`enum`/bounds), defaulting to `{type: string}`.
+     *
+     * Fails loud (throws {@see \LogicException}) on a field declaring BOTH source
+     * attributes, a `#[FromRoute]` with no matching placeholder, or a source
+     * attribute on a NESTED DTO reachable via `#[ArrayOf]`. Handlers without a
+     * RequestData parameter (or with an unresolvable one) yield no parameters.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function buildRequestDataSourceParameters(Route $route): array
+    {
+        $reflection = $this->handlerReflection($route->getHandler());
+        if ($reflection === null) {
+            return [];
+        }
+
+        $dtoClass = $this->findRequestDataParam($reflection);
+        if ($dtoClass === null) {
+            return [];
+        }
+
+        $dtoReflection = new \ReflectionClass($dtoClass);
+        $ctor = $dtoReflection->getConstructor();
+        if ($ctor === null) {
+            return [];
+        }
+
+        $placeholders = $route->getParamNames();
+        $parameters = [];
+
+        foreach ($ctor->getParameters() as $param) {
+            $hasFromRoute = $param->getAttributes(FromRoute::class) !== [];
+            $hasFromQuery = $param->getAttributes(FromQuery::class) !== [];
+
+            if ($hasFromRoute && $hasFromQuery) {
+                throw new \LogicException(sprintf(
+                    'RequestData field %s::$%s declares both #[FromRoute] and #[FromQuery]; pick one source.',
+                    $dtoClass,
+                    $param->getName(),
+                ));
+            }
+
+            if (!$hasFromRoute && !$hasFromQuery) {
+                continue;
+            }
+
+            $name = $param->getName();
+            $schema = $this->sourceFieldSchema($param);
+
+            if ($hasFromRoute) {
+                if (!in_array($name, $placeholders, true)) {
+                    throw new \LogicException(sprintf(
+                        '#[FromRoute] field %s::$%s has no {%s} placeholder in route %s',
+                        $dtoClass,
+                        $name,
+                        $name,
+                        $route->getPath(),
+                    ));
+                }
+
+                $parameters[] = [
+                    'name' => $name,
+                    'in' => 'path',
+                    'required' => true,
+                    'description' => '',
+                    'schema' => $schema,
+                ];
+                continue;
+            }
+
+            $parameters[] = [
+                'name' => $name,
+                'in' => 'query',
+                'required' => $this->fromQueryRequired($param),
+                'description' => '',
+                'schema' => $schema,
+            ];
+        }
+
+        // A source attribute on a nested DTO (reachable via #[ArrayOf]) is a
+        // developer error — the hydrator only honours sources on the top-level DTO.
+        $this->assertNoNestedSources($dtoClass, [$dtoClass]);
+
+        return $parameters;
+    }
+
+    /**
+     * Derive the OpenAPI schema for a source-attributed constructor param from its
+     * `#[Rule]` (carrying `type`/`format`/`enum`/bounds). A param with no `#[Rule]`
+     * defaults to `{type: string}`.
+     *
+     * @return array<string, mixed>
+     */
+    private function sourceFieldSchema(\ReflectionParameter $param): array
+    {
+        foreach ($param->getAttributes(Rule::class) as $attr) {
+            $rule = $attr->newInstance()->rules;
+            $schema = ValidationRuleSchema::toObjectSchema([$param->getName() => $rule]);
+            $property = $schema['properties'][$param->getName()] ?? null;
+            if (is_array($property)) {
+                return $property;
+            }
+        }
+
+        return ['type' => 'string'];
+    }
+
+    /**
+     * A `#[FromQuery]` field is required when its `#[Rule]` declares `required` OR
+     * the constructor param has no default value.
+     */
+    private function fromQueryRequired(\ReflectionParameter $param): bool
+    {
+        foreach ($param->getAttributes(Rule::class) as $attr) {
+            $rule = $attr->newInstance()->rules;
+            if (str_contains($rule, 'required')) {
+                return true;
+            }
+        }
+
+        return !$param->isDefaultValueAvailable();
+    }
+
+    /**
+     * Recursively assert that no NESTED DTO (reachable via `#[ArrayOf]` class
+     * fields) carries a `#[FromRoute]`/`#[FromQuery]` source attribute.
+     *
+     * Source attributes are only valid on the top-level injected DTO; finding one
+     * on a nested element is a developer error and fails generation loud.
+     *
+     * @param class-string  $dtoClass
+     * @param list<string>  $visited  classes already walked on this branch (cycle guard)
+     */
+    private function assertNoNestedSources(string $dtoClass, array $visited): void
+    {
+        $ctor = (new \ReflectionClass($dtoClass))->getConstructor();
+        if ($ctor === null) {
+            return;
+        }
+
+        foreach ($ctor->getParameters() as $param) {
+            foreach ($param->getAttributes(ArrayOf::class) as $attr) {
+                $nested = $attr->newInstance()->dtoClass();
+                if ($nested === null || in_array($nested, $visited, true)) {
+                    continue;
+                }
+
+                $this->assertNestedDtoHasNoSources($nested);
+                $this->assertNoNestedSources($nested, [...$visited, $nested]);
+            }
+        }
+    }
+
+    /**
+     * Throw when a nested DTO's constructor declares any source attribute.
+     *
+     * @param class-string $dtoClass
+     */
+    private function assertNestedDtoHasNoSources(string $dtoClass): void
+    {
+        $ctor = (new \ReflectionClass($dtoClass))->getConstructor();
+        if ($ctor === null) {
+            return;
+        }
+
+        foreach ($ctor->getParameters() as $param) {
+            if (
+                $param->getAttributes(FromRoute::class) !== []
+                || $param->getAttributes(FromQuery::class) !== []
+            ) {
+                throw new \LogicException(sprintf(
+                    'Nested RequestData %s::$%s declares a #[FromRoute]/#[FromQuery] source attribute; '
+                    . 'source attributes are only valid on the top-level injected DTO.',
+                    $dtoClass,
+                    $param->getName(),
+                ));
+            }
+        }
     }
 
     /**
