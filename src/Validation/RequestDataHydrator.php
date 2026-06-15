@@ -100,7 +100,31 @@ final class RequestDataHydrator
             $validated = $filtered + $raw;
         }
 
-        // (Array + nested handling added in Tasks 6/7; for now arrays pass through.)
+        // 3. Array element handling for #[ArrayOf] fields (scalar in this task).
+        foreach ($ctor->getParameters() as $param) {
+            $name    = $param->getName();
+            $arrayOf = $param->getAttributes(ArrayOf::class);
+            if (
+                $arrayOf === [] || isset($errors[$name]) || !array_key_exists($name, $validated)
+                || !is_array($validated[$name])
+            ) {
+                continue; // no #[ArrayOf], or parent rule already failed, or not an array
+            }
+            $of = $arrayOf[0]->newInstance();
+            if ($of->isScalar()) {
+                $coerced = [];
+                foreach ($validated[$name] as $i => $element) {
+                    $result = $this->coerceScalar($element, $of->type);
+                    if ($result['ok']) {
+                        $coerced[$i] = $result['value'];
+                    } else {
+                        $errors["{$name}.{$i}"][] = "The {$name}.{$i} field must be of type {$of->type}.";
+                    }
+                }
+                $validated[$name] = $coerced;
+            }
+            // nested-DTO arrays handled in Task 7
+        }
 
         // 3b. Required presence — a param absent from input with no default and not
         //     nullable would TypeError at construction; make it a 422 instead.
@@ -154,6 +178,20 @@ final class RequestDataHydrator
             'bool'   => is_bool($value) ? $value : filter_var($value, FILTER_VALIDATE_BOOL),
             'string' => is_scalar($value) ? (string) $value : $value,
             default  => $value,
+        };
+    }
+
+    /** @return array{ok: bool, value: mixed} */
+    private function coerceScalar(mixed $value, string $type): array
+    {
+        return match ($type) {
+            'int'    => is_int($value) || (is_string($value) && preg_match('/^-?\d+$/', $value) === 1)
+                            ? ['ok' => true, 'value' => (int) $value] : ['ok' => false, 'value' => null],
+            'float'  => is_int($value) || is_float($value) || (is_string($value) && is_numeric($value))
+                            ? ['ok' => true, 'value' => (float) $value] : ['ok' => false, 'value' => null],
+            'bool'   => is_bool($value) ? ['ok' => true, 'value' => $value] : ['ok' => false, 'value' => null],
+            'string' => is_string($value) ? ['ok' => true, 'value' => $value] : ['ok' => false, 'value' => null],
+            default  => ['ok' => false, 'value' => null],
         };
     }
 }

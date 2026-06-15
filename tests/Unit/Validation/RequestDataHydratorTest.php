@@ -6,6 +6,7 @@ namespace Glueful\Tests\Unit\Validation;
 
 use Glueful\Tests\Support\Fixtures\RequestData\DualSourceFixture;
 use Glueful\Tests\Support\Fixtures\RequestData\RequiredNoRuleFixture;
+use Glueful\Tests\Support\Fixtures\RequestData\ScalarArrayFixture;
 use Glueful\Tests\Support\Fixtures\RequestData\SourcedFixture;
 use Glueful\Validation\Attributes\Rule;
 use Glueful\Validation\Contracts\RequestData;
@@ -103,5 +104,31 @@ final class RequestDataHydratorTest extends TestCase
     {
         $this->expectException(\LogicException::class);
         $this->hydrator->hydrate(DualSourceFixture::class, [], ['x' => '1'], ['x' => '2']);
+    }
+
+    public function testCoercesScalarArrayElements(): void
+    {
+        $dto = $this->hydrator->hydrate(ScalarArrayFixture::class, ['ids' => ['1', '2', 3]]);
+        self::assertSame([1, 2, 3], $dto->ids);
+    }
+
+    public function testNonCoercibleScalarElementIs422WithDotPath(): void
+    {
+        try {
+            $this->hydrator->hydrate(ScalarArrayFixture::class, ['ids' => [1, 'nope']]);
+            self::fail('expected ValidationException');
+        } catch (ValidationException $e) {
+            self::assertArrayHasKey('ids.1', $e->errors());
+        }
+    }
+
+    public function testNonArrayValueForArrayFieldIs422NotTypeError(): void
+    {
+        try {
+            $this->hydrator->hydrate(ScalarArrayFixture::class, ['ids' => 'not-an-array']);
+            self::fail('expected ValidationException');
+        } catch (ValidationException $e) {
+            self::assertArrayHasKey('ids', $e->errors()); // shallow 'array' rule fired; recursion never ran
+        }
     }
 }
