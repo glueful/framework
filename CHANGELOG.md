@@ -6,6 +6,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.58.0] - 2026-06-15 — Thuban
+
+> **Theme: Typed request-DTO hydration v2.** `RequestData` DTOs gain array & nested-DTO hydration (failing as a clean `422`, never a `TypeError`/500), path/query field merging via `#[FromRoute]`/`#[FromQuery]`, `#[ArrayOf]` as the sole array element-type source for request DTOs, a `ValidatesSelf` cross-field hook, and app-registered custom rules via a built-in-aware `RuleRegistry`. Fully additive — flat scalar v1 DTOs are byte-identical, with no config or env changes — and closes the request-DTO v1 boundaries shipped in 1.57.0. **Minor release; no migrations.**
+
 ### Added
 - **Typed request-DTO hydration v2 — closes the v1 request-DTO boundaries** (the "v1 sharp edges" noted under 1.57.0 no longer apply). `RequestData` DTOs now hydrate arrays and nested DTOs (failing as 422, never a `TypeError`/500 — the non-scalar/un-ruled-param sharp edge is gone), pull fields from path/query via `#[FromRoute]`/`#[FromQuery]` (v1 was JSON-body-only), declare array element types with `#[ArrayOf]` (the sole element-type source for request DTOs — `@var` is not read), run cross-field checks via the `ValidatesSelf` contract, and resolve app-registered custom rules through a built-in-aware `RuleRegistry`. Source-attribute misuse (a field with both `#[FromRoute]` and `#[FromQuery]`, or a source attribute on a nested DTO, or a `#[FromRoute]` with no route placeholder) fails loud. Flat scalar DTOs are unchanged. See `docs/REQUEST_DTOS.md`.
 
