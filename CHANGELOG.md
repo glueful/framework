@@ -6,6 +6,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Added
+- **Typed request-DTO hydration v2.** `RequestData` DTOs now hydrate arrays and nested DTOs (failing as 422, never a `TypeError`/500), pull fields from path/query via `#[FromRoute]`/`#[FromQuery]`, declare array element types with `#[ArrayOf]`, run cross-field checks via the `ValidatesSelf` contract, and resolve app-registered custom rules through `RuleRegistry`. Flat scalar DTOs are unchanged. See `docs/REQUEST_DTOS.md`.
+
 ## [1.57.0] - 2026-06-14 — Sargas
 
 > **Theme: Types-first I/O & a single code-first OpenAPI generator.** A typed-DTO request/response convention (`RequestData`/`ResponseData`, `CollectionResponse`/`PaginatedResponse`, `#[Rule]`/`#[ResponseStatus]`/`HasResponseMessage`) where types drive both runtime enveloping and the generated spec, plus auto-`422`, `JsonResource`/`ResourceCollection` auto-normalization, and a `scaffold:dto` command. The OpenAPI generator is consolidated to a single **code-first `reflect`** engine: the legacy docblock-parsing `comments` generator is removed, structure is derived from the live route table + types, and a minimal typed attribute surface (`#[ApiOperation]`/`#[QueryParam]`/`#[ApiRequestBody]`/`#[ApiResponse]`) documents only what types can't express. **Minor release** (new features + the comment-generator removal + default changes), per the pre-public cadence. **Has `### Upgrade Notes`.**
