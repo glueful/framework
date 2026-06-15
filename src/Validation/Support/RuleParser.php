@@ -25,9 +25,22 @@ class RuleParser
 {
     private ?ApplicationContext $context;
 
-    public function __construct(?ApplicationContext $context = null)
+    private ?RuleRegistry $registry;
+
+    public function __construct(?ApplicationContext $context = null, ?RuleRegistry $registry = null)
     {
         $this->context = $context;
+        $this->registry = $registry;
+    }
+
+    /**
+     * Built-in rule names, exposed so RuleRegistry can reserve them.
+     *
+     * @return list<string>
+     */
+    public static function builtinRuleNames(): array
+    {
+        return array_keys((new self())->ruleMap);
     }
 
     /**
@@ -367,6 +380,16 @@ class RuleParser
      */
     protected function resolveCustomRule(string $name, array $parameters): ?Rule
     {
+        // Check the app-registered rule registry. This path is only reached when the
+        // name is NOT a built-in (built-ins are resolved first in parseRule()), so a
+        // registered rule can never shadow a built-in.
+        if ($this->registry !== null && $this->registry->has($name)) {
+            $class = $this->registry->classFor($name);
+            if ($class !== null) {
+                return $this->createCustomRule($class, $parameters);
+            }
+        }
+
         // Check for app-defined rules in App namespace
         $appClassName = 'App\\Validation\\Rules\\' . $this->studly($name);
         if (class_exists($appClassName) && is_subclass_of($appClassName, Rule::class)) {
