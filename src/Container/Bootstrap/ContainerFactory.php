@@ -174,7 +174,6 @@ final class ContainerFactory
             \Glueful\Queue\ServiceProvider\QueueProvider::class,
             \Glueful\Container\Providers\LockProvider::class,
             \Glueful\Container\Providers\FileProvider::class,
-            \Glueful\Container\Providers\SpaProvider::class,
             \Glueful\Container\Providers\HttpPsr15Provider::class,
             \Glueful\Container\Providers\VarDumperProvider::class,
             \Glueful\Container\Providers\ControllerProvider::class,
