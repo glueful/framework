@@ -1157,21 +1157,31 @@ final class RouteReflectionDocGenerator
                     ));
                 }
 
+                $fromRoute = $param->getAttributes(FromRoute::class)[0]->newInstance();
+                if ($fromRoute->example !== null) {
+                    $schema['example'] = $fromRoute->example;
+                }
+
                 $parameters[] = [
                     'name' => $name,
                     'in' => 'path',
                     'required' => true,
-                    'description' => '',
+                    'description' => $fromRoute->description ?? '',
                     'schema' => $schema,
                 ];
                 continue;
+            }
+
+            $fromQuery = $param->getAttributes(FromQuery::class)[0]->newInstance();
+            if ($fromQuery->example !== null) {
+                $schema['example'] = $fromQuery->example;
             }
 
             $parameters[] = [
                 'name' => $name,
                 'in' => 'query',
                 'required' => $this->fromQueryRequired($param),
-                'description' => '',
+                'description' => $fromQuery->description ?? '',
                 'schema' => $schema,
             ];
         }

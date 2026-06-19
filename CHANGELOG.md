@@ -8,6 +8,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ### Added
 - **OpenAPI: inferred error responses now include JSON body schemas.** The reflect generator's automatic `401`/`403` (secured routes) and `429` (rate-limited routes) responses now carry a default `{success,message}` JSON schema, while keeping rate-limit headers and preserving explicit `#[ApiResponse]` precedence. New `documentation.errors` config lets apps swap in a reflected DTO schema and opt into always-emitted statuses such as `500`.
+- **OpenAPI: `#[FromQuery]` and `#[FromRoute]` can document source parameters.** Both source attributes now accept optional `description` and `example` arguments, and the reflect generator includes them on generated query/path parameters. Hydration remains presence-based and unchanged.
 
 ## [1.58.1] - 2026-06-15 — Thuban
 
