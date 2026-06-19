@@ -1,0 +1,113 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Glueful\Tests\Integration\Extensions;
+
+use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Extensions\ServiceProvider;
+use Glueful\Routing\RouteCache;
+use Glueful\Routing\Router;
+use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+
+class ServeFrontendDispatchTest extends TestCase
+{
+    private string $dir;
+
+    protected function setUp(): void
+    {
+        $this->dir = sys_get_temp_dir() . '/serve_frontend_dispatch_' . uniqid();
+        mkdir($this->dir, 0755, true);
+        file_put_contents($this->dir . '/index.html', '<!doctype html><title>App</title>');
+        file_put_contents($this->dir . '/style.css', 'body{}');
+    }
+
+    protected function tearDown(): void
+    {
+        @unlink($this->dir . '/index.html');
+        @unlink($this->dir . '/style.css');
+        @rmdir($this->dir);
+    }
+
+    /** Build a REAL Router with the bundle mounted at /admin. */
+    private function mountedRouter(): Router
+    {
+        $context = new ApplicationContext(sys_get_temp_dir() . '/sfd_ctx_' . uniqid());
+        (new RouteCache($context))->clear();
+
+        $container = new class implements ContainerInterface {
+            /** @var array<string, mixed> */
+            public array $services = [];
+            public function has(string $id): bool
+            {
+                return array_key_exists($id, $this->services);
+            }
+            public function get(string $id): mixed
+            {
+                if ($this->has($id)) {
+                    return $this->services[$id];
+                }
+                throw new class ("Service '$id' not found")
+                    extends \RuntimeException
+                    implements \Psr\Container\NotFoundExceptionInterface {
+                };
+            }
+        };
+        $container->services[ApplicationContext::class] = $context;
+        $router = new Router($container);
+        $container->services[Router::class] = $router;
+
+        $provider = new class ($container) extends ServiceProvider {
+            public function expose(string $path, string $dir): void
+            {
+                $this->serveFrontend($path, $dir);
+            }
+        };
+        $provider->expose('/admin', $this->dir);
+
+        return $router;
+    }
+
+    public function testHeadOnIndexDoesNotThrowAndHasEmptyBody(): void
+    {
+        $router = $this->mountedRouter();
+        $resp = $router->dispatch(Request::create('/admin', 'HEAD'));
+
+        self::assertSame(200, $resp->getStatusCode());
+        self::assertSame('', (string) $resp->getContent());
+        self::assertNotEmpty($resp->headers->get('Content-Type'));
+    }
+
+    public function testHeadOnAssetDoesNotThrow(): void
+    {
+        $router = $this->mountedRouter();
+        $resp = $router->dispatch(Request::create('/admin/style.css', 'HEAD'));
+
+        self::assertSame(200, $resp->getStatusCode());
+        self::assertSame('', (string) $resp->getContent());
+    }
+
+    public function testRequestTrailingSlashServesIndex(): void
+    {
+        $router = $this->mountedRouter();
+        // Router rtrims the request path before matching, so /admin/ hits the root route.
+        $resp = $router->dispatch(Request::create('/admin/', 'GET'));
+
+        self::assertSame(200, $resp->getStatusCode());
+        // Index is a BinaryFileResponse (getContent() === false); assert via Content-Type.
+        self::assertStringContainsString('text/html', (string) $resp->headers->get('Content-Type'));
+    }
+
+    public function testStaticConfigRouteIsNotShadowedBySpaCatchAll(): void
+    {
+        $router = $this->mountedRouter();
+        // A real static sibling route under the mount prefix must win over /admin/{rest}.
+        $router->get('/admin/config.json', static fn (): Response => new Response('CONFIG', 200));
+
+        $resp = $router->dispatch(Request::create('/admin/config.json', 'GET'));
+        self::assertSame('CONFIG', (string) $resp->getContent());
+    }
+}

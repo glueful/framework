@@ -669,9 +669,17 @@ class Router
             $response = $this->normalizeResponse($invoker(), $successStatus);
         }
 
-        // Handle HEAD requests (remove body but keep headers)
+        // Handle HEAD requests (remove body but keep headers). BinaryFileResponse rejects
+        // setContent() with anything but null, so swap it for a body-less Response that
+        // preserves the status and headers — HEAD must never 500 or stream a body.
         if ($originalMethod === 'HEAD') {
-            $response->setContent('');
+            if ($response instanceof BinaryFileResponse) {
+                $stripped = new Response('', $response->getStatusCode());
+                $stripped->headers->replace($response->headers->all());
+                $response = $stripped;
+            } else {
+                $response->setContent('');
+            }
         }
 
         return $response;
