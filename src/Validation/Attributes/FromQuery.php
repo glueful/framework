@@ -11,4 +11,9 @@ namespace Glueful\Validation\Attributes;
 #[\Attribute(\Attribute::TARGET_PARAMETER | \Attribute::TARGET_PROPERTY)]
 final class FromQuery
 {
+    public function __construct(
+        public readonly ?string $description = null,
+        public readonly ?string $example = null,
+    ) {
+    }
 }

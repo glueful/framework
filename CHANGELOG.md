@@ -6,6 +6,26 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.59.0] - 2026-06-19 — Unukalhai
+
+> **Theme: First-party frontend serving + OpenAPI doc ergonomics.** A new `ServiceProvider::serveFrontend()` seam serves a built SPA or static bundle at any **literal** path (e.g. `/admin`) with secure asset serving, an `index.html` deep-link fallback, and a content-hash-aware cache split — replacing the `/extensions/{mount}`-only `mountStatic()` (removed, along with the dead `SpaManager`/`StaticFileDetector`/`SpaProvider`). Alongside: the OpenAPI reflect generator now gives inferred `401`/`403`/`429` responses a JSON body schema and lets `#[FromQuery]`/`#[FromRoute]` carry `description`/`example` (cutting repeated controller attributes), and a router fix makes `HEAD` requests to any file response safe. **Minor release** (new features + a breaking `mountStatic()` removal, per the pre-public policy); no migrations, no env changes. **Has `### Upgrade Notes`.**
+
+### Added
+- **OpenAPI: inferred error responses now include JSON body schemas.** The reflect generator's automatic `401`/`403` (secured routes) and `429` (rate-limited routes) responses now carry a default `{success,message}` JSON schema, while keeping rate-limit headers and preserving explicit `#[ApiResponse]` precedence. New `documentation.errors` config lets apps swap in a reflected DTO schema and opt into always-emitted statuses such as `500`.
+- **OpenAPI: `#[FromQuery]` and `#[FromRoute]` can document source parameters.** Both source attributes now accept optional `description` and `example` arguments, and the reflect generator includes them on generated query/path parameters. Hydration remains presence-based and unchanged.
+- **`ServiceProvider::serveFrontend(string $path, string $dir, array $options = [])`** — serve a first-party SPA or static bundle at any literal path (e.g. `/admin`), with secure asset serving (traversal/dotfile/`.php` denial, mime, ETag/304), an `index.html` deep-link fallback for client-side routing (`spaFallback`, default true), and a cache split (immutable content-hashed assets, `no-cache` shell). Request trailing slashes are handled by the router; the mount argument itself is strict.
+
+### Fixed
+- **`HEAD` requests to a `BinaryFileResponse` no longer 500.** `Router::dispatch()` stripped the HEAD body with `setContent('')`, which `BinaryFileResponse` rejects; it now swaps in a body-less `Response` preserving status and headers. Affects any file/download route, not just `serveFrontend()`.
+
+### Removed
+- **`ServiceProvider::mountStatic()`** and the unused `SpaManager` / `StaticFileDetector` / `SpaProvider` — superseded by `serveFrontend()`, which serves at any literal path (not just `/extensions/{mount}`) and adds the SPA deep-link fallback `mountStatic()` lacked. No production consumers existed.
+
+### Upgrade Notes
+
+- **`mountStatic()` is removed — migrate to `serveFrontend()`.** Replace `$this->mountStatic('foo', $dir)` (which served at `/extensions/foo`) with `$this->serveFrontend('/foo', $dir)` (any literal path, plus an `index.html` deep-link fallback). The mount path is now a strict literal (leading `/`, lowercase `[a-z0-9-]` segments, no trailing slash). For a **plain** static bundle that should `404` on a miss (the old no-SPA behavior), pass `['spaFallback' => false]`. Note `serveFrontend()` no-ops with a warning if the bundle has no `index.html` (when `spaFallback` is on).
+- **`SpaManager` / `StaticFileDetector` / `SpaProvider` are removed** (dead code — `SpaProvider` is dropped from the container's provider list). They had no callers; if you somehow resolved `StaticFileDetector` from the container, it is gone.
+
 ## [1.58.1] - 2026-06-15 — Thuban
 
 > **Theme: OpenAPI response-schema fidelity.** Three additive generator fixes so reflected `ResponseData` DTOs document response bodies accurately: the success envelope marks `success`/`message`/`data` `required`, and `#[ArrayOf]` resolves array `items` in **response** mode (previously request-mode only). `#[ArrayOf]` is relaxed to target any class so response DTO item types need not implement `RequestData`; the request-DTO element constraint moves into the hydrator (fails loud, behavior unchanged). **Patch release; no migrations, no config/env changes.**

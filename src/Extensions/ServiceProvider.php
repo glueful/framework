@@ -226,19 +226,25 @@ abstract class ServiceProvider
     }
 
     /**
-     * Serves prebuilt static assets via Symfony HttpFoundation (no templating).
-     * Mounted at /extensions/{mount} with strict path and caching guards.
-     * For public production assets prefer a CDN; mountStatic() is ideal for
-     * dev/private UIs and immutable bundles.
+     * Serve a prebuilt SPA (or static bundle) at a literal path, with safe asset
+     * serving and an optional index.html deep-link fallback for client-side routing.
+     *
+     * @param string $path  Literal mount path, e.g. '/admin' or '/app/console'. Strict:
+     *                      a leading '/', lowercase [a-z0-9-] segments, no trailing slash.
+     * @param string $dir   Filesystem directory of the built bundle.
+     * @param array{spaFallback?: bool, name?: string} $options
      */
-    protected function mountStatic(string $mount, string $dir): void
+    protected function serveFrontend(string $path, string $dir, array $options = []): void
     {
-        // Validate mount name to prevent route collisions and ensure URL safety
-        if (!preg_match('/^[a-z0-9\-]+$/', $mount)) {
+        if (preg_match('#^/[a-z0-9]+(?:-[a-z0-9]+)*(?:/[a-z0-9]+(?:-[a-z0-9]+)*)*$#', $path) !== 1) {
             throw new \InvalidArgumentException(
-                "Invalid mount name '{$mount}'. Only lowercase letters, numbers, and hyphens allowed."
+                "Invalid mount path '{$path}'. Use a leading slash and lowercase "
+                . "[a-z0-9-] segments with no trailing slash (e.g. '/admin')."
             );
         }
+
+        $spaFallback = (bool) ($options['spaFallback'] ?? true);
+        $name = (string) ($options['name'] ?? $path);
 
         if (!$this->app->has(\Glueful\Routing\Router::class) || !is_dir($dir)) {
             return;
@@ -247,92 +253,161 @@ abstract class ServiceProvider
         if ($realDir === false) {
             return;
         }
+        if ($spaFallback && !is_file($realDir . DIRECTORY_SEPARATOR . 'index.html')) {
+            $this->logFrontendWarning(
+                "serveFrontend('{$path}') skipped: {$name} bundle at {$realDir} has no index.html."
+            );
+            return;
+        }
 
         /** @var \Glueful\Routing\Router $router */
         $router = $this->app->get(\Glueful\Routing\Router::class);
 
-        // Shared file serving logic for both routes
-        $serveFile = function (
+        $serveAsset = $this->frontendAssetServer($realDir);
+        $serveIndex = $this->frontendIndexServer($realDir);
+
+        $router->get($path, function (
+            \Symfony\Component\HttpFoundation\Request $request
+        ) use (
+            $spaFallback,
+            $serveIndex
+) {
+            return $spaFallback
+                ? $serveIndex($request)
+                : new \Symfony\Component\HttpFoundation\Response('', 404);
+        });
+
+        $router->get($path . '/{rest}', function (
             \Symfony\Component\HttpFoundation\Request $request,
-            string $path
-        ) use ($realDir) {
+            string $rest
+        ) use (
+            $realDir,
+            $spaFallback,
+            $serveAsset,
+            $serveIndex
+) {
             if (headers_sent()) {
                 return new \Symfony\Component\HttpFoundation\Response('', 404);
             }
 
-            // deny dotfiles and PHP by policy (guard against empty basename)
-            $basename = basename($path);
+            $basename = basename($rest);
             if ($basename === '' || $basename[0] === '.' || str_ends_with(strtolower($basename), '.php')) {
                 return new \Symfony\Component\HttpFoundation\Response('', 404);
             }
 
-            $requested = realpath($realDir . DIRECTORY_SEPARATOR . $path);
-            if (
-                $requested === false
-                || !str_starts_with($requested, $realDir . DIRECTORY_SEPARATOR)
-                || !is_file($requested)
-            ) {
+            // Reject path-traversal sequences outright — a `..` segment must 404, never
+            // fall through to the SPA shell (the realpath check below also rejects an
+            // escaped *file*, but an extension-less traversal path would otherwise reach
+            // the index.html fallback).
+            if (preg_match('#(^|/)\.\.(/|$)#', $rest) === 1) {
                 return new \Symfony\Component\HttpFoundation\Response('', 404);
             }
 
-            $mtime = filemtime($requested) !== false ? filemtime($requested) : time();
-            $etag  = md5_file($requested) !== false ? md5_file($requested) : sha1($requested);
+            $requested = realpath($realDir . DIRECTORY_SEPARATOR . $rest);
+            if (
+                $requested !== false
+                && str_starts_with($requested, $realDir . DIRECTORY_SEPARATOR)
+                && is_file($requested)
+            ) {
+                return $serveAsset($request, $requested, $basename);
+            }
 
-            // mime (prefer Symfony MimeTypes; fallback to mime_content_type)
+            if (!$spaFallback) {
+                return new \Symfony\Component\HttpFoundation\Response('', 404);
+            }
+            // "A dot means an asset": a missing asset is a 404, never the HTML shell.
+            if (pathinfo($rest, PATHINFO_EXTENSION) !== '') {
+                return new \Symfony\Component\HttpFoundation\Response('', 404);
+            }
+            return $serveIndex($request);
+        })->where('rest', '.+');
+    }
+
+    /**
+     * Closure that streams a built asset with mime, security headers, the cache
+     * split, ETag/Last-Modified and 304 handling.
+     *
+     * @return \Closure(\Symfony\Component\HttpFoundation\Request, string, string):
+     *     \Symfony\Component\HttpFoundation\Response
+     */
+    private function frontendAssetServer(string $realDir): \Closure
+    {
+        return function (
+            \Symfony\Component\HttpFoundation\Request $request,
+            string $realPath,
+            string $basename
+        ): \Symfony\Component\HttpFoundation\Response {
+            $mtime = filemtime($realPath) !== false ? filemtime($realPath) : time();
+            $etag = md5_file($realPath) !== false ? md5_file($realPath) : sha1($realPath);
+
             $guesser = \Symfony\Component\Mime\MimeTypes::getDefault();
-            $mimeGuess = mime_content_type($requested);
-            $mime = $guesser->guessMimeType($requested) ??
-                ($mimeGuess !== false ? $mimeGuess : 'application/octet-stream');
+            $mimeGuess = mime_content_type($realPath);
+            $mime = $guesser->guessMimeType($realPath)
+                ?? ($mimeGuess !== false ? $mimeGuess : 'application/octet-stream');
 
-            $resp = new \Symfony\Component\HttpFoundation\BinaryFileResponse($requested);
+            $resp = new \Symfony\Component\HttpFoundation\BinaryFileResponse($realPath);
             $resp->headers->set('Content-Type', $mime);
-            // Basic hardening headers (safe defaults; override in app as needed)
             foreach (\Glueful\Security\SecurityHeaders::defaultStaticAssetHeaders() as $header => $value) {
                 $resp->headers->set($header, $value);
             }
-            $resp->setPublic();
-            $resp->headers->set(
-                'Cache-Control',
-                'public, max-age=31536000, immutable'
-            );
-            $resp->setEtag('"' . $etag . '"'); // strong ETag; consider weak (W/"...") if upstream transforms
+            $resp->headers->set('Cache-Control', $this->frontendCacheControl($basename));
+            $resp->setEtag('"' . $etag . '"');
             $resp->setLastModified((new \DateTimeImmutable())->setTimestamp($mtime));
             $resp->setContentDisposition(
                 \Symfony\Component\HttpFoundation\ResponseHeaderBag::DISPOSITION_INLINE,
                 $basename
             );
-
-            if ($resp->isNotModified($request)) {
-                return $resp;
-            }
+            $resp->isNotModified($request);
             return $resp;
         };
+    }
 
-        // Serve index.html for SPA root route
-        $indexCallback = function () use ($realDir) {
+    /**
+     * Cache-Control for a served file: content-hashed assets are immutable;
+     * everything else (incl. index.html) revalidates so deploys are seen.
+     */
+    private function frontendCacheControl(string $basename): string
+    {
+        return preg_match('/[.\-_][A-Za-z0-9]{8,}\.[A-Za-z0-9]+$/', $basename) === 1
+            ? 'public, max-age=31536000, immutable'
+            : 'no-cache';
+    }
+
+    /**
+     * Closure that serves index.html (200, no-cache, hardened headers, revalidatable).
+     *
+     * @return \Closure(\Symfony\Component\HttpFoundation\Request): \Symfony\Component\HttpFoundation\Response
+     */
+    private function frontendIndexServer(string $realDir): \Closure
+    {
+        return function (
+            \Symfony\Component\HttpFoundation\Request $request
+        ) use ($realDir): \Symfony\Component\HttpFoundation\Response {
             $index = $realDir . DIRECTORY_SEPARATOR . 'index.html';
             if (!is_file($index)) {
                 return new \Symfony\Component\HttpFoundation\Response('', 404);
             }
             $resp = new \Symfony\Component\HttpFoundation\BinaryFileResponse($index);
-            // Apply the same hardening headers to index as to asset responses
-            $resp->headers->set('X-Content-Type-Options', 'nosniff');
-            $resp->headers->set('Cross-Origin-Resource-Policy', 'same-origin');
-            $resp->headers->set(
-                'Content-Security-Policy',
-                "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:;"
-            );
-            $resp->headers->set('Referrer-Policy', 'no-referrer');
-            $resp->headers->set('X-Frame-Options', 'SAMEORIGIN');
-            $resp->headers->set('X-XSS-Protection', '0');
+            $resp->headers->set('Content-Type', 'text/html; charset=UTF-8');
+            foreach (\Glueful\Security\SecurityHeaders::defaultStaticAssetHeaders() as $header => $value) {
+                $resp->headers->set($header, $value);
+            }
+            $resp->headers->set('Cache-Control', 'no-cache');
+            $mtime = filemtime($index) !== false ? filemtime($index) : time();
+            $etag = md5_file($index) !== false ? md5_file($index) : sha1($index);
+            $resp->setEtag('"' . $etag . '"');
+            $resp->setLastModified((new \DateTimeImmutable())->setTimestamp($mtime));
+            $resp->isNotModified($request);
             return $resp;
         };
+    }
 
-        // Asset serving routes (GET only - HEAD handled by framework)
-        $router->get("/extensions/{$mount}/{path}", $serveFile)->where('path', '.+');
-
-        // Index serving routes (GET only - HEAD handled by framework)
-        $router->get("/extensions/{$mount}", $indexCallback);
+    /** Emit a boot-time warning through the container's logger when available. */
+    private function logFrontendWarning(string $message): void
+    {
+        if ($this->app->has(\Psr\Log\LoggerInterface::class)) {
+            $this->app->get(\Psr\Log\LoggerInterface::class)->warning($message);
+        }
     }
 
 

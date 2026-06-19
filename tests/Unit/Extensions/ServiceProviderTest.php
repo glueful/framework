@@ -104,21 +104,20 @@ class ServiceProviderTest extends TestCase
         }
     }
 
-    public function testMountStaticWithInvalidMountName(): void
+    public function testServeFrontendWithInvalidMountPath(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('Invalid mount name');
+        $this->expectExceptionMessage('Invalid mount path');
 
         $provider = new TestServiceProvider($this->container);
 
-        // Use reflection to call protected method
         $reflection = new \ReflectionClass($provider);
-        $method = $reflection->getMethod('mountStatic');
+        $method = $reflection->getMethod('serveFrontend');
         $method->setAccessible(true);
-        $method->invoke($provider, 'Invalid_Mount_Name!', '/some/dir');
+        $method->invoke($provider, 'Invalid_Mount!', '/some/dir', []);
     }
 
-    public function testMountStaticWithValidMountName(): void
+    public function testServeFrontendWithValidMountRegistersRoutes(): void
     {
         $router = $this->createMock(Router::class);
         $mockRoute = $this->createMock(Route::class);
@@ -137,17 +136,18 @@ class ServiceProviderTest extends TestCase
 
         $provider = new TestServiceProvider($this->container);
 
-        // Create a temporary directory
-        $staticDir = sys_get_temp_dir() . '/test_static_' . uniqid();
+        // spaFallback defaults true, so the bundle must contain index.html.
+        $staticDir = sys_get_temp_dir() . '/test_frontend_' . uniqid();
         mkdir($staticDir);
+        file_put_contents($staticDir . '/index.html', '<!doctype html>');
 
         try {
-            // Use reflection to call protected method
             $reflection = new \ReflectionClass($provider);
-            $method = $reflection->getMethod('mountStatic');
+            $method = $reflection->getMethod('serveFrontend');
             $method->setAccessible(true);
-            $method->invoke($provider, 'valid-mount', $staticDir);
+            $method->invoke($provider, '/valid-mount', $staticDir, []);
         } finally {
+            unlink($staticDir . '/index.html');
             rmdir($staticDir);
         }
     }
