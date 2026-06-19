@@ -26,11 +26,15 @@ final class DatabaseConfig
      * Internal Connection config override (matches Connection::buildConfigFromEnv() keys:
      * db/user/pass). Pooling is disabled so a test build is transient.
      *
+     * @param  int $connectTimeout Seconds to wait for connect before failing (0 = no override).
+     *                             The ConnectionTester passes a short value so an unreachable host
+     *                             fails fast; the migration build passes 0 (no connect timeout).
      * @return array<string, mixed>
      */
-    public function toConnectionConfig(): array
+    public function toConnectionConfig(int $connectTimeout = 0): array
     {
         $base = ['engine' => $this->engine, 'pooling' => ['enabled' => false]];
+        $timeout = $connectTimeout > 0 ? ['timeout' => $connectTimeout] : [];
 
         return match ($this->engine) {
             'sqlite' => $base + ['sqlite' => ['primary' => $this->database]],
@@ -42,7 +46,7 @@ final class DatabaseConfig
                 'pass' => $this->password,
                 'charset' => 'utf8mb4',
                 'strict' => true,
-            ]],
+            ] + $timeout],
             'pgsql' => $base + ['pgsql' => array_filter([
                 'host' => $this->host,
                 'port' => $this->port,
@@ -51,7 +55,7 @@ final class DatabaseConfig
                 'pass' => $this->password,
                 'schema' => $this->schema ?? 'public',
                 'sslmode' => $this->sslMode,
-            ], static fn ($v): bool => $v !== null)],
+            ], static fn ($v): bool => $v !== null) + $timeout],
             default => throw new \InvalidArgumentException("Unsupported engine: {$this->engine}"),
         };
     }

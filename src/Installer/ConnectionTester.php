@@ -14,14 +14,20 @@ use Glueful\Database\Connection;
  */
 final class ConnectionTester
 {
-    public function __construct(private readonly ?ApplicationContext $context = null)
-    {
+    /**
+     * @param int $connectTimeout Seconds to wait for the probe connection before failing fast
+     *                            (so an unreachable host does not hang a CLI prompt / UI request).
+     */
+    public function __construct(
+        private readonly ?ApplicationContext $context = null,
+        private readonly int $connectTimeout = 3,
+    ) {
     }
 
     public function test(DatabaseConfig $config): ConnectionTestResult
     {
         try {
-            $connection = new Connection($config->toConnectionConfig(), $this->context);
+            $connection = new Connection($config->toConnectionConfig($this->connectTimeout), $this->context);
             $connection->getPDO()->query('SELECT 1');
             unset($connection); // transient; pooling disabled in toConnectionConfig()
             return new ConnectionTestResult($config->engine, true, 'Connection successful.');

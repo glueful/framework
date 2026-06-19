@@ -55,4 +55,21 @@ final class DatabaseConfigTest extends TestCase
             $c->toEnvPairs(),
         );
     }
+
+    public function testConnectTimeoutIsIncludedOnlyWhenRequested(): void
+    {
+        $c = new DatabaseConfig('pgsql', 'h', 5432, 'd', 'u', 'p');
+
+        // No timeout by default (the migration build) — and it never reaches the persisted env.
+        self::assertArrayNotHasKey('timeout', $c->toConnectionConfig()['pgsql']);
+
+        // Short timeout when the tester asks for one.
+        self::assertSame(3, $c->toConnectionConfig(3)['pgsql']['timeout']);
+
+        $mysql = new DatabaseConfig('mysql', 'h', 3306, 'd', 'u', 'p');
+        self::assertSame(3, $mysql->toConnectionConfig(3)['mysql']['timeout']);
+
+        // Never persisted to .env.
+        self::assertArrayNotHasKey('DB_PGSQL_TIMEOUT', $c->toEnvPairs());
+    }
 }
