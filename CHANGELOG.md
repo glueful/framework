@@ -9,6 +9,13 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ### Added
 - **OpenAPI: inferred error responses now include JSON body schemas.** The reflect generator's automatic `401`/`403` (secured routes) and `429` (rate-limited routes) responses now carry a default `{success,message}` JSON schema, while keeping rate-limit headers and preserving explicit `#[ApiResponse]` precedence. New `documentation.errors` config lets apps swap in a reflected DTO schema and opt into always-emitted statuses such as `500`.
 - **OpenAPI: `#[FromQuery]` and `#[FromRoute]` can document source parameters.** Both source attributes now accept optional `description` and `example` arguments, and the reflect generator includes them on generated query/path parameters. Hydration remains presence-based and unchanged.
+- **`ServiceProvider::serveFrontend(string $path, string $dir, array $options = [])`** — serve a first-party SPA or static bundle at any literal path (e.g. `/admin`), with secure asset serving (traversal/dotfile/`.php` denial, mime, ETag/304), an `index.html` deep-link fallback for client-side routing (`spaFallback`, default true), and a cache split (immutable content-hashed assets, `no-cache` shell). Request trailing slashes are handled by the router; the mount argument itself is strict.
+
+### Fixed
+- **`HEAD` requests to a `BinaryFileResponse` no longer 500.** `Router::dispatch()` stripped the HEAD body with `setContent('')`, which `BinaryFileResponse` rejects; it now swaps in a body-less `Response` preserving status and headers. Affects any file/download route, not just `serveFrontend()`.
+
+### Removed
+- **`ServiceProvider::mountStatic()`** and the unused `SpaManager` / `StaticFileDetector` / `SpaProvider` — superseded by `serveFrontend()`, which serves at any literal path (not just `/extensions/{mount}`) and adds the SPA deep-link fallback `mountStatic()` lacked. No production consumers existed.
 
 ## [1.58.1] - 2026-06-15 — Thuban
 
