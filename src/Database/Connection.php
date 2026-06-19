@@ -344,9 +344,7 @@ class Connection implements DatabaseInterface
                 $config['host'] ?? '127.0.0.1',
                 $config['port'] ?? 5432,
                 $config['db'] ?? 'postgres',
-                (isset($config['timeout']) && (int) $config['timeout'] > 0)
-                    ? ';connect_timeout=' . (int) $config['timeout']
-                    : ''
+                $this->pgsqlDsnExtras($config)
             ),
             'sqlite' => $this->prepareSQLiteDSN(
                 (isset($config['primary']) && is_string($config['primary']) && $config['primary'] !== '')
@@ -358,6 +356,24 @@ class Connection implements DatabaseInterface
                 "Unsupported database engine: {$engine}"
             ),
         };
+    }
+
+    /**
+     * Optional pgsql DSN parameters appended only when configured: SSL mode and connect timeout.
+     * (pdo_pgsql honors neither via PDO::ATTR_* for connect, so they belong in the DSN.)
+     *
+     * @param array<string, mixed> $config
+     */
+    private function pgsqlDsnExtras(array $config): string
+    {
+        $extras = '';
+        if (isset($config['sslmode']) && is_string($config['sslmode']) && $config['sslmode'] !== '') {
+            $extras .= ';sslmode=' . $config['sslmode'];
+        }
+        if (isset($config['timeout']) && (int) $config['timeout'] > 0) {
+            $extras .= ';connect_timeout=' . (int) $config['timeout'];
+        }
+        return $extras;
     }
 
     private function getConfig(string $key, mixed $default = null): mixed

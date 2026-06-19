@@ -25,6 +25,20 @@ final class ConnectionTesterTest extends TestCase
         self::assertStringNotContainsString('connect_timeout', $without);
     }
 
+    public function testPgsqlDsnCarriesSslModeWhenSet(): void
+    {
+        // sslmode must reach the DSN (pdo_pgsql reads it there), so DatabaseConfig::sslMode takes effect.
+        $conn = new Connection((new DatabaseConfig('sqlite', database: ':memory:'))->toConnectionConfig());
+        $build = new \ReflectionMethod(Connection::class, 'buildDSN');
+        $build->setAccessible(true);
+
+        $with = $build->invoke($conn, 'pgsql', ['host' => 'h', 'port' => 5432, 'db' => 'd', 'sslmode' => 'require']);
+        $without = $build->invoke($conn, 'pgsql', ['host' => 'h', 'port' => 5432, 'db' => 'd']);
+
+        self::assertStringContainsString('sslmode=require', $with);
+        self::assertStringNotContainsString('sslmode', $without);
+    }
+
     public function testUnreachableHostFailsFastInsteadOfHanging(): void
     {
         // 192.0.2.1 = RFC 5737 TEST-NET-1 (unrouted/blackholed). With a 1s connect timeout the
