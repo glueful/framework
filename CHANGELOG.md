@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Added
+- **Engine-agnostic installer + `Glueful\Installer\` seams.** `php glueful install` now configures and migrates **any** database engine (MySQL/PostgreSQL/SQLite), not just SQLite, with reconnected interactive credential prompts. New reusable services — `EnvWriter` (atomic, quoting), `ConnectionTester` (transient probe of explicit creds, typed result), `Installer` (preflight-first pipeline, step-based `InstallResult`), `DatabaseConfig`, `InstallState` — let an app drive first-run setup from CLI or a UI without shelling out. Two hard invariants: a failed DB connection test mutates nothing (`.env` untouched), and the tested credentials are exactly the connection migrations run on.
+
+### Changed
+- **`MigrationManager` accepts an optional injected `Connection`** (appended 4th constructor arg) so the installer migrates the just-tested connection rather than the already-loaded config. Behavior is unchanged when none is injected.
+
+### Fixed
+- **`.env` writes are now quoted/escaped and atomic.** The two private `updateEnvFile()` copies (in `install` and `generate:key`) — which wrote unquoted values and could corrupt `.env` on a password containing spaces/`#`/`=`/quotes — are replaced by the single `EnvWriter`.
+
 ## [1.59.0] - 2026-06-19 — Unukalhai
 
 > **Theme: First-party frontend serving + OpenAPI doc ergonomics.** A new `ServiceProvider::serveFrontend()` seam serves a built SPA or static bundle at any **literal** path (e.g. `/admin`) with secure asset serving, an `index.html` deep-link fallback, and a content-hash-aware cache split — replacing the `/extensions/{mount}`-only `mountStatic()` (removed, along with the dead `SpaManager`/`StaticFileDetector`/`SpaProvider`). Alongside: the OpenAPI reflect generator now gives inferred `401`/`403`/`429` responses a JSON body schema and lets `#[FromQuery]`/`#[FromRoute]` carry `description`/`example` (cutting repeated controller attributes), and a router fix makes `HEAD` requests to any file response safe. **Minor release** (new features + a breaking `mountStatic()` removal, per the pre-public policy); no migrations, no env changes. **Has `### Upgrade Notes`.**
