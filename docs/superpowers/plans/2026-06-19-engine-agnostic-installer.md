@@ -756,6 +756,7 @@ final class InstallerTest extends TestCase
     {
         $this->dir = sys_get_temp_dir() . '/installer_' . uniqid();
         mkdir($this->dir, 0775, true);
+        mkdir($this->dir . '/migrations', 0775, true); // empty: migrate() runs 0 migrations, still creates the version table
         file_put_contents($this->dir . '/.env.example', "APP_ENV=local\nAPP_KEY=\n");
     }
 
@@ -773,7 +774,7 @@ final class InstallerTest extends TestCase
         self::assertFileDoesNotExist($this->dir . '/.env', 'precondition: a fresh project has no .env');
 
         $bad = new DatabaseConfig('pgsql', host: '127.0.0.1', port: 1, database: 'x', username: 'u', password: 'p');
-        $installer = new Installer($this->dir, skipCacheAndValidation: true);
+        $installer = new Installer($this->dir, skipCacheAndValidation: true, migrationsPath: $this->dir . '/migrations');
 
         $result = $installer->run(new InstallOptions(database: $bad, skipKeys: true));
 
@@ -788,7 +789,7 @@ final class InstallerTest extends TestCase
         // Invariant #2: migrations land in the DatabaseConfig's sqlite file, not the default.
         $dbFile = $this->dir . '/installed.sqlite';
         $config = new DatabaseConfig('sqlite', database: $dbFile);
-        $installer = new Installer($this->dir, skipCacheAndValidation: true);
+        $installer = new Installer($this->dir, skipCacheAndValidation: true, migrationsPath: $this->dir . '/migrations');
 
         $result = $installer->run(new InstallOptions(database: $config, skipKeys: false));
 
@@ -799,6 +800,13 @@ final class InstallerTest extends TestCase
         self::assertFileExists($this->dir . '/.env');
         self::assertFileExists($dbFile);
         self::assertStringContainsString('DB_SQLITE_DATABASE=', file_get_contents($this->dir . '/.env'));
+
+        // Sharp invariant #2: the version table landed in the TESTED sqlite file (proves the
+        // injected connection was migrated, not the default). VERSION_TABLE = 'migrations'.
+        $tables = (new \PDO("sqlite:{$dbFile}"))
+            ->query("SELECT name FROM sqlite_master WHERE type='table' AND name='migrations'")
+            ->fetchAll(\PDO::FETCH_COLUMN);
+        self::assertContains('migrations', $tables);
     }
 }
 ```
@@ -834,6 +842,7 @@ final class Installer
         private readonly string $basePath,
         private readonly ?ApplicationContext $context = null,
         private readonly bool $skipCacheAndValidation = false,
+        private readonly ?string $migrationsPath = null, // explicit path when no context resolves it
     ) {
     }
 
@@ -889,7 +898,10 @@ final class Installer
         // 5. Migrate the SAME connection (injected) — never fromContext().
         if (!$options->skipDatabase) {
             try {
-                $manager = new MigrationManager(null, null, $this->context, $migrationConnection);
+                // MigrationManager resolves app.paths.migrations via the context; with no context
+                // (e.g. a unit test) it would TypeError, so pass an explicit path when provided.
+                // In production context !== null, so $this->migrationsPath stays null and is resolved.
+                $manager = new MigrationManager($this->migrationsPath, null, $this->context, $migrationConnection);
                 $manager->migrate();
                 $steps[] = new InstallStep('migrate', InstallStep::OK, 'Migrations applied.');
             } catch (\Throwable $e) {
