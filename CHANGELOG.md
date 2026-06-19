@@ -6,6 +6,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Added
+- **OpenAPI: inferred error responses now include JSON body schemas.** The reflect generator's automatic `401`/`403` (secured routes) and `429` (rate-limited routes) responses now carry a default `{success,message}` JSON schema, while keeping rate-limit headers and preserving explicit `#[ApiResponse]` precedence. New `documentation.errors` config lets apps swap in a reflected DTO schema and opt into always-emitted statuses such as `500`.
+
 ## [1.58.1] - 2026-06-15 — Thuban
 
 > **Theme: OpenAPI response-schema fidelity.** Three additive generator fixes so reflected `ResponseData` DTOs document response bodies accurately: the success envelope marks `success`/`message`/`data` `required`, and `#[ArrayOf]` resolves array `items` in **response** mode (previously request-mode only). `#[ArrayOf]` is relaxed to target any class so response DTO item types need not implement `RequestData`; the request-DTO element constraint moves into the hydrator (fails loud, behavior unchanged). **Patch release; no migrations, no config/env changes.**

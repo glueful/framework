@@ -1332,24 +1332,39 @@ final class RouteReflectionDocGenerator
      * Build a minimal but valid responses object.
      *
      * Always includes a 200. Secured routes add 401/403. Rate-limited routes
-     * add a 429 carrying the standard rate-limit headers.
+     * add a 429 carrying the standard rate-limit headers. Inferred error
+     * responses carry a configured JSON body schema.
      *
      * @return array<int|string, mixed>
      */
     private function buildResponses(bool $isSecured, bool $rateLimited): array
     {
+        $errors = $this->errorConfig();
+        $body = $this->buildDefaultErrorBody($errors);
+        $descriptions = $errors['descriptions'];
+
         $responses = [
             '200' => ['description' => 'Successful response'],
         ];
 
+        $statuses = [];
         if ($isSecured) {
-            $responses['401'] = ['description' => 'Unauthenticated'];
-            $responses['403'] = ['description' => 'Forbidden'];
+            $statuses[] = 401;
+            $statuses[] = 403;
+        }
+        foreach ($errors['always'] as $status) {
+            $statuses[] = $status;
+        }
+
+        foreach (array_unique($statuses) as $status) {
+            $responses[(string) $status] = [
+                'description' => $descriptions[$status] ?? self::reasonPhrase($status),
+            ] + $body;
         }
 
         if ($rateLimited) {
             $responses['429'] = [
-                'description' => 'Too Many Requests',
+                'description' => $descriptions[429] ?? 'Too Many Requests',
                 'headers' => [
                     'Retry-After' => [
                         'description' => 'Seconds to wait before retrying.',
@@ -1364,10 +1379,98 @@ final class RouteReflectionDocGenerator
                         'schema' => ['type' => 'integer'],
                     ],
                 ],
-            ];
+            ] + $body;
         }
 
         return $responses;
+    }
+
+    /**
+     * Resolved `documentation.errors` config merged over built-in defaults.
+     *
+     * @return array{schema: ?string, envelope: bool, always: list<int>, descriptions: array<int, string>}
+     */
+    private function errorConfig(): array
+    {
+        $defaults = [
+            'schema' => null,
+            'envelope' => false,
+            'always' => [],
+            'descriptions' => [
+                401 => 'Unauthenticated.',
+                403 => 'Forbidden.',
+                429 => 'Too Many Requests.',
+                500 => 'Unexpected server error.',
+            ],
+        ];
+
+        $configured = $this->context?->getConfig('documentation.errors', []) ?? [];
+        if (!is_array($configured)) {
+            $configured = [];
+        }
+
+        $merged = array_merge($defaults, $configured);
+        $configuredDescriptions = is_array($configured['descriptions'] ?? null)
+            ? $configured['descriptions']
+            : [];
+
+        $descriptions = [];
+        foreach ($defaults['descriptions'] as $status => $description) {
+            $descriptions[$status] = $description;
+        }
+        foreach ($configuredDescriptions as $status => $description) {
+            if (is_numeric($status) && is_string($description)) {
+                $descriptions[(int) $status] = $description;
+            }
+        }
+
+        $always = [];
+        foreach ((array) ($merged['always'] ?? []) as $status) {
+            if (is_numeric($status)) {
+                $status = (int) $status;
+                if ($status >= 400 && $status <= 599) {
+                    $always[] = $status;
+                }
+            }
+        }
+
+        $schema = $merged['schema'] ?? null;
+
+        return [
+            'schema' => is_string($schema) && $schema !== '' ? $schema : null,
+            'envelope' => (bool) ($merged['envelope'] ?? false),
+            'always' => array_values(array_unique($always)),
+            'descriptions' => $descriptions,
+        ];
+    }
+
+    /**
+     * The shared JSON body attached to every inferred error response: a reflected
+     * DTO when `documentation.errors.schema` names one, else a slim inline shape.
+     *
+     * @param  array{schema: ?string, envelope: bool, always: list<int>, descriptions: array<int, string>} $errors
+     * @return array{content: array<string, mixed>}
+     */
+    private function buildDefaultErrorBody(array $errors): array
+    {
+        $schema = $errors['schema'];
+        if (is_string($schema) && $schema !== '') {
+            $bodySchema = ClassSchemaReflector::toSchema($schema);
+            if ($errors['envelope']) {
+                $bodySchema = $this->wrapInEnvelope($bodySchema);
+            }
+        } else {
+            $bodySchema = [
+                'type' => 'object',
+                'properties' => [
+                    'success' => ['type' => 'boolean', 'example' => false],
+                    'message' => ['type' => 'string'],
+                ],
+                'required' => ['success', 'message'],
+            ];
+        }
+
+        return ['content' => ['application/json' => ['schema' => $bodySchema]]];
     }
 
     /**

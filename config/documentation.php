@@ -190,6 +190,28 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Inferred error responses
+    |--------------------------------------------------------------------------
+    | Body schema + descriptions the generator attaches to auto-inferred error
+    | responses (401/403 on secured routes, 429 on rate-limited routes, plus any
+    | status listed in `always`). `schema: null` uses a slim inline {success,
+    | message} shape; set a thin public-typed DTO class to reflect instead.
+    | Do NOT point this at Glueful\DTOs\ErrorResponseDTO (the fat debug DTO).
+    */
+    'errors' => [
+        'schema'   => env('API_DOCS_ERROR_SCHEMA', null),
+        'envelope' => false,
+        'always'   => [],
+        'descriptions' => [
+            401 => 'Unauthenticated.',
+            403 => 'Forbidden.',
+            429 => 'Too Many Requests.',
+            500 => 'Unexpected server error.',
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Generation Options
     |--------------------------------------------------------------------------
     |
