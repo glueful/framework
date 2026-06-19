@@ -6,6 +6,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.60.0] - 2026-06-19 — Vega
+
+> **Theme: Engine-agnostic installer + first-run setup seams.** `php glueful install` now configures and migrates **any** database engine (MySQL/PostgreSQL/SQLite), not just SQLite, with reconnected interactive credential prompts. A new `Glueful\Installer\` toolkit (`EnvWriter`, `ConnectionTester`, `Installer`, `DatabaseConfig`, `InstallState`) lets an app drive first-run setup from CLI **or** a UI without shelling out — under two hard invariants: a failed DB test mutates nothing, and the tested credentials are exactly what migrations run on. Plus `.env` writes are now quoted + atomic (one `EnvWriter`, replacing two unsafe copies), and `MigrationManager` accepts an injected `Connection`. **Minor release** — additive (no breaking API changes, no new env, no migrations). **Has `### Upgrade Notes`** (the now-interactive `install`).
+
 ### Added
 - **Engine-agnostic installer + `Glueful\Installer\` seams.** `php glueful install` now configures and migrates **any** database engine (MySQL/PostgreSQL/SQLite), not just SQLite, with reconnected interactive credential prompts. New reusable services — `EnvWriter` (atomic, quoting), `ConnectionTester` (transient probe of explicit creds, typed result, with a short connect timeout so an unreachable host fails fast instead of hanging), `Installer` (preflight-first pipeline, step-based `InstallResult`), `DatabaseConfig`, `InstallState` — let an app drive first-run setup from CLI or a UI without shelling out. Two hard invariants: a failed DB connection test mutates nothing (`.env` untouched), and the tested credentials are exactly the connection migrations run on.
 
@@ -14,6 +18,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ### Fixed
 - **`.env` writes are now quoted/escaped and atomic.** The two private `updateEnvFile()` copies (in `install` and `generate:key`) — which wrote unquoted values and could corrupt `.env` on a password containing spaces/`#`/`=`/quotes — are replaced by the single `EnvWriter`.
+
+### Upgrade Notes
+
+- **`php glueful install` is now engine-agnostic and interactive.** By default it prompts for the database engine + credentials (previously it silently set up SQLite only). **Non-interactive callers** (CI, a `post-create-project-cmd`, scripts) should pass **`--quiet`** to use the existing `.env` without prompts, or **`--skip-database`** to skip DB setup/migrations entirely. The bundled api-skeleton's `post-create-project-cmd` is updated to `install --force --quiet`. No env or config changes; no migrations.
 
 ## [1.59.0] - 2026-06-19 — Unukalhai
 
