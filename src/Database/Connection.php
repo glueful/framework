@@ -279,6 +279,13 @@ class Connection implements DatabaseInterface
             $options[PDO::MYSQL_ATTR_INIT_COMMAND] = "SET sql_mode='STRICT_ALL_TABLES'";
         }
 
+        // Optional connect timeout. The installer's ConnectionTester sets a short one so an
+        // unreachable host fails fast instead of hanging on the OS default (~75s). MySQL honors
+        // PDO::ATTR_TIMEOUT for connect; PostgreSQL uses connect_timeout in the DSN (see buildDSN).
+        if (isset($dbConfig['timeout']) && (int) $dbConfig['timeout'] > 0) {
+            $options[PDO::ATTR_TIMEOUT] = (int) $dbConfig['timeout'];
+        }
+
         $pdo = new PDO(
             $this->buildDSN($engine, $dbConfig),
             $dbConfig['user'] ?? null,
@@ -333,10 +340,11 @@ class Connection implements DatabaseInterface
                 $config['charset'] ?? 'utf8mb4'
             ),
             'pgsql' => sprintf(
-                'pgsql:host=%s;port=%d;dbname=%s',
+                'pgsql:host=%s;port=%d;dbname=%s%s',
                 $config['host'] ?? '127.0.0.1',
                 $config['port'] ?? 5432,
-                $config['db'] ?? 'postgres'
+                $config['db'] ?? 'postgres',
+                $this->pgsqlDsnExtras($config)
             ),
             'sqlite' => $this->prepareSQLiteDSN(
                 (isset($config['primary']) && is_string($config['primary']) && $config['primary'] !== '')
@@ -348,6 +356,24 @@ class Connection implements DatabaseInterface
                 "Unsupported database engine: {$engine}"
             ),
         };
+    }
+
+    /**
+     * Optional pgsql DSN parameters appended only when configured: SSL mode and connect timeout.
+     * (pdo_pgsql honors neither via PDO::ATTR_* for connect, so they belong in the DSN.)
+     *
+     * @param array<string, mixed> $config
+     */
+    private function pgsqlDsnExtras(array $config): string
+    {
+        $extras = '';
+        if (isset($config['sslmode']) && is_string($config['sslmode']) && $config['sslmode'] !== '') {
+            $extras .= ';sslmode=' . $config['sslmode'];
+        }
+        if (isset($config['timeout']) && (int) $config['timeout'] > 0) {
+            $extras .= ';connect_timeout=' . (int) $config['timeout'];
+        }
+        return $extras;
     }
 
     private function getConfig(string $key, mixed $default = null): mixed

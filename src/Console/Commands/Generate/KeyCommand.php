@@ -3,6 +3,7 @@
 namespace Glueful\Console\Commands\Generate;
 
 use Glueful\Console\BaseCommand;
+use Glueful\Installer\EnvWriter;
 use Glueful\Security\RandomStringGenerator;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Input\InputInterface;
@@ -127,7 +128,8 @@ class KeyCommand extends BaseCommand
         $this->info('Generating APP_KEY...');
         $newKey = $generator::generate(32);
 
-        $this->updateEnvFile('APP_KEY', $newKey);
+        $env = new EnvWriter($this->getEnvPath());
+        $env->set('APP_KEY', $newKey);
 
         return [
             'status' => 'generated',
@@ -156,32 +158,14 @@ class KeyCommand extends BaseCommand
         $this->info('Generating JWT_KEY...');
         $newKey = $generator::generate(64);
 
-        $this->updateEnvFile('JWT_KEY', $newKey);
+        $env = new EnvWriter($this->getEnvPath());
+        $env->set('JWT_KEY', $newKey);
 
         return [
             'status' => 'generated',
             'message' => 'JWT_KEY generated successfully',
             'key' => $newKey
         ];
-    }
-
-    private function updateEnvFile(string $key, string $value): void
-    {
-        $envPath = $this->getEnvPath();
-        $envContent = file_get_contents($envPath);
-
-        $pattern = "/^{$key}=.*$/m";
-        $replacement = "{$key}={$value}";
-
-        if (preg_match($pattern, $envContent)) {
-            // Update existing key
-            $envContent = preg_replace($pattern, $replacement, $envContent);
-        } else {
-            // Add new key
-            $envContent .= "\n{$replacement}";
-        }
-
-        file_put_contents($envPath, $envContent);
     }
 
     private function displaySecurityWarning(): void

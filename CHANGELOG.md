@@ -6,6 +6,23 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.60.0] - 2026-06-19 — Vega
+
+> **Theme: Engine-agnostic installer + first-run setup seams.** `php glueful install` now configures and migrates **any** database engine (MySQL/PostgreSQL/SQLite), not just SQLite, with reconnected interactive credential prompts. A new `Glueful\Installer\` toolkit (`EnvWriter`, `ConnectionTester`, `Installer`, `DatabaseConfig`, `InstallState`) lets an app drive first-run setup from CLI **or** a UI without shelling out — under two hard invariants: a failed DB test mutates nothing, and the tested credentials are exactly what migrations run on. Plus `.env` writes are now quoted + atomic (one `EnvWriter`, replacing two unsafe copies), and `MigrationManager` accepts an injected `Connection`. **Minor release** — additive (no breaking API changes, no new env, no migrations). **Has `### Upgrade Notes`** (the now-interactive `install`).
+
+### Added
+- **Engine-agnostic installer + `Glueful\Installer\` seams.** `php glueful install` now configures and migrates **any** database engine (MySQL/PostgreSQL/SQLite), not just SQLite, with reconnected interactive credential prompts. New reusable services — `EnvWriter` (atomic, quoting), `ConnectionTester` (transient probe of explicit creds, typed result, with a short connect timeout so an unreachable host fails fast instead of hanging), `Installer` (preflight-first pipeline, step-based `InstallResult`), `DatabaseConfig`, `InstallState` — let an app drive first-run setup from CLI or a UI without shelling out. Two hard invariants: a failed DB connection test mutates nothing (`.env` untouched), and the tested credentials are exactly the connection migrations run on.
+
+### Changed
+- **`MigrationManager` accepts an optional injected `Connection`** (appended 4th constructor arg) so the installer migrates the just-tested connection rather than the already-loaded config. Behavior is unchanged when none is injected.
+
+### Fixed
+- **`.env` writes are now quoted/escaped and atomic.** The two private `updateEnvFile()` copies (in `install` and `generate:key`) — which wrote unquoted values and could corrupt `.env` on a password containing spaces/`#`/`=`/quotes — are replaced by the single `EnvWriter`.
+
+### Upgrade Notes
+
+- **`php glueful install` is now engine-agnostic and interactive.** By default it prompts for the database engine + credentials (previously it silently set up SQLite only). **Non-interactive callers** (CI, a `post-create-project-cmd`, scripts) should pass **`--quiet`** to use the existing `.env` without prompts, or **`--skip-database`** to skip DB setup/migrations entirely. The bundled api-skeleton's `post-create-project-cmd` is updated to `install --force --quiet`. No env or config changes; no migrations.
+
 ## [1.59.0] - 2026-06-19 — Unukalhai
 
 > **Theme: First-party frontend serving + OpenAPI doc ergonomics.** A new `ServiceProvider::serveFrontend()` seam serves a built SPA or static bundle at any **literal** path (e.g. `/admin`) with secure asset serving, an `index.html` deep-link fallback, and a content-hash-aware cache split — replacing the `/extensions/{mount}`-only `mountStatic()` (removed, along with the dead `SpaManager`/`StaticFileDetector`/`SpaProvider`). Alongside: the OpenAPI reflect generator now gives inferred `401`/`403`/`429` responses a JSON body schema and lets `#[FromQuery]`/`#[FromRoute]` carry `description`/`example` (cutting repeated controller attributes), and a router fix makes `HEAD` requests to any file response safe. **Minor release** (new features + a breaking `mountStatic()` removal, per the pre-public policy); no migrations, no env changes. **Has `### Upgrade Notes`.**
