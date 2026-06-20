@@ -797,6 +797,15 @@ class DocGenerator
      */
     public function getSwaggerJson(): string
     {
+        // Apply the configured tag allow/deny filter before anything downstream reads the paths
+        // (schema prune, transformPaths, and the tag list all derive from $this->paths), so
+        // dropped operations take their now-unreferenced tags + schemas with them.
+        $this->paths = self::filterPathsByTags(
+            $this->paths,
+            $this->configList('documentation.options.tags.include'),
+            $this->configList('documentation.options.tags.exclude'),
+        );
+
         $baseUrl = '';
         if ($this->context !== null && function_exists('api_url')) {
             $baseUrl = api_url($this->context);
@@ -853,6 +862,101 @@ class DocGenerator
         }
 
         return json_encode($swagger, JSON_PRETTY_PRINT);
+    }
+
+    /**
+     * Read a config value as a clean list of non-empty, trimmed strings.
+     *
+     * @return list<string>
+     */
+    private function configList(string $key): array
+    {
+        $raw = $this->getConfig($key, []);
+        if (!is_array($raw)) {
+            return [];
+        }
+        return array_values(array_filter(
+            array_map(static fn($v): string => is_scalar($v) ? trim((string) $v) : '', $raw),
+            static fn(string $v): bool => $v !== ''
+        ));
+    }
+
+    /**
+     * Filter operations by their tags using allow/deny lists, dropping any path item left with no
+     * operations. Pure + static so it can be unit-tested directly, independent of config/context.
+     *
+     * Keep rule per operation: (include empty OR its tags intersect include) AND (its tags do not
+     * intersect exclude). Deny WINS. An untagged operation passes an empty include-list but fails a
+     * non-empty one. Path-item-level keys (`parameters`, `$ref`, `summary`, `servers`, …) are
+     * preserved as-is; a path left with only such keys (no operations) is dropped.
+     *
+     * @param array<string, mixed> $paths    path => (verb|key) => operation
+     * @param list<string>         $include   allow-list (empty = all tags allowed)
+     * @param list<string>         $exclude   deny-list (takes precedence)
+     * @return array<string, mixed>
+     */
+    public static function filterPathsByTags(array $paths, array $include, array $exclude): array
+    {
+        if ($include === [] && $exclude === []) {
+            return $paths;
+        }
+
+        $methods = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'];
+        $includeSet = array_flip($include);
+        $excludeSet = array_flip($exclude);
+
+        $out = [];
+        foreach ($paths as $path => $item) {
+            if (!is_array($item)) {
+                $out[$path] = $item;
+                continue;
+            }
+            $kept = [];
+            foreach ($item as $key => $operation) {
+                // Preserve non-operation keys on the path item (parameters, $ref, summary, …).
+                if (!in_array(strtolower((string) $key), $methods, true)) {
+                    $kept[$key] = $operation;
+                    continue;
+                }
+                $tags = (is_array($operation) && isset($operation['tags']) && is_array($operation['tags']))
+                    ? array_map('strval', $operation['tags'])
+                    : [];
+                if (self::tagsPass($tags, $includeSet, $excludeSet)) {
+                    $kept[$key] = $operation;
+                }
+            }
+            // Keep the path only if at least one operation survived.
+            foreach (array_keys($kept) as $key) {
+                if (in_array(strtolower((string) $key), $methods, true)) {
+                    $out[$path] = $kept;
+                    break;
+                }
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * @param list<string>          $tags
+     * @param array<string, int>    $includeSet
+     * @param array<string, int>    $excludeSet
+     */
+    private static function tagsPass(array $tags, array $includeSet, array $excludeSet): bool
+    {
+        foreach ($tags as $t) {
+            if (isset($excludeSet[$t])) {
+                return false; // deny wins
+            }
+        }
+        if ($includeSet === []) {
+            return true; // no allow-list => allow
+        }
+        foreach ($tags as $t) {
+            if (isset($includeSet[$t])) {
+                return true;
+            }
+        }
+        return false; // allow-list set but nothing matched
     }
 
     /**

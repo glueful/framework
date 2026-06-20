@@ -6,6 +6,16 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.61.0] - 2026-06-20 — Wezen
+
+> **Theme: API-docs tag filtering.** The OpenAPI generator gains a tag allow/deny filter (`documentation.options.tags.include` / `.exclude`, env-driven) so a consumer-facing spec can drop infrastructure groups (e.g. `Health`, `Documentation`, `Security`) without turning off whole route sources (`include_framework_routes` / `include_extensions`). Plus a small config cleanup — the dead `route_definitions` / `extension_definitions` doc-config keys (unread by the reflect generator) are removed. **Minor release** — additive: filtering defaults off (empty lists), no breaking API changes, no new migrations, no behavioral change to existing specs.
+
+### Added
+- **OpenAPI tag allow/deny filter.** New `documentation.options.tags.include` / `.exclude` (both default empty = no filtering; comma-separated env `API_DOCS_INCLUDE_TAGS` / `API_DOCS_EXCLUDE_TAGS`) drop operations from the generated spec by tag, *before* write — so a consumer-facing spec can exclude infra groups (e.g. `Health`, `Documentation`, `Security`) without turning off whole route sources (`include_framework_routes` / `include_extensions`). Allow-list empty = keep all; deny-list wins over allow; dropped operations take their now-unreferenced tags + schemas with them. The filtering logic is a pure, unit-tested static `DocGenerator::filterPathsByTags()`.
+
+### Removed
+- **Dead doc-config keys `documentation.paths.route_definitions` and `documentation.paths.extension_definitions`.** They pointed at the removed comment generator's `json-definitions/{routes,extensions}/` output dirs and are unread by the reflect generator, which merges only top-level `docs/json-definitions/*.json` fragments.
+
 ## [1.60.0] - 2026-06-19 — Vega
 
 > **Theme: Engine-agnostic installer + first-run setup seams.** `php glueful install` now configures and migrates **any** database engine (MySQL/PostgreSQL/SQLite), not just SQLite, with reconnected interactive credential prompts. A new `Glueful\Installer\` toolkit (`EnvWriter`, `ConnectionTester`, `Installer`, `DatabaseConfig`, `InstallState`) lets an app drive first-run setup from CLI **or** a UI without shelling out — under two hard invariants: a failed DB test mutates nothing, and the tested credentials are exactly what migrations run on. Plus `.env` writes are now quoted + atomic (one `EnvWriter`, replacing two unsafe copies), and `MigrationManager` accepts an injected `Connection`. **Minor release** — additive (no breaking API changes, no new env, no migrations). **Has `### Upgrade Notes`** (the now-interactive `install`).
