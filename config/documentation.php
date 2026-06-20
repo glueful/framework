@@ -106,11 +106,6 @@ return [
         // Final OpenAPI specification file location
         'openapi' => $root . '/docs/openapi.json',
 
-        // JSON definitions for route-based documentation
-        'route_definitions' => $root . '/docs/json-definitions/routes',
-
-        // JSON definitions for extension documentation
-        'extension_definitions' => $root . '/docs/json-definitions/extensions',
     ],
 
     /*
@@ -234,6 +229,22 @@ return [
         // Default false: the built-in defaults are kept for backward compatibility.
         // Explicitly-documented schemas (from route/extension fragments) are always kept.
         'prune_unreferenced_schemas' => env('API_DOCS_PRUNE_UNREFERENCED_SCHEMAS', false),
+
+        // Tag allow/deny filter applied to the assembled spec before write. `include` is an
+        // allow-list (empty = keep all tags); `exclude` is a deny-list and WINS over include.
+        // Lets a consumer-facing spec drop infra groups (e.g. Health, Documentation) without
+        // turning off whole route sources. Both default empty (no filtering). Comma-separated
+        // env overrides, e.g. API_DOCS_EXCLUDE_TAGS="Health,Documentation,Security".
+        'tags' => [
+            'include' => array_values(array_filter(array_map(
+                'trim',
+                explode(',', (string) env('API_DOCS_INCLUDE_TAGS', ''))
+            ), static fn(string $v): bool => $v !== '')),
+            'exclude' => array_values(array_filter(array_map(
+                'trim',
+                explode(',', (string) env('API_DOCS_EXCLUDE_TAGS', ''))
+            ), static fn(string $v): bool => $v !== '')),
+        ],
     ],
 
     /*
