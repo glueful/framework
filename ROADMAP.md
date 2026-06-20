@@ -21,6 +21,11 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.61.0 — Wezen (Minor, Released 2026-06-20)
+- **OpenAPI tag allow/deny filter.** The doc generator gains `documentation.options.tags.include` / `.exclude` (env `API_DOCS_INCLUDE_TAGS` / `API_DOCS_EXCLUDE_TAGS`) — drop operations from the generated spec by tag *before* write, so a consumer-facing spec can exclude infra groups (e.g. `Health`/`Documentation`/`Security`) without disabling whole route sources. Allow-list empty = keep all; deny wins; dropped ops take their now-unreferenced tags + schemas with them. Pure static `DocGenerator::filterPathsByTags()`.
+- **Doc-config cleanup.** Removed the dead `documentation.paths.route_definitions` / `extension_definitions` keys (unread by the reflect generator, which merges only top-level `docs/json-definitions/*.json`).
+- Notes: **Minor release**, additive — filtering defaults off, no breaking API changes, no new migrations. api-skeleton bumped to `^1.61.0`.
+
 ### 1.60.0 — Vega (Minor, Released 2026-06-19)
 - **Engine-agnostic installer (`php glueful install`).** Install now configures + migrates **any** engine (MySQL/PostgreSQL/SQLite), not just SQLite — the DB step's SQLite-only guard is gone, replaced by a connection test + `migrate:run` against the configured engine, and the previously-orphaned interactive credential prompts are reconnected. The command is a thin wrapper (710 → 238 lines) over the new orchestrator.
 - **`Glueful\Installer\` first-run setup seams.** Reusable services an app can drive from CLI **or** a UI without shelling out: `EnvWriter` (atomic, quoted `.env` writes — the single writer now, replacing two unsafe copies in `install`/`generate:key`), `ConnectionTester` (transient probe of explicit creds with a short connect timeout + typed result), `Installer` (preflight-first pipeline, step-based result), `DatabaseConfig`, `InstallState`. Two hard invariants: a failed DB test mutates nothing, and the tested credentials are exactly the connection migrations run on (`MigrationManager` gains an optional injected `Connection`). PostgreSQL `sslmode`/`connect_timeout` now reach the DSN.

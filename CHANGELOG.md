@@ -6,6 +6,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.61.0] - 2026-06-20 — Wezen
+
+> **Theme: API-docs tag filtering.** The OpenAPI generator gains a tag allow/deny filter (`documentation.options.tags.include` / `.exclude`, env-driven) so a consumer-facing spec can drop infrastructure groups (e.g. `Health`, `Documentation`, `Security`) without turning off whole route sources (`include_framework_routes` / `include_extensions`). Plus a small config cleanup — the dead `route_definitions` / `extension_definitions` doc-config keys (unread by the reflect generator) are removed. **Minor release** — additive: filtering defaults off (empty lists), no breaking API changes, no new migrations, no behavioral change to existing specs.
+
 ### Added
 - **OpenAPI tag allow/deny filter.** New `documentation.options.tags.include` / `.exclude` (both default empty = no filtering; comma-separated env `API_DOCS_INCLUDE_TAGS` / `API_DOCS_EXCLUDE_TAGS`) drop operations from the generated spec by tag, *before* write — so a consumer-facing spec can exclude infra groups (e.g. `Health`, `Documentation`, `Security`) without turning off whole route sources (`include_framework_routes` / `include_extensions`). Allow-list empty = keep all; deny-list wins over allow; dropped operations take their now-unreferenced tags + schemas with them. The filtering logic is a pure, unit-tested static `DocGenerator::filterPathsByTags()`.
 
