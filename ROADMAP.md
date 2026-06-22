@@ -21,6 +21,10 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.61.1 — Wezen (Patch, Released 2026-06-22)
+- **CORS on every response.** `Application::handle()` now applies CORS headers to the final response in both the dispatch and exception-handler branches — previously only the OPTIONS preflight carried them, so cross-origin **regular** and **error** responses (422/401/…) shipped without `Access-Control-Allow-Origin` and browsers withheld the body. New public `Cors::applyToResponse(Request, Response)` supports the fix (no-op without an `Origin`, for disallowed origins, or when already set — never clobbers the preflight responder).
+- Notes: **Patch release** — bugfix, no new env, no migrations, no action required. api-skeleton bumped to `^1.61.1`.
+
 ### 1.61.0 — Wezen (Minor, Released 2026-06-20)
 - **OpenAPI tag allow/deny filter.** The doc generator gains `documentation.options.tags.include` / `.exclude` (env `API_DOCS_INCLUDE_TAGS` / `API_DOCS_EXCLUDE_TAGS`) — drop operations from the generated spec by tag *before* write, so a consumer-facing spec can exclude infra groups (e.g. `Health`/`Documentation`/`Security`) without disabling whole route sources. Allow-list empty = keep all; deny wins; dropped ops take their now-unreferenced tags + schemas with them. Pure static `DocGenerator::filterPathsByTags()`.
 - **Doc-config cleanup.** Removed the dead `documentation.paths.route_definitions` / `extension_definitions` keys (unread by the reflect generator, which merges only top-level `docs/json-definitions/*.json`).

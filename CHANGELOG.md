@@ -6,6 +6,16 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.61.1] - 2026-06-22 — Wezen
+
+> **Theme: CORS on every response.** The framework applied CORS headers only to the OPTIONS preflight, so cross-origin **regular** responses — and especially **error/exception** responses (422, 401, …) — shipped without `Access-Control-Allow-Origin`, and browsers withheld the body. A separately-served frontend (e.g. a Vite dev SPA on another origin) calling the API would therefore get an empty/unreadable body for any validation or error response. `Application::handle()` now applies CORS to the **final** response — in both the dispatch and exception-handler branches — so the headers that were always intended for these responses are actually present. **Patch release** — bugfix, no new env, no migrations, no action required.
+
+### Fixed
+- **Cross-origin error/regular responses are now readable.** `Application::handle()` applies CORS headers to the final response in both the normal **and** exception-handler branches, so a cross-origin client (e.g. a dev SPA on a different origin) can read the body of a `422`/`401`/etc. Previously only the OPTIONS preflight carried CORS headers, leaving regular and error response bodies blocked by the browser. Same-origin requests and disallowed origins are unaffected.
+
+### Added
+- **`Cors::applyToResponse(Request, Response)`** (supporting the fix above). Applies the regular-request CORS headers (`Access-Control-Allow-Origin`, `Vary: Origin`, plus `Access-Control-Expose-Headers` / `Access-Control-Allow-Credentials` per config) to an already-built response. No-op when there is no `Origin`, the origin is not allowed, or the header is already set (e.g. a preflight response), so it never clobbers the router's preflight handling.
+
 ## [1.61.0] - 2026-06-20 — Wezen
 
 > **Theme: API-docs tag filtering.** The OpenAPI generator gains a tag allow/deny filter (`documentation.options.tags.include` / `.exclude`, env-driven) so a consumer-facing spec can drop infrastructure groups (e.g. `Health`, `Documentation`, `Security`) without turning off whole route sources (`include_framework_routes` / `include_extensions`). Plus a small config cleanup — the dead `route_definitions` / `extension_definitions` doc-config keys (unread by the reflect generator) are removed. **Minor release** — additive: filtering defaults off (empty lists), no breaking API changes, no new migrations, no behavioral change to existing specs.

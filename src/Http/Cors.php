@@ -6,6 +6,7 @@ namespace Glueful\Http;
 
 use Glueful\Bootstrap\ApplicationContext;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 /**
  * Configurable CORS Handler - Developer-Friendly
@@ -338,6 +339,30 @@ class Cors
         }
 
         return $headers;
+    }
+
+    /**
+     * Apply regular (non-preflight) CORS headers to an already-built response.
+     *
+     * This lets cross-origin clients read the response BODY — including error/exception responses,
+     * which bypass the router's preflight handling and would otherwise ship without
+     * Access-Control-Allow-Origin (so the browser withholds the body). It is a no-op when there is
+     * no Origin, the origin is not allowed, or the response already carries the header (e.g. a
+     * preflight response). Sets headers on the Response object rather than via header(), so they
+     * travel with the response regardless of how/when it is sent.
+     */
+    public function applyToResponse(Request $request, SymfonyResponse $response): void
+    {
+        $origin = $request->headers->get('Origin', '');
+        if ($origin === '' || $response->headers->has('Access-Control-Allow-Origin')) {
+            return;
+        }
+        if (!$this->isOriginAllowed($origin)) {
+            return;
+        }
+        foreach ($this->responseCorsHeaders($origin) as $name => $value) {
+            $response->headers->set($name, $value);
+        }
     }
 
     /**
