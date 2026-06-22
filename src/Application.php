@@ -6,6 +6,7 @@ namespace Glueful;
 
 use Psr\Container\ContainerInterface;
 use Glueful\Routing\Router;
+use Glueful\Http\Cors;
 use Glueful\Http\Exceptions\Contracts\ExceptionHandlerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -48,6 +49,13 @@ class Application
             $handler = $this->container->get(ExceptionHandlerInterface::class);
             $response = $handler->handle($e, $request);
         }
+
+        // Cross-origin clients must be able to read EVERY response — including error/exception
+        // responses, which bypass the router's preflight CORS handling and would otherwise ship
+        // without Access-Control-Allow-Origin (so the browser withholds the body). Apply regular
+        // CORS headers to the final response here, the single chokepoint that sees both the
+        // dispatch and the exception-handler branches. No-op for same-origin or when already set.
+        (new Cors([], $this->context))->applyToResponse($request, $response);
 
         $totalTime = round((microtime(true) - $startTime) * 1000, 2);
         $this->logger->info(

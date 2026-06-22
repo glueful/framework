@@ -6,6 +6,8 @@ namespace Glueful\Tests\Unit\Http;
 
 use Glueful\Http\Cors;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Regression: the standalone CORS handler's no-config default was permissive and its
@@ -122,6 +124,63 @@ final class CorsTest extends TestCase
 
         $preflight = $this->invoke($cors, 'preflightCorsHeaders', ['https://app.example']);
         self::assertSame('Origin', $preflight['Vary'] ?? null);
+    }
+
+    public function test_applyToResponse_sets_cors_headers_on_error_response_for_allowed_origin(): void
+    {
+        $cors = new Cors(['allowedOrigins' => ['https://app.example']]);
+        $request = Request::create('/admin/setup', 'POST');
+        $request->headers->set('Origin', 'https://app.example');
+        // An error response — exactly the case the router's preflight handling doesn't cover.
+        $response = new Response('{"errors":{}}', 422);
+
+        $cors->applyToResponse($request, $response);
+
+        self::assertSame(
+            'https://app.example',
+            $response->headers->get('Access-Control-Allow-Origin'),
+            'cross-origin error responses must carry Access-Control-Allow-Origin so the browser exposes the body'
+        );
+        self::assertSame('Origin', $response->headers->get('Vary'));
+    }
+
+    public function test_applyToResponse_is_noop_for_disallowed_origin(): void
+    {
+        $cors = new Cors(['allowedOrigins' => ['https://app.example']]);
+        $request = Request::create('/x', 'POST');
+        $request->headers->set('Origin', 'https://evil.example');
+        $response = new Response('', 422);
+
+        $cors->applyToResponse($request, $response);
+
+        self::assertFalse($response->headers->has('Access-Control-Allow-Origin'));
+    }
+
+    public function test_applyToResponse_is_noop_without_an_origin(): void
+    {
+        $cors = new Cors(['allowedOrigins' => ['https://app.example']]);
+        $response = new Response('', 200);
+
+        $cors->applyToResponse(Request::create('/x', 'GET'), $response);
+
+        self::assertFalse($response->headers->has('Access-Control-Allow-Origin'));
+    }
+
+    public function test_applyToResponse_does_not_overwrite_an_existing_header(): void
+    {
+        $cors = new Cors(['allowedOrigins' => ['https://app.example']]);
+        $request = Request::create('/x', 'OPTIONS');
+        $request->headers->set('Origin', 'https://app.example');
+        $response = new Response('', 204);
+        $response->headers->set('Access-Control-Allow-Origin', 'https://preflight.example');
+
+        $cors->applyToResponse($request, $response);
+
+        self::assertSame(
+            'https://preflight.example',
+            $response->headers->get('Access-Control-Allow-Origin'),
+            'an already-set header (e.g. from the preflight responder) must not be clobbered'
+        );
     }
 
     private function configValue(Cors $cors, string $key): mixed
