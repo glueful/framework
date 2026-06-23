@@ -652,7 +652,10 @@ class MemcachedCacheDriver implements CacheStore
             throw CacheException::emptyKey();
         }
 
-        if (strpbrk($key, '{}()/\\@:') !== false) {
+        // Colons are valid in Memcached keys (only spaces and control chars are forbidden), and the
+        // framework namespaces every cache key with a colon (session:, provider:, …) — matching the
+        // Redis driver, which allows them. Banning ':' would break session caching on Memcached.
+        if (strpbrk($key, '{}()/\\@') !== false) {
             throw CacheException::invalidCharacters($key);
         }
 

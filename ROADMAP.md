@@ -21,6 +21,11 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.61.2 — Wezen (Patch, Released 2026-06-23)
+- **Permission gate no longer fail-closes (403) for authorized users.** `AuthMiddleware::autoEnrichRequest()` resolved the `auth.user` enricher by a leading-backslash container id (`'\Glueful\…\AuthToRequestAttributesMiddleware'`) that never matched the `::class` registration key, so `Container::has()` returned false, the enricher never ran, and `GateAttributeMiddleware` saw a null principal — returning 403 on every `#[RequiresPermission]` / `gate_permissions` route even for fully authorized users. Lookup now uses the `::class` constant.
+- **File/Memcached cache drivers accept colon-namespaced keys**, matching Redis — login no longer fails on those backends when `SessionCacheManager` stores `session:`-prefixed keys.
+- Notes: **Patch release** — bugfixes, no new env, no migrations, no action required. api-skeleton bumped to `^1.61.2`.
+
 ### 1.61.1 — Wezen (Patch, Released 2026-06-22)
 - **CORS on every response.** `Application::handle()` now applies CORS headers to the final response in both the dispatch and exception-handler branches — previously only the OPTIONS preflight carried them, so cross-origin **regular** and **error** responses (422/401/…) shipped without `Access-Control-Allow-Origin` and browsers withheld the body. New public `Cors::applyToResponse(Request, Response)` supports the fix (no-op without an `Origin`, for disallowed origins, or when already set — never clobbers the preflight responder).
 - Notes: **Patch release** — bugfix, no new env, no migrations, no action required. api-skeleton bumped to `^1.61.1`.
