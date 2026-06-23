@@ -663,7 +663,12 @@ class AuthMiddleware implements RouteMiddleware
         }
 
         try {
-            $middlewareClass = '\\Glueful\\Permissions\\Middleware\\AuthToRequestAttributesMiddleware';
+            // Use the ::class constant (no leading backslash) so the id matches the container's
+            // registration key. A leading-backslash string ("\Glueful\...") does NOT match —
+            // the container does not normalize it — so has() would return false and the
+            // enricher (which sets the `auth.user` UserIdentity the permission gate reads)
+            // would never run, silently fail-closing every #[RequiresPermission] route.
+            $middlewareClass = \Glueful\Permissions\Middleware\AuthToRequestAttributesMiddleware::class;
             if ($this->container->has($middlewareClass)) {
                 $enricher = $this->container->get($middlewareClass);
                 if (is_object($enricher) && method_exists($enricher, 'enrichRequest')) {

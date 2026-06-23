@@ -1107,7 +1107,11 @@ class FileCacheDriver implements CacheStore
             throw CacheException::emptyKey();
         }
 
-        if (strpbrk($key, '{}()/\\@:') !== false) {
+        // The key is md5-hashed before it becomes a filename (see getFilePath), so colons are
+        // filesystem-safe here. The framework namespaces every cache key with a colon
+        // (session:, provider:, user_permissions:, …), and the Redis driver allows them, so this
+        // driver must too — banning ':' breaks session caching on a file backend.
+        if (strpbrk($key, '{}()/\\@') !== false) {
             throw CacheException::invalidCharacters($key);
         }
 
