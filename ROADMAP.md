@@ -21,6 +21,14 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.62.0 — Xuange (Minor, Released 2026-06-24)
+- **User-record enrichment seam.** New `Glueful\Auth\Contracts\UserRecordEnricherInterface` + the
+  `users.record_enricher` tag — the read-side symmetric of `identity.claims_provider`. Lets an
+  authorization extension (glueful/aegis) attach a user's `roles` to the records an identity store
+  (glueful/users) returns on `/users`, `/users/{uuid}` and `/me`, with no dependency between the two.
+- Notes: **Minor release**, additive — no behavior change unless an extension registers an enricher,
+  no new env, no migrations. api-skeleton bumped to `^1.62.0`.
+
 ### 1.61.2 — Wezen (Patch, Released 2026-06-23)
 - **Permission gate no longer fail-closes (403) for authorized users.** `AuthMiddleware::autoEnrichRequest()` resolved the `auth.user` enricher by a leading-backslash container id (`'\Glueful\…\AuthToRequestAttributesMiddleware'`) that never matched the `::class` registration key, so `Container::has()` returned false, the enricher never ran, and `GateAttributeMiddleware` saw a null principal — returning 403 on every `#[RequiresPermission]` / `gate_permissions` route even for fully authorized users. Lookup now uses the `::class` constant.
 - **File/Memcached cache drivers accept colon-namespaced keys**, matching Redis — login no longer fails on those backends when `SessionCacheManager` stores `session:`-prefixed keys.

@@ -6,6 +6,24 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.62.0] - 2026-06-24 — Xuange
+
+> **Theme: user-record enrichment seam.** A new core contract lets an authorization (or other)
+> extension attach fields to the user *records* an identity store returns — the read-side symmetric
+> of the existing `identity.claims_provider` seam (which enriches the one authenticated identity at
+> login). It exists so glueful/users can surface a user's `roles` on `/users`, `/users/{uuid}` and
+> `/me` without depending on glueful/aegis, and so a future extension can attach teams/etc. the same
+> way. **Minor release** — additive contract, no behavior change unless an extension registers an
+> enricher, no new env, no migrations.
+
+### Added
+- **`Glueful\Auth\Contracts\UserRecordEnricherInterface`** + the `users.record_enricher` container
+  tag. An implementation receives a batch of user UUIDs and returns additive fields to merge per
+  record (e.g. `{roles: […]}`); a consumer (the identity store's read endpoints) collects every
+  tagged service and folds their output into each record. Implementations must be batch-friendly
+  (one query, no N+1) and additive (they cannot change identity facts). Mirrors
+  `IdentityClaimsProviderInterface` for read payloads rather than the authenticated principal.
+
 ## [1.61.2] - 2026-06-23 — Wezen
 
 > **Theme: permission gate fail-closed fix.** Every `#[RequiresPermission]` / `gate_permissions` route returned **403 for fully authorized users** because the `auth.user` principal the gate reads was never populated — `AuthMiddleware`'s enricher lookup used a leading-backslash container id that never matched, so the enricher silently never ran. The gate then saw a null principal and denied. Plus a companion cache-key fix so file/Memcached backends accept the framework's colon-namespaced keys (login could fail on those drivers). **Patch release** — bugfixes, no new env, no migrations, no action required.
