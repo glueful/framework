@@ -21,6 +21,18 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.63.0 — Yildun (Minor, Released 2026-06-25)
+- **Entity-deletion event.** `BaseRepository::delete()` now dispatches `Glueful\Events\Database\EntityDeletedEvent`
+  after a successful delete (`affected_rows > 0`), carrying the **pre-delete** record + metadata matching the
+  create/update events (`entity_id`, `primary_key`, `affected_rows`, `operation`). Completes the create/update/delete
+  event triplet so audit/cache-invalidation/notification consumers can react to deletes. Mirrors `EntityCreatedEvent`
+  (`getEntity()`/`getEntityId()`/`getTable()`/`getCacheTags()`/`isUserRelated()`, plus a `getOriginalData()` alias).
+- **Subclass domain-event dispatch.** `BaseRepository::dispatchEvent()` widened `private` → `protected` so repository
+  subclasses (incl. extensions) can emit their own domain events through the framework's best-effort, context-guarded
+  helper (no-ops without an injected `ApplicationContext`).
+- Notes: **Minor release**, additive — a new event (fires only if subscribed) + a visibility widening; no breaking
+  changes, no new env, no migrations. api-skeleton bumped to `^1.63.0`.
+
 ### 1.62.0 — Xuange (Minor, Released 2026-06-24)
 - **User-record enrichment seam.** New `Glueful\Auth\Contracts\UserRecordEnricherInterface` + the
   `users.record_enricher` tag — the read-side symmetric of `identity.claims_provider`. Lets an
