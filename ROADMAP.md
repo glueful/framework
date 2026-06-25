@@ -21,6 +21,21 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.63.1 — Yildun (Patch, Released 2026-06-25)
+- **Resilient event dispatch.** `EventDispatcher::dispatch()` now isolates listener failures — it catches
+  each listener's `Throwable`, logs it, and continues — so one broken/misconfigured listener can't abort
+  the dispatch and starve the rest of the chain (previously the first throw ended dispatch for that event).
+- **`ActivityLoggingSubscriber` is resolvable again.** It required a non-nullable `LogManager` that the
+  container never registers, so it threw on every auth/security event — and (pre-isolation) that aborted
+  delivery of those events to *all* listeners. Now takes `?LogManager $logger = null` with a
+  `getInstance()` fallback. Together these restore login/logout/security event delivery to listeners
+  (framework activity logging + app/extension subscribers such as glueful/audit).
+- **Failed logins emit `AuthenticationFailedEvent`.** The event existed and had subscribers but was never
+  dispatched; `AuthenticationService::verifyCredentials()` now fires it (best-effort, context-guarded) on
+  rejected credentials (`invalid_credentials`) or a disabled account (`user_disabled`), with the attempted
+  username and request IP/user-agent — making failed login attempts observable to audit/activity logging.
+- Notes: **Patch release** — bugfixes, no new env, no migrations, no action required. api-skeleton bumped to `^1.63.1`.
+
 ### 1.63.0 — Yildun (Minor, Released 2026-06-25)
 - **Entity-deletion event.** `BaseRepository::delete()` now dispatches `Glueful\Events\Database\EntityDeletedEvent`
   after a successful delete (`affected_rows > 0`), carrying the **pre-delete** record + metadata matching the
