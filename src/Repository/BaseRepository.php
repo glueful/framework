@@ -11,6 +11,7 @@ use Glueful\Repository\Traits\TransactionTrait;
 use Glueful\Helpers\Utils;
 use Glueful\Http\Exceptions\Domain\DatabaseException;
 use Glueful\Events\Database\EntityCreatedEvent;
+use Glueful\Events\Database\EntityDeletedEvent;
 use Glueful\Events\Database\EntityUpdatedEvent;
 use Glueful\Events\EventService;
 
@@ -318,12 +319,19 @@ abstract class BaseRepository implements RepositoryInterface
         $success = $affectedRows > 0;
 
         if ($success) {
+            $this->dispatchEvent(new EntityDeletedEvent($originalData, $this->table, [
+                'entity_id' => $uuid,
+                'timestamp' => time(),
+                'primary_key' => $this->primaryKey,
+                'affected_rows' => $affectedRows,
+                'operation' => 'delete',
+            ]));
         }
 
         return $success;
     }
 
-    private function dispatchEvent(object $event): void
+    protected function dispatchEvent(object $event): void
     {
         if ($this->context === null) {
             return;
