@@ -6,6 +6,31 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.63.0] - 2026-06-25 — Yildun
+
+> **Theme: entity-deletion event + subclass domain-event dispatch.** `BaseRepository` now emits an
+> `EntityDeletedEvent` on a successful delete — completing the create/update/delete triplet so audit,
+> cache-invalidation and notification consumers can react to deletes, not just writes. And the
+> repository's event-dispatch helper is now `protected`, so repository subclasses (including those in
+> extensions) can emit their own domain events through the same best-effort, context-guarded path.
+> **Minor release** — additive: a new event (fires only if something subscribes) plus a visibility
+> widening; no breaking changes, no new env, no migrations.
+
+### Added
+- **`Glueful\Events\Database\EntityDeletedEvent`**, dispatched from `BaseRepository::delete()` after a
+  successful delete (`affected_rows > 0`). It carries the **pre-delete** record (read before the delete)
+  so consumers can derive the entity's identity/labels, plus metadata matching the create/update events
+  (`entity_id`, `primary_key`, `affected_rows`, `operation: 'delete'`). Mirrors `EntityCreatedEvent`'s
+  surface (`getEntity()`/`getEntityId()`/`getTable()`/`getCacheTags()`/`isUserRelated()`, with a
+  `getOriginalData()` alias). Completes the entity CRUD event triplet; no-op deletes (missing row / zero
+  affected) emit nothing.
+
+### Changed
+- **`BaseRepository::dispatchEvent()` is now `protected`** (was `private`), so repository subclasses —
+  including those in extensions — can emit their own domain events through the framework's best-effort,
+  context-guarded dispatch helper (it no-ops when the repository was constructed without an
+  `ApplicationContext`). No behavior change to existing repositories.
+
 ## [1.62.0] - 2026-06-24 — Xuange
 
 > **Theme: user-record enrichment seam.** A new core contract lets an authorization (or other)
