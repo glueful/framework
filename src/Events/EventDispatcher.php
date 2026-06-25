@@ -36,15 +36,23 @@ final class EventDispatcher implements EventDispatcherInterface
                     break;
                 }
 
+                // Fault isolation: a listener that throws (a resolution failure or a runtime
+                // error) must NOT abort the dispatch and starve the listeners after it. Catch,
+                // report, and continue — one broken/misconfigured listener can't take the rest
+                // of the chain (e.g. an audit/cache listener) down with it.
                 if ($this->tracer instanceof NullEventTracer) {
-                    $listener($event);
+                    try {
+                        $listener($event);
+                    } catch (\Throwable $e) {
+                        $this->reportListenerError($event, $e);
+                    }
                 } else {
                     $start = hrtime(true);
                     try {
                         $listener($event);
                     } catch (\Throwable $e) {
                         $this->tracer->listenerError($event::class, $listener, $e);
-                        throw $e;
+                        $this->reportListenerError($event, $e);
                     } finally {
                         $this->tracer->listenerDone($event::class, $listener, hrtime(true) - $start);
                     }
@@ -57,5 +65,16 @@ final class EventDispatcher implements EventDispatcherInterface
         }
 
         return $event;
+    }
+
+    private function reportListenerError(object $event, \Throwable $e): void
+    {
+        error_log(sprintf(
+            'Event listener failed for %s: %s in %s:%d',
+            $event::class,
+            $e->getMessage(),
+            $e->getFile(),
+            $e->getLine()
+        ));
     }
 }
