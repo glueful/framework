@@ -21,6 +21,14 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.63.2 — Yildun (Patch, Released 2026-06-26)
+- **Image-variant caching fix.** Serving a resized blob (`GET /blobs/{uuid}?width=…`) with the variant
+  cache enabled 500'd — the rendered binary was cached through a JSON serializer (e.g. the Redis driver's
+  `SecureSerializer`), which can't encode non-UTF-8 bytes. Variants are now cached base64-encoded and
+  decoded on read; a corrupt/legacy entry re-renders. The un-resized original was never affected.
+- Notes: **Patch release** — bugfix only, no new env, no migrations, no action required. api-skeleton
+  bumped to `^1.63.2`.
+
 ### 1.63.1 — Yildun (Patch, Released 2026-06-25)
 - **Resilient event dispatch.** `EventDispatcher::dispatch()` now isolates listener failures — it catches
   each listener's `Throwable`, logs it, and continues — so one broken/misconfigured listener can't abort
