@@ -37,8 +37,14 @@ final class RepositoryProvider extends BaseServiceProvider
         );
         $defs[\Glueful\Repository\BlobRepository::class] = new FactoryDefinition(
             \Glueful\Repository\BlobRepository::class,
+            // Pass the ApplicationContext so create/update/delete dispatch their entity events
+            // (BaseRepository::dispatchEvent() no-ops without a context) — e.g. so blob uploads
+            // are auditable. Without it, uploads silently emit no EntityCreatedEvent.
             fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Repository\BlobRepository(
-                $c->get('database')
+                $c->get('database'),
+                $c->has(\Glueful\Bootstrap\ApplicationContext::class)
+                    ? $c->get(\Glueful\Bootstrap\ApplicationContext::class)
+                    : null
             )
         );
 

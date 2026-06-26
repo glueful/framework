@@ -21,6 +21,14 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.63.3 — Yildun (Patch, Released 2026-06-26)
+- **Blob writes are auditable.** `BlobRepository` was built without an `ApplicationContext`, so its
+  create/update/delete never dispatched entity events — blob uploads emitted no `EntityCreatedEvent` and
+  couldn't be audited. It's now constructed with the context, so uploads emit events an audit/activity
+  consumer can record.
+- Notes: **Patch release** — bugfix, no new env, no migrations, no action required. api-skeleton bumped
+  to `^1.63.3`.
+
 ### 1.63.2 — Yildun (Patch, Released 2026-06-26)
 - **Image-variant caching fix.** Serving a resized blob (`GET /blobs/{uuid}?width=…`) with the variant
   cache enabled 500'd — the rendered binary was cached through a JSON serializer (e.g. the Redis driver's
