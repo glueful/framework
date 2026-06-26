@@ -9,6 +9,8 @@ use Glueful\Auth\AuthenticationService;
 use Glueful\Auth\IdentityResolver;
 use Glueful\Auth\UserIdentity;
 use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Events\Auth\AuthenticationFailedEvent;
+use Glueful\Events\EventService;
 use Glueful\Framework;
 use Glueful\Routing\RouteManifest;
 use Glueful\Tests\Support\Auth\InMemoryUserProvider;
@@ -68,6 +70,43 @@ final class AuthenticationServiceSeamTest extends TestCase
         self::assertSame('amy@x.test', $userData['email'] ?? null);
 
         self::assertNull($svc->verifyCredentials(['email' => 'amy@x.test', 'password' => 'wrong']));
+    }
+
+    public function test_failed_login_dispatches_authentication_failed_event(): void
+    {
+        $provider = (new InMemoryUserProvider())->add(
+            new UserIdentity('u-amy00000001', email: 'amy@x.test', username: 'amy', status: 'active'),
+            'secret-123',
+            'amy@x.test',
+        );
+
+        /** @var list<AuthenticationFailedEvent> $captured */
+        $captured = [];
+        $events = $this->app->getContainer()->get(EventService::class);
+        $events->addListener(
+            AuthenticationFailedEvent::class,
+            function (AuthenticationFailedEvent $e) use (&$captured): void {
+                $captured[] = $e;
+            }
+        );
+
+        $svc = new AuthenticationService(
+            context: $this->context,
+            userProvider: $provider,
+            identityResolver: new IdentityResolver([]),
+        );
+
+        // A valid-format but wrong password reaches the credential check (a short one would be
+        // rejected earlier by the password-format guard) -> rejected AND one
+        // AuthenticationFailedEvent (invalid_credentials).
+        self::assertNull($svc->verifyCredentials(['email' => 'amy@x.test', 'password' => 'wrongpass-1']));
+        self::assertCount(1, $captured);
+        self::assertSame('amy@x.test', $captured[0]->getUsername());
+        self::assertSame('invalid_credentials', $captured[0]->getReason());
+
+        // A successful login emits nothing further.
+        self::assertNotNull($svc->verifyCredentials(['email' => 'amy@x.test', 'password' => 'secret-123']));
+        self::assertCount(1, $captured);
     }
 
     private function bootFramework(): void

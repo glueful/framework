@@ -6,6 +6,36 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.63.1] - 2026-06-25 — Yildun
+
+> **Theme: resilient event dispatch + dead auth events.** Related fixes that together restore delivery
+> of auth/security events (logins, logouts, failed logins, rate-limit/security violations) to their
+> listeners. `ActivityLoggingSubscriber` — the first listener on every auth/security event — was
+> **unresolvable** (it required a `LogManager` the container never registers), so resolving it threw;
+> and the dispatcher did **not** isolate listener failures, so that throw aborted the whole dispatch
+> before any later listener (cache invalidation, an audit extension, …) ran. The session-event
+> dispatcher swallows dispatch errors, so logins silently succeeded with nothing logged. **Patch
+> release** — bugfixes, no new env, no migrations, no action required.
+
+### Fixed
+- **A throwing event listener no longer aborts the dispatch and starves the listeners after it.**
+  `EventDispatcher::dispatch()` now catches each listener's `Throwable`, logs it, and continues to the
+  next listener (on both the hot and traced paths) — a single broken or misconfigured listener can no
+  longer take the rest of the chain down with it. Previously the first listener to throw ended dispatch
+  for that event entirely.
+- **`ActivityLoggingSubscriber` is now resolvable.** It required a non-nullable `LogManager`, which is
+  not a container-registered service, so the autowiring resolver could not construct it — making the
+  subscriber throw on every auth/security event. Its constructor now takes `?LogManager $logger = null`
+  and falls back to `LogManager::getInstance()`. Combined with the dispatcher fix, auth/security events
+  are delivered to all listeners again (the framework's own activity logging, plus any app/extension
+  subscriber such as glueful/audit).
+- **Failed logins now emit `AuthenticationFailedEvent`.** The event was declared and listeners subscribe
+  to it, but nothing ever dispatched it — so failed login attempts were invisible to activity logging and
+  audit consumers. `AuthenticationService::verifyCredentials()` now dispatches it (best-effort,
+  context-guarded, never breaks the login flow) when credentials are rejected (`invalid_credentials`) or
+  the resolved account is disabled (`user_disabled`), carrying the attempted username plus the request's
+  client IP and user-agent when available.
+
 ## [1.63.0] - 2026-06-25 — Yildun
 
 > **Theme: entity-deletion event + subclass domain-event dispatch.** `BaseRepository` now emits an

@@ -6,7 +6,10 @@ namespace Glueful\Auth;
 
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Cache\Drivers\ArrayCacheDriver;
+use Glueful\Events\Auth\AuthenticationFailedEvent;
+use Glueful\Events\EventService;
 use Glueful\Helpers\CacheHelper;
+use Glueful\Http\RequestContext;
 use Glueful\Auth\Contracts\UserProviderInterface;
 use Glueful\DTOs\{PasswordDTO};
 use Symfony\Component\HttpFoundation\Request;
@@ -227,6 +230,7 @@ class AuthenticationService
             (string) ($credentials['password'] ?? '')
         );
         if ($identity === null) {
+            $this->dispatchAuthFailed((string) $identifier, 'invalid_credentials');
             return null;
         }
 
@@ -234,6 +238,7 @@ class AuthenticationService
         // Null => rejected (e.g. suspended/disabled).
         $identity = $this->identityResolver->resolve($identity);
         if ($identity === null) {
+            $this->dispatchAuthFailed((string) $identifier, 'user_disabled');
             return null;
         }
 
@@ -251,6 +256,38 @@ class AuthenticationService
             'last_login' => date('Y-m-d H:i:s'),
             'remember_me' => $credentials['remember_me'] ?? false,
         ];
+    }
+
+    /**
+     * Emit an {@see AuthenticationFailedEvent} for a rejected username/password login so listeners
+     * (security monitoring, activity logging, an audit extension) can record the attempt. Best-effort
+     * and non-throwing — a failed dispatch must never change the login's outcome. Client IP / user agent
+     * are resolved from the request context when available.
+     */
+    private function dispatchAuthFailed(string $username, string $reason): void
+    {
+        if ($this->context === null) {
+            return;
+        }
+
+        try {
+            $clientIp = null;
+            $userAgent = null;
+            $container = $this->context->getContainer();
+            if ($container->has(RequestContext::class)) {
+                $requestContext = $container->get(RequestContext::class);
+                if ($requestContext instanceof RequestContext) {
+                    $clientIp = $requestContext->getClientIp();
+                    $userAgent = $requestContext->getUserAgent();
+                }
+            }
+
+            app($this->context, EventService::class)->dispatch(
+                new AuthenticationFailedEvent($username, $reason, $clientIp, $userAgent)
+            );
+        } catch (\Throwable) {
+            // Best-effort only — never break the login flow.
+        }
     }
 
     /**

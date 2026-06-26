@@ -30,9 +30,17 @@ use Glueful\Support\SensitiveParamRedactor;
  */
 class ActivityLoggingSubscriber implements EventSubscriberInterface
 {
-    public function __construct(
-        private LogManager $logger
-    ) {
+    private LogManager $logger;
+
+    /**
+     * `LogManager` is not a container-registered service, so the autowiring resolver can't
+     * construct it for a non-nullable param — which made this whole subscriber unresolvable and
+     * silently broke auth/security event delivery. Accept it as optional and fall back to the
+     * process-wide singleton.
+     */
+    public function __construct(?LogManager $logger = null)
+    {
+        $this->logger = $logger ?? LogManager::getInstance();
     }
 
     /**
