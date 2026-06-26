@@ -6,6 +6,22 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.63.2] - 2026-06-26 — Yildun
+
+> **Theme: image-variant caching fix.** A single bugfix — serving a resized blob variant
+> (`GET /blobs/{uuid}?width=…`) with the variant cache enabled 500'd, because the rendered binary was
+> cached through a JSON-based serializer. **Patch release** — bugfix only, no new env, no migrations,
+> no action required.
+
+### Fixed
+- **On-the-fly image variants no longer 500 when the variant cache is enabled.** `UploadController`'s
+  resized-blob serving (`GET /blobs/{uuid}?width=…`) cached the rendered variant as **raw image bytes**,
+  which a JSON-based cache serializer (e.g. the Redis driver's `SecureSerializer`) cannot encode — raw
+  bytes aren't valid UTF-8 — so every cached resize threw `JsonException: Malformed UTF-8` and returned
+  500 (the un-resized original was unaffected). The variant bytes are now stored **base64-encoded** and
+  decoded on read, so caching works across all serializers. A legacy/corrupt cache entry that fails to
+  decode falls through to a re-render.
+
 ## [1.63.1] - 2026-06-25 — Yildun
 
 > **Theme: resilient event dispatch + dead auth events.** Related fixes that together restore delivery
