@@ -409,16 +409,20 @@ class UploadController extends BaseController
             }
         }
 
-        // Check server-side cache
+        // Check server-side cache. The variant bytes are stored base64-encoded (see the set below),
+        // so decode before serving; a decode failure (legacy/corrupt entry) falls through to re-render.
         if ($cacheEnabled && $this->cache !== null) {
             $cached = $this->cache->get($cacheKey);
             if (is_array($cached) && isset($cached['data'], $cached['mime']) && is_string($cached['data'])) {
-                return $this->binaryResponse(
-                    $cached['data'],
-                    (string) $cached['mime'],
-                    $cacheTtl,
-                    $etagEnabled ? $etag : null
-                );
+                $decoded = base64_decode($cached['data'], true);
+                if ($decoded !== false) {
+                    return $this->binaryResponse(
+                        $decoded,
+                        (string) $cached['mime'],
+                        $cacheTtl,
+                        $etagEnabled ? $etag : null
+                    );
+                }
             }
         }
 
@@ -446,7 +450,9 @@ class UploadController extends BaseController
             }
 
             if ($cacheEnabled && $this->cache !== null) {
-                $this->cache->set($cacheKey, ['data' => $data, 'mime' => $mime], $cacheTtl);
+                // Store base64-encoded: raw image bytes aren't valid UTF-8 and break JSON-based cache
+                // serializers (e.g. the Redis driver's SecureSerializer -> json_encode).
+                $this->cache->set($cacheKey, ['data' => base64_encode($data), 'mime' => $mime], $cacheTtl);
             }
 
             return $this->binaryResponse($data, $mime, $cacheTtl, $etagEnabled ? $etag : null);
