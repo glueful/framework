@@ -6,6 +6,19 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.63.3] - 2026-06-26 — Yildun
+
+> **Theme: blob writes are now auditable.** `BlobRepository` was constructed without an
+> `ApplicationContext`, so its create/update/delete never dispatched entity events — meaning blob
+> uploads emitted no `EntityCreatedEvent` and couldn't be audited. **Patch release** — bugfix, no new
+> env, no migrations, no action required.
+
+### Fixed
+- **`BlobRepository` is now constructed with the `ApplicationContext`**, so its create/update/delete
+  dispatch their `Entity{Created,Updated,Deleted}` events (`BaseRepository::dispatchEvent()` no-ops
+  without a context). Blob uploads now emit an `EntityCreatedEvent` and can be recorded by an audit/
+  activity consumer — previously they were silently un-audited.
+
 ## [1.63.2] - 2026-06-26 — Yildun
 
 > **Theme: image-variant caching fix.** A single bugfix — serving a resized blob variant
