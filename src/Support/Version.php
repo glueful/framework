@@ -13,7 +13,7 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.63.4';
+    public const VERSION = '1.63.5';
 
 
     /** Release code name */

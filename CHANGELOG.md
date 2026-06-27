@@ -6,6 +6,23 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.63.5] - 2026-06-27 — Yildun
+
+> **Theme: the webhook management API is now fully typed in OpenAPI.** 1.63.4 added operation
+> summaries to `WebhookController`; this fills in the schemas — query parameters, request bodies, and
+> response shapes — so an application that mounts the controller gets a precise spec (and a typed
+> client) for subscriptions and deliveries, not just path stubs. **Patch release** — documentation
+> metadata only (new doc-only DTOs + attributes), no behavioral change, no new env, no migrations, no
+> action required.
+
+### Added
+- **Full OpenAPI schemas on `WebhookController`.** Added `#[QueryParam]` for the list/stats query
+  parameters (active / status / subscription / page / per_page / days), `#[ApiRequestBody]` for
+  create/update, and `#[ApiResponse(schema: …)]` for the subscription, delivery, list, and stats
+  responses — backed by new documentation-only DTOs under `Glueful\Api\Webhooks\DTOs`. The
+  controller's runtime behavior is unchanged; the DTOs are reflected for docs only (never hydrated),
+  the same approach the auth controller uses for `login`.
+
 ## [1.63.4] - 2026-06-27 — Yildun
 
 > **Theme: the webhook management API is now self-documenting.** The framework ships a complete
