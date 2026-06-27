@@ -5,13 +5,23 @@ declare(strict_types=1);
 namespace Glueful\Api\Webhooks\Http\Controllers;
 
 use Glueful\Api\Webhooks\Contracts\WebhookDispatcherInterface;
+use Glueful\Api\Webhooks\DTOs\Responses\WebhookDeliveryDetailData;
+use Glueful\Api\Webhooks\DTOs\Responses\WebhookDeliveryListData;
+use Glueful\Api\Webhooks\DTOs\Responses\WebhookStatsData;
+use Glueful\Api\Webhooks\DTOs\Responses\WebhookSubscriptionCreatedData;
+use Glueful\Api\Webhooks\DTOs\Responses\WebhookSubscriptionData;
+use Glueful\Api\Webhooks\DTOs\Responses\WebhookSubscriptionListData;
+use Glueful\Api\Webhooks\DTOs\WebhookSubscriptionInputData;
+use Glueful\Api\Webhooks\DTOs\WebhookSubscriptionUpdateData;
 use Glueful\Api\Webhooks\Webhook;
 use Glueful\Api\Webhooks\WebhookDelivery;
 use Glueful\Api\Webhooks\WebhookSubscription;
 use Glueful\Controllers\BaseController;
 use Glueful\Http\Response;
 use Glueful\Routing\Attributes\ApiOperation;
+use Glueful\Routing\Attributes\ApiRequestBody;
 use Glueful\Routing\Attributes\ApiResponse;
+use Glueful\Routing\Attributes\QueryParam;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
@@ -57,7 +67,10 @@ class WebhookController extends BaseController
             . 'active ones, plus `page` and `per_page` (max 100).',
         tags: ['Webhooks'],
     )]
-    #[ApiResponse(200, description: 'Subscriptions page.')]
+    #[QueryParam('active', type: 'boolean', description: 'When true, return only active subscriptions.')]
+    #[QueryParam('page', type: 'integer', description: 'Page number (default 1).')]
+    #[QueryParam('per_page', type: 'integer', description: 'Items per page (default 25, max 100).')]
+    #[ApiResponse(200, schema: WebhookSubscriptionListData::class, description: 'Subscriptions page.')]
     public function listSubscriptions(Request $request): \Symfony\Component\HttpFoundation\Response
     {
         $page = max(1, (int) $request->query->get('page', 1));
@@ -112,7 +125,12 @@ class WebhookController extends BaseController
             . '`prefix.*` wildcards), optional `metadata`. The signing `secret` is returned once.',
         tags: ['Webhooks'],
     )]
-    #[ApiResponse(201, description: 'Created subscription + signing secret.')]
+    #[ApiRequestBody(schema: WebhookSubscriptionInputData::class)]
+    #[ApiResponse(
+        201,
+        schema: WebhookSubscriptionCreatedData::class,
+        description: 'Created subscription + signing secret.',
+    )]
     #[ApiResponse(400, description: 'Invalid URL or events.')]
     public function createSubscription(Request $request): \Symfony\Component\HttpFoundation\Response
     {
@@ -153,7 +171,7 @@ class WebhookController extends BaseController
      * @return \Symfony\Component\HttpFoundation\Response
      */
     #[ApiOperation(summary: 'Get a webhook subscription', tags: ['Webhooks'])]
-    #[ApiResponse(200, description: 'Subscription.')]
+    #[ApiResponse(200, schema: WebhookSubscriptionData::class, description: 'Subscription.')]
     #[ApiResponse(404, description: 'No such subscription.')]
     public function getSubscription(string $id): \Symfony\Component\HttpFoundation\Response
     {
@@ -184,7 +202,8 @@ class WebhookController extends BaseController
             . '`metadata`; only supplied fields change.',
         tags: ['Webhooks'],
     )]
-    #[ApiResponse(200, description: 'Updated subscription.')]
+    #[ApiRequestBody(schema: WebhookSubscriptionUpdateData::class)]
+    #[ApiResponse(200, schema: WebhookSubscriptionData::class, description: 'Updated subscription.')]
     #[ApiResponse(400, description: 'Invalid URL or events.')]
     #[ApiResponse(404, description: 'No such subscription.')]
     public function updateSubscription(Request $request, string $id): \Symfony\Component\HttpFoundation\Response
@@ -347,7 +366,8 @@ class WebhookController extends BaseController
         description: 'Delivery counts and success rate over a window. Optional `days` query (default 30).',
         tags: ['Webhooks'],
     )]
-    #[ApiResponse(200, description: 'Delivery statistics.')]
+    #[QueryParam('days', type: 'integer', description: 'Window in days (default 30).')]
+    #[ApiResponse(200, schema: WebhookStatsData::class, description: 'Delivery statistics.')]
     #[ApiResponse(404, description: 'No such subscription.')]
     public function getSubscriptionStats(Request $request, string $id): \Symfony\Component\HttpFoundation\Response
     {
@@ -386,7 +406,11 @@ class WebhookController extends BaseController
             . '`subscription` (UUID) filters, plus `page` and `per_page` (max 100).',
         tags: ['Webhooks'],
     )]
-    #[ApiResponse(200, description: 'Deliveries page.')]
+    #[QueryParam('status', type: 'string', description: 'Filter by status (pending|delivered|failed|retrying).')]
+    #[QueryParam('subscription', type: 'string', description: 'Filter by subscription UUID.')]
+    #[QueryParam('page', type: 'integer', description: 'Page number (default 1).')]
+    #[QueryParam('per_page', type: 'integer', description: 'Items per page (default 25, max 100).')]
+    #[ApiResponse(200, schema: WebhookDeliveryListData::class, description: 'Deliveries page.')]
     public function listDeliveries(Request $request): \Symfony\Component\HttpFoundation\Response
     {
         $page = max(1, (int) $request->query->get('page', 1));
@@ -449,7 +473,7 @@ class WebhookController extends BaseController
         description: 'A single delivery including its request payload and the endpoint response body.',
         tags: ['Webhooks'],
     )]
-    #[ApiResponse(200, description: 'Delivery with payload + response.')]
+    #[ApiResponse(200, schema: WebhookDeliveryDetailData::class, description: 'Delivery with payload + response.')]
     #[ApiResponse(404, description: 'No such delivery.')]
     public function getDelivery(string $id): \Symfony\Component\HttpFoundation\Response
     {

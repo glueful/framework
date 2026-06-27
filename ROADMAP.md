@@ -21,6 +21,15 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.63.5 — Yildun (Patch, Released 2026-06-27)
+- **Webhook management API fully typed in OpenAPI.** Built on 1.63.4 (operation summaries) by adding
+  the schemas: `#[QueryParam]` for the list/stats query params, `#[ApiRequestBody]` for create/update,
+  and `#[ApiResponse(schema: …)]` for the subscription/delivery/list/stats responses, backed by new
+  doc-only DTOs under `Glueful\Api\Webhooks\DTOs`. Applications that mount the controller now get a
+  precise spec + typed client. No behavior change (DTOs reflected for docs only, never hydrated).
+- Notes: **Patch release** — documentation metadata only, no behavioral change, no new env, no
+  migrations, no action required. api-skeleton bumped to `^1.63.5`.
+
 ### 1.63.4 — Yildun (Patch, Released 2026-06-27)
 - **Webhook management API is self-documenting.** The framework's `WebhookController` (subscriptions +
   deliveries) had working routes but no OpenAPI attributes, so applications that mount it got endpoints
