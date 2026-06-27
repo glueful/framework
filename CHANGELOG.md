@@ -6,6 +6,23 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.63.4] - 2026-06-27 — Yildun
+
+> **Theme: the webhook management API is now self-documenting.** The framework ships a complete
+> `WebhookController` (subscription + delivery management), but its methods carried no OpenAPI
+> attributes — so an application that mounts these routes got working endpoints that were invisible to
+> `generate:openapi` / the typed client. Added `#[ApiOperation]`/`#[ApiResponse]` to all 11 endpoints.
+> **Patch release** — documentation metadata only, no behavioral change, no new env, no migrations, no
+> action required.
+
+### Added
+- **OpenAPI annotations on `WebhookController`.** All 11 webhook-management methods (subscription
+  list/create/get/update/delete, rotate-secret, test, stats; delivery list/get/retry) now carry
+  `#[ApiOperation]` + `#[ApiResponse]` attributes. Applications that mount the controller (the core
+  doesn't auto-register these routes) now get them in the generated `openapi.json` and typed schema,
+  the same as any annotated controller. No routes, behavior, or signatures changed — only the
+  attributes the docs generator reads.
+
 ## [1.63.3] - 2026-06-26 — Yildun
 
 > **Theme: blob writes are now auditable.** `BlobRepository` was constructed without an

@@ -21,6 +21,15 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.63.4 — Yildun (Patch, Released 2026-06-27)
+- **Webhook management API is self-documenting.** The framework's `WebhookController` (subscriptions +
+  deliveries) had working routes but no OpenAPI attributes, so applications that mount it got endpoints
+  invisible to `generate:openapi` and the typed client. Added `#[ApiOperation]`/`#[ApiResponse]` to all
+  11 methods — they're now documented like any annotated controller. No behavior change; the core still
+  doesn't auto-register these routes.
+- Notes: **Patch release** — documentation metadata only, no behavioral change, no new env, no
+  migrations, no action required. api-skeleton bumped to `^1.63.4`.
+
 ### 1.63.3 — Yildun (Patch, Released 2026-06-26)
 - **Blob writes are auditable.** `BlobRepository` was built without an `ApplicationContext`, so its
   create/update/delete never dispatched entity events — blob uploads emitted no `EntityCreatedEvent` and

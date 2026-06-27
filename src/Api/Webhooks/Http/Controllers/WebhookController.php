@@ -10,6 +10,8 @@ use Glueful\Api\Webhooks\WebhookDelivery;
 use Glueful\Api\Webhooks\WebhookSubscription;
 use Glueful\Controllers\BaseController;
 use Glueful\Http\Response;
+use Glueful\Routing\Attributes\ApiOperation;
+use Glueful\Routing\Attributes\ApiResponse;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
@@ -49,6 +51,13 @@ class WebhookController extends BaseController
      * @param Request $request
      * @return \Symfony\Component\HttpFoundation\Response
      */
+    #[ApiOperation(
+        summary: 'List webhook subscriptions',
+        description: 'Paginated list of webhook subscriptions. Optional `active=true` to return only '
+            . 'active ones, plus `page` and `per_page` (max 100).',
+        tags: ['Webhooks'],
+    )]
+    #[ApiResponse(200, description: 'Subscriptions page.')]
     public function listSubscriptions(Request $request): \Symfony\Component\HttpFoundation\Response
     {
         $page = max(1, (int) $request->query->get('page', 1));
@@ -96,6 +105,15 @@ class WebhookController extends BaseController
      * @param Request $request
      * @return \Symfony\Component\HttpFoundation\Response
      */
+    #[ApiOperation(
+        summary: 'Create a webhook subscription',
+        description: 'Subscribe an endpoint to events. Body: `url` (required, must be a valid URL — '
+            . 'HTTPS when require_https is on), `events` (required, non-empty array; supports `*` and '
+            . '`prefix.*` wildcards), optional `metadata`. The signing `secret` is returned once.',
+        tags: ['Webhooks'],
+    )]
+    #[ApiResponse(201, description: 'Created subscription + signing secret.')]
+    #[ApiResponse(400, description: 'Invalid URL or events.')]
     public function createSubscription(Request $request): \Symfony\Component\HttpFoundation\Response
     {
         $data = $this->getJsonBody($request);
@@ -134,6 +152,9 @@ class WebhookController extends BaseController
      * @param string $id Subscription UUID
      * @return \Symfony\Component\HttpFoundation\Response
      */
+    #[ApiOperation(summary: 'Get a webhook subscription', tags: ['Webhooks'])]
+    #[ApiResponse(200, description: 'Subscription.')]
+    #[ApiResponse(404, description: 'No such subscription.')]
     public function getSubscription(string $id): \Symfony\Component\HttpFoundation\Response
     {
         $subscription = Webhook::findSubscription($id);
@@ -157,6 +178,15 @@ class WebhookController extends BaseController
      * @param string $id Subscription UUID
      * @return \Symfony\Component\HttpFoundation\Response
      */
+    #[ApiOperation(
+        summary: 'Update a webhook subscription',
+        description: 'Partial update. Body may include `url`, `events` (non-empty array), `is_active`, '
+            . '`metadata`; only supplied fields change.',
+        tags: ['Webhooks'],
+    )]
+    #[ApiResponse(200, description: 'Updated subscription.')]
+    #[ApiResponse(400, description: 'Invalid URL or events.')]
+    #[ApiResponse(404, description: 'No such subscription.')]
     public function updateSubscription(Request $request, string $id): \Symfony\Component\HttpFoundation\Response
     {
         $subscription = Webhook::findSubscription($id);
@@ -211,6 +241,9 @@ class WebhookController extends BaseController
      * @param string $id Subscription UUID
      * @return \Symfony\Component\HttpFoundation\Response
      */
+    #[ApiOperation(summary: 'Delete a webhook subscription', tags: ['Webhooks'])]
+    #[ApiResponse(200, description: 'Deleted.')]
+    #[ApiResponse(404, description: 'No such subscription.')]
     public function deleteSubscription(string $id): \Symfony\Component\HttpFoundation\Response
     {
         $subscription = Webhook::findSubscription($id);
@@ -232,6 +265,14 @@ class WebhookController extends BaseController
      * @param string $id Subscription UUID
      * @return \Symfony\Component\HttpFoundation\Response
      */
+    #[ApiOperation(
+        summary: 'Rotate a subscription secret',
+        description: 'Generates a new signing secret and returns it once. Existing signatures using '
+            . 'the old secret stop verifying.',
+        tags: ['Webhooks'],
+    )]
+    #[ApiResponse(200, description: 'New signing secret.')]
+    #[ApiResponse(404, description: 'No such subscription.')]
     public function rotateSecret(string $id): \Symfony\Component\HttpFoundation\Response
     {
         $subscription = Webhook::findSubscription($id);
@@ -256,6 +297,15 @@ class WebhookController extends BaseController
      * @param string $id Subscription UUID
      * @return \Symfony\Component\HttpFoundation\Response
      */
+    #[ApiOperation(
+        summary: 'Send a test webhook',
+        description: 'Delivers a signed `webhook.test` event to the subscription URL synchronously and '
+            . 'returns the endpoint response.',
+        tags: ['Webhooks'],
+    )]
+    #[ApiResponse(200, description: 'Endpoint accepted the test.')]
+    #[ApiResponse(404, description: 'No such subscription.')]
+    #[ApiResponse(502, description: 'Endpoint rejected or failed the test.')]
     public function testSubscription(string $id): \Symfony\Component\HttpFoundation\Response
     {
         $subscription = Webhook::findSubscription($id);
@@ -292,6 +342,13 @@ class WebhookController extends BaseController
      * @param string $id Subscription UUID
      * @return \Symfony\Component\HttpFoundation\Response
      */
+    #[ApiOperation(
+        summary: 'Get subscription delivery stats',
+        description: 'Delivery counts and success rate over a window. Optional `days` query (default 30).',
+        tags: ['Webhooks'],
+    )]
+    #[ApiResponse(200, description: 'Delivery statistics.')]
+    #[ApiResponse(404, description: 'No such subscription.')]
     public function getSubscriptionStats(Request $request, string $id): \Symfony\Component\HttpFoundation\Response
     {
         $subscription = Webhook::findSubscription($id);
@@ -323,6 +380,13 @@ class WebhookController extends BaseController
      * @param Request $request
      * @return \Symfony\Component\HttpFoundation\Response
      */
+    #[ApiOperation(
+        summary: 'List webhook deliveries',
+        description: 'Paginated delivery log. Optional `status` (pending|delivered|failed|retrying), '
+            . '`subscription` (UUID) filters, plus `page` and `per_page` (max 100).',
+        tags: ['Webhooks'],
+    )]
+    #[ApiResponse(200, description: 'Deliveries page.')]
     public function listDeliveries(Request $request): \Symfony\Component\HttpFoundation\Response
     {
         $page = max(1, (int) $request->query->get('page', 1));
@@ -380,6 +444,13 @@ class WebhookController extends BaseController
      * @param string $id Delivery UUID
      * @return \Symfony\Component\HttpFoundation\Response
      */
+    #[ApiOperation(
+        summary: 'Get a webhook delivery',
+        description: 'A single delivery including its request payload and the endpoint response body.',
+        tags: ['Webhooks'],
+    )]
+    #[ApiResponse(200, description: 'Delivery with payload + response.')]
+    #[ApiResponse(404, description: 'No such delivery.')]
     public function getDelivery(string $id): \Symfony\Component\HttpFoundation\Response
     {
         $delivery = Webhook::findDelivery($id);
@@ -402,6 +473,14 @@ class WebhookController extends BaseController
      * @param string $id Delivery UUID
      * @return \Symfony\Component\HttpFoundation\Response
      */
+    #[ApiOperation(
+        summary: 'Retry a webhook delivery',
+        description: 'Re-queues a failed or retrying delivery for another attempt.',
+        tags: ['Webhooks'],
+    )]
+    #[ApiResponse(200, description: 'Delivery re-queued.')]
+    #[ApiResponse(400, description: 'Delivery is not in a retryable state.')]
+    #[ApiResponse(404, description: 'No such delivery.')]
     public function retryDelivery(string $id): \Symfony\Component\HttpFoundation\Response
     {
         $delivery = Webhook::findDelivery($id);
