@@ -6,6 +6,44 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.64.0] - 2026-06-28 — Zosma
+
+### Added
+- **API key prefix is configurable.** The generated key prefix (`gf_live_…` / `gf_test_…`) is no
+  longer hard-coded — `ApiKeyService` reads the brand from `auth.api_keys.prefix` (env
+  `API_KEY_PREFIX`, default `gf`). Set it to rebrand keys per app (e.g. `lm` → `lm_live_…`). Only the
+  first 16 chars are stored as the indexed lookup prefix, so keep it short. Backward compatible — the
+  default reproduces the existing `gf_*` keys.
+- **API key lifecycle is auditable.** `ApiKeyService::create/rotate/revoke` now emit framework entity
+  events (`EntityCreatedEvent`/`EntityUpdatedEvent` for the `api_keys` table) so an audit consumer can
+  record who minted, rotated, or revoked a key — previously these went through `Model::save()` and
+  emitted nothing. The event payload is **identity only** (uuid, name, key_prefix, scopes, …) and
+  never carries the plaintext or the `key_hash`. Best-effort dispatch — a failed audit never breaks
+  the key operation. Covers every path (HTTP, CLI, any `ApiKeyService` caller).
+
+### Fixed
+- **Webhook list endpoints no longer 500 on the query validator.** `WebhookController::listSubscriptions`
+  and `listDeliveries` chained `->offset()->limit()`, but the strict query validator rejects OFFSET
+  set before LIMIT (`OFFSET requires LIMIT to be set`). Reordered to `->limit()->offset()`.
+- **`WebhookSubscription` inserts no longer fail on PostgreSQL.** The model didn't set
+  `$timestamps = false`, so the ORM bound `DateTimeImmutable` `created_at`/`updated_at` values
+  (DB-defaulted columns) through the string-bind path, throwing on insert. Now disabled like
+  `WebhookDelivery`/`ApiKey`, letting the DB fill the timestamps.
+- **Webhook UUID columns widened to fit the generated ids.** `webhook_subscriptions`/
+  `webhook_deliveries` declared `uuid varchar(12)`, but ids are `wh_sub_`/`wh_del_` + a 16-char nano
+  id (23 chars). SQLite ignores the length so it was never caught; PostgreSQL overflowed every insert.
+  The auto-create path now uses `varchar(32)`.
+
+> These webhook fixes were latent: the framework ships `WebhookController` but does not register its
+> routes, so the endpoints were never exercised against PostgreSQL until an application mounted them.
+
+- **Uploaded blob visibility is now persisted.** `FileUploader::saveBlobRecord()` never wrote the
+  `visibility` column, so every blob fell back to the `private` DB default regardless of the
+  `visibility` requested at upload — the response *echoed* `public` but the row was `private`, so the
+  blob then 401'd on retrieval (`GET /blobs/{uuid}`), breaking any `<img>` use of a "public" upload.
+  `uploadMedia()` now forwards its options to `saveBlobRecord()`, which persists the requested
+  visibility (falling back to `uploads.default_visibility`).
+
 ## [1.63.5] - 2026-06-27 — Yildun
 
 > **Theme: the webhook management API is now fully typed in OpenAPI.** 1.63.4 added operation

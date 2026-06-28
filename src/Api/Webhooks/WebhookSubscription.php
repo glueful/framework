@@ -28,6 +28,13 @@ class WebhookSubscription extends Model
 {
     protected string $table = 'webhook_subscriptions';
 
+    /**
+     * created_at / updated_at are filled by the DB (DEFAULT CURRENT_TIMESTAMP). Disabling the ORM's
+     * automatic timestamp population avoids binding DateTimeImmutable objects through the
+     * QueryBuilder's string-bind path (which throws on insert). Matches WebhookDelivery + ApiKey.
+     */
+    public bool $timestamps = false;
+
     /** @var array<string> */
     protected array $fillable = [
         'uuid',

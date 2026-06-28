@@ -8,6 +8,9 @@ use Glueful\Auth\ApiKey\Exceptions\ApiKeyExpiredException;
 use Glueful\Auth\ApiKey\Exceptions\InvalidApiKeyException;
 use Glueful\Auth\ApiKey\Support\CidrMatcher;
 use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Events\Database\EntityCreatedEvent;
+use Glueful\Events\Database\EntityUpdatedEvent;
+use Glueful\Events\EventService;
 use Glueful\Helpers\Utils;
 
 /**
@@ -26,9 +29,10 @@ final class ApiKeyService
 
     // ── Pure helpers (no DB I/O) ──
 
-    public static function generatePlainKey(string $environment): string
+    public static function generatePlainKey(string $environment, string $brand = 'gf'): string
     {
-        $prefix = $environment === 'production' ? 'gf_live_' : 'gf_test_';
+        $env = $environment === 'production' ? 'live' : 'test';
+        $prefix = $brand . '_' . $env . '_';
         $random = '';
         $alphabetLength = strlen(self::ALPHABET);
         for ($i = 0; $i < self::RANDOM_LENGTH; $i++) {
@@ -84,7 +88,7 @@ final class ApiKeyService
     public static function create(ApplicationContext $context, array $attrs): array
     {
         $env = $context->getEnvironment();
-        $plain = self::generatePlainKey($env);
+        $plain = self::generatePlainKey($env, self::brand($context));
 
         $scopes = $attrs['scopes'] ?? null;
         $allowed = $attrs['allowed_ips'] ?? null;
@@ -101,6 +105,10 @@ final class ApiKeyService
         ], $context);
 
         $key->save();
+
+        // Audit trail: emit a generic entity event (the audit extension records it). Identity only —
+        // never the plaintext or key_hash. See self::auditView().
+        self::dispatchEvent($context, new EntityCreatedEvent(self::auditView($key), 'api_keys'));
 
         return ['plain' => $plain, 'key' => $key];
     }
@@ -179,7 +187,7 @@ final class ApiKeyService
         int $graceHours = 24
     ): array {
         $env = $context->getEnvironment();
-        $newPlain = self::generatePlainKey($env);
+        $newPlain = self::generatePlainKey($env, self::brand($context));
 
         $newKey = new ApiKey([
             'uuid'            => Utils::generateNanoID(),
@@ -198,6 +206,14 @@ final class ApiKeyService
         $existing->expires_at = $newExpiry;
         $existing->save();
 
+        // Audit: the successor key is created, and the old key's expiry is shortened to the grace window.
+        self::dispatchEvent($context, new EntityCreatedEvent(self::auditView($newKey), 'api_keys'));
+        self::dispatchEvent($context, new EntityUpdatedEvent(
+            self::auditView($existing),
+            'api_keys',
+            ['expires_at' => $newExpiry],
+        ));
+
         return [
             'old_uuid'       => $existing->uuid,
             'new_plain'      => $newPlain,
@@ -207,8 +223,53 @@ final class ApiKeyService
 
     public static function revoke(ApplicationContext $context, ApiKey $key): void
     {
-        $key->revoked_at = date('Y-m-d H:i:s');
+        $revokedAt = date('Y-m-d H:i:s');
+        $key->revoked_at = $revokedAt;
         $key->save();
+
+        self::dispatchEvent($context, new EntityUpdatedEvent(
+            self::auditView($key),
+            'api_keys',
+            ['revoked_at' => $revokedAt],
+        ));
+    }
+
+    /** Brand segment of generated keys (auth.api_keys.prefix; default 'gf'). */
+    private static function brand(ApplicationContext $context): string
+    {
+        $brand = config($context, 'auth.api_keys.prefix', 'gf');
+
+        return is_string($brand) && $brand !== '' ? $brand : 'gf';
+    }
+
+    /**
+     * Identity-only view of a key for audit/event payloads. NEVER includes the plaintext or the
+     * key_hash — a key lifecycle event must not leak the credential or its hash into the audit log.
+     *
+     * @return array<string,mixed>
+     */
+    private static function auditView(ApiKey $key): array
+    {
+        return [
+            'uuid'        => $key->uuid,
+            'user_uuid'   => $key->user_uuid,
+            'name'        => $key->name,
+            'key_prefix'  => $key->key_prefix,
+            'scopes'      => $key->scopes,
+            'allowed_ips' => $key->allowed_ips,
+            'expires_at'  => $key->expires_at,
+            'revoked_at'  => $key->revoked_at,
+        ];
+    }
+
+    /** Best-effort event dispatch — auditing must never break a key lifecycle operation. */
+    private static function dispatchEvent(ApplicationContext $context, object $event): void
+    {
+        try {
+            app($context, EventService::class)->dispatch($event);
+        } catch (\Throwable) {
+            // Swallow: the key was already persisted; a failed audit dispatch must not surface.
+        }
     }
 
     /** @return array<int, ApiKey> */

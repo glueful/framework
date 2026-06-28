@@ -9,6 +9,14 @@
  */
 
 return [
+    'api_keys' => [
+        // Brand segment of generated API keys: <prefix>_live_<random> in production,
+        // <prefix>_test_<random> elsewhere. Defaults to 'gf' (Glueful); set API_KEY_PREFIX to
+        // rebrand (e.g. 'lm' → lm_live_… / lm_test_…). Keep it short — only the first 16 chars of a
+        // key are stored as the indexed lookup prefix.
+        'prefix' => env('API_KEY_PREFIX', 'gf'),
+    ],
+
     'two_factor' => [
         // Master switch. When false, TwoFactorService::isEnabled() short-circuits
         // before any DB read and the /2fa/* routes are not registered.
