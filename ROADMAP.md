@@ -21,6 +21,25 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.64.0 — Zosma (Minor, Released 2026-06-28)
+- **API key prefix is configurable.** `ApiKeyService` reads the brand from `auth.api_keys.prefix`
+  (env `API_KEY_PREFIX`, default `gf`), so apps can rebrand generated keys (`gf_live_…` → `lm_live_…`).
+  Only the first 16 chars are stored as the indexed lookup prefix. Backward compatible — the default
+  reproduces the existing `gf_*` keys.
+- **API key lifecycle is auditable.** `ApiKeyService::create/rotate/revoke` now emit framework entity
+  events for the `api_keys` table (previously they went through `Model::save()` and emitted nothing),
+  so an audit consumer can record who minted/rotated/revoked a key. Identity-only payload (never the
+  plaintext or `key_hash`); best-effort dispatch.
+- **Webhook management fixes.** List endpoints no longer 500 on the strict query validator
+  (`->limit()->offset()` order); `WebhookSubscription` inserts no longer fail on PostgreSQL
+  (`$timestamps = false`); auto-created webhook UUID columns widened to `varchar(32)` to fit the
+  generated ids. These were latent — core ships the controller but doesn't register its routes.
+- **Uploaded blob visibility is now persisted.** `FileUploader::saveBlobRecord()` now writes the
+  requested `visibility` (falling back to `uploads.default_visibility`); previously every blob fell
+  back to the `private` default, so a "public" upload 401'd on retrieval.
+- Notes: **Minor release** — one new optional env (`API_KEY_PREFIX`, default `gf`, backward
+  compatible), no migrations, no breaking changes. api-skeleton bumped to `^1.64.0`.
+
 ### 1.63.5 — Yildun (Patch, Released 2026-06-27)
 - **Webhook management API fully typed in OpenAPI.** Built on 1.63.4 (operation summaries) by adding
   the schemas: `#[QueryParam]` for the list/stats query params, `#[ApiRequestBody]` for create/update,

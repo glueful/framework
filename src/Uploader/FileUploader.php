@@ -159,7 +159,7 @@ final class FileUploader
 
         // Save to database if requested
         if ((bool) ($options['save_to_blobs'] ?? true)) {
-            $result['blob_uuid'] = $this->saveBlobRecord($file, $mime, $fullPath);
+            $result['blob_uuid'] = $this->saveBlobRecord($file, $mime, $fullPath, $options);
         }
 
         return $result;
@@ -657,10 +657,17 @@ final class FileUploader
 
     /**
      * @param array<string, mixed> $file
+     * @param array<string, mixed> $options
      */
-    private function saveBlobRecord(array $file, string $mime, string $path): string
+    private function saveBlobRecord(array $file, string $mime, string $path, array $options = []): string
     {
         $user = Utils::getUser();
+
+        // Persist the requested visibility so public blobs are actually servable without auth;
+        // without this the column falls back to its 'private' default regardless of the request.
+        $visibility = isset($options['visibility']) && is_string($options['visibility'])
+            ? $options['visibility']
+            : (string) $this->getConfig('uploads.default_visibility', 'private');
 
         return $this->blobRepository->create([
             'name' => $file['name'] ?? basename($path),
@@ -670,6 +677,7 @@ final class FileUploader
             'created_by' => $user['uuid'] ?? null,
             'size' => $file['size'] ?? 0,
             'status' => 'active',
+            'visibility' => $visibility,
             'created_at' => date('Y-m-d H:i:s'),
         ]);
     }

@@ -91,7 +91,7 @@ class WebhookController extends BaseController
         $offset = ($page - 1) * $perPage;
 
         // Get paginated results
-        $results = $query->offset($offset)->limit($perPage)->get();
+        $results = $query->limit($perPage)->offset($offset)->get();
 
         $subscriptions = [];
         /** @var WebhookSubscription $subscription */
@@ -441,7 +441,7 @@ class WebhookController extends BaseController
         $offset = ($page - 1) * $perPage;
 
         // Get paginated results
-        $results = $query->offset($offset)->limit($perPage)->get();
+        $results = $query->limit($perPage)->offset($offset)->get();
 
         $deliveries = [];
         /** @var WebhookDelivery $delivery */
