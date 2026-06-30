@@ -96,6 +96,9 @@ abstract class ServiceProvider
     }
 
     /** Load routes from a file; file will use $router from the container. */
+    /** @var array<string, true> Loaded route files keyed by realpath; reset via resetLoadedRoutes(). */
+    private static array $loadedRoutes = [];
+
     protected function loadRoutesFrom(string $path): void
     {
         // Router must exist to register routes
@@ -109,9 +112,9 @@ abstract class ServiceProvider
             return;
         }
 
-        // Idempotency: avoid loading the same routes file more than once
-        static $loaded = [];
-        if (isset($loaded[$real])) {
+        // Idempotency: avoid loading the same routes file more than once (resettable via
+        // resetLoadedRoutes() so a fresh boot in the same process re-registers routes).
+        if (isset(self::$loadedRoutes[$real])) {
             return;
         }
 
@@ -120,7 +123,7 @@ abstract class ServiceProvider
             /** @var Router $router */
             $router = $this->app->get(Router::class);
             require $real; // executes the routes file
-            $loaded[$real] = true;
+            self::$loadedRoutes[$real] = true;
         } catch (\Throwable $e) {
             // Log and continue in production; rethrow in non‑production for fast feedback
             error_log('[Extensions] Failed to load routes from ' . $real . ': ' . $e->getMessage());
@@ -129,6 +132,16 @@ abstract class ServiceProvider
                 throw $e;
             }
         }
+    }
+
+    /**
+     * Reset the loaded-routes latch so a subsequent boot in the SAME process re-registers route
+     * files. Without this the process-global latch silently skips extension routes after the first
+     * boot (notably across multiple framework boots in one test process).
+     */
+    public static function resetLoadedRoutes(): void
+    {
+        self::$loadedRoutes = [];
     }
 
     /**

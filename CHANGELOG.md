@@ -6,6 +6,48 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.65.0] - 2026-06-30 — Acrux
+
+### Added
+- **Database: `QueryBuilder::forceDelete()`** — permanently deletes matching rows, bypassing
+  soft-delete even on a soft-deletable table (one with a `deleted_at` column). Previously the only
+  way to hard-delete such a row (e.g. to re-insert the same unique key in an upsert) was raw SQL,
+  since the hard-delete path was reachable only internally from `delete()`. Added to
+  `QueryBuilderInterface`.
+- **Validation: coercion `MutatingRule`s** — `CastToInt`, `CastToBoolean`, `CastToDate`. The
+  `Validator` rule set could validate but not coerce (`filtered()` returned uncoerced input); these
+  cast input before the validating rules run, so a rule pipeline can both normalize and validate.
+- **Validation: `DbUnique` exclude-by-column** — a fifth `$exceptColumn` constructor argument
+  (default `'id'`) so a record keyed by a non-`id` primary column (e.g. `uuid`) can exclude the
+  current row on update. The except-column is identifier-validated like the table/column.
+- **Auth: `api_key_uuid` request attribute** — `ApiKeyAuthenticationProvider` now also sets the
+  acting key's own uuid (alongside `api_key_scopes`), so callers can attribute an action to the
+  specific API key (audit, rate-limit keying) without re-reading the `api_keys` table.
+- **Extensions: `ServiceProvider::resetLoadedRoutes()`** — resets the process-global
+  loaded-routes latch so a fresh `Framework::boot()` in the same process re-registers route files
+  (the latch otherwise silently skips extension routes after the first boot — e.g. across test boots).
+
+### Fixed
+- **Routing: `AuthMiddleware` now always populates `auth.user`.** After a successful auth it
+  synthesises a basic `UserIdentity` (uuid, roles, scopes, email/username/status) when the optional
+  enricher (`auth_to_request`) has not set one, so `auth.user` is never silently null. Previously a
+  route running `auth` without the enricher left `auth.user` unset — silently fail-closing permission
+  gates that read it and dropping actor/audit attribution.
+- **Routing: `RequireScopeMiddleware` now enforces file-defined routes.** It only read the
+  `#[RequireScope]` attribute config and fell **open** when absent, so a route declaring its scope
+  as a middleware param (`->middleware('require_scope:read:content')`) got no enforcement. It now
+  falls back to the middleware params (a single any-of group) and enforces them **fail-closed**.
+- **Database: `TableBuilder` now applies column drops.** `executeAlterations()` did not forward
+  `drop_columns` to the SQL generator, so `dropColumn()` during `alterTable()` was a silent no-op.
+
+### Upgrade Notes
+- **Scope enforcement tightened (`RequireScopeMiddleware`).** A route that declared its required
+  scope as a middleware param — `->middleware('require_scope:read:content')` — was previously **not**
+  enforced (it fell open when no `#[RequireScope]` attribute was present). It now enforces
+  **fail-closed**. If any such route relied on that missing check, requests lacking the scope will now
+  correctly receive `403`. Routes using the `#[RequireScope]` attribute are unaffected.
+- No config defaults changed; no new env vars; no migrations.
+
 ## [1.64.0] - 2026-06-28 — Zosma
 
 ### Added

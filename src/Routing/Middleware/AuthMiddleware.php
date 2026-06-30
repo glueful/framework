@@ -11,6 +11,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Glueful\Auth\AuthenticationManager;
 use Glueful\Auth\JwtAuthenticationProvider;
 use Glueful\Auth\TokenManager;
+use Glueful\Auth\UserIdentity;
 use Psr\Container\ContainerInterface;
 use Glueful\Http\Exceptions\Domain\AuthenticationException;
 use Glueful\Permissions\Exceptions\UnauthorizedException as PermissionUnauthorizedException;
@@ -145,6 +146,17 @@ class AuthMiddleware implements RouteMiddleware
 
             // Auto-enrich request with auth attributes
             $this->autoEnrichRequest($request);
+
+            // Guarantee auth.user is populated. The enricher only sets it when the identity lives in
+            // the session context; for provider-based auth (API key, etc.) it can be absent, which
+            // silently fail-closes permission gates and drops audit attribution. Synthesise a basic
+            // UserIdentity from the authenticated user data so auth.user is never null after auth.
+            if (!$request->attributes->has('auth.user')) {
+                $identity = $this->identityFromUserArray($user);
+                if ($identity !== null) {
+                    $request->attributes->set('auth.user', $identity);
+                }
+            }
 
             // Log successful authentication
             $this->logAuthSuccess($user, $request, $requestId, $token);
@@ -684,5 +696,48 @@ class AuthMiddleware implements RouteMiddleware
                 ]);
             }
         }
+    }
+
+    /**
+     * Build a basic {@see UserIdentity} from the authenticated user-data array (the shape
+     * {@see UserIdentity::toArray()} produces). Returns null when there is no uuid. Carries the
+     * identity essentials (uuid, roles, scopes, email/username/status, claims); the optional
+     * enricher adds richer context (permissions, tenant) when applied.
+     *
+     * @param array<string, mixed> $user
+     */
+    private function identityFromUserArray(array $user): ?UserIdentity
+    {
+        $uuid = $user['uuid'] ?? $user['id'] ?? null;
+        if (!is_string($uuid) || $uuid === '') {
+            return null;
+        }
+
+        $roles = (isset($user['roles']) && is_array($user['roles']))
+            ? array_values(array_filter($user['roles'], 'is_string'))
+            : [];
+
+        $claims = (isset($user['claims']) && is_array($user['claims'])) ? $user['claims'] : [];
+        $scopesRaw = $claims['scope'] ?? $claims['scopes'] ?? ($user['scopes'] ?? []);
+        $scopes = is_array($scopesRaw) ? array_values(array_filter($scopesRaw, 'is_string')) : [];
+
+        $attributes = [];
+        if (array_key_exists('permissions', $user)) {
+            $attributes['permissions'] = $user['permissions'];
+        }
+
+        $identity = new UserIdentity(
+            uuid: $uuid,
+            roles: $roles,
+            scopes: $scopes,
+            attributes: $attributes,
+            email: is_string($user['email'] ?? null) ? $user['email'] : null,
+            username: is_string($user['username'] ?? null) ? $user['username'] : null,
+            status: is_string($user['status'] ?? null) ? $user['status'] : null,
+            sessionUuid: is_string($user['session_uuid'] ?? null) ? $user['session_uuid'] : null,
+            provider: is_string($user['provider'] ?? null) ? $user['provider'] : null,
+        );
+
+        return $claims !== [] ? $identity->withClaims($claims) : $identity;
     }
 }

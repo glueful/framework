@@ -724,6 +724,24 @@ class QueryBuilder implements QueryBuilderInterface
     }
 
     /**
+     * Permanently delete the matching rows, bypassing soft-delete even when the table is
+     * soft-deletable (has a `deleted_at` column).
+     *
+     * Use when a row must physically go — e.g. to re-insert the same unique key (an upsert),
+     * or to purge. {@see delete()} is the soft-delete-aware default and should be preferred
+     * unless a hard delete is specifically required.
+     */
+    public function forceDelete(): int
+    {
+        $table = $this->state->getTableOrFail();
+        $conditions = $this->whereClause->getConditionsArray();
+
+        $this->queryValidator->validateDelete($table, $conditions);
+
+        return $this->deleteBuilder->forceDelete($table, $conditions);
+    }
+
+    /**
      * Restore soft-deleted records
      */
     public function restore(): int

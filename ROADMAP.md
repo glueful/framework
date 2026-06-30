@@ -21,6 +21,25 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.65.0 — Acrux (Minor, Released 2026-06-30)
+- **`QueryBuilder::forceDelete()`** permanently deletes matching rows, bypassing soft-delete even on
+  a `deleted_at` table — previously hard-deleting such a row needed raw SQL. Added to
+  `QueryBuilderInterface`.
+- **Validation coercion rules** — `CastToInt`, `CastToBoolean`, `CastToDate` `MutatingRule`s let a
+  validator pipeline both normalize and validate (`filtered()` previously returned uncoerced input).
+- **`DbUnique` exclude-by-column** — a fifth `$exceptColumn` argument (default `'id'`) so a record
+  keyed by a non-`id` column (e.g. `uuid`) can exclude the current row on update.
+- **`api_key_uuid` request attribute** — `ApiKeyAuthenticationProvider` exposes the acting key's own
+  uuid alongside `api_key_scopes`, for per-key attribution (audit, rate-limit keying).
+- **`ServiceProvider::resetLoadedRoutes()`** resets the process-global loaded-routes latch so a fresh
+  `Framework::boot()` in the same process re-registers extension route files (notably across test boots).
+- **Routing/schema fixes.** `AuthMiddleware` now always populates `auth.user` (synthesises a basic
+  `UserIdentity` when no enricher ran, so permission gates never silently fail-closed);
+  `RequireScopeMiddleware` now enforces file-defined `require_scope:` params fail-closed (it previously
+  fell open); `TableBuilder::alterTable()` now applies `dropColumn()` (previously a silent no-op).
+- Notes: **Minor release** — no new env, no migrations, no breaking changes. Scope enforcement
+  tightened (see CHANGELOG Upgrade Notes). api-skeleton bumped to `^1.65.0`.
+
 ### 1.64.0 — Zosma (Minor, Released 2026-06-28)
 - **API key prefix is configurable.** `ApiKeyService` reads the brand from `auth.api_keys.prefix`
   (env `API_KEY_PREFIX`, default `gf`), so apps can rebrand generated keys (`gf_live_…` → `lm_live_…`).
