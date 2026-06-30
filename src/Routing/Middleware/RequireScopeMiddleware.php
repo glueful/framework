@@ -31,6 +31,20 @@ final class RequireScopeMiddleware implements RouteMiddleware
             ? $route->getRequireScopeConfig()
             : [];
 
+        // Fall back to middleware params for file-defined routes that declare their required scope
+        // as a middleware argument (e.g. ->middleware('require_scope:read:content')) rather than a
+        // #[RequireScope] attribute. The listed scopes form a single any-of group; enforcement below
+        // is fail-closed (an unauthenticated request is denied, not waved through).
+        if ($config === []) {
+            $paramScopes = array_values(array_filter(
+                array_map(static fn ($p): string => (string) $p, $params),
+                static fn (string $s): bool => $s !== '',
+            ));
+            if ($paramScopes !== []) {
+                $config = [$paramScopes];
+            }
+        }
+
         if ($config === []) {
             return $next($request);
         }

@@ -75,4 +75,48 @@ final class RequireScopeMiddlewareTest extends TestCase
         $response = $this->dispatch([], null);
         self::assertSame('OK', $response->getContent());
     }
+
+    /**
+     * Dispatch a file-defined route (EMPTY #[RequireScope] attribute config) that declares its
+     * required scope(s) as middleware params, so the middleware falls back to the params.
+     *
+     * @param array<int, string>|null $grantedScopes  null = the api_key_scopes attribute is absent
+     */
+    private function dispatchWithParams(?array $grantedScopes, string ...$params): Response
+    {
+        $request = Request::create('/x');
+        $route = new class {
+            /** @return array<int, array<int, string>> */
+            public function getRequireScopeConfig(): array
+            {
+                return [];
+            }
+        };
+        $request->attributes->set('_route', $route);
+        if ($grantedScopes !== null) {
+            $request->attributes->set('api_key_scopes', $grantedScopes);
+        }
+
+        return (new RequireScopeMiddleware())
+            ->handle($request, static fn(Request $r): Response => new Response('OK'), ...$params);
+    }
+
+    public function test_param_scope_denies_when_scopes_attribute_absent(): void
+    {
+        // File-defined route requires a scope via param, but the request carries no scopes -> deny.
+        $this->expectException(InsufficientScopeException::class);
+        $this->dispatchWithParams(null, 'read:content');
+    }
+
+    public function test_param_scope_allows_matching_grant(): void
+    {
+        $response = $this->dispatchWithParams(['read:content'], 'read:content');
+        self::assertSame('OK', $response->getContent());
+    }
+
+    public function test_param_scope_denies_insufficient_grant(): void
+    {
+        $this->expectException(InsufficientScopeException::class);
+        $this->dispatchWithParams(['read:other'], 'read:content');
+    }
 }

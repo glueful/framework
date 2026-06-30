@@ -229,9 +229,14 @@ interface QueryBuilderInterface
     public function update(array $data): int;
 
     /**
-     * Delete records
+     * Delete records (soft-delete-aware: soft-deletes when the table has a deleted_at column)
      */
     public function delete(): int;
+
+    /**
+     * Permanently delete records, bypassing soft-delete even on a soft-deletable table
+     */
+    public function forceDelete(): int;
 
     /**
      * Execute in transaction

@@ -27,6 +27,7 @@ final class DbUnique implements Rule
     private string $table;
     private ?string $column;
     private string|int|null $exceptId;
+    private string $exceptColumn;
 
     /**
      * Create a new DbUnique rule
@@ -40,11 +41,15 @@ final class DbUnique implements Rule
         PDO|string $pdoOrTable,
         ?string $tableOrColumn = null,
         string|int|null $columnOrExceptId = null,
-        string|int|null $exceptId = null
+        string|int|null $exceptId = null,
+        string $exceptColumn = 'id'
     ) {
         // Support both constructor signatures:
         // 1. new DbUnique($pdo, 'table', 'column')  - Original signature
         // 2. new DbUnique('table', 'column', $exceptId)  - String syntax
+        // $exceptColumn (default 'id') is the column the exceptId is matched against, so callers
+        // keyed by a non-'id' primary column (e.g. 'uuid') can exclude the current row on update.
+        $this->exceptColumn = $exceptColumn;
 
         if ($pdoOrTable instanceof PDO) {
             // Original signature with PDO
@@ -111,13 +116,17 @@ final class DbUnique implements Rule
             throw new \InvalidArgumentException('Invalid column name.');
         }
 
+        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $this->exceptColumn)) {
+            throw new \InvalidArgumentException('Invalid except column name.');
+        }
+
         // Build query
         $sql = "SELECT 1 FROM {$this->table} WHERE {$column} = :value";
         $params = ['value' => $value];
 
         // Exclude specific ID if provided
         if ($this->exceptId !== null && $this->exceptId !== '') {
-            $sql .= " AND id != :except_id";
+            $sql .= " AND {$this->exceptColumn} != :except_id";
             $params['except_id'] = $this->exceptId;
         }
 
