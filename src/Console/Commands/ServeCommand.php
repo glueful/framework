@@ -87,7 +87,7 @@ class ServeCommand extends BaseCommand
              )
              ->addOption(
                  'queue',
-                 'q',
+                 null,
                  InputOption::VALUE_NONE,
                  'Start queue worker alongside server'
              )

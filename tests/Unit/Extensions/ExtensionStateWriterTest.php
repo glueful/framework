@@ -75,6 +75,23 @@ final class ExtensionStateWriterTest extends TestCase
         (new ExtensionStateWriter())->enable($this->path, 'C\\D');
     }
 
+    public function testWrittenFileHasNoTrailingWhitespace(): void
+    {
+        $w = new ExtensionStateWriter();
+        $w->enable($this->path, 'A\\B');
+        $w->enable($this->path, 'C\\D');
+        $w->disable($this->path, 'A\\B');
+
+        $lines = explode("\n", (string) file_get_contents($this->path));
+        foreach ($lines as $i => $line) {
+            $this->assertSame(
+                rtrim($line),
+                $line,
+                "line " . ($i + 1) . " has trailing whitespace: " . var_export($line, true)
+            );
+        }
+    }
+
     public function testAcceptsCommentedDefaultTemplate(): void
     {
         // Mirrors the shipped config/extensions.php (a comment inside `enabled`).

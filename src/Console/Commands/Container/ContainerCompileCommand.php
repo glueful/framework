@@ -51,7 +51,7 @@ class ContainerCompileCommand extends BaseCommand
              )
              ->addOption(
                  'validate',
-                 'v',
+                 null,
                  InputOption::VALUE_NONE,
                  'Validate container configuration before compilation'
              )

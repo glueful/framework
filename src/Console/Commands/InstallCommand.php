@@ -17,7 +17,7 @@ use Symfony\Component\Console\Output\OutputInterface;
  * Installation and Setup Command
  *
  * Thin wrapper over {@see \Glueful\Installer\Installer}: it gathers input
- * (interactive credential prompts, or environment variables in --quiet mode),
+ * (interactive credential prompts, or environment variables in --unattended mode),
  * builds an {@see InstallOptions}, runs the engine-agnostic installer, and
  * renders the resulting {@see \Glueful\Installer\InstallResult} steps.
  *
@@ -72,8 +72,8 @@ class InstallCommand extends BaseCommand
                  'Overwrite existing configurations without confirmation'
              )
              ->addOption(
-                 'quiet',
-                 'q',
+                 'unattended',
+                 null,
                  InputOption::VALUE_NONE,
                  'Non-interactive mode using environment variables'
              );
@@ -85,7 +85,7 @@ class InstallCommand extends BaseCommand
         $skipKeys = (bool) $input->getOption('skip-keys');
         $skipCache = (bool) $input->getOption('skip-cache');
         $force = (bool) $input->getOption('force');
-        $quiet = (bool) $input->getOption('quiet');
+        $quiet = (bool) $input->getOption('unattended');
 
         try {
             if (!$quiet) {
@@ -94,7 +94,7 @@ class InstallCommand extends BaseCommand
                 $this->showQuietModeConfirmation();
             }
 
-            // Gather database credentials interactively; in --quiet mode leave
+            // Gather database credentials interactively; in --unattended mode leave
             // database = null so the installer uses the existing .env values.
             $database = null;
             if (!$skipDatabase && !$quiet) {
@@ -171,7 +171,7 @@ class InstallCommand extends BaseCommand
     private function showQuietModeConfirmation(): void
     {
         $this->line('');
-        $this->info('Running in quiet mode - using environment variables for configuration');
+        $this->info('Running in unattended mode - using environment variables for configuration');
         $this->line('');
         $this->line('Required environment variables:');
         $this->line('• Database: DB_DRIVER, DB_HOST, DB_DATABASE, DB_USERNAME, DB_PASSWORD');
@@ -180,7 +180,7 @@ class InstallCommand extends BaseCommand
         $this->line('');
 
         // In quiet/non-interactive/force modes, skip confirmation to support CI and scripted installs
-        $isQuiet = (bool) ($this->input->getOption('quiet') ?? false);
+        $isQuiet = (bool) ($this->input->getOption('unattended') ?? false);
         $isForced = (bool) ($this->input->getOption('force') ?? false);
         $isNonInteractive = !$this->input->isInteractive();
         if ($isQuiet || $isForced || $isNonInteractive) {
@@ -208,7 +208,7 @@ Steps performed:
 
 Examples:
   glueful install                           # Full interactive setup
-  glueful install --force --quiet           # Force reinstall using environment variables
+  glueful install --force --unattended      # Force reinstall using environment variables
   glueful install --skip-database           # Skip database setup
   glueful install --skip-db                 # Skip database setup (alias)
   glueful install --skip-cache              # Skip cache initialization

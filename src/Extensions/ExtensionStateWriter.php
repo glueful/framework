@@ -96,9 +96,12 @@ final class ExtensionStateWriter
             $items .= "        '" . str_replace('\\', '\\\\', $p) . "',\n";
         }
         $src = (string) file_get_contents($configPath);
+        // Consume the whitespace before the closing bracket into a non-captured `\s*` (it
+        // already holds the newline + indent) and re-emit the closing indent + bracket
+        // literally. Capturing it as `$3` and prefixing "    " left a 4-space dangling line.
         $updated = preg_replace(
-            "/('enabled'\\s*=>\\s*\\[)(.*?)(\\s*\\])/s",
-            "$1\n" . $items . "    $3",
+            "/('enabled'\\s*=>\\s*\\[)(.*?)\\s*\\]/s",
+            "$1\n" . $items . "    ]",
             $src,
             1
         );
