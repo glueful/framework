@@ -58,7 +58,7 @@ class ExpireCommand extends BaseCommand
              )
              ->addOption(
                  'verify',
-                 'v',
+                 null,
                  InputOption::VALUE_NONE,
                  'Verify the operation by checking TTL after setting'
              )

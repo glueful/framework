@@ -6,6 +6,29 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.65.1] - 2026-07-01 — Acrux
+
+### Fixed
+- **Extensions: `extensions:enable`/`disable` no longer leave a trailing-whitespace line in
+  `config/extensions.php`.** `ExtensionStateWriter::writeList()` captured the whitespace before the
+  closing bracket and re-emitted a literal indent in front of it, producing a dangling 4-space line
+  above `]` on every enable/disable — which then trips `Squiz.WhiteSpace.SuperfluousWhitespace` in
+  phpcs/CI. The writer now folds that whitespace into the match and writes the closing indent and
+  bracket cleanly.
+- **Console: CLI commands no longer collide with Symfony's global option shortcuts.** Four commands
+  declared options whose shortcuts (or, for `install`, the name too) clashed with the reserved
+  globals, so Symfony threw `An option with shortcut "…" already exists` when the command's
+  definition merged with the application's — on both run and `help`, making the command unrunnable:
+  - `serve` `--queue` dropped its `-q` shortcut (clashed with `-q/--quiet`).
+  - `cache:expire` `--verify` and `di:container:compile` `--validate` dropped their `-v` shortcut
+    (clashed with `-v/--verbose`).
+  - `install` `--quiet` (which meant "non-interactive, use env vars", not "suppress output") was
+    **renamed to `--unattended`** — it collided with the global `--quiet`/`-q` on both name and
+    shortcut. The global `-q/--quiet` now resolves normally on that command.
+
+  All long options are preserved (`--queue`, `--verify`, `--validate`, `--unattended`); only the
+  colliding shortcuts were removed.
+
 ## [1.65.0] - 2026-06-30 — Acrux
 
 ### Added

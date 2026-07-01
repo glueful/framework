@@ -21,6 +21,18 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.65.1 — Acrux (Patch, Released 2026-07-01)
+- **`extensions:enable`/`disable` no longer leave a trailing-whitespace line** in
+  `config/extensions.php`. `ExtensionStateWriter::writeList()` re-emitted a literal indent in front
+  of the captured pre-bracket whitespace, producing a dangling 4-space line above `]` on every
+  toggle — which then tripped `Squiz.WhiteSpace.SuperfluousWhitespace` in phpcs/CI. The writer now
+  folds that whitespace into the match and writes the closing indent + bracket cleanly.
+- **CLI commands no longer collide with Symfony's global option shortcuts** — `serve --queue`
+  dropped `-q`, `cache:expire --verify` and `di:container:compile --validate` dropped `-v`, and
+  `install --quiet` was renamed `--unattended`; the commands were previously unrunnable (Symfony
+  threw on the shortcut clash at merge time). All long options preserved.
+- Notes: **Patch release** — bugfixes only, no new env, no migrations, no behavioral changes.
+
 ### 1.65.0 — Acrux (Minor, Released 2026-06-30)
 - **`QueryBuilder::forceDelete()`** permanently deletes matching rows, bypassing soft-delete even on
   a `deleted_at` table — previously hard-deleting such a row needed raw SQL. Added to
