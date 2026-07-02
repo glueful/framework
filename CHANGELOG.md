@@ -6,6 +6,18 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.65.2] - 2026-07-02 — Acrux
+
+### Fixed
+- **FieldSelection: array-valued `fields`/`expand` query params no longer 500.** `FieldSelector::fromRequest()`
+  and `fromRequestAdvanced()` read `fields`/`expand` via `Request::query->get()`, which — since Symfony
+  HttpFoundation's `InputBag` non-scalar guard — throws a `BadRequestException` when the parameter is sent
+  as an array (e.g. `?fields[]=a&fields[]=b`). On a public endpoint that builds its selector from the
+  request (a delivery/read API), that surfaced as an unhandled **500**. Field selection is inherently a
+  scalar syntax, so both factories now read via `query->all()` and treat any non-string value as absent —
+  landing on the existing "no field selection" fast path instead of throwing. Scalar `fields`/`expand`
+  parse exactly as before.
+
 ## [1.65.1] - 2026-07-01 — Acrux
 
 ### Fixed

@@ -21,6 +21,14 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.65.2 — Acrux (Patch, Released 2026-07-02)
+- **Array-valued `fields`/`expand` query params no longer 500.** `FieldSelector::fromRequest()` /
+  `fromRequestAdvanced()` read those params through `query->all()` and treat a non-string value as
+  absent, instead of letting Symfony `InputBag`'s non-scalar guard throw a `BadRequestException`
+  (an unhandled 500 on public read/delivery endpoints when a client sends `?fields[]=a`). Scalar
+  `fields`/`expand` parse exactly as before.
+- Notes: **Patch release** — bugfix only, no new env, no migrations, no behavioral changes.
+
 ### 1.65.1 — Acrux (Patch, Released 2026-07-01)
 - **`extensions:enable`/`disable` no longer leave a trailing-whitespace line** in
   `config/extensions.php`. `ExtensionStateWriter::writeList()` re-emitted a literal indent in front

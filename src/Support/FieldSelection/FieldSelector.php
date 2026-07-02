@@ -40,8 +40,8 @@ final class FieldSelector
         $metrics = FieldSelectionMetrics::getInstance();
         $cache = new FieldTreeCache();
 
-        $fields = $request->query->get('fields');
-        $expand = $request->query->get('expand');
+        $fields = self::stringQueryParam($request, 'fields');
+        $expand = self::stringQueryParam($request, 'expand');
 
         // Fast path: no field selection
         if ($fields === null && $expand === null) {
@@ -66,7 +66,7 @@ final class FieldSelector
         // GraphQL style uses nested parentheses like: user(id,name,posts(title))
         // REST style with transformations uses: id,name:format(Y-m-d),price:currency(USD)
         $isGraphQLStyle = $fields !== null && $fields !== '' &&
-                         preg_match('/\w+\s*\([^)]*\s*\w+\s*\([^)]*\)/', (string)$fields);
+                         preg_match('/\w+\s*\([^)]*\s*\w+\s*\([^)]*\)/', $fields);
 
         if ($isGraphQLStyle) {
             // GraphQL-style syntax detected
@@ -122,8 +122,8 @@ final class FieldSelector
         int $maxFields = 200,
         int $maxItems = 1000
     ): self {
-        $fields = $request->query->get('fields');
-        $expand = $request->query->get('expand');
+        $fields = self::stringQueryParam($request, 'fields');
+        $expand = self::stringQueryParam($request, 'expand');
 
         // Fast path: no field selection
         if ($fields === null && $expand === null) {
@@ -132,7 +132,7 @@ final class FieldSelector
 
         // Parse based on syntax detection
         $isGraphQLStyle = $fields !== null && $fields !== '' &&
-                         preg_match('/\w+\s*\([^)]*\s*\w+\s*\([^)]*\)/', (string)$fields);
+                         preg_match('/\w+\s*\([^)]*\s*\w+\s*\([^)]*\)/', $fields);
 
         if ($isGraphQLStyle) {
             $tree = (new GraphQLProjectionParser())->parse((string)$fields);
@@ -146,6 +146,22 @@ final class FieldSelector
         }
 
         return new self($tree, $strict, $maxDepth, $maxFields, $maxItems);
+    }
+
+    /**
+     * Read a query parameter as a string, tolerating malformed array-valued params.
+     *
+     * Symfony's InputBag::get() throws a BadRequestException when a query parameter is sent as an
+     * array (e.g. `?fields[]=a`), which — on an unauthenticated delivery endpoint — surfaces as an
+     * unhandled 500. Field selection is inherently a scalar syntax, so an array value is simply not
+     * a selection: read via all() and treat any non-string value as absent (null), which lands on
+     * the existing "no field selection" fast path rather than throwing.
+     */
+    private static function stringQueryParam(Request $request, string $key): ?string
+    {
+        $value = $request->query->all()[$key] ?? null;
+
+        return is_string($value) ? $value : null;
     }
 
     public function empty(): bool
