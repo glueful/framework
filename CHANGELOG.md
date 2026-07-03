@@ -6,6 +6,26 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.65.3] - 2026-07-03 — Acrux
+
+### Fixed
+- **Security: `RandomStringGenerator::generate()` could read past its random-byte buffer.** The
+  rejection-sampling inner loop (`while ($idx >= $charsetLength)`) consumes bytes but had no refill
+  guard — only the outer loop refills — so rejections clustering at the buffer end walked past it
+  ("Uninitialized string offset N"). Inherently flaky (~1% per 16-char generate with a 79-char
+  charset), it surfaced as intermittent CI failures in consumers generating passwords
+  (`csv_user_import_failed`). Quieter correctness angle: outside strict error handling, `ord('')`
+  returns 0 — silently biasing generated secrets toward the charset's first character. The inner
+  loop now refills before reading; a regression test hammers the worst-case charset (65 chars,
+  ~49% rejection) with warnings escalated.
+- **Extensions: static assets served via `serveFrontend()` no longer get content-sniffed MIME
+  types.** `frontendAssetServer()` asked Symfony's `MimeTypes::guessMimeType()` first, which
+  content-sniffs via finfo — and CSS/JS carry no magic bytes, so finfo answers `text/plain`. Since
+  the same response sends `X-Content-Type-Options: nosniff`, browsers are REQUIRED to refuse the
+  stylesheet/module script outright (broken theme CSS on any `serveFrontend` mount, including
+  admin SPA bundles). The extension map now wins for known extensions (`css` → `text/css`);
+  sniffing remains the fallback for extensionless files.
+
 ## [1.65.2] - 2026-07-02 — Acrux
 
 ### Fixed

@@ -136,6 +136,23 @@ class ServeFrontendTest extends TestCase
         self::assertStringContainsString('no-cache', (string) $resp->headers->get('Cache-Control'));
     }
 
+    public function testTextAssetsGetExtensionMimeNotSniffedTextPlain(): void
+    {
+        // finfo content-sniffing calls css/js "text/plain" (no magic bytes), and
+        // these responses carry X-Content-Type-Options: nosniff — so a wrong
+        // type makes browsers REFUSE stylesheets/module scripts outright. The
+        // extension map must win for known extensions; sniffing is only the
+        // fallback for extensionless files.
+        [$routes] = $this->mount('/admin', $this->dir);
+        $css = $routes['/admin/{rest}'](Request::create('/admin/style.css'), 'style.css');
+        self::assertSame('text/css', $css->headers->get('Content-Type'));
+        $js = $routes['/admin/{rest}'](
+            Request::create('/admin/assets/app-C5kJ8nQ2.js'),
+            'assets/app-C5kJ8nQ2.js',
+        );
+        self::assertStringContainsString('javascript', (string) $js->headers->get('Content-Type'));
+    }
+
     public function testHashedAssetServedImmutable(): void
     {
         [$routes] = $this->mount('/admin', $this->dir);

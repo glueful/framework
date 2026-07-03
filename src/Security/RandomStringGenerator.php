@@ -72,8 +72,15 @@ class RandomStringGenerator
             $idx = ord($bytes[$pos]) & $mask;
             $pos++;
 
-            // If index is beyond charset length, get another one
+            // If index is beyond charset length, get another one. This loop
+            // consumes bytes too, so it needs its own refill guard: rejections
+            // clustering at the buffer end otherwise read past it
+            // ("Uninitialized string offset" — and ord('') would silently bias
+            // the output toward charset[0]).
             while ($idx >= $charsetLength) {
+                if ($pos >= strlen($bytes)) {
+                    $bytes .= random_bytes(32);
+                }
                 $idx = ord($bytes[$pos]) & $mask;
                 $pos++;
             }
