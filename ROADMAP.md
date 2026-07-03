@@ -21,6 +21,19 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.65.3 — Acrux (Patch, Released 2026-07-03)
+- **`RandomStringGenerator::generate()` no longer reads past its random-byte buffer.** The
+  rejection-sampling inner loop consumed bytes without a refill guard; rejections clustering at
+  the buffer end walked past it ("Uninitialized string offset N") — an inherently flaky failure
+  in consumers generating passwords, and a quiet bias risk (`ord('')` = 0 favors the charset's
+  first character). The inner loop now refills before reading, with a worst-case-charset
+  regression test.
+- **`serveFrontend()` static assets get extension-mapped MIME types.** Content sniffing called
+  CSS/JS `text/plain` (no magic bytes), and the accompanying `nosniff` header made browsers
+  refuse them outright. Extension map first (`css` → `text/css`); sniffing only for
+  extensionless files.
+- Notes: **Patch release** — bugfix only, no new env, no migrations, no behavioral changes.
+
 ### 1.65.2 — Acrux (Patch, Released 2026-07-02)
 - **Array-valued `fields`/`expand` query params no longer 500.** `FieldSelector::fromRequest()` /
   `fromRequestAdvanced()` read those params through `query->all()` and treat a non-string value as

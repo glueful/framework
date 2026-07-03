@@ -354,8 +354,16 @@ abstract class ServiceProvider
             $etag = md5_file($realPath) !== false ? md5_file($realPath) : sha1($realPath);
 
             $guesser = \Symfony\Component\Mime\MimeTypes::getDefault();
+            // Extension map FIRST: content sniffing cannot identify text formats
+            // (css/js/svg carry no magic bytes — finfo calls them text/plain), and
+            // these responses send X-Content-Type-Options: nosniff, so a wrong
+            // type makes browsers REFUSE stylesheets and module scripts outright.
+            // Sniffing remains the fallback for extensionless files.
+            $ext = strtolower(pathinfo($realPath, PATHINFO_EXTENSION));
+            $byExtension = $ext !== '' ? ($guesser->getMimeTypes($ext)[0] ?? null) : null;
             $mimeGuess = mime_content_type($realPath);
-            $mime = $guesser->guessMimeType($realPath)
+            $mime = $byExtension
+                ?? $guesser->guessMimeType($realPath)
                 ?? ($mimeGuess !== false ? $mimeGuess : 'application/octet-stream');
 
             $resp = new \Symfony\Component\HttpFoundation\BinaryFileResponse($realPath);
