@@ -4,62 +4,144 @@ declare(strict_types=1);
 
 namespace Glueful\Controllers;
 
-use Glueful\Http\Response;
+use Glueful\Bootstrap\ApplicationContext;
+use Glueful\DTOs\ExtensionInstallData;
+use Glueful\DTOs\ExtensionToggleData;
+use Glueful\Extensions\EnabledProviders;
+use Glueful\Extensions\ExtensionCatalog;
 use Glueful\Extensions\ExtensionManager;
+use Glueful\Extensions\ExtensionResolver;
+use Glueful\Extensions\ExtensionStateWriter;
+use Glueful\Extensions\Install\ExtensionInstaller;
+use Glueful\Extensions\Install\HostCapability;
+use Glueful\Extensions\Install\HostNotWritableException;
+use Glueful\Extensions\Install\InstallDisabledException;
+use Glueful\Extensions\Install\InstallJobStore;
+use Glueful\Extensions\Install\PackageNotAllowedException;
+use Glueful\Extensions\PackageManifest;
+use Glueful\Http\Response;
+use Glueful\Support\Version;
+use Psr\Log\LoggerInterface;
 
 /**
- * Simplified read-only Extensions API
+ * In-admin extensions manager API (browse / install / enable / disable).
  *
- * Provides basic extension information for monitoring and CLI support.
- * Extension management is now done via CLI commands and config files.
+ * Mutating actions require the `system.config.edit` tier; reads require
+ * `system.config.view`. Install is gated further by the kill-switch + host
+ * capability inside {@see ExtensionInstaller}. All actions are audited.
  */
 class ExtensionsController extends BaseController
 {
     public function __construct(
-        \Glueful\Bootstrap\ApplicationContext $context,
-        private ExtensionManager $extensionManager
+        ApplicationContext $context,
+        private ExtensionCatalog $catalog,
+        private ExtensionInstaller $installer,
+        private InstallJobStore $jobs,
+        private HostCapability $host,
+        private ExtensionManager $extensions,
+        private LoggerInterface $auditLog,
     ) {
         parent::__construct($context);
     }
 
-    /**
-     * List all discovered extensions (read-only)
-     *
-     * @return mixed HTTP response
-     */
-    public function index(): mixed
+    /** Installed extensions with enable/disable state. */
+    public function index(): Response
     {
-        $providers = $this->extensionManager->getProviders();
-        $meta = $this->extensionManager->listMeta();
-
-        $extensions = [];
-        foreach ($providers as $class => $provider) {
-            $m = $meta[$class] ?? [];
-            $extensions[] = [
-                'slug' => $m['slug'] ?? basename(str_replace('\\', '/', $class)),
-                'name' => $m['name'] ?? $class,
-                'version' => $m['version'] ?? 'n/a',
-                'description' => $m['description'] ?? '',
-                'provider' => $class,
-            ];
-        }
-
-        return Response::success([
-            'extensions' => $extensions,
-            'total' => count($extensions)
-        ], 'Extensions retrieved successfully');
+        $this->requirePermission('system.config.view');
+        return $this->success(['installed' => $this->catalog->installed()]);
     }
 
-    /**
-     * Get extension system summary
-     *
-     * @return mixed HTTP response
-     */
-    public function summary(): mixed
+    /** Installable extensions from Packagist (cached), annotated with local state. */
+    public function catalog(): Response
     {
-        return Response::success(
-            $this->extensionManager->getSummary(),
-            'Extension system summary retrieved successfully'
-        );
+        $this->requirePermission('system.config.view');
+        return $this->success(['catalog' => $this->catalog->catalog()]);
+    }
+
+    /** Start a detached install; returns a job id the client polls. */
+    public function install(ExtensionInstallData $data): Response
+    {
+        $this->requirePermission('system.config.edit');
+        try {
+            $result = $this->installer->start($data->package);
+        } catch (InstallDisabledException $e) {
+            return $this->forbidden($e->getMessage());
+        } catch (HostNotWritableException $e) {
+            return Response::error($e->getMessage(), 409, ['reason' => $e->reason]);
+        } catch (PackageNotAllowedException $e) {
+            return $this->validationError(['package' => [$e->getMessage()]]);
+        }
+        $this->audit('extension.install', $data->package, 'queued');
+        return $this->created($result, 'Install started');
+    }
+
+    /** Poll a running/finished install job. */
+    public function installStatus(string $jobId): Response
+    {
+        $this->requirePermission('system.config.view');
+        $record = $this->jobs->get($jobId);
+        return $record === null ? $this->notFound('Unknown install job') : $this->success($record);
+    }
+
+    public function enable(ExtensionToggleData $data): Response
+    {
+        return $this->toggle($data->package, enable: true);
+    }
+
+    public function disable(ExtensionToggleData $data): Response
+    {
+        return $this->toggle($data->package, enable: false);
+    }
+
+    private function toggle(string $package, bool $enable): Response
+    {
+        $this->requirePermission('system.config.edit');
+
+        if (($cap = $this->host->forToggle()) !== null) {
+            return Response::error('Host not writable', 409, ['reason' => $cap['reason']]);
+        }
+
+        $candidates = (new PackageManifest($this->context))->getCandidates();
+        $candidate = $candidates[$package] ?? null;
+        if ($candidate === null) {
+            return $this->notFound("Not an installed extension: {$package}");
+        }
+        $provider = $candidate->provider;
+        $current = EnabledProviders::from($this->context);
+        $proposed = $enable
+            ? [...$current, $provider]
+            : array_values(array_filter($current, static fn($p) => $p !== $provider));
+
+        $result = (new ExtensionResolver())->resolve($candidates, $proposed, Version::VERSION);
+        if ($result->hasErrors()) {
+            return $this->validationError(['extension' => array_map(
+                static fn($e) => "[{$e->kind}] {$e->message}",
+                $result->errors,
+            )]);
+        }
+
+        $writer = new ExtensionStateWriter();
+        $configPath = config_path($this->context, 'extensions.php');
+        $enable ? $writer->enable($configPath, $provider) : $writer->disable($configPath, $provider);
+        $this->extensions->writeCacheNow();
+
+        $this->audit($enable ? 'extension.enable' : 'extension.disable', $package, 'succeeded');
+        return $this->success([
+            'package' => $package,
+            'provider' => $provider,
+            'state' => $enable ? 'enabled' : 'available',
+        ]);
+    }
+
+    private function audit(string $action, string $package, string $result): void
+    {
+        $this->auditLog->info($action, [
+            'log_channel' => 'audit',
+            'action' => $action,
+            'actor_id' => $this->getCurrentUserUuid(),
+            'resource_type' => 'extension',
+            'resource_id' => $package,
+            'result' => $result,
+        ]);
     }
 }

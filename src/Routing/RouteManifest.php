@@ -44,6 +44,7 @@ class RouteManifest
                 // 2fa routes moved to glueful/users (loaded by UsersServiceProvider).
                 '/routes/blobs.php',
                 '/routes/resource.php',
+                '/routes/extensions.php',
             ],
             // Framework routes that don't get the API prefix (public endpoints)
             'public_routes' => [
