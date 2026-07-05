@@ -27,9 +27,12 @@ return [
      * literal list the enable/disable writer can edit).
      */
     'install' => [
-        'enabled'     => env('EXTENSIONS_INSTALL_ENABLED', env('APP_ENV') !== 'production'),
-        'auto_enable' => (bool) env('EXTENSIONS_INSTALL_AUTO_ENABLE', true),
-        'timeout'     => (int) env('EXTENSIONS_INSTALL_TIMEOUT', 600),
-        'vendor'      => 'glueful/',
+        'enabled'    => env('EXTENSIONS_INSTALL_ENABLED', env('APP_ENV') !== 'production'),
+        'timeout'    => (int) env('EXTENSIONS_INSTALL_TIMEOUT', 600),
+        'vendor'     => 'glueful/',
+        // Absolute path to a CLI php used to run composer. Leave null to auto-detect
+        // (PhpExecutableFinder, then PHP_BINARY). Set it when the web SAPI's php is not
+        // a usable CLI interpreter (Apache module / php-cgi / nginx+FPM).
+        'php_binary' => env('EXTENSIONS_INSTALL_PHP_BINARY') ?: null,
     ],
 ];

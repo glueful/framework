@@ -20,9 +20,6 @@ $router->group(['prefix' => '/extensions'], function (Router $router) {
     $router->post('/install', [ExtensionsController::class, 'install'])
         ->middleware(['auth', 'rate_limit:10,60']);
 
-    $router->get('/install/{jobId}', [ExtensionsController::class, 'installStatus'])
-        ->middleware(['auth', 'rate_limit:120,60']);
-
     $router->post('/enable', [ExtensionsController::class, 'enable'])
         ->middleware(['auth', 'rate_limit:20,60']);
 

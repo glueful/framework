@@ -21,6 +21,22 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.66.1 — Adhara (Patch, Released 2026-07-06)
+- **The extension installer is now synchronous.** The 1.66.0 detached/background-job installer was
+  unreliable under a web SAPI (`PHP_BINARY` is not a CLI interpreter behind Apache/php-cgi/nginx+FPM,
+  so the job never started). `POST /extensions/install` now runs `composer require` inline and
+  returns the result in one response; the extension installs disabled and is activated with the
+  enable toggle (WordPress-style). composer runs as `<cli-php> <composer> require …` with an explicit
+  env (`COMPOSER_HOME`), independent of the web PATH/`putenv`/`HOME`. Removed the job-poll endpoint,
+  the `DetachedRunner`/`InstallJobStore` and the two internal runner commands.
+- **Extensions installer no longer rejects installable extensions with `422`.**
+  `ExtensionCatalog::hydrateVersion()` required *every* Packagist release to be typed
+  `glueful-extension`, so any extension whose older tags predate that type (Packagist omits the
+  field when it defaults to `library`) was dropped from the catalog and the install allowlist
+  rejected it. Type re-verification now checks the latest release only.
+- Notes: install API reshaped (single response, no job polling); the broken 1.66.0 installer
+  affected no working integration. Run `php glueful cache:clear` after upgrading.
+
 ### 1.66.0 — Adhara (Minor, Released 2026-07-05)
 - **Install extensions from the admin UI, no SSH.** A new install pipeline runs `composer require`
   for a catalog extension from the browser: `ExtensionInstaller` validates the package against the

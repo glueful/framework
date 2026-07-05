@@ -819,10 +819,6 @@ final class CoreProvider extends BaseServiceProvider
             $this->autowire(\Glueful\Support\Process\ComposerBinaryResolver::class);
         $defs[\Glueful\Extensions\Install\HostCapability::class] =
             $this->autowire(\Glueful\Extensions\Install\HostCapability::class);
-        $defs[\Glueful\Extensions\Install\InstallJobStore::class] =
-            $this->autowire(\Glueful\Extensions\Install\InstallJobStore::class);
-        $defs[\Glueful\Support\Process\DetachedRunner::class] =
-            $this->autowire(\Glueful\Support\Process\DetachedRunner::class);
         $defs[\Glueful\Extensions\ExtensionCatalog::class] =
             $this->autowire(\Glueful\Extensions\ExtensionCatalog::class);
         $defs[\Glueful\Extensions\Install\ExtensionInstaller::class] =

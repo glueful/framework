@@ -6,6 +6,47 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.66.1] - 2026-07-06 — Adhara
+
+### Changed
+- **The extension installer is now synchronous — no background job, no polling.** The 1.66.0
+  installer spawned `composer require` as a detached background process and exposed a job-polling
+  endpoint, but forking a long-lived PHP CLI from a web SAPI (Apache mod_php, php-cgi, nginx+FPM)
+  proved unreliable: `PHP_BINARY` there is not a CLI interpreter, so the detached job silently never
+  started (stuck in `queued`). `POST /extensions/install` now runs `composer require` **inline** and
+  returns the outcome in a single response (`status: installed | failed`, with composer output on
+  failure); the extension installs **disabled** and is activated with the normal enable toggle
+  (WordPress-style install → activate). composer is invoked as `<cli-php> <composer> require …` with
+  an explicit child environment (including `COMPOSER_HOME`), so it no longer depends on the web
+  process's `PATH`, on `putenv()`, or on a writable `HOME`. **Removed:** the
+  `GET /extensions/install/{jobId}` poll endpoint, the `queued|running|…` job states, and the
+  internal `DetachedRunner`, `InstallJobStore`, `extensions:install-run` and
+  `extensions:enable-installed` machinery.
+
+### Fixed
+- **Installing any extension with release history failed with "Not an installable Glueful
+  extension".** `ExtensionCatalog::hydrateVersion()` re-verified the `glueful-extension` type by
+  iterating **every** Packagist release and dropping the package the moment one wasn't typed — but
+  older tags predate the type (Packagist omits the field when it defaults to `library`), so any
+  extension with a version history (e.g. `glueful/entrada`, whose latest is typed but whose older
+  tags are not) was excluded from the catalog and the install allowlist rejected it with a `422`.
+  Type re-verification now judges the **latest release only**, matching Packagist's
+  `type=glueful-extension` search.
+
+### Upgrade Notes
+- **The install API changed shape.** `POST /extensions/install` now returns the final result
+  directly (`{ status: 'installed' | 'failed', … }`) instead of a job id, and the
+  `GET /extensions/install/{jobId}` poll endpoint has been removed — clients await the single
+  request. (The 1.66.0 detached installer never functioned under a web SAPI, so this affects no
+  working integration.)
+- **Env** (all optional): `EXTENSIONS_INSTALL_PHP_BINARY` — absolute path to a CLI php used to run
+  composer; leave blank to auto-detect (set it when the web SAPI's php is not a usable CLI
+  interpreter, e.g. `/usr/bin/php` behind nginx+FPM). `COMPOSER_BINARY` — absolute composer path if
+  it is not on the web `PATH`. `EXTENSIONS_INSTALL_AUTO_ENABLE` has been removed (there is no
+  auto-enable step).
+- After upgrading, run `php glueful cache:clear` so the corrected installable-extension catalog is
+  rebuilt (the 1.66.0 catalog cache can hide affected packages until its TTL lapses).
+
 ## [1.66.0] - 2026-07-05 — Adhara
 
 ### Added

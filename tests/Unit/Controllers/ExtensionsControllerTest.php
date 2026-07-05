@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Glueful\Tests\Unit\Controllers;
 
 use Glueful\Bootstrap\ApplicationContext;
-use Glueful\Cache\Drivers\ArrayCacheDriver;
 use Glueful\Controllers\BaseController;
 use Glueful\Controllers\ExtensionsController;
 use Glueful\DTOs\ExtensionInstallData;
@@ -14,9 +13,8 @@ use Glueful\Extensions\ExtensionCatalog;
 use Glueful\Extensions\ExtensionManager;
 use Glueful\Extensions\Install\ExtensionInstaller;
 use Glueful\Extensions\Install\HostCapability;
-use Glueful\Extensions\Install\InstallJobStore;
 use Glueful\Support\Process\ComposerBinaryResolver;
-use Glueful\Support\Process\DetachedRunner;
+use Glueful\Support\Process\ProcessRunner;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Psr\Log\NullLogger;
@@ -49,13 +47,19 @@ final class ExtensionsControllerTest extends TestCase
         }
     }
 
-    public function test_install_happy_returns_201_with_jobId_and_checks_edit_permission(): void
+    public function test_install_happy_returns_200_installed_and_checks_edit_permission(): void
     {
         $c = $this->build(killSwitch: true, catalog: ['glueful/aegis']);
         $res = $c->controller->install(new ExtensionInstallData('glueful/aegis'));
 
-        $this->assertSame(201, $res->getStatusCode());
+        $this->assertSame(200, $res->getStatusCode());
         $this->assertContains('system.config.edit', $c->controller->perms);
+    }
+
+    public function test_install_422_when_composer_fails(): void
+    {
+        $c = $this->build(killSwitch: true, catalog: ['glueful/aegis'], composerExit: 1);
+        $this->assertSame(422, $c->controller->install(new ExtensionInstallData('glueful/aegis'))->getStatusCode());
     }
 
     public function test_install_403_when_kill_switch_off(): void
@@ -74,15 +78,6 @@ final class ExtensionsControllerTest extends TestCase
     {
         $c = $this->build(killSwitch: true, catalog: ['glueful/aegis'], readOnly: true);
         $this->assertSame(409, $c->controller->install(new ExtensionInstallData('glueful/aegis'))->getStatusCode());
-    }
-
-    public function test_install_status_404_then_200(): void
-    {
-        $c = $this->build(killSwitch: true, catalog: ['glueful/aegis']);
-        $this->assertSame(404, $c->controller->installStatus('nope')->getStatusCode());
-
-        $jobId = $c->jobs->create('glueful/aegis');
-        $this->assertSame(200, $c->controller->installStatus($jobId)->getStatusCode());
     }
 
     public function test_index_checks_view_permission(): void
@@ -120,8 +115,13 @@ final class ExtensionsControllerTest extends TestCase
     /**
      * @param list<string> $catalog
      */
-    private function build(bool $killSwitch, array $catalog, ?string $installedProvider = null, bool $readOnly = false): object
-    {
+    private function build(
+        bool $killSwitch,
+        array $catalog,
+        ?string $installedProvider = null,
+        bool $readOnly = false,
+        int $composerExit = 0,
+    ): object {
         $base = sys_get_temp_dir() . '/ectrl_' . bin2hex(random_bytes(6));
         mkdir($base . '/config', 0755, true);
         mkdir($base . '/bootstrap/cache', 0755, true);
@@ -185,10 +185,20 @@ final class ExtensionsControllerTest extends TestCase
             }
         };
 
-        $jobs = new InstallJobStore(new ArrayCacheDriver());
         $host = new HostCapability($context, new ComposerBinaryResolver());
         $extensions = new ExtensionManager($container);
-        $installer = new ExtensionInstaller($context, $fakeCatalog, $jobs, $host, new DetachedRunner($context, static fn() => null));
+        // Fake runner so install() never shells out to real composer in a unit test.
+        $runner = new class ($composerExit) implements ProcessRunner {
+            public function __construct(private int $exitCode)
+            {
+            }
+
+            public function run(array $cmd, string $cwd, float $timeout, ?callable $onOutput = null, ?array $env = null): array
+            {
+                return ['exitCode' => $this->exitCode, 'output' => $this->exitCode === 0 ? 'done' : 'boom'];
+            }
+        };
+        $installer = new ExtensionInstaller($context, $fakeCatalog, $host, $runner);
 
         if ($readOnly) {
             chmod($base . '/bootstrap/cache', 0555);
@@ -220,12 +230,11 @@ final class ExtensionsControllerTest extends TestCase
         $this->inject($controller, BaseController::class, 'context', $context);
         $this->inject($controller, ExtensionsController::class, 'catalog', $fakeCatalog);
         $this->inject($controller, ExtensionsController::class, 'installer', $installer);
-        $this->inject($controller, ExtensionsController::class, 'jobs', $jobs);
         $this->inject($controller, ExtensionsController::class, 'host', $host);
         $this->inject($controller, ExtensionsController::class, 'extensions', $extensions);
         $this->inject($controller, ExtensionsController::class, 'auditLog', new NullLogger());
 
-        return (object) ['controller' => $controller, 'jobs' => $jobs, 'base' => $base];
+        return (object) ['controller' => $controller, 'base' => $base];
     }
 
     private function inject(object $obj, string $class, string $prop, mixed $value): void
