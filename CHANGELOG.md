@@ -6,6 +6,54 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.66.0] - 2026-07-05 — Adhara
+
+### Added
+- **Extensions: install a Glueful extension from the admin UI, no SSH required.** A new
+  install pipeline lets an operator run `composer require` for a catalog extension from the
+  browser instead of the server terminal. `ExtensionInstaller::start()` validates the package
+  (catalog-membership allowlist + `glueful/` vendor prefix, no shell), then spawns a **detached**
+  `composer require` via `extensions:install-run` (`proc_open` with array argv + `setsid`, so it
+  survives an FPM recycle); on success it auto-enables the extension in a **fresh PHP subprocess**
+  (`extensions:enable-installed`) to sidestep the running worker's stale autoloader, then writes
+  the extension cache. Progress is polled through a `CacheStore`-backed `InstallJobStore`
+  (status enum `queued|running|succeeded|failed|installed_not_enabled`, 64 KB output cap). New
+  building blocks: `src/Extensions/Install/` (`ExtensionInstaller`, `InstallJobStore`,
+  `HostCapability`, and `InstallDisabled`/`PackageNotAllowed`/`HostNotWritable` exceptions),
+  `src/Support/Process/` (`DetachedRunner`, `ComposerBinaryResolver`, `ProcessRunner` +
+  `SymfonyProcessRunner`), `ExtensionCatalog` (two-stage Packagist fetch filtered to
+  `type=glueful-extension`), and a batteries-included `ExtensionsController` at
+  `/api/v1/extensions` (index / catalog / install / install-status / enable / disable),
+  registered in `CoreProvider`.
+- **Security guardrails on the install path.** Guarded by the `system.config` permission tier and
+  the `EXTENSIONS_INSTALL_ENABLED` kill-switch (off in production by default); a host-writability
+  preflight returns `409` on a read-only deploy; the package must be a member of the resolved
+  Packagist catalog (not a substring match). Every install is audited via the injected logger.
+
+### Fixed
+- **Uploads: SVG (and any type the app's allowlist permits) no longer 400s on the content check.**
+  `FileUploader::validateFileContent()` re-checked the detected mime against the hard-coded
+  `DEFAULT_ALLOWED_MIME_TYPES` constant, overruling the configured `uploads.allowed_types` that
+  `validateMimeType()` had already honored — so `image/svg+xml` passed the claimed-mime gate under
+  `image/*` and then failed content validation ("Invalid file type"). The content check now uses the
+  same configured allowlist (wildcards included; unconfigured installs still fall back to the
+  default constant), and the extension→mime map learned `svg` → `image/svg+xml`. Safety posture
+  unchanged: SVG stays out of `isSafeInlineMime` (served as attachment, never inline) and the
+  hazard scan still rejects `<script>`-bearing payloads — both regression-tested.
+
+### Upgrade Notes
+- **New env vars for the extension installer** (all optional; safe defaults):
+  - `EXTENSIONS_INSTALL_ENABLED` — master kill-switch. **Defaults to on outside production and off
+    in production** (`APP_ENV=production`). Leave unset unless you want to override that default.
+  - `EXTENSIONS_INSTALL_AUTO_ENABLE` (default `true`) — auto-enable an extension right after a
+    successful install.
+  - `EXTENSIONS_INSTALL_TIMEOUT` (default `600`) — seconds before a `composer require` run is
+    considered timed out.
+- No migrations, no config file is required to change — the new `install` block in
+  `config/extensions.php` ships with working defaults. To expose the installer in production you
+  must explicitly set `EXTENSIONS_INSTALL_ENABLED=true` and ensure the deploy's vendor/ tree is
+  writable by the web user.
+
 ## [1.65.3] - 2026-07-03 — Acrux
 
 ### Fixed

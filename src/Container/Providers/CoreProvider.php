@@ -814,6 +814,20 @@ final class CoreProvider extends BaseServiceProvider
             fn() => new \Glueful\Encryption\EncryptionService($this->context)
         );
 
+        // Extensions manager / installer services (in-admin extension installer)
+        $defs[\Glueful\Support\Process\ComposerBinaryResolver::class] =
+            $this->autowire(\Glueful\Support\Process\ComposerBinaryResolver::class);
+        $defs[\Glueful\Extensions\Install\HostCapability::class] =
+            $this->autowire(\Glueful\Extensions\Install\HostCapability::class);
+        $defs[\Glueful\Extensions\Install\InstallJobStore::class] =
+            $this->autowire(\Glueful\Extensions\Install\InstallJobStore::class);
+        $defs[\Glueful\Support\Process\DetachedRunner::class] =
+            $this->autowire(\Glueful\Support\Process\DetachedRunner::class);
+        $defs[\Glueful\Extensions\ExtensionCatalog::class] =
+            $this->autowire(\Glueful\Extensions\ExtensionCatalog::class);
+        $defs[\Glueful\Extensions\Install\ExtensionInstaller::class] =
+            $this->autowire(\Glueful\Extensions\Install\ExtensionInstaller::class);
+
         return $defs;
     }
 }

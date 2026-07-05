@@ -19,4 +19,17 @@ return [
     'enabled' => [
         // 'Glueful\\Extensions\\Aegis\\Services\\AegisServiceProvider',
     ],
+
+    /**
+     * In-admin extension installer (composer require via the /extensions API).
+     * Off in production unless EXTENSIONS_INSTALL_ENABLED is explicitly set.
+     * Keep env() reads here — NOT inside `enabled` above (that must stay a
+     * literal list the enable/disable writer can edit).
+     */
+    'install' => [
+        'enabled'     => env('EXTENSIONS_INSTALL_ENABLED', env('APP_ENV') !== 'production'),
+        'auto_enable' => (bool) env('EXTENSIONS_INSTALL_AUTO_ENABLE', true),
+        'timeout'     => (int) env('EXTENSIONS_INSTALL_TIMEOUT', 600),
+        'vendor'      => 'glueful/',
+    ],
 ];
