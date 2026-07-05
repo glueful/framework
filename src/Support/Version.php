@@ -13,15 +13,15 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.65.3';
+    public const VERSION = '1.66.0';
 
 
     /** Release code name */
-    public const NAME = 'Acrux';
+    public const NAME = 'Adhara';
 
 
     /** Release date */
-    public const RELEASE_DATE = '2026-07-03';
+    public const RELEASE_DATE = '2026-07-05';
 
     /** Minimum required PHP version */
     public const MIN_PHP_VERSION = '8.3.0';

@@ -21,6 +21,24 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.66.0 — Adhara (Minor, Released 2026-07-05)
+- **Install extensions from the admin UI, no SSH.** A new install pipeline runs `composer require`
+  for a catalog extension from the browser: `ExtensionInstaller` validates the package against the
+  Packagist catalog (allowlist + `glueful/` vendor prefix, no shell), spawns a **detached**
+  `composer require` (`proc_open` + array argv + `setsid`, survives FPM recycles), then auto-enables
+  in a **fresh PHP subprocess** to dodge the running worker's stale autoloader and rewrites the
+  extension cache. Progress polls a `CacheStore`-backed job store. Ships `src/Extensions/Install/`,
+  `src/Support/Process/`, `ExtensionCatalog`, and a batteries-included `ExtensionsController` at
+  `/api/v1/extensions`.
+- **Guardrails:** `system.config` permission tier, `EXTENSIONS_INSTALL_ENABLED` kill-switch (off in
+  production by default), host-writability preflight (`409` on read-only deploys), catalog-membership
+  allowlist, and per-install audit logging.
+- **SVG uploads no longer 400 on the content check.** `FileUploader::validateFileContent()` now honors
+  the configured `uploads.allowed_types` allowlist (wildcards included) instead of the hard-coded
+  default constant; safety posture unchanged (SVG served as attachment, `<script>` payloads rejected).
+- Notes: **Minor release** — adds three optional `EXTENSIONS_INSTALL_*` env vars with safe defaults;
+  no migrations, no breaking changes.
+
 ### 1.65.3 — Acrux (Patch, Released 2026-07-03)
 - **`RandomStringGenerator::generate()` no longer reads past its random-byte buffer.** The
   rejection-sampling inner loop consumed bytes without a refill guard; rejections clustering at

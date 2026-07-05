@@ -492,6 +492,12 @@ final class FileUploader
     }
 
     /**
+     * The detected-mime allowlist check honors the SAME configured list as
+     * validateMimeType() (uploads.allowed_types with wildcard support, falling
+     * back to DEFAULT_ALLOWED_MIME_TYPES) — otherwise a type the app config
+     * explicitly allows (e.g. image/svg+xml under 'image/*') would pass the
+     * claimed-mime gate and then 400 here on the hard-coded constant.
+     *
      * @param array<string, mixed> $file
      */
     private function validateFileContent(array $file, ?string $detectedMime = null): void
@@ -512,10 +518,10 @@ final class FileUploader
                 if (!in_array($mime, $mimeMap[$originalExt], true)) {
                     throw ValidationException::forField('file', 'MIME type does not match file extension');
                 }
-            } elseif (!in_array($mime, self::DEFAULT_ALLOWED_MIME_TYPES, true)) {
+            } elseif (!$this->mimeAllowed($mime, $this->getAllowedMimeTypes())) {
                 throw ValidationException::forField('file', 'Invalid file type');
             }
-        } elseif (!in_array($mime, self::DEFAULT_ALLOWED_MIME_TYPES, true)) {
+        } elseif (!$this->mimeAllowed($mime, $this->getAllowedMimeTypes())) {
             throw ValidationException::forField('file', 'Invalid file type');
         }
 
@@ -713,6 +719,10 @@ final class FileUploader
             'png' => ['image/png'],
             'gif' => ['image/gif'],
             'webp' => ['image/webp'],
+            // Uploadable only when the app's allowed_types permits it (e.g.
+            // 'image/*'); UploadController serves it as attachment (not in
+            // isSafeInlineMime) and the hazard scan rejects <script> payloads.
+            'svg' => ['image/svg+xml'],
             // Videos
             'mp4' => ['video/mp4'],
             'mov' => ['video/quicktime'],

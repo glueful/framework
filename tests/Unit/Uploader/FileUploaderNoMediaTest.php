@@ -166,6 +166,69 @@ final class FileUploaderNoMediaTest extends TestCase
         $this->assertSame('image/png', $row['mime_type']);
     }
 
+    public function testSvgUploadsPassWhenTheConfiguredAllowlistPermitsImages(): void
+    {
+        // Regression: the detected-mime content check must honor the SAME
+        // configured allowlist as the claimed-mime gate ('image/*' covers
+        // image/svg+xml) — not the hard-coded default constant, which would
+        // 400 a type the app config explicitly allows.
+        /** @var FileUploader $uploader */
+        $uploader = $this->context->getContainer()->get(FileUploader::class);
+
+        $tmp = $this->createSvgFixture();
+
+        $result = $uploader->uploadMedia(
+            [
+                'name' => 'logo.svg',
+                'type' => 'image/svg+xml',
+                'tmp_name' => $tmp,
+                'error' => UPLOAD_ERR_OK,
+                'size' => filesize($tmp),
+            ],
+            'posts/uuid123',
+            ['save_to_blobs' => true]
+        );
+
+        $this->assertArrayHasKey('path', $result);
+        $this->assertFileExists($this->uploadsRoot . '/' . $result['path']);
+
+        $connection = new Connection();
+        $row = $connection->table('blobs')
+            ->where('uuid', $result['blob_uuid'])
+            ->first();
+        $this->assertIsArray($row);
+        $this->assertSame('image/svg+xml', $row['mime_type']);
+    }
+
+    public function testScriptBearingSvgIsStillRejectedByTheHazardScan(): void
+    {
+        // The XSS-shaped SVG stays blocked: allowing the TYPE does not bypass
+        // the content scan.
+        /** @var FileUploader $uploader */
+        $uploader = $this->context->getContainer()->get(FileUploader::class);
+
+        $tmp = $this->appPath . '/evil.svg';
+        file_put_contents(
+            $tmp,
+            '<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg">'
+            . '<script>alert(1)</script></svg>'
+        );
+
+        $this->expectException(\Glueful\Validation\ValidationException::class);
+
+        $uploader->uploadMedia(
+            [
+                'name' => 'evil.svg',
+                'type' => 'image/svg+xml',
+                'tmp_name' => $tmp,
+                'error' => UPLOAD_ERR_OK,
+                'size' => filesize($tmp),
+            ],
+            'posts/uuid123',
+            ['save_to_blobs' => false]
+        );
+    }
+
     public function testUploadMediaRunsContentHazardScanOnLivePath(): void
     {
         /** @var FileUploader $uploader */
@@ -266,6 +329,20 @@ final class FileUploaderNoMediaTest extends TestCase
 
             $table->unique('uuid');
         });
+    }
+
+    private function createSvgFixture(): string
+    {
+        $path = $this->appPath . '/fixture.svg';
+        // XML prolog keeps finfo's detection deterministic (image/svg+xml).
+        file_put_contents(
+            $path,
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16">'
+            . '<rect width="16" height="16" fill="#3b82f6"/></svg>'
+        );
+
+        return $path;
     }
 
     private function createPngFixture(): string
