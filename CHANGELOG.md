@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.66.2] - 2026-07-06 — Adhara
+
 ### Fixed
 - **Serving an SPA via `serveFrontend()` silently disabled route caching for the whole
   application.** `ServiceProvider::serveFrontend()` registered its mount root and `/{rest}`
