@@ -79,13 +79,7 @@ class ServeFrontendTest extends TestCase
             },
         );
 
-        $provider = new class ($this->container) extends ServiceProvider {
-            /** @param array<string, mixed> $options */
-            public function expose(string $path, string $dir, array $options): void
-            {
-                $this->serveFrontend($path, $dir, $options);
-            }
-        };
+        $provider = new FrontendTestProvider($this->container);
         $provider->expose($path, $dir, $options);
 
         return [$routes, $calls];
@@ -145,5 +139,15 @@ class ServeFrontendTest extends TestCase
         self::assertSame('/admin', $mount['prefix']);
         self::assertSame(realpath($this->dir), $mount['dir']);
         self::assertTrue($mount['spaFallback']);
+    }
+}
+
+/** Exposes the protected serveFrontend() seam (with options) for registration assertions. */
+class FrontendTestProvider extends ServiceProvider // phpcs:ignore PSR1.Classes.ClassDeclaration.MultipleClasses
+{
+    /** @param array<string, mixed> $options */
+    public function expose(string $path, string $dir, array $options): void
+    {
+        $this->serveFrontend($path, $dir, $options);
     }
 }

@@ -19,7 +19,6 @@ use Symfony\Component\HttpFoundation\Response;
 class ServeFrontendDispatchTest extends TestCase
 {
     private string $dir;
-    private ApplicationContext $ctx;
 
     protected function setUp(): void
     {
@@ -40,7 +39,6 @@ class ServeFrontendDispatchTest extends TestCase
     private function mountedRouter(): Router
     {
         $context = new ApplicationContext(sys_get_temp_dir() . '/sfd_ctx_' . uniqid());
-        $this->ctx = $context;
         (new RouteCache($context))->clear();
 
         $container = new class implements ContainerInterface {
@@ -71,12 +69,7 @@ class ServeFrontendDispatchTest extends TestCase
         $container->services[FrontendMountRegistry::class] = $registry;
         $container->services[SpaMountController::class] = new SpaMountController($registry);
 
-        $provider = new class ($container) extends ServiceProvider {
-            public function expose(string $path, string $dir): void
-            {
-                $this->serveFrontend($path, $dir);
-            }
-        };
+        $provider = new FrontendDispatchTestProvider($container);
         $provider->expose('/admin', $this->dir);
 
         return $router;
@@ -143,5 +136,14 @@ class ServeFrontendDispatchTest extends TestCase
             'serveFrontend() must register controller handlers, not closures: '
                 . implode(', ', $compiler->getClosureRoutes($issues)),
         );
+    }
+}
+
+/** Exposes the protected serveFrontend() seam so the test can mount a bundle. */
+class FrontendDispatchTestProvider extends ServiceProvider // phpcs:ignore PSR1.Classes.ClassDeclaration.MultipleClasses
+{
+    public function expose(string $path, string $dir): void
+    {
+        $this->serveFrontend($path, $dir);
     }
 }
