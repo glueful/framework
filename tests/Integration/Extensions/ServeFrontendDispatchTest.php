@@ -6,8 +6,11 @@ namespace Glueful\Tests\Integration\Extensions;
 
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Extensions\ServiceProvider;
+use Glueful\Routing\FrontendMountRegistry;
 use Glueful\Routing\RouteCache;
+use Glueful\Routing\RouteCompiler;
 use Glueful\Routing\Router;
+use Glueful\Routing\SpaMountController;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -60,12 +63,13 @@ class ServeFrontendDispatchTest extends TestCase
         $router = new Router($container);
         $container->services[Router::class] = $router;
 
-        $provider = new class ($container) extends ServiceProvider {
-            public function expose(string $path, string $dir): void
-            {
-                $this->serveFrontend($path, $dir);
-            }
-        };
+        // serveFrontend populates the registry (boot) and SpaMountController reads it
+        // (dispatch); both resolve from the container as shared singletons in production.
+        $registry = new FrontendMountRegistry();
+        $container->services[FrontendMountRegistry::class] = $registry;
+        $container->services[SpaMountController::class] = new SpaMountController($registry);
+
+        $provider = new FrontendDispatchTestProvider($container);
         $provider->expose('/admin', $this->dir);
 
         return $router;
@@ -109,5 +113,37 @@ class ServeFrontendDispatchTest extends TestCase
 
         $resp = $router->dispatch(Request::create('/admin/config.json', 'GET'));
         self::assertSame('CONFIG', (string) $resp->getContent());
+    }
+
+    /**
+     * Regression: mounting an SPA via serveFrontend() must NOT introduce closure
+     * handlers, because a single closure makes RouteCache reject the ENTIRE route
+     * table (disabling route caching app-wide and logging a warning).
+     *
+     * `RouteCompiler::hasClosures()` is the exact predicate `RouteCache::save()`
+     * checks to decide rejection (save() returns false when it is true), so
+     * asserting it directly proves the table stays cacheable — without depending on
+     * save()'s environment-specific OPcache warm step.
+     */
+    public function testMountedRouteTableHasNoClosures(): void
+    {
+        $router = $this->mountedRouter();
+
+        $compiler = new RouteCompiler();
+        $issues = $compiler->validateHandlers($router);
+        self::assertFalse(
+            $compiler->hasClosures($issues),
+            'serveFrontend() must register controller handlers, not closures: '
+                . implode(', ', $compiler->getClosureRoutes($issues)),
+        );
+    }
+}
+
+/** Exposes the protected serveFrontend() seam so the test can mount a bundle. */
+class FrontendDispatchTestProvider extends ServiceProvider // phpcs:ignore PSR1.Classes.ClassDeclaration.MultipleClasses
+{
+    public function expose(string $path, string $dir): void
+    {
+        $this->serveFrontend($path, $dir);
     }
 }

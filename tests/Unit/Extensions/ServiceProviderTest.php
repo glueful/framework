@@ -127,12 +127,18 @@ class ServiceProviderTest extends TestCase
                ->method('get')
                ->willReturn($mockRoute);
 
+        $registry = new \Glueful\Routing\FrontendMountRegistry();
         $this->container->method('has')
                        ->with(\Glueful\Routing\Router::class)
                        ->willReturn(true);
+        // serveFrontend resolves the mount registry (boot-time side effect) and the
+        // Router; both must come from the container.
         $this->container->method('get')
-                       ->with(\Glueful\Routing\Router::class)
-                       ->willReturn($router);
+                       ->willReturnCallback(static fn (string $id): mixed => match ($id) {
+                           \Glueful\Routing\Router::class => $router,
+                           \Glueful\Routing\FrontendMountRegistry::class => $registry,
+                           default => throw new \RuntimeException("unexpected get($id)"),
+                       });
 
         $provider = new TestServiceProvider($this->container);
 
@@ -150,6 +156,10 @@ class ServiceProviderTest extends TestCase
             unlink($staticDir . '/index.html');
             rmdir($staticDir);
         }
+
+        // The mount was recorded, and the two registered handlers are the SPA
+        // controller (never closures — that is what keeps the route table cacheable).
+        self::assertArrayHasKey('/valid-mount', $registry->all());
     }
 
     public function testRunningInConsole(): void
