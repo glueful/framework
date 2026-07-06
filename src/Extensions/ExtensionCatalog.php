@@ -147,6 +147,13 @@ class ExtensionCatalog
      * Latest stable version string, null when unknown, or false when the package
      * is NOT type `glueful-extension` (excluded from the catalog).
      *
+     * p2 lists releases newest-first. Type re-verification runs against the
+     * chosen release ONLY — the latest stable, or the newest entry when there is
+     * no stable. Older releases predate the package adopting
+     * `type: glueful-extension` (Packagist omits the field when it defaults to
+     * `library`), so checking every version would wrongly exclude any extension
+     * that has release history.
+     *
      * @return string|null|false
      */
     private function hydrateVersion(string $name)
@@ -156,17 +163,22 @@ class ExtensionCatalog
         if ($versions === []) {
             return false;
         }
-        $latestStable = null;
+
+        $chosen = null;
         foreach ($versions as $version) {
-            if (($version['type'] ?? null) !== 'glueful-extension') {
-                return false; // type re-verification failed
-            }
             $ver = is_string($version['version'] ?? null) ? $version['version'] : '';
-            if ($latestStable === null && $ver !== '' && !str_contains($ver, 'dev')) {
-                $latestStable = $ver; // p2 lists newest first
+            if ($ver !== '' && !str_contains($ver, 'dev')) {
+                $chosen = $version; // first (newest) stable
+                break;
             }
         }
-        return $latestStable;
+        $chosen ??= $versions[0]; // no stable release — fall back to the newest entry
+
+        if (($chosen['type'] ?? null) !== 'glueful-extension') {
+            return false; // type re-verification failed
+        }
+        $ver = is_string($chosen['version'] ?? null) ? $chosen['version'] : '';
+        return ($ver !== '' && !str_contains($ver, 'dev')) ? $ver : null;
     }
 
     /**

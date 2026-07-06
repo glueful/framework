@@ -37,6 +37,33 @@ final class ExtensionCatalogTest extends TestCase
         $this->assertSame('available', $rows[0]['state']); // nothing installed locally
     }
 
+    public function test_package_with_untyped_legacy_versions_is_kept_when_latest_is_typed(): void
+    {
+        // Real-world shape (glueful/entrada): the newest release carries
+        // type=glueful-extension, but older releases predate the type and omit it.
+        // Type re-verification must judge the latest release only — not every one.
+        $map = [
+            'https://packagist.org/search.json?type=glueful-extension&per_page=100' => [
+                'results' => [
+                    ['name' => 'glueful/entrada', 'description' => 'CMS', 'downloads' => 7, 'repository' => 'r'],
+                ],
+            ],
+            'https://repo.packagist.org/p2/glueful/entrada.json' => [
+                'packages' => ['glueful/entrada' => [
+                    ['version' => 'v1.11.0', 'type' => 'glueful-extension'],
+                    ['version' => 'v1.10.0'],                    // legacy: type field absent
+                    ['version' => 'v1.9.0', 'type' => 'library'], // legacy: pre-adoption type
+                ]],
+            ],
+        ];
+
+        $rows = $this->catalog($map, installedJson: null)->catalog(refresh: true);
+
+        $this->assertCount(1, $rows);
+        $this->assertSame('glueful/entrada', $rows[0]['package']);
+        $this->assertSame('v1.11.0', $rows[0]['version']);
+    }
+
     public function test_state_is_installed_when_package_present_locally(): void
     {
         $installed = json_encode([

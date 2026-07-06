@@ -9,10 +9,9 @@ use Symfony\Component\Process\ExecutableFinder;
 /**
  * The single source of the composer binary path.
  *
- * Reused by BOTH the install preflight (HostCapability) and the install runner
- * (InstallRunCommand) so they can never diverge — preflight passing must mean the
- * runner uses the same binary. Honors the COMPOSER_BINARY env override, else finds
- * `composer` on PATH.
+ * Used by the synchronous installer ({@see \Glueful\Extensions\Install\ExtensionInstaller})
+ * to locate composer. Honors the COMPOSER_BINARY env override, else finds `composer`
+ * on PATH.
  */
 final class ComposerBinaryResolver
 {

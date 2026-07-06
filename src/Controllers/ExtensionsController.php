@@ -16,7 +16,6 @@ use Glueful\Extensions\Install\ExtensionInstaller;
 use Glueful\Extensions\Install\HostCapability;
 use Glueful\Extensions\Install\HostNotWritableException;
 use Glueful\Extensions\Install\InstallDisabledException;
-use Glueful\Extensions\Install\InstallJobStore;
 use Glueful\Extensions\Install\PackageNotAllowedException;
 use Glueful\Extensions\PackageManifest;
 use Glueful\Http\Response;
@@ -36,7 +35,6 @@ class ExtensionsController extends BaseController
         ApplicationContext $context,
         private ExtensionCatalog $catalog,
         private ExtensionInstaller $installer,
-        private InstallJobStore $jobs,
         private HostCapability $host,
         private ExtensionManager $extensions,
         private LoggerInterface $auditLog,
@@ -58,12 +56,15 @@ class ExtensionsController extends BaseController
         return $this->success(['catalog' => $this->catalog->catalog()]);
     }
 
-    /** Start a detached install; returns a job id the client polls. */
+    /**
+     * Install a package synchronously (blocking `composer require`). On success the
+     * extension is installed but DISABLED — enable it with {@see enable()}.
+     */
     public function install(ExtensionInstallData $data): Response
     {
         $this->requirePermission('system.config.edit');
         try {
-            $result = $this->installer->start($data->package);
+            $result = $this->installer->install($data->package);
         } catch (InstallDisabledException $e) {
             return $this->forbidden($e->getMessage());
         } catch (HostNotWritableException $e) {
@@ -71,16 +72,17 @@ class ExtensionsController extends BaseController
         } catch (PackageNotAllowedException $e) {
             return $this->validationError(['package' => [$e->getMessage()]]);
         }
-        $this->audit('extension.install', $data->package, 'queued');
-        return $this->created($result, 'Install started');
-    }
 
-    /** Poll a running/finished install job. */
-    public function installStatus(string $jobId): Response
-    {
-        $this->requirePermission('system.config.view');
-        $record = $this->jobs->get($jobId);
-        return $record === null ? $this->notFound('Unknown install job') : $this->success($record);
+        if (($result['status'] ?? null) !== 'installed') {
+            $this->audit('extension.install', $data->package, 'failed');
+            return Response::error(
+                is_string($result['error'] ?? null) ? $result['error'] : 'composer require failed',
+                422,
+                ['output' => is_string($result['output'] ?? null) ? $result['output'] : ''],
+            );
+        }
+        $this->audit('extension.install', $data->package, 'installed');
+        return $this->success($result, 'Extension installed — enable it to activate');
     }
 
     public function enable(ExtensionToggleData $data): Response
