@@ -21,6 +21,17 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.66.2 — Adhara (Patch, Released 2026-07-06)
+- **`serveFrontend()` no longer disables route caching.** Mounting an admin/SPA bundle registered
+  the mount root and `/{rest}` catch-all as closures, and `RouteCache` rejects any route table that
+  contains a closure — so every SPA-mounting app ran uncached and logged a `[RouteCache]` warning on
+  each boot. The seam now registers controller handlers (`SpaMountController::root`/`asset`) backed by
+  a new `FrontendMountRegistry` that resolves the mount from the request path by longest-prefix match
+  (multiple mounts supported). Asset/index serving is byte-for-byte identical (mime, security headers,
+  immutable-vs-revalidate cache split, ETag/304, path-traversal/dotfile/`.php` denial, SPA fallback).
+- Notes: no `serveFrontend()` signature/behavior change, no new env vars; SPA-mounting apps regain
+  route caching automatically.
+
 ### 1.66.1 — Adhara (Patch, Released 2026-07-06)
 - **The extension installer is now synchronous.** The 1.66.0 detached/background-job installer was
   unreliable under a web SAPI (`PHP_BINARY` is not a CLI interpreter behind Apache/php-cgi/nginx+FPM,
