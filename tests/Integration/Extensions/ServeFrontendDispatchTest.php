@@ -6,8 +6,11 @@ namespace Glueful\Tests\Integration\Extensions;
 
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Extensions\ServiceProvider;
+use Glueful\Routing\FrontendMountRegistry;
 use Glueful\Routing\RouteCache;
+use Glueful\Routing\RouteCompiler;
 use Glueful\Routing\Router;
+use Glueful\Routing\SpaMountController;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -16,6 +19,7 @@ use Symfony\Component\HttpFoundation\Response;
 class ServeFrontendDispatchTest extends TestCase
 {
     private string $dir;
+    private ApplicationContext $ctx;
 
     protected function setUp(): void
     {
@@ -36,6 +40,7 @@ class ServeFrontendDispatchTest extends TestCase
     private function mountedRouter(): Router
     {
         $context = new ApplicationContext(sys_get_temp_dir() . '/sfd_ctx_' . uniqid());
+        $this->ctx = $context;
         (new RouteCache($context))->clear();
 
         $container = new class implements ContainerInterface {
@@ -59,6 +64,12 @@ class ServeFrontendDispatchTest extends TestCase
         $container->services[ApplicationContext::class] = $context;
         $router = new Router($container);
         $container->services[Router::class] = $router;
+
+        // serveFrontend populates the registry (boot) and SpaMountController reads it
+        // (dispatch); both resolve from the container as shared singletons in production.
+        $registry = new FrontendMountRegistry();
+        $container->services[FrontendMountRegistry::class] = $registry;
+        $container->services[SpaMountController::class] = new SpaMountController($registry);
 
         $provider = new class ($container) extends ServiceProvider {
             public function expose(string $path, string $dir): void
@@ -109,5 +120,29 @@ class ServeFrontendDispatchTest extends TestCase
 
         $resp = $router->dispatch(Request::create('/admin/config.json', 'GET'));
         self::assertSame('CONFIG', (string) $resp->getContent());
+    }
+
+    /**
+     * Regression: mounting an SPA via serveFrontend() must NOT introduce closure
+     * handlers, because a single closure makes RouteCache reject the ENTIRE route
+     * table (disabling route caching app-wide and logging a warning). This proves
+     * the controller-based mount keeps the table cacheable.
+     */
+    public function testMountedRouteTableHasNoClosuresAndSaves(): void
+    {
+        $router = $this->mountedRouter();
+
+        $compiler = new RouteCompiler();
+        $issues = $compiler->validateHandlers($router);
+        self::assertFalse(
+            $compiler->hasClosures($issues),
+            'serveFrontend() must register controller handlers, not closures: '
+                . implode(', ', $compiler->getClosureRoutes($issues)),
+        );
+
+        // The cache writer returns false (and logs the warning) when it finds a
+        // closure; a true return proves the SPA-mounted table is cacheable.
+        $saved = (new RouteCache($this->ctx))->save($router);
+        self::assertTrue($saved, 'RouteCache::save() must succeed with an SPA mounted');
     }
 }

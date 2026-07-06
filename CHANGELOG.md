@@ -6,6 +6,23 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+- **Serving an SPA via `serveFrontend()` silently disabled route caching for the whole
+  application.** `ServiceProvider::serveFrontend()` registered its mount root and `/{rest}`
+  catch-all as **closures**, and `RouteCache` refuses to cache a route table containing any
+  closure — so every app that mounts an admin/SPA bundle ran with route caching off and logged
+  `[RouteCache] Skipping cache: N route(s) use closure handlers … Convert to [Controller::class,
+  "method"] syntax.` on each boot. The seam now registers controller handlers
+  (`[SpaMountController::class, 'root'|'asset']`) backed by a new `FrontendMountRegistry` that
+  resolves the owning mount from the request path by longest-prefix match (so multiple mounts —
+  `/admin`, `/portal`, … — are supported by one mount-agnostic controller). Asset/index serving is
+  byte-for-byte identical: mime typing, static-asset security headers, the immutable-vs-revalidate
+  cache split, ETag/`304`, path-traversal + dotfile + `.php` denial, and the SPA deep-link fallback.
+  New public classes `Glueful\Routing\FrontendMountRegistry` and `Glueful\Routing\SpaMountController`
+  (registered as shared services in `CoreProvider`); the `serveFrontend()` signature and behavior are
+  unchanged. Apps mounting an SPA regain route caching automatically — no code or config change and
+  no new env vars.
+
 ## [1.66.1] - 2026-07-06 — Adhara
 
 ### Changed
