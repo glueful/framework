@@ -19,6 +19,7 @@ use Symfony\Component\HttpFoundation\Response;
 class ServeFrontendDispatchTest extends TestCase
 {
     private string $dir;
+    private ApplicationContext $ctx;
 
     protected function setUp(): void
     {
@@ -39,6 +40,7 @@ class ServeFrontendDispatchTest extends TestCase
     private function mountedRouter(): Router
     {
         $context = new ApplicationContext(sys_get_temp_dir() . '/sfd_ctx_' . uniqid());
+        $this->ctx = $context;
         (new RouteCache($context))->clear();
 
         $container = new class implements ContainerInterface {
