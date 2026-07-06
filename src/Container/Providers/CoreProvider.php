@@ -556,6 +556,13 @@ final class CoreProvider extends BaseServiceProvider
         // Router + supporting services
         $defs[\Glueful\Routing\RouteCache::class] = $this->autowire(\Glueful\Routing\RouteCache::class);
         $defs[\Glueful\Routing\RouteCompiler::class] = $this->autowire(\Glueful\Routing\RouteCompiler::class);
+        // SPA/frontend mounts (ServiceProvider::serveFrontend). The registry is a
+        // shared singleton so serveFrontend() (boot) and SpaMountController (dispatch)
+        // see the same mounts within a request.
+        $defs[\Glueful\Routing\FrontendMountRegistry::class] =
+            $this->autowire(\Glueful\Routing\FrontendMountRegistry::class);
+        $defs[\Glueful\Routing\SpaMountController::class] =
+            $this->autowire(\Glueful\Routing\SpaMountController::class);
         $defs[\Glueful\Routing\Router::class] = new FactoryDefinition(
             \Glueful\Routing\Router::class,
             fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Routing\Router($c)
