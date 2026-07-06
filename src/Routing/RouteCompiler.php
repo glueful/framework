@@ -44,10 +44,18 @@ class RouteCompiler
                 $handlerMeta = $this->normalizeHandler($route->getHandler());
                 $params = var_export($route->getParamNames(), true);
                 $middleware = var_export($route->getMiddleware(), true);
+                // Serialize the authoritative original path + constraints so the
+                // route can be reconstructed exactly (see Router::reconstructDynamicRoutes).
+                // Reverse-engineering the path from the compiled pattern is lossy when a
+                // constraint contains parentheses (e.g. a non-capturing '(?:…)' group).
+                $path = var_export($route->getPath(), true);
+                $where = var_export($route->getConstraints(), true);
                 $code .= "            [\n";
+                $code .= "                'path' => {$path},\n";
                 $code .= "                'pattern' => '{$pattern}',\n";
                 $code .= "                'handler' => " . var_export($handlerMeta, true) . ",\n";
                 $code .= "                'params' => {$params},\n";
+                $code .= "                'where' => {$where},\n";
                 $code .= "                'middleware' => {$middleware}\n";
                 $code .= "            ],\n";
             }

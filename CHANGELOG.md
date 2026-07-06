@@ -6,6 +6,24 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.66.3] - 2026-07-06 — Adhara
+
+### Fixed
+- **Route caching crashed dynamic routes whose `where()` constraint contained parentheses
+  (e.g. a non-capturing `(?:…)` group).** When the compiled route table was reconstructed from
+  cache, each dynamic route's path was reverse-engineered from its compiled regex by
+  `Router::patternToPath()`, whose group-matching regex mistook the constraint's inner `(?:…)`
+  group for the parameter's own capture group. The reconstructed route then compiled to a pattern
+  with more capture groups than parameter names, so the first matching request raised
+  `ValueError: array_combine(): Argument #1 ($keys) and argument #2 ($values) must have the same
+  number of elements` in `Route::match()`. This surfaced in 1.66.2, which re-enabled route caching
+  for apps that mount an SPA (caching had been silently disabled by the closure handlers 1.66.2
+  removed). Reconstruction now rebuilds each route from its **authoritative original path and
+  `where` constraints** — newly serialized into the compiled cache — and recompiles the pattern
+  identically to registration, instead of reverse-engineering it from the regex. The compiled
+  cache format version is bumped so any pre-existing route cache regenerates automatically on
+  upgrade.
+
 ## [1.66.2] - 2026-07-06 — Adhara
 
 ### Fixed

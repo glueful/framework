@@ -1343,12 +1343,24 @@ class Router
                 // Reconstruct the handler from cached metadata
                 $handler = $this->reconstructHandler($routeData['handler']);
 
-                // Create a new Route object with the cached data
-                // Need to create path from pattern for Route constructor
-                // Use cached param names when reconstructing path
+                // Reconstruct from the authoritative original path + constraints.
+                // Falling back to reverse-engineering the path from the compiled
+                // pattern (patternToPath) is lossy when a constraint contains
+                // parentheses — a non-capturing '(?:…)' group is mistaken for the
+                // param's capture group, desyncing the group count from the param
+                // names and raising a ValueError from array_combine() on match.
                 $paramNames = is_array($routeData['params'] ?? null) ? $routeData['params'] : [];
-                $path = $this->patternToPath($routeData['pattern'], $paramNames);
+                $path = is_string($routeData['path'] ?? null)
+                    ? $routeData['path']
+                    : $this->patternToPath($routeData['pattern'], $paramNames);
                 $route = new Route($this, $method, $path, $handler);
+
+                // Re-apply constraints so the pattern recompiles identically to
+                // registration (with the correct capture-group/param-name count).
+                $where = $routeData['where'] ?? null;
+                if (is_array($where) && count($where) > 0) {
+                    $route->where($where);
+                }
 
                 // Apply middleware if present
                 if (isset($routeData['middleware']) && count($routeData['middleware']) > 0) {

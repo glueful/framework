@@ -21,6 +21,17 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.66.3 — Adhara (Patch, Released 2026-07-06)
+- **Route caching no longer crashes routes with parenthesized `where()` constraints.** Reconstructing
+  a dynamic route from the compiled cache reverse-engineered its path from the regex, mistaking a
+  constraint's non-capturing `(?:…)` group for the parameter's capture group; the rebuilt route then
+  had more capture groups than parameter names, raising `ValueError` from `array_combine()` in
+  `Route::match()` on the first request. Exposed by 1.66.2, which re-enabled route caching for
+  SPA-mounting apps. Reconstruction now rebuilds each route from its authoritative original path +
+  `where` constraints (serialized into the cache) and recompiles identically to registration.
+- Notes: the compiled cache format is bumped, so stale route caches regenerate automatically on
+  upgrade; no code or config change required.
+
 ### 1.66.2 — Adhara (Patch, Released 2026-07-06)
 - **`serveFrontend()` no longer disables route caching.** Mounting an admin/SPA bundle registered
   the mount root and `/{rest}` catch-all as closures, and `RouteCache` rejects any route table that
