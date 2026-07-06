@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.66.3] - 2026-07-06 — Adhara
+
 ### Fixed
 - **Route caching crashed dynamic routes whose `where()` constraint contained parentheses
   (e.g. a non-capturing `(?:…)` group).** When the compiled route table was reconstructed from
