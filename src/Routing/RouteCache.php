@@ -8,6 +8,13 @@ use Glueful\Bootstrap\ApplicationContext;
 
 class RouteCache
 {
+    /**
+     * Bumped when the compiled cache schema changes, so upgrading the framework
+     * invalidates any cache written by an older format. v2 added per-route
+     * 'path' + 'where' for lossless dynamic-route reconstruction.
+     */
+    private const CACHE_FORMAT = 2;
+
     private string $cacheDir;
     private ApplicationContext $context;
 
@@ -214,6 +221,7 @@ class RouteCache
         sort($files);
 
         $ctx = hash_init('sha256');
+        hash_update($ctx, 'fmt:' . self::CACHE_FORMAT);
         foreach ($files as $file) {
             if (!is_file($file)) {
                 continue;
