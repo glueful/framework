@@ -14,12 +14,19 @@ use Glueful\Services\ImageSecurityValidator;
 use Glueful\Routing\RouteManifest;
 use Glueful\Storage\StorageManager;
 use Glueful\Storage\Support\UrlGenerator;
+use Glueful\Uploader\Contracts\BlobAccessContext;
+use Glueful\Uploader\Contracts\BlobAction;
+use Glueful\Uploader\Contracts\BlobAccessPolicy;
+use Glueful\Uploader\Contracts\BlobCreatedHook;
 use Glueful\Uploader\Contracts\MediaProcessorInterface;
+use Glueful\Uploader\Contracts\NullBlobAccessPolicy;
+use Glueful\Uploader\Contracts\NullBlobCreatedHook;
 use Glueful\Uploader\FileUploader;
 use Glueful\Uploader\MediaMetadata;
 use Glueful\Uploader\Storage\StorageInterface;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 /**
  * Phase B / Task B3 — proves UploadController routes on-demand variant serving
@@ -272,7 +279,84 @@ final class UploadControllerVariantTest extends TestCase
         $this->assertSame(0, $fake->renderCalls);
     }
 
-    private function makeController(?MediaProcessorInterface $media): UploadController
+    public function testTenancyPolicyCanHideAnOtherwisePublicBlob(): void
+    {
+        $policy = new class implements BlobCreatedHook, BlobAccessPolicy {
+            public ?BlobAccessContext $seen = null;
+
+            public function onBlobCreated(string $blobUuid, ?string $uploaderUserUuid): void
+            {
+            }
+
+            public function authorizeAccess(array $blob, BlobAccessContext $context): bool
+            {
+                $this->seen = $context;
+                return false;
+            }
+        };
+
+        $response = $this->makeController(null, $policy)->show(
+            Request::create('/blobs/' . $this->blobUuid),
+            $this->blobUuid,
+        );
+
+        self::assertSame(404, $response->getStatusCode());
+        self::assertSame(BlobAction::VIEW, $policy->seen?->action);
+        self::assertFalse($policy->seen?->signatureValid);
+    }
+
+    public function testUploadAttributesTheCreatedBlob(): void
+    {
+        $policy = new class implements BlobCreatedHook, BlobAccessPolicy {
+            public ?string $blobUuid = null;
+            public ?string $userUuid = null;
+
+            public function onBlobCreated(string $blobUuid, ?string $uploaderUserUuid): void
+            {
+                $this->blobUuid = $blobUuid;
+                $this->userUuid = $uploaderUserUuid;
+            }
+
+            public function authorizeAccess(array $blob, BlobAccessContext $context): bool
+            {
+                return true;
+            }
+        };
+
+        $response = $this->makeController(null, $policy)->upload($this->uploadRequest());
+        $body = json_decode((string) $response->getContent(), true, flags: JSON_THROW_ON_ERROR);
+
+        self::assertSame(201, $response->getStatusCode());
+        self::assertSame($body['data']['blob_uuid'], $policy->blobUuid);
+        self::assertSame('usr123456789', $policy->userUuid);
+    }
+
+    public function testAttributionFailureCompensatesTheCreatedBlob(): void
+    {
+        $policy = new class implements BlobCreatedHook, BlobAccessPolicy {
+            public function onBlobCreated(string $blobUuid, ?string $uploaderUserUuid): void
+            {
+                throw new \RuntimeException('no tenant');
+            }
+
+            public function authorizeAccess(array $blob, BlobAccessContext $context): bool
+            {
+                return true;
+            }
+        };
+        $connection = \Glueful\Database\Connection::fromContext($this->context);
+        $before = $connection->table('blobs')->count();
+
+        $response = $this->makeController(null, $policy)->upload($this->uploadRequest());
+
+        self::assertSame(500, $response->getStatusCode());
+        self::assertSame($before, $connection->table('blobs')->count());
+    }
+
+    private function makeController(
+        ?MediaProcessorInterface $media,
+        (BlobCreatedHook&BlobAccessPolicy)|null $blobExtension = null,
+    ): UploadController
     {
         $c = $this->context->getContainer();
 
@@ -283,7 +367,10 @@ final class UploadControllerVariantTest extends TestCase
             $c->get(StorageManager::class),
             $c->get(UrlGenerator::class),
             $media,
-            new ImageSecurityValidator()
+            new ImageSecurityValidator(),
+            $blobExtension ?? new NullBlobCreatedHook(),
+            $blobExtension ?? new NullBlobAccessPolicy(),
+            new \Psr\Log\NullLogger(),
         );
     }
 
@@ -292,6 +379,16 @@ final class UploadControllerVariantTest extends TestCase
         ob_start();
         $response->sendContent();
         return (string) ob_get_clean();
+    }
+
+    private function uploadRequest(): Request
+    {
+        $source = $this->uploadsRoot . '/upload-source.png';
+        file_put_contents($source, $this->originalBytes);
+        $request = Request::create('/blobs', 'POST');
+        $request->files->set('file', new UploadedFile($source, 'upload.png', 'image/png', null, true));
+
+        return $request;
     }
 
     private function resetSharedConnection(): void

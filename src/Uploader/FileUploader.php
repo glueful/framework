@@ -312,6 +312,32 @@ final class FileUploader
         return $this->storage;
     }
 
+    /**
+     * Generate the deferred thumbnail for an upload after external attribution succeeds.
+     *
+     * @param array<string,mixed> $options
+     */
+    public function generateThumbnailFor(
+        mixed $fileInput,
+        string $storagePath,
+        string $filename,
+        string $mime,
+        array $options = [],
+    ): ?string {
+        $file = $this->normalizeFileInput($fileInput);
+        if ($file === null || !isset($file['tmp_name']) || $file['tmp_name'] === '') {
+            throw new UploadException('Invalid file input');
+        }
+
+        return $this->maybeGenerateThumbnail(
+            (string) $file['tmp_name'],
+            $storagePath,
+            $filename,
+            $mime,
+            [...$options, 'generate_thumbnail' => true],
+        );
+    }
+
     // -------------------------------------------------------------------------
     // Private Methods
     // -------------------------------------------------------------------------

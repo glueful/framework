@@ -526,6 +526,15 @@ class Connection implements DatabaseInterface
     }
 
     /**
+     * Open a non-pooled, independent PDO session using this connection's resolved configuration.
+     * The caller owns its lifetime; it is never stored in the shared instance or connection pool.
+     */
+    public function newPdo(): PDO
+    {
+        return $this->createPDOConnection($this->getDriverName());
+    }
+
+    /**
      * Access current database driver
      *
      * Returns engine-specific driver instance.
@@ -592,6 +601,51 @@ class Connection implements DatabaseInterface
     public static function clearTableHooks(): void
     {
         self::$tableHooks = [];
+    }
+
+    /**
+     * Chainable, process-level hooks applied to associative row data on write (insert/insertBatch/upsert).
+     *
+     * Registered once at boot (e.g. by an extension's service provider). All run, in registration
+     * order, so multiple extensions can decorate writes without clobbering each other. Each receives
+     * (string $table, array $data) and MUST return the (possibly modified) associative row.
+     *
+     * @var array<int, \Closure(string, array<string,mixed>):array<string,mixed>>
+     */
+    private static array $insertHooks = [];
+
+    public static function addInsertHook(\Closure $hook): void
+    {
+        self::$insertHooks[] = $hook;
+    }
+
+    public static function clearInsertHooks(): void
+    {
+        self::$insertHooks = [];
+    }
+
+    /**
+     * Run every registered insert hook over $data in registration order, returning the final row.
+     *
+     * A hook must return an associative array (column => value); a list-shaped return would be bound
+     * positionally against the wrong columns downstream, so reject it loudly instead of corrupting the
+     * write. An empty row is left untouched (nothing to misbind).
+     *
+     * @param  array<string,mixed> $data
+     * @return array<string,mixed>
+     */
+    public static function applyInsertHooks(string $table, array $data): array
+    {
+        foreach (self::$insertHooks as $hook) {
+            $data = $hook($table, $data);
+            if ($data !== [] && array_is_list($data)) {
+                throw new \UnexpectedValueException(sprintf(
+                    'An insert hook for "%s" returned a non-associative (list-shaped) row.',
+                    $table
+                ));
+            }
+        }
+        return $data;
     }
 
     public function table(string $table): QueryBuilder

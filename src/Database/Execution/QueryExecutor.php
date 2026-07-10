@@ -52,6 +52,9 @@ class QueryExecutor implements QueryExecutorInterface
      */
     private static array $interceptors = [];
 
+    /** @var array<int, ExecutionWrapperInterface> */
+    private static array $executionWrappers = [];
+
     public static function addQueryInterceptor(QueryInterceptorInterface $interceptor): void
     {
         self::$interceptors[] = $interceptor;
@@ -81,6 +84,16 @@ class QueryExecutor implements QueryExecutorInterface
     public static function clearQueryInterceptors(): void
     {
         self::$interceptors = [];
+    }
+
+    public static function addExecutionWrapper(ExecutionWrapperInterface $wrapper): void
+    {
+        self::$executionWrappers[] = $wrapper;
+    }
+
+    public static function clearExecutionWrappers(): void
+    {
+        self::$executionWrappers = [];
     }
 
     /**
@@ -229,26 +242,34 @@ class QueryExecutor implements QueryExecutorInterface
         // Flatten bindings to prevent array to string conversion warnings
         $flattenedParams = $this->binder->flattenBindings($bindings);
 
-        try {
-            $stmt = $this->pdo->prepare($sql);
+        $core = function () use ($sql, $flattenedParams, $timerId, $purpose): PDOStatement {
+            try {
+                $stmt = $this->pdo->prepare($sql);
 
-            if (!$stmt) {
-                throw new PDOException('Failed to prepare statement');
+                if (!$stmt) {
+                    throw new PDOException('Failed to prepare statement');
+                }
+
+                $stmt->execute($flattenedParams);
+
+                $sanitizedBindings = $this->binder->sanitizeBindingsForLog($flattenedParams);
+                $this->logger->logQuery($sql, $sanitizedBindings, $timerId, null, $purpose);
+
+                return $stmt;
+            } catch (PDOException $e) {
+                $sanitizedBindings = $this->binder->sanitizeBindingsForLog($flattenedParams);
+                $this->logger->logQuery($sql, $sanitizedBindings, $timerId, $e, $purpose);
+                throw $e;
             }
+        };
 
-            $stmt->execute($flattenedParams);
-
-            // Log successful query with purpose
-            $sanitizedBindings = $this->binder->sanitizeBindingsForLog($flattenedParams);
-            $this->logger->logQuery($sql, $sanitizedBindings, $timerId, null, $purpose);
-
-            return $stmt;
-        } catch (PDOException $e) {
-            // Log failed query with purpose
-            $sanitizedBindings = $this->binder->sanitizeBindingsForLog($flattenedParams);
-            $this->logger->logQuery($sql, $sanitizedBindings, $timerId, $e, $purpose);
-            throw $e;
+        $chain = $core;
+        foreach (array_reverse(self::$executionWrappers) as $wrapper) {
+            $next = $chain;
+            $chain = static fn (): PDOStatement => $wrapper->around($sql, $bindings, $next);
         }
+
+        return $chain();
     }
 
     /**

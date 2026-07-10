@@ -23,6 +23,14 @@ use Glueful\Database\Connection;
  */
 class BlobRepository extends BaseRepository
 {
+    /** Permanently remove a blob row, bypassing the table's soft-delete behavior. */
+    public function forceDelete(string $uuid): bool
+    {
+        return $this->db->table($this->table)
+            ->where([$this->primaryKey => $uuid])
+            ->forceDelete() > 0;
+    }
+
     /** @var array<string> Default fields to retrieve for blob operations */
     private array $defaultBlobFields = [
         'uuid', 'name', 'description', 'mime_type', 'size',
