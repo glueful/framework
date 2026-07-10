@@ -21,6 +21,25 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.68.0 — Ain (Minor, Released 2026-07-10)
+- **Blob route extensibility.**
+  - `BlobRouteMiddlewareProvider` + `BlobRouteAction` — applications contribute per-action blob
+    middleware, consulted at route registration (providers boot before framework routes load),
+    inserted after authentication and before rate limiting. Unbound = routes unchanged.
+  - `BlobPublicUrlProvider` — the origin for signed/public blob URLs becomes application-choosable
+    (signatures cover path + query only, so a host override never invalidates a grant). Unbound =
+    request host, as today.
+  - `auth:optional` — a general AuthMiddleware mode: authenticate when credentials are supplied,
+    pass anonymous requests through, still reject malformed/invalid credentials.
+- **Fix:** blob VIEW under `uploads.access=private` previously carried route-level `auth`, so an
+  anonymous request with a VALID signed URL was rejected before the controller could validate the
+  signature. VIEW now uses `auth:optional` + the controller's authoritative visibility/signature
+  checks (response shapes unchanged — the 401 for unsigned anonymous private access is re-derived
+  controller-side); all private access aliases share one retrieval rule.
+- Notes: **Minor release** — no new env vars, no migrations, no default changes; both seams are
+  unbound pass-throughs. Built for (and consumed by) the Thallo multi-tenancy resolution surface;
+  deliberately tenancy-agnostic.
+
 ### 1.67.0 — Adhil (Minor, Released 2026-07-10)
 - **Extension seams: four opt-in extension points, all exact pass-throughs until bound.**
   - `Connection::newPdo()` — a fresh, non-pooled, independent PDO session (advisory locks and other

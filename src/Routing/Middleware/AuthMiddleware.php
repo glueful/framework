@@ -103,6 +103,7 @@ class AuthMiddleware implements RouteMiddleware
     public function handle(Request $request, callable $next, mixed ...$params): mixed
     {
         $requiresAdmin = in_array('admin', $params, true);
+        $optional = in_array('optional', $params, true);
         $requestIdValue = $request->attributes->get('request_id', uniqid('req_', true));
         $requestId = is_string($requestIdValue) ? $requestIdValue : uniqid('req_', true);
 
@@ -111,62 +112,64 @@ class AuthMiddleware implements RouteMiddleware
             $token = $this->extractAuthenticationCredentials($request);
 
             if ($token === null) {
-                $this->logAuthFailure('Missing authentication credentials', $request, $requestId);
-                $this->dispatchAuthFailureEvent('missing_credentials', $request);
-                return $this->unauthorized('Authentication required');
-            }
-
-            // Authenticate with configured providers
-            $user = $this->authenticateRequest($request, $token);
-
-            if ($user === null) {
-                $this->logAuthFailure('Authentication failed', $request, $requestId, $token);
-                $this->dispatchAuthFailureEvent('authentication_failed', $request, $token);
-                return $this->unauthorized('Invalid credentials');
-            }
-
-            // Validate token expiration if enabled
-            if ($this->validateExpiration) {
-                $expirationResult = $this->validateTokenExpiration($user, $request);
-                if ($expirationResult !== null) {
-                    return $expirationResult;
+                if (!$optional) {
+                    $this->logAuthFailure('Missing authentication credentials', $request, $requestId);
+                    $this->dispatchAuthFailureEvent('missing_credentials', $request);
+                    return $this->unauthorized('Authentication required');
                 }
-            }
+            } else {
+                // Authenticate with configured providers
+                $user = $this->authenticateRequest($request, $token);
 
-            // Check admin requirement if needed
-            if ($requiresAdmin && !$this->isAdmin($user)) {
-                $this->logAuthFailure('Admin access denied', $request, $requestId, $token);
-                $this->dispatchAuthFailureEvent('insufficient_permissions', $request, $token);
-                return $this->forbidden('Admin access required');
-            }
-
-            // Store authenticated user in request
-            $request->attributes->set('user', $user);
-            $request->attributes->set('auth_provider', $user['auth_provider'] ?? 'unknown');
-
-            // Auto-enrich request with auth attributes
-            $this->autoEnrichRequest($request);
-
-            // Guarantee auth.user is populated. The enricher only sets it when the identity lives in
-            // the session context; for provider-based auth (API key, etc.) it can be absent, which
-            // silently fail-closes permission gates and drops audit attribution. Synthesise a basic
-            // UserIdentity from the authenticated user data so auth.user is never null after auth.
-            if (!$request->attributes->has('auth.user')) {
-                $identity = $this->identityFromUserArray($user);
-                if ($identity !== null) {
-                    $request->attributes->set('auth.user', $identity);
+                if ($user === null) {
+                    $this->logAuthFailure('Authentication failed', $request, $requestId, $token);
+                    $this->dispatchAuthFailureEvent('authentication_failed', $request, $token);
+                    return $this->unauthorized('Invalid credentials');
                 }
-            }
 
-            // Log successful authentication
-            $this->logAuthSuccess($user, $request, $requestId, $token);
-            $this->dispatchAuthSuccessEvent($request, $user, $token);
+                // Validate token expiration if enabled
+                if ($this->validateExpiration) {
+                    $expirationResult = $this->validateTokenExpiration($user, $request);
+                    if ($expirationResult !== null) {
+                        return $expirationResult;
+                    }
+                }
 
-            // Log access if auth manager supports it
-            try {
-                $this->authManager->logAccess($user, $request);
-            } catch (\Throwable) {
-                // Method doesn't exist or logging failed, ignore silently
+                // Check admin requirement if needed
+                if ($requiresAdmin && !$this->isAdmin($user)) {
+                    $this->logAuthFailure('Admin access denied', $request, $requestId, $token);
+                    $this->dispatchAuthFailureEvent('insufficient_permissions', $request, $token);
+                    return $this->forbidden('Admin access required');
+                }
+
+                // Store authenticated user in request
+                $request->attributes->set('user', $user);
+                $request->attributes->set('auth_provider', $user['auth_provider'] ?? 'unknown');
+
+                // Auto-enrich request with auth attributes
+                $this->autoEnrichRequest($request);
+
+                // Guarantee auth.user is populated. The enricher only sets it when the identity lives in
+                // the session context; for provider-based auth (API key, etc.) it can be absent, which
+                // silently fail-closes permission gates and drops audit attribution. Synthesise a basic
+                // UserIdentity from the authenticated user data so auth.user is never null after auth.
+                if (!$request->attributes->has('auth.user')) {
+                    $identity = $this->identityFromUserArray($user);
+                    if ($identity !== null) {
+                        $request->attributes->set('auth.user', $identity);
+                    }
+                }
+
+                // Log successful authentication
+                $this->logAuthSuccess($user, $request, $requestId, $token);
+                $this->dispatchAuthSuccessEvent($request, $user, $token);
+
+                // Log access if auth manager supports it
+                try {
+                    $this->authManager->logAccess($user, $request);
+                } catch (\Throwable) {
+                    // Method doesn't exist or logging failed, ignore silently
+                }
             }
         } catch (AuthenticationException $e) {
             return $this->handleAuthenticationException($e, $request, $requestId);
