@@ -526,6 +526,15 @@ class Connection implements DatabaseInterface
     }
 
     /**
+     * Open a non-pooled, independent PDO session using this connection's resolved configuration.
+     * The caller owns its lifetime; it is never stored in the shared instance or connection pool.
+     */
+    public function newPdo(): PDO
+    {
+        return $this->createPDOConnection($this->getDriverName());
+    }
+
+    /**
      * Access current database driver
      *
      * Returns engine-specific driver instance.
