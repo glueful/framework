@@ -6,6 +6,32 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.68.0] - 2026-07-10 — Ain
+
+**Theme: blob route extensibility** — two generic, unbound-by-default seams over the blob
+endpoints plus a reusable `auth:optional` mode, and a fix that makes signed URLs actually
+usable under globally-private uploads. No new env vars, no migrations; the VIEW route's auth
+posture changes (see Fixed — the controller remains the authoritative gate, so response
+shapes are unchanged).
+
+### Added
+- **Generic blob route and public-origin seams.** Applications may contribute per-action blob
+  middleware through `BlobRouteMiddlewareProvider` (consulted at route registration, inserted
+  after authentication and before rate limiting; `BlobRouteAction`: upload/view/info/delete/
+  sign) and choose the origin used for signed/public blob URLs through `BlobPublicUrlProvider`
+  (signatures cover path + query only, so overriding the base host never invalidates a grant);
+  both are unbound pass-throughs by default — the framework binds neither and route behavior
+  is unchanged when unbound.
+- **Optional route authentication.** `auth:optional` authenticates credentials when supplied,
+  passes requests with no credentials, and still rejects malformed or invalid credentials.
+
+### Fixed
+- **Signed blob URLs now work with globally private uploads without breaking authenticated direct
+  reads.** Blob VIEW uses optional authentication and controller-level signature/access checks
+  (previously, route-level `auth` under `uploads.access=private` rejected anonymous requests
+  carrying a valid signed grant before the controller could validate the signature);
+  all private access aliases (`private`, `true`, `'true'`, `1`) now share the same retrieval rule.
+
 ## [1.67.0] - 2026-07-10 — Adhil
 
 **Theme: extension seams** — four opt-in extension points (independent DB sessions, around-execution
