@@ -156,6 +156,9 @@ final class StorageProvider extends BaseServiceProvider
                 $c->has(\Psr\Log\LoggerInterface::class)
                     ? $c->get(\Psr\Log\LoggerInterface::class)
                     : new \Psr\Log\NullLogger(),
+                $c->has(\Glueful\Uploader\Contracts\BlobPublicUrlProvider::class)
+                    ? $c->get(\Glueful\Uploader\Contracts\BlobPublicUrlProvider::class)
+                    : null,
             )
         );
 

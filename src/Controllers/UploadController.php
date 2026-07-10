@@ -29,6 +29,7 @@ use Glueful\Uploader\Contracts\BlobAccessContext;
 use Glueful\Uploader\Contracts\BlobAction;
 use Glueful\Uploader\Contracts\BlobAccessPolicy;
 use Glueful\Uploader\Contracts\BlobCreatedHook;
+use Glueful\Uploader\Contracts\BlobPublicUrlProvider;
 use Glueful\Uploader\Contracts\NullBlobAccessPolicy;
 use Glueful\Uploader\Contracts\NullBlobCreatedHook;
 use Glueful\Uploader\FileUploader;
@@ -65,6 +66,7 @@ class UploadController extends BaseController
         ?BlobCreatedHook $createdHook = null,
         ?BlobAccessPolicy $accessPolicy = null,
         ?LoggerInterface $logger = null,
+        private readonly ?BlobPublicUrlProvider $publicUrlProvider = null,
     ) {
         parent::__construct($context);
         $this->uploader = $uploader;
@@ -378,7 +380,8 @@ class UploadController extends BaseController
             $ttl = $maxTtl;
         }
 
-        $baseUrl = $request->getSchemeAndHttpHost() . '/blobs/' . $uuid;
+        $base = $this->publicUrlProvider?->publicBaseUrl($blob) ?? $request->getSchemeAndHttpHost();
+        $baseUrl = rtrim($base, '/') . '/blobs/' . $uuid;
         $signedUrl = SignedUrl::make($this->getContext())->generate($baseUrl, $ttl);
 
         $rawPath = (string) ($blob['url'] ?? '');
@@ -1016,10 +1019,8 @@ class UploadController extends BaseController
     private function checkBlobAccess(Request $request, array $blob, bool $signatureValid): ?Response
     {
         $visibility = (string) ($blob['visibility'] ?? 'private');
-        $globalAccess = $this->getConfig('uploads.access', 'private');
-
-        // Public blobs are always accessible (unless global access is private)
-        if ($visibility === 'public' && $globalAccess !== 'private') {
+        // Public blobs are accessible only when retrieval is not globally auth-gated.
+        if ($visibility === 'public' && !$this->requiresAuthFor('retrieve')) {
             return null;
         }
 
