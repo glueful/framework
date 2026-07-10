@@ -21,6 +21,24 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.67.0 — Adhil (Minor, Released 2026-07-10)
+- **Extension seams: four opt-in extension points, all exact pass-throughs until bound.**
+  - `Connection::newPdo()` — a fresh, non-pooled, independent PDO session (advisory locks and other
+    session-scoped infrastructure can no longer be poisoned by the shared statement session).
+  - `QueryExecutor::addExecutionWrapper()` (`ExecutionWrapperInterface::around()`) — composes wrappers
+    around the *actual* prepare/execute, so a lock or resource can be held across the full statement
+    boundary (the before-only interceptor seam cannot span execution).
+  - `Connection::addInsertHook()` — write-side row hooks over `insert()`/`insertBatch()`/`upsert()` for
+    transparent column stamping/transforming, with batch-shape hardening.
+  - Blob lifecycle + authorization: `BlobCreatedHook` (post-persist accept/reject with checked
+    compensation — object delete + `BlobRepository::forceDelete()` + verified quarantine fallback) and
+    `BlobAccessPolicy` (post-core-checks authorization for `show`/`info`/`delete`/`signedUrl` via
+    `BlobAccessContext`/`BlobAction`); thumbnails defer until the hook accepts
+    (`FileUploader::generateThumbnailFor()`), so a rejected upload never leaves an orphaned thumbnail.
+- Notes: **Minor release** — no new env vars, no migrations, no default changes; the framework binds
+  none of the seams, so unbound behavior is byte-for-byte identical. Built for (and consumed by) the
+  Thallo multi-tenancy runtime; the seams are deliberately tenancy-agnostic.
+
 ### 1.66.3 — Adhara (Patch, Released 2026-07-06)
 - **Route caching no longer crashes routes with parenthesized `where()` constraints.** Reconstructing
   a dynamic route from the compiled cache reverse-engineered its path from the regex, mistaking a

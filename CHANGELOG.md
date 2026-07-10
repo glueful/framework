@@ -6,7 +6,37 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.67.0] - 2026-07-10 — Adhil
+
+**Theme: extension seams** — four opt-in extension points (independent DB sessions, around-execution
+wrappers, write-side row hooks, and blob lifecycle/authorization hooks) that are exact pass-throughs
+until an application binds them. No new env vars, no migrations, no default changes.
+
 ### Added
+- **Blob lifecycle + authorization seams on the upload pipeline.** Two optional contracts let an
+  application observe and gate the framework's blob endpoints without replacing the controller:
+  - `Glueful\Uploader\Contracts\BlobCreatedHook::onBlobCreated(string $blobUuid, ?string $uploaderUserUuid)`
+    runs after a blob row is persisted; **throwing rejects the upload** and the controller compensates —
+    it deletes the stored object (checked, not assumed) and hard-deletes the blob row via the new
+    `BlobRepository::forceDelete()`, falling back to a verified `status='deleted'` quarantine so a failed
+    hook can never leave a servable, unattributed blob.
+  - `Glueful\Uploader\Contracts\BlobAccessPolicy::authorizeAccess(array $blob, BlobAccessContext $ctx)`
+    runs after the framework's own visibility/auth/signature checks on `show`/`info`/`delete`/`signedUrl`,
+    receiving a `BlobAccessContext {action: BlobAction, authenticatedUserUuid, signatureValid}` (the
+    signature is computed once per request and reused). Returning `false` yields a 404.
+  Both resolve softly from the container (`NullBlobCreatedHook`/`NullBlobAccessPolicy` pass-through
+  defaults — the framework binds nothing), so existing applications are byte-for-byte unaffected.
+- **Deferred thumbnail generation.** `FileUploader::generateThumbnailFor()` generates an upload's
+  thumbnail *after* the fact; the upload controller now defers thumbnail creation until the
+  `BlobCreatedHook` has accepted the blob, so a rejected upload never leaves an orphaned public
+  thumbnail. Thumbnail failures after acceptance are logged and degrade to `thumb_url: null` — a
+  committed upload never 500s on a thumbnail error.
+- **Independent database sessions.** `Connection::newPdo()` opens a non-pooled PDO using the
+  connection's resolved configuration for advisory locks and other session-scoped infrastructure.
+- **Around-execution database wrappers.** `QueryExecutor::addExecutionWrapper()` composes generic
+  `ExecutionWrapperInterface` implementations around the actual prepare/execute operation, allowing
+  extensions to hold locks or other resources for the full statement boundary. The registry is
+  process-level and resettable through `clearExecutionWrappers()`.
 - **Process-level write hooks on `Connection` — the write-side counterpart to the existing `table()`
   read hooks.** `Connection::addInsertHook(\Closure $hook)` registers a
   `fn(string $table, array $data): array` that runs, in registration order, over the row of every
