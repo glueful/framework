@@ -622,6 +622,7 @@ class QueryBuilder implements QueryBuilderInterface
     public function insert(array $data): int
     {
         $table = $this->state->getTableOrFail();
+        $data = Connection::applyInsertHooks($table, $data);
         $this->queryValidator->validateInsert($table, $data);
 
         return $this->insertBuilder->insert($table, $data);
@@ -639,6 +640,37 @@ class QueryBuilder implements QueryBuilderInterface
         if ($rows === []) {
             throw new \InvalidArgumentException('No rows provided for batch insert');
         }
+
+        $rows = array_map(
+            static fn (array $row): array => Connection::applyInsertHooks($table, $row),
+            $rows,
+        );
+
+        // The insert builder assumes a uniform column set across a batch and binds values
+        // positionally against the first row's columns. Compare each row's columns as a SET
+        // (order-independent); a hook adding a column to only some rows is an error, so fail
+        // loudly here before SQL generation.
+        $reference = array_keys($rows[0]);
+        $referenceSet = $reference;
+        sort($referenceSet);
+
+        foreach ($rows as $i => $row) {
+            $keys = array_keys($row);
+            sort($keys);
+            if ($keys !== $referenceSet) {
+                throw new \UnexpectedValueException(sprintf(
+                    'Insert hooks produced an inconsistent column set for batch insert into "%s" at row %d.',
+                    $table,
+                    $i,
+                ));
+            }
+        }
+
+        // Every row has exactly the reference columns (set equality above), so normalize each
+        // row's key ORDER to the first row's, so a hook returning the same columns in a
+        // different order cannot misalign the insert builder's positional binding.
+        $template = array_fill_keys($reference, null);
+        $rows = array_map(static fn (array $row): array => array_replace($template, $row), $rows);
 
         return $this->insertBuilder->insertBatch($table, $rows);
     }
@@ -682,6 +714,7 @@ class QueryBuilder implements QueryBuilderInterface
     public function upsert(array $data, array $updateColumns): int
     {
         $table = $this->state->getTableOrFail();
+        $data = Connection::applyInsertHooks($table, $data);
         $this->queryValidator->validateInsert($table, $data);
 
         return $this->insertBuilder->upsert($table, $data, $updateColumns);

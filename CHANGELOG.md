@@ -6,6 +6,19 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Added
+- **Process-level write hooks on `Connection` — the write-side counterpart to the existing `table()`
+  read hooks.** `Connection::addInsertHook(\Closure $hook)` registers a
+  `fn(string $table, array $data): array` that runs, in registration order, over the row of every
+  `QueryBuilder` `insert()`, `insertBatch()`, and `upsert()`, so an extension can transparently stamp or
+  transform columns (a tenant key, `created_by`, an encrypted field, …) in one place instead of in every
+  repository. `clearInsertHooks()` resets the process-global registry (mirrors `clearTableHooks()`) and
+  `applyInsertHooks()` is the seam the query builder calls. Batch inserts are hardened around hook
+  output: a hook that produces a non-uniform column set across the batch, or a list-shaped
+  (non-associative) row, raises `\UnexpectedValueException` before SQL generation, and each row's key
+  order is normalized to the first row's so a reordered-but-equal column set cannot misalign positional
+  binding. When no hook is registered the seam is a pass-through — no behavior change for existing code.
+
 ## [1.66.3] - 2026-07-06 — Adhara
 
 ### Fixed
