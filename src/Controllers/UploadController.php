@@ -25,6 +25,12 @@ use Glueful\Storage\Contracts\StorageDriverRegistryInterface;
 use Glueful\Storage\StorageManager;
 use Glueful\Storage\Support\UrlGenerator;
 use Glueful\Uploader\Contracts\MediaProcessorInterface;
+use Glueful\Uploader\Contracts\BlobAccessContext;
+use Glueful\Uploader\Contracts\BlobAction;
+use Glueful\Uploader\Contracts\BlobAccessPolicy;
+use Glueful\Uploader\Contracts\BlobCreatedHook;
+use Glueful\Uploader\Contracts\NullBlobAccessPolicy;
+use Glueful\Uploader\Contracts\NullBlobCreatedHook;
 use Glueful\Uploader\FileUploader;
 use Glueful\Uploader\UploadException;
 use Glueful\Validation\ValidationException;
@@ -33,6 +39,8 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 class UploadController extends BaseController
 {
@@ -42,6 +50,9 @@ class UploadController extends BaseController
     private UrlGenerator $urls;
     /** @var CacheStore<mixed>|null */
     private ?CacheStore $cache;
+    private BlobCreatedHook $createdHook;
+    private BlobAccessPolicy $accessPolicy;
+    private LoggerInterface $logger;
 
     public function __construct(
         ApplicationContext $context,
@@ -50,13 +61,19 @@ class UploadController extends BaseController
         StorageManager $storage,
         UrlGenerator $urls,
         private readonly ?MediaProcessorInterface $media = null,
-        private readonly ?ImageSecurityValidator $imageSecurity = null
+        private readonly ?ImageSecurityValidator $imageSecurity = null,
+        ?BlobCreatedHook $createdHook = null,
+        ?BlobAccessPolicy $accessPolicy = null,
+        ?LoggerInterface $logger = null,
     ) {
         parent::__construct($context);
         $this->uploader = $uploader;
         $this->blobs = $blobRepository;
         $this->storage = $storage;
         $this->urls = $urls;
+        $this->createdHook = $createdHook ?? new NullBlobCreatedHook();
+        $this->accessPolicy = $accessPolicy ?? new NullBlobAccessPolicy();
+        $this->logger = $logger ?? new NullLogger();
         $this->cache = $this->resolveCache();
     }
 
@@ -139,13 +156,51 @@ class UploadController extends BaseController
 
             $thumbCfg = (array) $this->getConfig('uploads.thumbnails', []);
             $result = $uploader->uploadMedia($fileInput, $pathPrefix, [
-                'generate_thumbnail' => (bool) ($thumbCfg['enabled'] ?? true),
+                'generate_thumbnail' => false,
                 'thumbnail_width' => $thumbCfg['width'] ?? null,
                 'thumbnail_height' => $thumbCfg['height'] ?? null,
                 'thumbnail_quality' => $thumbCfg['quality'] ?? null,
                 'save_to_blobs' => true,
                 'visibility' => $visibility,
             ]);
+
+            $blobUuid = (string) ($result['blob_uuid'] ?? '');
+            try {
+                $this->createdHook->onBlobCreated($blobUuid, $this->authenticatedUserUuid());
+            } catch (\Throwable $exception) {
+                $this->compensateOwnerlessBlob($uploader, $blobUuid, (string) ($result['path'] ?? ''));
+                $this->logger->error('upload.tenant_attribution_failed', [
+                    'blob_uuid' => $blobUuid,
+                    'error' => $exception->getMessage(),
+                ]);
+
+                return Response::error(
+                    'Upload could not be attributed to a tenant',
+                    Response::HTTP_INTERNAL_SERVER_ERROR,
+                );
+            }
+
+            if ((bool) ($thumbCfg['enabled'] ?? true)) {
+                try {
+                    $result['thumb_url'] = $uploader->generateThumbnailFor(
+                        $fileInput,
+                        $pathPrefix,
+                        (string) ($result['filename'] ?? ''),
+                        (string) ($result['mime_type'] ?? ''),
+                        [
+                            'thumbnail_width' => $thumbCfg['width'] ?? null,
+                            'thumbnail_height' => $thumbCfg['height'] ?? null,
+                            'thumbnail_quality' => $thumbCfg['quality'] ?? null,
+                        ],
+                    );
+                } catch (\Throwable $exception) {
+                    $this->logger->warning('upload.thumbnail.deferred_failed', [
+                        'blob_uuid' => $blobUuid,
+                        'error' => $exception->getMessage(),
+                    ]);
+                    $result['thumb_url'] = null;
+                }
+            }
 
             // Add visibility to response
             $result['visibility'] = $visibility;
@@ -178,6 +233,14 @@ class UploadController extends BaseController
 
         $blob = $this->blobs->findByUuidWithDeleteFilter($uuid);
         if ($blob === null) {
+            return Response::notFound('Blob not found');
+        }
+
+        $allowed = $this->accessPolicy->authorizeAccess(
+            $blob,
+            new BlobAccessContext(BlobAction::INFO, $this->authenticatedUserUuid(), false),
+        );
+        if (!$allowed) {
             return Response::notFound('Blob not found');
         }
 
@@ -223,9 +286,17 @@ class UploadController extends BaseController
         }
 
         // Check access based on visibility and auth
-        $accessDenied = $this->checkBlobAccess($request, $blob);
+        $signatureValid = $this->hasValidSignature($request);
+        $accessDenied = $this->checkBlobAccess($request, $blob, $signatureValid);
         if ($accessDenied !== null) {
             return $accessDenied;
+        }
+        $allowed = $this->accessPolicy->authorizeAccess(
+            $blob,
+            new BlobAccessContext(BlobAction::VIEW, $this->authenticatedUserUuid(), $signatureValid),
+        );
+        if (!$allowed) {
+            return Response::notFound('Blob not found');
         }
 
         $disk = $this->resolveDisk($blob);
@@ -288,6 +359,14 @@ class UploadController extends BaseController
             return Response::notFound('Blob not found');
         }
 
+        $allowed = $this->accessPolicy->authorizeAccess(
+            $blob,
+            new BlobAccessContext(BlobAction::SIGN, $this->authenticatedUserUuid(), false),
+        );
+        if (!$allowed) {
+            return Response::notFound('Blob not found');
+        }
+
         $ttl = $request->query->getInt('ttl', 0);
         if ($ttl <= 0) {
             $ttl = (int) $this->getConfig('uploads.signed_urls.ttl', 3600);
@@ -329,6 +408,14 @@ class UploadController extends BaseController
 
         $blob = $this->blobs->findByUuidWithDeleteFilter($uuid, true);
         if ($blob === null) {
+            return Response::notFound('Blob not found');
+        }
+
+        $allowed = $this->accessPolicy->authorizeAccess(
+            $blob,
+            new BlobAccessContext(BlobAction::DELETE, $this->authenticatedUserUuid(), false),
+        );
+        if (!$allowed) {
             return Response::notFound('Blob not found');
         }
 
@@ -887,13 +974,46 @@ class UploadController extends BaseController
         return false;
     }
 
+    private function authenticatedUserUuid(): ?string
+    {
+        $user = Utils::getUser();
+        $uuid = is_array($user) ? ($user['uuid'] ?? null) : null;
+
+        return is_string($uuid) && $uuid !== '' ? $uuid : null;
+    }
+
+    private function compensateOwnerlessBlob(FileUploader $uploader, string $blobUuid, string $path): void
+    {
+        if ($path !== '' && !$uploader->getStorage()->delete($path)) {
+            $this->logger->critical('upload.compensation.object_orphaned', [
+                'blob_uuid' => $blobUuid,
+                'path' => $path,
+            ]);
+        }
+
+        if ($blobUuid !== '' && $this->blobs->forceDelete($blobUuid)) {
+            return;
+        }
+
+        $updated = $blobUuid !== '' && $this->blobs->updateStatus($blobUuid, 'deleted');
+        $row = $blobUuid !== ''
+            ? $this->blobs->findByUuidWithDeleteFilter($blobUuid, includeDeleted: true)
+            : null;
+        $quarantined = $updated && $row !== null && ($row['status'] ?? null) === 'deleted';
+
+        $this->logger->critical('upload.compensation.blob_quarantined', [
+            'blob_uuid' => $blobUuid,
+            'quarantined' => $quarantined,
+        ]);
+    }
+
     /**
      * Check blob access based on visibility, auth, and signed URL.
      *
      * @param array<string, mixed> $blob
      * @return Response|null Null if access allowed, Response if denied
      */
-    private function checkBlobAccess(Request $request, array $blob): ?Response
+    private function checkBlobAccess(Request $request, array $blob, bool $signatureValid): ?Response
     {
         $visibility = (string) ($blob['visibility'] ?? 'private');
         $globalAccess = $this->getConfig('uploads.access', 'private');
@@ -909,7 +1029,7 @@ class UploadController extends BaseController
         }
 
         // Check for valid signed URL
-        if ($this->hasValidSignature($request)) {
+        if ($signatureValid) {
             return null;
         }
 

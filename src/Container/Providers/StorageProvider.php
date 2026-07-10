@@ -146,7 +146,16 @@ final class StorageProvider extends BaseServiceProvider
                 $c->has(\Glueful\Uploader\Contracts\MediaProcessorInterface::class)
                     ? $c->get(\Glueful\Uploader\Contracts\MediaProcessorInterface::class)
                     : null,
-                $c->get(\Glueful\Services\ImageSecurityValidator::class)
+                $c->get(\Glueful\Services\ImageSecurityValidator::class),
+                $c->has(\Glueful\Uploader\Contracts\BlobCreatedHook::class)
+                    ? $c->get(\Glueful\Uploader\Contracts\BlobCreatedHook::class)
+                    : new \Glueful\Uploader\Contracts\NullBlobCreatedHook(),
+                $c->has(\Glueful\Uploader\Contracts\BlobAccessPolicy::class)
+                    ? $c->get(\Glueful\Uploader\Contracts\BlobAccessPolicy::class)
+                    : new \Glueful\Uploader\Contracts\NullBlobAccessPolicy(),
+                $c->has(\Psr\Log\LoggerInterface::class)
+                    ? $c->get(\Psr\Log\LoggerInterface::class)
+                    : new \Psr\Log\NullLogger(),
             )
         );
 
