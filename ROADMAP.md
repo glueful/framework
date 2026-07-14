@@ -21,6 +21,18 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.69.0 — Albali (Minor, Released 2026-07-14)
+- **Boot-time config override seam.**
+  - `ApplicationContext::overrideConfig(string $key, mixed $value)` — a process-local config override
+    that wins over file/env/default config (precedence: extension defaults < file/env < override).
+    Dot-path keys deep-merge into nested config and survive `clearConfigCache()`.
+  - Boot-only window: `Framework::boot()` calls `ApplicationContext::markBooted()` after all boot
+    phases complete, after which `overrideConfig()` throws — mid-request config mutation would create
+    split-brain services reading config at different times.
+- Notes: **Minor release** — additive API only, no new env vars, no migrations, no default changes;
+  existing apps are unaffected. Built for (and consumed by) the Thallo tenancy public-origin surface;
+  the seam is deliberately application-agnostic.
+
 ### 1.68.0 — Ain (Minor, Released 2026-07-10)
 - **Blob route extensibility.**
   - `BlobRouteMiddlewareProvider` + `BlobRouteAction` — applications contribute per-action blob

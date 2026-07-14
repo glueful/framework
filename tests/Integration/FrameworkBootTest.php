@@ -67,6 +67,7 @@ final class FrameworkBootTest extends TestCase
 
         $this->assertInstanceOf(Application::class, $app);
         $this->assertTrue($framework->isBooted());
+        $this->assertTrue($app->getContext()->isBooted());
     }
 
     public function testFrameworkBootIdempotency(): void

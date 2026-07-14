@@ -6,6 +6,23 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.69.0] - 2026-07-14 — Albali
+
+**Theme: boot-time config override seam** — one additive `ApplicationContext` method that lets
+applications and extensions override configuration during boot, with a hard freeze once boot
+completes. No new env vars, no migrations, no default changes; existing apps are unaffected.
+
+### Added
+- **Process-local config overrides.** `ApplicationContext::overrideConfig(string $key, mixed $value)`
+  applies a config override that wins over file/env/default config (precedence: extension defaults <
+  file/env < override). Overrides accept dot-path keys, deep-merge into nested config, and survive
+  `clearConfigCache()` (which only empties the loaded/cached layers). The window is **boot-only**:
+  `Framework::boot()` calls `ApplicationContext::markBooted()` once all boot phases (including
+  extension/provider boot) complete, after which `overrideConfig()` throws — mid-request config
+  mutation would create split-brain services that read config at different times. Built for (and
+  consumed by) the Thallo tenancy public-origin surface, which persists a base domain + default hosts
+  and applies them over config at boot; the seam itself is application-agnostic.
+
 ## [1.68.0] - 2026-07-10 — Ain
 
 **Theme: blob route extensibility** — two generic, unbound-by-default seams over the blob
