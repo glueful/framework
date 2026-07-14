@@ -18,6 +18,9 @@ final class ApplicationContext
 
     /** @var array<string, array<string, mixed>> Extension-provided config defaults, merged under file config */
     private array $configDefaults = [];
+
+    /** @var array<string, mixed> Process-local config overrides applied over file/default config. */
+    private array $configOverrides = [];
     private ?ContainerInterface $container = null;
     private ?ConfigurationLoader $configLoader = null;
     private bool $booted = false;
@@ -133,6 +136,16 @@ final class ApplicationContext
 
         $config = $this->loadedConfigs[$configName];
 
+        // Process override layer wins over file/default config (precedence:
+        // extension defaults < file/env < override). Applied here so overrides
+        // survive clearConfigCache() (which only empties the loaded/cached layers).
+        if (array_key_exists($configName, $this->configOverrides)) {
+            $override = $this->configOverrides[$configName];
+            $config = is_array($config) && is_array($override)
+                ? self::deepMerge($config, $override)
+                : $override;
+        }
+
         // Traverse nested keys
         foreach ($segments as $segment) {
             if (!is_array($config) || !array_key_exists($segment, $config)) {
@@ -163,6 +176,52 @@ final class ApplicationContext
         unset($this->loadedConfigs[$name]);
         foreach (array_keys($this->configCache) as $cachedKey) {
             if ($cachedKey === $name || str_starts_with($cachedKey, $name . '.')) {
+                unset($this->configCache[$cachedKey]);
+            }
+        }
+    }
+
+    /**
+     * Apply a process-local config override that wins over file/env/default config.
+     *
+     * Boot-only: overrides shape the container's view of config once, before the app is
+     * booted. Calling after {@see markBooted()} is a programming error — mid-request config
+     * changes would create split-brain services that read config at different times.
+     *
+     * A nested key invalidates the entire top-level namespace cache (including cached parent
+     * reads), and the override persists across {@see clearConfigCache()}.
+     */
+    public function overrideConfig(string $key, mixed $value): void
+    {
+        if ($this->booted) {
+            throw new \LogicException(
+                'overrideConfig() must be called before boot completes (after markBooted()).'
+            );
+        }
+
+        $segments = explode('.', $key);
+        if ($segments === [] || in_array('', $segments, true)) {
+            throw new \InvalidArgumentException('Config override keys must be non-empty dot paths.');
+        }
+        $configName = array_shift($segments);
+
+        if ($segments === []) {
+            $this->configOverrides[$configName] = $value;
+        } else {
+            $nested = $value;
+            foreach (array_reverse($segments) as $segment) {
+                $nested = [$segment => $nested];
+            }
+            $existing = $this->configOverrides[$configName] ?? [];
+            $this->configOverrides[$configName] = is_array($existing)
+                ? self::deepMerge($existing, $nested)
+                : $nested;
+        }
+
+        // Invalidate the whole top-level namespace so parent + child cached reads re-resolve.
+        unset($this->loadedConfigs[$configName]);
+        foreach (array_keys($this->configCache) as $cachedKey) {
+            if ($cachedKey === $configName || str_starts_with($cachedKey, $configName . '.')) {
                 unset($this->configCache[$cachedKey]);
             }
         }

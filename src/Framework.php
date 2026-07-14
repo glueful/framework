@@ -141,6 +141,10 @@ class Framework
         // Create Application instance
         $this->application = new Application($this->context);
 
+        // All boot phases (incl. extension/provider boot) are complete; freeze the config
+        // override window so overrideConfig() can no longer mutate the container's config view.
+        $this->context->markBooted();
+
         $this->booted = true;
 
         // Log boot performance
