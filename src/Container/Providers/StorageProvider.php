@@ -115,6 +115,15 @@ final class StorageProvider extends BaseServiceProvider
             }
         );
 
+        // Shared registry of named BlobAccessPolicy contributors. Available before
+        // any extension's boot() runs; CompositeBlobAccessPolicy below holds this
+        // exact instance (not a snapshot), so late registration stays live.
+        $defs[\Glueful\Uploader\Contracts\BlobAccessPolicyRegistry::class] = new FactoryDefinition(
+            \Glueful\Uploader\Contracts\BlobAccessPolicyRegistry::class,
+            fn(): \Glueful\Uploader\Contracts\BlobAccessPolicyRegistry
+                => new \Glueful\Uploader\Contracts\BlobAccessPolicyRegistry()
+        );
+
         // Image security validator (kept resolvable after ImageProvider removal;
         // reads image.security/image.limits which the media extension merges in,
         // defaulting to [] when the extension is absent)
@@ -150,9 +159,19 @@ final class StorageProvider extends BaseServiceProvider
                 $c->has(\Glueful\Uploader\Contracts\BlobCreatedHook::class)
                     ? $c->get(\Glueful\Uploader\Contracts\BlobCreatedHook::class)
                     : new \Glueful\Uploader\Contracts\NullBlobCreatedHook(),
-                $c->has(\Glueful\Uploader\Contracts\BlobAccessPolicy::class)
-                    ? $c->get(\Glueful\Uploader\Contracts\BlobAccessPolicy::class)
-                    : new \Glueful\Uploader\Contracts\NullBlobAccessPolicy(),
+                // The controller always receives a CompositeBlobAccessPolicy: today's
+                // primary (bound BlobAccessPolicy, or the Null fallback) AND-composed
+                // with every current BlobAccessPolicyRegistry contributor. The
+                // composite holds the registry live, so contributors registered
+                // during extension boot() — even after this controller is
+                // constructed — are still enforced. Zero contributors + no bound
+                // primary is byte-identical to the old unwrapped Null policy.
+                new \Glueful\Uploader\Contracts\CompositeBlobAccessPolicy(
+                    $c->has(\Glueful\Uploader\Contracts\BlobAccessPolicy::class)
+                        ? $c->get(\Glueful\Uploader\Contracts\BlobAccessPolicy::class)
+                        : new \Glueful\Uploader\Contracts\NullBlobAccessPolicy(),
+                    $c->get(\Glueful\Uploader\Contracts\BlobAccessPolicyRegistry::class)
+                ),
                 $c->has(\Psr\Log\LoggerInterface::class)
                     ? $c->get(\Psr\Log\LoggerInterface::class)
                     : new \Psr\Log\NullLogger(),

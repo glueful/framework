@@ -460,6 +460,35 @@ class WhereClause implements WhereClauseInterface
                     continue;
                 }
 
+                // Handle whereIn()/whereNotIn(): "<column> [NOT ]IN (?, ?, ...)". The
+                // UPDATE/DELETE builders already emit IN/NOT IN for array-valued
+                // conditions ('__op' + array '__value'); this reparse recovers the
+                // column, operator, and the N bound values so multi-placeholder IN
+                // no longer falls through to the complex-conditions rejection.
+                if (preg_match('/^(.+?)\s+(NOT\s+)?IN\s*\(\s*\?(?:\s*,\s*\?)*\s*\)$/i', $sql, $matches)) {
+                    $column = trim($matches[1], '`"[]');
+                    if (strpos($column, '.') !== false) {
+                        $parts = explode('.', $column);
+                        // Re-strip wrap chars (see the null-check branch above).
+                        $column = trim(end($parts), '`"[]');
+                    }
+
+                    // The regex anchors the whole raw string, so every placeholder
+                    // in it belongs to the IN list.
+                    $count = substr_count($sql, '?');
+                    $values = array_slice($this->bindings, $bindingIndex, $count);
+                    if (count($values) === $count) {
+                        $this->assignSimpleCondition($simpleConditions, $column, [
+                            '__op' => isset($matches[2]) && trim($matches[2]) !== '' ? 'NOT IN' : 'IN',
+                            '__value' => $values,
+                        ]);
+                    } else {
+                        $complexConditions[] = $condition;
+                    }
+                    $bindingIndex += $count;
+                    continue;
+                }
+
                 // Handle simple raw comparisons with single placeholder: "<column> <op> ?"
                 if (preg_match('/^(.+?)\s+([=!<>]+|LIKE|NOT LIKE|IN|NOT IN|IS|IS NOT)\s+\?$/i', $sql, $matches)) {
                     $column = trim($matches[1], '`"[]');
