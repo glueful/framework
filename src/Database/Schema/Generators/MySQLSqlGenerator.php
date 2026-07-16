@@ -63,9 +63,12 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
             $parts[] = '  PRIMARY KEY (' . implode(', ', $quotedColumns) . ')';
         }
 
-        // Add indexes
+        // Add unique/fulltext constraints inline. Plain indexes are deliberately NOT
+        // inlined: TableBuilder::create() emits them as follow-up CREATE INDEX
+        // statements uniformly across drivers (SQLite/PostgreSQL cannot inline them),
+        // so inlining here would raise a duplicate-index-name error.
         foreach ($table->indexes as $index) {
-            if ($index->type !== 'primary') {
+            if ($index->type !== 'primary' && $index->type !== 'index') {
                 $parts[] = '  ' . $this->buildIndexDefinition($index);
             }
         }

@@ -6,6 +6,56 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.70.0] - 2026-07-16 — Albireo
+
+**Theme: blob-policy composition + two long-standing database fixes** — a registry seam that
+lets multiple extensions contribute blob access policies simultaneously, plus `whereIn()` on
+write operations and plain create-table indexes on SQLite/PostgreSQL now actually working.
+Additive API; no new env vars, no migrations, no default changes. One operational note for
+pre-existing dev databases (see Upgrade Notes).
+
+### Added
+- **`BlobAccessPolicyRegistry` + `CompositeBlobAccessPolicy`** — a composition seam over the
+  existing `BlobAccessPolicy` extension point. Applications and extensions register named
+  contributors into the shared `BlobAccessPolicyRegistry` (a normal DI service bound by
+  `StorageProvider`; no static accessor, no process-global fallback); `UploadController` now
+  always receives a `CompositeBlobAccessPolicy` wrapping today's primary policy (bound
+  `BlobAccessPolicy`, or the `Null` fallback) AND-composed with every current registry
+  contributor (veto semantics — any denial denies, short-circuiting in primary-then-insertion
+  order). The composite holds the registry object itself, not a snapshot, so a contributor
+  registered during a later extension's `boot()` is enforced immediately, even though the
+  controller was already constructed. With zero contributors, behavior is byte-identical to
+  the previous unwrapped primary-or-Null policy.
+
+### Fixed
+- **`whereIn()`/`whereNotIn()` now work on `update()`/`delete()`.** The write path's condition
+  reparser only recognized single-placeholder raw conditions, so `whereIn`'s multi-placeholder
+  `col IN (?, ?, …)` was rejected with "Complex WHERE conditions … not yet supported" — even
+  though the UPDATE/DELETE builders already emit `IN`/`NOT IN` for array-valued conditions.
+  The reparser now recovers the column, operator, and bound values (binding offsets preserved
+  when composed with other predicates). `whereIn(col, [])` on a write still throws, as before
+  (the always-false raw condition has no simple-map representation).
+- **`createTable()` no longer silently discards plain (non-unique) indexes on SQLite and
+  PostgreSQL.** Inline `->index(...)` definitions in a create-table callback were only ever
+  emitted by the MySQL generator (as inline `KEY` clauses); the SQLite/PostgreSQL generators
+  inlined UNIQUE constraints only, so plain indexes vanished without error. `TableBuilder::create()`
+  now emits every plain index as a follow-up `CREATE INDEX` statement uniformly across drivers
+  (the same artifact kind the `alterTable()` path produces — real and droppable), and the MySQL
+  generator no longer inlines plain indexes (unique/fulltext stay inline) so nothing is created
+  twice. Existing SQLite/PostgreSQL databases migrated before this fix are missing those indexes;
+  re-running the relevant `CREATE INDEX` statements (or re-migrating dev databases) restores them.
+  Performance-only: query results were never affected.
+
+### Upgrade Notes
+- **SQLite/PostgreSQL databases migrated before 1.70.0 are missing every plain index declared
+  inline in a `createTable()` callback** (they were silently discarded — see Fixed). Fresh
+  migrations are correct automatically. For existing databases, re-run the relevant
+  `CREATE INDEX` statements or re-migrate dev databases. Performance-only; no data or query
+  results were ever affected.
+- No other action required: the registry seam is additive (zero contributors is byte-identical
+  to the previous unwrapped policy), and the `whereIn()` write fix turns a previously throwing
+  call into the behavior its builders already advertised.
+
 ## [1.69.0] - 2026-07-14 — Albali
 
 **Theme: boot-time config override seam** — one additive `ApplicationContext` method that lets

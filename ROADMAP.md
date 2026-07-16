@@ -21,6 +21,24 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.70.0 — Albireo (Minor, Released 2026-07-16)
+- **Blob-policy composition seam.**
+  - `BlobAccessPolicyRegistry` + `CompositeBlobAccessPolicy` — applications and extensions register
+    named `BlobAccessPolicy` contributors into a shared registry (normal DI service bound by
+    `StorageProvider`); `UploadController` receives a composite wrapping the primary policy AND-composed
+    with every contributor (veto semantics, primary-then-insertion order). The composite holds the live
+    registry, so contributors registered during a later extension's `boot()` are enforced immediately.
+    Zero contributors = byte-identical to the previous unwrapped primary-or-Null policy.
+- **Database fixes.**
+  - `whereIn()`/`whereNotIn()` now work on `update()`/`delete()` — the write path's condition reparser
+    recovers multi-placeholder `IN (?, ?, …)` conditions (binding offsets preserved).
+  - `createTable()` no longer silently discards plain indexes on SQLite/PostgreSQL — every plain index
+    is emitted as a follow-up `CREATE INDEX` uniformly across drivers; MySQL stops inlining them so
+    nothing is created twice.
+- Notes: **Minor release** — additive API + fixes; no new env vars, no migrations, no default changes.
+  Operational note: SQLite/PostgreSQL dev databases migrated pre-1.70.0 are missing the previously
+  discarded plain indexes (performance-only); re-run the `CREATE INDEX` statements or re-migrate.
+
 ### 1.69.0 — Albali (Minor, Released 2026-07-14)
 - **Boot-time config override seam.**
   - `ApplicationContext::overrideConfig(string $key, mixed $value)` — a process-local config override

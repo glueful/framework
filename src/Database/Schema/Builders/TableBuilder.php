@@ -664,6 +664,20 @@ class TableBuilder implements TableBuilderInterface, TableBuilderContextInterfac
         $sql = $this->sqlGenerator->createTable($tableDefinition);
         $this->schemaBuilder->addPendingOperation($sql);
 
+        // Plain (non-unique) indexes are emitted as follow-up CREATE INDEX operations on
+        // every driver. Only UNIQUE constraints belong inside CREATE TABLE: SQLite and
+        // PostgreSQL never supported inline plain indexes (they were silently discarded),
+        // and standalone statements make create-time indexes real, droppable artifacts —
+        // identical to the alterTable path. Fulltext stays generator-specific (MySQL
+        // inlines it; other drivers do not support it).
+        foreach ($this->indexes as $index) {
+            if ($index->type === 'index') {
+                $this->schemaBuilder->addPendingOperation(
+                    $this->sqlGenerator->createIndex($this->tableName, $index)
+                );
+            }
+        }
+
         return $this->schemaBuilder;
     }
 
