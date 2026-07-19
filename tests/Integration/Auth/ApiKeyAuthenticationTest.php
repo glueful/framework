@@ -95,6 +95,75 @@ class ApiKeyAuthenticationTest extends TestCase
         $this->assertNotNull(ApiKeyService::verify($this->context, $original['plain'], '1.2.3.4'));
     }
 
+    public function testRotateReturnsNewUuidMatchingSuccessorKey(): void
+    {
+        $original = ApiKeyService::create($this->context, ['user_uuid' => 'u-abc12345abcd', 'name' => 'O']);
+        $rotation = ApiKeyService::rotate($this->context, $original['key'], graceHours: 24);
+
+        $this->assertArrayHasKey('new_uuid', $rotation);
+        $successor = ApiKeyService::verify($this->context, $rotation['new_plain'], '1.2.3.4');
+        $this->assertSame($successor->uuid, $rotation['new_uuid']);
+        $this->assertNotSame($rotation['old_uuid'], $rotation['new_uuid']);
+    }
+
+    public function testRotateNeverExtendsAnEarlierPredecessorExpiry(): void
+    {
+        // Existing key already expires sooner (1h) than the grace deadline (24h) would put it.
+        $earlierExpiry = date('Y-m-d H:i:s', time() + 3600);
+        $original = ApiKeyService::create($this->context, [
+            'user_uuid'  => 'u-abc12345abcd',
+            'name'       => 'Soon',
+            'expires_at' => $earlierExpiry,
+        ]);
+
+        $rotation = ApiKeyService::rotate($this->context, $original['key'], graceHours: 24);
+
+        // The predecessor's own (earlier) expiry must be preserved, not extended to now+24h.
+        $this->assertSame($earlierExpiry, $rotation['old_expires_at']);
+
+        // Both keys are still valid right now — the predecessor has not been extended AND has not expired yet.
+        $this->assertNotNull(ApiKeyService::verify($this->context, $original['plain'], '1.2.3.4'));
+        $this->assertNotNull(ApiKeyService::verify($this->context, $rotation['new_plain'], '1.2.3.4'));
+    }
+
+    public function testRotateShortensLaterPredecessorExpiryToGraceDeadlineWithoutClampingSuccessor(): void
+    {
+        // Existing key expires far later (100h) than the grace deadline (24h) — must be shortened.
+        $laterExpiry = date('Y-m-d H:i:s', time() + (100 * 3600));
+        $original = ApiKeyService::create($this->context, [
+            'user_uuid'  => 'u-abc12345abcd',
+            'name'       => 'Later',
+            'expires_at' => $laterExpiry,
+        ]);
+
+        $graceDeadline = time() + (24 * 3600);
+        $rotation = ApiKeyService::rotate($this->context, $original['key'], graceHours: 24);
+
+        $appliedTs = strtotime($rotation['old_expires_at']);
+        $this->assertIsInt($appliedTs);
+        $this->assertLessThanOrEqual(5, abs($appliedTs - $graceDeadline), 'predecessor expiry not shortened to grace deadline');
+
+        // The successor inherits the ORIGINAL (unshortened) expiry — it is not clamped by the
+        // predecessor's shortening.
+        $successor = ApiKeyService::verify($this->context, $rotation['new_plain'], '1.2.3.4');
+        $this->assertSame($laterExpiry, $successor->expires_at);
+    }
+
+    public function testRotateWithNoOriginalExpiryShortensToGraceDeadlineAndBothKeysVerify(): void
+    {
+        $original = ApiKeyService::create($this->context, ['user_uuid' => 'u-abc12345abcd', 'name' => 'NoExpiry']);
+
+        $graceDeadline = time() + (24 * 3600);
+        $rotation = ApiKeyService::rotate($this->context, $original['key'], graceHours: 24);
+
+        $appliedTs = strtotime($rotation['old_expires_at']);
+        $this->assertIsInt($appliedTs);
+        $this->assertLessThanOrEqual(5, abs($appliedTs - $graceDeadline), 'null predecessor expiry not set to grace deadline');
+
+        $this->assertNotNull(ApiKeyService::verify($this->context, $original['plain'], '1.2.3.4'));
+        $this->assertNotNull(ApiKeyService::verify($this->context, $rotation['new_plain'], '1.2.3.4'));
+    }
+
     public function testRevokedKeyFailsVerify(): void
     {
         $result = ApiKeyService::create($this->context, ['user_uuid' => 'u-abc12345abcd', 'name' => 'Doomed']);
