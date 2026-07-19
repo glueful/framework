@@ -25,6 +25,33 @@ final class EventService
     }
 
     /**
+     * Strict dispatch: rethrows the ORIGINAL exception from the first listener that fails
+     * (after it has been reported through the same logging path {@see dispatch()} uses), which
+     * stops dispatching — listeners registered after the failing one do not run.
+     *
+     * This is for callers that need a listener failure to be observable and re-driveable rather
+     * than fault-isolated — e.g. a durable event store (payment-provider webhooks/chargebacks)
+     * that redelivers on error. Delivery is therefore **at-least-once**: a caller may catch the
+     * exception and re-dispatch the same event, so every listener wired to a strictly-dispatched
+     * event MUST be idempotent.
+     *
+     * {@see dispatch()} is unaffected and keeps its fault-isolated, always-continues behavior.
+     *
+     * @throws \Throwable the original exception thrown by the first failing listener
+     */
+    public function dispatchOrFail(object $event): object
+    {
+        if (!$this->dispatcher instanceof EventDispatcher) {
+            throw new \LogicException(
+                'EventService::dispatchOrFail() requires the underlying dispatcher to be an instance of '
+                . EventDispatcher::class . ', got ' . get_debug_type($this->dispatcher) . '.'
+            );
+        }
+
+        return $this->dispatcher->dispatchOrFail($event);
+    }
+
+    /**
      * Register a listener.
      * $listener can be:
      *  - callable
