@@ -151,6 +151,78 @@ final class SafeOutboundTargetResolverTest extends TestCase
         $linkLocal->resolveWebhook('https://v6link.example.test/hooks');
     }
 
+    public function testResolveWebhookRejectsCgnatResolution(): void
+    {
+        // 100.64.0.0/10 (RFC6598 CGNAT) is NOT covered by FILTER_FLAG_NO_PRIV_RANGE /
+        // FILTER_FLAG_NO_RES_RANGE — this is the supplemental blocked-CIDR check.
+        $resolver = $this->resolverWithDns(['cgnat.example.test' => ['100.64.0.5']]);
+
+        $this->expectException(HttpClientException::class);
+        $this->expectExceptionMessage('private or reserved');
+
+        $resolver->resolveWebhook('https://cgnat.example.test/hooks');
+    }
+
+    public function testResolveWebhookRejectsNat64EmbeddedLoopbackResolution(): void
+    {
+        // 64:ff9b::/96 (NAT64) with an embedded 127.0.0.1 — must decode the embedded
+        // IPv4 and reject because 127.0.0.0/8 is blocked, not just the /96 shell.
+        $resolver = $this->resolverWithDns(['nat64.example.test' => ['64:ff9b::7f00:1']]);
+
+        $this->expectException(HttpClientException::class);
+        $this->expectExceptionMessage('private or reserved');
+
+        $resolver->resolveWebhook('https://nat64.example.test/hooks');
+    }
+
+    public function testResolveWebhookRejects6to4EmbeddedLoopbackResolution(): void
+    {
+        // 2002::/16 (6to4) with an embedded 127.0.0.1 (2002:7f00:0001:: decodes to
+        // 127.0.0.1 in bytes 2-5) — must be rejected via the decoded IPv4 check.
+        $resolver = $this->resolverWithDns(['sixtofour.example.test' => ['2002:7f00:1::']]);
+
+        $this->expectException(HttpClientException::class);
+        $this->expectExceptionMessage('private or reserved');
+
+        $resolver->resolveWebhook('https://sixtofour.example.test/hooks');
+    }
+
+    public function testResolveWebhookRejectsIanaProtocolAssignmentResolution(): void
+    {
+        // 192.0.0.0/24 (IANA IETF Protocol Assignments) — reserved space not covered
+        // by FILTER_FLAG_NO_RES_RANGE.
+        $resolver = $this->resolverWithDns(['iana.example.test' => ['192.0.0.1']]);
+
+        $this->expectException(HttpClientException::class);
+        $this->expectExceptionMessage('private or reserved');
+
+        $resolver->resolveWebhook('https://iana.example.test/hooks');
+    }
+
+    public function testResolveWebhookRejectsBenchmarkingRangeResolution(): void
+    {
+        // 198.18.0.0/15 (RFC2544 benchmarking) — reserved space not covered by
+        // FILTER_FLAG_NO_RES_RANGE.
+        $resolver = $this->resolverWithDns(['bench.example.test' => ['198.18.0.1']]);
+
+        $this->expectException(HttpClientException::class);
+        $this->expectExceptionMessage('private or reserved');
+
+        $resolver->resolveWebhook('https://bench.example.test/hooks');
+    }
+
+    public function testResolveWebhookRejectsIpv4MappedMetadataResolution(): void
+    {
+        // ::ffff:0:0/96 (IPv4-mapped) wrapping the cloud metadata address — must
+        // decode the embedded IPv4 and reject because 169.254.0.0/16 is blocked.
+        $resolver = $this->resolverWithDns(['mapped.example.test' => ['::ffff:169.254.169.254']]);
+
+        $this->expectException(HttpClientException::class);
+        $this->expectExceptionMessage('private or reserved');
+
+        $resolver->resolveWebhook('https://mapped.example.test/hooks');
+    }
+
     public function testResolveWebhookRejectsWhenAnyOfMultipleARecordsIsPrivate(): void
     {
         // Public first, private second — proves ALL resolved addresses are checked,
@@ -290,6 +362,19 @@ final class SafeOutboundTargetResolverTest extends TestCase
 
         $this->assertSame('93.184.216.34', $target->host);
         $this->assertSame(8443, $target->port);
+    }
+
+    public function testResolveSafeFetchIsUnaffectedByTheWebhookOnlySupplementalBlocklist(): void
+    {
+        // The CGNAT/NAT64/6to4/IANA-reserved supplemental check added for
+        // resolveWebhook() must NOT be applied to resolveSafeFetch() — its
+        // blocked-range policy stays exactly filter_var's NO_PRIV_RANGE |
+        // NO_RES_RANGE flags, byte-identical to the pre-extraction behavior.
+        $resolver = $this->resolverWithDns(['cgnat.example.test' => ['100.64.0.5']]);
+
+        $target = $resolver->resolveSafeFetch('https://cgnat.example.test/x');
+
+        $this->assertSame('100.64.0.5', $target->ip);
     }
 
     /**

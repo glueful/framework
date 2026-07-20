@@ -32,6 +32,58 @@ final class SafeOutboundTargetResolver
     private const BLOCKED_IP_FLAGS = FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE;
 
     /**
+     * Supplemental IPv4 blocked ranges checked ONLY by resolveWebhook() (belt-and-
+     * suspenders on top of BLOCKED_IP_FLAGS). FILTER_FLAG_NO_PRIV_RANGE and
+     * FILTER_FLAG_NO_RES_RANGE do not cover RFC6598 CGNAT space or several IANA
+     * special-purpose ranges — left open here, a webhook host resolving into one of
+     * them (e.g. 100.64.0.0/10 on CGNAT-routed pod networking) would pass resolution
+     * and connect. resolveSafeFetch() intentionally does NOT use this list — its
+     * blocked-range policy stays exactly BLOCKED_IP_FLAGS, byte-identical to the
+     * pre-extraction Client::assertSafeFetchUrl() behavior.
+     */
+    private const BLOCKED_WEBHOOK_IPV4_CIDRS = [
+        '0.0.0.0/8',        // "this" network
+        '10.0.0.0/8',       // RFC1918 private
+        '100.64.0.0/10',    // RFC6598 CGNAT (shared address space)
+        '127.0.0.0/8',      // loopback
+        '169.254.0.0/16',   // link-local, incl. cloud metadata (169.254.169.254)
+        '172.16.0.0/12',    // RFC1918 private
+        '192.0.0.0/24',     // IANA IETF protocol assignments
+        '192.0.2.0/24',     // TEST-NET-1 documentation
+        '192.168.0.0/16',   // RFC1918 private
+        '198.18.0.0/15',    // RFC2544 benchmarking
+        '198.51.100.0/24',  // TEST-NET-2 documentation
+        '203.0.113.0/24',   // TEST-NET-3 documentation
+        '224.0.0.0/4',      // multicast
+        '240.0.0.0/4',      // reserved for future use
+        '255.255.255.255/32', // limited broadcast
+    ];
+
+    /** Supplemental IPv6 blocked ranges checked ONLY by resolveWebhook() (see above). */
+    private const BLOCKED_WEBHOOK_IPV6_CIDRS = [
+        '::1/128',        // loopback
+        '::/128',          // unspecified
+        '100::/64',        // discard-only
+        '2001:db8::/32',   // documentation
+        'fc00::/7',        // unique local (ULA)
+        'fe80::/10',       // link-local
+    ];
+
+    /**
+     * IPv6 transition ranges that embed an IPv4 address: the resolved address itself
+     * may fall outside BLOCKED_WEBHOOK_IPV6_CIDRS while the address it decodes to is
+     * blocked (e.g. `64:ff9b::7f00:1` is NAT64-wrapped 127.0.0.1). Value is the byte
+     * offset of the embedded 4-byte IPv4 address within the 16-byte IPv6 binary form.
+     *
+     * @var array<string, int>
+     */
+    private const EMBEDDED_IPV4_IPV6_RANGES = [
+        '::ffff:0:0/96' => 12, // IPv4-mapped
+        '64:ff9b::/96' => 12,  // NAT64
+        '2002::/16' => 2,      // 6to4
+    ];
+
+    /**
      * IDNA "dot" look-alike codepoints (ideographic full stop, fullwidth full stop,
      * halfwidth ideographic full stop) that UTS46 silently maps to U+002E during
      * canonicalization. A host containing one of these was not written with a dot
@@ -235,11 +287,128 @@ final class SafeOutboundTargetResolver
     private function rejectIfAnyBlocked(array $ips, string $context = 'safe'): void
     {
         foreach ($ips as $ip) {
-            if (filter_var($ip, FILTER_VALIDATE_IP, self::BLOCKED_IP_FLAGS) === false) {
+            $blocked = filter_var($ip, FILTER_VALIDATE_IP, self::BLOCKED_IP_FLAGS) === false;
+
+            // Supplemental check: webhook only, never applied to resolveSafeFetch().
+            if (!$blocked && $context === 'webhook') {
+                $blocked = $this->isSupplementalBlockedWebhookAddress($ip);
+            }
+
+            if ($blocked) {
                 $prefix = $context === 'webhook' ? 'Unsafe webhook URL' : 'Unsafe URL';
                 throw new HttpClientException($prefix . ': host resolves to a private or reserved address');
             }
         }
+    }
+
+    /**
+     * Belt-and-suspenders check applied only by the webhook profile: covers CGNAT and
+     * IANA special-purpose ranges that BLOCKED_IP_FLAGS leaves open, plus IPv6
+     * transition ranges whose embedded IPv4 address must be decoded and re-checked.
+     */
+    private function isSupplementalBlockedWebhookAddress(string $ip): bool
+    {
+        if (str_contains($ip, ':')) {
+            return $this->isBlockedWebhookIpv6($ip);
+        }
+
+        return $this->isBlockedWebhookIpv4($ip);
+    }
+
+    private function isBlockedWebhookIpv4(string $ip): bool
+    {
+        foreach (self::BLOCKED_WEBHOOK_IPV4_CIDRS as $cidr) {
+            if ($this->ipv4InCidr($ip, $cidr)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isBlockedWebhookIpv6(string $ip): bool
+    {
+        foreach (self::BLOCKED_WEBHOOK_IPV6_CIDRS as $cidr) {
+            if ($this->ipv6InCidr($ip, $cidr)) {
+                return true;
+            }
+        }
+
+        foreach (self::EMBEDDED_IPV4_IPV6_RANGES as $cidr => $byteOffset) {
+            if (!$this->ipv6InCidr($ip, $cidr)) {
+                continue;
+            }
+
+            $embedded = $this->extractEmbeddedIpv4($ip, $byteOffset);
+
+            return $embedded === null || $this->isBlockedWebhookIpv4($embedded);
+        }
+
+        return false;
+    }
+
+    /**
+     * Decodes the 4-byte IPv4 address embedded at $byteOffset within an IPv6
+     * transition-range address (IPv4-mapped, NAT64, or 6to4).
+     */
+    private function extractEmbeddedIpv4(string $ip, int $byteOffset): ?string
+    {
+        $binary = @inet_pton($ip);
+        if ($binary === false || strlen($binary) !== 16) {
+            return null;
+        }
+
+        $embedded = @inet_ntop(substr($binary, $byteOffset, 4));
+
+        return $embedded === false ? null : $embedded;
+    }
+
+    /**
+     * IPv4 CIDR-membership check via ip2long() + bitmask comparison.
+     */
+    private function ipv4InCidr(string $ip, string $cidr): bool
+    {
+        [$subnet, $prefixPart] = explode('/', $cidr, 2);
+        $prefix = (int) $prefixPart;
+
+        $ipLong = ip2long($ip);
+        $subnetLong = ip2long($subnet);
+        if ($ipLong === false || $subnetLong === false) {
+            return false;
+        }
+
+        $mask = $prefix === 0 ? 0 : ((~0 << (32 - $prefix)) & 0xFFFFFFFF);
+
+        return ($ipLong & $mask) === ($subnetLong & $mask);
+    }
+
+    /**
+     * IPv6 CIDR-membership check via inet_pton() + byte-prefix comparison.
+     */
+    private function ipv6InCidr(string $ip, string $cidr): bool
+    {
+        [$subnet, $prefixPart] = explode('/', $cidr, 2);
+        $prefix = (int) $prefixPart;
+
+        $ipBin = @inet_pton($ip);
+        $subnetBin = @inet_pton($subnet);
+        if ($ipBin === false || $subnetBin === false || strlen($ipBin) !== 16 || strlen($subnetBin) !== 16) {
+            return false;
+        }
+
+        $fullBytes = intdiv($prefix, 8);
+        if ($fullBytes > 0 && substr($ipBin, 0, $fullBytes) !== substr($subnetBin, 0, $fullBytes)) {
+            return false;
+        }
+
+        $remainingBits = $prefix % 8;
+        if ($remainingBits === 0) {
+            return true;
+        }
+
+        $mask = (0xFF << (8 - $remainingBits)) & 0xFF;
+
+        return (ord($ipBin[$fullBytes]) & $mask) === (ord($subnetBin[$fullBytes]) & $mask);
     }
 
     /**
