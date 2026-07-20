@@ -21,6 +21,24 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.71.0 — Alcor (Minor, Released 2026-07-20)
+- **Outbound-webhook security & reliability seams** (extracted while hardening the commerce
+  marketplace's seller webhooks; application-agnostic).
+  - `EventService::dispatchOrFail()` — strict, at-least-once dispatch that stops at the first failing
+    listener and rethrows, so a caller's transaction can roll back. `dispatch()` stays fault-isolating
+    and byte-unchanged.
+  - `SafeOutboundTargetResolver` + `ResolvedOutboundTarget` — one SSRF-safe URL→target resolver with two
+    profiles: `resolveSafeFetch()` (byte-identical to the existing `safeRequest*()` checks) and a stricter
+    `resolveWebhook()` (HTTPS-only; rejects credentials/fragments/non-default-ports/IP-literals/malformed
+    IDNA; resolves every A/AAAA and refuses any blocked range incl. CGNAT `100.64/10`).
+  - `Client::safeWebhookRequestAsync()` — one-resolve-and-pin outbound POST with no TOCTOU window and no
+    redirects.
+  - `ApiKeyService::rotate()` returns the successor `new_uuid` (additive) and clamps a predecessor's
+    expiry to `min(existing, now + grace)` — rotation can only shorten a superseded key, never extend it.
+- Notes: **Minor release** — additive seams plus one behavioral tightening (API-key rotation no longer
+  extends a predecessor's expiry; see CHANGELOG Upgrade Notes); no new env vars, no migrations, no
+  default changes.
+
 ### 1.70.0 — Albireo (Minor, Released 2026-07-16)
 - **Blob-policy composition seam.**
   - `BlobAccessPolicyRegistry` + `CompositeBlobAccessPolicy` — applications and extensions register

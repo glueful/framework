@@ -6,6 +6,50 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.71.0] - 2026-07-20 — Alcor
+
+**Theme: outbound-webhook security & reliability seams** — three additive, application-agnostic
+building blocks extracted while hardening the commerce marketplace's seller webhooks: a strict
+event-dispatch path that surfaces listener failures instead of swallowing them, a shared SSRF-safe
+outbound-target resolver with a dedicated strict webhook profile, and an API-key rotation that
+returns the successor's identity and can only ever shorten a predecessor's lifetime. No new env
+vars, no migrations, no default changes. One behavioral note for API-key rotation (see Upgrade Notes).
+
+### Added
+- **`EventService::dispatchOrFail()` — strict, at-least-once event dispatch.** Alongside the existing
+  fault-isolating `dispatch()` (which logs and continues past a throwing listener), `dispatchOrFail()`
+  stops at the first failing listener, logs, and rethrows the original exception so the caller's
+  transaction can roll back. `dispatch()` is byte-unchanged — a pure insertion guarded by regression
+  tests; the strict path is opt-in per call site, for events whose delivery is a correctness invariant
+  (e.g. a financial webhook that must not be silently lost). The PSR `EventDispatcherInterface` alias
+  resolves to the concrete `EventDispatcher`, so the strict path is reachable through the container.
+- **`SafeOutboundTargetResolver` + `ResolvedOutboundTarget` (`src/Http/Security/`) — one place that
+  turns a URL into a validated, IP-pinned outbound target.** Two profiles: `resolveSafeFetch()`
+  preserves the exact behavior of the existing `Client::safeRequest*()` SSRF checks (byte-for-byte —
+  existing callers are unaffected), and `resolveWebhook()` applies a stricter third-party-delivery
+  profile: HTTPS only; rejects embedded credentials, fragments, non-default ports, IP-literal hosts,
+  and malformed/ambiguous IDNA; resolves every A/AAAA record and refuses if any resolves into a
+  blocked range (loopback, private, link-local, CGNAT `100.64/10`, and reserved/embedded-v4 IPv6).
+- **`Client::safeWebhookRequestAsync()` — SSRF-safe outbound POST with no TOCTOU window.** Resolves the
+  target exactly once via `resolveWebhook()` and pins the checked IP into the request's resolve map, so
+  the address that was validated is the address that gets connected; redirects are never followed.
+
+### Changed
+- **`ApiKeyService::rotate()` now returns the successor key's `new_uuid`** — an additive field on the
+  returned array, so existing consumers that ignore it are unaffected — and **clamps the predecessor's
+  expiry to `min(existing, now + grace)`** so rotation can only ever shorten a superseded key's life,
+  never extend it (an unparsable/absent existing expiry falls back to `now + grace`). The successor's
+  own expiry is captured before the clamp and is unaffected.
+
+### Upgrade Notes
+- **API-key rotation no longer extends a predecessor's expiry.** Before 1.71.0, rotating a key with a
+  grace window could push a superseded key's `expires_at` later than its original value; it now takes
+  the earlier of the two. If you relied on rotation to lengthen an old key's lifetime, issue a fresh
+  key instead. Otherwise no action is required — the new `new_uuid` field on `rotate()`'s result is
+  purely additive.
+- No new env vars, no migrations, no default changes. The event and HTTP additions are opt-in seams;
+  `dispatch()` and the existing `safeRequest*()` SSRF behavior are byte-identical to 1.70.x.
+
 ## [1.70.0] - 2026-07-16 — Albireo
 
 **Theme: blob-policy composition + two long-standing database fixes** — a registry seam that
