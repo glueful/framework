@@ -11,6 +11,7 @@ use Symfony\Component\HttpClient\Retry\GenericRetryStrategy;
 use Symfony\Component\HttpClient\RetryableHttpClient;
 use Glueful\Http\Response\Response;
 use Glueful\Http\Exceptions\HttpClientException;
+use Glueful\Http\Security\SafeOutboundTargetResolver;
 use Glueful\Events\Http\HttpClientFailureEvent;
 use Glueful\Events\EventService;
 use Psr\Log\LoggerInterface;
@@ -26,7 +27,8 @@ class Client
     public function __construct(
         private HttpClientInterface $httpClient,
         private LoggerInterface $logger,
-        private ?ApplicationContext $context = null
+        private ?ApplicationContext $context = null,
+        private SafeOutboundTargetResolver $safeOutboundResolver = new SafeOutboundTargetResolver()
     ) {
     }
 
@@ -101,11 +103,11 @@ class Client
 
         $currentUrl = $url;
         for ($redirects = 0;; $redirects++) {
-            $resolution = $this->assertSafeFetchUrl($currentUrl, $allowPrivateHosts);
+            $resolution = $this->safeOutboundResolver->resolveSafeFetch($currentUrl, $allowPrivateHosts);
 
             $symfonyOptions = $this->transformOptions($options);
             $symfonyOptions['max_redirects'] = 0;
-            $symfonyOptions['resolve'][$resolution['host']] = $resolution['ip'];
+            $symfonyOptions['resolve'][$resolution->host] = $resolution->ip;
 
             try {
                 $response = $this->httpClient->request($method, $currentUrl, $symfonyOptions);
@@ -149,13 +151,40 @@ class Client
         $allowPrivateHosts = (bool) ($options['allow_private_hosts'] ?? false);
         unset($options['max_redirects'], $options['allow_private_hosts']);
 
-        $resolution = $this->assertSafeFetchUrl($url, $allowPrivateHosts);
+        $resolution = $this->safeOutboundResolver->resolveSafeFetch($url, $allowPrivateHosts);
 
         $symfonyOptions = $this->transformOptions($options);
         $symfonyOptions['max_redirects'] = 0;
-        $symfonyOptions['resolve'][$resolution['host']] = $resolution['ip'];
+        $symfonyOptions['resolve'][$resolution->host] = $resolution->ip;
 
         return $this->httpClient->request($method, $url, $symfonyOptions);
+    }
+
+    /**
+     * Start a strictly SSRF-validated request for third-party webhook delivery.
+     *
+     * Unlike safeRequestAsync(), this always enforces the strict webhook profile
+     * (HTTPS only; no credentials/fragment/non-default-port/IP-literal hosts; full
+     * IDNA canonicalization; every resolved A/AAAA address checked). resolveWebhook()
+     * is invoked exactly once, immediately before the request is created, and its
+     * returned {canonicalUrl, host, ip} is installed directly into the resolve map —
+     * there is no separate resolution the connection could race against (no
+     * check-then-second-resolution / DNS-rebinding gap): the address that was
+     * checked is the address that gets pinned. Redirects are never followed.
+     *
+     * @param array<string, mixed> $options
+     */
+    public function safeWebhookRequestAsync(string $method, string $url, array $options = []): ResponseInterface
+    {
+        unset($options['max_redirects'], $options['allow_private_hosts']);
+
+        $resolution = $this->safeOutboundResolver->resolveWebhook($url);
+
+        $symfonyOptions = $this->transformOptions($options);
+        $symfonyOptions['max_redirects'] = 0;
+        $symfonyOptions['resolve'][$resolution->host] = $resolution->ip;
+
+        return $this->httpClient->request($method, $resolution->canonicalUrl, $symfonyOptions);
     }
 
     /**
@@ -226,7 +255,7 @@ class Client
     public function createScopedClient(array $defaultOptions = []): self
     {
         $scopedClient = $this->httpClient->withOptions($defaultOptions);
-        return new self($scopedClient, $this->logger, $this->context);
+        return new self($scopedClient, $this->logger, $this->context, $this->safeOutboundResolver);
     }
 
     /**
@@ -242,7 +271,7 @@ class Client
      */
     public function withHttpClient(HttpClientInterface $httpClient): self
     {
-        return new self($httpClient, $this->logger, $this->context);
+        return new self($httpClient, $this->logger, $this->context, $this->safeOutboundResolver);
     }
 
     /**
@@ -266,7 +295,7 @@ class Client
             maxRetries: $config['max_retries'] ?? 3
         );
 
-        return new self($retrying, $this->logger, $this->context);
+        return new self($retrying, $this->logger, $this->context, $this->safeOutboundResolver);
     }
 
     private function dispatchEvent(object $event): void
@@ -383,85 +412,6 @@ class Client
         }
 
         return $symfonyOptions;
-    }
-
-    /**
-     * Validate a URL for safe fetching and resolve its host for IP pinning.
-     *
-     * With $allowPrivateHosts the private/reserved-range rejection is skipped
-     * (for operator-configured endpoints such as internal health checks); the
-     * scheme allowlist and DNS resolution still apply so the connection can be
-     * pinned to the validated address.
-     *
-     * @return array{host: string, ip: string}
-     */
-    private function assertSafeFetchUrl(string $url, bool $allowPrivateHosts = false): array
-    {
-        $parts = parse_url($url);
-        if ($parts === false) {
-            throw new HttpClientException('Unsafe URL: invalid URL');
-        }
-
-        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
-        if (!in_array($scheme, ['http', 'https'], true)) {
-            throw new HttpClientException('Unsafe URL: only http and https schemes are allowed');
-        }
-
-        $host = strtolower(trim((string) ($parts['host'] ?? ''), "[] \t\n\r\0\x0B"));
-        if ($host === '' || (!$allowPrivateHosts && $host === 'localhost')) {
-            throw new HttpClientException('Unsafe URL: host is not allowed');
-        }
-
-        $ips = $this->resolveHostIps($host);
-        if ($ips === []) {
-            throw new HttpClientException('Unsafe URL: host could not be resolved');
-        }
-
-        if (!$allowPrivateHosts) {
-            foreach ($ips as $ip) {
-                if (
-                    filter_var(
-                        $ip,
-                        FILTER_VALIDATE_IP,
-                        FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
-                    ) === false
-                ) {
-                    throw new HttpClientException('Unsafe URL: host resolves to a private or reserved address');
-                }
-            }
-        }
-
-        return [
-            'host' => $host,
-            'ip' => $ips[0],
-        ];
-    }
-
-    /**
-     * @return array<string>
-     */
-    private function resolveHostIps(string $host): array
-    {
-        if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
-            return [$host];
-        }
-
-        $ips = [];
-        $ipv4 = @gethostbynamel($host);
-        if (is_array($ipv4)) {
-            $ips = array_merge($ips, $ipv4);
-        }
-
-        $aaaa = @dns_get_record($host, DNS_AAAA);
-        if (is_array($aaaa)) {
-            foreach ($aaaa as $record) {
-                if (isset($record['ipv6']) && is_string($record['ipv6'])) {
-                    $ips[] = $record['ipv6'];
-                }
-            }
-        }
-
-        return array_values(array_unique($ips));
     }
 
     private function resolveRedirectUrl(string $baseUrl, string $location): string
