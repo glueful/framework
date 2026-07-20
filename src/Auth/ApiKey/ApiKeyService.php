@@ -179,7 +179,13 @@ final class ApiKeyService
      * Rotate a key with a grace period. Both old and new keys are valid
      * during the grace window.
      *
-     * @return array{old_uuid: string, new_plain: string, old_expires_at: string}
+     * The predecessor's expiry is bounded to the EARLIER of its existing `expires_at` and the
+     * grace deadline (`now + graceHours`) — rotation must never EXTEND a predecessor's expiry.
+     * A null existing expiry is treated as "no earlier bound", so the grace deadline applies.
+     * The successor key is unaffected by this clamp — it inherits `$existing->expires_at` as
+     * captured before the predecessor's expiry is shortened.
+     *
+     * @return array{old_uuid: string, new_uuid: string, new_plain: string, old_expires_at: string}
      */
     public static function rotate(
         ApplicationContext $context,
@@ -202,11 +208,24 @@ final class ApiKeyService
         ], $context);
         $newKey->save();
 
-        $newExpiry = date('Y-m-d H:i:s', time() + ($graceHours * 3600));
+        $graceDeadlineTs = time() + ($graceHours * 3600);
+        $existingExpiresAt = $existing->expires_at ?? null;
+        $existingExpiryTs = is_string($existingExpiresAt) && $existingExpiresAt !== ''
+            ? strtotime($existingExpiresAt)
+            : false;
+
+        // Never extend: if the predecessor already expires sooner than the grace deadline, keep
+        // its earlier expiry. Otherwise (later expiry, or none at all) shorten it to the deadline.
+        $appliedExpiryTs = ($existingExpiryTs !== false && $existingExpiryTs < $graceDeadlineTs)
+            ? $existingExpiryTs
+            : $graceDeadlineTs;
+
+        $newExpiry = date('Y-m-d H:i:s', $appliedExpiryTs);
         $existing->expires_at = $newExpiry;
         $existing->save();
 
-        // Audit: the successor key is created, and the old key's expiry is shortened to the grace window.
+        // Audit: the successor key is created, and the old key's expiry is bounded to the earlier
+        // of its own expiry and the grace deadline.
         self::dispatchEvent($context, new EntityCreatedEvent(self::auditView($newKey), 'api_keys'));
         self::dispatchEvent($context, new EntityUpdatedEvent(
             self::auditView($existing),
@@ -216,6 +235,7 @@ final class ApiKeyService
 
         return [
             'old_uuid'       => $existing->uuid,
+            'new_uuid'       => $newKey->uuid,
             'new_plain'      => $newPlain,
             'old_expires_at' => $newExpiry,
         ];
