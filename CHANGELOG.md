@@ -6,6 +6,30 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.71.2] - 2026-07-22 — Alcor
+
+**Theme: connection reuse scoped to framework-managed connections** — a follow-up fix to 1.71.1's
+non-pooled PDO reuse. Reuse now applies only to connections constructed WITH an `ApplicationContext`
+(the DI container path that leaked); an ad-hoc `new Connection([...])` without a context always opens
+a fresh backend. Pure fix: no new env vars, no migrations, no default changes, no API changes.
+
+### Fixed
+- **Ad-hoc `new Connection([...])` (no context) no longer shares a backend with the framework's
+  managed connection — fixes config-identical session pairs deadlocking.** 1.71.1 keyed non-pooled PDO
+  reuse by connection identity (DSN + user + schema) for every construction. But a caller hand-building
+  a Connection is usually asking for an INDEPENDENT session — e.g. a test or job that holds a
+  lock/transaction open on one session while another session (or a child process) contends with it.
+  When such a pair's config happened to resolve identically to the managed connection (typical in CI,
+  where DB settings come from real environment variables so every construction path sees the same
+  values), 1.71.1 silently collapsed them into one PG session — turning session-level semantics
+  (advisory locks, open transactions) into self-interactions. Concretely: a race-style test held a lock
+  on its "second connection" (secretly the same session), spawned a child process that blocked waiting
+  on that lock, and then blocked reading the child's pipe — a permanent, CI-only deadlock. Reuse is now
+  gated on the constructor's `$context` parameter: framework-managed constructions (the container's
+  `database` factory passes the context) still share one identity-keyed backend — the 1.71.1 leak fix
+  is fully preserved — while context-less constructions always get their own PDO, restoring 1.71.0
+  semantics for hand-built connections. SQLite behavior unchanged (never reused).
+
 ## [1.71.1] - 2026-07-22 — Alcor
 
 **Theme: non-pooled connection reuse & OPcache-off warmup** — two runtime bugfixes surfaced by a

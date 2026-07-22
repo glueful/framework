@@ -160,21 +160,28 @@ class Connection implements DatabaseInterface
 
         // Initialize PDO connection only if pooling is disabled.
         if ($poolingEnabled === false) {
-            // For server-based engines, reuse a process-global PDO keyed by the FULL connection
-            // identity (DSN + user + schema) rather than opening a fresh backend for every
-            // Connection instance: without pooling, each new Connection otherwise leaks a PDO
-            // that is only released on GC — and cached test-harness app contexts (and cyclic
-            // container graphs) keep those objects alive, exhausting the server's connection
-            // ceiling ("too many clients") once enough containers are booted. The identity key
-            // (NOT engine alone) is essential: a Connection built for a different schema/host/
-            // db/user must get its OWN backend, or a caller that opens an isolated-schema
-            // connection would silently run against the shared search_path.
+            // FRAMEWORK-MANAGED connections (constructed WITH an ApplicationContext — the DI
+            // container's 'database' factory and other framework paths) reuse a process-global
+            // PDO keyed by the FULL connection identity (DSN + user + schema): without pooling,
+            // each new Connection otherwise leaks a PDO that is only released on GC — and cached
+            // test-harness app contexts (and cyclic container graphs) keep those objects alive,
+            // exhausting the server's connection ceiling ("too many clients") once enough
+            // containers are booted. The identity key (NOT engine alone) still guards a managed
+            // connection built for a different schema/host/db/user getting its OWN backend.
             //
-            // SQLite is excluded: a ':memory:' database is private to each connection and file
-            // databases are cheap to open, so reuse there would wrongly share one in-memory
-            // schema across connections meant to be isolated. This keeps SQLite's pooling-off
-            // behaviour exactly as before.
-            if ($this->engine === 'sqlite') {
+            // AD-HOC connections (constructed WITHOUT a context — `new Connection([...])` in
+            // application/test code) always open a FRESH backend. A caller hand-building a
+            // Connection is asking for an independent session — e.g. a second session to hold a
+            // lock/transaction open while another session contends with it. Silently collapsing
+            // such pairs into one backend when their configs happen to match turns session-level
+            // semantics (advisory locks, transactions) into self-interactions and deadlocks the
+            // caller (a pair of "racing" sessions that are secretly one session can block forever).
+            //
+            // SQLite is excluded from reuse entirely: a ':memory:' database is private to each
+            // connection and file databases are cheap to open, so reuse there would wrongly share
+            // one in-memory schema across connections meant to be isolated. This keeps SQLite's
+            // pooling-off behaviour exactly as before.
+            if ($this->engine === 'sqlite' || $context === null) {
                 $this->pdo = $this->createPDOConnection($this->engine);
             } else {
                 $dbConfig = $this->config[$this->engine] ?? [];
