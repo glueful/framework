@@ -6,6 +6,33 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.71.1] - 2026-07-22 — Alcor
+
+**Theme: non-pooled connection reuse & OPcache-off warmup** — two runtime bugfixes surfaced by a
+connection-heavy test suite. Without pooling, `Connection` opened (and leaked) a fresh database
+backend per instance, exhausting the server's connection ceiling under many short-lived containers;
+and route-cache warmup threw on every boot when OPcache was loaded but disabled. Both are pure fixes:
+no new env vars, no migrations, no default changes, no API changes.
+
+### Fixed
+- **Non-pooled `Connection` no longer leaks a backend per instance — fixes "too many clients" under
+  many short-lived containers.** With connection pooling disabled, `new Connection(...)` opened a fresh
+  PDO in its constructor and never reused it, so each additional container (e.g. a test harness that
+  boots the framework repeatedly, or any process that constructs several `Connection`s) opened another
+  server connection that was only released on GC — which cyclic container graphs and cached contexts
+  prevent. Enough of them exhausted the server's `max_connections` (`SQLSTATE[08006]/FATAL: sorry, too
+  many clients already`) and slowed runs to a crawl. Server engines now reuse a process-global PDO keyed
+  by the **full connection identity** (DSN + user + schema), so equivalent connections share one backend
+  while a connection opened for a *different* schema/host/db/user still gets its own — preserving
+  intentional isolation (e.g. a caller that opens a private-schema connection). **SQLite is excluded**
+  (a `:memory:` database is private to its connection; file databases are cheap), so its pooling-off
+  behavior is byte-unchanged. Pooled mode is untouched.
+- **Route-cache warmup no longer throws when OPcache is loaded but disabled.** `RouteCache::save()`
+  guarded `opcache_compile_file()` with `function_exists()` alone; when the extension is present but off
+  (e.g. `opcache.enable_cli=0`, the default in CI) the call throws "Zend OPcache has not been properly
+  started, can't compile file". The throw was caught upstream but spammed logs and aborted HTTP-layer
+  warmup on every boot. Warmup now runs only when OPcache reports itself enabled for the current SAPI.
+
 ## [1.71.0] - 2026-07-20 — Alcor
 
 **Theme: outbound-webhook security & reliability seams** — three additive, application-agnostic
