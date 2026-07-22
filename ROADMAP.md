@@ -21,6 +21,16 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.71.2 — Alcor (Patch, Released 2026-07-22)
+- **Connection reuse scoped to framework-managed connections.** Follow-up to 1.71.1: non-pooled PDO
+  reuse now applies only to connections constructed WITH an `ApplicationContext` (the DI container
+  path — where the leak lived). An ad-hoc `new Connection([...])` without a context always opens a
+  fresh backend: a caller hand-building a Connection is asking for an independent session (locks,
+  open transactions), and collapsing config-identical pairs into one backend turned session semantics
+  into self-interactions (a CI-only race-test deadlock: a "second session" holding a lock was secretly
+  the same session its child process waited on). Leak fix fully preserved; SQLite unchanged.
+- Notes: **Patch release** — pure fix; no new env vars, no migrations, no default changes.
+
 ### 1.71.1 — Alcor (Patch, Released 2026-07-22)
 - **Non-pooled connection reuse.** With pooling disabled, `Connection` opened a fresh PDO in its
   constructor and never reused it, so each additional container (a test harness that boots the
