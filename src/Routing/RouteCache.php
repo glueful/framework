@@ -150,9 +150,19 @@ class RouteCache
             throw new \RuntimeException(sprintf('Failed to atomically replace route cache file: %s', $cacheFile));
         }
 
-        // Warm opcache
-        if (function_exists('opcache_compile_file')) {
-            opcache_compile_file($cacheFile);
+        // Warm opcache — only when OPcache is actually enabled for this SAPI. Guarding on
+        // function_exists() alone is not enough: when the extension is loaded but disabled
+        // (e.g. opcache.enable_cli=0, the default in CI), opcache_compile_file() throws
+        // "Zend OPcache has not been properly started, can't compile file". That throw is
+        // caught upstream but spams the logs and needlessly aborts HTTP-layer warmup on every
+        // boot. Skip it cleanly when OPcache is off.
+        if (
+            function_exists('opcache_compile_file')
+            && function_exists('opcache_get_status')
+            && is_array($status = @opcache_get_status(false))
+            && ($status['opcache_enabled'] ?? false) === true
+        ) {
+            @opcache_compile_file($cacheFile);
         }
 
         return true;

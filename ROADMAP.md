@@ -21,6 +21,20 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.71.1 — Alcor (Patch, Released 2026-07-22)
+- **Non-pooled connection reuse.** With pooling disabled, `Connection` opened a fresh PDO in its
+  constructor and never reused it, so each additional container (a test harness that boots the
+  framework repeatedly, or any process constructing several `Connection`s) leaked a backend that GC
+  could not reclaim — exhausting the server's `max_connections` ("too many clients"). Server engines
+  now reuse a process-global PDO keyed by full connection identity (DSN + user + schema); a connection
+  for a different schema/host/db/user still gets its own backend. SQLite excluded (`:memory:` is
+  per-connection) — its behavior is byte-unchanged. Pooled mode untouched.
+- **OPcache-off route-cache warmup.** `RouteCache::save()` guarded `opcache_compile_file()` with
+  `function_exists()` alone; when OPcache was loaded but disabled (e.g. `opcache.enable_cli=0`, the CI
+  default) the call threw on every boot. Warmup now runs only when OPcache reports itself enabled.
+- Notes: **Patch release** — pure bugfixes; no new env vars, no migrations, no default changes, no API
+  changes.
+
 ### 1.71.0 — Alcor (Minor, Released 2026-07-20)
 - **Outbound-webhook security & reliability seams** (extracted while hardening the commerce
   marketplace's seller webhooks; application-agnostic).

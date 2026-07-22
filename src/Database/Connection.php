@@ -158,9 +158,36 @@ class Connection implements DatabaseInterface
 
         $this->driver = $this->resolveDriver($this->engine);
 
-        // Initialize PDO connection only if pooling is disabled
+        // Initialize PDO connection only if pooling is disabled.
         if ($poolingEnabled === false) {
-            $this->pdo = $this->createPDOConnection($this->engine);
+            // For server-based engines, reuse a process-global PDO keyed by the FULL connection
+            // identity (DSN + user + schema) rather than opening a fresh backend for every
+            // Connection instance: without pooling, each new Connection otherwise leaks a PDO
+            // that is only released on GC — and cached test-harness app contexts (and cyclic
+            // container graphs) keep those objects alive, exhausting the server's connection
+            // ceiling ("too many clients") once enough containers are booted. The identity key
+            // (NOT engine alone) is essential: a Connection built for a different schema/host/
+            // db/user must get its OWN backend, or a caller that opens an isolated-schema
+            // connection would silently run against the shared search_path.
+            //
+            // SQLite is excluded: a ':memory:' database is private to each connection and file
+            // databases are cheap to open, so reuse there would wrongly share one in-memory
+            // schema across connections meant to be isolated. This keeps SQLite's pooling-off
+            // behaviour exactly as before.
+            if ($this->engine === 'sqlite') {
+                $this->pdo = $this->createPDOConnection($this->engine);
+            } else {
+                $dbConfig = $this->config[$this->engine] ?? [];
+                $key = $this->engine . '|' . $this->buildDSN($this->engine, $dbConfig)
+                    . '|' . ($dbConfig['user'] ?? '')
+                    . '|' . ($dbConfig['schema'] ?? '');
+                if (isset(self::$instances[$key])) {
+                    $this->pdo = self::$instances[$key];
+                } else {
+                    $this->pdo = $this->createPDOConnection($this->engine);
+                    self::$instances[$key] = $this->pdo;
+                }
+            }
         }
 
         // Note: Schema manager is initialized lazily when first accessed
