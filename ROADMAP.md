@@ -21,6 +21,13 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.71.3 — Alcor (Patch, Released 2026-07-25)
+- **Discovered console commands join the booted world.** `Console\Application` bare-instantiated
+  extension-discovered commands, sending `BaseCommand` down its no-args path: a fresh context plus
+  a fresh, never-booted container (no capabilities, no boot-registered contributors or listeners).
+  Bare instantiation now passes the console's own container and `ApplicationContext`, matching
+  container-resolved commands.
+
 ### 1.71.2 — Alcor (Patch, Released 2026-07-22)
 - **Connection reuse scoped to framework-managed connections.** Follow-up to 1.71.1: non-pooled PDO
   reuse now applies only to connections constructed WITH an `ApplicationContext` (the DI container

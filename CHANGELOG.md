@@ -6,6 +6,13 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.71.3] - 2026-07-25 — Alcor
+
+**Theme: discovered console commands join the booted world** — a one-line-in-spirit console fix
+with a wide blast radius: extension-discovered commands no longer run inside a parallel,
+never-booted container. Pure fix: no new env vars, no migrations, no default changes, no API
+changes.
+
 ### Fixed
 - **Console: discovered commands ran in a parallel, never-booted world** —
   `Application::registerDeferredExtensionCommands()` instantiated non-container-registered
