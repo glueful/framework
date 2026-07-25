@@ -2,6 +2,7 @@
 
 namespace Glueful\Console;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Symfony\Component\Console\Application as BaseApplication;
 use Symfony\Component\Console\Command\Command;
 use Psr\Container\ContainerInterface;
@@ -90,7 +91,19 @@ class Application extends BaseApplication
                 if ($this->container->has($class)) {
                     $command = $this->container->get($class);
                 } else {
-                    $command = new $class();
+                    // Bare instantiation MUST still hand BaseCommand the REAL booted
+                    // container/context: with no args, BaseCommand builds a fresh context and a
+                    // fresh, never-booted container — a parallel world where extension boot()
+                    // never ran (no capabilities, no boot-registered contributors/listeners), so
+                    // discovered commands silently operate on different state than the app.
+                    $command = is_subclass_of($class, BaseCommand::class)
+                        ? new $class(
+                            $this->container,
+                            $this->container->has(ApplicationContext::class)
+                                ? $this->container->get(ApplicationContext::class)
+                                : null,
+                        )
+                        : new $class();
                 }
                 if ($command instanceof Command) {
                     $this->addCommand($command);
