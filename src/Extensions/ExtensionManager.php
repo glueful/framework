@@ -437,6 +437,15 @@ final class ExtensionManager
      */
     public function writeCacheNow(?array $providerClasses = null): void
     {
+        // No explicit list ⇒ recompile from CURRENT on-disk config. Every real caller sits in
+        // a read→write→recompile sequence (extensions:enable/disable, the admin toggle): the
+        // enabled list was already read — and cached on the context — BEFORE the state write,
+        // so resolving through that cache would persist the PRE-write activation state. Config
+        // defaults and overrides survive clearConfigCache(); only the file-read layer drops.
+        if ($providerClasses === null) {
+            $this->getContext()->clearConfigCache();
+        }
+
         // Rebuild internal providers list deterministically. An explicit list gets the same
         // declarative ordering guarantee as the resolver path (idempotent there); list
         // COMPLETENESS remains the caller's responsibility — omitted providers are not added.

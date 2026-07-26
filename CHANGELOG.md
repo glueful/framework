@@ -6,6 +6,17 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+- **Stale extension-cache recompile after an activation write** — no-arg
+  `ExtensionManager::writeCacheNow()` now clears the context config cache before resolving, so
+  it recompiles from the just-written `config/extensions.php` instead of the enabled list
+  cached earlier in the same process. Every activation surface runs a read→write→recompile
+  sequence (`extensions:enable`/`disable`, the admin toggle): reading the enabled list primes
+  the config cache, `ExtensionStateWriter` mutates the file, and the recompile previously
+  resolved through the stale cache — persisting the PRE-write activation state (a just-enabled
+  provider missing from the compiled cache, a just-disabled one still present). Config
+  defaults and overrides survive the clear; explicit-list calls are unchanged.
+
 ## [1.72.0] - 2026-07-26 — Alderamin
 
 **Theme: providers get one order, one owner, and one gatekeeper** — three additive extension
