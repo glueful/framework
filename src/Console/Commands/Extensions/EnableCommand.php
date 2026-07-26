@@ -10,6 +10,7 @@ use Glueful\Extensions\EnabledProviders;
 use Glueful\Extensions\ExtensionManager;
 use Glueful\Extensions\ExtensionResolver;
 use Glueful\Extensions\ExtensionStateWriter;
+use Glueful\Extensions\ProtectedProviders;
 use Glueful\Extensions\PackageManifest;
 use Glueful\Support\Version;
 use Symfony\Component\Console\Input\InputArgument;
@@ -65,6 +66,13 @@ final class EnableCommand extends BaseCommand
         $providerClass = $this->resolveNeedle($needle, $candidates);
         if ($providerClass === null) {
             $output->writeln("<error>Extension not found among installed packages: {$needle}</error>");
+            return self::FAILURE;
+        }
+
+        // Protected providers refuse BEFORE any same-state short-circuit: ownership belongs
+        // to a lifecycle flow, and "already enabled" must never mask that answer.
+        if (($refusal = ProtectedProviders::refusalFor($context, $providerClass)) !== null) {
+            $output->writeln("<error>{$refusal}</error>");
             return self::FAILURE;
         }
 

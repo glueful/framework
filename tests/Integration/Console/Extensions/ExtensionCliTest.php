@@ -137,6 +137,47 @@ final class ExtensionCliTest extends TestCase
         return $tester;
     }
 
+    /** Writes the temp extensions.php with vendor/widgets protected (and optionally enabled). */
+    private function protectWidgets(bool $enabled): void
+    {
+        $enabledBlock = $enabled ? "        'Vendor\\\\Widgets\\\\Provider',\n" : '';
+        file_put_contents(
+            $this->base . '/config/extensions.php',
+            "<?php\n\nreturn [\n"
+            . "    'protected' => [\n"
+            . "        'Vendor\\\\Widgets\\\\Provider' => [\n"
+            . "            'reason' => 'Managed by the widgets lifecycle flow.',\n"
+            . "            'managed_by' => 'vendor/widgets lifecycle',\n"
+            . "        ],\n"
+            . "    ],\n"
+            . "    'enabled' => [\n{$enabledBlock}    ],\n];\n"
+        );
+    }
+
+    public function testEnableRefusesAProtectedProviderBeforeAnyShortCircuit(): void
+    {
+        // Protected AND already enabled: the refusal must win over "already enabled".
+        $this->protectWidgets(enabled: true);
+
+        $tester = $this->runEnable(['extension' => 'widgets']);
+
+        self::assertSame(1, $tester->getStatusCode());
+        self::assertStringContainsString('Managed by the widgets lifecycle flow.', $tester->getDisplay());
+        self::assertSame(['Vendor\\Widgets\\Provider'], $this->enabled());
+    }
+
+    public function testDisableRefusesAProtectedProviderBeforeAnyShortCircuit(): void
+    {
+        // Protected but NOT enabled: the refusal must win over "not enabled".
+        $this->protectWidgets(enabled: false);
+
+        $tester = $this->runDisable(['extension' => 'widgets']);
+
+        self::assertSame(1, $tester->getStatusCode());
+        self::assertStringContainsString('Managed by the widgets lifecycle flow.', $tester->getDisplay());
+        self::assertSame([], $this->enabled());
+    }
+
     public function testEnableAddsProviderToConfig(): void
     {
         $tester = $this->runEnable(['extension' => 'widgets']);

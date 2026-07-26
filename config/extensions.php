@@ -16,6 +16,15 @@
  */
 
 return [
+    /**
+     * Providers whose enable/disable is OWNED elsewhere — a domain lifecycle flow (e.g.
+     * glueful/tenancy's enablement state machine) or a product's bundled-required set.
+     * Generic surfaces (extensions:enable|disable, the extensions admin toggle) refuse these
+     * with the recorded reason; the owning flow keeps using ExtensionStateWriter directly.
+     * Shape: 'Fully\\Qualified\\Provider' => ['reason' => '...', 'managed_by' => '...'].
+     */
+    'protected' => [],
+
     'enabled' => [
         // 'Glueful\\Extensions\\Aegis\\Services\\AegisServiceProvider',
     ],

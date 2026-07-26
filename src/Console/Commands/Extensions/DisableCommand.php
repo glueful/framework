@@ -10,6 +10,7 @@ use Glueful\Extensions\EnabledProviders;
 use Glueful\Extensions\ExtensionManager;
 use Glueful\Extensions\ExtensionResolver;
 use Glueful\Extensions\ExtensionStateWriter;
+use Glueful\Extensions\ProtectedProviders;
 use Glueful\Extensions\PackageManifest;
 use Glueful\Extensions\ResolverError;
 use Glueful\Support\Version;
@@ -66,6 +67,13 @@ final class DisableCommand extends BaseCommand
         // A disabled-but-still-installed extension is resolvable by needle; if the
         // package is gone, fall back to treating the needle as a literal FQCN.
         $providerClass = $this->resolveNeedle($needle, $candidates) ?? ltrim($needle, '\\');
+
+        // Protected providers refuse BEFORE any same-state short-circuit: ownership belongs
+        // to a lifecycle flow, and "not enabled" must never mask that answer.
+        if (($refusal = ProtectedProviders::refusalFor($context, $providerClass)) !== null) {
+            $output->writeln("<error>{$refusal}</error>");
+            return self::FAILURE;
+        }
 
         $current = EnabledProviders::from($context);
         if (!in_array($providerClass, $current, true)) {

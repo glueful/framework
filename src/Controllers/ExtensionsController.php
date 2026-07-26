@@ -12,6 +12,7 @@ use Glueful\Extensions\ExtensionCatalog;
 use Glueful\Extensions\ExtensionManager;
 use Glueful\Extensions\ExtensionResolver;
 use Glueful\Extensions\ExtensionStateWriter;
+use Glueful\Extensions\ProtectedProviders;
 use Glueful\Extensions\Install\ExtensionInstaller;
 use Glueful\Extensions\Install\HostCapability;
 use Glueful\Extensions\Install\HostNotWritableException;
@@ -99,16 +100,23 @@ class ExtensionsController extends BaseController
     {
         $this->requirePermission('system.config.edit');
 
-        if (($cap = $this->host->forToggle()) !== null) {
-            return Response::error('Host not writable', 409, ['reason' => $cap['reason']]);
-        }
-
         $candidates = (new PackageManifest($this->context))->getCandidates();
         $candidate = $candidates[$package] ?? null;
         if ($candidate === null) {
             return $this->notFound("Not an installed extension: {$package}");
         }
         $provider = $candidate->provider;
+
+        // Protected providers refuse before writability/resolution: ownership belongs to a
+        // lifecycle flow, and no other precondition may mask that answer.
+        if (($refusal = ProtectedProviders::refusalFor($this->context, $provider)) !== null) {
+            return Response::error($refusal, 409);
+        }
+
+        if (($cap = $this->host->forToggle()) !== null) {
+            return Response::error('Host not writable', 409, ['reason' => $cap['reason']]);
+        }
+
         $current = EnabledProviders::from($this->context);
         $proposed = $enable
             ? [...$current, $provider]
