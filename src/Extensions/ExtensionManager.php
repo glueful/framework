@@ -306,6 +306,18 @@ final class ExtensionManager
             $graph[$class] = [];
             $in[$class] = 0;
         }
+
+        // Pin DeclaresLoadOrder participants: their relative order was fixed by the resolver
+        // (the ONE cross-phase order) and the legacy instance-level pass must not move them
+        // relative to each other. Chain edges D1->D2->...->Dn preserve it through the topo sort.
+        $declarative = array_values(array_filter(
+            array_keys($this->providers),
+            static fn (string $class): bool => is_subclass_of($class, DeclaresLoadOrder::class)
+        ));
+        for ($d = 1, $n = count($declarative); $d < $n; $d++) {
+            $graph[$declarative[$d - 1]][] = $declarative[$d];
+            $in[$declarative[$d]]++;
+        }
         foreach ($rows as [$class,,,$p]) {
             if ($p instanceof OrderedProvider) {
                 foreach ($p->bootAfter() as $dep) {
@@ -336,8 +348,14 @@ final class ExtensionManager
         }
 
         if (count($ordered) !== count($rows)) {
-            // cycle → fall back to priority order
-            $ordered = array_map(fn($r) => $r[0], $rows);
+            // Keep the legacy behavior (drop cyclic bootAfter edges and fall back to the
+            // priority seed), then re-apply the cross-phase declarative contract. With no
+            // declarative providers this is byte-identical because ProviderOrderer sees no
+            // metadata and preserves the priority-seeded input. Required even though
+            // declarative providers must not implement OrderedProvider themselves: a legacy
+            // provider can still name a declarative one in bootAfter(), forming a mixed cycle,
+            // and the fallback must not undo the canonical class order.
+            $ordered = ProviderOrderer::order(array_map(static fn (array $row): string => $row[0], $rows));
             $this->log('Circular dependency detected in provider bootAfter(), using priority fallback');
         }
 
@@ -423,9 +441,11 @@ final class ExtensionManager
      */
     public function writeCacheNow(?array $providerClasses = null): void
     {
-        // Rebuild internal providers list deterministically
+        // Rebuild internal providers list deterministically. An explicit list gets the same
+        // declarative ordering guarantee as the resolver path (idempotent there); list
+        // COMPLETENESS remains the caller's responsibility — omitted providers are not added.
         $this->providers = [];
-        $classes = $providerClasses ?? $this->resolveProviderClasses();
+        $classes = ProviderOrderer::order($providerClasses ?? $this->resolveProviderClasses());
         foreach ($classes as $cls) {
             $this->addProvider($cls);
         }

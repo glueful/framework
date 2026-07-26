@@ -34,6 +34,11 @@ final class ProviderClassResolver
         // app providers first, then resolved extensions; dedupe preserving order
         $combined = array_values(array_unique([...$app, ...$extResult->providers]));
 
+        // ONE declarative order for every phase (DeclaresLoadOrder): container compilation,
+        // live discovery, cache generation, and cached boot all start from this list.
+        // A cycle throws ProviderOrderCycleException — resolution fails loudly everywhere.
+        $combined = ProviderOrderer::order($combined);
+
         return new ResolverResult($combined, $extResult->errors);
     }
 }
