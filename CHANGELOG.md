@@ -6,6 +6,39 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.72.0] - 2026-07-26 — Alderamin
+
+**Theme: providers get one order, one owner, and one gatekeeper** — three additive extension
+seams: a declarative cross-phase provider load order, type-agnostic provider→package
+attribution, and a protected-provider guard on the generic activation surfaces. One new config
+key (`extensions.protected`, default `[]`). Hosts adopting none of the new contracts see
+byte-identical behavior — upgrade and run.
+
+### Added
+- **Declarative cross-phase provider ordering** — new `DeclaresLoadOrder` contract (static
+  `loadAfter()`/`loadPriority()`, readable from class strings without construction) and a pure
+  deterministic `ProviderOrderer` applied inside `ProviderClassResolver`, so container
+  compilation, live discovery, cache generation (implicit AND explicit `writeCacheNow()`
+  lists), and cached production boot all start from ONE ordered class list. Cycles (including
+  self-dependencies) throw `ProviderOrderCycleException` naming every blocked provider —
+  resolution fails loudly, never a silent fallback. The legacy instance-level `OrderedProvider`
+  keeps its exact semantics for boot-only third-party ordering, but can no longer move
+  declarative participants relative to each other — including through its logged cycle
+  fallback, which now re-applies the declarative contract. Hosts using neither contract see
+  byte-identical behavior.
+- **Type-agnostic provider→package attribution** — `PackageManifest::providerOwnership()` maps
+  `extra.glueful.provider` to its owning composer package across ALL installed packages
+  regardless of type (FQCN-normalized; duplicate ownership is a fatal configuration error), and
+  permission `managed_by` attribution now uses it — a library-typed, app-integrated provider
+  package keeps its package attribution instead of degrading to `app`.
+- **Protected-provider activation guard** — a host config map (`extensions.protected`:
+  provider → `{reason, managed_by}`) that generic activation surfaces consult BEFORE any
+  same-state short-circuit or writability check: `extensions:enable`, `extensions:disable`, and
+  the extensions admin toggle all refuse listed providers with the recorded reason (CLI failure
+  / HTTP 409). Protects providers owned by domain lifecycle flows (e.g. glueful/tenancy's
+  enablement state machine) and bundled-required sets; `ExtensionStateWriter` stays policy-free
+  so owning flows keep using it directly.
+
 ## [1.71.3] - 2026-07-25 — Alcor
 
 **Theme: discovered console commands join the booted world** — a one-line-in-spirit console fix

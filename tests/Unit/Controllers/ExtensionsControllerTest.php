@@ -87,6 +87,33 @@ final class ExtensionsControllerTest extends TestCase
         $this->assertContains('system.config.view', $c->controller->perms);
     }
 
+    public function test_enable_and_disable_refuse_a_protected_provider_with_409(): void
+    {
+        $provider = 'Glueful\\Tests\\Support\\DummyAegisProvider';
+        $c = $this->build(killSwitch: true, catalog: [], installedProvider: $provider);
+        $c->context->mergeConfigDefaults('extensions', [
+            'protected' => [
+                $provider => [
+                    'reason' => 'Managed by the aegis lifecycle flow.',
+                    'managed_by' => 'vendor/aegis lifecycle',
+                ],
+            ],
+        ]);
+
+        $enableRes = $c->controller->enable(new ExtensionToggleData('glueful/aegis'));
+        $this->assertSame(409, $enableRes->getStatusCode());
+        $this->assertStringContainsString(
+            'Managed by the aegis lifecycle flow.',
+            (string) $enableRes->getContent()
+        );
+
+        $disableRes = $c->controller->disable(new ExtensionToggleData('glueful/aegis'));
+        $this->assertSame(409, $disableRes->getStatusCode());
+
+        // Nothing was written by either refusal.
+        $this->assertSame([], (require $c->base . '/config/extensions.php')['enabled']);
+    }
+
     public function test_enable_happy_writes_config_and_returns_enabled(): void
     {
         $provider = 'Glueful\\Tests\\Support\\DummyAegisProvider';
@@ -234,7 +261,7 @@ final class ExtensionsControllerTest extends TestCase
         $this->inject($controller, ExtensionsController::class, 'extensions', $extensions);
         $this->inject($controller, ExtensionsController::class, 'auditLog', new NullLogger());
 
-        return (object) ['controller' => $controller, 'base' => $base];
+        return (object) ['controller' => $controller, 'base' => $base, 'context' => $context];
     }
 
     private function inject(object $obj, string $class, string $prop, mixed $value): void
