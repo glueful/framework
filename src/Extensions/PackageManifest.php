@@ -109,4 +109,41 @@ final class PackageManifest
 
         return [];
     }
+
+    /**
+     * Provider FQCN → owning composer package, from `extra.glueful.provider` across ALL
+     * installed packages REGARDLESS of type. Extension candidacy stays type-filtered
+     * ({@see getCandidates()}); ownership deliberately does not — a host may ship
+     * library-typed provider packages (app-integrated modules) that still deserve stable
+     * `managed_by` attribution. Two packages claiming one provider is a fatal
+     * configuration error, never a silent last-one-wins.
+     *
+     * @return array<class-string, string>
+     */
+    public function providerOwnership(): array
+    {
+        $owners = [];
+        foreach ($this->rawPackages() as $name => $pkg) {
+            $glueful = is_array($pkg['extra']['glueful'] ?? null) ? $pkg['extra']['glueful'] : [];
+            $provider = $glueful['provider'] ?? null;
+            if (!is_string($provider)) {
+                continue;
+            }
+            $provider = ltrim($provider, '\\');
+            if (!str_contains($provider, '\\')) {
+                continue;
+            }
+            if (isset($owners[$provider])) {
+                throw new \RuntimeException(sprintf(
+                    'Provider %s is declared by two packages: %s and %s.',
+                    $provider,
+                    $owners[$provider],
+                    $name
+                ));
+            }
+            $owners[$provider] = (string) $name;
+        }
+
+        return $owners;
+    }
 }

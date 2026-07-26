@@ -192,12 +192,8 @@ final class ExtensionManager
      */
     private function packageNameFor(string $providerClass): string
     {
-        foreach ((new PackageManifest($this->getContext()))->getCandidates() as $candidate) {
-            if ($candidate->provider === $providerClass) {
-                return $candidate->name;
-            }
-        }
-        return 'app';
+        return (new PackageManifest($this->getContext()))->providerOwnership()[$providerClass]
+            ?? 'app';
     }
 
     /**
