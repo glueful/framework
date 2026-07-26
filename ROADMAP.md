@@ -21,6 +21,12 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.72.1 — Alderamin (Patch, Released 2026-07-26)
+- **Activation writes recompile from current file state.** No-arg `writeCacheNow()` clears the
+  context config cache before resolving: `extensions:enable`/`disable` and the admin toggles no
+  longer persist the PRE-write activation state (a just-enabled provider missing from the
+  compiled cache, a just-disabled one still present).
+
 ### 1.72.0 — Alderamin (Minor, Released 2026-07-26)
 - **Declarative cross-phase provider ordering.** `DeclaresLoadOrder` (static metadata) + a pure
   `ProviderOrderer` applied in `ProviderClassResolver`: container compilation, live discovery,

@@ -6,6 +6,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.72.1] - 2026-07-26 — Alderamin
+
+**Theme: activation writes recompile from what was just written** — one targeted fix to the
+extension cache recompile; no new config, no behavioral change for anything outside the
+enable/disable surfaces. Low-risk patch — upgrade and run.
+
 ### Fixed
 - **Stale extension-cache recompile after an activation write** — no-arg
   `ExtensionManager::writeCacheNow()` now clears the context config cache before resolving, so
