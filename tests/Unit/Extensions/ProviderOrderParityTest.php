@@ -7,7 +7,9 @@ namespace Glueful\Tests\Unit\Extensions;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Bootstrap\ConfigurationLoader;
 use Glueful\Extensions\DeclaresLoadOrder;
+use Glueful\Extensions\EnabledProviders;
 use Glueful\Extensions\ExtensionManager;
+use Glueful\Extensions\ExtensionStateWriter;
 use Glueful\Extensions\OrderedProvider;
 use Glueful\Extensions\ProviderClassResolver;
 use Glueful\Extensions\ServiceProvider;
@@ -158,6 +160,29 @@ final class ProviderOrderParityTest extends TestCase
         $liveManager = new ExtensionManager($this->container);
         $liveManager->discover();
         self::assertEarlyBeforeLate(array_keys($this->providersOf($liveManager)), 'uncached discovery');
+    }
+
+    public function testRecompileAfterAStateWriteSeesTheNewFileState(): void
+    {
+        // The read→write→recompile sequence every activation surface runs (extensions:enable,
+        // the admin toggles): reading the enabled list primes the context config cache, then
+        // ExtensionStateWriter mutates the file, then writeCacheNow() recompiles. The recompile
+        // must observe the JUST-WRITTEN state, not the primed cache — a stale recompile writes
+        // a cache missing the provider that was just enabled.
+        file_put_contents($this->base . '/config/extensions.php', "<?php\nreturn [\n    'enabled' => [\n    ],\n];\n");
+        self::assertSame([], EnabledProviders::from($this->context)); // primes the config cache
+
+        (new ExtensionStateWriter())->enable(
+            $this->base . '/config/extensions.php',
+            ParityEarlyExtensionProvider::class,
+        );
+        (new ExtensionManager($this->container))->writeCacheNow();
+
+        self::assertContains(
+            ParityEarlyExtensionProvider::class,
+            require $this->base . '/bootstrap/cache/extensions.php',
+            'writeCacheNow() must recompile from current file state, not the primed config cache',
+        );
     }
 
     public function testLegacyCycleFallbackKeepsTheDeclarativeOrder(): void
