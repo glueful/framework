@@ -21,6 +21,16 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.72.0 — Alderamin (Minor, Released 2026-07-26)
+- **Declarative cross-phase provider ordering.** `DeclaresLoadOrder` (static metadata) + a pure
+  `ProviderOrderer` applied in `ProviderClassResolver`: container compilation, live discovery,
+  cache generation, and cached boot share ONE ordered class list; cycles fail loudly.
+- **Type-agnostic provider→package attribution.** `PackageManifest::providerOwnership()` scans
+  all installed packages regardless of type, so library-typed app-integrated provider packages
+  keep stable permission `managed_by` attribution.
+- **Protected-provider guard.** `extensions.protected` config map; generic enable/disable (CLI
+  and admin toggle) refuse lifecycle-owned providers with the recorded reason.
+
 ### 1.71.3 — Alcor (Patch, Released 2026-07-25)
 - **Discovered console commands join the booted world.** `Console\Application` bare-instantiated
   extension-discovered commands, sending `BaseCommand` down its no-args path: a fresh context plus

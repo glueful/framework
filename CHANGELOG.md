@@ -6,6 +6,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.72.0] - 2026-07-26 — Alderamin
+
+**Theme: providers get one order, one owner, and one gatekeeper** — three additive extension
+seams: a declarative cross-phase provider load order, type-agnostic provider→package
+attribution, and a protected-provider guard on the generic activation surfaces. One new config
+key (`extensions.protected`, default `[]`). Hosts adopting none of the new contracts see
+byte-identical behavior — upgrade and run.
+
 ### Added
 - **Declarative cross-phase provider ordering** — new `DeclaresLoadOrder` contract (static
   `loadAfter()`/`loadPriority()`, readable from class strings without construction) and a pure

@@ -13,15 +13,15 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.71.3';
+    public const VERSION = '1.72.0';
 
 
     /** Release code name */
-    public const NAME = 'Alcor';
+    public const NAME = 'Alderamin';
 
 
     /** Release date */
-    public const RELEASE_DATE = '2026-07-25';
+    public const RELEASE_DATE = '2026-07-26';
 
     /** Minimum required PHP version */
     public const MIN_PHP_VERSION = '8.3.0';
