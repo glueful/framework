@@ -37,7 +37,27 @@ final class LoginResponseShaper
         if (env('CSRF_PROTECTION_ENABLED', true) === true) {
             try {
                 $csrf = new CSRFMiddleware();
-                $token = $csrf->generateToken($request);
+
+                // Bind the token to the session just issued. Login runs before any
+                // authenticated identity is attached to the request, so without an explicit
+                // binding the token would key on the anonymous fingerprint while every later
+                // authenticated request keys on the session — and the first write would fail.
+                $sessionId = '';
+                foreach (['sid', 'session_uuid', 'session_id'] as $key) {
+                    $candidate = $session[$key] ?? null;
+                    if (!is_string($candidate) || $candidate === '') {
+                        $user = $session['user'] ?? null;
+                        $candidate = is_array($user) ? ($user[$key] ?? null) : null;
+                    }
+                    if (is_string($candidate) && $candidate !== '') {
+                        $sessionId = $candidate;
+                        break;
+                    }
+                }
+
+                $token = $sessionId !== ''
+                    ? $csrf->generateTokenForSession($request, $sessionId)
+                    : $csrf->generateToken($request);
                 $session['csrf_token'] = [
                     'token' => $token,
                     'header' => 'X-CSRF-Token',

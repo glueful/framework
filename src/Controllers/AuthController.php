@@ -57,6 +57,7 @@ class AuthController
     /** Optional: a 2FA impl (e.g. glueful/users); null when no 2FA service is registered. */
     private ?\Glueful\Auth\Contracts\TwoFactorServiceInterface $twoFactor = null;
     private \Glueful\Auth\LoginResponseShaper $loginResponseShaper;
+    private \Glueful\Auth\Session\LoginOrchestrator $loginOrchestrator;
 
     public function __construct(ApplicationContext $context)
     {
@@ -75,6 +76,14 @@ class AuthController
         $c = container($this->context);
         $this->twoFactor = $c->has($twoFactorClass) ? $c->get($twoFactorClass) : null;
         $this->loginResponseShaper = container($this->context)->get(\Glueful\Auth\LoginResponseShaper::class);
+
+        // Password login runs through the shared orchestrator so every transport passes the
+        // same 2FA gate. Falls back to direct construction when the container has no
+        // definition (parity with the AuthenticationService resolution above).
+        $orchestratorClass = \Glueful\Auth\Session\LoginOrchestrator::class;
+        $this->loginOrchestrator = $c->has($orchestratorClass)
+            ? $c->get($orchestratorClass)
+            : new \Glueful\Auth\Session\LoginOrchestrator($this->authService, $this->twoFactor);
 
         // Initialize the authentication system
         app($this->context, \Glueful\Auth\AuthBootstrap::class)->initialize();
@@ -143,23 +152,16 @@ class AuthController
         // Get credentials using the getPostData method from our Helper Request class
         $credentials = RequestHelper::getRequestData($request);
 
-        // Extract remember me preference from credentials
-        $rememberMe = isset($credentials['remember']) && (bool)$credentials['remember'];
-
-        // Add remember_me to credentials for authentication service
-        $credentials['remember_me'] = $rememberMe;
-
         // Check if a specific provider was requested
         $providerName = null;
         if (isset($credentials['provider'])) {
             $providerName = $credentials['provider'];
         }
-        $preferredProvider = $providerName ?? ($credentials['provider'] ?? 'jwt');
 
-        // Route 1 — token / API-key provider login. Bypasses the 2FA gate entirely
-        // (these credentials have no "verified user, no session yet" intermediate
-        // state). Delegates to the unchanged AuthenticationService::authenticate()
-        // provider short-circuit, then shapes the response like every other login.
+        // Route 1 — token / API-key provider login, UNCHANGED. These providers return an
+        // identity array with NO tokens, so the result is shaped directly and never modelled
+        // as a session. Deliberately outside the orchestrator for that reason; it also has no
+        // "verified user, no session yet" state for a second factor to gate.
         if (isset($credentials['token']) || isset($credentials['api_key'])) {
             $result = $this->authService->authenticate($credentials, $providerName);
             if ($result === null) {
@@ -168,43 +170,23 @@ class AuthController
             return $this->loginResponseShaper->shape($request, $result);
         }
 
-        // Route 2 — username/password login. Goes through the split + 2FA gate.
+        // Route 2 — username/password login, through the shared orchestrator and its 2FA gate.
+        $outcome = $this->loginOrchestrator->login($credentials, $providerName);
 
-        // Step 1: credentials & status validation only. NO session is created here.
-        $userData = $this->authService->verifyCredentials($credentials, $providerName);
-        if ($userData === null) {
-            throw new AuthenticationException('Invalid credentials');
-        }
-
-        // Step 2: 2FA branch. Skipped entirely when 2FA isn't installed (glueful/users absent).
-        // isEnabled() short-circuits (no DB read) when the master switch is off.
-        if ($this->twoFactor !== null && $this->twoFactor->isEnabled((string) $userData['uuid'])) {
-            $challenge = $this->twoFactor->beginLogin(
-                [
-                    'uuid'              => (string) $userData['uuid'],
-                    'email'             => (string) ($userData['email'] ?? ''),
-                    'email_verified_at' => $userData['email_verified_at'] ?? null,
-                    'username'          => $userData['username'] ?? null,
-                    'profile'           => $userData['profile'] ?? null,
-                    'remember_me'       => $rememberMe,
-                    'status'            => $userData['status'] ?? null,
-                ],
-                $preferredProvider
-            );
+        if (!$outcome->isAuthenticated()) {
+            $challenge = $outcome->challenge();
 
             // Challenge responses deliberately skip CSRF + login events — login is
             // not yet complete and there is no session to bind a CSRF token to.
             return Response::success([
                 'two_factor_required' => true,
-                'challenge_token'     => $challenge['token'],
-                'expires_in'          => $challenge['expires_in'],
-                'delivered_to'        => $challenge['delivered_to'],
+                'challenge_token'     => $challenge->token,
+                'expires_in'          => $challenge->expiresIn,
+                'delivered_to'        => $challenge->deliveredTo,
             ], 'Two-factor verification required');
         }
 
-        // Step 3: no 2FA. Issue the session and shape the response (CSRF + events).
-        $session = $this->authService->issueSession($userData, $preferredProvider);
-        return $this->loginResponseShaper->shape($request, $session);
+        return $this->loginResponseShaper->shape($request, $outcome->session()->toSessionArray());
     }
 
     /**

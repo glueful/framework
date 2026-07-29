@@ -286,6 +286,21 @@ final class CoreProvider extends BaseServiceProvider
             )
         );
 
+        // The one password-login path: credential check -> 2FA gate -> session issuance.
+        // Shared by JSON login and any cookie-session login, so no transport can reach session
+        // issuance without passing the same gate. 2FA is optional (extension-provided).
+        $defs[\Glueful\Auth\Session\LoginOrchestrator::class] = new FactoryDefinition(
+            \Glueful\Auth\Session\LoginOrchestrator::class,
+            static function (\Psr\Container\ContainerInterface $c) {
+                $twoFactorClass = \Glueful\Auth\Contracts\TwoFactorServiceInterface::class;
+
+                return new \Glueful\Auth\Session\LoginOrchestrator(
+                    $c->get(\Glueful\Auth\AuthenticationService::class),
+                    $c->has($twoFactorClass) ? $c->get($twoFactorClass) : null,
+                );
+            }
+        );
+
         // TwoFactorService moved to glueful/users (owns users.two_factor_enabled state); it is
         // registered by UsersServiceProvider. ChallengeTokenIssuer + JtiBlocklist (above) stay in
         // core as pure token mechanics that the moved service consumes across the boundary.
@@ -626,10 +641,59 @@ final class CoreProvider extends BaseServiceProvider
                 )
         );
 
+        // Opt-in browser-session transport: cookie -> Authorization header adapter, plus the
+        // one place cookie attributes are set. Both are inert while the transport is disabled.
+        $defs[\Glueful\Auth\Session\SessionCookieConfig::class] = new FactoryDefinition(
+            \Glueful\Auth\Session\SessionCookieConfig::class,
+            fn(\Psr\Container\ContainerInterface $c) =>
+                \Glueful\Auth\Session\SessionCookieConfig::fromContext($this->context)
+        );
+        $defs[\Glueful\Auth\Session\SessionCookieIssuer::class] = new FactoryDefinition(
+            \Glueful\Auth\Session\SessionCookieIssuer::class,
+            static fn(\Psr\Container\ContainerInterface $c) =>
+                new \Glueful\Auth\Session\SessionCookieIssuer(
+                    $c->get(\Glueful\Auth\Session\SessionCookieConfig::class)
+                )
+        );
+        $defs[\Glueful\Routing\Middleware\SessionCookieMiddleware::class] = new FactoryDefinition(
+            \Glueful\Routing\Middleware\SessionCookieMiddleware::class,
+            fn(\Psr\Container\ContainerInterface $c) =>
+                new \Glueful\Routing\Middleware\SessionCookieMiddleware(
+                    $c->get(\Glueful\Auth\Session\SessionCookieConfig::class),
+                    $c->get(\Glueful\Auth\AuthenticationService::class),
+                    $this->context,
+                )
+        );
+
+        $defs[\Glueful\Auth\Session\SessionLogout::class] = new FactoryDefinition(
+            \Glueful\Auth\Session\SessionLogout::class,
+            static fn(\Psr\Container\ContainerInterface $c) =>
+                new \Glueful\Auth\Session\SessionLogout(
+                    $c->get(\Glueful\Auth\AuthenticationService::class),
+                    $c->get(\Glueful\Auth\Session\SessionCookieIssuer::class),
+                    $c->get(\Glueful\Auth\Session\SessionCookieConfig::class),
+                )
+        );
+        $defs[\Glueful\Controllers\SessionController::class] = new FactoryDefinition(
+            \Glueful\Controllers\SessionController::class,
+            static fn(\Psr\Container\ContainerInterface $c) =>
+                new \Glueful\Controllers\SessionController(
+                    $c->get(\Glueful\Auth\AuthenticationService::class),
+                    $c->get(\Glueful\Auth\Session\SessionCookieIssuer::class),
+                    $c->get(\Glueful\Auth\Session\SessionCookieConfig::class),
+                    new \Glueful\Auth\Session\SameOriginGuard(),
+                    $c->get(\Glueful\Auth\Session\SessionLogout::class),
+                )
+        );
+
         // String alias convenience (parity with DI aliases)
         $defs['auth'] = new AliasDefinition(
             'auth',
             \Glueful\Routing\Middleware\AuthMiddleware::class
+        );
+        $defs['session_cookie'] = new AliasDefinition(
+            'session_cookie',
+            \Glueful\Routing\Middleware\SessionCookieMiddleware::class
         );
         $defs['rate_limit'] = new AliasDefinition(
             'rate_limit',

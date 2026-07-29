@@ -116,6 +116,9 @@ class CSRFMiddleware implements RouteMiddleware
     /** @var bool Whether to validate Origin/Referer headers */
     private bool $validateOrigin;
 
+    /** Explicit session binding, set while a caller generates a token for a known session. */
+    private ?string $boundSessionId = null;
+
     /** @var bool Whether to auto-rotate tokens after validation */
     private bool $autoRotateTokens;
 
@@ -337,6 +340,23 @@ class CSRFMiddleware implements RouteMiddleware
      * @param int|null $lifetime Token lifetime in seconds
      * @return string Generated CSRF token
      */
+    /**
+     * Generate a token bound to a KNOWN session, for callers that hold the session before an
+     * authenticated identity is attached to the request — login response shaping above all.
+     * Without this, a login-issued token binds to the anonymous fingerprint while every later
+     * request binds to the session, so the first authenticated write would be rejected.
+     */
+    public function generateTokenForSession(Request $request, string $sessionId, ?int $lifetime = null): string
+    {
+        $previous = $this->boundSessionId;
+        $this->boundSessionId = $sessionId;
+        try {
+            return $this->generateToken($request, $lifetime);
+        } finally {
+            $this->boundSessionId = $previous;
+        }
+    }
+
     public function generateToken(Request $request, ?int $lifetime = null): string
     {
         $lifetime = $lifetime ?? $this->tokenLifetime;
@@ -877,10 +897,25 @@ class CSRFMiddleware implements RouteMiddleware
      */
     private function getSessionId(Request $request): string
     {
-        // Try to get from authenticated user session
+        // An explicit binding supplied by a caller that knows the session before an
+        // authenticated identity is attached to the request (login response shaping).
+        if ($this->boundSessionId !== null) {
+            return 'sid_' . $this->boundSessionId;
+        }
+
+        // Try to get from the authenticated user session. Providers name the session uuid
+        // `sid` (JWT claim) or `session_uuid` (session row); `session_id` is kept for any
+        // provider that uses it. Reading ONLY `session_id` silently fell through to the
+        // fingerprint branch for every JWT-authenticated request, which meant two visitors
+        // sharing an IP and User-Agent also shared a CSRF identity.
         $user = $request->attributes->get('user');
-        if (is_array($user) && isset($user['session_id'])) {
-            return $user['session_id'];
+        if (is_array($user)) {
+            foreach (['sid', 'session_uuid', 'session_id'] as $key) {
+                $value = $user[$key] ?? null;
+                if (is_string($value) && $value !== '') {
+                    return 'sid_' . $value;
+                }
+            }
         }
 
         // Try to get from JWT session

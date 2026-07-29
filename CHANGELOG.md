@@ -6,6 +6,53 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.73.0] - 2026-07-29 — Algedi
+
+**Theme: browsers get a first-class transport** — an opt-in HttpOnly cookie session alongside
+the unchanged bearer path, one login orchestration both transports pass through, and a CSRF
+binding fix that authenticated sessions depended on. Moderate risk: the transport is off by
+default and bearer behavior is byte-identical, but the CSRF fix invalidates tokens held by
+authenticated callers at upgrade time — read the upgrade notes.
+
+### Added
+- **Opt-in browser session transport.** The `session_cookie` middleware adapts an HttpOnly access
+  cookie into the `Authorization` header the existing `auth` middleware already reads, and marks
+  `auth_transport` on the request so cookie-authenticated writes can carry CSRF obligations that
+  bearer requests do not. `SessionCookieIssuer` owns cookie attributes — HttpOnly, Secure,
+  `SameSite=Lax`, host-configurable names, refresh cookie path-scoped to `/auth/session` — and
+  accepts only a completed session, so cookies cannot be issued for a login still awaiting
+  second-factor verification. New endpoints `POST /auth/session/refresh` and
+  `POST /auth/session/logout` rotate and revoke without ever putting tokens in a response body;
+  logout clears both cookies even when server-side revocation fails, and reports that failure
+  rather than returning a green 200 over a half-completed logout. Mixed credentials are never
+  silently resolved: a bearer and a cookie resolving to the same identity defer to the bearer,
+  a mismatch is rejected. Off by default — while disabled the session routes are not registered
+  at all. See `docs/BROWSER_SESSIONS.md`.
+- **Transport-neutral login orchestration.** Password login runs through `LoginOrchestrator`,
+  which returns a closed `LoginOutcome` (an authenticated session or a pending two-factor
+  challenge, never both), so every transport passes the same two-factor gate and no second login
+  path can reach session issuance around it. Token and API-key credential exchange is unchanged
+  and deliberately stays outside the orchestrator: those providers return an identity payload
+  with no tokens. JSON login responses are byte-identical.
+
+### Fixed
+- **CSRF tokens now bind to the session, not to a request fingerprint.** `getSessionId()` looked
+  only for `user['session_id']`, a key no provider emits — JWT authentication returns `sid` and
+  `session_uuid` — so every authenticated request fell through to fingerprinting on IP and
+  User-Agent. Two visitors behind one NAT using the same browser therefore shared a CSRF
+  identity, and a token issued to one validated a write from the other. Tokens now key on the
+  session uuid, and `generateTokenForSession()` lets login response shaping bind the token to the
+  session it just issued (login runs before any identity is attached to the request).
+  Unauthenticated forms still fall back to fingerprinting.
+
+### Upgrade Notes
+- CSRF tokens issued to **authenticated** callers before this release were fingerprint-bound and
+  stop validating after it. There is no compatibility window and no automatic recovery: an
+  affected client receives a `403` and must fetch a new CSRF token or reload the page. Old
+  fingerprint-keyed cache entries expire on their own. Unauthenticated forms are unaffected.
+- The browser session transport is opt-in and off by default; no action is required to keep
+  bearer-only behavior.
+
 ## [1.72.1] - 2026-07-26 — Alderamin
 
 **Theme: activation writes recompile from what was just written** — one targeted fix to the
