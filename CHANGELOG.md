@@ -6,6 +6,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.73.0] - 2026-07-29 — Algedi
+
+**Theme: browsers get a first-class transport** — an opt-in HttpOnly cookie session alongside
+the unchanged bearer path, one login orchestration both transports pass through, and a CSRF
+binding fix that authenticated sessions depended on. Moderate risk: the transport is off by
+default and bearer behavior is byte-identical, but the CSRF fix invalidates tokens held by
+authenticated callers at upgrade time — read the upgrade notes.
+
 ### Added
 - **Opt-in browser session transport.** The `session_cookie` middleware adapts an HttpOnly access
   cookie into the `Authorization` header the existing `auth` middleware already reads, and marks

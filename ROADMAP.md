@@ -21,6 +21,21 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.73.0 — Algedi (Minor, Released 2026-07-29)
+- **Opt-in browser session transport.** `session_cookie` middleware adapts an HttpOnly access
+  cookie into the `Authorization` header the existing `auth` middleware already reads, marking
+  `auth_transport` so cookie writes can carry CSRF obligations bearer requests do not.
+  `SessionCookieIssuer` owns cookie attributes and accepts only a completed session, so cookies
+  cannot be issued for a login awaiting second-factor verification. New `POST /auth/session/refresh`
+  and `POST /auth/session/logout` rotate and revoke without tokens in any response body.
+  Off by default; while disabled the routes are not registered at all.
+- **Transport-neutral login orchestration.** Password login runs through `LoginOrchestrator`,
+  returning a closed outcome (session or pending challenge), so no transport can reach session
+  issuance around the two-factor gate. Token/API-key exchange is unchanged and stays outside it.
+- **CSRF tokens bind to the session, not a request fingerprint.** Authenticated requests
+  previously fell through to IP + User-Agent fingerprinting, so visitors sharing a NAT and
+  browser shared a CSRF identity. See the CHANGELOG upgrade notes.
+
 ### 1.72.1 — Alderamin (Patch, Released 2026-07-26)
 - **Activation writes recompile from current file state.** No-arg `writeCacheNow()` clears the
   context config cache before resolving: `extensions:enable`/`disable` and the admin toggles no
