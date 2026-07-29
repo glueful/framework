@@ -665,6 +665,27 @@ final class CoreProvider extends BaseServiceProvider
                 )
         );
 
+        $defs[\Glueful\Auth\Session\SessionLogout::class] = new FactoryDefinition(
+            \Glueful\Auth\Session\SessionLogout::class,
+            static fn(\Psr\Container\ContainerInterface $c) =>
+                new \Glueful\Auth\Session\SessionLogout(
+                    $c->get(\Glueful\Auth\AuthenticationService::class),
+                    $c->get(\Glueful\Auth\Session\SessionCookieIssuer::class),
+                    $c->get(\Glueful\Auth\Session\SessionCookieConfig::class),
+                )
+        );
+        $defs[\Glueful\Controllers\SessionController::class] = new FactoryDefinition(
+            \Glueful\Controllers\SessionController::class,
+            static fn(\Psr\Container\ContainerInterface $c) =>
+                new \Glueful\Controllers\SessionController(
+                    $c->get(\Glueful\Auth\AuthenticationService::class),
+                    $c->get(\Glueful\Auth\Session\SessionCookieIssuer::class),
+                    $c->get(\Glueful\Auth\Session\SessionCookieConfig::class),
+                    new \Glueful\Auth\Session\SameOriginGuard(),
+                    $c->get(\Glueful\Auth\Session\SessionLogout::class),
+                )
+        );
+
         // String alias convenience (parity with DI aliases)
         $defs['auth'] = new AliasDefinition(
             'auth',
