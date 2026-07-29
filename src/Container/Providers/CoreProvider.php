@@ -286,6 +286,21 @@ final class CoreProvider extends BaseServiceProvider
             )
         );
 
+        // The one password-login path: credential check -> 2FA gate -> session issuance.
+        // Shared by JSON login and any cookie-session login, so no transport can reach session
+        // issuance without passing the same gate. 2FA is optional (extension-provided).
+        $defs[\Glueful\Auth\Session\LoginOrchestrator::class] = new FactoryDefinition(
+            \Glueful\Auth\Session\LoginOrchestrator::class,
+            static function (\Psr\Container\ContainerInterface $c) {
+                $twoFactorClass = \Glueful\Auth\Contracts\TwoFactorServiceInterface::class;
+
+                return new \Glueful\Auth\Session\LoginOrchestrator(
+                    $c->get(\Glueful\Auth\AuthenticationService::class),
+                    $c->has($twoFactorClass) ? $c->get($twoFactorClass) : null,
+                );
+            }
+        );
+
         // TwoFactorService moved to glueful/users (owns users.two_factor_enabled state); it is
         // registered by UsersServiceProvider. ChallengeTokenIssuer + JtiBlocklist (above) stay in
         // core as pure token mechanics that the moved service consumes across the boundary.
