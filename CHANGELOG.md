@@ -6,6 +6,29 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.74.0] - 2026-07-30 — Algenib
+
+**Theme: username validation matches the column, not a product rule** — one widened bound so an
+application can use a normalized email as a username. Low risk: strictly more permissive, no
+schema change, nothing previously valid becomes invalid.
+
+### Changed
+- **Username validation widened from 3–30 to 3–255 characters** (`UsernameDTO`, `UserDTO`, both via
+  a new `MAX_LENGTH` constant). 255 is the `users.username` column width, so the framework now
+  enforces only storage-safe invariants — required, trimmed, at least 3 characters, within the
+  column, unique. A 30-character ceiling is a product rule, and the framework cannot know what a
+  host's usernames are for: an application that uses a normalized email as the username needs the
+  full width, since plenty of valid addresses exceed 30 characters. Applications wanting something
+  narrower (slug-safe charsets, reserved names, shorter limits) impose it at their own input
+  boundary. Deliberately not unbounded — accepting more than the column holds would only move the
+  rejection to the database.
+
+### Upgrade Notes
+- Strictly more permissive: every username that validated before still validates. No migration is
+  required; the column has always been `varchar(255)`.
+- If your application relies on the framework rejecting usernames longer than 30 characters, add
+  that rule at your own input boundary — it is no longer enforced centrally.
+
 ## [1.73.0] - 2026-07-29 — Algedi
 
 **Theme: browsers get a first-class transport** — an opt-in HttpOnly cookie session alongside
