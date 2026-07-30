@@ -21,6 +21,12 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.74.0 — Algenib (Minor, Released 2026-07-30)
+- **Username validation widened to the column width (3–255).** `UsernameDTO` and `UserDTO` now
+  enforce only storage-safe invariants; a 30-character ceiling is an application product rule, and
+  an app using a normalized email as its username needs the full width. Strictly more permissive,
+  no schema change.
+
 ### 1.73.0 — Algedi (Minor, Released 2026-07-29)
 - **Opt-in browser session transport.** `session_cookie` middleware adapts an HttpOnly access
   cookie into the `Authorization` header the existing `auth` middleware already reads, marking

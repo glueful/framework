@@ -13,6 +13,15 @@ use Glueful\Validation\Rules\{Sanitize, Required, Email as EmailRule, Length, In
  */
 class UserDTO
 {
+    /**
+     * Storage-safe ceiling: the `users.username` column is `varchar(255)`, so this is the widest
+     * value that can actually be stored. Deliberately NOT narrower — a 30-character product rule
+     * belongs at an application's own input boundary, not in the framework, and an app that uses
+     * a normalized email as the username needs the full width. Deliberately not unbounded either:
+     * accepting more than the column holds only moves the rejection to the database.
+     */
+    public const MAX_LENGTH = 255;
+
     public string $name;
     public string $email;
     public ?string $password = null;
@@ -62,7 +71,7 @@ class UserDTO
             'name' => [new Sanitize(['trim', 'strip_tags']), new Required(), new Length(2, 50)],
             'email' => [new Sanitize(['trim', 'strip_tags']), new Required(), new EmailRule()],
             'password' => [new Sanitize(['trim']), new Length(8, 255)],
-            'username' => [new Sanitize(['trim', 'strip_tags']), new Length(3, 30)],
+            'username' => [new Sanitize(['trim', 'strip_tags']), new Length(3, self::MAX_LENGTH)],
             'status' => [new Sanitize(['trim']), new InArray(['active','inactive','suspended','banned'])],
             'role' => [new Sanitize(['trim']), new InArray(['user','admin','moderator','guest'])],
         ]);
