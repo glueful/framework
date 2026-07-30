@@ -6,6 +6,26 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.74.1] - 2026-07-30 — Algenib
+
+**Theme: session enumeration no longer recurses into itself** — a mutual delegation between the
+session store and its cache manager exhausted memory on any container-resolved call that listed,
+counted, or bulk-managed a user's sessions. Low risk: a pure bugfix on a path the common
+login / logout / refresh flows never touch.
+
+### Fixed
+- **`SessionCacheManager::findUserSessions()` no longer delegates to `SessionStore::listByUser()`.**
+  The two called each other with no base case on the container-resolved path — `listByUser()`
+  deferred to the cache manager, and the manager's `findUserSessions()` deferred back to the store —
+  an unbounded mutual recursion that exhausted memory. It now enumerates from the cache user-index
+  only, its sole authority. Any code that lists, counts, terminates-all, or refreshes permissions
+  across a user's sessions (`SessionStore::listByUser`, `SessionCacheManager::getUserSessions` /
+  `getUserSessionCount` / `terminateAllUserSessions` / `refreshPermissionsForAllUserSessions`) was
+  affected on the container-resolved path; single-session login / logout / refresh (by token) were
+  not, which is why it stayed latent. `revokeAllForUser()` was already a direct database operation
+  and is unchanged. Making database enumeration authoritative — mapping rows to the token-bearing
+  payload shape those callers depend on — is a deliberate later redesign, not part of this fix.
+
 ## [1.74.0] - 2026-07-30 — Algenib
 
 **Theme: username validation matches the column, not a product rule** — one widened bound so an

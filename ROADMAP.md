@@ -21,6 +21,12 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.74.1 — Algenib (Patch, Released 2026-07-30)
+- **Session-enumeration recursion fixed.** `SessionCacheManager::findUserSessions()` and
+  `SessionStore::listByUser()` no longer delegate to each other; enumeration reads the cache
+  user-index only. Fixes an out-of-memory on any container-resolved list / count / terminate-all /
+  permission-refresh call. `revokeAllForUser()` is unchanged.
+
 ### 1.74.0 — Algenib (Minor, Released 2026-07-30)
 - **Username validation widened to the column width (3–255).** `UsernameDTO` and `UserDTO` now
   enforce only storage-safe invariants; a 30-character ceiling is an application product rule, and

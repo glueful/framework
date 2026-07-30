@@ -977,21 +977,12 @@ class SessionCacheManager
     private function findUserSessions(string $userUuid): array
     {
         try {
-            // Prefer SessionStore listByUser to avoid cache-shape coupling
-            try {
-                $container = $this->getContainer();
-                if ($container === null) {
-                    return [];
-                }
-                $store = $container->get(SessionStore::class);
-                $fromStore = $store->listByUser($userUuid);
-                if (is_array($fromStore) && $fromStore !== []) {
-                    return $fromStore;
-                }
-            } catch (\Throwable) {
-                // ignore and fallback to cache-indexed approach
-            }
-            // Get session IDs from user index
+            // Enumerate from the cache user-index. This MUST NOT delegate to
+            // SessionStore::listByUser(): that method delegates back to this manager, and the two
+            // formed an unbounded mutual recursion on the container-resolved path (the resulting
+            // OOM was fixed in 1.74.1). Making DB enumeration authoritative is a separate redesign —
+            // it must map rows to the token-bearing payload shape that terminateAllUserSessions()
+            // and permission refresh depend on, so it cannot be done by returning raw rows here.
             $indexKey = self::USER_SESSION_INDEX_PREFIX . $userUuid;
             $sessionIds = $this->cache->get($indexKey) ?? [];
 
