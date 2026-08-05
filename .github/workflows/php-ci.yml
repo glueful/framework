@@ -127,6 +127,26 @@ jobs:
       - name: Run static analysis (composer run analyse)
         run: composer run analyse
 
+  rector:
+    name: Rector (advisory, non-blocking)
+    runs-on: ubuntu-latest
+    # Informational only — reports the pending modernization surface from
+    # rector.php. Waves are applied deliberately per component (with the test
+    # suite and the matching phpstan:* script as the gate), never by CI.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer:v2
+          ini-values: memory_limit=1G
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress --no-interaction
+      - name: Rector dry-run (composer run rector)
+        run: composer run rector
+
   # NOTE: dependency advisories are handled by GitHub Dependabot (out-of-band,
   # opens fix PRs), not a CI audit step. And `php glueful security:check --production`
   # is a deployed-app readiness command (it boots Redis/DB/extensions/routes) — it

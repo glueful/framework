@@ -13,6 +13,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   `orWhereDoesntHave()` crashed with "Call to undefined method" (surfaced by the PHPStan 2
   upgrade; regression-pinned in `OrWhereRawTest`).
 
+- **Rector adopted for dev tooling** (`rector/rector ^2.6`, dev-only). Conservative wave-0
+  `rector.php`: PHP sets derived from `composer.json` (`^8.3`) plus PHPUnit upgrade sets —
+  no dead-code or type-declaration sets yet (the level-8 campaign applies those per
+  component), and `ReadOnlyClassRector` / `ReadOnlyPropertyRector` are skipped permanently
+  as framework-BC hazards (extensions subclass framework classes). New scripts:
+  `composer rector` (dry-run) / `composer rector:fix` (apply); CI gains an advisory,
+  non-blocking Rector job. Current advisory surface: 440 files.
+
 ### Changed
 - **Static analysis upgraded to PHPStan 2.x** (`phpstan/phpstan ^2.0` with `phpstan-phpunit`,
   `phpstan-strict-rules`, and `phpstan-deprecation-rules` on their 2.x majors). The level-6 CI
