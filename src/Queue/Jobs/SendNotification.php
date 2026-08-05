@@ -84,7 +84,7 @@ class SendNotification extends Job
                 $this->type = $type;
             }
 
-            public function routeNotificationFor(string $channel): ?string
+            public function routeNotificationFor(string $channel): string
             {
                 return $this->recipient;
             }

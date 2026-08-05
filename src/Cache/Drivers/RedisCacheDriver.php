@@ -47,6 +47,9 @@ class RedisCacheDriver implements CacheStore
      */
     public function zadd(string $key, array $scoreValues): bool
     {
+        if ($scoreValues === []) {
+            return true;
+        }
         $mergedArray = array_merge(
             ...array_map(null, array_values($scoreValues), array_keys($scoreValues))
         );

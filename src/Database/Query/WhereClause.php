@@ -214,6 +214,14 @@ class WhereClause implements WhereClauseInterface
     }
 
     /**
+     * Add raw WHERE condition joined with OR
+     */
+    public function orWhereRaw(string $condition, array $bindings = []): void
+    {
+        $this->addRawCondition($condition, $bindings, 'OR');
+    }
+
+    /**
      * Build database-agnostic JSON condition string for use in raw SQL
      *
      * @param  string      $column      JSON column name

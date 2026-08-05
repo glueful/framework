@@ -312,6 +312,17 @@ class QueryBuilder implements QueryBuilderInterface
     }
 
     /**
+     * Add raw WHERE condition joined with OR
+     *
+     * @param array<mixed> $bindings
+     */
+    public function orWhereRaw(string $condition, array $bindings = []): static
+    {
+        $this->whereClause->orWhereRaw($condition, $bindings);
+        return $this;
+    }
+
+    /**
      * Add JSON contains WHERE condition (database-agnostic)
      *
      * Searches for a value within a JSON column using database-specific JSON functions.

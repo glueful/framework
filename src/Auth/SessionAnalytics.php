@@ -865,7 +865,7 @@ class SessionAnalytics
 
         sort($values);
         $count = count($values);
-        $middle = floor($count / 2);
+        $middle = intdiv($count, 2);
 
         if ($count % 2 === 0) {
             return ($values[$middle - 1] + $values[$middle]) / 2;

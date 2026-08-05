@@ -584,15 +584,9 @@ abstract class BaseRepository implements RepositoryInterface
             return 0;
         }
 
-        $affectedRows = $this->db->table($this->table)
+        return $this->db->table($this->table)
             ->where([$this->primaryKey => ['IN', $uuids]])
             ->delete();
-
-        // Ensure we return an integer count
-        $count = is_bool($affectedRows) ? ($affectedRows ? count($uuids) : 0) : $affectedRows;
-
-
-        return $count;
     }
 
     /**

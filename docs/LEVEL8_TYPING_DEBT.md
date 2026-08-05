@@ -6,7 +6,10 @@
 > target; this document tracks the gap so it can be closed deliberately, area by area, rather
 > than discovered ad hoc.
 
-**Last surveyed:** 2026-05-28 — **914 errors across `src/`.**
+**Last surveyed:** 2026-08-05 — **839 errors across `src/`**, under **PHPStan 2.2** (upgraded
+from 1.12; the sharper 2.x engine changed the error catalog, so per-area counts shifted).
+Counts are measured with `phpstan-baseline.neon` applied — the frozen PHPStan-2 upgrade delta
+at the level-6 gate (111 entries) is tracked there, not here.
 
 ## Regenerate
 
@@ -23,20 +26,19 @@ vendor/bin/phpstan analyse src/Database --level=8 --no-progress --memory-limit=1
 
 | Area | Errors | | Area | Errors |
 |---|---:|---|---|---:|
-| `Database` | 201 | | `Cache` | 28 |
-| `Console` | 103 | | `Services` | 24 |
-| `Support` | 60 | | `Helpers` | 22 |
-| `Queue` | 56 | | `Permissions` | 14 |
-| `Controllers` | 50 | | `Extensions` | 13 |
-| `Notifications` | 48 | | `Events` | 13 |
-| `Security` | 46 | | (src root) | 12 |
-| `Api` | 43 | | `Tasks` | 11 |
-| `Routing` | 39 | | `Validation` / `Repository` / `Logging` | 8 each |
-| `Auth` | 38 | | `Performance` | 7 |
-| `Http` | 37 | | `Uploader` / `Container` | 5 each |
-| | | | …`Lock`, `Storage`, `Scheduler`, `Testing`, `Bootstrap` | 1–4 each |
+| `Database` | 214 | | `Queue` | 25 |
+| `Console` | 85 | | `Helpers` | 20 |
+| `Routing` | 46 | | `Permissions` / `Events` | 17 each |
+| `Http` | 45 | | (src root) | 15 |
+| `Notifications` | 44 | | `Services` | 13 |
+| `Controllers` | 41 | | `Validation` | 12 |
+| `Auth` / `Api` | 40 each | | `Logging` | 10 |
+| `Security` | 39 | | `Tasks` / `Performance` / `Extensions` | 9 each |
+| `Support` | 32 | | `Container` | 7 |
+| `Cache` | 27 | | `Repository` | 6 |
+| | | | …`Uploader`, `Storage`, `Scheduler`, `Testing`, `Bootstrap`, `Lock`, `Development` | 1–4 each |
 
-**~914 total.** Regenerate for the exact, current set.
+**839 total.** Regenerate for the exact, current set.
 
 ## Recommended adoption strategy
 
@@ -57,10 +59,11 @@ vendor/bin/phpstan analyse src/Database --level=8 --no-progress --memory-limit=1
 
 ---
 
-## First detailed slice: `src/Database` (201)
+## First detailed slice: `src/Database` (214 under PHPStan 2)
 
 The categories below are representative of what every area will look like; Database was the
-first surveyed in depth.
+first surveyed in depth (under PHPStan 1.12, at 201 errors — the category shape still holds,
+but regenerate for exact per-file sets before working the area).
 
 | Category | ~Count | Nature | Risk |
 |---|---|---|---|

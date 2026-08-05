@@ -6,6 +6,32 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Added
+- **`QueryBuilder::orWhereRaw()` / `WhereClause::orWhereRaw()`** — raw WHERE condition joined
+  with `OR`. Fixes a reachable fatal: the ORM's relation-count machinery dispatched to
+  `orWhereRaw` for the `'or'` boolean, so `orHas()` / `orDoesntHave()` / `orWhereHas()` /
+  `orWhereDoesntHave()` crashed with "Call to undefined method" (surfaced by the PHPStan 2
+  upgrade; regression-pinned in `OrWhereRawTest`).
+
+### Changed
+- **Static analysis upgraded to PHPStan 2.x** (`phpstan/phpstan ^2.0` with `phpstan-phpunit`,
+  `phpstan-strict-rules`, and `phpstan-deprecation-rules` on their 2.x majors). The level-6 CI
+  gate stays green: the 2.x engine's new findings are frozen in `phpstan-baseline.neon`
+  (111 entries, identifier-tagged) to be burned down deliberately — the baseline must never
+  grow. Removed the `checkGenericClassInNonGenericObjectType` config option (dropped in
+  PHPStan 2). `composer run types:validate` gains the previously missing `phpstan:di` script
+  (`src/Container` at level 8). Level-8 debt catalog re-surveyed under the 2.x engine:
+  839 errors (`docs/LEVEL8_TYPING_DEBT.md`).
+
+### Fixed
+- **`RedisCacheDriver::zadd()` no longer errors on an empty score-value map** — it previously
+  spread zero arguments into `Redis::zAdd()` (an `ArgumentCountError`); adding zero members
+  now trivially succeeds.
+- Small correctness cleanups surfaced by the sharper PHPStan 2 engine: integer array indices
+  in median/`formatBytes` calculations (`intdiv`/`(int) floor` instead of float keys), a
+  malformed `@SuppressWarnings` docblock in `CSRFMiddleware` that broke PHPDoc parsing, and a
+  dead `is_bool` branch on `delete()`'s `int`-typed return in `BaseRepository`.
+
 ## [1.74.1] - 2026-07-30 — Algenib
 
 **Theme: session enumeration no longer recurses into itself** — a mutual delegation between the

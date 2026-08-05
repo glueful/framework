@@ -3,6 +3,9 @@ includes:
     - vendor/phpstan/phpstan-deprecation-rules/rules.neon
     - vendor/phpstan/phpstan-phpunit/extension.neon
     - vendor/phpstan/phpstan-phpunit/rules.neon
+    # PHPStan 2.x upgrade delta, frozen 2026-08-05 — burn down, never grow.
+    # Regenerate with: vendor/bin/phpstan analyse src config --generate-baseline
+    - phpstan-baseline.neon
 
 parameters:
     level: 6
@@ -18,8 +21,6 @@ parameters:
     
     # Improve analysis quality
     treatPhpDocTypesAsCertain: false
-    # Deprecated in recent PHPStan; omit to avoid warnings
-    checkGenericClassInNonGenericObjectType: true
     # Ignore patterns may be forward-looking; don't fail when unmatched
     reportUnmatchedIgnoredErrors: false
     ignoreErrors:

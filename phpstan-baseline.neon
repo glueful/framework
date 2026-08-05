@@ -1,0 +1,565 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Call to function array_filter\(\) requires parameter \#2 to be passed to avoid loose comparison semantics\.$#'
+			identifier: arrayFilter.strict
+			count: 4
+			path: config/cors.php
+
+		-
+			message: '#^Call to function array_filter\(\) requires parameter \#2 to be passed to avoid loose comparison semantics\.$#'
+			identifier: arrayFilter.strict
+			count: 1
+			path: config/encryption.php
+
+		-
+			message: '#^Call to function array_filter\(\) requires parameter \#2 to be passed to avoid loose comparison semantics\.$#'
+			identifier: arrayFilter.strict
+			count: 2
+			path: config/security.php
+
+		-
+			message: '#^Trait Glueful\\Api\\Filtering\\Concerns\\Searchable is used zero times and is not analysed\.$#'
+			identifier: trait.unused
+			count: 1
+			path: src/Api/Filtering/Concerns/Searchable.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>alternative" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: src/Api/Versioning/Middleware/VersionNegotiationMiddleware.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>date" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: src/Api/Versioning/Middleware/VersionNegotiationMiddleware.php
+
+		-
+			message: '#^Trait Glueful\\Api\\Webhooks\\Concerns\\DispatchesWebhooks is used zero times and is not analysed\.$#'
+			identifier: trait.unused
+			count: 1
+			path: src/Api/Webhooks/Concerns/DispatchesWebhooks.php
+
+		-
+			message: '#^Return type \(array\<string, array\<int, array\{0\: string, 1\?\: int\}\>\>\) of method Glueful\\Api\\Webhooks\\Listeners\\WebhookEventListener\:\:getSubscribedEvents\(\) should be covariant with return type \(array\<string, list\<array\{0\: string, 1\?\: int\}\|int\|string\>\|string\>\) of method Symfony\\Component\\EventDispatcher\\EventSubscriberInterface\:\:getSubscribedEvents\(\)$#'
+			identifier: method.childReturnType
+			count: 1
+			path: src/Api/Webhooks/Listeners/WebhookEventListener.php
+
+		-
+			message: '#^Call to function array_filter\(\) requires parameter \#2 to be passed to avoid loose comparison semantics\.$#'
+			identifier: arrayFilter.strict
+			count: 1
+			path: src/Auth/SessionAnalytics.php
+
+		-
+			message: '#^Method Glueful\\Auth\\SessionAnalytics\:\:analyzeByTimeRange\(\) should return array\<string, array\<string, int\>\> but returns array\<string, array\<string, int\<0, max\>\|list\<mixed\>\>\>\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Auth/SessionAnalytics.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between Glueful\\Cache\\CacheStore and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: src/Auth/SessionAnalytics.php
+
+		-
+			message: '#^Call to function array_filter\(\) requires parameter \#2 to be passed to avoid loose comparison semantics\.$#'
+			identifier: arrayFilter.strict
+			count: 1
+			path: src/Auth/SessionCacheManager.php
+
+		-
+			message: '#^Parameter \#2 \$tokens of class Glueful\\Events\\Auth\\SessionCreatedEvent constructor expects array\<string, string\>, array\<string, int\|string\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Auth/SessionStore.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between Glueful\\Cache\\CacheStore and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: src/Auth/SessionTransaction.php
+
+		-
+			message: '#^PHPDoc tag @var with type array\<int, Glueful\\Auth\\Interfaces\\AuthenticationProviderInterface\> is not subtype of type array\<string, Glueful\\Auth\\Interfaces\\AuthenticationProviderInterface\>\.$#'
+			identifier: varTag.type
+			count: 1
+			path: src/Auth/TokenManager.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between Glueful\\Cache\\CacheStore and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: src/Cache/DistributedCacheService.php
+
+		-
+			message: '#^Only booleans are allowed in a ternary operator condition, mixed given\.$#'
+			identifier: ternary.condNotBoolean
+			count: 2
+			path: src/Console/Commands/Api/VersionListCommand.php
+
+		-
+			message: '#^Call to function array_filter\(\) requires parameter \#2 to be passed to avoid loose comparison semantics\.$#'
+			identifier: arrayFilter.strict
+			count: 1
+			path: src/Console/Commands/ApiKey/CreateCommand.php
+
+		-
+			message: '#^Casting class ReflectionType to string is deprecated\.$#'
+			identifier: class.toStringDeprecated
+			count: 1
+			path: src/Console/Commands/Container/ContainerDebugCommand.php
+
+		-
+			message: '#^Parameter \#2 \$rows of method Glueful\\Console\\BaseCommand\:\:table\(\) expects array\<array\<string\>\>, array\<int, array\<int, mixed\>\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Console/Commands/Container/ContainerDebugCommand.php
+
+		-
+			message: '#^Call to function class_exists\(\) with ''App\\\\Database…''\|''Database\\\\Seeders…'' will always evaluate to false\.$#'
+			identifier: function.impossibleType
+			count: 1
+			path: src/Console/Commands/Database/SeedCommand.php
+
+		-
+			message: '#^Parameter \#2 \$rows of method Glueful\\Console\\BaseCommand\:\:table\(\) expects array\<array\<string\>\>, array\<int, list\<int\|string\>\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Console/Commands/Database/StatusCommand.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: src/Console/Commands/Extensions/InfoCommand.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>requiresExtensions" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: src/Console/Commands/Extensions/InfoCommand.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>requiresGlueful" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: src/Console/Commands/Extensions/InfoCommand.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>version" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: src/Console/Commands/Extensions/InfoCommand.php
+
+		-
+			message: '#^Parameter \#2 \$rows of method Glueful\\Console\\BaseCommand\:\:table\(\) expects array\<array\<string\>\>, array\<int, array\<int, int\<0, max\>\|string\>\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Console/Commands/Fields/WhitelistCheckCommand.php
+
+		-
+			message: '#^Parameter \#2 \$rows of method Glueful\\Console\\BaseCommand\:\:table\(\) expects array\<array\<string\>\>, list\<array\<int, mixed\>\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Console/Commands/Fields/WhitelistCheckCommand.php
+
+		-
+			message: '#^Call to function array_filter\(\) requires parameter \#2 to be passed to avoid loose comparison semantics\.$#'
+			identifier: arrayFilter.strict
+			count: 1
+			path: src/Console/Commands/Scaffold/RuleCommand.php
+
+		-
+			message: '#^Call to function array_filter\(\) requires parameter \#2 to be passed to avoid loose comparison semantics\.$#'
+			identifier: arrayFilter.strict
+			count: 1
+			path: src/Console/Commands/Scaffold/TestCommand.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<string\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: src/Container/Compile/ContainerCompiler.php
+
+		-
+			message: '#^PHPDoc tag @var with type callable is not subtype of native type string\.$#'
+			identifier: varTag.nativeType
+			count: 1
+			path: src/Container/Loader/DefaultServicesLoader.php
+
+		-
+			message: '#^Parameter \#1 \$errors of method Glueful\\Controllers\\BaseController\:\:validationError\(\) expects array\<string, array\<string\>\|string\>, array\<string, list\<string\>\|string\|false\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Controllers/ConfigController.php
+
+		-
+			message: '#^Parameter \#1 \$errors of method Glueful\\Controllers\\BaseController\:\:validationError\(\) expects array\<string, array\<string\>\|string\>, array\<string, mixed\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Controllers/ConfigController.php
+
+		-
+			message: '#^Only booleans are allowed in a ternary operator condition, mixed given\.$#'
+			identifier: ternary.condNotBoolean
+			count: 1
+			path: src/Controllers/MetricsController.php
+
+		-
+			message: '#^Only booleans are allowed in an if condition, mixed given\.$#'
+			identifier: if.condNotBoolean
+			count: 1
+			path: src/Controllers/MetricsController.php
+
+		-
+			message: '#^Trait Glueful\\Controllers\\Traits\\FieldLevelPermissionsTrait is used zero times and is not analysed\.$#'
+			identifier: trait.unused
+			count: 1
+			path: src/Controllers/Traits/FieldLevelPermissionsTrait.php
+
+		-
+			message: '#^Trait Glueful\\Controllers\\Traits\\QueryRestrictionsTrait is used zero times and is not analysed\.$#'
+			identifier: trait.unused
+			count: 1
+			path: src/Controllers/Traits/QueryRestrictionsTrait.php
+
+		-
+			message: '#^Trait Glueful\\Controllers\\Traits\\ResponseCachingTrait has PHPDoc tag @method for method can\(\) parameter \#3 \$context with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Controllers/Traits/ResponseCachingTrait.php
+
+		-
+			message: '#^Trait Glueful\\Controllers\\Traits\\TableAccessControlTrait is used zero times and is not analysed\.$#'
+			identifier: trait.unused
+			count: 1
+			path: src/Controllers/Traits/TableAccessControlTrait.php
+
+		-
+			message: '#^Offset ''backtrace'' on array\{sql\: string, normalized_sql\: string, params\: array\<string, mixed\>, execution_time\: float, purpose\: string, timestamp\: float, memory_usage\: int, backtrace\: array\<int, array\{file\: string, line\: int, function\: string\}\>, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/Database/DevelopmentQueryMonitor.php
+
+		-
+			message: '#^Offset ''params'' on array\{sql\: string, normalized_sql\: string, params\: array\<string, mixed\>, execution_time\: float, purpose\: string, timestamp\: float, memory_usage\: int, backtrace\: array\<int, array\{file\: string, line\: int, function\: string\}\>, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/Database/DevelopmentQueryMonitor.php
+
+		-
+			message: '#^PHPDoc tag @var with type array\{data\: array\<int, array\<string, mixed\>\>, current_page\: int, per_page\: int, total\: int, last_page\: int, has_more\: bool, from\: int, to\: int, \.\.\.\} is not subtype of type array\{data\: array\<int, array\<string, mixed\>\>, current_page\: int, per_page\: int, total\: int, last_page\: int, has_more\: bool, from\: int, to\: int, \.\.\.\}\.$#'
+			identifier: varTag.type
+			count: 1
+			path: src/Database/Features/PaginationBuilder.php
+
+		-
+			message: '#^Call to function array_filter\(\) requires parameter \#2 to be passed to avoid loose comparison semantics\.$#'
+			identifier: arrayFilter.strict
+			count: 1
+			path: src/Database/ORM/Collection.php
+
+		-
+			message: '#^Return type \(int\) of method Glueful\\Database\\ORM\\Collection\:\:count\(\) should be covariant with return type \(int\<0, max\>\) of method Countable\:\:count\(\)$#'
+			identifier: method.childReturnType
+			count: 1
+			path: src/Database/ORM/Collection.php
+
+		-
+			message: '#^Trait Glueful\\Database\\ORM\\Concerns\\HasFactory is used zero times and is not analysed\.$#'
+			identifier: trait.unused
+			count: 1
+			path: src/Database/ORM/Concerns/HasFactory.php
+
+		-
+			message: '#^Trait Glueful\\Database\\ORM\\Concerns\\SoftDeletes is used zero times and is not analysed\.$#'
+			identifier: trait.unused
+			count: 1
+			path: src/Database/ORM/Concerns/SoftDeletes.php
+
+		-
+			message: '#^Access to an undefined property Glueful\\Database\\QueryBuilder\:\:\$joins\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Database/ORM/Scopes/SoftDeletingScope.php
+
+		-
+			message: '#^PHPDoc tag @var with type Glueful\\Database\\ORM\\Contracts\\SoftDeletable is not subtype of native type Glueful\\Database\\ORM\\Model\.$#'
+			identifier: varTag.nativeType
+			count: 5
+			path: src/Database/ORM/Scopes/SoftDeletingScope.php
+
+		-
+			message: '#^Method Glueful\\Database\\Query\\WhereClause\:\:orWhereRaw\(\) has parameter \$bindings with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Database/Query/WhereClause.php
+
+		-
+			message: '#^Call to an undefined method Glueful\\Database\\Query\\Interfaces\\WhereClauseInterface\:\:orWhereRaw\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Database/QueryBuilder.php
+
+		-
+			message: '#^Property Glueful\\Database\\Attributes\\CacheResult\:\:\$keyPrefix \(string\) on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.property
+			count: 1
+			path: src/Database/QueryCacheService.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between Glueful\\Cache\\CacheStore and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: src/Database/QueryCacheService.php
+
+		-
+			message: '#^Call to function array_filter\(\) requires parameter \#2 to be passed to avoid loose comparison semantics\.$#'
+			identifier: arrayFilter.strict
+			count: 2
+			path: src/Database/Schema/Builders/AlterTableBuilder.php
+
+		-
+			message: '#^Loose comparison via "\=\=" is not allowed\.$#'
+			identifier: equal.notAllowed
+			count: 1
+			path: src/Database/Schema/Generators/MySQLSqlGenerator.php
+
+		-
+			message: '#^Loose comparison via "\=\=" is not allowed\.$#'
+			identifier: equal.notAllowed
+			count: 3
+			path: src/Database/Schema/Generators/SQLiteSqlGenerator.php
+
+		-
+			message: '#^Offset 3 on array\{string, string, string, string, string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/Encryption/EncryptionService.php
+
+		-
+			message: '#^Offset 3 on non\-empty\-list\<string\> on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: src/Encryption/EncryptionService.php
+
+		-
+			message: '#^Offset 4 on array\{string, string, string, string, string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/Encryption/EncryptionService.php
+
+		-
+			message: '#^Offset 4 on non\-empty\-list\<string\> on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/Encryption/EncryptionService.php
+
+		-
+			message: '#^Offset 5 on non\-empty\-list\<string\> on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/Encryption/EncryptionService.php
+
+		-
+			message: '#^Offset 6 on non\-empty\-list\<string\> on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/Encryption/EncryptionService.php
+
+		-
+			message: '#^Trait Glueful\\Events\\Traits\\Dispatchable is used zero times and is not analysed\.$#'
+			identifier: trait.unused
+			count: 1
+			path: src/Events/Traits/Dispatchable.php
+
+		-
+			message: '#^Trait Glueful\\Events\\Traits\\EventHelpers is used zero times and is not analysed\.$#'
+			identifier: trait.unused
+			count: 1
+			path: src/Events/Traits/EventHelpers.php
+
+		-
+			message: '#^Trait Glueful\\Events\\Traits\\InteractsWithQueue is used zero times and is not analysed\.$#'
+			identifier: trait.unused
+			count: 1
+			path: src/Events/Traits/InteractsWithQueue.php
+
+		-
+			message: '#^Trait Glueful\\Events\\Traits\\Serializable is used zero times and is not analysed\.$#'
+			identifier: trait.unused
+			count: 1
+			path: src/Events/Traits/Serializable.php
+
+		-
+			message: '#^Trait Glueful\\Events\\Traits\\Timestampable is used zero times and is not analysed\.$#'
+			identifier: trait.unused
+			count: 1
+			path: src/Events/Traits/Timestampable.php
+
+		-
+			message: '#^Call to function array_filter\(\) requires parameter \#2 to be passed to avoid loose comparison semantics\.$#'
+			identifier: arrayFilter.strict
+			count: 1
+			path: src/Helpers/Utils.php
+
+		-
+			message: '#^Call to function array_filter\(\) requires parameter \#2 to be passed to avoid loose comparison semantics\.$#'
+			identifier: arrayFilter.strict
+			count: 1
+			path: src/Http/Builders/OAuthClientBuilder.php
+
+		-
+			message: '#^Call to function array_filter\(\) requires parameter \#2 to be passed to avoid loose comparison semantics\.$#'
+			identifier: arrayFilter.strict
+			count: 3
+			path: src/Http/Cors.php
+
+		-
+			message: '#^Only booleans are allowed in an if condition, array\|null given\.$#'
+			identifier: if.condNotBoolean
+			count: 1
+			path: src/Http/RequestUserContext.php
+
+		-
+			message: '#^Only booleans are allowed in an if condition, mixed given\.$#'
+			identifier: if.condNotBoolean
+			count: 1
+			path: src/Logging/LogManager.php
+
+		-
+			message: '#^Property Glueful\\Logging\\LogManager\:\:\$defaultChannel on left side of \?\? is not nullable nor uninitialized\.$#'
+			identifier: nullCoalesce.initializedProperty
+			count: 1
+			path: src/Logging/LogManager.php
+
+		-
+			message: '#^Loose comparison via "\=\=" is not allowed\.$#'
+			identifier: equal.notAllowed
+			count: 1
+			path: src/Notifications/Services/NotificationService.php
+
+		-
+			message: '#^Access to private property Glueful\\Auth\\UserIdentity\:\:\$email\.$#'
+			identifier: property.private
+			count: 1
+			path: src/Permissions/Middleware/AuthToRequestAttributesMiddleware.php
+
+		-
+			message: '#^Access to private property Glueful\\Auth\\UserIdentity\:\:\$username\.$#'
+			identifier: property.private
+			count: 1
+			path: src/Permissions/Middleware/AuthToRequestAttributesMiddleware.php
+
+		-
+			message: '#^Call to function array_filter\(\) requires parameter \#2 to be passed to avoid loose comparison semantics\.$#'
+			identifier: arrayFilter.strict
+			count: 1
+			path: src/Permissions/PermissionContext.php
+
+		-
+			message: '#^Loose comparison via "\=\=" is not allowed\.$#'
+			identifier: equal.notAllowed
+			count: 1
+			path: src/Permissions/Voters/OwnershipVoter.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between int and false will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 2
+			path: src/Repository/BaseRepository.php
+
+		-
+			message: '#^Method Glueful\\Routing\\Middleware\\AdminPermissionMiddleware\:\:incrementFailedAttempts\(\) returns void but does not have any side effects\.$#'
+			identifier: void.pure
+			count: 1
+			path: src/Routing/Middleware/AdminPermissionMiddleware.php
+
+		-
+			message: '#^Method Glueful\\Routing\\Middleware\\AdminPermissionMiddleware\:\:resetFailedAttempts\(\) returns void but does not have any side effects\.$#'
+			identifier: void.pure
+			count: 1
+			path: src/Routing/Middleware/AdminPermissionMiddleware.php
+
+		-
+			message: '#^PHPDoc tag @SuppressWarnings has invalid value \(\(PHPMD\.UnusedFormalParameter\)\)\: Unexpected token "\.UnusedFormalParameter\)", expected ''\)'' at offset 291 on line 9$#'
+			identifier: phpDoc.parseError
+			count: 1
+			path: src/Routing/Middleware/CSRFMiddleware.php
+
+		-
+			message: '#^Call to function array_filter\(\) requires parameter \#2 to be passed to avoid loose comparison semantics\.$#'
+			identifier: arrayFilter.strict
+			count: 2
+			path: src/Routing/Middleware/FieldSelectionMiddleware.php
+
+		-
+			message: '#^Parameter &\$array by\-ref type of method Glueful\\Routing\\Middleware\\RequestResponseLoggingMiddleware\:\:sanitizeArray\(\) expects array\<string, mixed\>, array\<mixed\> given\.$#'
+			identifier: parameterByRef.type
+			count: 1
+			path: src/Routing/Middleware/RequestResponseLoggingMiddleware.php
+
+		-
+			message: '#^Only booleans are allowed in a ternary operator condition, string\|null given\.$#'
+			identifier: ternary.condNotBoolean
+			count: 1
+			path: src/Routing/Router.php
+
+		-
+			message: '#^Only booleans are allowed in an if condition, mixed given\.$#'
+			identifier: if.condNotBoolean
+			count: 1
+			path: src/Scheduler/JobScheduler.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between Glueful\\Cache\\CacheStore and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: src/Security/SecurityManager.php
+
+		-
+			message: '#^Loose comparison via "\!\=" is not allowed\.$#'
+			identifier: notEqual.notAllowed
+			count: 1
+			path: src/Services/ApiMetricsService.php
+
+		-
+			message: '#^PHPDoc tag @var with type mixed is not subtype of type array\<string, array\<Glueful\\Validation\\Contracts\\Rule\>\|string\>\.$#'
+			identifier: varTag.type
+			count: 1
+			path: src/Support/Documentation/RouteReflectionDocGenerator.php
+
+		-
+			message: '#^Parameter \#1 \$dto of method Glueful\\Support\\Documentation\\RouteReflectionDocGenerator\:\:collectRuleStrings\(\) expects ReflectionClass\<object\>, ReflectionClass\<Glueful\\Validation\\Contracts\\RequestData\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Support/Documentation/RouteReflectionDocGenerator.php
+
+		-
+			message: '#^Call to function array_filter\(\) requires parameter \#2 to be passed to avoid loose comparison semantics\.$#'
+			identifier: arrayFilter.strict
+			count: 1
+			path: src/Support/FieldSelection/Performance/PerformanceDashboard.php
+
+		-
+			message: '#^Property Glueful\\Support\\FieldSelection\\FieldSelector\:\:\$maxDepth \(int\) on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.property
+			count: 1
+			path: src/Support/FieldSelection/Projector.php
+
+		-
+			message: '#^Property Glueful\\Support\\FieldSelection\\FieldSelector\:\:\$maxFields \(int\) on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.property
+			count: 1
+			path: src/Support/FieldSelection/Projector.php
+
+		-
+			message: '#^Offset int\<0, max\> on non\-empty\-list\<non\-empty\-string\> in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.offset
+			count: 1
+			path: src/Validation/Support/RuleParser.php

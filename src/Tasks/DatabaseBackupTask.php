@@ -194,7 +194,7 @@ class DatabaseBackupTask
         }
 
         $units = ['B', 'KB', 'MB', 'GB'];
-        $i = floor(log($bytes, 1024));
+        $i = (int) floor(log($bytes, 1024));
 
         return round($bytes / (1024 ** $i), 2) . ' ' . $units[$i];
     }

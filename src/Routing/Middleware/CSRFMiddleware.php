@@ -776,10 +776,12 @@ class CSRFMiddleware implements RouteMiddleware
     /**
      * Validate stateless token
      *
+     * The $request parameter is reserved for future enhanced validation.
+     *
      * @param Request $request The HTTP request
      * @param string $token Token to validate
      * @return bool Whether token is valid
-     * @SuppressWarnings(PHPMD.UnusedFormalParameter) - Reserved for future enhanced validation
+     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
      */
     private function validateStatelessToken(Request $request, string $token): bool
     {

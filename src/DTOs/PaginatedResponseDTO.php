@@ -127,7 +127,7 @@ class PaginatedResponseDTO
     private function formatBytes(int $bytes): string
     {
         $units = ['B', 'KB', 'MB', 'GB'];
-        $pow = floor(log($bytes, 1024));
+        $pow = (int) floor(log($bytes, 1024));
         return round($bytes / (1024 ** $pow), 2) . ' ' . $units[$pow];
     }
 
