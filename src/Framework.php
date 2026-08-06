@@ -95,12 +95,15 @@ class Framework
             if (!$allowReboot && $this->strictMode) {
                 throw new \RuntimeException('Framework already booted');
             }
+            if ($this->application === null) {
+                throw new \RuntimeException('Framework marked booted without an application instance');
+            }
             return $this->application;
         }
 
         $profiler = new BootProfiler();
 
-        $this->context = new ApplicationContext(
+        $context = new ApplicationContext(
             basePath: $this->basePath,
             environment: $this->environment,
             configPaths: [
@@ -108,19 +111,20 @@ class Framework
                 'application' => $this->configPath,
             ],
         );
+        $this->context = $context;
 
         // Register global error/exception handlers early so PHP errors
         // during Phase 1-3 are caught (Handler wired after container build)
         ExceptionHandler::register();
 
         // Phase 1: Environment & Globals (0-2ms)
-        $profiler->time('environment', fn() => $this->initializeEnvironment($this->context));
+        $profiler->time('environment', fn() => $this->initializeEnvironment($context));
 
         // Phase 2: Configuration (now instant!) - Just initialize lazy loading
-        $profiler->time('config', fn() => $this->initializeConfiguration($this->context));
+        $profiler->time('config', fn() => $this->initializeConfiguration($context));
 
         // Phase 3: Container (5-8ms) - Now config() will work during container build
-        $profiler->time('container', fn() => $this->buildContainer($this->context));
+        $profiler->time('container', fn() => $this->buildContainer($context));
         $this->configureProfilerLogger($profiler);
 
         // Wire the DI-managed Handler into the global exception handler shim
@@ -139,11 +143,12 @@ class Framework
         $profiler->time('validation', fn() => $this->validateFramework());
 
         // Create Application instance
-        $this->application = new Application($this->context);
+        $application = new Application($context);
+        $this->application = $application;
 
         // All boot phases (incl. extension/provider boot) are complete; freeze the config
         // override window so overrideConfig() can no longer mutate the container's config view.
-        $this->context->markBooted();
+        $context->markBooted();
 
         $this->booted = true;
 
@@ -153,7 +158,7 @@ class Framework
         // Schedule background initialization (after HTTP response)
         $this->scheduleBackgroundTasks();
 
-        return $this->application;
+        return $application;
     }
 
     /**
@@ -334,12 +339,14 @@ class Framework
      */
     private function initializeCoreServices(): void
     {
+        $context = $this->requireContext();
+
         // Set application context for core services
-        Model::setDefaultContext($this->context);
-        Utils::setContext($this->context);
-        CacheHelper::setContext($this->context);
-        SecureErrorResponse::setContext($this->context);
-        RoutesManager::setContext($this->context);
+        Model::setDefaultContext($context);
+        Utils::setContext($context);
+        CacheHelper::setContext($context);
+        SecureErrorResponse::setContext($context);
+        RoutesManager::setContext($context);
 
         // Initialize Cache Driver
         Utils::initializeCacheDriver();
@@ -373,26 +380,27 @@ class Framework
     private function initializeHttpLayer(): void
     {
         try {
+            $context = $this->requireContext();
+            $container = $this->requireContainer();
+
             // Set webhook context for API webhook operations
-            Webhook::setContext($this->context);
+            Webhook::setContext($context);
 
             // Get the Next-Gen Router instance
-            $router = $this->container->get(\Glueful\Routing\Router::class);
+            $router = $container->get(\Glueful\Routing\Router::class);
 
             // Load routes using a single manifest to keep sources centralized
-            if ($this->context !== null) {
-                RouteManifest::load($router, $this->context);
-            }
+            RouteManifest::load($router, $context);
 
             // Auto-discover controllers with attributes if directory exists
             if (is_dir($this->basePath . '/app/Controllers')) {
-                $attributeLoader = $this->container->get(\Glueful\Routing\AttributeRouteLoader::class);
+                $attributeLoader = $container->get(\Glueful\Routing\AttributeRouteLoader::class);
                 $attributeLoader->scanDirectory($this->basePath . '/app/Controllers');
             }
 
             // Cache routes for consistent behavior across environments
             if ((bool) env('ROUTE_CACHE', true)) {
-                $cache = $this->container->get(\Glueful\Routing\RouteCache::class);
+                $cache = $container->get(\Glueful\Routing\RouteCache::class);
                 $cache->save($router);
             }
         } catch (\Throwable $e) {
@@ -525,7 +533,7 @@ class Framework
     private function initializeExtensions(): void
     {
         /** @var \Glueful\Extensions\ExtensionManager $extensions */
-        $extensions = $this->container->get(\Glueful\Extensions\ExtensionManager::class);
+        $extensions = $this->requireContainer()->get(\Glueful\Extensions\ExtensionManager::class);
 
         try {
             // Discover providers before catalog build so the provider list is populated.
@@ -554,13 +562,13 @@ class Framework
     private function configureStructuredLogging(): void
     {
         try {
-            $logger = $this->container->get(LoggerInterface::class);
+            $logger = $this->requireContainer()->get(LoggerInterface::class);
 
             if ($logger instanceof \Monolog\Logger) {
                 $userIdResolver = function (): ?string {
                     try {
                         if (function_exists('auth')) {
-                            /** @var callable():object|null $authFunction */
+                            /** @var callable():(object|null) $authFunction */
                             $authFunction = 'auth';
                             $auth = $authFunction();
                             if (
@@ -597,7 +605,7 @@ class Framework
     {
         try {
             /** @var LoggerInterface $logger */
-            $logger = $this->container->get(LoggerInterface::class);
+            $logger = $this->requireContainer()->get(LoggerInterface::class);
             $info = [
                 'env' => $this->environment,
                 'compiled' => ($this->environment === 'production') && !(bool) env('APP_DEBUG', false),
@@ -751,6 +759,30 @@ class Framework
 
     public function getContainer(): ?ContainerInterface
     {
+        return $this->container;
+    }
+
+    /**
+     * The ApplicationContext, for boot phases that run strictly after it is created.
+     */
+    private function requireContext(): ApplicationContext
+    {
+        if ($this->context === null) {
+            throw new \RuntimeException('Framework not booted — no ApplicationContext yet.');
+        }
+
+        return $this->context;
+    }
+
+    /**
+     * The container, for boot phases that run strictly after it is built.
+     */
+    private function requireContainer(): ContainerInterface
+    {
+        if ($this->container === null) {
+            throw new \RuntimeException('Framework not booted — container not built yet.');
+        }
+
         return $this->container;
     }
 

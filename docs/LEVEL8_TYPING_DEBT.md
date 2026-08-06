@@ -26,16 +26,14 @@ vendor/bin/phpstan analyse src/Database --level=8 --no-progress --memory-limit=1
 
 | Area | Errors | | Area | Errors |
 |---|---:|---|---|---:|
-| `Database` | 214 | | `Support` | 32 |
-| `Console` | 85 | | `Cache` | 27 |
-| `Routing` | 46 | | `Queue` | 25 |
-| `Http` | 45 | | `Helpers` | 20 |
-| `Notifications` | 44 | | `Permissions` / `Events` | 17 each |
-| `Controllers` | 41 | | (src root) | 15 |
-| `Auth` / `Api` | 40 each | | `Services` | 13 |
-| `Security` | 39 | | | |
+| `Database` | 214 | | `Auth` / `Api` | 40 each |
+| `Console` | 85 | | `Security` | 39 |
+| `Routing` | 46 | | `Support` | 32 |
+| `Http` | 45 | | `Cache` | 27 |
+| `Notifications` | 44 | | `Queue` | 25 |
+| `Controllers` | 41 | | | |
 
-**760 total across the 17 remaining areas.** The other 14 areas are level-8 clean ✓ and
+**678 total across the 12 remaining areas.** The other 19 areas are level-8 clean ✓ and
 ratcheted in CI. Regenerate for the exact, current set.
 
 **Cleaned lanes (ratcheted):** a lane cleaned to level 8 joins the CI static job's
@@ -48,6 +46,11 @@ each newly cleaned directory to its path list.
   2026-08-06 as one leaf-lanes pass.
 - `Extensions`, `Logging`, `Performance`, `Repository`, `Tasks`, `Validation` — cleaned
   2026-08-06 as one six-area pass (all in `composer run phpstan:lanes`).
+- `Events`, `Helpers`, `Permissions`, `Services`, and the src-root files
+  (`Application.php`, `Framework.php`) — cleaned 2026-08-06 as one five-area pass.
+  Note: `phpstan.neon` carries a scoped `trait.unused` ignore for
+  `Helpers/DatabaseConnectionTrait` (its users live in `Cache`/`Controllers`, outside the
+  lane's analysed paths) — remove it when those areas join the lanes.
 
 ## Recommended adoption strategy
 

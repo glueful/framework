@@ -105,8 +105,12 @@ final class GateAttributeMiddleware implements RouteMiddleware
     private function attributeInstances(array $meta, string $attributeFqcn): array
     {
         $instances = [];
+        $class = $meta['class'] ?? null;
+        if ($class === null || !class_exists($class)) {
+            return [];
+        }
         try {
-            $rc = new \ReflectionClass($meta['class']);
+            $rc = new \ReflectionClass($class);
             $seenMethods = [];
 
             do {

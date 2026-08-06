@@ -67,6 +67,11 @@ final class EventService
             $this->provider->addListener($eventClass, $lazy, $priority);
             return;
         }
+        if (is_string($listener) && !is_callable($listener)) {
+            throw new \InvalidArgumentException(
+                "Listener string must be an '@service' reference or a callable function name: {$listener}"
+            );
+        }
         $this->provider->addListener($eventClass, $listener, $priority);
     }
 

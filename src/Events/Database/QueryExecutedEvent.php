@@ -65,7 +65,7 @@ class QueryExecutedEvent extends BaseEvent
         $query = $this->sql;
         foreach ($this->bindings as $binding) {
             $value = is_string($binding) ? "'{$binding}'" : (string)$binding;
-            $query = preg_replace('/\\?/', $value, $query, 1);
+            $query = preg_replace('/\\?/', $value, $query, 1) ?? $query;
         }
         return $query;
     }

@@ -52,7 +52,20 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   `RequestData` hydration rejects nonexistent DTO classes by name; and
   `ProviderOrderer::order()`'s signature is now honest about accepting unverified provider
   FQCNs (its documented contract — instantiation layers own existence).
-- **Static analysis upgraded to PHPStan 2.x** (`phpstan/phpstan ^2.0` with `phpstan-phpunit`,
+- **Five more areas are level-8 clean** — `Events`, `Helpers`, `Permissions`, `Services`,
+  plus the src-root files `Application.php` and `Framework.php` (82 errors) — 19 of 31 areas
+  now clean and CI-enforced (678 remaining). The substance: `Framework`'s boot phases route
+  through `requireContext()`/`requireContainer()` guards with clear "not booted" failures
+  instead of null-method fatals; `EventDispatcher`'s tracer property is non-nullable (the
+  constructor always normalized to `NullEventTracer` — the declared type was the lie);
+  `HealthService`'s cache/connection properties match their constructor guarantees;
+  `PermissionManager` captures the active provider locally so its combine-mode closure can't
+  race a provider swap, and its debug log is honestly a list; `PolicyRegistry::register()`
+  validates the policy class implements `PolicyInterface` at registration; subscriber
+  fallback listeners and string listeners are `is_callable`-verified with named exceptions;
+  webhook/response payload-size math guards `json_encode`/`getContent()` `false`; and
+  `Utils::getCache()` throws a clear "cache not available" instead of returning null typed
+  as `CacheStore`. (`phpstan/phpstan ^2.0` with `phpstan-phpunit`,
   `phpstan-strict-rules`, and `phpstan-deprecation-rules` on their 2.x majors). The level-6 CI
   gate stays green: the 2.x engine's new findings are frozen in `phpstan-baseline.neon`
   (111 entries, identifier-tagged) to be burned down deliberately — the baseline must never

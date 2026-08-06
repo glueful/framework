@@ -77,11 +77,17 @@ class PermissionAttributeScanner
         try {
             $rc = new \ReflectionClass($class);
             foreach ($rc->getAttributes($attributeFqcn) as $a) {
-                $names[] = $a->newInstance()->name;
+                $vars = get_object_vars($a->newInstance());
+                if (isset($vars['name']) && is_string($vars['name'])) {
+                    $names[] = $vars['name'];
+                }
             }
             if ($method !== null && $rc->hasMethod($method)) {
                 foreach ($rc->getMethod($method)->getAttributes($attributeFqcn) as $a) {
-                    $names[] = $a->newInstance()->name;
+                    $vars = get_object_vars($a->newInstance());
+                    if (isset($vars['name']) && is_string($vars['name'])) {
+                        $names[] = $vars['name'];
+                    }
                 }
             }
         } catch (\Throwable) {

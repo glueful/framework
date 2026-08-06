@@ -20,6 +20,11 @@ final class PolicyRegistry
 
     public function register(string $resourceOrClass, string $policyClass): void
     {
+        if (!is_subclass_of($policyClass, PolicyInterface::class)) {
+            throw new \InvalidArgumentException(
+                "Policy class must implement PolicyInterface: {$policyClass}"
+            );
+        }
         $this->map[$resourceOrClass] = $policyClass;
     }
 

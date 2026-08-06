@@ -56,6 +56,7 @@ class WebhookDeliveredEvent extends BaseEvent
 
     public function getPayloadSize(): int
     {
-        return strlen(json_encode($this->payload));
+        $encoded = json_encode($this->payload);
+        return $encoded === false ? 0 : strlen($encoded);
     }
 }

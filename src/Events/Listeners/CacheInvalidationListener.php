@@ -168,7 +168,7 @@ class CacheInvalidationListener implements EventSubscriberInterface
         $regex = str_replace(['*', ':'], ['.*', '\\:'], $pattern);
         $regex = "/^{$regex}$/";
         foreach ($this->cache->getAllKeys() as $key) {
-            if (preg_match($regex, $key)) {
+            if (preg_match($regex, $key) === 1) {
                 $keys[] = $key;
             }
         }

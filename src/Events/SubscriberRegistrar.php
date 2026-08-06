@@ -25,7 +25,13 @@ final class SubscriberRegistrar
                 $listener = new ContainerListener($lazyRef, $this->container);
             } else {
                 // fallback: direct instantiation (useful in tests without a container)
-                $listener = [new $subscriberClass(), $method];
+                $candidate = [new $subscriberClass(), (string) $method];
+                if (!is_callable($candidate)) {
+                    throw new \InvalidArgumentException(
+                        "Subscriber {$subscriberClass} has no callable method: {$method}"
+                    );
+                }
+                $listener = $candidate;
             }
             $this->provider->addListener($event, $listener, $priority);
         }

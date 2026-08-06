@@ -470,7 +470,7 @@ class ApiMetricsService
 
             // Sort endpoints by call volume
             usort($endpoints, function ($a, $b) {
-                return $b['calls'] - $a['calls'];
+                return $b['calls'] <=> $a['calls'];
             });
 
             // Format time series data

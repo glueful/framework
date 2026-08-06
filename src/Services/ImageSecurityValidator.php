@@ -251,7 +251,7 @@ class ImageSecurityValidator
         }
 
         $parsedUrl = parse_url($url);
-        if (!$parsedUrl || !isset($parsedUrl['host'])) {
+        if ($parsedUrl === false || !isset($parsedUrl['host'])) {
             return false;
         }
 
@@ -421,7 +421,7 @@ class ImageSecurityValidator
     private function formatBytes(int $bytes): string
     {
         $units = ['B', 'KB', 'MB', 'GB'];
-        $power = $bytes > 0 ? floor(log($bytes, 1024)) : 0;
+        $power = $bytes > 0 ? (int) floor(log($bytes, 1024)) : 0;
 
         if ($power >= count($units)) {
             $power = count($units) - 1;

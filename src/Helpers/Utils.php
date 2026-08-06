@@ -34,7 +34,12 @@ class Utils
      */
     private static function getCache(): CacheStore
     {
-        return self::$cache ??= CacheHelper::createCacheInstance(self::$context);
+        $cache = self::$cache ??= CacheHelper::createCacheInstance(self::$context);
+        if ($cache === null) {
+            throw new \RuntimeException('Cache is not available: unable to create a cache instance.');
+        }
+
+        return $cache;
     }
     /**
      * @param array<string, mixed> $data
@@ -379,7 +384,8 @@ class Utils
                 $ip = trim($ips[0]);
 
                 // Validate IP format
-                if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                $flags = FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE;
+                if (filter_var($ip, FILTER_VALIDATE_IP, $flags) !== false) {
                     return $ip;
                 }
             }
@@ -444,19 +450,19 @@ class Utils
             $errors[] = "Password must be at least {$minLength} characters long";
         }
 
-        if ($requireNumbers && !preg_match('/\d/', $password)) {
+        if ($requireNumbers && preg_match('/\d/', $password) !== 1) {
             $errors[] = "Password must contain at least one number";
         }
 
-        if ($requireUppercase && !preg_match('/[A-Z]/', $password)) {
+        if ($requireUppercase && preg_match('/[A-Z]/', $password) !== 1) {
             $errors[] = "Password must contain at least one uppercase letter";
         }
 
-        if ($requireLowercase && !preg_match('/[a-z]/', $password)) {
+        if ($requireLowercase && preg_match('/[a-z]/', $password) !== 1) {
             $errors[] = "Password must contain at least one lowercase letter";
         }
 
-        if ($requireSpecialChars && !preg_match('/[^a-zA-Z\d]/', $password)) {
+        if ($requireSpecialChars && preg_match('/[^a-zA-Z\d]/', $password) !== 1) {
             $errors[] = "Password must contain at least one special character";
         }
 
@@ -476,7 +482,7 @@ class Utils
     {
         $uuid = trim($uuid);
 
-        if (preg_match('/^[a-f\d]{8}(-[a-f\d]{4}){4}[a-f\d]{8}$/i', $uuid)) {
+        if (preg_match('/^[a-f\d]{8}(-[a-f\d]{4}){4}[a-f\d]{8}$/i', $uuid) === 1) {
             return strtolower($uuid);
         }
 
@@ -578,7 +584,7 @@ class Utils
 
         $bytes = max($bytes, 0);
         $pow = floor(($bytes > 0 ? log($bytes) : 0) / log(1024));
-        $pow = min($pow, count($units) - 1);
+        $pow = (int) min($pow, count($units) - 1);
 
         $bytes /= (1 << (10 * $pow));
 
@@ -678,6 +684,9 @@ class Utils
     public static function arrayToCsv(array $data, array $headers = []): string
     {
         $output = fopen('php://temp', 'r+');
+        if ($output === false) {
+            throw new \RuntimeException('Failed to open temporary stream for CSV generation.');
+        }
 
         // Write headers if provided
         if (count($headers) > 0) {

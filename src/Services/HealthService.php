@@ -19,11 +19,11 @@ class HealthService
     /** @var self|null Singleton instance */
     private static ?self $instance = null;
 
-    /** @var CacheStore<mixed>|null Cache driver instance */
-    private ?CacheStore $cache = null;
+    /** @var CacheStore<mixed> Cache driver instance */
+    private CacheStore $cache;
 
-    /** @var Connection|null Database connection instance */
-    private ?Connection $connection = null;
+    /** @var Connection Database connection instance */
+    private Connection $connection;
 
     /** @var array<string, array{result: array<string, mixed>, timestamp: float}> In-memory cache for health checks */
     private static array $healthCache = [];
@@ -41,12 +41,13 @@ class HealthService
         ?ApplicationContext $context = null
     ) {
         $this->context = $context;
-        $this->cache = $cache ?? CacheHelper::createCacheInstance($this->context);
-        if ($this->cache === null) {
+        $cache = $cache ?? CacheHelper::createCacheInstance($this->context);
+        if ($cache === null) {
             throw new \RuntimeException(
                 'CacheStore is required for HealthService: Unable to create cache instance.'
             );
         }
+        $this->cache = $cache;
 
         $this->connection = $connection ?? Connection::fromContext($this->context);
     }
