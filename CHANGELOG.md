@@ -78,6 +78,22 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   `false` typed as `string`; cache node/file drivers guard
   `fopen`/`file_get_contents`/`filesize`/`glob` falses; and the distributed cache
   constructor matches its non-null guarantee.
+- **`Api` and `Security` are level-8 clean** (79 errors) — 24 of 31 areas now clean and
+  CI-enforced (515 remaining). The optional search SDKs (`elasticsearch/elasticsearch`,
+  `meilisearch/meilisearch-php`) joined require-dev so the search adapters type-check
+  against real SDK classes for the first time — which immediately surfaced real contract
+  gaps: the Elasticsearch adapter now narrows the SDK's sync/async response union before
+  calling `asArray()`/`asBool()`, Meilisearch attribute updates filter to the
+  `list<non-empty-string>` shape the SDK demands, and both adapters throw a named
+  "client not initialized — install <package>" error instead of a null-method fatal when
+  used without their SDK. Elsewhere: webhook SSRF checks pin every `filter_var()` to
+  `!== false`; webhook event-name derivation and attribute lookups guard `class_exists`
+  before reflection; `VulnerabilityScanner` folds its pervasive
+  `glob`/`file_get_contents`/`filemtime` false-handling into three helpers;
+  `ProductionSecurityValidator` makes ini-truthiness explicit via `iniEnabled()`; and
+  `SecurityManager`/`RandomStringGenerator` match their constructor/range guarantees.
+  Dev-dependency `squizlabs/php_codesniffer` bumped to 3.13.6 (CVE-2026-67434, command
+  injection — dev-only tooling).
 - **Static analysis upgraded to PHPStan 2.x** (`phpstan/phpstan ^2.0` with `phpstan-phpunit`,
   `phpstan-strict-rules`, and `phpstan-deprecation-rules` on their 2.x majors). The level-6 CI
   gate stays green: the 2.x engine's new findings are frozen in `phpstan-baseline.neon`

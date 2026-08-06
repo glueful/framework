@@ -333,7 +333,7 @@ class DeliverWebhookJob extends Job
         }
 
         // Direct IP address in URL
-        if (filter_var($host, FILTER_VALIDATE_IP)) {
+        if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
             $ipError = $this->validateIpAddress($host);
             if ($ipError !== null) {
                 return $ipError;
@@ -393,15 +393,15 @@ class DeliverWebhookJob extends Job
     private function validateIpAddress(string $ip): ?string
     {
         // IPv4 validation
-        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
-            if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
+            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
                 return 'Webhook URL host is not allowed';
             }
             return null;
         }
 
         // IPv6 validation
-        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false) {
             $lowerIp = strtolower($ip);
 
             // Strip zone ID (e.g., fe80::1%eth0 -> fe80::1)
@@ -414,11 +414,11 @@ class DeliverWebhookJob extends Job
             if (str_starts_with($lowerIp, '::ffff:')) {
                 $ipv4 = substr($lowerIp, 7);
                 if (
-                    !filter_var(
+                    filter_var(
                         $ipv4,
                         FILTER_VALIDATE_IP,
                         FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
-                    )
+                    ) === false
                 ) {
                     return 'Webhook URL host is not allowed';
                 }

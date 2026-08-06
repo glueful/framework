@@ -255,13 +255,17 @@ class VersionNegotiationMiddleware implements RouteMiddleware
      * Checks method first, then falls back to class.
      *
      * @template T of object
-     * @param class-string $class Controller class
+     * @param string $class Controller class name (route metadata — may be unverified)
      * @param string $method Method name
      * @param class-string<T> $attributeClass Attribute class to look for
      * @return T|null
      */
     private function getAttribute(string $class, string $method, string $attributeClass): ?object
     {
+        if (!class_exists($class)) {
+            return null;
+        }
+
         try {
             // Check method first
             $reflection = new \ReflectionMethod($class, $method);

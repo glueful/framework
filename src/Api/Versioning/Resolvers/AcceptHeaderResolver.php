@@ -36,13 +36,13 @@ final class AcceptHeaderResolver implements VersionResolverInterface
 
     public function resolve(Request $request): ?ApiVersion
     {
-        $accept = $request->headers->get('Accept', '');
+        $accept = $request->headers->get('Accept', '') ?? '';
 
         if ($accept === '') {
             return null;
         }
 
-        if (preg_match($this->pattern, $accept, $matches)) {
+        if (preg_match($this->pattern, $accept, $matches) === 1) {
             return ApiVersion::fromString($matches[1]);
         }
 

@@ -131,9 +131,18 @@ class WebhookSubscription extends Model
      */
     public function stats(int $days = 30): array
     {
-        $since = date('Y-m-d H:i:s', strtotime("-{$days} days"));
+        $sinceTimestamp = strtotime("-{$days} days");
+        if ($sinceTimestamp === false) {
+            throw new \RuntimeException("Invalid stats window: {$days} days");
+        }
+        $since = date('Y-m-d H:i:s', $sinceTimestamp);
 
-        $deliveries = WebhookDelivery::query($this->getContext())
+        $context = $this->getContext();
+        if ($context === null) {
+            throw new \RuntimeException('ApplicationContext is required for webhook stats.');
+        }
+
+        $deliveries = WebhookDelivery::query($context)
             ->where('subscription_id', $this->id)
             ->where('created_at', '>=', $since)
             ->get();

@@ -137,7 +137,7 @@ class WebhookController extends BaseController
         $data = $this->getJsonBody($request);
 
         // Validate required fields
-        if (!isset($data['url']) || !filter_var($data['url'], FILTER_VALIDATE_URL)) {
+        if (!isset($data['url']) || filter_var($data['url'], FILTER_VALIDATE_URL) === false) {
             return Response::error('Invalid or missing URL', 400);
         }
 
@@ -218,7 +218,7 @@ class WebhookController extends BaseController
         $updates = [];
 
         if (isset($data['url'])) {
-            if (!filter_var($data['url'], FILTER_VALIDATE_URL)) {
+            if (filter_var($data['url'], FILTER_VALIDATE_URL) === false) {
                 return Response::error('Invalid URL', 400);
             }
             if ($this->requiresHttps() && !str_starts_with($data['url'], 'https://')) {

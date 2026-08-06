@@ -50,7 +50,9 @@
         "vlucas/phpdotenv": "^5.6"
     },
     "require-dev": {
+        "elasticsearch/elasticsearch": "^8.0",
         "league/flysystem-memory": "^3.29",
+        "meilisearch/meilisearch-php": "^1.0",
         "phpstan/phpstan": "^2.0",
         "phpstan/phpstan-deprecation-rules": "^2.0",
         "phpstan/phpstan-phpunit": "^2.0",
@@ -97,7 +99,7 @@
         "rector": "vendor/bin/rector process --dry-run",
         "rector:fix": "vendor/bin/rector process",
         "phpstan:di": "PHPSTAN_DISABLE_PARALLEL=1 vendor/bin/phpstan analyse src/Container --level=8 --no-progress",
-        "phpstan:lanes": "PHPSTAN_DISABLE_PARALLEL=1 vendor/bin/phpstan analyse src/Application.php src/Framework.php src/Bootstrap src/Cache src/Development src/Events src/Extensions src/Helpers src/Lock src/Logging src/Performance src/Permissions src/Queue src/Repository src/Scheduler src/Services src/Storage src/Support src/Tasks src/Testing src/Uploader src/Validation --level=8 --no-progress",
+        "phpstan:lanes": "PHPSTAN_DISABLE_PARALLEL=1 vendor/bin/phpstan analyse src/Application.php src/Framework.php src/Api src/Bootstrap src/Cache src/Development src/Events src/Extensions src/Helpers src/Lock src/Logging src/Performance src/Permissions src/Queue src/Repository src/Scheduler src/Security src/Services src/Storage src/Support src/Tasks src/Testing src/Uploader src/Validation --level=8 --no-progress",
         "phpstan:db": "PHPSTAN_DISABLE_PARALLEL=1 vendor/bin/phpstan analyse src/Database --level=8 --no-progress",
         "phpstan:http": "PHPSTAN_DISABLE_PARALLEL=1 vendor/bin/phpstan analyse src/Http --level=7 --no-progress",
         "phpstan:cache": "PHPSTAN_DISABLE_PARALLEL=1 vendor/bin/phpstan analyse -c phpstan.cache-strict.neon --no-progress",

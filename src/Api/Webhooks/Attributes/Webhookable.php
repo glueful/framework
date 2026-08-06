@@ -65,8 +65,13 @@ class Webhookable
             return $this->event;
         }
 
-        // Get short class name
-        $shortName = (new \ReflectionClass($className))->getShortName();
+        // Get short class name (fall back to manual parsing for unloadable names)
+        if (class_exists($className)) {
+            $shortName = (new \ReflectionClass($className))->getShortName();
+        } else {
+            $separatorPos = strrpos($className, '\\');
+            $shortName = $separatorPos === false ? $className : substr($className, $separatorPos + 1);
+        }
 
         // Remove "Event" suffix if present
         $shortName = preg_replace('/Event$/', '', $shortName);
@@ -113,6 +118,9 @@ class Webhookable
     public static function fromClass(string|object $class): ?self
     {
         $className = is_object($class) ? $class::class : $class;
+        if (!class_exists($className)) {
+            return null;
+        }
 
         try {
             $reflection = new \ReflectionClass($className);

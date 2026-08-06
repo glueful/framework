@@ -188,8 +188,13 @@ class WebhookEventListener implements EventSubscriberInterface
      */
     private function deriveEventName(string $className): string
     {
-        // Get short class name
-        $shortName = (new \ReflectionClass($className))->getShortName();
+        // Get short class name (fall back to manual parsing for unloadable names)
+        if (class_exists($className)) {
+            $shortName = (new \ReflectionClass($className))->getShortName();
+        } else {
+            $separatorPos = strrpos($className, '\\');
+            $shortName = $separatorPos === false ? $className : substr($className, $separatorPos + 1);
+        }
 
         // Remove "Event" suffix if present
         $shortName = preg_replace('/Event$/', '', $shortName);
