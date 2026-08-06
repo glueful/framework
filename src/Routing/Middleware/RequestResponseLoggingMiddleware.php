@@ -489,15 +489,21 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
         $decoded = json_decode($body, true);
         if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
             $this->sanitizeArray($decoded);
-            return json_encode($decoded, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            $encoded = json_encode($decoded, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            // Never fall back to the raw body — it may hold exactly what we redact.
+            return $encoded === false ? '[unencodable]' : $encoded;
         }
 
         if ($this->isFormUrlEncoded($contentType)) {
             $decoded = [];
             parse_str($body, $decoded);
             if ($decoded !== []) {
-                $this->sanitizeArray($decoded);
-                return http_build_query($decoded);
+                $stringKeyed = [];
+                foreach ($decoded as $key => $value) {
+                    $stringKeyed[(string) $key] = $value;
+                }
+                $this->sanitizeArray($stringKeyed);
+                return http_build_query($stringKeyed);
             }
         }
 
@@ -543,14 +549,14 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
      */
     private function anonymizeIp(string $ip): string
     {
-        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
             // IPv4: Replace last octet with 0
             $parts = explode('.', $ip);
             $parts[3] = '0';
             return implode('.', $parts);
         }
 
-        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false) {
             // IPv6: Keep only first 64 bits
             $parts = explode(':', $ip);
             return implode(':', array_slice($parts, 0, 4)) . '::';

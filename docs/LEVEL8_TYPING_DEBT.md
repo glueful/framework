@@ -26,10 +26,9 @@ vendor/bin/phpstan analyse src/Database --level=8 --no-progress --memory-limit=1
 
 | Area | Errors | | Area | Errors |
 |---|---:|---|---|---:|
-| `Database` | 214 | | `Routing` | 46 |
-| `Console` | 85 | | | |
+| `Database` | 214 | | `Console` | 85 |
 
-**345 total across the 3 remaining areas.** The other 28 areas are level-8 clean ✓ and
+**299 total across the 2 remaining areas.** The other 29 areas are level-8 clean ✓ and
 ratcheted in CI. Regenerate for the exact, current set.
 
 **Cleaned lanes (ratcheted):** a lane cleaned to level 8 joins the CI static job's
@@ -57,6 +56,10 @@ each newly cleaned directory to its path list.
 - `Http`, `Notifications` — cleaned 2026-08-06. Webhook signature generation throws on an
   unencodable payload; resource collections validate their `collects` classes; the PSR-15
   bridge validates provider-supplied PSR-17 factories.
+- `Routing` — cleaned 2026-08-06. The router's closure reflection-cache key is prefixed
+  (a bare numeric-string key was being silently cast to int by PHP); CSRF token caching
+  throws on an unencodable token record; lockdown state files read through a guarded
+  JSON helper.
 
 ## Recommended adoption strategy
 

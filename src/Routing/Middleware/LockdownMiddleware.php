@@ -187,7 +187,7 @@ class LockdownMiddleware implements RouteMiddleware
             return false;
         }
 
-        $maintenanceData = json_decode(file_get_contents($maintenanceFile), true);
+        $maintenanceData = $this->readJsonFile($maintenanceFile);
 
         if ($maintenanceData === null || ($maintenanceData['enabled'] ?? false) !== true) {
             return false;
@@ -216,7 +216,7 @@ class LockdownMiddleware implements RouteMiddleware
             return 'medium';
         }
 
-        $maintenanceData = json_decode(file_get_contents($maintenanceFile), true);
+        $maintenanceData = $this->readJsonFile($maintenanceFile);
         return $maintenanceData['severity'] ?? 'medium';
     }
 
@@ -255,12 +255,12 @@ class LockdownMiddleware implements RouteMiddleware
                 }
 
                 // Validate IP and exclude private/reserved ranges for public IPs
-                if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false) {
                     return $ip;
                 }
 
                 // Allow private IPs if that's all we have
-                if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                if (filter_var($ip, FILTER_VALIDATE_IP) !== false) {
                     return $ip;
                 }
             }
@@ -302,7 +302,7 @@ class LockdownMiddleware implements RouteMiddleware
             return false;
         }
 
-        $blockedIps = json_decode(file_get_contents($blockedIpsFile), true) ?? [];
+        $blockedIps = $this->readJsonFile($blockedIpsFile) ?? [];
 
         if (!isset($blockedIps[$ip])) {
             return false;
@@ -415,7 +415,7 @@ class LockdownMiddleware implements RouteMiddleware
         }
 
         // Check Accept header for JSON preference
-        $acceptHeader = $request->headers->get('Accept', '');
+        $acceptHeader = $request->headers->get('Accept', '') ?? '';
         if (
             str_contains($acceptHeader, 'application/json') &&
             !str_contains($acceptHeader, 'text/html')
@@ -424,7 +424,7 @@ class LockdownMiddleware implements RouteMiddleware
         }
 
         // Check Content-Type for JSON requests
-        $contentType = $request->headers->get('Content-Type', '');
+        $contentType = $request->headers->get('Content-Type', '') ?? '';
         if (str_contains($contentType, 'application/json')) {
             return false;
         }
@@ -444,7 +444,7 @@ class LockdownMiddleware implements RouteMiddleware
 
         $maintenanceData = [];
         if (file_exists($maintenanceFile)) {
-            $maintenanceData = json_decode(file_get_contents($maintenanceFile), true) ?? [];
+            $maintenanceData = $this->readJsonFile($maintenanceFile) ?? [];
         }
 
         $config = $this->lockdownConfig['maintenance_mode'] ?? [];
@@ -488,7 +488,7 @@ class LockdownMiddleware implements RouteMiddleware
 
         $maintenanceData = [];
         if (file_exists($maintenanceFile)) {
-            $maintenanceData = json_decode(file_get_contents($maintenanceFile), true) ?? [];
+            $maintenanceData = $this->readJsonFile($maintenanceFile) ?? [];
         }
 
         $response = [
@@ -698,7 +698,7 @@ HTML;
             return;
         }
 
-        $blockedIps = json_decode(file_get_contents($blockedIpsFile), true) ?? [];
+        $blockedIps = $this->readJsonFile($blockedIpsFile) ?? [];
 
         if (isset($blockedIps[$ip])) {
             unset($blockedIps[$ip]);
@@ -949,5 +949,21 @@ HTML;
     public static function withLogger(?LoggerInterface $logger): self
     {
         return new self($logger);
+    }
+
+    /**
+     * Read and decode a JSON state file; null when unreadable or not an array.
+     *
+     * @return array<mixed>|null
+     */
+    private function readJsonFile(string $file): ?array
+    {
+        $content = file_get_contents($file);
+        if ($content === false) {
+            return null;
+        }
+        $data = json_decode($content, true);
+
+        return is_array($data) ? $data : null;
     }
 }

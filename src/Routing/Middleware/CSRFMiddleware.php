@@ -383,7 +383,7 @@ class CSRFMiddleware implements RouteMiddleware
                     'user_agent' => $request->headers->get('User-Agent')
                 ];
 
-                $this->cache->set($cacheKey, json_encode($tokenData), $lifetime);
+                $this->cache->set($cacheKey, json_encode($tokenData, JSON_THROW_ON_ERROR), $lifetime);
 
                 $this->logger?->debug('CSRF token generated', [
                     'session_id' => substr($sessionId, 0, 8) . '...',
@@ -502,18 +502,18 @@ class CSRFMiddleware implements RouteMiddleware
 
         // Check form data
         $token = $request->request->get(self::CSRF_FIELD);
-        if ($token !== null) {
+        if (is_string($token)) {
             return $token;
         }
 
         // Check alternative form field
         $token = $request->request->get(self::CSRF_FIELD_ALT);
-        if ($token !== null) {
+        if (is_string($token)) {
             return $token;
         }
 
         // Check JSON body for API requests
-        if (str_contains($request->headers->get('Content-Type', ''), 'application/json')) {
+        if (str_contains($request->headers->get('Content-Type', '') ?? '', 'application/json')) {
             $content = $request->getContent();
             if ($content !== '') {
                 $json = json_decode($content, true);
@@ -547,7 +547,7 @@ class CSRFMiddleware implements RouteMiddleware
         // If neither header is present, decide based on configuration
         if ($origin === null && $referer === null) {
             if ((bool) $this->getConfig('security.csrf.skip_for_bearer_auth', true)) {
-                $authorization = $request->headers->get('Authorization', '');
+                $authorization = $request->headers->get('Authorization', '') ?? '';
                 if (str_starts_with($authorization, 'Bearer ')) {
                     return true;
                 }
@@ -614,13 +614,14 @@ class CSRFMiddleware implements RouteMiddleware
             return '';
         }
 
-        $origin = ($parsed['scheme'] ?? 'https') . '://';
+        $scheme = $parsed['scheme'] ?? 'https';
+        $origin = $scheme . '://';
         $origin .= $parsed['host'] ?? '';
 
         if (
             isset($parsed['port']) &&
-            !(($parsed['scheme'] === 'https' && $parsed['port'] === 443) ||
-              ($parsed['scheme'] === 'http' && $parsed['port'] === 80))
+            !(($scheme === 'https' && $parsed['port'] === 443) ||
+              ($scheme === 'http' && $parsed['port'] === 80))
         ) {
             $origin .= ':' . $parsed['port'];
         }
@@ -769,7 +770,8 @@ class CSRFMiddleware implements RouteMiddleware
             'timestamp' => time()
         ];
 
-        $contextHash = hash('sha256', json_encode($context));
+        $encodedContext = json_encode($context);
+        $contextHash = hash('sha256', $encodedContext === false ? '' : $encodedContext);
         return $baseToken . ':' . substr($contextHash, 0, 16);
     }
 
@@ -801,7 +803,7 @@ class CSRFMiddleware implements RouteMiddleware
     private function isAjaxRequest(Request $request): bool
     {
         return $request->headers->get('X-Requested-With') === 'XMLHttpRequest' ||
-               str_contains($request->headers->get('Accept', ''), 'application/json');
+               str_contains($request->headers->get('Accept', '') ?? '', 'application/json');
     }
 
     /**
@@ -934,7 +936,8 @@ class CSRFMiddleware implements RouteMiddleware
             'accept_encoding' => $request->headers->get('Accept-Encoding', '')
         ];
 
-        return hash('sha256', json_encode($fingerprint));
+        $encodedFingerprint = json_encode($fingerprint);
+        return hash('sha256', $encodedFingerprint === false ? '' : $encodedFingerprint);
     }
 
     /**

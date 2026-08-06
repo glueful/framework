@@ -79,7 +79,7 @@ final class FieldSelectionMiddleware implements RouteMiddleware
                 /** @var Response */
                 return $response;
             }
-            $ctype = $response->headers->get('Content-Type', '');
+            $ctype = $response->headers->get('Content-Type', '') ?? '';
             if (!str_contains($ctype, 'application/json')) {
                 return $response;
             }

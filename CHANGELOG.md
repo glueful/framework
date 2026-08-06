@@ -121,6 +121,17 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   was (28 errors from one `object` property); notification delivery metrics skip
   cleanly on a null notification uuid instead of a `TypeError`; and `ExternalApiService`
   can no longer throw null after a zero-attempt retry loop.
+- **`Routing` is level-8 clean** (46 errors) — 29 of 31 areas now clean and CI-enforced
+  (299 remaining). The substance: the router's closure reflection-cache key is prefixed —
+  PHP was silently casting the bare numeric-string `spl_object_id` key to an int array key,
+  so the cache's declared string-key type was never true; CSRF token caching uses
+  `JSON_THROW_ON_ERROR` instead of caching the string `"false"` as a token record, and its
+  context/fingerprint hashes guard encode failures; the request/response logger never falls
+  back to the raw body when re-encoding a sanitized payload fails (the raw body may hold
+  exactly what was being redacted); lockdown maintenance/blocked-IP state files read through
+  a guarded JSON helper; attribute route loading and gate-attribute checks guard
+  `class_exists` before reflection; `Route::where()` rejects a null constraint by name; and
+  the auth middleware's query-param token gate null-checks its context before `config()`.
 - **Static analysis upgraded to PHPStan 2.x** (`phpstan/phpstan ^2.0` with `phpstan-phpunit`,
   `phpstan-strict-rules`, and `phpstan-deprecation-rules` on their 2.x majors). The level-6 CI
   gate stays green: the 2.x engine's new findings are frozen in `phpstan-baseline.neon`
