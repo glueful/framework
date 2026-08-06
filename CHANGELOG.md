@@ -22,6 +22,13 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   non-blocking Rector job. Current advisory surface: 440 files.
 
 ### Changed
+- **`src/Container` is level-8 clean — first lane of the level-8 campaign.** The seven
+  remaining errors were real hardening: `class_exists` guards before reflection in the
+  autowirer (clear `ContainerException` instead of a bare `ReflectionException`), the
+  container compiler, and console-command discovery; the framework logger's level name is
+  now validated against Monolog's known levels (invalid config falls back to `info`
+  instead of throwing mid-boot). `composer run phpstan:di` is now enforced in CI
+  ("Level-8 lanes" step) so the lane cannot regress.
 - **Static analysis upgraded to PHPStan 2.x** (`phpstan/phpstan ^2.0` with `phpstan-phpunit`,
   `phpstan-strict-rules`, and `phpstan-deprecation-rules` on their 2.x majors). The level-6 CI
   gate stays green: the 2.x engine's new findings are frozen in `phpstan-baseline.neon`

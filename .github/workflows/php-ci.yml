@@ -126,6 +126,10 @@ jobs:
         run: composer install --prefer-dist --no-progress --no-interaction
       - name: Run static analysis (composer run analyse)
         run: composer run analyse
+      # Level-8 ratchet: lanes added here are level-8-clean and must stay so.
+      # See docs/LEVEL8_TYPING_DEBT.md for the per-component adoption campaign.
+      - name: Level-8 lanes (composer run phpstan:di)
+        run: composer run phpstan:di
 
   rector:
     name: Rector (advisory, non-blocking)
