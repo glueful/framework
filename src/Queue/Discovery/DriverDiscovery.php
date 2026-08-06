@@ -78,7 +78,7 @@ class DriverDiscovery
 
         foreach ($extensionPaths as $pattern) {
             $expandedPaths = glob($pattern, GLOB_ONLYDIR);
-            if ($expandedPaths) {
+            if ($expandedPaths !== false && $expandedPaths !== []) {
                 $paths = array_merge($paths, $expandedPaths);
             }
         }
@@ -112,9 +112,11 @@ class DriverDiscovery
             return $discovered;
         }
 
+        $driverFiles = glob($path . '/*Driver.php');
+        $queueFiles = glob($path . '/*Queue.php');
         $files = array_merge(
-            glob($path . '/*Driver.php'),
-            glob($path . '/*Queue.php')
+            $driverFiles === false ? [] : $driverFiles,
+            $queueFiles === false ? [] : $queueFiles
         );
         foreach ($files as $file) {
             $driver = $this->analyzeDriverFile($file);
@@ -153,6 +155,9 @@ class DriverDiscovery
 
             // Extract driver metadata
             $instance = $reflection->newInstanceWithoutConstructor();
+            if (!$instance instanceof QueueDriverInterface) {
+                return null;
+            }
             $info = $instance->getDriverInfo();
 
             return [
@@ -176,19 +181,19 @@ class DriverDiscovery
     private function extractClassName(string $file): ?string
     {
         $content = file_get_contents($file);
-        if (!$content) {
+        if ($content === false || $content === '') {
             return null;
         }
 
         // Extract namespace
         $namespace = null;
-        if (preg_match('/^namespace\s+([^;]+);/m', $content, $matches)) {
+        if (preg_match('/^namespace\s+([^;]+);/m', $content, $matches) === 1) {
             $namespace = trim($matches[1]);
         }
 
         // Extract class name
         $className = null;
-        if (preg_match('/^class\s+(\w+)/m', $content, $matches)) {
+        if (preg_match('/^class\s+(\w+)/m', $content, $matches) === 1) {
             $className = $matches[1];
         }
 

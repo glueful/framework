@@ -281,8 +281,8 @@ class CacheInvalidationService
             return;
         }
 
-        if ($dispatcher === null) {
-            // Skip registration if no dispatcher provided
+        if ($dispatcher === null || !method_exists($dispatcher, 'addListener')) {
+            // Skip registration if no usable dispatcher provided
             return;
         }
 
@@ -391,13 +391,13 @@ class CacheInvalidationService
                 $value = $context[$placeholder];
                 if (is_array($value)) {
                     foreach ($value as $val) {
-                        $tempPattern = str_replace('{' . $placeholder . '}', $val, $expandedPattern);
+                        $tempPattern = str_replace('{' . $placeholder . '}', (string) $val, $expandedPattern);
                         if (!in_array($tempPattern, $keys, true)) {
                             $keys[] = $tempPattern;
                         }
                     }
                 } else {
-                    $expandedPattern = str_replace('{' . $placeholder . '}', $value, $expandedPattern);
+                    $expandedPattern = str_replace('{' . $placeholder . '}', (string) $value, $expandedPattern);
                 }
             } else {
                 $expandedPattern = str_replace('{' . $placeholder . '}', '*', $expandedPattern);
@@ -408,6 +408,6 @@ class CacheInvalidationService
             $keys[] = $expandedPattern;
         }
 
-        return array_unique($keys);
+        return array_values(array_unique($keys));
     }
 }

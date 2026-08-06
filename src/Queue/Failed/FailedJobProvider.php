@@ -362,7 +362,7 @@ class FailedJobProvider
                 return $this->exportToCsv($failedJobs);
             case 'json':
             default:
-                return json_encode($failedJobs, JSON_PRETTY_PRINT);
+                return json_encode($failedJobs, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR);
         }
     }
 
@@ -457,7 +457,10 @@ class FailedJobProvider
         ];
 
         $exceptionClass = get_class($exception);
-        $shortClass = substr($exceptionClass, strrpos($exceptionClass, '\\') + 1);
+        $separatorPos = strrpos($exceptionClass, '\\');
+        // Global classes (Error, TypeError, ...) have no separator — strrpos false
+        // plus one would silently mangle the name to "rror"/"ypeError".
+        $shortClass = $separatorPos === false ? $exceptionClass : substr($exceptionClass, $separatorPos + 1);
 
         // Check if it's a non-retryable exception
         if (in_array($shortClass, $nonRetryableExceptions, true)) {

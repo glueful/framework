@@ -70,7 +70,7 @@ class PluginManager
 
         foreach ($pluginPaths as $pattern) {
             $files = glob($pattern);
-            if ($files) {
+            if ($files !== false && $files !== []) {
                 foreach ($files as $pluginFile) {
                     $this->loadPlugin($pluginFile);
                 }
@@ -116,7 +116,10 @@ class PluginManager
                         $this->events->listen($event, $listener);
                     } elseif (is_string($listener) && class_exists($listener)) {
                         // Support class-based listeners
-                        $this->events->listen($event, [new $listener(), 'handle']);
+                        $callable = [new $listener(), 'handle'];
+                        if (is_callable($callable)) {
+                            $this->events->listen($event, $callable);
+                        }
                     }
                 }
             }
@@ -153,6 +156,10 @@ class PluginManager
         if ($this->driverRegistry !== null) {
             try {
                 $driver = new $driverConfig['class']();
+                if (!$driver instanceof \Glueful\Queue\Contracts\QueueDriverInterface) {
+                    error_log("Driver class does not implement QueueDriverInterface: {$driverConfig['class']}");
+                    return;
+                }
                 $info = $driver->getDriverInfo();
                 $this->driverRegistry->registerDriver(
                     $driverConfig['name'],

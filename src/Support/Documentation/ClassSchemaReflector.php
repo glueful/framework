@@ -263,6 +263,10 @@ final class ClassSchemaReflector
      */
     private static function enumSchema(string $enum): array
     {
+        if (!is_subclass_of($enum, \UnitEnum::class)) {
+            return ['type' => 'string'];
+        }
+
         try {
             $reflection = new \ReflectionEnum($enum);
         } catch (\Throwable) {

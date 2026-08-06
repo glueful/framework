@@ -100,13 +100,13 @@ final class RestProjectionParser
                 $directive = trim($parts[$i]);
 
                 // Parse conditional fields: if(condition)
-                if (preg_match('/^if\(([^)]+)\)$/', $directive, $matches)) {
+                if (preg_match('/^if\(([^)]+)\)$/', $directive, $matches) === 1) {
                     $condition = $matches[1];
                     continue;
                 }
 
                 // Parse transformations: function(params)
-                if (preg_match('/^(\w+)\(([^)]*)\)$/', $directive, $matches)) {
+                if (preg_match('/^(\w+)\(([^)]*)\)$/', $directive, $matches) === 1) {
                     $transformation = $directive;
                     continue;
                 }

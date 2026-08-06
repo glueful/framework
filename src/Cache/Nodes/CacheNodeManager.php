@@ -379,12 +379,17 @@ class CacheNodeManager
      */
     public function checkNodesHealth(): array
     {
-        if ($this->healthMonitor === null) {
+        $monitor = $this->healthMonitor;
+        if ($monitor === null) {
             // Initialize health monitoring with default config
             $this->initializeHealthMonitoring();
+            $monitor = $this->healthMonitor;
+            if ($monitor === null) {
+                throw new \RuntimeException('Health monitoring failed to initialize.');
+            }
         }
 
-        return $this->healthMonitor->monitorNodes();
+        return $monitor->monitorNodes();
     }
 
     /**

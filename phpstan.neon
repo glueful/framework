@@ -86,10 +86,5 @@ parameters:
         - '#Call to function is_string\(\) with string will always evaluate to true\.#'
         # Foreach variable reuse in recursive trait functions
         - '#Foreach overwrites \$class with its value variable\.#'
-        # Cross-lane artifact: the trait's users (Cache, Controllers) are outside the
-        # level-8 lane runs' analysed paths. Remove when those areas join phpstan:lanes.
-        -
-            identifier: trait.unused
-            path: src/Helpers/DatabaseConnectionTrait.php
         # Short ternary in helper functions
         - '#Short ternary operator is not allowed.*#'

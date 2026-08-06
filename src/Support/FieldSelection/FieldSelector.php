@@ -66,7 +66,7 @@ final class FieldSelector
         // GraphQL style uses nested parentheses like: user(id,name,posts(title))
         // REST style with transformations uses: id,name:format(Y-m-d),price:currency(USD)
         $isGraphQLStyle = $fields !== null && $fields !== '' &&
-                         preg_match('/\w+\s*\([^)]*\s*\w+\s*\([^)]*\)/', $fields);
+                         preg_match('/\w+\s*\([^)]*\s*\w+\s*\([^)]*\)/', $fields) === 1;
 
         if ($isGraphQLStyle) {
             // GraphQL-style syntax detected
@@ -132,7 +132,7 @@ final class FieldSelector
 
         // Parse based on syntax detection
         $isGraphQLStyle = $fields !== null && $fields !== '' &&
-                         preg_match('/\w+\s*\([^)]*\s*\w+\s*\([^)]*\)/', $fields);
+                         preg_match('/\w+\s*\([^)]*\s*\w+\s*\([^)]*\)/', $fields) === 1;
 
         if ($isGraphQLStyle) {
             $tree = (new GraphQLProjectionParser())->parse((string)$fields);

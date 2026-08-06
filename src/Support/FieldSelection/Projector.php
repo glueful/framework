@@ -208,7 +208,7 @@ final class Projector
         return (array)$row;
     }
 
-    /** @param array<int,mixed> $arr */
+    /** @param array<mixed> $arr */
     private function isList(array $arr): bool
     {
         if ($arr === []) {

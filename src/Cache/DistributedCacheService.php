@@ -51,14 +51,15 @@ class DistributedCacheService implements CacheStore
     ) {
         $this->context = $context;
         // Set up cache - try provided instance or get from container
-        $this->primaryCache = $primaryCache ?? $this->createCacheInstance();
+        $primaryCache = $primaryCache ?? $this->createCacheInstance();
 
-        if ($this->primaryCache === null) {
+        if ($primaryCache === null) {
             throw new \RuntimeException(
                 'CacheStore is required for distributed cache service. '
                 . 'Please ensure cache is properly configured or provide a CacheStore instance.'
             );
         }
+        $this->primaryCache = $primaryCache;
 
         $this->nodeManager = new Nodes\CacheNodeManager($config['nodes'] ?? []);
         $this->replicationStrategy = $config['replication'] ?? 'consistent-hashing';
@@ -134,7 +135,7 @@ class DistributedCacheService implements CacheStore
             : $this->nodeManager->getNodesForKey($key, $this->replicationStrategy);
 
         foreach ($nodes as $node) {
-            $success = $success && $node->set($key, $value, $ttlSeconds);
+            $success = $success && $node->set($key, $value, $ttlSeconds ?? 3600);
         }
 
         return $success;

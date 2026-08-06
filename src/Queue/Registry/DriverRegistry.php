@@ -114,6 +114,11 @@ class DriverRegistry
 
         $className = $this->drivers[$name]['class'];
         $instance = new $className();
+        if (!$instance instanceof QueueDriverInterface) {
+            throw new DriverNotFoundException(
+                "Queue driver class for '{$name}' must implement QueueDriverInterface: {$className}"
+            );
+        }
 
         if ($config !== []) {
             // Validate configuration against driver schema
@@ -203,6 +208,9 @@ class DriverRegistry
         try {
             $className = $this->drivers[$driverName]['class'];
             $tempInstance = new $className();
+            if (!$tempInstance instanceof QueueDriverInterface) {
+                return ['Driver class does not implement QueueDriverInterface'];
+            }
             $schema = $tempInstance->getConfigSchema();
 
             return $this->validateConfigAgainstSchema($config, $schema);
@@ -374,9 +382,14 @@ class DriverRegistry
      */
     public function getPluginManager(): PluginManager
     {
-        if ($this->pluginManager === null) {
+        $manager = $this->pluginManager;
+        if ($manager === null) {
             $this->initializePluginManager();
+            $manager = $this->pluginManager;
+            if ($manager === null) {
+                throw new \RuntimeException('Plugin manager failed to initialize.');
+            }
         }
-        return $this->pluginManager;
+        return $manager;
     }
 }

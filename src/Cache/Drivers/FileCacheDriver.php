@@ -152,7 +152,7 @@ class FileCacheDriver implements CacheStore
 
     /**
      * Determine if meta indicates expiration
-     * @param array<string, mixed>|null $meta
+     * @param array<mixed>|null $meta
      */
     private function isExpiredMeta(?array $meta, ?int $now = null): bool
     {
@@ -173,7 +173,7 @@ class FileCacheDriver implements CacheStore
         $filePath = $this->getFilePath($key);
         $lockPath = $filePath . '.lock';
         $lockFile = fopen($lockPath, 'c');
-        if (!$lockFile) {
+        if ($lockFile === false) {
             return null;
         }
         try {
@@ -486,7 +486,7 @@ class FileCacheDriver implements CacheStore
             return -1; // No expiry
         }
 
-        $ttl = $meta['expires'] - time();
+        $ttl = (int) $meta['expires'] - time();
         return $ttl > 0 ? $ttl : -2;
     }
 
@@ -658,7 +658,7 @@ class FileCacheDriver implements CacheStore
             return [];
         }
 
-        return array_slice($values, $start, $stop - $start + 1);
+        return array_map('strval', array_slice($values, $start, $stop - $start + 1));
     }
 
     /**
@@ -1086,7 +1086,7 @@ class FileCacheDriver implements CacheStore
     private function formatBytes(int $size): string
     {
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-        $power = $size > 0 ? floor(log($size, 1024)) : 0;
+        $power = $size > 0 ? (int) floor(log($size, 1024)) : 0;
 
         if ($power >= count($units)) {
             $power = count($units) - 1;

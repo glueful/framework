@@ -168,7 +168,8 @@ class FileNode extends CacheNode
 
         try {
             // Check expiration
-            $meta = json_decode(file_get_contents($metaPath), true);
+            $rawMeta = file_get_contents($metaPath);
+            $meta = $rawMeta === false ? null : json_decode($rawMeta, true);
 
             if (
                 is_array($meta) && isset($meta['expires'])
@@ -295,7 +296,8 @@ class FileNode extends CacheNode
 
         try {
             // Check expiration
-            $meta = json_decode(file_get_contents($metaPath), true);
+            $rawMeta = file_get_contents($metaPath);
+            $meta = $rawMeta === false ? null : json_decode($rawMeta, true);
 
             if (
                 is_array($meta) && isset($meta['expires'])
@@ -373,7 +375,10 @@ class FileNode extends CacheNode
                 $this->getDirInfo($path, $items, $size);
             } elseif (substr($file, -6) === '.cache') {
                 $items++;
-                $size += filesize($path);
+                $fileSize = filesize($path);
+                if ($fileSize !== false) {
+                    $size += $fileSize;
+                }
             }
         }
     }

@@ -21,7 +21,7 @@ class DocGenerator
     /** @var array<string, mixed> OpenAPI schemas storage */
     private array $schemas = [];
 
-    /** @var array<string, mixed> Extension tags storage */
+    /** @var list<mixed> Extension tags storage */
     private array $extensionTags = [];
 
     /** @var string|null Server URL discovered from merged definition files */
@@ -243,7 +243,7 @@ class DocGenerator
     public function generateFromJson(string $filename): void
     {
         $jsonContent = file_get_contents($filename);
-        if (!$jsonContent) {
+        if ($jsonContent === false || $jsonContent === '') {
             error_log("DocGenerator: Could not read table definition file: $filename");
             return;
         }
@@ -272,7 +272,7 @@ class DocGenerator
     public function generateFromDocJson(string $filename): void
     {
         $jsonContent = file_get_contents($filename);
-        if (!$jsonContent) {
+        if ($jsonContent === false || $jsonContent === '') {
             error_log("DocGenerator: Could not read custom API definition file: $filename");
             return;
         }
@@ -312,11 +312,15 @@ class DocGenerator
         }
 
         // Scan extension directories
-        $extensionDirs = array_filter(glob($extensionsPath . '/*'), 'is_dir');
+        $extensionEntries = glob($extensionsPath . '/*');
+        $extensionDirs = array_filter($extensionEntries === false ? [] : $extensionEntries, 'is_dir');
 
         foreach ($extensionDirs as $extDir) {
             $extName = basename($extDir);
             $extFiles = glob($extDir . '/*.json');
+            if ($extFiles === false) {
+                continue;
+            }
 
             foreach ($extFiles as $extFile) {
                 $this->mergeExtensionDefinition($extFile, $extName);
@@ -380,6 +384,9 @@ class DocGenerator
 
         // Process all route documentation files
         $routeFiles = glob($routesPath . '/*.json');
+        if ($routeFiles === false) {
+            return;
+        }
 
         foreach ($routeFiles as $routeFile) {
             $routeName = basename($routeFile, '.json');
@@ -745,7 +752,7 @@ class DocGenerator
     private function mergeDefinition(string $filePath, string $schemaPrefix, string $type): void
     {
         $jsonContent = file_get_contents($filePath);
-        if (!$jsonContent) {
+        if ($jsonContent === false || $jsonContent === '') {
             error_log("DocGenerator: Could not read $type definition file: $filePath");
             return;
         }
@@ -861,7 +868,7 @@ class DocGenerator
             $swagger['webhooks'] = $webhooks;
         }
 
-        return json_encode($swagger, JSON_PRETTY_PRINT);
+        return json_encode($swagger, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR);
     }
 
     /**
@@ -919,7 +926,7 @@ class DocGenerator
                     continue;
                 }
                 $tags = (is_array($operation) && isset($operation['tags']) && is_array($operation['tags']))
-                    ? array_map('strval', $operation['tags'])
+                    ? array_values(array_map('strval', $operation['tags']))
                     : [];
                 if (self::tagsPass($tags, $includeSet, $excludeSet)) {
                     $kept[$key] = $operation;

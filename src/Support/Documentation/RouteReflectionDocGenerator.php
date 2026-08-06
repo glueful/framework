@@ -1464,7 +1464,7 @@ final class RouteReflectionDocGenerator
     private function buildDefaultErrorBody(array $errors): array
     {
         $schema = $errors['schema'];
-        if (is_string($schema) && $schema !== '') {
+        if (is_string($schema) && $schema !== '' && class_exists($schema)) {
             $bodySchema = ClassSchemaReflector::toSchema($schema);
             if ($errors['envelope']) {
                 $bodySchema = $this->wrapInEnvelope($bodySchema);

@@ -65,7 +65,20 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   fallback listeners and string listeners are `is_callable`-verified with named exceptions;
   webhook/response payload-size math guards `json_encode`/`getContent()` `false`; and
   `Utils::getCache()` throws a clear "cache not available" instead of returning null typed
-  as `CacheStore`. (`phpstan/phpstan ^2.0` with `phpstan-phpunit`,
+  as `CacheStore`.
+- **Three more areas are level-8 clean** — `Cache`, `Queue`, `Support` (84 errors) — 22 of 31
+  areas now clean and CI-enforced (594 remaining). The substance: a genuine retry-policy bug
+  in `FailedJobProvider` — global exception classes (`Error`, `TypeError`, …) were mangled by
+  `substr($class, strrpos($class, '\\') + 1)` when no namespace separator exists, so they
+  never matched the non-retryable list and failed jobs retried when they shouldn't;
+  `SignedUrl` verification returns `false` instead of a `TypeError` 500 when an attacker
+  sends `signature[]=…` as an array; queue driver instantiation (registry, discovery,
+  plugins) verifies `QueueDriverInterface` before calling driver methods on arbitrary
+  classes; `toJson()` across queue contracts uses `JSON_THROW_ON_ERROR` instead of returning
+  `false` typed as `string`; cache node/file drivers guard
+  `fopen`/`file_get_contents`/`filesize`/`glob` falses; and the distributed cache
+  constructor matches its non-null guarantee.
+- **Static analysis upgraded to PHPStan 2.x** (`phpstan/phpstan ^2.0` with `phpstan-phpunit`,
   `phpstan-strict-rules`, and `phpstan-deprecation-rules` on their 2.x majors). The level-6 CI
   gate stays green: the 2.x engine's new findings are frozen in `phpstan-baseline.neon`
   (111 entries, identifier-tagged) to be burned down deliberately — the baseline must never
