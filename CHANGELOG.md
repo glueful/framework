@@ -94,6 +94,21 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   `SecurityManager`/`RandomStringGenerator` match their constructor/range guarantees.
   Dev-dependency `squizlabs/php_codesniffer` bumped to 3.13.6 (CVE-2026-67434, command
   injection — dev-only tooling).
+- **`Auth` and `Controllers` are level-8 clean** (81 errors) — 26 of 31 areas now clean and
+  CI-enforced (434 remaining). The substance in the auth stack: `CidrMatcher` fails closed
+  (no match) if `unpack()` ever fails; JWT header/payload encoding uses
+  `JSON_THROW_ON_ERROR` instead of signing the string `"false"`; the JWT provider's
+  query-param token fallback no longer calls `config()` before its own null-context check;
+  token pairs are runtime-validated (`access_token`/`refresh_token` present and strings)
+  at the refresh and session-store boundaries instead of trusted; the session cookie's
+  `same_site` config value is validated with a named error; `SessionStore` skips caching
+  a session that cannot be JSON-encoded rather than caching the string `"false"`; rollback
+  operations throw a named error on malformed entries; and `AuthSessionUser`'s
+  permissions/roles types now tell the truth (shape varies by RBAC provider). In
+  controllers: config-file path containment fails closed when `realpath()` fails on either
+  side; disk-usage/metrics endpoints survive `disk_*`/`glob`/`filemtime`/`sys_getloadavg`
+  falses instead of fataling; and the resize-parameter contract documents its actual
+  null-valued shape.
 - **Static analysis upgraded to PHPStan 2.x** (`phpstan/phpstan ^2.0` with `phpstan-phpunit`,
   `phpstan-strict-rules`, and `phpstan-deprecation-rules` on their 2.x majors). The level-6 CI
   gate stays green: the 2.x engine's new findings are frozen in `phpstan-baseline.neon`

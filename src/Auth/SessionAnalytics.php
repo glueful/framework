@@ -53,12 +53,13 @@ class SessionAnalytics
         ?ApplicationContext $context = null
     ) {
         $this->context = $context;
-        $this->cache = $cache ?? CacheHelper::createCacheInstance();
-        if ($this->cache === null) {
+        $cache = $cache ?? CacheHelper::createCacheInstance();
+        if ($cache === null) {
             throw new \RuntimeException(
                 'CacheStore is required for SessionAnalytics: Unable to create cache instance.'
             );
         }
+        $this->cache = $cache;
         if ($sessionCacheManager !== null) {
             $this->sessionCacheManager = $sessionCacheManager;
         } elseif ($this->context !== null) {
@@ -180,7 +181,7 @@ class SessionAnalytics
         // Get all active sessions and filter manually
         $allSessions = $this->getAllActiveSessions();
 
-        return array_filter($allSessions, function ($session) use ($criteria) {
+        return array_values(array_filter($allSessions, function ($session) use ($criteria) {
             foreach ($criteria as $field => $condition) {
                 switch ($field) {
                     case 'ip_range':
@@ -238,7 +239,7 @@ class SessionAnalytics
                 }
             }
             return true;
-        });
+        }));
     }
 
     /**
@@ -741,7 +742,7 @@ class SessionAnalytics
      */
     private function applyFilters(array $sessions, array $filters): array
     {
-        return array_filter($sessions, function ($session) use ($filters) {
+        return array_values(array_filter($sessions, function ($session) use ($filters) {
             foreach ($filters as $field => $value) {
                 switch ($field) {
                     case 'provider':
@@ -758,7 +759,7 @@ class SessionAnalytics
                 }
             }
             return true;
-        });
+        }));
     }
 
     /**
@@ -770,7 +771,8 @@ class SessionAnalytics
      */
     private function cacheAnalytics(array $analytics, array $filters): void
     {
-        $cacheKey = self::ANALYTICS_PREFIX . 'full:' . md5(json_encode($filters));
+        $encodedFilters = json_encode($filters);
+        $cacheKey = self::ANALYTICS_PREFIX . 'full:' . md5($encodedFilters === false ? '' : $encodedFilters);
         $this->cache->set($cacheKey, $analytics, self::METRICS_TTL);
     }
 

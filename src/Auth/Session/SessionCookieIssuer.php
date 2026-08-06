@@ -53,6 +53,13 @@ final class SessionCookieIssuer
 
     private function cookie(string $name, string $value, int $expiresAt, string $path): Cookie
     {
+        $sameSite = match ($this->config->sameSite) {
+            'lax', 'strict', 'none', '' => $this->config->sameSite,
+            default => throw new \InvalidArgumentException(
+                "Invalid session cookie same_site value: {$this->config->sameSite}"
+            ),
+        };
+
         return Cookie::create(
             name: $name,
             value: $value,
@@ -62,7 +69,7 @@ final class SessionCookieIssuer
             secure: $this->config->secure,
             httpOnly: true,
             raw: false,
-            sameSite: $this->config->sameSite,
+            sameSite: $sameSite,
         );
     }
 }

@@ -56,7 +56,7 @@ class AuthenticationGuard
     public function id(): mixed
     {
         $user = $this->user();
-        if (!$user) {
+        if ($user === null) {
             return null;
         }
 

@@ -427,7 +427,7 @@ class ConfigController extends BaseController
      * Load all configuration files
      */
     /**
-     * @return array<int, array{name: string, config: array<string, mixed>, source: string, extension_version?: string}>
+     * @return array<int, array{name: string, config: array<string, mixed>, source: string, extension_version?: string|null}>
      */
     private function loadAllConfigs(): array
     {
@@ -612,7 +612,7 @@ class ConfigController extends BaseController
         $realPath = realpath($file);
         $basePath = realpath(base_path($this->getContext()));
 
-        if (!$realPath || !str_starts_with($realPath, $basePath)) {
+        if ($realPath === false || $basePath === false || !str_starts_with($realPath, $basePath)) {
             throw new SecurityException("Invalid config file path: {$file}");
         }
 
@@ -759,7 +759,7 @@ class ConfigController extends BaseController
     {
         try {
             ValidationHelper::validateLength($name, 1, 50, 'config_name');
-            if (!preg_match('/^[a-zA-Z0-9_-]+$/', $name)) {
+            if (preg_match('/^[a-zA-Z0-9_-]+$/', $name) !== 1) {
                 return false;
             }
             return true;
@@ -848,6 +848,9 @@ class ConfigController extends BaseController
         }
 
         $envContent = file_get_contents($envPath);
+        if ($envContent === false) {
+            return;
+        }
         $lines = explode("\n", $envContent);
         $updated = false;
 

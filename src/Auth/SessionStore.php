@@ -531,6 +531,9 @@ class SessionStore implements SessionStoreInterface
         }
         $canonicalKey = "session_data_{$session['uuid']}";
         $sessionJson = json_encode($session);
+        if ($sessionJson === false) {
+            return; // can't cache what can't encode — the database stays authoritative
+        }
         $refreshTtl = (int) $this->getConfig('session.refresh_token_lifetime', 604800);
         $maxTtl = max($this->cacheDefaultTtl, $refreshTtl);
         $this->cache?->set($canonicalKey, $sessionJson, $maxTtl);

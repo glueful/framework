@@ -94,10 +94,16 @@ class PasswordHasher
      * - Options (cost, etc.)
      *
      * @param string $hash Password hash to analyze
-     * @return array{algo:int, algoName:string, options: array<string, mixed>} Hash information
+     * @return array{algo: string|null, algoName: string, options: array<string, mixed>} Hash information
      */
     public function getInfo(string $hash): array
     {
-        return password_get_info($hash);
+        $info = password_get_info($hash);
+
+        return [
+            'algo' => is_string($info['algo'] ?? null) ? $info['algo'] : null,
+            'algoName' => (string) ($info['algoName'] ?? 'unknown'),
+            'options' => is_array($info['options'] ?? null) ? $info['options'] : [],
+        ];
     }
 }

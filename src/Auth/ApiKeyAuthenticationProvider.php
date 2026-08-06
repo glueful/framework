@@ -52,12 +52,15 @@ class ApiKeyAuthenticationProvider implements AuthenticationProviderInterface
 
     private function getUserProvider(): UserProviderInterface
     {
-        if ($this->userProvider === null) {
-            $this->userProvider = ($this->context !== null && $this->context->hasContainer())
+        $provider = $this->userProvider;
+        if ($provider === null) {
+            $candidate = ($this->context !== null && $this->context->hasContainer())
                 ? $this->context->getContainer()->get(UserProviderInterface::class)
-                : new NullUserProvider();
+                : null;
+            $provider = $candidate instanceof UserProviderInterface ? $candidate : new NullUserProvider();
+            $this->userProvider = $provider;
         }
-        return $this->userProvider;
+        return $provider;
     }
 
     /**

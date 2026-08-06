@@ -26,12 +26,11 @@ vendor/bin/phpstan analyse src/Database --level=8 --no-progress --memory-limit=1
 
 | Area | Errors | | Area | Errors |
 |---|---:|---|---|---:|
-| `Database` | 214 | | `Notifications` | 44 |
-| `Console` | 85 | | `Controllers` | 41 |
-| `Routing` | 46 | | `Auth` | 40 |
-| `Http` | 45 | | | |
+| `Database` | 214 | | `Http` | 45 |
+| `Console` | 85 | | `Notifications` | 44 |
+| `Routing` | 46 | | | |
 
-**515 total across the 7 remaining areas.** The other 24 areas are level-8 clean ✓ and
+**434 total across the 5 remaining areas.** The other 26 areas are level-8 clean ✓ and
 ratcheted in CI. Regenerate for the exact, current set.
 
 **Cleaned lanes (ratcheted):** a lane cleaned to level 8 joins the CI static job's
@@ -53,6 +52,9 @@ each newly cleaned directory to its path list.
   (`elasticsearch/elasticsearch`, `meilisearch/meilisearch-php`) joined require-dev so the
   search adapters type-check against real SDK classes (properties stay natively `?object`
   for runtime-optional support; the SDK types live in PHPDoc).
+- `Auth`, `Controllers` — cleaned 2026-08-06. Token shapes are runtime-validated at the
+  refresh/store boundaries; `AuthSessionUser`'s permissions/roles types now tell the truth
+  (shape varies by RBAC provider).
 
 ## Recommended adoption strategy
 

@@ -569,7 +569,8 @@ class HealthController extends BaseController
         try {
             if (function_exists('sys_getloadavg')) {
                 $uptime = shell_exec('uptime');
-                return trim($uptime) !== '' ? trim($uptime) : 'Unable to determine uptime';
+                $trimmed = is_string($uptime) ? trim($uptime) : '';
+                return $trimmed !== '' ? $trimmed : 'Unable to determine uptime';
             }
             return 'Uptime not available on this system';
         } catch (\Throwable) {
@@ -885,8 +886,11 @@ class HealthController extends BaseController
     private function getDiskUsage(): array
     {
         $path = realpath(base_path($this->getContext(), 'storage'));
-        $totalSpace = disk_total_space($path);
-        $freeSpace = disk_free_space($path);
+        $totalSpace = $path === false ? false : disk_total_space($path);
+        $freeSpace = $path === false ? false : disk_free_space($path);
+        if ($totalSpace === false || $freeSpace === false || $totalSpace <= 0) {
+            return ['used' => 0, 'free' => 0, 'total' => 0, 'usage_percent' => 0.0];
+        }
         $usedSpace = $totalSpace - $freeSpace;
 
         return [

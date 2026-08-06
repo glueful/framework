@@ -299,7 +299,7 @@ trait ResponseCachingTrait
             }
         }
 
-        $this->getCacheStore()->invalidateTags($tags);
+        $this->getCacheStore()->invalidateTags(array_values($tags));
     }
 
     /**
@@ -439,7 +439,10 @@ trait ResponseCachingTrait
         ];
 
         // Store metrics (could be sent to monitoring service)
-        $this->getCacheStore()->zadd('cache_metrics', [json_encode($metrics) => time()]);
+        $metricsKey = json_encode($metrics);
+        if ($metricsKey !== false) {
+            $this->getCacheStore()->zadd('cache_metrics', [$metricsKey => time()]);
+        }
 
         // Cleanup old metrics (keep last 24 hours)
         $this->getCacheStore()->zremrangebyscore('cache_metrics', '-inf', (string)(time() - 86400));

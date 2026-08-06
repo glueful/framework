@@ -434,7 +434,7 @@ class UploadController extends BaseController
     }
 
     /**
-     * @return array{width?: int, height?: int, quality?: int, format?: string, fit?: string}|null
+     * @return array{width: int|null, height: int|null, quality: int|null, format: string|null, fit: string|null}|null
      */
     private function getResizeParams(Request $request): ?array
     {
@@ -524,9 +524,13 @@ class UploadController extends BaseController
                 return Response::error($e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
-            // @phpstan-ignore-next-line — guarded by the `$this->media !== null`
-            // check in show(); serveResizedImage() is never reached with a null seam.
-            ['data' => $data, 'mime' => $mime] = $this->media->renderVariant(
+            // show() serves the original when the media seam is absent, so this path
+            // is unreachable with a null processor — but say so loudly if it happens.
+            $media = $this->media;
+            if ($media === null) {
+                throw new \RuntimeException('serveResizedImage() requires the media processor seam.');
+            }
+            ['data' => $data, 'mime' => $mime] = $media->renderVariant(
                 $temp,
                 $this->buildVariantOptions($resize)
             );
@@ -645,7 +649,7 @@ class UploadController extends BaseController
             $headers['Accept-Ranges'] = 'bytes';
             $rangeHeader = $request->headers->get('Range');
 
-            if ($rangeHeader !== null && preg_match('/bytes=(\d+)-(\d*)/', $rangeHeader, $matches)) {
+            if ($rangeHeader !== null && preg_match('/bytes=(\d+)-(\d*)/', $rangeHeader, $matches) === 1) {
                 $start = (int) $matches[1];
                 $end = $matches[2] !== '' ? (int) $matches[2] : $fileSize - 1;
 

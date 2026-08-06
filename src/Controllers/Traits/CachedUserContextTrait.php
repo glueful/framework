@@ -217,7 +217,7 @@ trait CachedUserContextTrait
 
         if (!$this->isCachedAdmin()) {
             throw new UnauthorizedException(
-                $this->getCachedUserUuid(),
+                $this->getCachedUserUuid() ?? '',
                 'admin',
                 'system',
                 $message ?? 'Administrator privileges required'
@@ -244,7 +244,7 @@ trait CachedUserContextTrait
 
         if (!$this->hasCachedPermission($permission, $resource, $context)) {
             throw new UnauthorizedException(
-                $this->getCachedUserUuid(),
+                $this->getCachedUserUuid() ?? '',
                 $permission,
                 $resource,
                 $message ?? sprintf(
