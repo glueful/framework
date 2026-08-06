@@ -29,6 +29,16 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   now validated against Monolog's known levels (invalid config falls back to `info`
   instead of throwing mid-boot). `composer run phpstan:di` is now enforced in CI
   ("Level-8 lanes" step) so the lane cannot regress.
+- **Seven leaf areas are level-8 clean** — `Bootstrap`, `Development`, `Lock`, `Scheduler`,
+  `Storage`, `Testing`, `Uploader` — ratcheted behind the new `composer run phpstan:leaf`
+  script in the same CI step. Notable substance: `FileUploader::calculateChecksum()` throws
+  `UploadException` on an unreadable file instead of returning `false` typed as `string`;
+  `PathGuard::normalize()` fails closed if PCRE ever errors; `Glueful\Testing\TestCase::app()`
+  reports "Application not booted" instead of a null-method fatal; `LockManager` treats a
+  `null` auto-release flag as the documented default (`true`) rather than crashing in
+  Symfony Lock; `JobScheduler`'s jobs collection is honestly typed as a list (its
+  `array<string, …>` docblocks were wrong, which had also mistyped five
+  `SchedulerCommand` helpers).
 - **Static analysis upgraded to PHPStan 2.x** (`phpstan/phpstan ^2.0` with `phpstan-phpunit`,
   `phpstan-strict-rules`, and `phpstan-deprecation-rules` on their 2.x majors). The level-6 CI
   gate stays green: the 2.x engine's new findings are frozen in `phpstan-baseline.neon`

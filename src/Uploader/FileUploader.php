@@ -301,7 +301,12 @@ final class FileUploader
      */
     public function calculateChecksum(string $filePath): string
     {
-        return hash_file('sha256', $filePath);
+        $checksum = hash_file('sha256', $filePath);
+        if ($checksum === false) {
+            throw new UploadException("Failed to calculate checksum for: {$filePath}");
+        }
+
+        return $checksum;
     }
 
     /**
@@ -782,7 +787,7 @@ final class FileUploader
     private function formatBytes(int $size): string
     {
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-        $power = $size > 0 ? floor(log($size, 1024)) : 0;
+        $power = $size > 0 ? (int) floor(log($size, 1024)) : 0;
 
         if ($power >= count($units)) {
             $power = count($units) - 1;

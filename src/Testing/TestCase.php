@@ -96,7 +96,7 @@ abstract class TestCase extends PHPUnitTestCase
 
     protected function getContainer(): ContainerInterface
     {
-        return $this->app->getContainer();
+        return $this->app()->getContainer();
     }
 
     protected function get(string $id): mixed
@@ -109,6 +109,10 @@ abstract class TestCase extends PHPUnitTestCase
      */
     protected function app(): \Glueful\Application
     {
+        if ($this->app === null) {
+            throw new \RuntimeException('Application not booted — ensure parent::setUp() has run.');
+        }
+
         return $this->app;
     }
 

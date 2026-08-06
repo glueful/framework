@@ -48,7 +48,7 @@ class LogEntry
         // [Mon Jan 22 14:23:15 2026] [::1]:56643 [200]: GET /api/users
         $pattern = '/\[([^\]]+)\]\s+\S+\s+\[(\d+)\]:\s+(\w+)\s+(.+)/';
 
-        if (!preg_match($pattern, $line, $matches)) {
+        if (preg_match($pattern, $line, $matches) !== 1) {
             return null;
         }
 

@@ -66,7 +66,7 @@ use Symfony\Component\Lock\Exception\LockConflictedException;
  */
 class JobScheduler
 {
-    /** @var array<string, array<string, mixed>> List of registered jobs and their schedules */
+    /** @var list<array<string, mixed>> List of registered jobs and their schedules */
     protected array $jobs = [];
 
     /** @var Connection Database connection */
@@ -512,7 +512,7 @@ class JobScheduler
     /**
      * Get all registered jobs.
      *
-     * @return array<string, array<string, mixed>> List of jobs
+     * @return list<array<string, mixed>> List of jobs
      */
     public function getJobs(): array
     {

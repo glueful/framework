@@ -31,7 +31,7 @@ class LockManager implements LockManagerInterface
     public function createLock(string $resource, ?float $ttl = null, ?bool $autoRelease = true): LockInterface
     {
         $key = $this->prefix . $resource;
-        $symfonyLock = $this->factory->createLock($key, $ttl, $autoRelease);
+        $symfonyLock = $this->factory->createLock($key, $ttl, $autoRelease ?? true);
 
         $lock = new Lock($symfonyLock, $resource, $ttl);
         $this->locks[$resource] = $lock;

@@ -36,14 +36,16 @@ vendor/bin/phpstan analyse src/Database --level=8 --no-progress --memory-limit=1
 | `Security` | 39 | | `Tasks` / `Performance` / `Extensions` | 9 each |
 | `Support` | 32 | | `Container` | **0 ✓** |
 | `Cache` | 27 | | `Repository` | 6 |
-| | | | …`Uploader`, `Storage`, `Scheduler`, `Testing`, `Bootstrap`, `Lock`, `Development` | 1–4 each |
+| | | | `Bootstrap` / `Development` / `Lock` / `Scheduler` / `Storage` / `Testing` / `Uploader` | **0 ✓** |
 
-**832 total.** Regenerate for the exact, current set.
+**815 total.** Regenerate for the exact, current set.
 
 **Cleaned lanes (ratcheted):** a lane cleaned to level 8 gets its `phpstan:*` script added to the
 CI static job's "Level-8 lanes" step so it can never regress.
 
 - `Container` — cleaned 2026-08-06 (`composer run phpstan:di`, enforced in CI).
+- `Bootstrap`, `Development`, `Lock`, `Scheduler`, `Storage`, `Testing`, `Uploader` — cleaned
+  2026-08-06 as one leaf-lanes pass (`composer run phpstan:leaf`, enforced in CI).
 
 ## Recommended adoption strategy
 

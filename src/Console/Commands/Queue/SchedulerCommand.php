@@ -504,8 +504,8 @@ class SchedulerCommand extends BaseCommand
     }
 
     /**
-     * @param array<string, mixed> $jobs
-     * @return array<string, mixed>
+     * @param list<array<string, mixed>> $jobs
+     * @return array<int, array<string, mixed>>
      */
     private function filterJobs(array $jobs, string $filter): array
     {
@@ -521,7 +521,7 @@ class SchedulerCommand extends BaseCommand
     }
 
     /**
-     * @param array<string, mixed> $jobs
+     * @param array<int, array<string, mixed>> $jobs
      */
     private function displayJobs(array $jobs, string $format): void
     {
@@ -541,7 +541,7 @@ class SchedulerCommand extends BaseCommand
     }
 
     /**
-     * @param array<string, mixed> $jobs
+     * @param array<int, array<string, mixed>> $jobs
      */
     private function displayJobsTable(array $jobs): void
     {
@@ -566,7 +566,7 @@ class SchedulerCommand extends BaseCommand
     }
 
     /**
-     * @param array<string, mixed> $jobs
+     * @param list<array<string, mixed>> $jobs
      * @return array<string, int>
      */
     private function calculateSchedulerStats(array $jobs): array
@@ -603,8 +603,8 @@ class SchedulerCommand extends BaseCommand
     }
 
     /**
-     * @param array<string, mixed> $jobs
-     * @return array<string, mixed>
+     * @param list<array<string, mixed>> $jobs
+     * @return list<array<string, mixed>>
      */
     private function getUpcomingJobs(array $jobs, int $limit): array
     {
@@ -614,7 +614,7 @@ class SchedulerCommand extends BaseCommand
     }
 
     /**
-     * @param array<string, mixed> $jobs
+     * @param list<array<string, mixed>> $jobs
      */
     private function displayUpcomingJobs(array $jobs): void
     {
