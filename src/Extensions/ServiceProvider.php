@@ -462,6 +462,10 @@ abstract class ServiceProvider
      */
     private function isValidCommand(string $className): bool
     {
+        if (!class_exists($className)) {
+            return false;
+        }
+
         try {
             $reflection = new ReflectionClass($className);
 

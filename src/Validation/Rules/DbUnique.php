@@ -108,15 +108,15 @@ final class DbUnique implements Rule
         }
 
         // Validate table and column names to prevent SQL injection
-        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $this->table)) {
+        if (preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $this->table) !== 1) {
             throw new \InvalidArgumentException('Invalid table name.');
         }
 
-        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $column)) {
+        if (preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $column) !== 1) {
             throw new \InvalidArgumentException('Invalid column name.');
         }
 
-        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $this->exceptColumn)) {
+        if (preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $this->exceptColumn) !== 1) {
             throw new \InvalidArgumentException('Invalid except column name.');
         }
 

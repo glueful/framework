@@ -59,8 +59,9 @@ class RepositoryFactory
     public function get(string $repositoryClass)
     {
         // Return cached instance if available
-        if (isset($this->repositories[$repositoryClass])) {
-            return $this->repositories[$repositoryClass];
+        $cached = $this->repositories[$repositoryClass] ?? null;
+        if ($cached instanceof $repositoryClass) {
+            return $cached;
         }
 
         // Create repository instance

@@ -191,7 +191,7 @@ class RuleParser
             if ($inRegex && $char === $regexDelimiter && ($chars[$i - 1] ?? '') !== '\\') {
                 // Check if this is the closing delimiter (not followed by modifiers then pipe/end)
                 $remaining = substr($rules, $i + 1);
-                if (preg_match('/^[a-z]*(\||$)/', $remaining)) {
+                if (preg_match('/^[a-z]*(\||$)/', $remaining) === 1) {
                     $inRegex = false;
                 }
             }

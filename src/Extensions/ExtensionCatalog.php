@@ -46,13 +46,23 @@ class ExtensionCatalog
         $installed = $this->installedMap();
         $enabled = EnabledProviders::from($this->context);
 
-        return array_map(function (array $p) use ($installed, $enabled): array {
+        // Rebuild the shape explicitly — cache round-trips erase types, so the
+        // boundary coerces instead of trusting stored data.
+        return array_values(array_map(function (array $p) use ($installed, $enabled): array {
+            $package = (string) ($p['package'] ?? '');
             $state = 'available';
-            if (isset($installed[$p['package']])) {
-                $state = in_array($installed[$p['package']], $enabled, true) ? 'enabled' : 'installed';
+            if (isset($installed[$package])) {
+                $state = in_array($installed[$package], $enabled, true) ? 'enabled' : 'installed';
             }
-            return [...$p, 'state' => $state];
-        }, $packages);
+            return [
+                'package' => $package,
+                'description' => (string) ($p['description'] ?? ''),
+                'version' => isset($p['version']) && is_string($p['version']) ? $p['version'] : null,
+                'downloads' => (int) ($p['downloads'] ?? 0),
+                'repository' => (string) ($p['repository'] ?? ''),
+                'state' => $state,
+            ];
+        }, $packages));
     }
 
     /**

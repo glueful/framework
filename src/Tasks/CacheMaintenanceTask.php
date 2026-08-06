@@ -57,6 +57,9 @@ class CacheMaintenanceTask
     private function cleanFileCache(string $cacheDir): void
     {
         $files = glob($cacheDir . '/*');
+        if ($files === false) {
+            $files = [];
+        }
         $now = time();
 
         foreach ($files as $file) {
@@ -77,7 +80,7 @@ class CacheMaintenanceTask
                 } else {
                     // Remove malformed cache files
                     $fileAge = filemtime($file);
-                    if ($now - $fileAge > 86400) { // 24 hours
+                    if ($fileAge !== false && $now - $fileAge > 86400) { // 24 hours
                         unlink($file);
                         $this->stats['expired_keys_removed']++;
                     }
@@ -121,10 +124,16 @@ class CacheMaintenanceTask
     {
         $size = 0;
         $files = glob($cacheDir . '/*');
+        if ($files === false) {
+            $files = [];
+        }
 
         foreach ($files as $file) {
             if (is_file($file)) {
-                $size += filesize($file);
+                $fileSize = filesize($file);
+                if ($fileSize !== false) {
+                    $size += $fileSize;
+                }
             }
         }
 
@@ -160,6 +169,9 @@ class CacheMaintenanceTask
 
         // Move valid cache files to temp directory
         $files = glob($cacheDir . '/*');
+        if ($files === false) {
+            $files = [];
+        }
         $now = time();
 
         foreach ($files as $file) {

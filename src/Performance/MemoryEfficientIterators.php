@@ -120,6 +120,9 @@ class MemoryEfficientIterators
         } elseif ($statement instanceof \mysqli_stmt) {
             // MySQLi implementation
             $result = $statement->get_result();
+            if ($result === false) {
+                throw new \RuntimeException('Failed to get result set from mysqli statement');
+            }
             while ($row = $result->fetch_assoc()) {
                 yield $row;
             }

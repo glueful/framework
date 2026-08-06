@@ -26,26 +26,28 @@ vendor/bin/phpstan analyse src/Database --level=8 --no-progress --memory-limit=1
 
 | Area | Errors | | Area | Errors |
 |---|---:|---|---|---:|
-| `Database` | 214 | | `Queue` | 25 |
-| `Console` | 85 | | `Helpers` | 20 |
-| `Routing` | 46 | | `Permissions` / `Events` | 17 each |
-| `Http` | 45 | | (src root) | 15 |
-| `Notifications` | 44 | | `Services` | 13 |
-| `Controllers` | 41 | | `Validation` | 12 |
-| `Auth` / `Api` | 40 each | | `Logging` | 10 |
-| `Security` | 39 | | `Tasks` / `Performance` / `Extensions` | 9 each |
-| `Support` | 32 | | `Container` | **0 ✓** |
-| `Cache` | 27 | | `Repository` | 6 |
-| | | | `Bootstrap` / `Development` / `Lock` / `Scheduler` / `Storage` / `Testing` / `Uploader` | **0 ✓** |
+| `Database` | 214 | | `Support` | 32 |
+| `Console` | 85 | | `Cache` | 27 |
+| `Routing` | 46 | | `Queue` | 25 |
+| `Http` | 45 | | `Helpers` | 20 |
+| `Notifications` | 44 | | `Permissions` / `Events` | 17 each |
+| `Controllers` | 41 | | (src root) | 15 |
+| `Auth` / `Api` | 40 each | | `Services` | 13 |
+| `Security` | 39 | | | |
 
-**815 total.** Regenerate for the exact, current set.
+**760 total across the 17 remaining areas.** The other 14 areas are level-8 clean ✓ and
+ratcheted in CI. Regenerate for the exact, current set.
 
-**Cleaned lanes (ratcheted):** a lane cleaned to level 8 gets its `phpstan:*` script added to the
-CI static job's "Level-8 lanes" step so it can never regress.
+**Cleaned lanes (ratcheted):** a lane cleaned to level 8 joins the CI static job's
+"Level-8 lanes" step so it can never regress. `phpstan:di` covers `Container`;
+`phpstan:lanes` is the single accumulating script for every other clean area — append
+each newly cleaned directory to its path list.
 
-- `Container` — cleaned 2026-08-06 (`composer run phpstan:di`, enforced in CI).
+- `Container` — cleaned 2026-08-06 (`composer run phpstan:di`).
 - `Bootstrap`, `Development`, `Lock`, `Scheduler`, `Storage`, `Testing`, `Uploader` — cleaned
-  2026-08-06 as one leaf-lanes pass (`composer run phpstan:leaf`, enforced in CI).
+  2026-08-06 as one leaf-lanes pass.
+- `Extensions`, `Logging`, `Performance`, `Repository`, `Tasks`, `Validation` — cleaned
+  2026-08-06 as one six-area pass (all in `composer run phpstan:lanes`).
 
 ## Recommended adoption strategy
 

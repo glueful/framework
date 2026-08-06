@@ -60,7 +60,11 @@ class SessionCleanupTask
     {
         try {
             $retentionDays = (int) $this->getConfig('session.cleanup.refresh_token_retention_days', 30);
-            $cutoffDate = date('Y-m-d H:i:s', strtotime("-{$retentionDays} days"));
+            $cutoffTimestamp = strtotime("-{$retentionDays} days");
+            if ($cutoffTimestamp === false) {
+                throw new \RuntimeException("Invalid retention window: {$retentionDays} days");
+            }
+            $cutoffDate = date('Y-m-d H:i:s', $cutoffTimestamp);
 
             $affected = self::$connection->table('auth_refresh_tokens')
                 ->whereIn('status', ['consumed', 'revoked', 'expired'])
@@ -77,8 +81,12 @@ class SessionCleanupTask
     {
         try {
             // Get configurable retention period, default to 30 days
-            $retentionDays = $this->getConfig('session.cleanup.revoked_retention_days', 30);
-            $cutoffDate = date('Y-m-d H:i:s', strtotime("-{$retentionDays} days"));
+            $retentionDays = (int) $this->getConfig('session.cleanup.revoked_retention_days', 30);
+            $cutoffTimestamp = strtotime("-{$retentionDays} days");
+            if ($cutoffTimestamp === false) {
+                throw new \RuntimeException("Invalid retention window: {$retentionDays} days");
+            }
+            $cutoffDate = date('Y-m-d H:i:s', $cutoffTimestamp);
             $affected = self::$connection->table('auth_sessions')
                 ->where('status', 'revoked')
                 ->where('updated_at', '<', $cutoffDate)

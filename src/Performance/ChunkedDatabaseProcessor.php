@@ -173,6 +173,9 @@ class ChunkedDatabaseProcessor
                 $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
             } elseif ($this->connection instanceof \mysqli) {
                 $stmt = $this->connection->prepare($sql);
+                if ($stmt === false) {
+                    throw new \RuntimeException('Failed to prepare statement: ' . $this->connection->error);
+                }
 
                 $types = '';
                 foreach ($params as $param) {
@@ -190,6 +193,9 @@ class ChunkedDatabaseProcessor
                 $stmt->bind_param($types, ...$params);
                 $stmt->execute();
                 $result = $stmt->get_result();
+                if ($result === false) {
+                    throw new \RuntimeException('Failed to get result set: ' . $this->connection->error);
+                }
                 $rows = $result->fetch_all(MYSQLI_ASSOC);
             } else {
                 throw new \InvalidArgumentException('Unsupported connection type');

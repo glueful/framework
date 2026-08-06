@@ -12,8 +12,12 @@ namespace Glueful\Extensions;
 final class ProviderOrderer
 {
     /**
-     * @param list<class-string> $classes
-     * @return list<class-string>
+     * Orders provider FQCNs. Accepts unverified strings by contract: the resolver
+     * passes config-declared names through without existence checks (instantiation
+     * layers own that concern), and is_subclass_of() is false for unknown classes.
+     *
+     * @param list<string> $classes
+     * @return list<string>
      */
     public static function order(array $classes): array
     {

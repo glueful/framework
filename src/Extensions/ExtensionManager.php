@@ -355,8 +355,12 @@ final class ExtensionManager
             $this->log('Circular dependency detected in provider bootAfter(), using priority fallback');
         }
 
+        // $ordered is a permutation of $this->providers' keys, so every key is a
+        // class-string<ServiceProvider>.
+        /** @var list<class-string<ServiceProvider>> $orderedProviderClasses */
+        $orderedProviderClasses = $ordered;
         $final = [];
-        foreach ($ordered as $class) {
+        foreach ($orderedProviderClasses as $class) {
             $final[$class] = $this->providers[$class];
         }
         $this->providers = $final;
@@ -366,7 +370,7 @@ final class ExtensionManager
      * Load providers from cache
      */
     /**
-     * @return array<class-string, object>|null
+     * @return array<class-string<ServiceProvider>, ServiceProvider>|null
      */
     private function loadFromCache(): ?array
     {
@@ -381,7 +385,8 @@ final class ExtensionManager
         $maxAge = $this->isProduction()
             ? (int) (env('EXTENSIONS_CACHE_TTL_PROD', PHP_INT_MAX))
             : (int) env('EXTENSIONS_CACHE_TTL_DEV', 5);
-        if (time() - filemtime($cacheFile) > $maxAge) {
+        $mtime = filemtime($cacheFile);
+        if ($mtime === false || time() - $mtime > $maxAge) {
             return null;
         }
 
@@ -511,7 +516,7 @@ final class ExtensionManager
      * Get all extension metadata
      */
     /**
-     * @return array<class-string, array<string, mixed>>
+     * @return array<string, array<string, mixed>>
      */
     public function listMeta(): array
     {

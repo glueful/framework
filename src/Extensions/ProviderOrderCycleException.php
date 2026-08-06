@@ -6,7 +6,7 @@ namespace Glueful\Extensions;
 
 final class ProviderOrderCycleException extends \RuntimeException
 {
-    /** @param list<class-string> $blockedProviders */
+    /** @param list<string> $blockedProviders Provider FQCNs caught in the cycle */
     public function __construct(public readonly array $blockedProviders)
     {
         parent::__construct(

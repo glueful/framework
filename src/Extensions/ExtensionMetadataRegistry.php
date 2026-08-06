@@ -6,7 +6,7 @@ namespace Glueful\Extensions;
 
 final class ExtensionMetadataRegistry
 {
-    /** @var array<class-string, array<string, mixed>> */
+    /** @var array<string, array<string, mixed>> */
     private array $meta = [];
 
     /**
@@ -18,7 +18,7 @@ final class ExtensionMetadataRegistry
     }
 
     /**
-     * @return array<class-string, array<string, mixed>>
+     * @return array<string, array<string, mixed>>
      */
     public function all(): array
     {

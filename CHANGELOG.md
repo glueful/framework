@@ -30,8 +30,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   instead of throwing mid-boot). `composer run phpstan:di` is now enforced in CI
   ("Level-8 lanes" step) so the lane cannot regress.
 - **Seven leaf areas are level-8 clean** — `Bootstrap`, `Development`, `Lock`, `Scheduler`,
-  `Storage`, `Testing`, `Uploader` — ratcheted behind the new `composer run phpstan:leaf`
-  script in the same CI step. Notable substance: `FileUploader::calculateChecksum()` throws
+  `Storage`, `Testing`, `Uploader` — ratcheted behind the accumulating
+  `composer run phpstan:lanes` script in the same CI step. Notable substance: `FileUploader::calculateChecksum()` throws
   `UploadException` on an unreadable file instead of returning `false` typed as `string`;
   `PathGuard::normalize()` fails closed if PCRE ever errors; `Glueful\Testing\TestCase::app()`
   reports "Application not booted" instead of a null-method fatal; `LockManager` treats a
@@ -39,6 +39,19 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   Symfony Lock; `JobScheduler`'s jobs collection is honestly typed as a list (its
   `array<string, …>` docblocks were wrong, which had also mistyped five
   `SchedulerCommand` helpers).
+- **Six more areas are level-8 clean** — `Extensions`, `Logging`, `Performance`, `Repository`,
+  `Tasks`, `Validation` (55 errors) — appended to `composer run phpstan:lanes`; 14 of 31 areas
+  are now clean and CI-enforced (760 remaining). The substance: mysqli
+  `prepare()`/`get_result()` failures throw named `RuntimeException`s instead of fataling on
+  `false`; every `strtotime()`-based retention cutoff (log pruner, session cleanup, orphaned
+  blobs) guards the `false` case; `glob()` failures no longer crash cache-maintenance/backup
+  tasks; the extension cache validates its `filemtime()`; `ExtensionCatalog` coerces cached
+  Packagist data at the boundary instead of trusting it; log-level names are allowlisted
+  before Monolog's `fromName()` (typos fall back to `debug` instead of throwing
+  `ValueError`); `RepositoryFactory::get()` verifies cached instances with `instanceof`;
+  `RequestData` hydration rejects nonexistent DTO classes by name; and
+  `ProviderOrderer::order()`'s signature is now honest about accepting unverified provider
+  FQCNs (its documented contract — instantiation layers own existence).
 - **Static analysis upgraded to PHPStan 2.x** (`phpstan/phpstan ^2.0` with `phpstan-phpunit`,
   `phpstan-strict-rules`, and `phpstan-deprecation-rules` on their 2.x majors). The level-6 CI
   gate stays green: the 2.x engine's new findings are frozen in `phpstan-baseline.neon`

@@ -562,10 +562,8 @@ class NotificationRepository extends BaseRepository implements NotificationStore
             ];
 
             // Check if preference exists by UUID
-            $existing = null;
-            if (($preference->getUuid() ?? '') !== '') {
-                $existing = $this->findPreferenceByUuid($preference->getUuid());
-            }
+            $uuid = $preference->getUuid();
+            $existing = ($uuid !== null && $uuid !== '') ? $this->findPreferenceByUuid($uuid) : null;
 
             if ($existing !== null) {
                 // Update existing preference
@@ -674,10 +672,8 @@ class NotificationRepository extends BaseRepository implements NotificationStore
             ];
 
             // Check if template exists by UUID
-            $existing = null;
-            if (($template->getUuid() ?? '') !== '') {
-                $existing = $this->findTemplateByUuid($template->getUuid());
-            }
+            $uuid = $template->getUuid();
+            $existing = ($uuid !== null && $uuid !== '') ? $this->findTemplateByUuid($uuid) : null;
 
             if ($existing !== null) {
                 // Update existing template
@@ -864,11 +860,13 @@ class NotificationRepository extends BaseRepository implements NotificationStore
         $cutoffDate = (new DateTime())->modify("-$olderThanDays days")->format('Y-m-d H:i:s');
 
         // First find the notifications to delete (to ensure proper audit logging)
-        $oldNotifications = $this->db->table($this->table)
+        $query = $this->db->table($this->table)
             ->select(['uuid'])
-            ->where('created_at', '<', $cutoffDate)
-            ->limit($limit)
-            ->get();
+            ->where('created_at', '<', $cutoffDate);
+        if ($limit !== null) {
+            $query = $query->limit($limit);
+        }
+        $oldNotifications = $query->get();
 
         if ($oldNotifications === []) {
             return true;  // Nothing to delete

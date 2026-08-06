@@ -118,7 +118,7 @@ final class PackageManifest
      * `managed_by` attribution. Two packages claiming one provider is a fatal
      * configuration error, never a silent last-one-wins.
      *
-     * @return array<class-string, string>
+     * @return array<string, string>
      */
     public function providerOwnership(): array
     {

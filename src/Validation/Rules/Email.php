@@ -16,6 +16,6 @@ final class Email implements Rule
         if ($value === null) {
             return null;
         }
-        return filter_var($value, FILTER_VALIDATE_EMAIL) ? null : 'Invalid email address.';
+        return filter_var($value, FILTER_VALIDATE_EMAIL) !== false ? null : 'Invalid email address.';
     }
 }

@@ -291,7 +291,7 @@ class MemoryAlertingService
 
             $response = $client->post($slackConfig['webhook_url'], [
                 'timeout' => 10,
-                'json' => json_decode($payload, true)
+                'json' => $payload !== false ? json_decode($payload, true) : null
             ]);
 
             if (!$response->isSuccessful()) {
@@ -366,7 +366,7 @@ class MemoryAlertingService
                 'headers' => [
                     'X-Alert-Type' => 'memory'
                 ],
-                'json' => json_decode($payload, true)
+                'json' => $payload !== false ? json_decode($payload, true) : null
             ]);
 
             if (!$response->isSuccessful()) {
@@ -445,7 +445,7 @@ class MemoryAlertingService
 
         $bytes = max($bytes, 0);
         $pow = floor(($bytes > 0 ? log($bytes) : 0) / log(1024));
-        $pow = min($pow, count($units) - 1);
+        $pow = (int) min($pow, count($units) - 1);
 
         $bytes /= pow(1024, $pow);
 

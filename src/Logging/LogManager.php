@@ -70,7 +70,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
     /** @var bool Debug mode flag */
     private bool $debugMode = true;
 
-    /** @var array<int, array{level: string, message: string, context: array<string, mixed>, timestamp: float}> Recent log entries buffer */
+    /** @var array<int, array{level: string, message: string, context: array<string, mixed>, timestamp: string}> Recent log entries buffer */
     private array $recentLogs = [];
 
     /** @var int Maximum size for recent logs buffer */
@@ -619,7 +619,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
     /**
      * Get recent logs from in-memory buffer
      *
-     * @return array<int, array{level: string, message: string, context: array<string, mixed>, timestamp: float}>
+     * @return array<int, array{level: string, message: string, context: array<string, mixed>, timestamp: string}>
      *         Recent log entries
      */
     public function getRecentLogs(): array
@@ -714,12 +714,10 @@ class LogManager implements LoggerInterface, LogManagerInterface
 
             // Convert string level to Level enum if needed
             if (is_string($level)) {
-                try {
-                    $level = Level::fromName(ucfirst(strtolower($level)));
-                } catch (\ValueError $e) {
-                    // Fallback to Debug level if conversion fails
-                    $level = Level::Debug;
-                }
+                $name = strtolower($level);
+                $validLevels = ['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency'];
+                // Fallback to Debug level if the name is unknown
+                $level = in_array($name, $validLevels, true) ? Level::fromName(ucfirst($name)) : Level::Debug;
             }
 
             // Extract channel from context if present
@@ -1041,7 +1039,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
         $bytes = max($bytes, 0);
         $pow = floor(($bytes > 0 ? log($bytes) : 0) / log(1024));
-        $pow = min($pow, count($units) - 1);
+        $pow = (int) min($pow, count($units) - 1);
         $bytes /= (1 << (10 * $pow));
 
         return round($bytes, 2) . ' ' . $units[$pow];
@@ -1156,6 +1154,11 @@ class LogManager implements LoggerInterface, LogManagerInterface
         // For weekly rotation strategy, set maxFiles to 7
         $maxFiles = $this->rotationStrategy === 'weekly' ? 7 : $this->maxFiles;
 
+        // Normalize a raw int level to the Level enum (unknown values → Debug)
+        if (is_int($level)) {
+            $level = Level::tryFrom($level) ?? Level::Debug;
+        }
+
         $handler = new RotatingFileHandler(
             $filename,
             $maxFiles,
@@ -1268,7 +1271,9 @@ class LogManager implements LoggerInterface, LogManagerInterface
     {
         // Convert level to integer value for comparison
         if (is_string($level)) {
-            $level = Level::fromName(ucfirst($level))->value;
+            $name = strtolower($level);
+            $validLevels = ['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency'];
+            $level = in_array($name, $validLevels, true) ? Level::fromName(ucfirst($name))->value : Level::Debug->value;
         } elseif ($level instanceof Level) {
             $level = $level->value;
         }
@@ -1414,7 +1419,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
         $sanitized = [];
         foreach ($context as $key => $value) {
             // Mask potential sensitive information
-            if (is_string($key) && preg_match('/(password|token|key|secret|auth|credential)/i', $key)) {
+            if (is_string($key) && preg_match('/(password|token|key|secret|auth|credential)/i', $key) === 1) {
                 $sanitized[$key] = '***REDACTED***';
             } elseif (is_array($value)) {
                 $sanitized[$key] = $this->sanitizeContext($value);
