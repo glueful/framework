@@ -113,7 +113,9 @@ class SessionContext
     public function getId(): string
     {
         $this->ensureStarted();
-        return session_id();
+        $id = session_id();
+
+        return $id === false ? '' : $id;
     }
 
     /**

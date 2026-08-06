@@ -353,7 +353,7 @@ class Cors
      */
     public function applyToResponse(Request $request, SymfonyResponse $response): void
     {
-        $origin = $request->headers->get('Origin', '');
+        $origin = $request->headers->get('Origin', '') ?? '';
         if ($origin === '' || $response->headers->has('Access-Control-Allow-Origin')) {
             return;
         }

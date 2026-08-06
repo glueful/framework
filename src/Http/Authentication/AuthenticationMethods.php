@@ -139,7 +139,7 @@ class AuthenticationMethods
         $authHeader = 'OAuth ';
         $pairs = [];
         foreach ($oauth as $key => $value) {
-            $pairs[] = urlencode($key) . '="' . urlencode($value) . '"';
+            $pairs[] = urlencode($key) . '="' . urlencode((string) $value) . '"';
         }
         $authHeader .= implode(', ', $pairs);
 

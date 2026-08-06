@@ -461,7 +461,8 @@ class Handler implements ExceptionHandlerInterface
             return false;
         }
 
-        $fileReal = realpath($file) !== false ? realpath($file) : $file;
+        $fileRealResolved = realpath($file);
+        $fileReal = $fileRealResolved !== false ? $fileRealResolved : $file;
         $frameworkSrc = realpath(dirname(__DIR__, 2));
 
         if ($frameworkSrc !== false) {

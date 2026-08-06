@@ -141,7 +141,8 @@ class HealthCheckService
         $results = [];
 
         foreach ($services as $serviceName => $config) {
-            $endpoint = $config['endpoint'] ?? $config;
+            $endpoint = is_array($config) ? ($config['endpoint'] ?? '') : $config;
+            $endpoint = is_string($endpoint) ? $endpoint : '';
             $options = is_array($config) ? $config : [];
 
             $results[$serviceName] = $this->checkServiceHealth(

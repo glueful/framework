@@ -246,8 +246,13 @@ class RequestUserContext
                 $userData = $user->toArray();
 
                 // Get AuthenticationManager instance
-                $authManager = app(self::$context, \Glueful\Auth\AuthenticationManager::class);
-                $this->permissionCache[$cacheKey] = $authManager->isAdmin($userData);
+                $context = self::$context;
+                if ($context === null) {
+                    $this->permissionCache[$cacheKey] = false;
+                } else {
+                    $authManager = app($context, \Glueful\Auth\AuthenticationManager::class);
+                    $this->permissionCache[$cacheKey] = $authManager->isAdmin($userData);
+                }
             }
         }
 
@@ -264,7 +269,13 @@ class RequestUserContext
      */
     public function hasPermission(string $permission, string $resource = 'system', array $context = []): bool
     {
-        $cacheKey = sprintf('permission:%s:%s:%s', $permission, $resource, md5(json_encode($context)));
+        $encodedContext = json_encode($context);
+        $cacheKey = sprintf(
+            'permission:%s:%s:%s',
+            $permission,
+            $resource,
+            md5($encodedContext === false ? '' : $encodedContext)
+        );
 
         if (!isset($this->permissionCache[$cacheKey])) {
             $user = $this->getUser();

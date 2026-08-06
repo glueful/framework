@@ -319,15 +319,17 @@ class SecureErrorResponse
      */
     private static function sanitizeMessage(string $message): string
     {
-        // Remove file paths
-        $message = preg_replace('/[\/\\\\][^\s]*\.php/', '[file]', $message);
+        // Remove file paths. Each pass keeps the prior value if PCRE ever fails —
+        // a partially-sanitized message is safer than none, and length capping
+        // below still applies.
+        $message = preg_replace('/[\/\\\\][^\s]*\.php/', '[file]', $message) ?? $message;
 
         // Remove sensitive connection details
-        $message = preg_replace('/password=[^\s;,)]+/i', 'password=[REDACTED]', $message);
-        $message = preg_replace('/host=[^\s;,)]+/i', 'host=[REDACTED]', $message);
+        $message = preg_replace('/password=[^\s;,)]+/i', 'password=[REDACTED]', $message) ?? $message;
+        $message = preg_replace('/host=[^\s;,)]+/i', 'host=[REDACTED]', $message) ?? $message;
 
         // Remove full namespaces
-        $message = preg_replace('/\\\\[A-Za-z\\\\]+\\\\/', '', $message);
+        $message = preg_replace('/\\\\[A-Za-z\\\\]+\\\\/', '', $message) ?? $message;
 
         // Limit message length
         if (strlen($message) > 150) {

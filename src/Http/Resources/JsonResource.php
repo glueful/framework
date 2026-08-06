@@ -120,24 +120,38 @@ class JsonResource implements JsonSerializable, ArrayAccess
      */
     public function toArray(): array
     {
-        if ($this->resource === null) {
+        $resource = $this->resource;
+        if ($resource === null) {
             return [];
         }
 
         // Default: return all attributes
-        if (is_array($this->resource)) {
-            return $this->resource;
+        if (is_array($resource)) {
+            /** @var array<string, mixed> $resource Resources are associative by contract */
+            return $resource;
         }
 
-        if (method_exists($this->resource, 'toArray')) {
-            return $this->resource->toArray();
+        if (is_object($resource)) {
+            if (method_exists($resource, 'toArray')) {
+                $result = $resource->toArray();
+                if (is_array($result)) {
+                    /** @var array<string, mixed> $result */
+                    return $result;
+                }
+            }
+
+            if (method_exists($resource, 'getAttributes')) {
+                $attributes = $resource->getAttributes();
+                if (is_array($attributes)) {
+                    /** @var array<string, mixed> $attributes */
+                    return $attributes;
+                }
+            }
         }
 
-        if (method_exists($this->resource, 'getAttributes')) {
-            return $this->resource->getAttributes();
-        }
-
-        return (array) $this->resource;
+        $cast = (array) $resource;
+        /** @var array<string, mixed> $cast */
+        return $cast;
     }
 
     /**

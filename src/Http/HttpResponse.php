@@ -111,7 +111,7 @@ class HttpResponse
      */
     public function json(bool $assoc = true, int $depth = 512, int $options = 0)
     {
-        return json_decode($this->body, $assoc, $depth, $options | JSON_THROW_ON_ERROR);
+        return json_decode($this->body, $assoc, max(1, $depth), $options | JSON_THROW_ON_ERROR);
     }
 
     /**

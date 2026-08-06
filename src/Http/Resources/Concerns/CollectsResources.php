@@ -53,7 +53,12 @@ trait CollectsResources
     {
         $collects = $this->collects();
 
-        return new $collects($resource);
+        $instance = new $collects($resource);
+        if (!$instance instanceof JsonResource) {
+            throw new \InvalidArgumentException("Resource class must extend JsonResource: {$collects}");
+        }
+
+        return $instance;
     }
 
     /**

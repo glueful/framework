@@ -127,9 +127,10 @@ class Response extends JsonResponse
     ): self {
         // Serialize items if context is provided
         $serializedItems = $items;
-        if (self::$serializer !== null && $context !== null) {
+        $serializer = self::$serializer;
+        if ($serializer !== null && $context !== null) {
             $serializedItems = array_map(
-                fn($item) => self::$serializer->normalize($item, $context),
+                fn($item) => $serializer->normalize($item, $context),
                 $items
             );
         }
@@ -279,9 +280,10 @@ class Response extends JsonResponse
     ): self {
         // Serialize data if context is provided
         $serializedData = $data;
-        if (self::$serializer !== null && $context !== null) {
+        $serializer = self::$serializer;
+        if ($serializer !== null && $context !== null) {
             $serializedData = array_map(
-                fn($item) => self::$serializer->normalize($item, $context),
+                fn($item) => $serializer->normalize($item, $context),
                 $data
             );
         }

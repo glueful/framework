@@ -109,6 +109,18 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   side; disk-usage/metrics endpoints survive `disk_*`/`glob`/`filemtime`/`sys_getloadavg`
   falses instead of fataling; and the resize-parameter contract documents its actual
   null-valued shape.
+- **`Http` and `Notifications` are level-8 clean** (89 errors) — 28 of 31 areas now clean and
+  CI-enforced (345 remaining). The substance: webhook signature generation
+  (`WebhookDeliveryService`) throws on an unencodable payload instead of HMAC-ing the string
+  `"false"`; the PSR-15 bridge validates provider-supplied PSR-17 factories with a named
+  error and stops calling bridge methods on nullable statics inside its closure; resource
+  collections (`AnonymousResourceCollection`, `CollectsResources`, `ModelResource`) validate
+  their `collects` classes extend `JsonResource` at construction; `SecureErrorResponse`
+  keeps the prior message when a sanitization pass fails (partially sanitized beats
+  unsanitized); `NotificationMetricsService`'s cache is typed as the `CacheStore` it always
+  was (28 errors from one `object` property); notification delivery metrics skip
+  cleanly on a null notification uuid instead of a `TypeError`; and `ExternalApiService`
+  can no longer throw null after a zero-attempt retry loop.
 - **Static analysis upgraded to PHPStan 2.x** (`phpstan/phpstan ^2.0` with `phpstan-phpunit`,
   `phpstan-strict-rules`, and `phpstan-deprecation-rules` on their 2.x majors). The level-6 CI
   gate stays green: the 2.x engine's new findings are frozen in `phpstan-baseline.neon`

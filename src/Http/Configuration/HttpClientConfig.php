@@ -156,7 +156,7 @@ class HttpClientConfig
             $errors[] = 'HTTP version must be 1.0, 1.1, or 2.0';
         }
 
-        if ($this->baseUri !== null && !filter_var($this->baseUri, FILTER_VALIDATE_URL)) {
+        if ($this->baseUri !== null && filter_var($this->baseUri, FILTER_VALIDATE_URL) === false) {
             $errors[] = 'Base URI must be a valid URL';
         }
 

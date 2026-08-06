@@ -103,7 +103,7 @@ class Response
     public function json(bool $assoc = true, int $depth = 512, int $options = 0)
     {
         try {
-            return json_decode($this->getContent(), $assoc, $depth, $options | JSON_THROW_ON_ERROR);
+            return json_decode($this->getContent(), $assoc, max(1, $depth), $options | JSON_THROW_ON_ERROR);
         } catch (\JsonException $e) {
             throw new HttpResponseException('Failed to decode JSON response: ' . $e->getMessage());
         }
