@@ -1,15 +1,15 @@
 # Level-8 Static-Analysis Adoption
 
-> **Goal:** eventually run PHPStan **level 8 across the whole framework** and enforce it in CI.
-> **Status:** Catalogued, not yet addressed. **Not blocking.** The current CI gate is
-> `composer analyse` (**level 6**), which is green. Level 8 (`composer analyse:strict`) is the
-> target; this document tracks the gap so it can be closed deliberately, area by area, rather
-> than discovered ad hoc.
+> **Goal:** run PHPStan **level 8 across the whole framework** and enforce it in CI.
+> **Status: ACHIEVED 2026-08-07.** `phpstan.neon` sets `level: 8` over `src/` + `config/`,
+> and the CI gate (`composer analyse`) enforces it. All 31 areas were cleaned area-by-area
+> between 2026-08-06 and 2026-08-07 (see the campaign log below); the per-lane ratchet
+> scripts are retired — the main gate now guards everything they guarded.
 
-**Last surveyed:** 2026-08-05 — **839 errors across `src/`**, under **PHPStan 2.2** (upgraded
-from 1.12; the sharper 2.x engine changed the error catalog, so per-area counts shifted).
-Counts are measured with `phpstan-baseline.neon` applied — the frozen PHPStan-2 upgrade delta
-at the level-6 gate (111 entries) is tracked there, not here.
+**Remaining debt:** `phpstan-baseline.neon` — the frozen PHPStan-2 upgrade delta
+(111 identifier-tagged entries, generated 2026-08-05 when the gate was level 6). It must
+never grow; burn it down opportunistically when touching the files it names, and delete
+entries (or regenerate) as they stop matching.
 
 ## Regenerate
 
@@ -24,17 +24,10 @@ vendor/bin/phpstan analyse src/Database --level=8 --no-progress --memory-limit=1
 
 ## Scope by area
 
-| Area | Errors |
-|---|---:|
-| `Database` | 214 |
+**0 errors — all 31 areas level-8 clean ✓** (gate: `composer analyse`, level 8 in
+`phpstan.neon`). Regenerate to confirm.
 
-**214 total in the 1 remaining area.** The other 30 areas are level-8 clean ✓ and
-ratcheted in CI. Regenerate for the exact, current set.
-
-**Cleaned lanes (ratcheted):** a lane cleaned to level 8 joins the CI static job's
-"Level-8 lanes" step so it can never regress. `phpstan:di` covers `Container`;
-`phpstan:lanes` is the single accumulating script for every other clean area — append
-each newly cleaned directory to its path list.
+## Campaign log
 
 - `Container` — cleaned 2026-08-06 (`composer run phpstan:di`).
 - `Bootstrap`, `Development`, `Lock`, `Scheduler`, `Storage`, `Testing`, `Uploader` — cleaned
@@ -63,8 +56,18 @@ each newly cleaned directory to its path list.
 - `Console` — cleaned 2026-08-07. `BaseCommand::jsonForDisplay()` centralizes JSON output
   for commands ('[unencodable]' on failure); scaffold name validation pins `preg_match`;
   file reads/`glob`/`sys_getloadavg` guard their falses.
+- `Database` — cleaned 2026-08-07, closing the campaign. Relation machinery retyped from
+  `object` to `Model` (base `Relation` + all six relation classes + `newRelatedInstance()`,
+  with `class-string<Model>` relation params); ~57 `preg_match` pins; every SQL
+  normalization/signature chain guards `preg_replace` nulls; `WhereClauseInterface` is
+  honest about accepting callables; discriminated condition/order/join shapes read
+  defensively; `Model`/`Collection` `toJson()` throw named errors instead of returning
+  `false` typed as `string`. Gate raised: `phpstan.neon` `level: 8`.
+  **Trap for the record:** `is_callable([$class, $method])` is always true on `Model`
+  because of `__callStatic` — the boot-hook dispatch must use `method_exists`, or absent
+  hooks misroute into the static query proxy (caught by the test suite).
 
-## Recommended adoption strategy
+## Recommended adoption strategy (historical)
 
 1. **Area by area, not one sweep.** Each area is its own branch of work with its own test surface.
 2. **Run the full suite after each area** (`composer test`) and **commit per area**.

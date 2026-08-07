@@ -374,9 +374,8 @@ abstract class Factory
         }
 
         $first = $models->first();
-        if ($first !== null) {
-            $modelClass = get_class($first);
-            $clone->recycle[$modelClass] = $models;
+        if ($first instanceof Model) {
+            $clone->recycle[get_class($first)] = $models;
         }
 
         return $clone;

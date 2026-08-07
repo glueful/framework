@@ -114,7 +114,15 @@ class PooledConnection
 
         try {
             // Call PDO method
-            return call_user_func_array([$this->pdo, $method], $args);
+            $pdo = $this->pdo;
+            if ($pdo === null) {
+                throw new \RuntimeException('Pooled connection has no active PDO handle.');
+            }
+            $pdoCallable = [$pdo, $method];
+            if (!is_callable($pdoCallable)) {
+                throw new \BadMethodCallException("PDO method does not exist: {$method}");
+            }
+            return $pdoCallable(...$args);
         } catch (\Exception $e) {
             // Mark connection as unhealthy on database errors
             if ($this->isDatabaseError($e)) {

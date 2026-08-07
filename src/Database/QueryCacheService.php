@@ -48,13 +48,14 @@ class QueryCacheService
     {
         $this->context = $context;
         // Set up cache - try provided instance or get from helper
-        $this->cache = $cache ?? CacheHelper::createCacheInstance($this->context);
+        $cache = $cache ?? CacheHelper::createCacheInstance($this->context);
 
-        if ($this->cache === null) {
+        if ($cache === null) {
             throw new \RuntimeException(
                 'CacheStore is required for query cache service: Unable to create cache instance.'
             );
         }
+        $this->cache = $cache;
         $this->queryHasher = new QueryHasher($this->context);
         $this->enabled = (bool) $this->getConfig('database.query_cache.enabled', true);
         $this->defaultTtl = (int) $this->getConfig('database.query_cache.default_ttl', 3600);
@@ -155,7 +156,7 @@ class QueryCacheService
 
                 // Apply custom tags if provided in the attribute
                 if ($cacheAttr->tags !== []) {
-                    $this->cache->addTags($key, $cacheAttr->tags);
+                    $this->cache->addTags($key, array_values($cacheAttr->tags));
                 }
 
                 return $result;
@@ -187,19 +188,19 @@ class QueryCacheService
     protected function isCacheable(string $query): bool
     {
         // Only cache SELECT queries by default
-        if (!preg_match('/^\s*SELECT\b/i', $query)) {
+        if (preg_match('/^\s*SELECT\b/i', $query) !== 1) {
             return false;
         }
 
         // Skip queries with FOR UPDATE or other locking clauses
-        if (preg_match('/FOR\s+UPDATE\b/i', $query)) {
+        if (preg_match('/FOR\s+UPDATE\b/i', $query) === 1) {
             return false;
         }
 
         // Check against exclude patterns from config
         $excludePatterns = $this->getConfig('database.query_cache.exclude_patterns', []);
         foreach ($excludePatterns as $pattern) {
-            if (preg_match($pattern, $query)) {
+            if (preg_match($pattern, $query) === 1) {
                 return false;
             }
         }
@@ -251,27 +252,27 @@ class QueryCacheService
 
         // Simple extraction for common patterns
         // FROM table
-        if (preg_match_all('/\bFROM\s+`?(\w+)`?/i', $query, $matches)) {
+        if ((int) preg_match_all('/\bFROM\s+`?(\w+)`?/i', $query, $matches) > 0) {
             $tables = array_merge($tables, $matches[1]);
         }
 
         // JOIN table
-        if (preg_match_all('/\bJOIN\s+`?(\w+)`?/i', $query, $matches)) {
+        if ((int) preg_match_all('/\bJOIN\s+`?(\w+)`?/i', $query, $matches) > 0) {
             $tables = array_merge($tables, $matches[1]);
         }
 
         // UPDATE table
-        if (preg_match_all('/\bUPDATE\s+`?(\w+)`?/i', $query, $matches)) {
+        if ((int) preg_match_all('/\bUPDATE\s+`?(\w+)`?/i', $query, $matches) > 0) {
             $tables = array_merge($tables, $matches[1]);
         }
 
         // INSERT INTO table
-        if (preg_match_all('/\bINSERT\s+INTO\s+`?(\w+)`?/i', $query, $matches)) {
+        if ((int) preg_match_all('/\bINSERT\s+INTO\s+`?(\w+)`?/i', $query, $matches) > 0) {
             $tables = array_merge($tables, $matches[1]);
         }
 
         // DELETE FROM table
-        if (preg_match_all('/\bDELETE\s+FROM\s+`?(\w+)`?/i', $query, $matches)) {
+        if ((int) preg_match_all('/\bDELETE\s+FROM\s+`?(\w+)`?/i', $query, $matches) > 0) {
             $tables = array_merge($tables, $matches[1]);
         }
 

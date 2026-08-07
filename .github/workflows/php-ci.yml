@@ -124,14 +124,11 @@ jobs:
           ini-values: memory_limit=1G
       - name: Install dependencies
         run: composer install --prefer-dist --no-progress --no-interaction
+      # The main gate runs at PHPStan level 8 across src/ + config/ (phpstan.neon).
+      # The per-lane ratchet scripts from the adoption campaign are retired — the
+      # gate itself now enforces what they guarded. See docs/LEVEL8_TYPING_DEBT.md.
       - name: Run static analysis (composer run analyse)
         run: composer run analyse
-      # Level-8 ratchet: lanes added here are level-8-clean and must stay so.
-      # See docs/LEVEL8_TYPING_DEBT.md for the per-component adoption campaign.
-      - name: Level-8 lanes (composer run phpstan:di, phpstan:lanes)
-        run: |
-          composer run phpstan:di
-          composer run phpstan:lanes
 
   rector:
     name: Rector (advisory, non-blocking)

@@ -174,8 +174,12 @@ abstract class Model implements ModelInterface, JsonSerializable
         foreach (class_uses_recursive($class) as $trait) {
             $method = 'boot' . class_basename($trait);
 
+            // method_exists, NOT is_callable: Model's __callStatic makes every name
+            // "callable", which would misroute absent boot hooks into the query proxy.
             if (method_exists($class, $method)) {
-                forward_static_call([$class, $method]);
+                /** @var callable $bootCallable Real method verified above */
+                $bootCallable = [$class, $method];
+                forward_static_call($bootCallable);
             }
         }
     }
@@ -640,7 +644,12 @@ abstract class Model implements ModelInterface, JsonSerializable
      */
     public function toJson(int $options = 0): string
     {
-        return json_encode($this->jsonSerialize(), $options);
+        $json = json_encode($this->jsonSerialize(), $options);
+        if ($json === false) {
+            throw new \RuntimeException('Failed to serialize model to JSON: ' . json_last_error_msg());
+        }
+
+        return $json;
     }
 
     /**

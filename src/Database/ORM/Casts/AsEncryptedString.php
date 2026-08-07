@@ -124,7 +124,7 @@ class AsEncryptedString implements CastsAttributes
 
         $ivLength = openssl_cipher_iv_length(self::CIPHER);
 
-        if ($ivLength === false) {
+        if ($ivLength === false || $ivLength < 1) {
             throw new RuntimeException('Failed to get cipher IV length.');
         }
 

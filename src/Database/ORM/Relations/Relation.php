@@ -6,6 +6,7 @@ namespace Glueful\Database\ORM\Relations;
 
 use Glueful\Database\ORM\Builder;
 use Glueful\Database\ORM\Collection;
+use Glueful\Database\ORM\Model;
 
 /**
  * Abstract Relation
@@ -23,12 +24,12 @@ abstract class Relation
     /**
      * The parent model instance
      */
-    protected object $parent;
+    protected Model $parent;
 
     /**
      * The related model instance
      */
-    protected object $related;
+    protected Model $related;
 
     /**
      * Indicates if the relation has been loaded
@@ -45,9 +46,9 @@ abstract class Relation
      * Create a new relation instance
      *
      * @param Builder $query
-     * @param object $parent
+     * @param Model $parent
      */
-    public function __construct(Builder $query, object $parent)
+    public function __construct(Builder $query, Model $parent)
     {
         $this->query = $query;
         $this->parent = $parent;
@@ -88,7 +89,7 @@ abstract class Relation
     /**
      * Set the constraints for an eager load of the relation
      *
-     * @param array<object> $models
+     * @param array<Model> $models
      * @return void
      */
     abstract public function addEagerConstraints(array $models): void;
@@ -96,19 +97,19 @@ abstract class Relation
     /**
      * Initialize the relation on a set of models
      *
-     * @param array<object> $models
+     * @param array<Model> $models
      * @param string $relation
-     * @return array<object>
+     * @return array<Model>
      */
     abstract public function initRelation(array $models, string $relation): array;
 
     /**
      * Match the eagerly loaded results to their parents
      *
-     * @param array<object> $models
-     * @param Collection $results
+     * @param array<Model> $models
+     * @param Collection<Model> $results
      * @param string $relation
-     * @return array<object>
+     * @return array<Model>
      */
     abstract public function match(array $models, Collection $results, string $relation): array;
 
@@ -132,9 +133,9 @@ abstract class Relation
     /**
      * Get the parent model
      *
-     * @return object
+     * @return Model
      */
-    public function getParent(): object
+    public function getParent(): Model
     {
         return $this->parent;
     }
@@ -142,9 +143,9 @@ abstract class Relation
     /**
      * Get the related model
      *
-     * @return object
+     * @return Model
      */
-    public function getRelated(): object
+    public function getRelated(): Model
     {
         return $this->related;
     }
@@ -152,7 +153,7 @@ abstract class Relation
     /**
      * Get all of the primary keys for the relation
      *
-     * @param array<object> $models
+     * @param array<Model> $models
      * @param string|null $key
      * @return array<mixed>
      */

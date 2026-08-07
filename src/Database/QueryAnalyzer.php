@@ -80,7 +80,7 @@ class QueryAnalyzer
      *
      * @param  string $query  The SQL query to analyze
      * @param  array<int|string, mixed>  $params Parameters to bind to the query
-     * @return array<string, mixed> The execution plan as returned by the database
+     * @return array<mixed> The execution plan as returned by the database (shape varies by driver)
      */
     protected function getExecutionPlan(string $query, array $params = []): array
     {
@@ -320,7 +320,7 @@ class QueryAnalyzer
         $query = strtolower($query);
 
         // Check for SELECT * pattern
-        if (preg_match('/select\s+\*\s+from/i', $query)) {
+        if (preg_match('/select\s+\*\s+from/i', $query) === 1) {
             $issues[] = [
                 'severity' => 'info',
                 'message' => "Query uses 'SELECT *'",
@@ -329,7 +329,7 @@ class QueryAnalyzer
         }
 
         // Check for inefficient LIKE patterns
-        if (preg_match('/like\s+[\'"]%/i', $query)) {
+        if (preg_match('/like\s+[\'"]%/i', $query) === 1) {
             $issues[] = [
                 'severity' => 'warning',
                 'message' => "Query uses leading wildcard in LIKE pattern",
@@ -338,7 +338,7 @@ class QueryAnalyzer
         }
 
         // Check for IN with large number of values
-        if (preg_match('/in\s+\([^)]{1000,}\)/i', $query)) {
+        if (preg_match('/in\s+\([^)]{1000,}\)/i', $query) === 1) {
             $issues[] = [
                 'severity' => 'warning',
                 'message' => "Query uses IN clause with many values",
@@ -544,7 +544,7 @@ class QueryAnalyzer
         // Note: This is a basic implementation and may not cover all SQL syntax variations
 
         // Extract from FROM clause
-        if (preg_match('/from\s+([a-z0-9_\.]+)/i', $query, $matches)) {
+        if (preg_match('/from\s+([a-z0-9_\.]+)/i', $query, $matches) === 1) {
             $tables[] = $matches[1];
         }
 
@@ -568,7 +568,7 @@ class QueryAnalyzer
         $columns = [];
 
         // This is a simplified implementation and may not catch all WHERE conditions
-        if (preg_match('/where\s+(.*?)(?:group by|order by|limit|$)/is', $query, $matches)) {
+        if (preg_match('/where\s+(.*?)(?:group by|order by|limit|$)/is', $query, $matches) === 1) {
             $whereClause = $matches[1];
 
             // Extract column names from conditions
@@ -653,15 +653,18 @@ class QueryAnalyzer
         $columns = [];
 
         // Extract ORDER BY clause
-        if (preg_match('/order by\s+(.*?)(?:limit|$)/is', $query, $matches)) {
+        if (preg_match('/order by\s+(.*?)(?:limit|$)/is', $query, $matches) === 1) {
             $orderByClause = $matches[1];
 
             // Split by commas to get individual columns
             $orderColumns = preg_split('/\s*,\s*/', $orderByClause);
+            if ($orderColumns === false) {
+                $orderColumns = [];
+            }
 
             foreach ($orderColumns as $col) {
                 // Remove ASC/DESC if present
-                $col = preg_replace('/\s+(?:asc|desc)$/i', '', trim($col));
+                $col = preg_replace('/\s+(?:asc|desc)$/i', '', trim($col)) ?? trim($col);
 
                 // If column has table prefix, separate it
                 if (strpos($col, '.') !== false) {
@@ -693,11 +696,14 @@ class QueryAnalyzer
         $columns = [];
 
         // Extract GROUP BY clause
-        if (preg_match('/group by\s+(.*?)(?:having|order by|limit|$)/is', $query, $matches)) {
+        if (preg_match('/group by\s+(.*?)(?:having|order by|limit|$)/is', $query, $matches) === 1) {
             $groupByClause = $matches[1];
 
             // Split by commas to get individual columns
             $groupColumns = preg_split('/\s*,\s*/', $groupByClause);
+            if ($groupColumns === false) {
+                $groupColumns = [];
+            }
 
             foreach ($groupColumns as $col) {
                 $col = trim($col);

@@ -132,6 +132,24 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   a guarded JSON helper; attribute route loading and gate-attribute checks guard
   `class_exists` before reflection; `Route::where()` rejects a null constraint by name; and
   the auth middleware's query-param token gate null-checks its context before `config()`.
+- **`Database` is level-8 clean and the CI gate is now PHPStan level 8 framework-wide** —
+  the level-8 campaign is complete: all 31 areas clean, `phpstan.neon` raised from level 6
+  to `level: 8` over `src/` + `config/`, and the per-lane ratchet scripts retired (the main
+  `composer analyse` gate now guards everything they guarded; `types:validate` lanes all
+  pass). The Database substance: the ORM relation machinery is truthfully typed — the base
+  `Relation` and all six relation classes carry `Model` (not `object`) parents/related
+  instances, relation definitions take `class-string<Model>`, and eager-load dictionaries
+  read pivot/through keys via `getRelation()`/`getAttribute()` instead of undeclared
+  dynamic properties; ~57 `preg_match` conditions pinned with the right operator; every SQL
+  normalization/signature chain (query logger, hasher, monitors, optimizer, pagination)
+  guards `preg_replace` nulls — fail-closed where the string feeds redaction or hashing;
+  `WhereClauseInterface` is honest about accepting callables (closures previously violated
+  its declared signature); `Model::toJson()`/`Collection::toJson()` throw named errors
+  instead of returning `false` typed as `string`; pooled connections and batch inserts fail
+  with named errors instead of null-method/`TypeError` crashes. One trap documented for
+  posterity: `is_callable([$class, $method])` is always true on `Model` due to
+  `__callStatic`, so trait boot-hook dispatch must use `method_exists` — the full test
+  suite caught the one regression this campaign briefly introduced there.
 - **`Console` is level-8 clean** (85 errors) — 30 of 31 areas now clean and CI-enforced;
   only `Database` (214) remains. `BaseCommand` gains a protected `jsonForDisplay()` helper —
   JSON-encode for console output with an `'[unencodable]'` fallback — replacing ~30 raw

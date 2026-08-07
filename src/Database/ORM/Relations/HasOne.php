@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Database\ORM\Relations;
 
 use Glueful\Database\ORM\Builder;
+use Glueful\Database\ORM\Model;
 use Glueful\Database\ORM\Collection;
 
 /**
@@ -29,11 +30,11 @@ class HasOne extends Relation
      * Create a new has one relationship instance
      *
      * @param Builder $query
-     * @param object $parent
+     * @param Model $parent
      * @param string $foreignKey
      * @param string $localKey
      */
-    public function __construct(Builder $query, object $parent, string $foreignKey, string $localKey)
+    public function __construct(Builder $query, Model $parent, string $foreignKey, string $localKey)
     {
         $this->foreignKey = $foreignKey;
         $this->localKey = $localKey;
@@ -54,7 +55,7 @@ class HasOne extends Relation
     /**
      * Set the constraints for an eager load of the relation
      *
-     * @param array<object> $models
+     * @param array<Model> $models
      * @return void
      */
     public function addEagerConstraints(array $models): void
@@ -67,9 +68,9 @@ class HasOne extends Relation
     /**
      * Initialize the relation on a set of models
      *
-     * @param array<object> $models
+     * @param array<Model> $models
      * @param string $relation
-     * @return array<object>
+     * @return array<Model>
      */
     public function initRelation(array $models, string $relation): array
     {
@@ -83,10 +84,10 @@ class HasOne extends Relation
     /**
      * Match the eagerly loaded results to their parents
      *
-     * @param array<object> $models
+     * @param array<Model> $models
      * @param Collection $results
      * @param string $relation
-     * @return array<object>
+     * @return array<Model>
      */
     public function match(array $models, Collection $results, string $relation): array
     {

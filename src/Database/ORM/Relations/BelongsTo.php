@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Database\ORM\Relations;
 
 use Glueful\Database\ORM\Builder;
+use Glueful\Database\ORM\Model;
 use Glueful\Database\ORM\Collection;
 
 /**
@@ -35,7 +36,7 @@ class BelongsTo extends Relation
      * Create a new belongs to relationship instance
      *
      * @param Builder $query
-     * @param object $parent
+     * @param Model $parent
      * @param string $foreignKey
      * @param string $ownerKey
      * @param string $relationName
@@ -73,7 +74,7 @@ class BelongsTo extends Relation
     /**
      * Set the constraints for an eager load of the relation
      *
-     * @param array<object> $models
+     * @param array<Model> $models
      * @return void
      */
     public function addEagerConstraints(array $models): void
@@ -88,9 +89,9 @@ class BelongsTo extends Relation
     /**
      * Initialize the relation on a set of models
      *
-     * @param array<object> $models
+     * @param array<Model> $models
      * @param string $relation
-     * @return array<object>
+     * @return array<Model>
      */
     public function initRelation(array $models, string $relation): array
     {
@@ -104,10 +105,10 @@ class BelongsTo extends Relation
     /**
      * Match the eagerly loaded results to their parents
      *
-     * @param array<object> $models
+     * @param array<Model> $models
      * @param Collection $results
      * @param string $relation
-     * @return array<object>
+     * @return array<Model>
      */
     public function match(array $models, Collection $results, string $relation): array
     {

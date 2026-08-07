@@ -28,7 +28,7 @@ class QueryPatternRecognizer
         $matches = [];
 
         foreach ($this->patterns as $patternName => $pattern) {
-            if (preg_match($pattern['regex'], $query)) {
+            if (preg_match($pattern['regex'], $query) === 1) {
                 $matches[$patternName] = [
                     'description' => $pattern['description'],
                     'recommendation' => $pattern['recommendation']

@@ -197,7 +197,7 @@ class QueryValidator implements QueryValidatorInterface
         }
 
         // Check for SQL injection attempts
-        if (preg_match('/[;\'"`]/', $table)) {
+        if (preg_match('/[;\'"`]/', $table) === 1) {
             throw new \InvalidArgumentException('Invalid characters in table name');
         }
 
@@ -214,7 +214,7 @@ class QueryValidator implements QueryValidatorInterface
 
         // Check for "table AS alias" or "table alias" pattern (case-insensitive)
         $aliasPattern = '/^(' . $tablePattern . ')\s+(?:AS\s+)?(' . $identifierPattern . ')$/i';
-        if (preg_match($aliasPattern, $table, $matches)) {
+        if (preg_match($aliasPattern, $table, $matches) === 1) {
             $tableName = $matches[1];
             $alias = $matches[2];
         }
@@ -240,7 +240,7 @@ class QueryValidator implements QueryValidatorInterface
         }
 
         // Validate table name identifier format
-        if (!preg_match('/^' . $identifierPattern . '$/', $baseTableName)) {
+        if (preg_match('/^' . $identifierPattern . '$/', $baseTableName) !== 1) {
             throw new \InvalidArgumentException(
                 'Invalid table name format. Must start with letter or underscore, ' .
                 'followed by letters, numbers, or underscores.'
@@ -253,7 +253,7 @@ class QueryValidator implements QueryValidatorInterface
                 throw new \InvalidArgumentException("Schema name '$schema' is a reserved SQL keyword");
             }
 
-            if (!preg_match('/^' . $identifierPattern . '$/', $schema)) {
+            if (preg_match('/^' . $identifierPattern . '$/', $schema) !== 1) {
                 throw new \InvalidArgumentException(
                     'Invalid schema name format. Must start with letter or underscore, ' .
                     'followed by letters, numbers, or underscores.'
@@ -311,12 +311,12 @@ class QueryValidator implements QueryValidatorInterface
         $parts = explode('.', $column);
         foreach ($parts as $part) {
             // Check for SQL injection attempts
-            if (preg_match('/[;\'"`]/', $part)) {
+            if (preg_match('/[;\'"`]/', $part) === 1) {
                 throw new \InvalidArgumentException("Invalid characters in column name: $column");
             }
 
             // Skip validation for aggregate functions or expressions
-            if (preg_match('/^(COUNT|SUM|AVG|MAX|MIN|DISTINCT)\s*\(/i', $part)) {
+            if (preg_match('/^(COUNT|SUM|AVG|MAX|MIN|DISTINCT)\s*\(/i', $part) === 1) {
                 continue;
             }
 
@@ -369,7 +369,7 @@ class QueryValidator implements QueryValidatorInterface
         // Check for potentially dangerous values
         if (is_string($value)) {
             // Check for SQL injection patterns
-            if (preg_match('/;\s*(DROP|DELETE|UPDATE|INSERT|CREATE|ALTER)\s/i', $value)) {
+            if (preg_match('/;\s*(DROP|DELETE|UPDATE|INSERT|CREATE|ALTER)\s/i', $value) === 1) {
                 throw new \InvalidArgumentException(
                     "Potentially dangerous SQL detected in value for column '$column'"
                 );

@@ -106,14 +106,13 @@ class PaginationBuilder implements PaginationBuilderInterface
             'debug'
         );
 
-        /** @var array{data: array<int, array<string, mixed>>, current_page: int, per_page: int, total: int, last_page: int, has_more: bool, from: int, to: int, execution_time_ms: int} */
         return array_merge(
             [
-                'data' => $data,
+                'data' => array_values($data),
             ],
             $meta,
             [
-                'execution_time_ms' => $executionTime
+                'execution_time_ms' => (int) ($executionTime ?? 0)
             ]
         );
     }
@@ -140,11 +139,11 @@ class PaginationBuilder implements PaginationBuilderInterface
         // Remove ORDER BY and LIMIT as they don't affect count
         // Stops at LIMIT, OFFSET, FOR UPDATE, or end of query
         $orderByPattern = '/\sORDER\s+BY\s+.+?(?=\s*(?:LIMIT|OFFSET|FOR\s+UPDATE|$))/is';
-        $cleanedQuery = preg_replace($orderByPattern, '', $originalQuery);
+        $cleanedQuery = preg_replace($orderByPattern, '', $originalQuery) ?? $originalQuery;
 
         // Handles: LIMIT 10, LIMIT ?, LIMIT 10 OFFSET 5, LIMIT 10, 20 (MySQL syntax), LIMIT ? OFFSET ?
         $limitPattern = '/\sLIMIT\s+(?:\d+|\?)\s*(?:,\s*(?:\d+|\?))?(?:\s+OFFSET\s+(?:\d+|\?))?$/is';
-        $cleanedQuery = preg_replace($limitPattern, '', $cleanedQuery);
+        $cleanedQuery = preg_replace($limitPattern, '', $cleanedQuery) ?? $cleanedQuery;
 
         // Check if this is a complex query that needs wrapping
         // Complex = has GROUP BY, subqueries in SELECT, or aggregate functions
@@ -177,22 +176,22 @@ class PaginationBuilder implements PaginationBuilderInterface
         }
 
         // Has DISTINCT
-        if (preg_match('/SELECT\s+DISTINCT/i', $query)) {
+        if (preg_match('/SELECT\s+DISTINCT/i', $query) === 1) {
             return true;
         }
 
         // Has UNION (UNION, UNION ALL, INTERSECT, EXCEPT)
-        if (preg_match('/\b(UNION|INTERSECT|EXCEPT)\b/i', $query)) {
+        if (preg_match('/\b(UNION|INTERSECT|EXCEPT)\b/i', $query) === 1) {
             return true;
         }
 
         // Has CTE (WITH ... AS)
-        if (preg_match('/^\s*WITH\s+\w+\s+AS\s*\(/i', $query)) {
+        if (preg_match('/^\s*WITH\s+\w+\s+AS\s*\(/i', $query) === 1) {
             return true;
         }
 
         // Has window functions (OVER clause)
-        if (preg_match('/\bOVER\s*\(/i', $query)) {
+        if (preg_match('/\bOVER\s*\(/i', $query) === 1) {
             return true;
         }
 

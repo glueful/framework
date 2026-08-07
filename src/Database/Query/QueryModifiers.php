@@ -240,12 +240,12 @@ class QueryModifiers implements QueryModifiersInterface
             }
 
             if ($having['type'] === 'raw') {
-                $condition .= $having['expression'];
+                $condition .= $having['expression'] ?? '';
             } else {
-                $column = $this->driver->wrapIdentifier($having['column']);
-                $operator = $having['operator'];
+                $column = $this->driver->wrapIdentifier($having['column'] ?? '');
+                $operator = $having['operator'] ?? '=';
 
-                if ($having['value'] === null) {
+                if (($having['value'] ?? null) === null) {
                     $condition .= "{$column} {$operator} NULL";
                 } else {
                     $condition .= "{$column} {$operator} ?";
@@ -271,10 +271,11 @@ class QueryModifiers implements QueryModifiersInterface
 
         foreach ($this->orderBy as $order) {
             if ($order['type'] === 'raw') {
-                $clauses[] = $order['expression'];
+                $clauses[] = $order['expression'] ?? '';
             } else {
-                $column = $this->driver->wrapIdentifier($order['column']);
-                $clauses[] = "{$column} {$order['direction']}";
+                $column = $this->driver->wrapIdentifier($order['column'] ?? '');
+                $direction = $order['direction'] ?? 'ASC';
+                $clauses[] = "{$column} {$direction}";
             }
         }
 

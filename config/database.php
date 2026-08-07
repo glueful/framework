@@ -63,7 +63,7 @@ return [
             // If path is absolute, use as-is. Otherwise, resolve from project root
             if (
                 str_starts_with($path, '/') || str_starts_with($path, DIRECTORY_SEPARATOR) ||
-                (PHP_OS_FAMILY === 'Windows' && preg_match('/^[a-zA-Z]:/', $path))
+                (PHP_OS_FAMILY === 'Windows' && preg_match('/^[a-zA-Z]:/', $path) === 1)
             ) {
                 return $path;
             }

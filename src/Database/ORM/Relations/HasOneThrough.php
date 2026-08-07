@@ -123,7 +123,7 @@ class HasOneThrough extends Relation
     /**
      * Set the constraints for an eager load of the relation
      *
-     * @param array<object> $models
+     * @param array<Model> $models
      * @return void
      */
     public function addEagerConstraints(array $models): void
@@ -136,9 +136,9 @@ class HasOneThrough extends Relation
     /**
      * Initialize the relation on a set of models
      *
-     * @param array<object> $models
+     * @param array<Model> $models
      * @param string $relation
-     * @return array<object>
+     * @return array<Model>
      */
     public function initRelation(array $models, string $relation): array
     {
@@ -152,10 +152,10 @@ class HasOneThrough extends Relation
     /**
      * Match the eagerly loaded results to their parents
      *
-     * @param array<object> $models
-     * @param Collection $results
+     * @param array<Model> $models
+     * @param Collection<Model> $results
      * @param string $relation
-     * @return array<object>
+     * @return array<Model>
      */
     public function match(array $models, Collection $results, string $relation): array
     {
@@ -175,7 +175,7 @@ class HasOneThrough extends Relation
     /**
      * Build a dictionary from the results
      *
-     * @param Collection $results
+     * @param Collection<Model> $results
      * @return array<mixed, Model>
      */
     protected function buildDictionary(Collection $results): array
@@ -184,7 +184,7 @@ class HasOneThrough extends Relation
         $throughTable = $this->throughParent->getTable();
 
         foreach ($results as $result) {
-            $key = $result->{"laravel_through_key"} ?? null;
+            $key = $result->getAttribute('laravel_through_key');
 
             if ($key !== null) {
                 $dictionary[$key] = $result;

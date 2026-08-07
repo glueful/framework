@@ -87,7 +87,7 @@ class Builder
     /**
      * Set the model instance being queried
      *
-     * @param Model $model
+     * @param TModel $model
      * @return static
      */
     public function setModel(Model $model): static
@@ -498,6 +498,9 @@ class Builder
     protected function eagerLoadNestedRelation(array $models, array $parts, ?Closure $constraints): array
     {
         $baseName = array_shift($parts);
+        if ($baseName === null) {
+            return $models;
+        }
         $nestedName = implode('.', $parts);
 
         // The base relation should already be loaded
@@ -599,12 +602,15 @@ class Builder
         foreach ($relations as $key => $value) {
             // If the key is numeric, the value is the relation name
             if (is_numeric($key)) {
+                if (!is_string($value)) {
+                    continue; // a numeric key must carry a relation name
+                }
                 // Handle nested relations like 'posts.comments.author'
                 $nested = $this->addNestedWiths($value, $results);
                 $results = array_merge($results, $nested);
             } else {
                 // The key is the relation name, value is a closure for constraints
-                $results[$key] = $value;
+                $results[$key] = $value instanceof Closure ? $value : null;
             }
         }
 
@@ -1259,6 +1265,9 @@ class Builder
         ?string $second = null,
         string $type = 'inner'
     ): static {
+        if ($operator === null || $second === null) {
+            throw new \InvalidArgumentException('join() requires both an operator and a second column.');
+        }
         $this->query->join($table, $first, $operator, $second, $type);
 
         return $this;

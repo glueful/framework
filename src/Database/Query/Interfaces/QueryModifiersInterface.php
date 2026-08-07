@@ -73,7 +73,7 @@ interface QueryModifiersInterface
     /**
      * Get ORDER BY clauses
      *
-     * @return array<array{column: string, direction: string}> The order by clauses
+     * @return array<array{type: string, column?: string, direction?: string, expression?: string}> Order by clauses
      */
     public function getOrderBy(): array;
 

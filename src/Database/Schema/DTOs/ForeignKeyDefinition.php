@@ -283,7 +283,7 @@ readonly class ForeignKeyDefinition
         }
 
         // Validate constraint name format (basic check)
-        if (!preg_match('/^[a-zA-Z][a-zA-Z0-9_]*$/', $this->name)) {
+        if (preg_match('/^[a-zA-Z][a-zA-Z0-9_]*$/', $this->name) !== 1) {
             throw new \InvalidArgumentException(
                 'Foreign key constraint name must start with letter and contain only letters, numbers, and underscores'
             );

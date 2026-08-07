@@ -133,16 +133,17 @@ class ConnectionValidator
         error_log("Graceful degradation mode activated due to database unavailability");
 
         // Notify monitoring systems
-        error_log(
-            json_encode(
-                [
-                'event' => 'graceful_degradation_activated',
-                'reason' => 'database_unavailable',
-                'details' => $healthData,
-                'timestamp' => date('c')
-                ]
-            )
+        $degradationEvent = json_encode(
+            [
+            'event' => 'graceful_degradation_activated',
+            'reason' => 'database_unavailable',
+            'details' => $healthData,
+            'timestamp' => date('c')
+            ]
         );
+        if ($degradationEvent !== false) {
+            error_log($degradationEvent);
+        }
     }
 
     /**

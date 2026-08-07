@@ -292,10 +292,10 @@ class DevelopmentQueryMonitor
     private static function normalizeQuery(string $sql): string
     {
         // Remove specific values, keep structure
-        $normalized = preg_replace('/\b\d+\b/', '?', $sql);
-        $normalized = preg_replace("/'[^']*'/", '?', $normalized);
-        $normalized = preg_replace('/"[^"]*"/', '?', $normalized);
-        $normalized = preg_replace('/\s+/', ' ', $normalized);
+        $normalized = preg_replace('/\b\d+\b/', '?', $sql) ?? $sql;
+        $normalized = preg_replace("/'[^']*'/", '?', $normalized) ?? $normalized;
+        $normalized = preg_replace('/"[^"]*"/', '?', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
 
 
         return trim(strtoupper($normalized));
@@ -309,18 +309,18 @@ class DevelopmentQueryMonitor
         // Extract table and operation pattern from original SQL (before normalization)
         // Handle queries with backticks, quotes around table names
         $pattern = '/^(SELECT|INSERT|UPDATE|DELETE).*?(FROM|INTO|UPDATE)\s+[`"\'"]?(\w+)[`"\'"]?/i';
-        if (preg_match($pattern, $originalSql, $matches)) {
+        if (preg_match($pattern, $originalSql, $matches) === 1) {
             $operation = $matches[1];
             $table = $matches[3];
 
             // Add more specificity for SELECT queries to avoid false N+1 detection
             if ($operation === 'SELECT') {
                 // Check for WHERE IN clauses (batch operations)
-                if (preg_match('/WHERE.*?IN\s*\(/i', $originalSql)) {
+                if (preg_match('/WHERE.*?IN\s*\(/i', $originalSql) === 1) {
                     return $operation . ' ' . $table . ' BATCH_IN';
                 }
                 // Check for specific column selections vs SELECT *
-                if (preg_match('/SELECT\s+\*/i', $originalSql)) {
+                if (preg_match('/SELECT\s+\*/i', $originalSql) === 1) {
                     return $operation . ' ' . $table . ' ALL_COLUMNS';
                 } else {
                     return $operation . ' ' . $table . ' SPECIFIC_COLUMNS';
@@ -328,7 +328,7 @@ class DevelopmentQueryMonitor
             }
 
             // For INSERT, check if it's batch insert
-            if ($operation === 'INSERT' && preg_match('/VALUES\s*\([^)]+\)\s*,/i', $originalSql)) {
+            if ($operation === 'INSERT' && preg_match('/VALUES\s*\([^)]+\)\s*,/i', $originalSql) === 1) {
                 return $operation . ' ' . $table . ' BATCH';
             }
 
@@ -336,7 +336,7 @@ class DevelopmentQueryMonitor
         }
 
         // Try to extract at least the operation type
-        if (preg_match('/^(SELECT|INSERT|UPDATE|DELETE)\s+/i', $originalSql, $matches)) {
+        if (preg_match('/^(SELECT|INSERT|UPDATE|DELETE)\s+/i', $originalSql, $matches) === 1) {
             return $matches[1] . ' UNKNOWN_TABLE';
         }
 
@@ -515,7 +515,7 @@ class DevelopmentQueryMonitor
 
         // Check if request URI indicates API endpoint
         $requestUri = $_SERVER['REQUEST_URI'] ?? '';
-        if (str_starts_with($requestUri, '/v') && preg_match('/^\/v\d+\//', $requestUri)) {
+        if (str_starts_with($requestUri, '/v') && preg_match('/^\/v\d+\//', $requestUri) === 1) {
             return true;
         }
 

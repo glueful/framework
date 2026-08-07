@@ -407,14 +407,17 @@ class MigrationManager
     {
         include_once $file;
 
-        $className = pathinfo($file, PATHINFO_FILENAME);
-        $className = preg_replace('/^\d+_/', '', $className); // Removes any leading digits and underscore
+        $baseName = pathinfo($file, PATHINFO_FILENAME);
+        $className = preg_replace('/^\d+_/', '', $baseName) ?? $baseName; // Removes any leading digits and underscore
 
         // Try to determine if the file contains a namespaced class
         $fileContent = file_get_contents($file);
+        if ($fileContent === false) {
+            $fileContent = '';
+        }
         $namespace = '';
 
-        if (preg_match('/namespace\s+([^;]+);/i', $fileContent, $matches)) {
+        if (preg_match('/namespace\s+([^;]+);/i', $fileContent, $matches) === 1) {
             $namespace = $matches[1] . '\\';
         }
 

@@ -601,9 +601,9 @@ class ExecutionPlanAnalyzer
     private function bindParams($stmt, array $params): void
     {
         foreach ($params as $key => $value) {
-            $paramName = is_numeric($key) ? ($key + 1) : $key;
+            $paramName = is_int($key) ? $key + 1 : $key;
             $stmt->bindValue(
-                is_numeric($paramName) ? $paramName : ":{$paramName}",
+                is_int($paramName) ? $paramName : ":{$paramName}",
                 $value,
                 $this->getPDOType($value)
             );

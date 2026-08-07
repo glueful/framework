@@ -36,7 +36,7 @@ class PostgreSQLDriver implements DatabaseDriver
         $wrap = static fn(string $part): string => '"' . str_replace('"', '""', $part) . '"';
 
         // Handle table aliases: "table AS alias" or "table alias"
-        if (preg_match('/^(.+?)\s+(?:AS\s+)?([a-zA-Z_][a-zA-Z0-9_]*)$/i', $identifier, $matches)) {
+        if (preg_match('/^(.+?)\s+(?:AS\s+)?([a-zA-Z_][a-zA-Z0-9_]*)$/i', $identifier, $matches) === 1) {
             $tableName = trim($matches[1]);
             $alias = $matches[2];
             return $wrap($tableName) . ' AS ' . $wrap($alias);
