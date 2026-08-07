@@ -478,7 +478,7 @@ class JobScheduler
                 }
 
                 // Register based on persistence flag
-                $isPersistent = $job['persistence'] ?? false;
+                $isPersistent = (bool) ($job['persistence'] ?? false);
                 if ($isPersistent) {
                     $this->registerInDatabase(
                         $job['name'],

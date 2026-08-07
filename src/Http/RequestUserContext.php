@@ -146,7 +146,7 @@ class RequestUserContext
                 }
                 $sessionCacheManager = container(self::$context)->get(SessionCacheManager::class);
                 $this->sessionData = $sessionCacheManager->getOptimizedSession($this->token, $context);
-                if ($this->sessionData) {
+                if ($this->sessionData !== null) {
                     // Session is the source of truth for runtime user context.
                     $this->user = $this->buildUserFromSession($this->sessionData);
 

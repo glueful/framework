@@ -142,7 +142,9 @@ class QueryCacheService
         $cacheAttr = $attributes[0]->newInstance();
 
         // Generate a unique key for this method call
-        $keyBase = $cacheAttr->keyPrefix ?? (get_class($repository) . '::' . $method);
+        // !== '' rather than ?? — the property is non-nullable, so the intended
+        // class::method fallback never fired for an unset (empty) prefix.
+        $keyBase = $cacheAttr->keyPrefix !== '' ? $cacheAttr->keyPrefix : (get_class($repository) . '::' . $method);
         $key = $this->generateMethodCacheKey($keyBase, $args);
 
         // Use the ttl from the attribute

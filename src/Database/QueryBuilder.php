@@ -312,6 +312,14 @@ class QueryBuilder implements QueryBuilderInterface
     }
 
     /**
+     * Whether the query has any JOIN clauses
+     */
+    public function hasJoins(): bool
+    {
+        return $this->state->getJoins() !== [];
+    }
+
+    /**
      * Add raw WHERE condition joined with OR
      *
      * @param array<mixed> $bindings

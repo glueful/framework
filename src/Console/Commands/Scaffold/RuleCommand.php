@@ -75,7 +75,9 @@ class RuleCommand extends BaseCommand
         // Get rule options
         /** @var string|null $paramsOption */
         $paramsOption = $input->getOption('params');
-        $params = $paramsOption !== null ? array_filter(array_map('trim', explode(',', $paramsOption))) : [];
+        $params = $paramsOption !== null
+            ? array_filter(array_map('trim', explode(',', $paramsOption)), static fn (string $s): bool => $s !== '')
+            : [];
         /** @var bool $implicit */
         $implicit = (bool) $input->getOption('implicit');
 

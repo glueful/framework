@@ -685,7 +685,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
 
         foreach ($this->logBatch as $entry) {
             // Ensure channel is not null to prevent withName() error
-            $channel = $entry['channel'] ?? $this->defaultChannel ?? 'default';
+            $channel = $entry['channel'] ?? $this->defaultChannel;
             // Convert Level enum to RFC 5424 level name for Monolog compatibility
             $logLevel = $entry['level'] instanceof Level ? strtolower($entry['level']->name) : $entry['level'];
             $this->logger->withName($channel)
@@ -1198,7 +1198,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
 
         // If using JWT
         $token = $_SERVER['HTTP_AUTHORIZATION'] ?? null;
-        if ($token) {
+        if (is_string($token) && $token !== '') {
             $authInfo['auth_type'] = 'bearer';
             // Don't include actual token in logs
             $authInfo['token_present'] = true;

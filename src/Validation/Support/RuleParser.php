@@ -180,7 +180,7 @@ class RuleParser
             $char = $chars[$i];
 
             // Check for regex start
-            if (!$inRegex && $current === 'regex:' && isset($chars[$i])) {
+            if (!$inRegex && $current === 'regex:') {
                 $inRegex = true;
                 $regexDelimiter = $char;
                 $current .= $char;

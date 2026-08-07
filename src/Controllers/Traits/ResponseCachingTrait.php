@@ -24,7 +24,7 @@ use Glueful\Cache\Contracts\EdgeCacheInterface;
  * @property \Glueful\Repository\RepositoryFactory $repositoryFactory
  * @property \Glueful\Auth\UserIdentity|null $currentUser
  * @method bool isAdmin()
- * @method bool can(string $permission, string $resource = 'system', array $context = [])
+ * @method bool can(string $permission, string $resource = 'system', array<string, mixed> $context = [])
  *
  * @package Glueful\Controllers\Traits
  */

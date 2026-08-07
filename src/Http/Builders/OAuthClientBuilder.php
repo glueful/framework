@@ -199,7 +199,7 @@ class OAuthClientBuilder
             'state' => $this->options['state'] ?? '',
         ];
 
-        $params = array_filter($params); // Remove empty values
+        $params = array_filter($params, static fn ($value): bool => (bool) $value); // Remove empty values
         return $authEndpoint . '?' . http_build_query($params);
     }
 

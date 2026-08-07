@@ -118,7 +118,7 @@ final class ContainerCompiler
         foreach ($definitions as $id => $definition) {
             $row = [
                 'shared' => (bool) $definition->isShared(),
-                'tags' => array_values($serviceTags[$id] ?? []),
+                'tags' => $serviceTags[$id] ?? [],
                 'provider' => $providerMap[$id] ?? null,
                 'type' => get_class($definition),
             ];

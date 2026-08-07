@@ -215,6 +215,8 @@ class WhereClause implements WhereClauseInterface
 
     /**
      * Add raw WHERE condition joined with OR
+     *
+     * @param array<mixed> $bindings
      */
     public function orWhereRaw(string $condition, array $bindings = []): void
     {

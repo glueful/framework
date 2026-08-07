@@ -366,7 +366,7 @@ abstract class BaseCommand extends Command
      * - Provides clean tabular display
      *
      * @param array<string> $headers Table headers
-     * @param array<array<string>> $rows Table rows
+     * @param array<array<scalar|null>> $rows Table rows (scalars are rendered as strings)
      * @return void
      */
     protected function table(array $headers, array $rows): void

@@ -112,7 +112,7 @@ class Utils
 
     public static function cacheKey(string ...$parts): string
     {
-        return implode(':', array_filter($parts));
+        return implode(':', array_filter($parts, static fn (string $part): bool => $part !== ''));
     }
 
     public static function withCache(string $key, callable $callback, ?int $ttl = 3600): mixed

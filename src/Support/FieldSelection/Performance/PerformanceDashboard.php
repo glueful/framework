@@ -363,7 +363,7 @@ final class PerformanceDashboard
         if ($memoryUsages === []) {
             return [];
         }
-        $filteredPeaks = array_filter($peakMemories);
+        $filteredPeaks = array_filter($peakMemories, static fn ($peak): bool => (bool) $peak);
 
         return [
             'total_memory_used_bytes' => array_sum($memoryUsages),

@@ -161,7 +161,7 @@ final class DefaultServicesLoader implements ServicesLoader
         return function (\Psr\Container\ContainerInterface $c) use ($callable) {
             if (is_string($callable)) {
                 // 'Class::method' — pass container as first arg
-                /** @var callable $callable */
+                /** @var callable-string $callable */
                 return $callable($c);
             }
             // array form: ['@service','method'] or ['Class','method']

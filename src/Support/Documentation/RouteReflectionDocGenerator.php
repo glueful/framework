@@ -720,7 +720,8 @@ final class RouteReflectionDocGenerator
      * Mirrors the hydrator: v1 reads `#[Rule]` only from constructor parameters
      * (promoted properties carry the attribute on the parameter).
      *
-     * @param  \ReflectionClass<object> $dto
+     * @template TDto of object
+     * @param  \ReflectionClass<TDto> $dto
      * @return array<string, string>
      */
     private function collectRuleStrings(\ReflectionClass $dto): array
@@ -830,7 +831,6 @@ final class RouteReflectionDocGenerator
                 return null;
             }
 
-            /** @var mixed $rules */
             $rules = $attributes[0]->newInstance()->rules;
             if (!is_array($rules)) {
                 return null;

@@ -1053,7 +1053,7 @@ class Router
         if (!is_string($name) || $name === '') {
             throw new \RuntimeException("Invalid middleware reference: {$middleware}");
         }
-        $params = $args ? array_map('trim', explode(',', $args)) : [];
+        $params = $args !== null && $args !== '' ? array_map('trim', explode(',', $args)) : [];
 
         // Get middleware instance from container
         $instance = $this->container->get($name);

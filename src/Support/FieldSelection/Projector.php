@@ -240,8 +240,8 @@ final class Projector
     /** @param array<string>|null $allowed */
     private function guardTree(FieldTree $tree, FieldSelector $selector, ?array $allowed): void
     {
-        $maxDepth  = max(1, $selector->maxDepth ?? $this->maxDepthDefault);
-        $maxFields = max(1, $selector->maxFields ?? $this->maxFieldsDefault);
+        $maxDepth  = max(1, $selector->maxDepth);
+        $maxFields = max(1, $selector->maxFields);
 
         $count = 0;
         $walk = function (FieldNode $n, int $depth) use (&$count, $maxDepth, &$walk) {

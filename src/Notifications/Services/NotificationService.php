@@ -176,7 +176,7 @@ class NotificationService implements ConfigurableInterface
             }
         }
 
-        if (!isset($options['schedule']) || $options['schedule'] == null) {
+        if (($options['schedule'] ?? '') === '' || ($options['schedule'] ?? null) === null) {
             $syncResult = null;
             if ($syncChannels !== []) {
                 $syncResult = $this->dispatcher->send($notification, $notifiable, $syncChannels);

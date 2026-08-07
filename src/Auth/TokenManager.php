@@ -804,9 +804,9 @@ class TokenManager
 
         // Try to call a method to get all providers
         try {
-            /** @var array<int, AuthenticationProviderInterface> $all */
+            /** @var array<string, AuthenticationProviderInterface> $all */
             $all = $authManager->getProviders();
-            return $all;
+            return array_values($all);
         } catch (\Throwable) {
             // Silently fail and continue with fallback
         }

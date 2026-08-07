@@ -186,11 +186,14 @@ final class FieldSelectionMiddleware implements RouteMiddleware
             $ids['item_ids'] = [$payload['id']];
             $ids['single_item'] = true;
         } elseif (array_is_list($payload)) {
-            $ids['item_ids'] = array_filter(array_column($payload, 'id'));
+            $ids['item_ids'] = array_filter(array_column($payload, 'id'), static fn ($id): bool => (bool) $id);
             $ids['is_collection'] = true;
             $ids['collection_size'] = count($payload);
         } elseif (isset($payload['data']) && is_array($payload['data'])) {
-            $ids['item_ids'] = array_filter(array_column($payload['data'], 'id'));
+            $ids['item_ids'] = array_filter(
+                array_column($payload['data'], 'id'),
+                static fn ($id): bool => (bool) $id
+            );
             $ids['is_paginated'] = true;
             $ids['page'] = $payload['current_page'] ?? $payload['page'] ?? null;
             $ids['per_page'] = $payload['per_page'] ?? null;

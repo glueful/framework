@@ -68,6 +68,13 @@ interface WhereClauseInterface
     public function orWhereNotNull(string $column): self;
 
     /**
+     * Add raw WHERE condition joined with OR
+     *
+     * @param array<mixed> $bindings
+     */
+    public function orWhereRaw(string $condition, array $bindings = []): void;
+
+    /**
      * Add WHERE BETWEEN condition
      */
     public function whereBetween(string $column, mixed $min, mixed $max): void;

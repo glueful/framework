@@ -427,8 +427,13 @@ class ContainerDebugCommand extends BaseCommand
                 if ($type !== null) {
                     if ($type instanceof \ReflectionNamedType) {
                         $typeName = $type->getName();
-                    } elseif (method_exists($type, '__toString')) {
-                        $typeName = (string) $type;
+                    } elseif ($type instanceof \ReflectionUnionType || $type instanceof \ReflectionIntersectionType) {
+                        $separator = $type instanceof \ReflectionUnionType ? '|' : '&';
+                        $typeName = implode($separator, array_map(
+                            static fn (\ReflectionType $t): string =>
+                                $t instanceof \ReflectionNamedType ? $t->getName() : 'mixed',
+                            $type->getTypes()
+                        ));
                     }
                 }
                 $arguments[] = $param->getName() . ': ' . $typeName;

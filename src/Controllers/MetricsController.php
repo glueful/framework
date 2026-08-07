@@ -331,7 +331,7 @@ class MetricsController extends BaseController
 
                 if (is_array($config) && isset($config['extensions'])) {
                     foreach ($config['extensions'] as $extensionName => $extensionInfo) {
-                        $isEnabled = $extensionInfo['enabled'] ?? false;
+                        $isEnabled = (bool) ($extensionInfo['enabled'] ?? false);
                         if ($isEnabled) {
                             $enabledCount++;
                         }

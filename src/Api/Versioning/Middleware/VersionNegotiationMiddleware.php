@@ -155,7 +155,7 @@ class VersionNegotiationMiddleware implements RouteMiddleware
         if (is_string($class) && is_string($method)) {
             $sunsetAttr = $this->getSunsetAttribute($class, $method);
         }
-        $sunsetDate = $sunsetAttr?->date ?? $this->versionManager->getSunsetDate($version);
+        $sunsetDate = $sunsetAttr->date ?? $this->versionManager->getSunsetDate($version);
 
         if ($sunsetDate !== null) {
             $this->addSunsetHeaders($response, $sunsetDate, $sunsetAttr);
@@ -180,7 +180,7 @@ class VersionNegotiationMiddleware implements RouteMiddleware
         $response->headers->set('Warning', '299 - "' . $message . '"');
 
         // Link to alternative if available
-        $alternative = $deprecatedAttr?->alternative
+        $alternative = $deprecatedAttr->alternative
             ?? $this->versionManager->getAlternativeUrl($version);
 
         if ($alternative !== null) {

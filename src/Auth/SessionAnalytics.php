@@ -373,7 +373,7 @@ class SessionAnalytics
      * Analyze sessions by time range
      *
      * @param list<array<string, mixed>> $sessions Sessions to analyze
-     * @return array<string, array<string, int>> Time range analysis
+     * @return array<string, array<string, mixed>> Time range analysis
      */
     private function analyzeByTimeRange(array $sessions): array
     {
@@ -832,7 +832,7 @@ class SessionAnalytics
     {
         $users = array_unique(array_filter(array_map(function ($session) {
             return $session['user']['uuid'] ?? null;
-        }, $sessions)));
+        }, $sessions), static fn ($uuid): bool => $uuid !== null && $uuid !== ''));
         return count($users);
     }
 

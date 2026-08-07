@@ -3,9 +3,6 @@ includes:
     - vendor/phpstan/phpstan-deprecation-rules/rules.neon
     - vendor/phpstan/phpstan-phpunit/extension.neon
     - vendor/phpstan/phpstan-phpunit/rules.neon
-    # PHPStan 2.x upgrade delta, frozen 2026-08-05 — burn down, never grow.
-    # Regenerate with: vendor/bin/phpstan analyse src config --generate-baseline
-    - phpstan-baseline.neon
 
 parameters:
     level: 8
@@ -86,5 +83,9 @@ parameters:
         - '#Call to function is_string\(\) with string will always evaluate to true\.#'
         # Foreach variable reuse in recursive trait functions
         - '#Foreach overwrites \$class with its value variable\.#'
+        # The framework ships traits as public API for applications and extensions;
+        # zero in-repo users does not mean dead code.
+        -
+            identifier: trait.unused
         # Short ternary in helper functions
         - '#Short ternary operator is not allowed.*#'

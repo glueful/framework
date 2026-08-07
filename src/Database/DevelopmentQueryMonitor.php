@@ -478,13 +478,13 @@ class DevelopmentQueryMonitor
         foreach ($hashes as $hash => $queries) {
             if (count($queries) > 1) {
                 $sql = $queries[0]['sql'];
-                $params = $queries[0]['params'] ?? [];
+                $params = $queries[0]['params'];
                 $message = "DUPLICATE QUERY: " . $sql . " | Params: " . json_encode($params) .
                           " | Count: " . count($queries);
                 error_log($message);
                 // Log backtraces to identify source
                 foreach ($queries as $i => $query) {
-                    $backtrace = $query['backtrace'] ?? [];
+                    $backtrace = $query['backtrace'];
                     if (count($backtrace) > 0) {
                         $traceItems = array_map(
                             function (array $frame): string {

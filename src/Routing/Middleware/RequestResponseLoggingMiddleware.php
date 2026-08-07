@@ -513,7 +513,7 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
     /**
      * Recursively sanitize array fields
      *
-     * @param array<string, mixed> $array
+     * @param array<mixed> $array
      */
     private function sanitizeArray(array &$array): void
     {

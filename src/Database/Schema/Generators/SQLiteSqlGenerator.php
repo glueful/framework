@@ -657,9 +657,9 @@ class SQLiteSqlGenerator implements SqlGeneratorInterface
             $formattedColumns[$columnName] = [
                 'name' => $columnName,
                 'type' => $column['type'],
-                'nullable' => $column['notnull'] == 0,
+                'nullable' => (int) $column['notnull'] === 0,
                 'default' => $column['dflt_value'],
-                'is_primary' => $column['pk'] == 1,
+                'is_primary' => (int) $column['pk'] === 1,
                 'is_unique' => false, // Will be populated later
                 'is_indexed' => false, // Will be populated later
                 'relationships' => [],
@@ -676,7 +676,7 @@ class SQLiteSqlGenerator implements SqlGeneratorInterface
 
             foreach ($indexes as $index) {
                 $indexName = $index['name'];
-                $isUnique = $index['unique'] == 1;
+                $isUnique = (int) $index['unique'] === 1;
 
                 // Skip SQLite's auto-generated indexes for PRIMARY KEY
                 if (preg_match('/^sqlite_autoindex_/', $indexName) === 1) {

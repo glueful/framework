@@ -97,7 +97,9 @@ class TestCommand extends BaseCommand
 
         /** @var string|null $methodsOption */
         $methodsOption = $input->getOption('methods');
-        $methods = $methodsOption !== null ? array_filter(array_map('trim', explode(',', $methodsOption))) : [];
+        $methods = $methodsOption !== null
+            ? array_filter(array_map('trim', explode(',', $methodsOption)), static fn (string $s): bool => $s !== '')
+            : [];
 
         // Normalize the name
         $name = $this->normalizeTestName($name);

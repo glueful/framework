@@ -1233,8 +1233,14 @@ class SessionCacheManager
         // Use the batch get operation from CacheStore
         $cachedSessions = $this->cache->mget($cacheKeys);
 
-        // Return only valid sessions (filter out null/false values)
-        return array_values(array_filter($cachedSessions));
+        // Return only valid sessions (filter out null/false/empty values)
+        /** @var list<AuthSessionPayload> $validSessions Cache rows are session payloads by construction */
+        $validSessions = array_values(array_filter(
+            $cachedSessions,
+            static fn ($session): bool => is_array($session) && $session !== []
+        ));
+
+        return $validSessions;
     }
 
     /**

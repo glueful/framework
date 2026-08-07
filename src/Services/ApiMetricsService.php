@@ -314,7 +314,7 @@ class ApiMetricsService
         ];
 
         // If this is a new minute, reset the counter
-        if ($rateLimit['minute'] != $minute) {
+        if ((int) $rateLimit['minute'] !== (int) $minute) {
             $rateLimit = [
                 'count' => 1,
                 'minute' => $minute,

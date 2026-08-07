@@ -39,7 +39,7 @@ class WebhookEventListener implements EventSubscriberInterface
      * Returns an empty array since we use a different mechanism
      * to intercept events (via the kernel event).
      *
-     * @return array<string, array<int, array{0: string, 1?: int}>>
+     * @return array<string, list<array{0: string, 1?: int}|int|string>|string>
      */
     public static function getSubscribedEvents(): array
     {

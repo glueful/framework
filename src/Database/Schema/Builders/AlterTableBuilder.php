@@ -606,7 +606,7 @@ class AlterTableBuilder implements AlterTableBuilderInterface, TableBuilderConte
      */
     public function execute(): bool
     {
-        if (array_filter($this->changes) === []) {
+        if (array_filter($this->changes, static fn ($changeSet): bool => $changeSet !== []) === []) {
             return true; // No changes to execute
         }
 
@@ -880,7 +880,7 @@ class AlterTableBuilder implements AlterTableBuilderInterface, TableBuilderConte
      */
     public function hasChanges(): bool
     {
-        return array_filter($this->changes) !== [];
+        return array_filter($this->changes, static fn ($changeSet): bool => $changeSet !== []) !== [];
     }
 
     /**

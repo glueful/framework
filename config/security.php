@@ -25,7 +25,10 @@ return [
 
     // Comma-separated trusted reverse proxies/load balancers. Leave empty unless
     // the app is deployed behind infrastructure that owns X-Forwarded-* headers.
-    'trusted_proxies' => array_filter(array_map('trim', explode(',', env('TRUSTED_PROXIES', '')))),
+    'trusted_proxies' => array_filter(
+        array_map('trim', explode(',', env('TRUSTED_PROXIES', ''))),
+        static fn (string $s): bool => $s !== ''
+    ),
 
     // Security level definitions
     'levels' => [
@@ -35,7 +38,10 @@ return [
     ],
 
     // Health endpoint security
-    'health_ip_allowlist' => array_filter(explode(',', env('HEALTH_IP_ALLOWLIST', ''))),
+    'health_ip_allowlist' => array_filter(
+        explode(',', env('HEALTH_IP_ALLOWLIST', '')),
+        static fn (string $ip): bool => $ip !== ''
+    ),
     'health_auth_required' => env('HEALTH_AUTH_REQUIRED', false),
 
     // Smart environment-aware security level (stricter for production, flexible for development)

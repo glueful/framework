@@ -19,7 +19,7 @@ class SessionCreatedEvent extends BaseEvent
 {
     /**
      * @param array<string, mixed> $sessionData Session data (uuid, username, email, etc.)
-     * @param array<string, string> $tokens Access and refresh tokens
+     * @param array<string, int|string> $tokens Access and refresh tokens (plus expires_in seconds)
      * @param array<string, mixed> $metadata Additional session metadata
      */
     public function __construct(
@@ -53,7 +53,7 @@ class SessionCreatedEvent extends BaseEvent
     }
 
     /**
-     * @return array<string, string>
+     * @return array<string, int|string>
      */
     public function getTokens(): array
     {
@@ -62,12 +62,16 @@ class SessionCreatedEvent extends BaseEvent
 
     public function getAccessToken(): ?string
     {
-        return $this->tokens['access_token'] ?? null;
+        $token = $this->tokens['access_token'] ?? null;
+
+        return is_string($token) ? $token : null;
     }
 
     public function getRefreshToken(): ?string
     {
-        return $this->tokens['refresh_token'] ?? null;
+        $token = $this->tokens['refresh_token'] ?? null;
+
+        return is_string($token) ? $token : null;
     }
 
     public function getMetadataValue(string $key, mixed $default = null): mixed

@@ -6,10 +6,10 @@
 > between 2026-08-06 and 2026-08-07 (see the campaign log below); the per-lane ratchet
 > scripts are retired — the main gate now guards everything they guarded.
 
-**Remaining debt:** `phpstan-baseline.neon` — the frozen PHPStan-2 upgrade delta
-(111 identifier-tagged entries, generated 2026-08-05 when the gate was level 6). It must
-never grow; burn it down opportunistically when touching the files it names, and delete
-entries (or regenerate) as they stop matching.
+**Remaining debt: none.** `phpstan-baseline.neon` (the frozen PHPStan-2 upgrade delta,
+111 identifier-tagged entries) was burned down and deleted on 2026-08-07 — the gate runs
+with no baseline file. Do not reintroduce one: new errors are fixed at the source, or in
+rare justified cases suppressed inline with `@phpstan-ignore identifier (reason)`.
 
 ## Regenerate
 
@@ -66,6 +66,14 @@ vendor/bin/phpstan analyse src/Database --level=8 --no-progress --memory-limit=1
   **Trap for the record:** `is_callable([$class, $method])` is always true on `Model`
   because of `__callStatic` — the boot-hook dispatch must use `method_exists`, or absent
   hooks misroute into the static query proxy (caught by the test suite).
+- Baseline burn-down — 2026-08-07. All 111 frozen PHPStan-2 upgrade entries fixed and
+  `phpstan-baseline.neon` deleted. Real bugs surfaced by the burn-down:
+  `AuthToRequestAttributesMiddleware` read private `UserIdentity` properties with `?? null`,
+  so the request's `email`/`username` attributes were always null (now uses the accessors);
+  `SoftDeletingScope::getDeletedAtColumn()` read a nonexistent `$joins` property, leaving the
+  qualified-column branch for joined queries unreachable (now `QueryBuilder::hasJoins()`);
+  `QueryCacheService`'s empty-`keyPrefix` fallback never fired (`!== ''` guard added).
+  `trait.unused` became a permanent global ignore — the framework ships traits as public API.
 
 ## Recommended adoption strategy (historical)
 

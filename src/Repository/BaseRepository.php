@@ -244,7 +244,7 @@ abstract class BaseRepository implements RepositoryInterface
         // Execute the insert
         $success = $this->db->table($this->table)->insert($data);
 
-        if ($success === false) {
+        if ($success === 0) {
             throw DatabaseException::createFailed($this->table);
         }
 
@@ -530,7 +530,7 @@ abstract class BaseRepository implements RepositoryInterface
         try {
             // Use database bulk insert for better performance
             $success = $this->db->table($this->table)->insertBatch($bulkData);
-            if ($success === false) {
+            if ($success === 0) {
                 throw new \RuntimeException('Bulk insert failed');
             }
 

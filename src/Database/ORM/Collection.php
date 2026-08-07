@@ -157,7 +157,7 @@ final class Collection implements ArrayAccess, Countable, IteratorAggregate, Jso
     /**
      * Get the number of items in the collection
      *
-     * @return int
+     * @return int<0, max>
      */
     public function count(): int
     {
@@ -187,7 +187,7 @@ final class Collection implements ArrayAccess, Countable, IteratorAggregate, Jso
     public function filter(?callable $callback = null): static
     {
         if ($callback === null) {
-            return new self(array_filter($this->items));
+            return new self(array_filter($this->items, static fn ($item): bool => (bool) $item));
         }
 
         return new self(array_filter($this->items, $callback, ARRAY_FILTER_USE_BOTH));

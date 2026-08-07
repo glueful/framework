@@ -264,7 +264,7 @@ class EncryptionService
         $version = $parts[2] ?? '';
 
         if ($version === self::STREAM_VERSION) {
-            if (count($parts) < 5 || '$' . $prefix . '$' !== self::PREFIX || ($parts[3] ?? '') === '') {
+            if (count($parts) < 5 || '$' . $prefix . '$' !== self::PREFIX || $parts[3] === '') {
                 return null;
             }
 
@@ -284,10 +284,10 @@ class EncryptionService
             return null;
         }
 
-        $keyId = $parts[3] ?? '';
-        $nonce = $parts[4] ?? '';
-        $ciphertext = $parts[5] ?? '';
-        $tag = $parts[6] ?? '';
+        $keyId = $parts[3];
+        $nonce = $parts[4];
+        $ciphertext = $parts[5];
+        $tag = $parts[6];
 
         if ($keyId === '' || $nonce === '' || $tag === '' || $ciphertext === '') {
             return null;
@@ -462,7 +462,7 @@ class EncryptionService
         }
 
         $parts = explode('$', $line);
-        if (count($parts) !== 5 || ($parts[3] ?? '') === '' || ($parts[4] ?? '') === '') {
+        if (count($parts) !== 5 || $parts[3] === '' || $parts[4] === '') {
             return null;
         }
 

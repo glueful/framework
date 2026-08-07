@@ -153,7 +153,7 @@ abstract class BaseController implements \Glueful\Contracts\ContextAwareInterfac
     /**
      * Create validation error response
      *
-     * @param array<string, string|array<string>> $errors Field errors (string or array of strings)
+     * @param array<string, mixed> $errors Field errors plus optional context values
      */
     protected function validationError(array $errors, string $message = 'Validation failed'): Response
     {

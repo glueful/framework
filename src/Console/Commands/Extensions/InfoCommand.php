@@ -70,14 +70,14 @@ final class InfoCommand extends BaseCommand
 
         $output->writeln('<info>Extension Information</info>');
         $output->writeln('=====================');
-        $output->writeln('Package:        ' . ($candidate?->name ?? 'n/a'));
+        $output->writeln('Package:        ' . ($candidate->name ?? 'n/a'));
         $output->writeln('Provider:       ' . $providerClass);
         $output->writeln('State:          ' . ($isEnabled ? 'enabled ✓' : 'available ○ (not enabled)'));
-        $output->writeln('Requires (fw):  ' . ($candidate?->requiresGlueful ?? '*'));
-        $deps = $candidate?->requiresExtensions ?? [];
+        $output->writeln('Requires (fw):  ' . ($candidate->requiresGlueful ?? '*'));
+        $deps = $candidate->requiresExtensions ?? [];
         $output->writeln('Requires (ext): ' . ($deps === [] ? 'none' : implode(', ', $deps)));
         $output->writeln('Name:           ' . (is_string($m['name'] ?? null) ? $m['name'] : 'n/a'));
-        $version = $candidate?->version ?? (is_string($m['version'] ?? null) ? $m['version'] : null);
+        $version = $candidate->version ?? (is_string($m['version'] ?? null) ? $m['version'] : null);
         $output->writeln('Version:        ' . ($version ?? 'n/a'));
         $output->writeln('Description:    ' . (is_string($m['description'] ?? null) ? $m['description'] : ''));
 

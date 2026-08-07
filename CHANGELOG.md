@@ -150,6 +150,16 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   posterity: `is_callable([$class, $method])` is always true on `Model` due to
   `__callStatic`, so trait boot-hook dispatch must use `method_exists` — the full test
   suite caught the one regression this campaign briefly introduced there.
+- **PHPStan baseline eliminated** — all 111 frozen PHPStan-2 upgrade entries in
+  `phpstan-baseline.neon` are fixed and the file is deleted; the framework-wide level-8
+  gate now runs with zero suppressed errors. Substance beyond annotations: `array_filter`
+  calls gained explicit callbacks (strict-rules `arrayFilter.strict`) across config files,
+  CORS parsing, console commands, and session/permission plumbing; count-guarded token
+  parsing in `EncryptionService` dropped its dead `?? ''` fallbacks; loose `==`/`!=`
+  driver-metadata comparisons in the schema generators pinned with explicit casts; and
+  `trait.unused` became a permanent documented ignore (the framework ships traits as
+  public API for applications and extensions — zero in-repo users does not mean dead
+  code). New `QueryBuilder::hasJoins()` supports the soft-delete fix below.
 - **`Console` is level-8 clean** (85 errors) — 30 of 31 areas now clean and CI-enforced;
   only `Database` (214) remains. `BaseCommand` gains a protected `jsonForDisplay()` helper —
   JSON-encode for console output with an `'[unencodable]'` fallback — replacing ~30 raw
@@ -169,6 +179,17 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   839 errors (`docs/LEVEL8_TYPING_DEBT.md`).
 
 ### Fixed
+- **Request `email`/`username` attributes were always `null` after authentication** —
+  `AuthToRequestAttributesMiddleware` read `UserIdentity`'s private properties with
+  `?? null` (silently yielding `null` from outside the class) instead of calling the
+  `email()`/`username()` accessors. Surfaced by the baseline burn-down.
+- **Soft-delete restore/delete on joined queries never qualified the `deleted_at` column** —
+  `SoftDeletingScope::getDeletedAtColumn()` read a nonexistent `$joins` property on the
+  query builder, so the joined-query branch was unreachable since day one. It now asks the
+  new `QueryBuilder::hasJoins()`.
+- **`QueryCacheService`'s empty-`keyPrefix` fallback never fired** — the intended default
+  prefix was guarded by a check that could not trigger; an explicit `!== ''` comparison
+  activates it.
 - **`RedisCacheDriver::zadd()` no longer errors on an empty score-value map** — it previously
   spread zero arguments into `Redis::zAdd()` (an `ArgumentCountError`); adding zero members
   now trivially succeeds.
