@@ -38,21 +38,19 @@ adoption promised, with zero new dependencies.
 
 ### 1. Typed database exceptions — DONE (see CHANGELOG [Unreleased])
 
-Introduce constraint, deadlock/serialization, connection-loss, timeout, and
-syntax/schema exception families, classified from **SQLSTATE plus vendor codes** at the
-execution boundary (`UniqueConstraintViolationException`,
-`ForeignKeyViolationException`, `DeadlockException`, `ConnectionLostException`, …).
+Shipped as `Glueful\Database\Exceptions`: constraint (`ConstraintViolationException`
+parent with `UniqueConstraintViolationException`,
+`ForeignKeyConstraintViolationException`, `NotNullConstraintViolationException`),
+`DeadlockException`, `SerializationFailureException`, `LockContentionException`, and
+`ConnectionLostException`, classified from **SQLSTATE plus vendor codes** (vendor-first)
+at the execution boundary by a stateless `ExceptionClassifier`. Timeout and
+syntax/schema families were deliberately not shipped — a syntax error is a programming
+bug and falls to the generic `DatabaseException`; lock-wait timeouts are covered by
+`LockContentionException`. Design record:
+`docs/superpowers/specs/2026-08-07-typed-database-exceptions-design.md`.
 
-Current state: `QueryExecutor` rethrows raw `PDOException`
-(`src/Database/Execution/QueryExecutor.php:259`); the only typed exceptions under
-`Database` are `ConnectionPoolException` and the ORM's
-`LazyLoadingViolationException`. The HTTP-domain
-`Glueful\Http\Exceptions\Domain\DatabaseException` is status-code oriented, not a
-driver classifier. Applications currently string-match driver messages to tell
-"duplicate key" from "connection gone".
-
-Value: clean 409-conflict handling for unique violations, safe retry-on-deadlock,
-immediately useful to Thallo and every extension.
+Value delivered: clean 409-conflict handling for unique violations, marker-driven
+retry-on-deadlock, no more string-matching driver messages.
 
 ### 2. Unify retry classification — DONE (shipped with item 1)
 

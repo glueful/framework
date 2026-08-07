@@ -118,6 +118,14 @@ final class ExceptionClassifierTest extends TestCase
             'driver' => 'pgsql', 'errorInfo' => ['55P03', 7, 'could not obtain lock'],
             'expected' => LockContentionException::class,
         ];
+        yield 'pgsql crash shutdown (57P02)' => [
+            'driver' => 'pgsql', 'errorInfo' => ['57P02', 7, 'terminating connection due to crash'],
+            'expected' => ConnectionLostException::class,
+        ];
+        yield 'pgsql cannot connect now (57P03)' => [
+            'driver' => 'pgsql', 'errorInfo' => ['57P03', 7, 'the database system is starting up'],
+            'expected' => ConnectionLostException::class,
+        ];
         yield 'pgsql admin shutdown (57P01)' => [
             'driver' => 'pgsql', 'errorInfo' => ['57P01', 7, 'terminating connection'],
             'expected' => ConnectionLostException::class,

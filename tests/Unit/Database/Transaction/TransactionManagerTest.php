@@ -509,6 +509,31 @@ class TransactionManagerTest extends TestCase
     }
 
     #[Test]
+    public function nestedBeginFailureDoesNotRollBackTheOuterTransaction(): void
+    {
+        // The $began rollback guard's one load-bearing case: transaction() at
+        // level >= 1 whose savepoint creation fails. An unguarded rollback here
+        // would run PDO::rollBack() and destroy the caller's outer transaction.
+        $pdo = $this->faultInjectingPdo(failBeginTimes: 0);
+        $savepointFailure = new \PDOException('database is locked');
+        $savepointFailure->errorInfo = ['HY000', 5, 'database is locked'];
+        $savepoints = $this->createMock(SavepointManagerInterface::class);
+        $savepoints->method('create')->willThrowException($savepointFailure);
+
+        $manager = new TransactionManager($pdo, $savepoints, $this->logger);
+        $manager->setMaxRetries(1);
+        $manager->begin();
+
+        try {
+            $manager->transaction(static fn (): string => 'unreachable');
+            $this->fail('Expected the savepoint failure to propagate');
+        } catch (LockContentionException $e) {
+            $this->assertSame(0, $pdo->rollbackCalls, 'outer transaction must survive a nested begin failure');
+            $this->assertTrue($manager->isActive(), 'outer transaction level must remain open');
+        }
+    }
+
+    #[Test]
     public function directBeginClassifiesItsOwnFailure(): void
     {
         $pdo = $this->faultInjectingPdo(failBeginTimes: PHP_INT_MAX);
