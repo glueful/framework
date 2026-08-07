@@ -79,8 +79,29 @@ class SQLiteSqlGenerator implements SqlGeneratorInterface
             $parts[] = '  ' . $this->buildForeignKeyDefinition($foreignKey);
         }
 
+        // Table-level CHECK constraints (round-tripped from introspection)
+        $tableChecks = $table->options['table_checks'] ?? [];
+        if (is_array($tableChecks)) {
+            foreach ($tableChecks as $checkExpression) {
+                if (is_string($checkExpression) && $checkExpression !== '') {
+                    $parts[] = '  CHECK (' . $checkExpression . ')';
+                }
+            }
+        }
+
         $sql .= implode(",\n", $parts) . "\n";
         $sql .= ')';
+
+        $suffixes = [];
+        if (($table->options['without_rowid'] ?? false) === true) {
+            $suffixes[] = 'WITHOUT ROWID';
+        }
+        if (($table->options['strict'] ?? false) === true) {
+            $suffixes[] = 'STRICT';
+        }
+        if ($suffixes !== []) {
+            $sql .= ' ' . implode(', ', $suffixes);
+        }
 
         return $sql . ';';
     }
@@ -370,7 +391,7 @@ class SQLiteSqlGenerator implements SqlGeneratorInterface
             'string', 'varchar', 'char' => 'TEXT',
             'text', 'longText', 'mediumText', 'tinyText' => 'TEXT',
             'integer', 'bigInteger', 'smallInteger', 'tinyInteger' => 'INTEGER',
-            'decimal', 'numeric', 'float', 'double' => 'REAL',
+            'decimal', 'numeric', 'float', 'double', 'real' => 'REAL',
             'boolean' => 'INTEGER',
             'timestamp', 'datetime', 'date', 'time', 'year' => 'TEXT',
             'json' => 'TEXT',
@@ -558,8 +579,10 @@ class SQLiteSqlGenerator implements SqlGeneratorInterface
         }
 
         // Default value
-        if ($column->hasDefault() && !$column->autoIncrement) {
-            $parts[] = 'DEFAULT ' . $this->formatDefaultValue($column->getDefaultValue(), $column->type);
+        if ($column->defaultRaw !== null && !$column->autoIncrement) {
+            $parts[] = 'DEFAULT ' . $column->defaultRaw;
+        } elseif ($column->default !== null && !$column->autoIncrement) {
+            $parts[] = 'DEFAULT ' . $this->formatDefaultValue($column->default, $column->type);
         }
 
         // Unique constraint
