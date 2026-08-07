@@ -198,15 +198,15 @@ class SelectBuilder implements SelectBuilderInterface
     /**
      * Build JOIN clause from join data
      *
-     * @param array{type?: string, table: string, first: string, operator: string, second: string} $join
+     * @param array<string, mixed> $join Join spec: type, table, first, operator, second
      */
     protected function buildJoinClause(array $join): string
     {
         $type = $join['type'] ?? 'INNER';
-        $table = $this->driver->wrapIdentifier($join['table']);
-        $first = $this->formatJoinColumn($join['first']);
+        $table = $this->driver->wrapIdentifier((string) ($join['table'] ?? ''));
+        $first = $this->formatJoinColumn((string) ($join['first'] ?? ''));
         $operator = $join['operator'] ?? '=';
-        $second = $this->formatJoinColumn($join['second']);
+        $second = $this->formatJoinColumn((string) ($join['second'] ?? ''));
 
         return " {$type} JOIN {$table} ON {$first} {$operator} {$second}";
     }

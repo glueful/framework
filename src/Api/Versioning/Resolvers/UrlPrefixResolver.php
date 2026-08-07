@@ -38,7 +38,7 @@ final class UrlPrefixResolver implements VersionResolverInterface
     {
         $path = $request->getPathInfo();
 
-        if (preg_match($this->pattern, $path, $matches)) {
+        if (preg_match($this->pattern, $path, $matches) === 1) {
             return ApiVersion::fromString($matches[1]);
         }
 

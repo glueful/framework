@@ -14,7 +14,7 @@ final class FieldSelectionMetrics
 {
     private static ?self $instance = null;
 
-    /** @var array<string, array<string, mixed>> */
+    /** @var array<string, list<array<string, mixed>>> */
     private array $metrics = [];
 
     /** @var array<string, float> */

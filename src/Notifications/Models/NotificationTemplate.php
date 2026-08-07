@@ -274,12 +274,12 @@ class NotificationTemplate implements JsonSerializable
         $content = $this->content;
 
         // Handle simple placeholders like {{variable}}
-        $content = preg_replace_callback('/\{\{([^}]+)\}\}/', function ($matches) use ($data) {
+        $rendered = preg_replace_callback('/\{\{([^}]+)\}\}/', function ($matches) use ($data) {
             $key = trim($matches[1]);
             return $data[$key] ?? '';
         }, $content);
 
-        return $content;
+        return $rendered ?? $content;
     }
 
     /**

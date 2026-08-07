@@ -130,6 +130,7 @@ class SeedCommand extends BaseCommand
         ];
 
         foreach ($candidates as $candidate) {
+            // @phpstan-ignore function.impossibleType (app-namespace seeders exist only in consuming applications)
             if (class_exists($candidate)) {
                 return $candidate;
             }

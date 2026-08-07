@@ -377,7 +377,11 @@ class BlobRepository extends BaseRepository
      */
     public function findOrphanedBlobs(int $olderThanDays = 7, ?int $limit = null): array
     {
-        $cutoffDate = date('Y-m-d H:i:s', strtotime("-{$olderThanDays} days"));
+        $cutoffTimestamp = strtotime("-{$olderThanDays} days");
+        if ($cutoffTimestamp === false) {
+            throw new \RuntimeException("Invalid retention window: {$olderThanDays} days");
+        }
+        $cutoffDate = date('Y-m-d H:i:s', $cutoffTimestamp);
 
         $query = $this->db->table($this->getTableName())
             ->select($this->defaultFields)

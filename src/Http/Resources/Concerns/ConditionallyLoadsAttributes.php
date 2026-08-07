@@ -179,7 +179,9 @@ trait ConditionallyLoadsAttributes
             return func_num_args() === 3 ? $default : new MissingValue();
         }
 
-        // Check for pivot property (ORM model)
+        // Check for pivot property (ORM models expose it via magic __get;
+        // plain objects may define it dynamically).
+        // @phpstan-ignore property.notFound
         $pivot = $this->resource->pivot ?? null;
 
         if ($pivot === null) {

@@ -56,16 +56,17 @@ class PathGuard
     private function normalize(string $path): string
     {
         $path = str_replace('\\', '/', $path);
-        $path = preg_replace('#/+#', '/', $path);
+        $path = preg_replace('#/+#', '/', $path)
+            ?? throw new \RuntimeException('Path normalization failed');
         if ($path !== '/') {
             $path = rtrim($path, '/');
         }
-        $path = preg_replace('#(\./)+#', '', $path);
-        return $path;
+        return preg_replace('#(\./)+#', '', $path)
+            ?? throw new \RuntimeException('Path normalization failed');
     }
 
     private function isAbsolute(string $path): bool
     {
-        return $path[0] === '/' || preg_match('/^[a-zA-Z]:/', $path);
+        return $path[0] === '/' || preg_match('/^[a-zA-Z]:/', $path) === 1;
     }
 }

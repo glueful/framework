@@ -210,10 +210,14 @@ class MetricsController extends BaseController
 
             // File system metrics
             $storagePath = realpath(base_path($this->getContext(), 'storage'));
+            $freeSpace = $storagePath === false ? false : disk_free_space($storagePath);
+            $totalSpace = $storagePath === false ? false : disk_total_space($storagePath);
             $fileSystemMetrics = [
-                'storage_free_space' => $this->formatBytes(disk_free_space($storagePath)),
-                'storage_total_space' => $this->formatBytes(disk_total_space($storagePath)),
-                'storage_usage_percent' => $this->calculateStoragePercentage($storagePath)
+                'storage_free_space' => $this->formatBytes($freeSpace === false ? 0 : $freeSpace),
+                'storage_total_space' => $this->formatBytes($totalSpace === false ? 0 : $totalSpace),
+                'storage_usage_percent' => $storagePath === false
+                    ? 'n/a'
+                    : $this->calculateStoragePercentage($storagePath)
             ];
 
             // Add sensitive file system info only for admins
@@ -225,24 +229,35 @@ class MetricsController extends BaseController
 
             // Check for log files
             $logPath = realpath(base_path($this->getContext(), 'storage/logs'));
-            if ($logPath && is_dir($logPath)) {
+            if ($logPath !== false && is_dir($logPath)) {
                 $logFiles = glob($logPath . '/*.log');
+                if ($logFiles === false) {
+                    $logFiles = [];
+                }
                 $recentLogs = [];
 
                 if ($logFiles !== []) {
                     // Get the most recent log file
-                    usort($logFiles, function ($a, $b) {
-                        return filemtime($b) - filemtime($a);
+                    usort($logFiles, function (string $a, string $b): int {
+                        $bTime = filemtime($b);
+                        $aTime = filemtime($a);
+                        return ($bTime === false ? 0 : $bTime) - ($aTime === false ? 0 : $aTime);
                     });
 
                     $mostRecentLog = $logFiles[0];
                     // Get the last 10 lines from the most recent log file
-                    $recentLogContent = file_exists($mostRecentLog) ?
-                        array_slice(file($mostRecentLog, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES), -10) : [];
+                    $recentLogContent = [];
+                    if (file_exists($mostRecentLog)) {
+                        $logLines = file($mostRecentLog, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+                        if ($logLines !== false) {
+                            $recentLogContent = array_slice($logLines, -10);
+                        }
+                    }
 
+                    $logMtime = filemtime($mostRecentLog);
                     $recentLogs = [
                         'file' => basename($mostRecentLog),
-                        'last_modified' => date('Y-m-d H:i:s', filemtime($mostRecentLog)),
+                        'last_modified' => $logMtime === false ? 'unknown' : date('Y-m-d H:i:s', $logMtime),
                         'recent_entries' => $recentLogContent
                     ];
                 }
@@ -309,14 +324,14 @@ class MetricsController extends BaseController
                 $globalConfig = $extensionManager->getGlobalConfig();
                 $extensionConfigFile = $globalConfig['config_path'] ?? 'config/extensions.json';
                 $content = file_get_contents($extensionConfigFile);
-                $config = json_decode($content, true);
+                $config = $content === false ? null : json_decode($content, true);
 
                 $extensionStatus = [];
                 $enabledCount = 0;
 
                 if (is_array($config) && isset($config['extensions'])) {
                     foreach ($config['extensions'] as $extensionName => $extensionInfo) {
-                        $isEnabled = $extensionInfo['enabled'] ?? false;
+                        $isEnabled = (bool) ($extensionInfo['enabled'] ?? false);
                         if ($isEnabled) {
                             $enabledCount++;
                         }
@@ -346,20 +361,24 @@ class MetricsController extends BaseController
             // Server load
             if (function_exists('sys_getloadavg')) {
                 $load = sys_getloadavg();
-                $metrics['server_load'] = [
-                    '1min' => $load[0],
-                    '5min' => $load[1],
-                    '15min' => $load[2]
-                ];
+                if ($load !== false) {
+                    $metrics['server_load'] = [
+                        '1min' => $load[0],
+                        '5min' => $load[1],
+                        '15min' => $load[2]
+                    ];
+                }
             }
 
             // Application uptime (if possible)
             if (function_exists('posix_times')) {
                 $uptime = posix_times();
-                $metrics['app_uptime'] = [
-                    'system_seconds' => $uptime['ticks'],
-                    'formatted' => $this->formatUptime($uptime['ticks'])
-                ];
+                if ($uptime !== false) {
+                    $metrics['app_uptime'] = [
+                        'system_seconds' => $uptime['ticks'],
+                        'formatted' => $this->formatUptime($uptime['ticks'])
+                    ];
+                }
             }
 
             // Current time and timezone
@@ -385,7 +404,7 @@ class MetricsController extends BaseController
 
         $bytes = max((float)$bytes, 0);
         $pow = floor(($bytes > 0 ? log($bytes) : 0) / log(1024));
-        $pow = min($pow, count($units) - 1);
+        $pow = (int) min($pow, count($units) - 1);
 
         $bytes /= (1 << (10 * $pow));
 
@@ -427,6 +446,9 @@ class MetricsController extends BaseController
     {
         $freeSpace = disk_free_space($path);
         $totalSpace = disk_total_space($path);
+        if ($freeSpace === false || $totalSpace === false || $totalSpace <= 0) {
+            return 'n/a';
+        }
         return round((1 - $freeSpace / $totalSpace) * 100, 2) . '%';
     }
 

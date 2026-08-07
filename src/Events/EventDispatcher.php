@@ -12,11 +12,13 @@ use Glueful\Events\Tracing\NullEventTracer;
 
 final class EventDispatcher implements EventDispatcherInterface
 {
+    private EventTracerInterface $tracer;
+
     public function __construct(
         private ListenerProviderInterface $provider,
-        private ?EventTracerInterface $tracer = null
+        ?EventTracerInterface $tracer = null
     ) {
-        $this->tracer ??= new NullEventTracer();
+        $this->tracer = $tracer ?? new NullEventTracer();
     }
 
     public function dispatch(object $event): object

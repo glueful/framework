@@ -44,16 +44,16 @@ class MeilisearchAdapter extends SearchAdapter
 {
     /**
      * Meilisearch client instance
-     * Type hint omitted for optional dependency support
+     * Native type stays object for optional dependency support
      *
-     * @var object|null
+     * @var \Meilisearch\Client|null
      */
     private ?object $client = null;
 
     /**
      * Meilisearch index instance
      *
-     * @var object|null
+     * @var \Meilisearch\Endpoints\Indexes|null
      */
     private ?object $index = null;
 
@@ -86,7 +86,35 @@ class MeilisearchAdapter extends SearchAdapter
 
         /** @disregard P1009 Optional dependency */
         $this->client = new \Meilisearch\Client($host, $apiKey);
-        $this->index = $this->client->index($this->indexName);
+        $this->index = $this->requireClient()->index($this->indexName);
+    }
+
+    /**
+     * The client, for operations that require the SDK to be installed and initialized.
+     */
+    private function requireClient(): \Meilisearch\Client
+    {
+        if ($this->client === null) {
+            throw new \RuntimeException(
+                'Meilisearch client not initialized — install meilisearch/meilisearch-php.'
+            );
+        }
+
+        return $this->client;
+    }
+
+    /**
+     * The index handle, for operations that require the SDK to be installed and initialized.
+     */
+    private function requireIndex(): \Meilisearch\Endpoints\Indexes
+    {
+        if ($this->index === null) {
+            throw new \RuntimeException(
+                'Meilisearch index not initialized — install meilisearch/meilisearch-php.'
+            );
+        }
+
+        return $this->index;
     }
 
     /**
@@ -151,7 +179,7 @@ class MeilisearchAdapter extends SearchAdapter
         }
 
         // Execute search
-        $response = $this->index->search($query, $searchParams);
+        $response = $this->requireIndex()->search($query, $searchParams);
 
         $took = (microtime(true) - $startTime) * 1000;
 
@@ -178,7 +206,7 @@ class MeilisearchAdapter extends SearchAdapter
         }
 
         try {
-            $this->client->health();
+            $this->requireClient()->health();
             return true;
         } catch (\Exception) {
             return false;
@@ -205,7 +233,7 @@ class MeilisearchAdapter extends SearchAdapter
         $data = $this->prepareDocument($document);
         $data['id'] = $id;
 
-        $this->index->addDocuments([$data], 'id');
+        $this->requireIndex()->addDocuments([$data], 'id');
     }
 
     /**
@@ -220,7 +248,7 @@ class MeilisearchAdapter extends SearchAdapter
         $data = $this->prepareDocument($document);
         $data['id'] = $id;
 
-        $this->index->updateDocuments([$data], 'id');
+        $this->requireIndex()->updateDocuments([$data], 'id');
     }
 
     /**
@@ -233,7 +261,7 @@ class MeilisearchAdapter extends SearchAdapter
         }
 
         try {
-            $this->index->deleteDocument($id);
+            $this->requireIndex()->deleteDocument($id);
         } catch (\Exception) {
             // Document might not exist
         }
@@ -256,7 +284,7 @@ class MeilisearchAdapter extends SearchAdapter
         }
 
         if ($prepared !== []) {
-            $this->index->addDocuments($prepared, 'id');
+            $this->requireIndex()->addDocuments($prepared, 'id');
         }
     }
 
@@ -401,7 +429,7 @@ class MeilisearchAdapter extends SearchAdapter
             return;
         }
 
-        $this->index->updateSettings($settings);
+        $this->requireIndex()->updateSettings($settings);
     }
 
     /**
@@ -415,7 +443,9 @@ class MeilisearchAdapter extends SearchAdapter
             return;
         }
 
-        $this->index->updateSearchableAttributes($attributes);
+        $this->requireIndex()->updateSearchableAttributes(
+            array_values(array_filter($attributes, static fn (string $a): bool => $a !== ''))
+        );
     }
 
     /**
@@ -429,7 +459,9 @@ class MeilisearchAdapter extends SearchAdapter
             return;
         }
 
-        $this->index->updateFilterableAttributes($attributes);
+        $this->requireIndex()->updateFilterableAttributes(
+            array_values(array_filter($attributes, static fn (string $a): bool => $a !== ''))
+        );
     }
 
     /**
@@ -443,7 +475,9 @@ class MeilisearchAdapter extends SearchAdapter
             return;
         }
 
-        $this->index->updateSortableAttributes($attributes);
+        $this->requireIndex()->updateSortableAttributes(
+            array_values(array_filter($attributes, static fn (string $a): bool => $a !== ''))
+        );
     }
 
     /**
@@ -456,7 +490,7 @@ class MeilisearchAdapter extends SearchAdapter
         }
 
         try {
-            $this->client->deleteIndex($this->indexName);
+            $this->requireClient()->deleteIndex($this->indexName);
         } catch (\Exception) {
             // Index might not exist
         }

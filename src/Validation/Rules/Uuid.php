@@ -51,7 +51,7 @@ final class Uuid implements Rule
             return "The {$field} cannot be a nil UUID.";
         }
 
-        if (!preg_match(self::UUID_PATTERN, $stringValue)) {
+        if (preg_match(self::UUID_PATTERN, $stringValue) !== 1) {
             return "The {$field} must be a valid UUID.";
         }
 

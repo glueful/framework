@@ -159,11 +159,17 @@ abstract class Seeder
      */
     protected function getConnection(): Connection
     {
-        if ($this->connection === null) {
-            $this->connection = $this->container->get(Connection::class);
+        $connection = $this->connection;
+        if ($connection === null) {
+            $resolved = $this->container->get(Connection::class);
+            if (!$resolved instanceof Connection) {
+                throw new \RuntimeException('Container did not provide a database Connection.');
+            }
+            $this->connection = $resolved;
+            $connection = $resolved;
         }
 
-        return $this->connection;
+        return $connection;
     }
 
     /**

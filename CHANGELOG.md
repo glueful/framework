@@ -6,6 +6,230 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.75.0] - 2026-08-07 — Algieba
+
+**Theme: the whole framework type-checks at PHPStan level 8 with zero suppressed errors** —
+a 31-area campaign took the gate from level 6 (914 errors of debt) to level 8 with no baseline
+file, on the PHPStan 2.x engine, with Rector adopted alongside as advisory dev tooling. The
+sweep surfaced and fixed real latent bugs: a reachable `orHas()` fatal, auth request attributes
+that were always `null`, an unreachable soft-delete branch, and more below. Moderate risk: the
+diff surface is wide but behavior-preserving by construction — every area landed behind the
+full test suite, and the handful of genuine behavior changes are called out in the Upgrade
+Notes.
+
+### Added
+- **`QueryBuilder::orWhereRaw()` / `WhereClause::orWhereRaw()`** — raw WHERE condition joined
+  with `OR`. Fixes a reachable fatal: the ORM's relation-count machinery dispatched to
+  `orWhereRaw` for the `'or'` boolean, so `orHas()` / `orDoesntHave()` / `orWhereHas()` /
+  `orWhereDoesntHave()` crashed with "Call to undefined method" (surfaced by the PHPStan 2
+  upgrade; regression-pinned in `OrWhereRawTest`).
+
+- **Rector adopted for dev tooling** (`rector/rector ^2.6`, dev-only). Conservative wave-0
+  `rector.php`: PHP sets derived from `composer.json` (`^8.3`) plus PHPUnit upgrade sets —
+  no dead-code or type-declaration sets yet (the level-8 campaign applies those per
+  component), and `ReadOnlyClassRector` / `ReadOnlyPropertyRector` are skipped permanently
+  as framework-BC hazards (extensions subclass framework classes). New scripts:
+  `composer rector` (dry-run) / `composer rector:fix` (apply); Rector runs locally on
+  demand, not in CI. Current advisory surface: 440 files.
+
+### Changed
+- **`src/Container` is level-8 clean — first lane of the level-8 campaign.** The seven
+  remaining errors were real hardening: `class_exists` guards before reflection in the
+  autowirer (clear `ContainerException` instead of a bare `ReflectionException`), the
+  container compiler, and console-command discovery; the framework logger's level name is
+  now validated against Monolog's known levels (invalid config falls back to `info`
+  instead of throwing mid-boot). `composer run phpstan:di` is now enforced in CI
+  ("Level-8 lanes" step) so the lane cannot regress.
+- **Seven leaf areas are level-8 clean** — `Bootstrap`, `Development`, `Lock`, `Scheduler`,
+  `Storage`, `Testing`, `Uploader` — ratcheted behind the accumulating
+  `composer run phpstan:lanes` script in the same CI step. Notable substance: `FileUploader::calculateChecksum()` throws
+  `UploadException` on an unreadable file instead of returning `false` typed as `string`;
+  `PathGuard::normalize()` fails closed if PCRE ever errors; `Glueful\Testing\TestCase::app()`
+  reports "Application not booted" instead of a null-method fatal; `LockManager` treats a
+  `null` auto-release flag as the documented default (`true`) rather than crashing in
+  Symfony Lock; `JobScheduler`'s jobs collection is honestly typed as a list (its
+  `array<string, …>` docblocks were wrong, which had also mistyped five
+  `SchedulerCommand` helpers).
+- **Six more areas are level-8 clean** — `Extensions`, `Logging`, `Performance`, `Repository`,
+  `Tasks`, `Validation` (55 errors) — appended to `composer run phpstan:lanes`; 14 of 31 areas
+  are now clean and CI-enforced (760 remaining). The substance: mysqli
+  `prepare()`/`get_result()` failures throw named `RuntimeException`s instead of fataling on
+  `false`; every `strtotime()`-based retention cutoff (log pruner, session cleanup, orphaned
+  blobs) guards the `false` case; `glob()` failures no longer crash cache-maintenance/backup
+  tasks; the extension cache validates its `filemtime()`; `ExtensionCatalog` coerces cached
+  Packagist data at the boundary instead of trusting it; log-level names are allowlisted
+  before Monolog's `fromName()` (typos fall back to `debug` instead of throwing
+  `ValueError`); `RepositoryFactory::get()` verifies cached instances with `instanceof`;
+  `RequestData` hydration rejects nonexistent DTO classes by name; and
+  `ProviderOrderer::order()`'s signature is now honest about accepting unverified provider
+  FQCNs (its documented contract — instantiation layers own existence).
+- **Five more areas are level-8 clean** — `Events`, `Helpers`, `Permissions`, `Services`,
+  plus the src-root files `Application.php` and `Framework.php` (82 errors) — 19 of 31 areas
+  now clean and CI-enforced (678 remaining). The substance: `Framework`'s boot phases route
+  through `requireContext()`/`requireContainer()` guards with clear "not booted" failures
+  instead of null-method fatals; `EventDispatcher`'s tracer property is non-nullable (the
+  constructor always normalized to `NullEventTracer` — the declared type was the lie);
+  `HealthService`'s cache/connection properties match their constructor guarantees;
+  `PermissionManager` captures the active provider locally so its combine-mode closure can't
+  race a provider swap, and its debug log is honestly a list; `PolicyRegistry::register()`
+  validates the policy class implements `PolicyInterface` at registration; subscriber
+  fallback listeners and string listeners are `is_callable`-verified with named exceptions;
+  webhook/response payload-size math guards `json_encode`/`getContent()` `false`; and
+  `Utils::getCache()` throws a clear "cache not available" instead of returning null typed
+  as `CacheStore`.
+- **Three more areas are level-8 clean** — `Cache`, `Queue`, `Support` (84 errors) — 22 of 31
+  areas now clean and CI-enforced (594 remaining). The substance: a genuine retry-policy bug
+  in `FailedJobProvider` — global exception classes (`Error`, `TypeError`, …) were mangled by
+  `substr($class, strrpos($class, '\\') + 1)` when no namespace separator exists, so they
+  never matched the non-retryable list and failed jobs retried when they shouldn't;
+  `SignedUrl` verification returns `false` instead of a `TypeError` 500 when an attacker
+  sends `signature[]=…` as an array; queue driver instantiation (registry, discovery,
+  plugins) verifies `QueueDriverInterface` before calling driver methods on arbitrary
+  classes; `toJson()` across queue contracts uses `JSON_THROW_ON_ERROR` instead of returning
+  `false` typed as `string`; cache node/file drivers guard
+  `fopen`/`file_get_contents`/`filesize`/`glob` falses; and the distributed cache
+  constructor matches its non-null guarantee.
+- **`Api` and `Security` are level-8 clean** (79 errors) — 24 of 31 areas now clean and
+  CI-enforced (515 remaining). The optional search SDKs (`elasticsearch/elasticsearch`,
+  `meilisearch/meilisearch-php`) joined require-dev so the search adapters type-check
+  against real SDK classes for the first time — which immediately surfaced real contract
+  gaps: the Elasticsearch adapter now narrows the SDK's sync/async response union before
+  calling `asArray()`/`asBool()`, Meilisearch attribute updates filter to the
+  `list<non-empty-string>` shape the SDK demands, and both adapters throw a named
+  "client not initialized — install <package>" error instead of a null-method fatal when
+  used without their SDK. Elsewhere: webhook SSRF checks pin every `filter_var()` to
+  `!== false`; webhook event-name derivation and attribute lookups guard `class_exists`
+  before reflection; `VulnerabilityScanner` folds its pervasive
+  `glob`/`file_get_contents`/`filemtime` false-handling into three helpers;
+  `ProductionSecurityValidator` makes ini-truthiness explicit via `iniEnabled()`; and
+  `SecurityManager`/`RandomStringGenerator` match their constructor/range guarantees.
+  Dev-dependency `squizlabs/php_codesniffer` bumped to 3.13.6 (CVE-2026-67434, command
+  injection — dev-only tooling).
+- **`Auth` and `Controllers` are level-8 clean** (81 errors) — 26 of 31 areas now clean and
+  CI-enforced (434 remaining). The substance in the auth stack: `CidrMatcher` fails closed
+  (no match) if `unpack()` ever fails; JWT header/payload encoding uses
+  `JSON_THROW_ON_ERROR` instead of signing the string `"false"`; the JWT provider's
+  query-param token fallback no longer calls `config()` before its own null-context check;
+  token pairs are runtime-validated (`access_token`/`refresh_token` present and strings)
+  at the refresh and session-store boundaries instead of trusted; the session cookie's
+  `same_site` config value is validated with a named error; `SessionStore` skips caching
+  a session that cannot be JSON-encoded rather than caching the string `"false"`; rollback
+  operations throw a named error on malformed entries; and `AuthSessionUser`'s
+  permissions/roles types now tell the truth (shape varies by RBAC provider). In
+  controllers: config-file path containment fails closed when `realpath()` fails on either
+  side; disk-usage/metrics endpoints survive `disk_*`/`glob`/`filemtime`/`sys_getloadavg`
+  falses instead of fataling; and the resize-parameter contract documents its actual
+  null-valued shape.
+- **`Http` and `Notifications` are level-8 clean** (89 errors) — 28 of 31 areas now clean and
+  CI-enforced (345 remaining). The substance: webhook signature generation
+  (`WebhookDeliveryService`) throws on an unencodable payload instead of HMAC-ing the string
+  `"false"`; the PSR-15 bridge validates provider-supplied PSR-17 factories with a named
+  error and stops calling bridge methods on nullable statics inside its closure; resource
+  collections (`AnonymousResourceCollection`, `CollectsResources`, `ModelResource`) validate
+  their `collects` classes extend `JsonResource` at construction; `SecureErrorResponse`
+  keeps the prior message when a sanitization pass fails (partially sanitized beats
+  unsanitized); `NotificationMetricsService`'s cache is typed as the `CacheStore` it always
+  was (28 errors from one `object` property); notification delivery metrics skip
+  cleanly on a null notification uuid instead of a `TypeError`; and `ExternalApiService`
+  can no longer throw null after a zero-attempt retry loop.
+- **`Routing` is level-8 clean** (46 errors) — 29 of 31 areas now clean and CI-enforced
+  (299 remaining). The substance: the router's closure reflection-cache key is prefixed —
+  PHP was silently casting the bare numeric-string `spl_object_id` key to an int array key,
+  so the cache's declared string-key type was never true; CSRF token caching uses
+  `JSON_THROW_ON_ERROR` instead of caching the string `"false"` as a token record, and its
+  context/fingerprint hashes guard encode failures; the request/response logger never falls
+  back to the raw body when re-encoding a sanitized payload fails (the raw body may hold
+  exactly what was being redacted); lockdown maintenance/blocked-IP state files read through
+  a guarded JSON helper; attribute route loading and gate-attribute checks guard
+  `class_exists` before reflection; `Route::where()` rejects a null constraint by name; and
+  the auth middleware's query-param token gate null-checks its context before `config()`.
+- **`Database` is level-8 clean and the CI gate is now PHPStan level 8 framework-wide** —
+  the level-8 campaign is complete: all 31 areas clean, `phpstan.neon` raised from level 6
+  to `level: 8` over `src/` + `config/`, and the per-lane ratchet scripts retired (the main
+  `composer analyse` gate now guards everything they guarded; `types:validate` lanes all
+  pass). The Database substance: the ORM relation machinery is truthfully typed — the base
+  `Relation` and all six relation classes carry `Model` (not `object`) parents/related
+  instances, relation definitions take `class-string<Model>`, and eager-load dictionaries
+  read pivot/through keys via `getRelation()`/`getAttribute()` instead of undeclared
+  dynamic properties; ~57 `preg_match` conditions pinned with the right operator; every SQL
+  normalization/signature chain (query logger, hasher, monitors, optimizer, pagination)
+  guards `preg_replace` nulls — fail-closed where the string feeds redaction or hashing;
+  `WhereClauseInterface` is honest about accepting callables (closures previously violated
+  its declared signature); `Model::toJson()`/`Collection::toJson()` throw named errors
+  instead of returning `false` typed as `string`; pooled connections and batch inserts fail
+  with named errors instead of null-method/`TypeError` crashes. One trap documented for
+  posterity: `is_callable([$class, $method])` is always true on `Model` due to
+  `__callStatic`, so trait boot-hook dispatch must use `method_exists` — the full test
+  suite caught the one regression this campaign briefly introduced there.
+- **PHPStan baseline eliminated** — all 111 frozen PHPStan-2 upgrade entries in
+  `phpstan-baseline.neon` are fixed and the file is deleted; the framework-wide level-8
+  gate now runs with zero suppressed errors. Substance beyond annotations: `array_filter`
+  calls gained explicit callbacks (strict-rules `arrayFilter.strict`) across config files,
+  CORS parsing, console commands, and session/permission plumbing; count-guarded token
+  parsing in `EncryptionService` dropped its dead `?? ''` fallbacks; loose `==`/`!=`
+  driver-metadata comparisons in the schema generators pinned with explicit casts; and
+  `trait.unused` became a permanent documented ignore (the framework ships traits as
+  public API for applications and extensions — zero in-repo users does not mean dead
+  code). New `QueryBuilder::hasJoins()` supports the soft-delete fix below.
+- **`Console` is level-8 clean** (85 errors) — 30 of 31 areas now clean and CI-enforced;
+  only `Database` (214) remains. `BaseCommand` gains a protected `jsonForDisplay()` helper —
+  JSON-encode for console output with an `'[unencodable]'` fallback — replacing ~30 raw
+  `json_encode()` display calls that could pass `false` into `line()`/`text()`/`writeln()`.
+  Elsewhere: scaffold/event generators pin their class-name `preg_match` validation;
+  `db:profile` throws named errors on unreadable query files and guards empty benchmark
+  samples; `system:production` guards env template/file reads; `serve`'s watcher and server
+  process are held in non-null locals; container compile/validate guard `glob`/`filesize`;
+  and load-average displays guard `sys_getloadavg()` returning `false`.
+- **Static analysis upgraded to PHPStan 2.x** (`phpstan/phpstan ^2.0` with `phpstan-phpunit`,
+  `phpstan-strict-rules`, and `phpstan-deprecation-rules` on their 2.x majors). The level-6 CI
+  gate stays green: the 2.x engine's new findings are frozen in `phpstan-baseline.neon`
+  (111 entries, identifier-tagged) to be burned down deliberately — the baseline must never
+  grow. Removed the `checkGenericClassInNonGenericObjectType` config option (dropped in
+  PHPStan 2). `composer run types:validate` gains the previously missing `phpstan:di` script
+  (`src/Container` at level 8). Level-8 debt catalog re-surveyed under the 2.x engine:
+  839 errors (`docs/LEVEL8_TYPING_DEBT.md`).
+
+### Fixed
+- **Request `email`/`username` attributes were always `null` after authentication** —
+  `AuthToRequestAttributesMiddleware` read `UserIdentity`'s private properties with
+  `?? null` (silently yielding `null` from outside the class) instead of calling the
+  `email()`/`username()` accessors. Surfaced by the baseline burn-down.
+- **Soft-delete restore/delete on joined queries never qualified the `deleted_at` column** —
+  `SoftDeletingScope::getDeletedAtColumn()` read a nonexistent `$joins` property on the
+  query builder, so the joined-query branch was unreachable since day one. It now asks the
+  new `QueryBuilder::hasJoins()`.
+- **`QueryCacheService`'s empty-`keyPrefix` fallback never fired** — the intended default
+  prefix was guarded by a check that could not trigger; an explicit `!== ''` comparison
+  activates it.
+- **`RedisCacheDriver::zadd()` no longer errors on an empty score-value map** — it previously
+  spread zero arguments into `Redis::zAdd()` (an `ArgumentCountError`); adding zero members
+  now trivially succeeds.
+- Small correctness cleanups surfaced by the sharper PHPStan 2 engine: integer array indices
+  in median/`formatBytes` calculations (`intdiv`/`(int) floor` instead of float keys), a
+  malformed `@SuppressWarnings` docblock in `CSRFMiddleware` that broke PHPDoc parsing, and a
+  dead `is_bool` branch on `delete()`'s `int`-typed return in `BaseRepository`.
+
+### Upgrade Notes
+- **For applications: `composer update glueful/framework` is enough.** No new env vars, no new
+  config keys, no migrations, no default changes.
+- **Contract-visible changes to audit if you extend framework internals:**
+  - `WhereClauseInterface` gained `orWhereRaw()` — a custom implementation of that interface
+    (rare) must add the method.
+  - `Model::toJson()` / `Collection::toJson()` now throw a named error on an unencodable
+    payload instead of returning `false` typed as `string`; likewise
+    `FileUploader::calculateChecksum()` throws `UploadException` on an unreadable file.
+  - The ORM relation machinery is typed against `Model` instead of `object` — an extension
+    subclassing `Relation` with non-Model parents would now fail analysis (it never worked at
+    runtime).
+- **Behavior restored by bug fixes** (previously broken, now working as documented): the
+  post-auth request attributes `email`/`username` are populated instead of always `null`;
+  soft-delete restore/delete on joined queries qualifies the `deleted_at` column; installs
+  with an empty `keyPrefix` get `QueryCacheService`'s intended default prefix — their query
+  cache re-keys once after upgrade (a one-time round of cache misses, not an error).
+- **For contributors and CI forks:** the analysis gate is now `level: 8` over `src/` +
+  `config/` with no baseline file — new findings are fixed at the source, not suppressed.
+  PHPStan runs on the 2.x engine; `composer rector` exists as an advisory dry-run.
+
 ## [1.74.1] - 2026-07-30 — Algenib
 
 **Theme: session enumeration no longer recurses into itself** — a mutual delegation between the

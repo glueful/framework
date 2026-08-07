@@ -177,7 +177,7 @@ class QueryBuilder implements QueryBuilderInterface
     {
         if (is_array($column)) {
             foreach ($column as $key => $val) {
-                $this->whereClause->add($key, '=', $val);
+                $this->whereClause->add((string) $key, '=', $val);
             }
         } else {
             // Normalize 2-argument form: where('id', 5) => where('id', '=', 5)
@@ -205,7 +205,7 @@ class QueryBuilder implements QueryBuilderInterface
     {
         if (is_array($column)) {
             foreach ($column as $key => $val) {
-                $this->whereClause->orWhere($key, '=', $val);
+                $this->whereClause->orWhere((string) $key, '=', $val);
             }
         } else {
             // Normalize 2-argument form: orWhere('id', 5) => orWhere('id', '=', 5)
@@ -308,6 +308,25 @@ class QueryBuilder implements QueryBuilderInterface
     public function whereRaw(string $condition, array $bindings = []): static
     {
         $this->whereClause->whereRaw($condition, $bindings);
+        return $this;
+    }
+
+    /**
+     * Whether the query has any JOIN clauses
+     */
+    public function hasJoins(): bool
+    {
+        return $this->state->getJoins() !== [];
+    }
+
+    /**
+     * Add raw WHERE condition joined with OR
+     *
+     * @param array<mixed> $bindings
+     */
+    public function orWhereRaw(string $condition, array $bindings = []): static
+    {
+        $this->whereClause->orWhereRaw($condition, $bindings);
         return $this;
     }
 
@@ -486,6 +505,9 @@ class QueryBuilder implements QueryBuilderInterface
             $this->cacheEnabled
         );
 
+        // Rows originate from PDO fetchAll (a list); the cache round-trip widens
+        // the inferred key type but never re-keys.
+        /** @var list<array<string, mixed>> $result */
         return $result;
     }
 
@@ -717,7 +739,7 @@ class QueryBuilder implements QueryBuilderInterface
         $data = Connection::applyInsertHooks($table, $data);
         $this->queryValidator->validateInsert($table, $data);
 
-        return $this->insertBuilder->upsert($table, $data, $updateColumns);
+        return $this->insertBuilder->upsert($table, $data, array_values(array_map('strval', $updateColumns)));
     }
 
     /**

@@ -53,12 +53,13 @@ class SessionAnalytics
         ?ApplicationContext $context = null
     ) {
         $this->context = $context;
-        $this->cache = $cache ?? CacheHelper::createCacheInstance();
-        if ($this->cache === null) {
+        $cache = $cache ?? CacheHelper::createCacheInstance();
+        if ($cache === null) {
             throw new \RuntimeException(
                 'CacheStore is required for SessionAnalytics: Unable to create cache instance.'
             );
         }
+        $this->cache = $cache;
         if ($sessionCacheManager !== null) {
             $this->sessionCacheManager = $sessionCacheManager;
         } elseif ($this->context !== null) {
@@ -180,7 +181,7 @@ class SessionAnalytics
         // Get all active sessions and filter manually
         $allSessions = $this->getAllActiveSessions();
 
-        return array_filter($allSessions, function ($session) use ($criteria) {
+        return array_values(array_filter($allSessions, function ($session) use ($criteria) {
             foreach ($criteria as $field => $condition) {
                 switch ($field) {
                     case 'ip_range':
@@ -238,7 +239,7 @@ class SessionAnalytics
                 }
             }
             return true;
-        });
+        }));
     }
 
     /**
@@ -372,7 +373,7 @@ class SessionAnalytics
      * Analyze sessions by time range
      *
      * @param list<array<string, mixed>> $sessions Sessions to analyze
-     * @return array<string, array<string, int>> Time range analysis
+     * @return array<string, array<string, mixed>> Time range analysis
      */
     private function analyzeByTimeRange(array $sessions): array
     {
@@ -741,7 +742,7 @@ class SessionAnalytics
      */
     private function applyFilters(array $sessions, array $filters): array
     {
-        return array_filter($sessions, function ($session) use ($filters) {
+        return array_values(array_filter($sessions, function ($session) use ($filters) {
             foreach ($filters as $field => $value) {
                 switch ($field) {
                     case 'provider':
@@ -758,7 +759,7 @@ class SessionAnalytics
                 }
             }
             return true;
-        });
+        }));
     }
 
     /**
@@ -770,7 +771,8 @@ class SessionAnalytics
      */
     private function cacheAnalytics(array $analytics, array $filters): void
     {
-        $cacheKey = self::ANALYTICS_PREFIX . 'full:' . md5(json_encode($filters));
+        $encodedFilters = json_encode($filters);
+        $cacheKey = self::ANALYTICS_PREFIX . 'full:' . md5($encodedFilters === false ? '' : $encodedFilters);
         $this->cache->set($cacheKey, $analytics, self::METRICS_TTL);
     }
 
@@ -830,7 +832,7 @@ class SessionAnalytics
     {
         $users = array_unique(array_filter(array_map(function ($session) {
             return $session['user']['uuid'] ?? null;
-        }, $sessions)));
+        }, $sessions), static fn ($uuid): bool => $uuid !== null && $uuid !== ''));
         return count($users);
     }
 
@@ -865,7 +867,7 @@ class SessionAnalytics
 
         sort($values);
         $count = count($values);
-        $middle = floor($count / 2);
+        $middle = intdiv($count, 2);
 
         if ($count % 2 === 0) {
             return ($values[$middle - 1] + $values[$middle]) / 2;

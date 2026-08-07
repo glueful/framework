@@ -40,7 +40,7 @@ class PermissionManager implements PermissionManagerInterface
     /** @var bool Whether debug mode is enabled */
     private static bool $debugMode = false;
 
-    /** @var array<string, mixed> Debug information collected during operations */
+    /** @var list<array<string, mixed>> Debug information collected during operations */
     private static array $debugInfo = [];
 
     /** @var \Glueful\Auth\SessionCacheManager|null Session cache manager instance */
@@ -193,10 +193,11 @@ class PermissionManager implements PermissionManagerInterface
 
         // Provider decide hook for 'combine' mode (provider true=GRANT, false=ABSTAIN)
         $providerDecide = null;
-        if (self::$activeProvider !== null && $mode === 'combine') {
-            $providerDecide = function () use ($userUuid, $permission, $resource, $context) {
+        $activeProvider = self::$activeProvider;
+        if ($activeProvider !== null && $mode === 'combine') {
+            $providerDecide = function () use ($activeProvider, $userUuid, $permission, $resource, $context) {
                 try {
-                    return self::$activeProvider->can($userUuid, $permission, $resource, $context)
+                    return $activeProvider->can($userUuid, $permission, $resource, $context)
                         ? \Glueful\Permissions\Vote::GRANT
                         : \Glueful\Permissions\Vote::ABSTAIN;
                 } catch (\Throwable) {
@@ -512,7 +513,7 @@ class PermissionManager implements PermissionManagerInterface
     /**
      * Get debug information
      *
-     * @return array<string, mixed> Debug information
+     * @return list<array<string, mixed>> Debug information
      */
     public function getDebugInfo(): array
     {

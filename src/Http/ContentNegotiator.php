@@ -30,7 +30,8 @@ final class ContentNegotiator
             if (str_contains($p, ';q=')) {
                 [$mime, $param] = explode(';', $p, 2);
                 $p = trim($mime);
-                $qStr = substr(strstr($param, 'q='), 2);
+                $qPart = strstr($param, 'q=');
+                $qStr = $qPart === false ? '' : substr($qPart, 2);
                 $q = is_numeric($qStr) ? (float) $qStr : 1.0;
             }
             $candidates[] = ['mime' => strtolower($p), 'q' => $q];

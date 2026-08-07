@@ -21,6 +21,22 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.75.0 — Algieba (Minor, Released 2026-08-07)
+- **Framework-wide PHPStan level 8, zero suppressed errors.** A 31-area campaign cleaned 914
+  errors of typing debt, raised the CI gate from level 6 to `level: 8` over `src/` + `config/`,
+  and eliminated the PHPStan-2 upgrade baseline (all 111 entries fixed, file deleted). Engine
+  upgraded to PHPStan 2.x; Rector adopted as advisory dev tooling (conservative wave-0 config,
+  local dry-run only).
+- **Latent bugs fixed by the sweep:** `orHas()`/`orWhereHas()` family fatal (missing
+  `orWhereRaw`, now public API); post-auth request `email`/`username` attributes were always
+  `null`; soft-delete on joined queries never qualified `deleted_at` (new
+  `QueryBuilder::hasJoins()`); `QueryCacheService`'s default key prefix never applied;
+  failed-job retry name mangling; JWT/webhook signing of `"false"` payloads;
+  `RedisCacheDriver::zadd()` on an empty map.
+- **Honest contracts:** ORM relations typed against `Model` (not `object`);
+  `toJson()`/`calculateChecksum()` throw named errors instead of returning `false`;
+  `WhereClauseInterface` declares `orWhereRaw()`.
+
 ### 1.74.1 — Algenib (Patch, Released 2026-07-30)
 - **Session-enumeration recursion fixed.** `SessionCacheManager::findUserSessions()` and
   `SessionStore::listByUser()` no longer delegate to each other; enumeration reads the cache

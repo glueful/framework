@@ -27,8 +27,9 @@ use Glueful\Events\Auth\SessionCachedEvent;
 /**
  * @phpstan-type AuthSessionUser array{
  *   uuid?: string,
- *   permissions?: array<string, list<string>>|list<string>,
- *   roles?: list<string>
+ *   permissions?: array<mixed>,
+ *   roles?: array<mixed>,
+ *   permission_hash?: string
  * }
  * @phpstan-type AuthSessionPayload array{
  *   id: string,
@@ -155,7 +156,7 @@ class SessionCacheManager
         $sessionId = $userData['session_id'] ?? $this->generateSessionId();
 
     // Use custom TTL if provided, or provider-specific TTL if available
-        $sessionTtl = $ttl ?? $this->getProviderTtl($provider);
+        $sessionTtl = $ttl ?? $this->getProviderTtl($provider ?? 'jwt');
 
     // Pre-load permissions if RBAC extension is available
         $enhancedUserData = $this->enhanceUserDataWithPermissions($userData);
@@ -635,10 +636,11 @@ class SessionCacheManager
             $permissions = $this->loadUserPermissions($userUuid);
             $roles = $this->loadUserRoles($userUuid);
 
+            $hashSource = json_encode(array_merge($permissions, $roles));
             return array_merge($userData, [
             'permissions' => $permissions,
             'roles' => $roles,
-            'permission_hash' => hash('xxh3', json_encode(array_merge($permissions, $roles)))
+            'permission_hash' => hash('xxh3', $hashSource === false ? '' : $hashSource)
             ]);
         } catch (\Throwable $e) {
             // Log error but don't fail session creation
@@ -655,7 +657,7 @@ class SessionCacheManager
      * Load user permissions using RBAC permission provider
      *
      * @param string $userUuid User UUID
-     * @return array<string, list<string>>|list<string> User permissions grouped by resource
+     * @return array<mixed> User permissions (shape varies by provider)
      */
     private function loadUserPermissions(string $userUuid): array
     {
@@ -694,7 +696,7 @@ class SessionCacheManager
      * Load user roles using RBAC role service
      *
      * @param string $userUuid User UUID
-     * @return list<string> User roles with hierarchy information
+     * @return array<mixed> User roles with hierarchy information (shape varies by provider)
      */
     private function loadUserRoles(string $userUuid): array
     {
@@ -905,9 +907,10 @@ class SessionCacheManager
             $roles = $this->loadUserRoles($userUuid);
 
             // Update session data
+            $hashSource = json_encode(array_merge($permissions, $roles));
             $session['user']['permissions'] = $permissions;
             $session['user']['roles'] = $roles;
-            $session['user']['permission_hash'] = hash('xxh3', json_encode(array_merge($permissions, $roles)));
+            $session['user']['permission_hash'] = hash('xxh3', $hashSource === false ? '' : $hashSource);
             $session['permissions_loaded_at'] = time();
 
             // Get session data from SessionStore to find session ID
@@ -1081,10 +1084,11 @@ class SessionCacheManager
 
         // Validate permission hash if available (integrity check)
         if (isset($session['user']['permission_hash'])) {
-            $currentHash = hash('xxh3', json_encode(array_merge(
+            $hashSource = json_encode(array_merge(
                 $session['user']['permissions'] ?? [],
                 $session['user']['roles'] ?? []
-            )));
+            ));
+            $currentHash = hash('xxh3', $hashSource === false ? '' : $hashSource);
 
             if ($currentHash !== $session['user']['permission_hash']) {
                 return false;
@@ -1128,9 +1132,10 @@ class SessionCacheManager
                 $roles = $this->loadUserRoles($userUuid);
 
                 // Update session with fresh permissions
+                $hashSource = json_encode(array_merge($permissions, $roles));
                 $session['user']['permissions'] = $permissions;
                 $session['user']['roles'] = $roles;
-                $session['user']['permission_hash'] = hash('xxh3', json_encode(array_merge($permissions, $roles)));
+                $session['user']['permission_hash'] = hash('xxh3', $hashSource === false ? '' : $hashSource);
                 $session['permissions_loaded_at'] = time();
 
                 // Store updated session
@@ -1228,8 +1233,14 @@ class SessionCacheManager
         // Use the batch get operation from CacheStore
         $cachedSessions = $this->cache->mget($cacheKeys);
 
-        // Return only valid sessions (filter out null/false values)
-        return array_values(array_filter($cachedSessions));
+        // Return only valid sessions (filter out null/false/empty values)
+        /** @var list<AuthSessionPayload> $validSessions Cache rows are session payloads by construction */
+        $validSessions = array_values(array_filter(
+            $cachedSessions,
+            static fn ($session): bool => is_array($session) && $session !== []
+        ));
+
+        return $validSessions;
     }
 
     /**

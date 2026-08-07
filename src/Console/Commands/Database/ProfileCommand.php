@@ -171,7 +171,11 @@ class ProfileCommand extends BaseCommand
             if (!file_exists($file)) {
                 throw new \RuntimeException("Query file not found: {$file}");
             }
-            return file_get_contents($file);
+            $contents = file_get_contents($file);
+            if ($contents === false) {
+                throw new \RuntimeException("Failed to read query file: {$file}");
+            }
+            return $contents;
         }
 
         return '';
@@ -215,7 +219,7 @@ class ProfileCommand extends BaseCommand
         $this->io->text($query);
         if (count($params) > 0) {
             $this->io->text('<info>Parameters:</info>');
-            $this->io->text(json_encode($params, JSON_PRETTY_PRINT));
+            $this->io->text($this->jsonForDisplay($params, JSON_PRETTY_PRINT));
         }
         $this->io->newLine();
 
@@ -307,6 +311,10 @@ class ProfileCommand extends BaseCommand
         $durations = array_column($profiles, 'duration');
         $memories = array_column($profiles, 'memory_delta');
 
+        if ($durations === [] || $memories === []) {
+            throw new \RuntimeException('Benchmark produced no samples.');
+        }
+
         return array_merge($firstProfile, [
             'benchmark_iterations' => $benchmark,
             'total_time' => $totalTime,
@@ -339,6 +347,9 @@ class ProfileCommand extends BaseCommand
         }
 
         $compareQuery = file_get_contents($compareFile);
+        if ($compareQuery === false) {
+            throw new \RuntimeException("Failed to read comparison query file: {$compareFile}");
+        }
         $this->io->section('⚖️ Query Comparison');
 
         // Profile comparison query
@@ -381,7 +392,7 @@ class ProfileCommand extends BaseCommand
         if ($comparison !== null) {
             $output['comparison'] = $comparison;
         }
-        $this->io->text(json_encode($output, JSON_PRETTY_PRINT));
+        $this->io->text($this->jsonForDisplay($output, JSON_PRETTY_PRINT));
     }
 
     /**
@@ -441,7 +452,7 @@ class ProfileCommand extends BaseCommand
         // Show execution plan
         if (isset($profile['execution_plan'])) {
             $this->io->section('🗂️ Execution Plan');
-            $this->io->text(json_encode($profile['execution_plan'], JSON_PRETTY_PRINT));
+            $this->io->text($this->jsonForDisplay($profile['execution_plan'], JSON_PRETTY_PRINT));
         }
 
         // Show patterns
@@ -468,7 +479,7 @@ class ProfileCommand extends BaseCommand
             $this->io->section('📋 Result Sample');
             foreach ($profile['result_sample'] as $i => $row) {
                 $this->io->text("Row " . ($i + 1) . ":");
-                $this->io->text(json_encode($row, JSON_PRETTY_PRINT));
+                $this->io->text($this->jsonForDisplay($row, JSON_PRETTY_PRINT));
                 $this->io->newLine();
             }
         }
@@ -566,7 +577,7 @@ class ProfileCommand extends BaseCommand
 
         $bytes = max($bytes, 0);
         $pow = floor(($bytes > 0 ? log($bytes) : 0) / log(1024));
-        $pow = min($pow, count($units) - 1);
+        $pow = (int) min($pow, count($units) - 1);
 
         $bytes /= (1 << (10 * $pow));
 

@@ -86,7 +86,7 @@ class WebhookListCommand extends BaseCommand
         }
 
         if ($jsonOutput) {
-            $this->line(json_encode(['subscriptions' => $subscriptions], JSON_PRETTY_PRINT));
+            $this->line($this->jsonForDisplay(['subscriptions' => $subscriptions], JSON_PRETTY_PRINT));
             return self::SUCCESS;
         }
 

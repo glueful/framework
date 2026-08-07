@@ -66,7 +66,7 @@ class InsertBuilder implements InsertBuilderInterface
     {
         $this->validateData($data);
 
-        $sql = $this->buildUpsertQuery($table, $data, $updateColumns);
+        $sql = $this->buildUpsertQuery($table, $data, array_values($updateColumns));
         $bindings = array_values($data);
 
         return $this->executor->executeModification($sql, $bindings);
@@ -94,6 +94,9 @@ class InsertBuilder implements InsertBuilderInterface
     public function buildBatchInsertQuery(string $table, array $rows): string
     {
         $firstRow = reset($rows);
+        if ($firstRow === false) {
+            throw new \InvalidArgumentException('Batch insert requires at least one row.');
+        }
         $columns = array_keys($firstRow);
         $columnCount = count($columns);
 
@@ -180,6 +183,9 @@ class InsertBuilder implements InsertBuilderInterface
     {
         $values = [];
         $firstRow = reset($rows);
+        if ($firstRow === false) {
+            return [];
+        }
         $columns = array_keys($firstRow);
 
         foreach ($rows as $row) {

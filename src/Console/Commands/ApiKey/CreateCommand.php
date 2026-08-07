@@ -82,7 +82,9 @@ final class CreateCommand extends BaseCommand
         if (!is_string($value) || $value === '') {
             return [];
         }
-        return array_values(array_filter(array_map('trim', explode(',', $value))));
+        return array_values(
+            array_filter(array_map('trim', explode(',', $value)), static fn (string $s): bool => $s !== '')
+        );
     }
 
     private static function parseExpires(mixed $value): ?string

@@ -306,7 +306,8 @@ class SecureSerializer
     private function extractSerializedClasses(string $data): array
     {
         $classes = [];
-        if (preg_match_all('/[OC]:[0-9]+:"([^"]+)"/', $data, $matches)) {
+        $matchCount = preg_match_all('/[OC]:[0-9]+:"([^"]+)"/', $data, $matches);
+        if ($matchCount !== false && $matchCount > 0) {
             $classes = $matches[1];
         }
 

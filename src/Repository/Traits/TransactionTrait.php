@@ -134,7 +134,7 @@ trait TransactionTrait
             return [];
         }
 
-        $chunks = array_chunk($data, $chunkSize);
+        $chunks = array_chunk($data, max(1, $chunkSize));
         $allResults = [];
 
         foreach ($chunks as $chunkIndex => $chunk) {

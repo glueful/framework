@@ -32,6 +32,9 @@ class ParameterBinder implements ParameterBinderInterface
 
     /**
      * Flatten bindings to prevent nested arrays and normalize types for database
+     *
+     * @param array<int|string, mixed> $bindings
+     * @return array<int|string, mixed> Positional bindings keep their int keys
      */
     public function flattenBindings(array $bindings): array
     {

@@ -66,14 +66,15 @@ class SecurityManager
     ) {
         $this->context = $context;
         $this->config = ConfigManager::get('security', []);
-        $this->cache = $cache ?? CacheHelper::createCacheInstance();
+        $cache = $cache ?? CacheHelper::createCacheInstance();
         $this->events = $events;
 
-        if ($this->cache === null) {
+        if ($cache === null) {
             throw new \RuntimeException(
                 'Cache is required for SecurityManager. Please ensure cache is properly configured.'
             );
         }
+        $this->cache = $cache;
     }
 
     /**
@@ -557,7 +558,7 @@ class SecurityManager
 
             // Check user agent against each suspicious pattern
             foreach ($suspiciousPatterns as $pattern) {
-                if (preg_match($pattern, $userAgent)) {
+                if (preg_match($pattern, $userAgent) === 1) {
                     throw new SecurityException("Suspicious user agent blocked", 403);
                 }
             }

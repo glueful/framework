@@ -498,6 +498,10 @@ class TokenManager
         }
 
         // Store session using SessionStore for unified database/cache management
+        if (!is_string($tokens['access_token'] ?? null) || !is_string($tokens['refresh_token'] ?? null)) {
+            return [];
+        }
+        /** @var array{access_token: string, refresh_token: string, expires_in?: int} $tokens */
         $user['refresh_token'] = $tokens['refresh_token'];
         $user['provider'] = $provider ?? 'jwt';
         $user['remember_me'] = $user['remember_me'] ?? false;
@@ -529,7 +533,7 @@ class TokenManager
             $user, // userData array
             $tokens['access_token'], // token string
             $provider ?? 'jwt', // provider
-            $tokens['expires_in'] // ttl
+            $tokens['expires_in'] ?? null // ttl (null = provider default)
         );
 
         unset($user['refresh_token']);
@@ -715,7 +719,7 @@ class TokenManager
         // Extract Bearer token using preg_match (handles extra spaces)
         if (
             $authorization_header !== null && $authorization_header !== ''
-            && preg_match('/Bearer\s+(.+)/i', $authorization_header, $matches)
+            && preg_match('/Bearer\s+(.+)/i', $authorization_header, $matches) === 1
         ) {
             return trim($matches[1]);
         }
@@ -800,9 +804,9 @@ class TokenManager
 
         // Try to call a method to get all providers
         try {
-            /** @var array<int, AuthenticationProviderInterface> $all */
+            /** @var array<string, AuthenticationProviderInterface> $all */
             $all = $authManager->getProviders();
-            return $all;
+            return array_values($all);
         } catch (\Throwable) {
             // Silently fail and continue with fallback
         }

@@ -219,6 +219,9 @@ class ModelResource extends JsonResource
         }
 
         if ($resourceClass !== null) {
+            if (!is_subclass_of($resourceClass, JsonResource::class)) {
+                throw new \InvalidArgumentException("Resource class must extend JsonResource: {$resourceClass}");
+            }
             return new AnonymousResourceCollection($items, $resourceClass);
         }
 
@@ -247,6 +250,9 @@ class ModelResource extends JsonResource
         }
 
         if ($resourceClass !== null) {
+            if (!is_subclass_of($resourceClass, JsonResource::class)) {
+                throw new \InvalidArgumentException("Resource class must extend JsonResource: {$resourceClass}");
+            }
             return new $resourceClass($related);
         }
 

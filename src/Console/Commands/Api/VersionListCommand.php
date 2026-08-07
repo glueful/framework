@@ -45,7 +45,7 @@ final class VersionListCommand extends BaseCommand
                 "Default Version: v{$default}",
                 'Strategy: ' . ($config['strategy'] ?? 'url_prefix'),
                 'Prefix: ' . ($config['prefix'] ?? '/api'),
-                'Strict Mode: ' . (($config['strict'] ?? false) ? 'Yes' : 'No'),
+                'Strict Mode: ' . ((bool) ($config['strict'] ?? false) ? 'Yes' : 'No'),
             ]);
 
             return self::SUCCESS;
@@ -112,7 +112,7 @@ final class VersionListCommand extends BaseCommand
         $this->io->listing([
             'Strategy: ' . ($config['strategy'] ?? 'url_prefix'),
             'Prefix: ' . ($config['prefix'] ?? '/api'),
-            'Strict Mode: ' . (($config['strict'] ?? false) ? 'Yes' : 'No'),
+            'Strict Mode: ' . ((bool) ($config['strict'] ?? false) ? 'Yes' : 'No'),
             "Default Version: v{$default}",
         ]);
 

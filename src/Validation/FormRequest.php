@@ -164,15 +164,16 @@ abstract class FormRequest
 
         // Build and run validator
         $rules = $this->parseRules($this->rules());
-        $this->validator = new Validator($rules);
+        $validator = new Validator($rules);
+        $this->validator = $validator;
 
-        $errors = $this->validator->validate($this->all());
+        $errors = $validator->validate($this->all());
 
         if ($errors !== []) {
             $this->failedValidation($errors);
         }
 
-        $this->validated = $this->validator->filtered();
+        $this->validated = $validator->filtered();
         $this->passedValidation();
     }
 

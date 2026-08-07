@@ -494,7 +494,7 @@ class ContainerValidateCommand extends BaseCommand
             $providers = glob($providersDir . '/*Provider.php');
             $validProviders = 0;
 
-            foreach ($providers as $providerFile) {
+            foreach ($providers === false ? [] : $providers as $providerFile) {
                 $className = basename($providerFile, '.php');
                 $fullClassName = "Glueful\\Container\\Providers\\{$className}";
 
@@ -576,7 +576,7 @@ class ContainerValidateCommand extends BaseCommand
     private function displayValidationResults(array $results, string $format): void
     {
         if ($format === 'json') {
-            $this->line(json_encode($results, JSON_PRETTY_PRINT));
+            $this->line($this->jsonForDisplay($results, JSON_PRETTY_PRINT));
             return;
         } elseif ($format === 'yaml') {
             $this->line($this->arrayToYaml($results));

@@ -142,6 +142,10 @@ class ExternalApiService
             }
         }
 
+        if ($lastException === null) {
+            $lastException = new \RuntimeException('API call failed with no recorded exception.');
+        }
+
         $this->logger->error('API call failed after all retries', [
             'url' => $url,
             'attempts' => $maxRetries,

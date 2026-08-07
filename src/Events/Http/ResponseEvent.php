@@ -85,7 +85,12 @@ class ResponseEvent extends BaseEvent
     public function getContentLength(): ?int
     {
         $contentLength = $this->response->headers->get('Content-Length');
-        return $contentLength !== null ? (int)$contentLength : strlen($this->response->getContent());
+        if ($contentLength !== null) {
+            return (int) $contentLength;
+        }
+
+        $content = $this->response->getContent();
+        return $content === false ? null : strlen($content);
     }
 
     /**

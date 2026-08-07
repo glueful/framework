@@ -16,10 +16,10 @@ use Glueful\Database\Query\Interfaces\QueryStateInterface;
 class QueryState implements QueryStateInterface
 {
     protected ?string $table = null;
-    /** @var array<string> */
+    /** @var array<\Glueful\Database\RawExpression|string> */
     protected array $selectColumns = ['*'];
     protected bool $distinct = false;
-    /** @var array<array{type: string, table: string, first: string, operator: string, second: string}> */
+    /** @var array<array<string, mixed>> Join specs: type, table, first, operator, second */
     protected array $joins = [];
     protected ?int $limit = null;
     protected ?int $offset = null;
@@ -64,6 +64,8 @@ class QueryState implements QueryStateInterface
 
     /**
      * Set columns to select
+     *
+     * @param array<\Glueful\Database\RawExpression|string> $columns
      */
     public function setSelectColumns(array $columns): void
     {
@@ -72,6 +74,8 @@ class QueryState implements QueryStateInterface
 
     /**
      * Get select columns
+     *
+     * @return array<\Glueful\Database\RawExpression|string>
      */
     public function getSelectColumns(): array
     {
@@ -124,6 +128,8 @@ class QueryState implements QueryStateInterface
 
     /**
      * Add join information
+     *
+     * @param array<string, mixed> $joinData
      */
     public function addJoin(array $joinData): void
     {
@@ -132,6 +138,8 @@ class QueryState implements QueryStateInterface
 
     /**
      * Get all joins
+     *
+     * @return array<array<string, mixed>>
      */
     public function getJoins(): array
     {

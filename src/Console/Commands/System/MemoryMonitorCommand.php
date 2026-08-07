@@ -470,11 +470,13 @@ class MemoryMonitorCommand extends BaseCommand
         // Add system memory info if available
         if (function_exists('sys_getloadavg')) {
             $load = sys_getloadavg();
-            $detailRows[] = [
-                'System Load',
-                sprintf('%.2f, %.2f, %.2f', $load[0], $load[1], $load[2]),
-                '1min, 5min, 15min averages'
-            ];
+            if ($load !== false) {
+                $detailRows[] = [
+                    'System Load',
+                    sprintf('%.2f, %.2f, %.2f', $load[0], $load[1], $load[2]),
+                    '1min, 5min, 15min averages'
+                ];
+            }
         }
 
         $this->io->table($detailRows[0], array_slice($detailRows, 1));
@@ -571,6 +573,7 @@ class MemoryMonitorCommand extends BaseCommand
 
         $memoryChange = $last['current'] - $first['current'];
         $timeSpan = $last['time'] - $first['time'];
+        $currentValues = array_column($trends, 'current');
 
         $this->io->section('📈 Trend Analysis Results');
 
@@ -581,9 +584,9 @@ class MemoryMonitorCommand extends BaseCommand
                 'Memory Change',
                 $this->formatBytes(abs($memoryChange)) . ($memoryChange >= 0 ? ' (increase)' : ' (decrease)')
             ],
-            ['Rate of Change', $this->formatBytes(abs($memoryChange / max($timeSpan, 1))) . '/second'],
-            ['Peak in Period', $this->formatBytes(max(array_column($trends, 'current')))],
-            ['Low in Period', $this->formatBytes(min(array_column($trends, 'current')))],
+            ['Rate of Change', $this->formatBytes((int) abs($memoryChange / max($timeSpan, 1))) . '/second'],
+            ['Peak in Period', $this->formatBytes($currentValues === [] ? 0 : (int) max($currentValues))],
+            ['Low in Period', $this->formatBytes($currentValues === [] ? 0 : (int) min($currentValues))],
         ];
 
         $this->io->table($trendRows[0], array_slice($trendRows, 1));
@@ -781,7 +784,7 @@ class MemoryMonitorCommand extends BaseCommand
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
         $bytes = max($bytes, 0);
         $pow = floor(($bytes > 0 ? log($bytes) : 0) / log(1024));
-        $pow = min($pow, count($units) - 1);
+        $pow = (int) min($pow, count($units) - 1);
         $bytes /= pow(1024, $pow);
         return round($bytes, 2) . ' ' . $units[$pow];
     }

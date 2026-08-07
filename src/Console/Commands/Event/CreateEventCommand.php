@@ -128,13 +128,13 @@ class CreateEventCommand extends BaseCommand
         $className = array_pop($parts);
 
         // Check if class name is valid PascalCase
-        if (!preg_match('/^[A-Z][a-zA-Z0-9]*$/', $className)) {
+        if (preg_match('/^[A-Z][a-zA-Z0-9]*$/', $className) !== 1) {
             return false;
         }
 
         // Check if all directory parts are valid
         foreach ($parts as $part) {
-            if (!preg_match('/^[A-Z][a-zA-Z0-9]*$/', $part)) {
+            if (preg_match('/^[A-Z][a-zA-Z0-9]*$/', $part) !== 1) {
                 return false;
             }
         }

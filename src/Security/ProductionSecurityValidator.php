@@ -157,8 +157,7 @@ class ProductionSecurityValidator
         }
 
         // Check display_errors setting
-        $displayErrors = ini_get('display_errors');
-        if ($environment === 'production' && $displayErrors) {
+        if ($environment === 'production' && self::iniEnabled('display_errors')) {
             $issues[] = [
                 'type' => 'HIGH',
                 'category' => 'DISPLAY_ERRORS',
@@ -168,8 +167,7 @@ class ProductionSecurityValidator
         }
 
         // Check log_errors setting
-        $logErrors = ini_get('log_errors');
-        if (!$logErrors) {
+        if (!self::iniEnabled('log_errors')) {
             $warnings[] = [
                 'type' => 'MEDIUM',
                 'category' => 'ERROR_LOGGING',
@@ -234,7 +232,7 @@ class ProductionSecurityValidator
 
         if ($environment === 'production') {
             // Check expose_php setting
-            if (ini_get('expose_php')) {
+            if (self::iniEnabled('expose_php')) {
                 $risks[] = [
                     'type' => 'LOW',
                     'category' => 'PHP_EXPOSURE',
@@ -244,7 +242,7 @@ class ProductionSecurityValidator
             }
 
             // Check session security
-            if (!ini_get('session.cookie_secure') && isset($_SERVER['HTTPS'])) {
+            if (!self::iniEnabled('session.cookie_secure') && isset($_SERVER['HTTPS'])) {
                 $risks[] = [
                     'type' => 'MEDIUM',
                     'category' => 'SESSION_SECURITY',
@@ -253,7 +251,7 @@ class ProductionSecurityValidator
                 ];
             }
 
-            if (!ini_get('session.cookie_httponly')) {
+            if (!self::iniEnabled('session.cookie_httponly')) {
                 $risks[] = [
                     'type' => 'MEDIUM',
                     'category' => 'SESSION_SECURITY',
@@ -408,5 +406,16 @@ class ProductionSecurityValidator
             'warnings_count' => count($validation['warnings']),
             'top_recommendation' => $validation['recommendations'][0] ?? 'No issues found'
         ];
+    }
+
+    /**
+     * PHP-truthiness of an ini option, made explicit: false (unknown option),
+     * '' and '0' are disabled; anything else counts as enabled.
+     */
+    private static function iniEnabled(string $option): bool
+    {
+        $value = ini_get($option);
+
+        return $value !== false && $value !== '' && $value !== '0';
     }
 }

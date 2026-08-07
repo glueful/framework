@@ -138,8 +138,9 @@ abstract class QueryFilter
 
         // Check for custom filter method (filterFieldName)
         $method = 'filter' . $this->studly($filter->field);
-        if (method_exists($this, $method)) {
-            call_user_func([$this, $method], $filter->value, $filter->operator);
+        $callable = [$this, $method];
+        if (is_callable($callable)) {
+            $callable($filter->value, $filter->operator);
             return;
         }
 

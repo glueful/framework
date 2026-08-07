@@ -44,6 +44,15 @@ final class ArrayOf
     /** @return class-string|null */
     public function dtoClass(): ?string
     {
-        return $this->isScalar() ? null : $this->type;
+        if ($this->isScalar()) {
+            return null;
+        }
+        if (!class_exists($this->type)) {
+            throw new \InvalidArgumentException(
+                "ArrayOf type must be a scalar name or an existing class, got: {$this->type}"
+            );
+        }
+
+        return $this->type;
     }
 }

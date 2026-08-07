@@ -47,7 +47,7 @@ trait HasRelationships
     /**
      * Define a one-to-one relationship
      *
-     * @param class-string $related
+     * @param class-string<\Glueful\Database\ORM\Model> $related
      * @param string|null $foreignKey
      * @param string|null $localKey
      * @return HasOne
@@ -65,7 +65,7 @@ trait HasRelationships
     /**
      * Define a one-to-many relationship
      *
-     * @param class-string $related
+     * @param class-string<\Glueful\Database\ORM\Model> $related
      * @param string|null $foreignKey
      * @param string|null $localKey
      * @return HasMany
@@ -83,8 +83,8 @@ trait HasRelationships
     /**
      * Define a has-one-through relationship
      *
-     * @param class-string $related The final related model
-     * @param class-string $through The intermediate model
+     * @param class-string<\Glueful\Database\ORM\Model> $related The final related model
+     * @param class-string<\Glueful\Database\ORM\Model> $through The intermediate model
      * @param string|null $firstKey Foreign key on the intermediate model
      * @param string|null $secondKey Foreign key on the final model
      * @param string|null $localKey Local key on this model
@@ -121,8 +121,8 @@ trait HasRelationships
     /**
      * Define a has-many-through relationship
      *
-     * @param class-string $related The final related model
-     * @param class-string $through The intermediate model
+     * @param class-string<\Glueful\Database\ORM\Model> $related The final related model
+     * @param class-string<\Glueful\Database\ORM\Model> $through The intermediate model
      * @param string|null $firstKey Foreign key on the intermediate model
      * @param string|null $secondKey Foreign key on the final model
      * @param string|null $localKey Local key on this model
@@ -159,7 +159,7 @@ trait HasRelationships
     /**
      * Define an inverse one-to-one or one-to-many relationship
      *
-     * @param class-string $related
+     * @param class-string<\Glueful\Database\ORM\Model> $related
      * @param string|null $foreignKey
      * @param string|null $ownerKey
      * @param string|null $relation
@@ -191,7 +191,7 @@ trait HasRelationships
     /**
      * Define a many-to-many relationship
      *
-     * @param class-string $related The related model class
+     * @param class-string<\Glueful\Database\ORM\Model> $related The related model class
      * @param string|null $table The pivot table name
      * @param string|null $foreignPivotKey The foreign key on the pivot table for this model
      * @param string|null $relatedPivotKey The foreign key on the pivot table for the related model
@@ -247,7 +247,7 @@ trait HasRelationships
      * The table name is derived by sorting the two model table names
      * alphabetically and joining them with an underscore.
      *
-     * @param class-string $related
+     * @param class-string<\Glueful\Database\ORM\Model> $related
      * @return string
      */
     protected function joiningTable(string $related): string
@@ -268,10 +268,10 @@ trait HasRelationships
     /**
      * Create a new model instance for a related model
      *
-     * @param class-string $class
-     * @return object
+     * @param class-string<\Glueful\Database\ORM\Model> $class
+     * @return \Glueful\Database\ORM\Model
      */
-    protected function newRelatedInstance(string $class): object
+    protected function newRelatedInstance(string $class): \Glueful\Database\ORM\Model
     {
         // Pass the parent model's context so the related instance can resolve
         // its database connection via the container (required for relation queries).
@@ -478,8 +478,8 @@ trait HasRelationships
     protected function snakeCase(string $value): string
     {
         if (!ctype_lower($value)) {
-            $value = preg_replace('/\s+/u', '', ucwords($value));
-            $value = mb_strtolower(preg_replace('/(.)(?=[A-Z])/u', '$1_', $value), 'UTF-8');
+            $value = preg_replace('/\s+/u', '', ucwords($value)) ?? $value;
+            $value = mb_strtolower(preg_replace('/(.)(?=[A-Z])/u', '$1_', $value) ?? $value, 'UTF-8');
         }
 
         return $value;

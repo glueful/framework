@@ -242,7 +242,7 @@ class CacheTaggingService
             ];
         }
 
-        return self::invalidateByTags($tags);
+        return self::invalidateByTags(array_values($tags));
     }
 
     /**

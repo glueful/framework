@@ -726,10 +726,10 @@ class ConnectionPool
             $loop = null;
 
             // Try modern ReactPHP Loop::get() method (v1.2+)
-            if (class_exists('React\\EventLoop\\Loop')) {
-                $loopClass = 'React\\EventLoop\\Loop';
+            $loopCallable = ['React\\EventLoop\\Loop', 'get'];
+            if (is_callable($loopCallable)) {
                 try {
-                    $loop = call_user_func([$loopClass, 'get']);
+                    $loop = $loopCallable();
                 } catch (\Error $e) {
                     // Method doesn't exist, try factory
                     $loop = null;
@@ -737,9 +737,9 @@ class ConnectionPool
             }
 
             // Fallback to Factory for older versions (v1.0-v1.1)
-            if ($loop === null && class_exists('React\\EventLoop\\Factory')) {
-                $factoryClass = 'React\\EventLoop\\Factory';
-                $loop = call_user_func([$factoryClass, 'create']);
+            $factoryCallable = ['React\\EventLoop\\Factory', 'create'];
+            if ($loop === null && is_callable($factoryCallable)) {
+                $loop = $factoryCallable();
             }
 
             if ($loop !== null) {

@@ -96,7 +96,7 @@ class GetCommand extends BaseCommand
         if (is_string($value)) {
             $this->line($value);
         } elseif (is_array($value) || is_object($value)) {
-            $this->line(json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+            $this->line($this->jsonForDisplay($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
         } elseif (is_bool($value)) {
             $this->line($value ? 'true' : 'false');
         } elseif (is_null($value)) {

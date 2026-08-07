@@ -171,12 +171,12 @@ class NotificationService implements ConfigurableInterface
         $notificationUuid = ($notification->getUuid() ?? '');
         if ($notificationUuid !== '' && $trackedChannels !== []) {
             $this->repository->ensureDeliveryRecords($notificationUuid, $trackedChannels);
-        }
-        foreach ($trackedChannels as $channel) {
-            $this->metricsService->setNotificationCreationTime($notification->getUuid(), $channel);
+            foreach ($trackedChannels as $channel) {
+                $this->metricsService->setNotificationCreationTime($notificationUuid, $channel);
+            }
         }
 
-        if (!isset($options['schedule']) || $options['schedule'] == null) {
+        if (($options['schedule'] ?? '') === '' || ($options['schedule'] ?? null) === null) {
             $syncResult = null;
             if ($syncChannels !== []) {
                 $syncResult = $this->dispatcher->send($notification, $notifiable, $syncChannels);
@@ -243,7 +243,7 @@ class NotificationService implements ConfigurableInterface
             'status' => 'scheduled',
             'notification_uuid' => $notification->getUuid(),
             'notification_id' => $notification->getId(),
-            'scheduled_at' => $notification->getScheduledAt()->format('Y-m-d H:i:s')
+            'scheduled_at' => $notification->getScheduledAt()?->format('Y-m-d H:i:s')
         ];
     }
 
@@ -888,10 +888,11 @@ class NotificationService implements ConfigurableInterface
         // Look for extensions that might support this type of notifiable entity
         foreach ($extensions as $extensionClass) {
             // Check if the extension has a method for resolving notifiable entities
-            if (method_exists($extensionClass, 'resolveNotifiableEntity')) {
+            $resolveCallable = [$extensionClass, 'resolveNotifiableEntity'];
+            if (is_callable($resolveCallable)) {
                 try {
                     // Call the extension's resolveNotifiableEntity method
-                    $notifiable = call_user_func_array([$extensionClass, 'resolveNotifiableEntity'], [$type, $id]);
+                    $notifiable = $resolveCallable($type, $id);
 
                     // If the extension returned a valid Notifiable entity, return it
                     if ($notifiable instanceof \Glueful\Notifications\Contracts\Notifiable) {
@@ -899,7 +900,8 @@ class NotificationService implements ConfigurableInterface
                     }
                 } catch (\Throwable $e) {
                     // Log error but continue trying other extensions
-                    error_log("Extension {$extensionClass} failed to resolve notifiable entity: " . $e->getMessage());
+                    $extensionName = is_object($extensionClass) ? $extensionClass::class : $extensionClass;
+                    error_log("Extension {$extensionName} failed to resolve notifiable entity: " . $e->getMessage());
                 }
             }
         }
@@ -1108,19 +1110,24 @@ class NotificationService implements ConfigurableInterface
             return;
         }
 
+        $notificationUuid = $notification->getUuid();
         foreach ($dispatchResult['channels'] as $channel => $channelResult) {
             if (!is_array($channelResult) || ($channelResult['status'] ?? 'failed') !== 'success') {
                 continue;
             }
 
-            $creationTime = $this->metricsService->getNotificationCreationTime($notification->getUuid(), $channel);
-            if ($creationTime !== null) {
-                $deliveryTime = time() - $creationTime;
-                $this->metricsService->trackDeliveryTime($notification->getUuid(), $channel, $deliveryTime);
+            if ($notificationUuid !== null) {
+                $creationTime = $this->metricsService->getNotificationCreationTime($notificationUuid, $channel);
+                if ($creationTime !== null) {
+                    $deliveryTime = time() - $creationTime;
+                    $this->metricsService->trackDeliveryTime($notificationUuid, $channel, $deliveryTime);
+                }
             }
 
             $this->metricsService->updateSuccessRateMetrics($channel, true);
-            $this->metricsService->cleanupNotificationMetrics($notification->getUuid(), $channel);
+            if ($notificationUuid !== null) {
+                $this->metricsService->cleanupNotificationMetrics($notificationUuid, $channel);
+            }
         }
     }
 

@@ -68,6 +68,9 @@ class Route
         if (is_array($param)) {
             $this->where = array_merge($this->where, $param);
         } else {
+            if ($regex === null) {
+                throw new \InvalidArgumentException("Constraint regex required for parameter '{$param}'");
+            }
             $this->where[$param] = $regex;
         }
         // Recompile pattern with constraints
@@ -137,7 +140,7 @@ class Route
         }
 
         // Dynamic route
-        if (preg_match($this->pattern, $path, $matches)) {
+        if (preg_match($this->pattern, $path, $matches) === 1) {
             array_shift($matches); // Remove full match
 
             if (count($this->paramNames) === 0) {
@@ -213,7 +216,7 @@ class Route
             // Validate against constraint if set
             if (isset($this->where[$param])) {
                 $constraint = '#^' . str_replace('#', '\\#', $this->where[$param]) . '$#u';
-                if (!preg_match($constraint, $value)) {
+                if (preg_match($constraint, $value) !== 1) {
                     throw new \InvalidArgumentException(
                         "Parameter '{$param}' value '{$value}' does not match constraint"
                     );

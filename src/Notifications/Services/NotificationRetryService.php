@@ -74,15 +74,15 @@ class NotificationRetryService
     }
 
     /**
-     * Initialize the database connection
-     *
-     * @return void
+     * Initialize (lazily) and return the database connection
      */
-    private function initDatabase(): void
+    private function initDatabase(): Connection
     {
         if ($this->connection === null) {
             $this->connection = Connection::fromContext($this->context);
         }
+
+        return $this->connection;
     }
 
     /**
@@ -133,7 +133,7 @@ class NotificationRetryService
             $this->initDatabase();
 
             // Check if this notification is already in the retry queue
-            $existingEntry = $this->connection->table('notification_retry_queue')
+            $existingEntry = $this->initDatabase()->table('notification_retry_queue')
                 ->select(['id'])
                 ->where('notification_id', $notification->getId())
                 ->where('channel', $channel)
@@ -141,7 +141,7 @@ class NotificationRetryService
 
             if ($existingEntry === []) {
                 // Insert new record
-                $this->connection->table('notification_retry_queue')->insert([
+                $this->initDatabase()->table('notification_retry_queue')->insert([
                     'notification_id' => $notification->getId(),
                     'notifiable_type' => $notifiable->getNotifiableType(),
                     'notifiable_id' => $notifiable->getNotifiableId(),
@@ -152,7 +152,7 @@ class NotificationRetryService
                 ]);
             } else {
                 // Update existing record
-                $this->connection->table('notification_retry_queue')
+                $this->initDatabase()->table('notification_retry_queue')
                     ->where('id', $existingEntry[0]['id'])
                     ->update([
                         'retry_count' => $retryCount,
@@ -226,7 +226,7 @@ class NotificationRetryService
         $now = (new DateTime())->format('Y-m-d H:i:s');
 
         // Get due retries
-        $dueRetries = $this->connection->table('notification_retry_queue')
+        $dueRetries = $this->initDatabase()->table('notification_retry_queue')
             ->select(['*'])
             ->where('retry_at', '<=', $now)
             ->orderBy('retry_count', 'ASC')
@@ -252,7 +252,7 @@ class NotificationRetryService
             $notification = $this->notificationRepository->findByUuid($retry['notification_id']);
             if ($notification === null) {
                 // Remove from queue if notification doesn't exist anymore
-                $this->connection->table('notification_retry_queue')->where('id', $retry['id'])->delete();
+                $this->initDatabase()->table('notification_retry_queue')->where('id', $retry['id'])->delete();
                 $results['removed']++;
                 continue;
             }
@@ -265,7 +265,7 @@ class NotificationRetryService
 
             if ($notifiable === null) {
                 // Remove from queue if notifiable can't be created
-                $this->connection->table('notification_retry_queue')->where('id', $retry['id'])->delete();
+                $this->initDatabase()->table('notification_retry_queue')->where('id', $retry['id'])->delete();
                 $results['removed']++;
                 continue;
             }
@@ -281,7 +281,7 @@ class NotificationRetryService
                 // Mark as sent and remove from retry queue
                 $notification->markAsSent();
                 $this->notificationRepository->save($notification);
-                $this->connection->table('notification_retry_queue')->where('id', $retry['id'])->delete();
+                $this->initDatabase()->table('notification_retry_queue')->where('id', $retry['id'])->delete();
                 $results['successful']++;
 
                 if ($this->logger !== null) {
@@ -297,7 +297,7 @@ class NotificationRetryService
 
                 if ($retry['retry_count'] >= $maxRetries) {
                     // Max retries reached, remove from queue
-                    $this->connection->table('notification_retry_queue')->where('id', $retry['id'])->delete();
+                    $this->initDatabase()->table('notification_retry_queue')->where('id', $retry['id'])->delete();
                     $results['removed']++;
 
                     if ($this->logger !== null) {

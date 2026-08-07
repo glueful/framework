@@ -314,7 +314,7 @@ class ApiMetricsService
         ];
 
         // If this is a new minute, reset the counter
-        if ($rateLimit['minute'] != $minute) {
+        if ((int) $rateLimit['minute'] !== (int) $minute) {
             $rateLimit = [
                 'count' => 1,
                 'minute' => $minute,
@@ -470,7 +470,7 @@ class ApiMetricsService
 
             // Sort endpoints by call volume
             usort($endpoints, function ($a, $b) {
-                return $b['calls'] - $a['calls'];
+                return $b['calls'] <=> $a['calls'];
             });
 
             // Format time series data

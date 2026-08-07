@@ -445,8 +445,9 @@ class QueryLogger
      */
     private function sanitizeSql(string $sql): string
     {
-        // Remove potential sensitive data from SQL for framework logging
-        return preg_replace('/\b\d{16,}\b/', '***', $sql); // Hide credit card numbers
+        // Remove potential sensitive data from SQL for framework logging.
+        // Never fall back to the raw SQL — it may hold exactly what we redact.
+        return preg_replace('/\b\d{16,}\b/', '***', $sql) ?? '[unsanitizable]'; // Hide credit card numbers
     }
 
     /**
@@ -470,7 +471,7 @@ class QueryLogger
         $sanitized = [];
         foreach ($params as $key => $value) {
             // Mask sensitive parameters
-            if (is_string($key) && preg_match('/(password|token|secret|key|auth|credential)/i', $key)) {
+            if (is_string($key) && preg_match('/(password|token|secret|key|auth|credential)/i', $key) === 1) {
                 $sanitized[$key] = '***REDACTED***';
             } elseif (is_array($value)) {
                 $sanitized[$key] = $this->sanitizeQueryParams($value);
@@ -544,10 +545,10 @@ class QueryLogger
     public function getQueryCount(?string $type = null): int
     {
         if ($type === null) {
-            return $this->stats['total'];
+            return (int) $this->stats['total'];
         }
 
-        return $this->stats[$type] ?? 0;
+        return (int) ($this->stats[$type] ?? 0);
     }
 
     /**
@@ -561,11 +562,11 @@ class QueryLogger
         $tables = [];
 
         // Normalize query for easier parsing
-        $sql = preg_replace('/\s+/', ' ', trim($sql));
+        $sql = preg_replace('/\s+/', ' ', trim($sql)) ?? trim($sql);
         $sql = strtolower($sql);
 
         // Extract main table from queries
-        if (preg_match('/\bfrom\s+[`"]?(\w+)[`"]?/i', $sql, $matches)) {
+        if (preg_match('/\bfrom\s+[`"]?(\w+)[`"]?/i', $sql, $matches) === 1) {
             $tables[] = $matches[1];
         }
 
@@ -576,17 +577,17 @@ class QueryLogger
         }
 
         // Extract tables from inserts
-        if (preg_match('/\binsert\s+into\s+[`"]?(\w+)[`"]?/i', $sql, $matches)) {
+        if (preg_match('/\binsert\s+into\s+[`"]?(\w+)[`"]?/i', $sql, $matches) === 1) {
             $tables[] = $matches[1];
         }
 
         // Extract tables from updates - using case-insensitive matching
-        if (preg_match('/\bupdate\s+[`"]?(\w+)[`"]?/i', $sql, $matches)) {
+        if (preg_match('/\bupdate\s+[`"]?(\w+)[`"]?/i', $sql, $matches) === 1) {
             $tables[] = $matches[1];
         }
 
         // Extract tables from deletes
-        if (preg_match('/\bdelete\s+from\s+[`"]?(\w+)[`"]?/i', $sql, $matches)) {
+        if (preg_match('/\bdelete\s+from\s+[`"]?(\w+)[`"]?/i', $sql, $matches) === 1) {
             $tables[] = $matches[1];
         }
 
@@ -612,7 +613,7 @@ class QueryLogger
         $complexity = 0;
 
         // Normalize query for easier analysis
-        $normalizedSql = preg_replace('/\s+/', ' ', strtolower($sql));
+        $normalizedSql = preg_replace('/\s+/', ' ', strtolower($sql)) ?? strtolower($sql);
 
         // Count JOIN operations (+1 for each join)
         $complexity += substr_count($normalizedSql, ' join ');
@@ -622,12 +623,12 @@ class QueryLogger
         $complexity += $subqueryCount * 2;
 
         // Check for aggregation functions (+1)
-        if (preg_match('/\b(count|sum|avg|min|max)\s*\(/i', $normalizedSql)) {
+        if (preg_match('/\b(count|sum|avg|min|max)\s*\(/i', $normalizedSql) === 1) {
             $complexity += 1;
         }
 
         // Check for window functions (+2)
-        if (preg_match('/\bover\s*\(/i', $normalizedSql)) {
+        if (preg_match('/\bover\s*\(/i', $normalizedSql) === 1) {
             $complexity += 2;
         }
 
@@ -648,7 +649,7 @@ class QueryLogger
         $complexity += ($unionCount + $intersectCount + $exceptCount) * 2;
 
         // Check for ordering complexity (+1 for complex ordering)
-        if (preg_match('/order by .+,.+/i', $normalizedSql)) {
+        if (preg_match('/order by .+,.+/i', $normalizedSql) === 1) {
             $complexity += 1;
         }
 
@@ -723,19 +724,19 @@ class QueryLogger
         $signature = strtolower($sql);
 
         // Replace all literal values with placeholders
-        $signature = preg_replace('/\b\d+\b/', '?', $signature); // Numbers
-        $signature = preg_replace('/\'[^\']*\'/', '?', $signature); // Strings
-        $signature = preg_replace('/\s+/', ' ', $signature); // Normalize whitespace
+        $signature = preg_replace('/\b\d+\b/', '?', $signature) ?? $signature; // Numbers
+        $signature = preg_replace('/\'[^\']*\'/', '?', $signature) ?? $signature; // Strings
+        $signature = preg_replace('/\s+/', ' ', $signature) ?? $signature; // Normalize whitespace
 
         // Replace IN clauses with standardized form
-        $signature = preg_replace('/\bin\s*\([^)]+\)/i', 'in(?)', $signature);
+        $signature = preg_replace('/\bin\s*\([^)]+\)/i', 'in(?)', $signature) ?? $signature;
 
         // Replace parameter placeholders (? or :param)
-        $signature = preg_replace('/\?/', '$param', $signature);
-        $signature = preg_replace('/:\w+/', '$param', $signature);
+        $signature = preg_replace('/\?/', '$param', $signature) ?? $signature;
+        $signature = preg_replace('/:\w+/', '$param', $signature) ?? $signature;
 
         // Strip schema prefixes from table names for better pattern matching
-        $signature = preg_replace('/([`"\[])[^`"\]]+\./', '$1', $signature);
+        $signature = preg_replace('/([`"\[])[^`"\]]+\./', '$1', $signature) ?? $signature;
 
         // Create a hash of the normalized query
         return md5($signature);

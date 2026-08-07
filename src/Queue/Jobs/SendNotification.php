@@ -84,7 +84,7 @@ class SendNotification extends Job
                 $this->type = $type;
             }
 
-            public function routeNotificationFor(string $channel): ?string
+            public function routeNotificationFor(string $channel): string
             {
                 return $this->recipient;
             }
@@ -241,7 +241,7 @@ class SendNotification extends Job
         // Type-specific validation
         switch ($data['type']) {
             case 'email':
-                if (!filter_var($data['recipient'], FILTER_VALIDATE_EMAIL)) {
+                if (filter_var($data['recipient'], FILTER_VALIDATE_EMAIL) === false) {
                     throw new \InvalidArgumentException('Invalid email address');
                 }
                 if (
@@ -262,7 +262,7 @@ class SendNotification extends Job
                 break;
 
             case 'webhook':
-                if (!filter_var($data['recipient'], FILTER_VALIDATE_URL)) {
+                if (filter_var($data['recipient'], FILTER_VALIDATE_URL) === false) {
                     throw new \InvalidArgumentException('Invalid webhook URL');
                 }
                 break;
@@ -358,7 +358,7 @@ class SendNotification extends Job
     private function isValidPhoneNumber(string $phone): bool
     {
         // Simple phone validation - could be enhanced
-        return preg_match('/^\+?[1-9]\d{1,14}$/', $phone);
+        return preg_match('/^\+?[1-9]\d{1,14}$/', $phone) === 1;
     }
 
     /**

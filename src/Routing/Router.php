@@ -582,7 +582,7 @@ class Router
 
         // Check pattern matches
         foreach ($config['allowed_origin_patterns'] as $pattern) {
-            if (preg_match($pattern, $origin)) {
+            if (preg_match($pattern, $origin) === 1) {
                 return true;
             }
         }
@@ -759,7 +759,8 @@ class Router
             is_array($handler) => (is_object($handler[0]) ? $handler[0]::class : $handler[0]) . '::' . $handler[1],
             is_string($handler) && str_contains($handler, '::') => $handler,
             is_string($handler) && class_exists($handler) => $handler . '::__invoke',
-            default => spl_object_id($handler) // For closures and other callables
+            // Prefixed: a bare numeric-string key would be silently cast to int by PHP.
+            default => 'closure_' . spl_object_id($handler) // For closures and other callables
         };
 
         if (isset($this->reflectionCache[$key])) {
@@ -981,11 +982,12 @@ class Router
             return false;
         }
 
-        try {
-            $class = new \ReflectionClass($meta['class']);
-        } catch (\ReflectionException) {
+        $metaClass = $meta['class'];
+        if (!is_string($metaClass) || !class_exists($metaClass)) {
             return false;
         }
+
+        $class = new \ReflectionClass($metaClass);
 
         $methodName = $meta['method'] ?? null;
         $seenMethods = [];
@@ -1048,7 +1050,10 @@ class Router
 
         // Support "name:param1,param2" format
         [$name, $args] = array_pad(explode(':', $middleware, 2), 2, null);
-        $params = $args ? array_map('trim', explode(',', $args)) : [];
+        if (!is_string($name) || $name === '') {
+            throw new \RuntimeException("Invalid middleware reference: {$middleware}");
+        }
+        $params = $args !== null && $args !== '' ? array_map('trim', explode(',', $args)) : [];
 
         // Get middleware instance from container
         $instance = $this->container->get($name);
@@ -1110,7 +1115,7 @@ class Router
         // collection success status.
         if ($result instanceof \Glueful\Http\Responses\PaginatedResponse) {
             return ApiResponse::paginated(
-                $this->serializeResponseItems($result->items),
+                array_values($this->serializeResponseItems($result->items)),
                 $result->total,
                 $result->page,
                 $result->perPage,

@@ -132,7 +132,7 @@ class CreateListenerCommand extends BaseCommand
         $name = str_replace('.php', '', $name);
 
         // Check if class name is valid PascalCase
-        if (!preg_match('/^[A-Z][a-zA-Z0-9]*$/', $name)) {
+        if (preg_match('/^[A-Z][a-zA-Z0-9]*$/', $name) !== 1) {
             return false;
         }
 

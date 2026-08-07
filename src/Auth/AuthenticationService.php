@@ -386,7 +386,7 @@ class AuthenticationService
 
         if (
             $authorizationHeader !== null && $authorizationHeader !== ''
-            && preg_match('/Bearer\s+(.+)/i', $authorizationHeader, $matches)
+            && preg_match('/Bearer\s+(.+)/i', $authorizationHeader, $matches) === 1
         ) {
             return trim($matches[1]);
         }

@@ -96,6 +96,12 @@ class RefreshService
             $this->incrementMetric('auth_refresh_lock_wait_samples_total');
         }
 
+        if (!is_string($tokens['access_token'] ?? null) || !is_string($tokens['refresh_token'] ?? null)) {
+            $this->refreshTokenRepository->revokeSessionFamily($sessionUuid);
+            $this->sessionStateCache->invalidateSession($sessionUuid);
+            return $this->fail('session_persist_failed', $startedAt, $sessionUuid, $userUuid);
+        }
+        /** @var array{access_token: string, refresh_token: string, expires_in?: int} $tokens */
         $persisted = $this->sessionStateCache->persistRotatedSession($sessionUuid, $tokens);
         if ($persisted === false) {
             $this->refreshTokenRepository->revokeSessionFamily($sessionUuid);

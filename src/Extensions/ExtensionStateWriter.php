@@ -73,7 +73,7 @@ final class ExtensionStateWriter
         // Capture the enabled => [ ... ] block and ensure that, after removing
         // comments and string literals, nothing but commas/whitespace remains —
         // i.e. no conditionals, function calls, ::class, or non-string entries.
-        if (!preg_match("/'enabled'\\s*=>\\s*\\[(.*?)\\]/s", $src, $m)) {
+        if (preg_match("/'enabled'\\s*=>\\s*\\[(.*?)\\]/s", $src, $m) !== 1) {
             return false;
         }
         $body = $m[1];

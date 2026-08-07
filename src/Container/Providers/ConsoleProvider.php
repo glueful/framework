@@ -135,6 +135,10 @@ final class ConsoleProvider extends BaseServiceProvider
      */
     private function isValidCommand(string $className): bool
     {
+        if (!class_exists($className)) {
+            return false;
+        }
+
         try {
             $reflection = new ReflectionClass($className);
 

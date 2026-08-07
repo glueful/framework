@@ -173,7 +173,7 @@ class ModelCommand extends BaseCommand
             return false;
         }
 
-        if (!preg_match('/^[A-Z][a-zA-Z0-9]*$/', $name)) {
+        if (preg_match('/^[A-Z][a-zA-Z0-9]*$/', $name) !== 1) {
             $this->error('Model name must be in PascalCase (e.g., User, BlogPost, OrderItem).');
             $this->tip('Example: User, Post, OrderItem, ProductCategory');
             return false;
@@ -389,21 +389,21 @@ PHP;
         }
 
         // Words ending in s, x, z, ch, sh
-        if (preg_match('/(s|x|z|ch|sh)$/', $word)) {
+        if (preg_match('/(s|x|z|ch|sh)$/', $word) === 1) {
             return $word . 'es';
         }
 
         // Words ending in y (preceded by consonant)
-        if (preg_match('/[^aeiou]y$/', $word)) {
+        if (preg_match('/[^aeiou]y$/', $word) === 1) {
             return substr($word, 0, -1) . 'ies';
         }
 
         // Words ending in f or fe
-        if (preg_match('/f$/', $word)) {
+        if (preg_match('/f$/', $word) === 1) {
             return substr($word, 0, -1) . 'ves';
         }
 
-        if (preg_match('/fe$/', $word)) {
+        if (preg_match('/fe$/', $word) === 1) {
             return substr($word, 0, -2) . 'ves';
         }
 
@@ -543,7 +543,7 @@ PHP;
 
                 $answer = trim($answer);
 
-                if (!preg_match('/^[A-Z][a-zA-Z0-9]*$/', $answer)) {
+                if (preg_match('/^[A-Z][a-zA-Z0-9]*$/', $answer) !== 1) {
                     throw new \RuntimeException(
                         'Model name must start with uppercase letter and contain only alphanumeric characters.'
                     );

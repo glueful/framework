@@ -52,6 +52,10 @@ final class RequestDataHydrator
      */
     private function build(string $dtoClass, array $body, array $route, array $query, int $depth, bool $nested): array
     {
+        if (!class_exists($dtoClass)) {
+            throw new \InvalidArgumentException("Request DTO class does not exist: {$dtoClass}");
+        }
+
         $ref  = new \ReflectionClass($dtoClass);
         $ctor = $ref->getConstructor();
         if ($ctor === null) {
@@ -173,7 +177,7 @@ final class RequestDataHydrator
 
         // 4. Errors before construction → 422, never construct.
         if ($errors !== []) {
-            return [null, $errors];
+            return [null, array_map('array_values', $errors)];
         }
 
         // 5. Construct. (After the gate above, an absent param here is always either

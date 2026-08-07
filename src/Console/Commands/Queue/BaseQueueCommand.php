@@ -31,7 +31,7 @@ abstract class BaseQueueCommand extends BaseCommand
 
         // Handle --option value format
         $index = array_search($option, $args, true);
-        if ($index !== false && isset($args[$index + 1])) {
+        if (is_int($index) && isset($args[$index + 1])) {
             $nextArg = $args[$index + 1];
             // Make sure next argument is not another option
             if (!str_starts_with($nextArg, '--')) {
@@ -166,7 +166,7 @@ abstract class BaseQueueCommand extends BaseCommand
     protected function displayJson(mixed $data, bool $pretty = true): void
     {
         $flags = $pretty ? JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES : 0;
-        $this->output->writeln(json_encode($data, $flags));
+        $this->output->writeln($this->jsonForDisplay($data, $flags));
     }
 
     /**

@@ -15,17 +15,18 @@ $allowedHeadersRaw = is_string($allowedHeadersRaw) ? trim($allowedHeadersRaw) : 
 $exposeHeadersRaw = env('CORS_EXPOSE_HEADERS', '');
 $exposeHeadersRaw = is_string($exposeHeadersRaw) ? $exposeHeadersRaw : '';
 
-$allowedOrigins = $allowedOriginsRaw === '*'
-    ? []
-    : array_values(array_filter(array_map('trim', explode(',', $allowedOriginsRaw))));
+/** @return list<string> */
+$splitList = static fn (string $raw): array => array_values(
+    array_filter(array_map('trim', explode(',', $raw)), static fn (string $s): bool => $s !== '')
+);
 
-$allowedOriginPatterns = array_values(array_filter(array_map('trim', explode(',', $allowedOriginPatternsRaw))));
+$allowedOrigins = $allowedOriginsRaw === '*' ? [] : $splitList($allowedOriginsRaw);
 
-$allowHeaders = $allowedHeadersRaw === '*'
-    ? '*'
-    : array_values(array_filter(array_map('trim', explode(',', $allowedHeadersRaw))));
+$allowedOriginPatterns = $splitList($allowedOriginPatternsRaw);
 
-$exposeHeaders = array_values(array_filter(array_map('trim', explode(',', $exposeHeadersRaw))));
+$allowHeaders = $allowedHeadersRaw === '*' ? '*' : $splitList($allowedHeadersRaw);
+
+$exposeHeaders = $splitList($exposeHeadersRaw);
 
 return [
     // Origins

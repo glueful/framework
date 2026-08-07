@@ -636,6 +636,10 @@ trait HasAttributes
             $caster = new $castType();
         }
 
+        if (!$caster instanceof CastsAttributes) {
+            throw new \InvalidArgumentException("Cast class must implement CastsAttributes: {$castType}");
+        }
+
         // Cache and return the caster
         return $this->castCache[$castType] = $caster;
     }

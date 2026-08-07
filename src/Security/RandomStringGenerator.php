@@ -109,7 +109,7 @@ class RandomStringGenerator
         }
 
         // bin2hex doubles the length, so we need half the bytes (rounded up)
-        $bytes = random_bytes((int) ceil($length / 2));
+        $bytes = random_bytes(max(1, (int) ceil($length / 2)));
         $hex = bin2hex($bytes);
 
         // Return exact length requested

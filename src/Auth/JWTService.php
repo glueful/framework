@@ -80,8 +80,8 @@ class JWTService
         $payload['exp'] = time() + $expiration;  // Expiration
         $payload['jti'] = bin2hex(random_bytes(16));  // JWT ID
 
-        $headerEncoded = self::base64UrlEncode(json_encode($header));
-        $payloadEncoded = self::base64UrlEncode(json_encode($payload));
+        $headerEncoded = self::base64UrlEncode(json_encode($header, JSON_THROW_ON_ERROR));
+        $payloadEncoded = self::base64UrlEncode(json_encode($payload, JSON_THROW_ON_ERROR));
 
         $data = $headerEncoded . '.' . $payloadEncoded;
         $signature = hash_hmac(self::getHmacAlgorithm(self::$algorithm), $data, self::$key, true);

@@ -54,12 +54,13 @@ class SessionTransaction
         ?ApplicationContext $context = null
     ) {
         $this->context = $context;
-        $this->cache = $cache ?? CacheHelper::createCacheInstance();
-        if ($this->cache === null) {
+        $cache = $cache ?? CacheHelper::createCacheInstance();
+        if ($cache === null) {
             throw new \RuntimeException(
                 'CacheStore is required for SessionTransaction: Unable to create cache instance.'
             );
         }
+        $this->cache = $cache;
         $this->transactionId = uniqid('session_tx_', true);
         $this->startTime = microtime(true);
         if ($sessionCacheManager !== null) {
@@ -132,6 +133,8 @@ class SessionTransaction
             // Execute rollback operations in reverse order
             foreach (array_reverse($this->rollbackOperations) as $rollbackOp) {
                 try {
+                    // Operations are recorded exclusively by this class with this shape.
+                    /** @var array{type: string, session_data?: array<string, mixed>, token?: string} $rollbackOp */
                     $this->executeRollbackOperation($rollbackOp);
                 } catch (\Exception $e) {
                     $rollbackErrors[] = $e->getMessage();
@@ -481,10 +484,16 @@ class SessionTransaction
     {
         switch ($operation['type']) {
             case 'restore_session':
+                if (!isset($operation['session_data'])) {
+                    throw new \RuntimeException('restore_session operation missing session_data');
+                }
                 $this->restoreSession($operation['session_data']);
                 break;
 
             case 'delete_session':
+                if (!isset($operation['token'])) {
+                    throw new \RuntimeException('delete_session operation missing token');
+                }
                 $this->deleteSession($operation['token']);
                 break;
 

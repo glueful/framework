@@ -1,12 +1,15 @@
 # Level-8 Static-Analysis Adoption
 
-> **Goal:** eventually run PHPStan **level 8 across the whole framework** and enforce it in CI.
-> **Status:** Catalogued, not yet addressed. **Not blocking.** The current CI gate is
-> `composer analyse` (**level 6**), which is green. Level 8 (`composer analyse:strict`) is the
-> target; this document tracks the gap so it can be closed deliberately, area by area, rather
-> than discovered ad hoc.
+> **Goal:** run PHPStan **level 8 across the whole framework** and enforce it in CI.
+> **Status: ACHIEVED 2026-08-07.** `phpstan.neon` sets `level: 8` over `src/` + `config/`,
+> and the CI gate (`composer analyse`) enforces it. All 31 areas were cleaned area-by-area
+> between 2026-08-06 and 2026-08-07 (see the campaign log below); the per-lane ratchet
+> scripts are retired — the main gate now guards everything they guarded.
 
-**Last surveyed:** 2026-05-28 — **914 errors across `src/`.**
+**Remaining debt: none.** `phpstan-baseline.neon` (the frozen PHPStan-2 upgrade delta,
+111 identifier-tagged entries) was burned down and deleted on 2026-08-07 — the gate runs
+with no baseline file. Do not reintroduce one: new errors are fixed at the source, or in
+rare justified cases suppressed inline with `@phpstan-ignore identifier (reason)`.
 
 ## Regenerate
 
@@ -21,24 +24,58 @@ vendor/bin/phpstan analyse src/Database --level=8 --no-progress --memory-limit=1
 
 ## Scope by area
 
-| Area | Errors | | Area | Errors |
-|---|---:|---|---|---:|
-| `Database` | 201 | | `Cache` | 28 |
-| `Console` | 103 | | `Services` | 24 |
-| `Support` | 60 | | `Helpers` | 22 |
-| `Queue` | 56 | | `Permissions` | 14 |
-| `Controllers` | 50 | | `Extensions` | 13 |
-| `Notifications` | 48 | | `Events` | 13 |
-| `Security` | 46 | | (src root) | 12 |
-| `Api` | 43 | | `Tasks` | 11 |
-| `Routing` | 39 | | `Validation` / `Repository` / `Logging` | 8 each |
-| `Auth` | 38 | | `Performance` | 7 |
-| `Http` | 37 | | `Uploader` / `Container` | 5 each |
-| | | | …`Lock`, `Storage`, `Scheduler`, `Testing`, `Bootstrap` | 1–4 each |
+**0 errors — all 31 areas level-8 clean ✓** (gate: `composer analyse`, level 8 in
+`phpstan.neon`). Regenerate to confirm.
 
-**~914 total.** Regenerate for the exact, current set.
+## Campaign log
 
-## Recommended adoption strategy
+- `Container` — cleaned 2026-08-06 (`composer run phpstan:di`).
+- `Bootstrap`, `Development`, `Lock`, `Scheduler`, `Storage`, `Testing`, `Uploader` — cleaned
+  2026-08-06 as one leaf-lanes pass.
+- `Extensions`, `Logging`, `Performance`, `Repository`, `Tasks`, `Validation` — cleaned
+  2026-08-06 as one six-area pass (all in `composer run phpstan:lanes`).
+- `Events`, `Helpers`, `Permissions`, `Services`, and the src-root files
+  (`Application.php`, `Framework.php`) — cleaned 2026-08-06 as one five-area pass.
+- `Cache`, `Queue`, `Support` — cleaned 2026-08-06 as one three-area pass. With `Cache`
+  in the lane, the temporary `trait.unused` ignore for `Helpers/DatabaseConnectionTrait`
+  was removed again.
+- `Api`, `Security` — cleaned 2026-08-06. The optional search SDKs
+  (`elasticsearch/elasticsearch`, `meilisearch/meilisearch-php`) joined require-dev so the
+  search adapters type-check against real SDK classes (properties stay natively `?object`
+  for runtime-optional support; the SDK types live in PHPDoc).
+- `Auth`, `Controllers` — cleaned 2026-08-06. Token shapes are runtime-validated at the
+  refresh/store boundaries; `AuthSessionUser`'s permissions/roles types now tell the truth
+  (shape varies by RBAC provider).
+- `Http`, `Notifications` — cleaned 2026-08-06. Webhook signature generation throws on an
+  unencodable payload; resource collections validate their `collects` classes; the PSR-15
+  bridge validates provider-supplied PSR-17 factories.
+- `Routing` — cleaned 2026-08-06. The router's closure reflection-cache key is prefixed
+  (a bare numeric-string key was being silently cast to int by PHP); CSRF token caching
+  throws on an unencodable token record; lockdown state files read through a guarded
+  JSON helper.
+- `Console` — cleaned 2026-08-07. `BaseCommand::jsonForDisplay()` centralizes JSON output
+  for commands ('[unencodable]' on failure); scaffold name validation pins `preg_match`;
+  file reads/`glob`/`sys_getloadavg` guard their falses.
+- `Database` — cleaned 2026-08-07, closing the campaign. Relation machinery retyped from
+  `object` to `Model` (base `Relation` + all six relation classes + `newRelatedInstance()`,
+  with `class-string<Model>` relation params); ~57 `preg_match` pins; every SQL
+  normalization/signature chain guards `preg_replace` nulls; `WhereClauseInterface` is
+  honest about accepting callables; discriminated condition/order/join shapes read
+  defensively; `Model`/`Collection` `toJson()` throw named errors instead of returning
+  `false` typed as `string`. Gate raised: `phpstan.neon` `level: 8`.
+  **Trap for the record:** `is_callable([$class, $method])` is always true on `Model`
+  because of `__callStatic` — the boot-hook dispatch must use `method_exists`, or absent
+  hooks misroute into the static query proxy (caught by the test suite).
+- Baseline burn-down — 2026-08-07. All 111 frozen PHPStan-2 upgrade entries fixed and
+  `phpstan-baseline.neon` deleted. Real bugs surfaced by the burn-down:
+  `AuthToRequestAttributesMiddleware` read private `UserIdentity` properties with `?? null`,
+  so the request's `email`/`username` attributes were always null (now uses the accessors);
+  `SoftDeletingScope::getDeletedAtColumn()` read a nonexistent `$joins` property, leaving the
+  qualified-column branch for joined queries unreachable (now `QueryBuilder::hasJoins()`);
+  `QueryCacheService`'s empty-`keyPrefix` fallback never fired (`!== ''` guard added).
+  `trait.unused` became a permanent global ignore — the framework ships traits as public API.
+
+## Recommended adoption strategy (historical)
 
 1. **Area by area, not one sweep.** Each area is its own branch of work with its own test surface.
 2. **Run the full suite after each area** (`composer test`) and **commit per area**.
@@ -57,10 +94,11 @@ vendor/bin/phpstan analyse src/Database --level=8 --no-progress --memory-limit=1
 
 ---
 
-## First detailed slice: `src/Database` (201)
+## First detailed slice: `src/Database` (214 under PHPStan 2)
 
 The categories below are representative of what every area will look like; Database was the
-first surveyed in depth.
+first surveyed in depth (under PHPStan 1.12, at 201 errors — the category shape still holds,
+but regenerate for exact per-file sets before working the area).
 
 | Category | ~Count | Nature | Risk |
 |---|---|---|---|

@@ -263,6 +263,10 @@ final class ClassSchemaReflector
      */
     private static function enumSchema(string $enum): array
     {
+        if (!is_subclass_of($enum, \UnitEnum::class)) {
+            return ['type' => 'string'];
+        }
+
         try {
             $reflection = new \ReflectionEnum($enum);
         } catch (\Throwable) {
@@ -270,12 +274,13 @@ final class ClassSchemaReflector
         }
 
         if ($reflection->isBacked()) {
-            $backingType = (string) $reflection->getBackingType();
-            $type = $backingType === 'int' ? 'integer' : 'string';
             $values = array_map(
                 static fn (\UnitEnum $case): string|int => $case instanceof \BackedEnum ? $case->value : $case->name,
                 $enum::cases(),
             );
+            // Infer the schema type from the values themselves rather than
+            // getBackingType(), whose reflected type varies across PHP versions.
+            $type = is_int($values[0] ?? null) ? 'integer' : 'string';
             return ['type' => $type, 'enum' => array_values($values)];
         }
 

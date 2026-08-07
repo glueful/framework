@@ -75,7 +75,9 @@ class RuleCommand extends BaseCommand
         // Get rule options
         /** @var string|null $paramsOption */
         $paramsOption = $input->getOption('params');
-        $params = $paramsOption !== null ? array_filter(array_map('trim', explode(',', $paramsOption))) : [];
+        $params = $paramsOption !== null
+            ? array_filter(array_map('trim', explode(',', $paramsOption)), static fn (string $s): bool => $s !== '')
+            : [];
         /** @var bool $implicit */
         $implicit = (bool) $input->getOption('implicit');
 
@@ -174,7 +176,7 @@ class RuleCommand extends BaseCommand
         $parts = explode('/', str_replace('\\', '/', $name));
 
         foreach ($parts as $part) {
-            if (!preg_match('/^[A-Z][a-zA-Z0-9]*$/', $part)) {
+            if (preg_match('/^[A-Z][a-zA-Z0-9]*$/', $part) !== 1) {
                 return false;
             }
         }

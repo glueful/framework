@@ -47,10 +47,16 @@ class RedisCacheDriver implements CacheStore
      */
     public function zadd(string $key, array $scoreValues): bool
     {
-        $mergedArray = array_merge(
-            ...array_map(null, array_values($scoreValues), array_keys($scoreValues))
-        );
-        $result = $this->redis->zAdd($key, ...$mergedArray);
+        if ($scoreValues === []) {
+            return true;
+        }
+        $args = [];
+        foreach ($scoreValues as $member => $score) {
+            $args[] = (float) $score;
+            $args[] = (string) $member;
+        }
+        $firstScore = (float) array_shift($args);
+        $result = $this->redis->zAdd($key, $firstScore, ...$args);
         return $result !== false;
     }
 
@@ -88,7 +94,12 @@ class RedisCacheDriver implements CacheStore
      */
     public function zrange(string $key, int $start, int $stop): array
     {
-        return $this->redis->zRange($key, $start, $stop);
+        $result = $this->redis->zRange($key, $start, $stop);
+        if (!is_array($result)) {
+            return [];
+        }
+
+        return array_values(array_map('strval', $result));
     }
 
     /**

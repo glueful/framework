@@ -292,8 +292,8 @@ final class PerformanceDashboard
      */
     private function getN1QueryStats(): array
     {
-        $detected = $this->metrics->getSummary()['counters']['n1_queries_detected'] ?? 0;
-        $prevented = $this->metrics->getSummary()['counters']['n1_queries_prevented'] ?? 0;
+        $detected = (int) ($this->metrics->getSummary()['counters']['n1_queries_detected'] ?? 0);
+        $prevented = (int) ($this->metrics->getSummary()['counters']['n1_queries_prevented'] ?? 0);
 
         return [
             'detected' => $detected,
@@ -360,12 +360,16 @@ final class PerformanceDashboard
 
         $memoryUsages = array_column($allMetrics, 'memory_used_bytes');
         $peakMemories = array_column($allMetrics, 'memory_peak_mb');
+        if ($memoryUsages === []) {
+            return [];
+        }
+        $filteredPeaks = array_filter($peakMemories, static fn ($peak): bool => (bool) $peak);
 
         return [
             'total_memory_used_bytes' => array_sum($memoryUsages),
             'avg_memory_per_operation_bytes' => array_sum($memoryUsages) / count($memoryUsages),
             'max_memory_used_bytes' => max($memoryUsages),
-            'peak_memory_mb' => max(array_filter($peakMemories))
+            'peak_memory_mb' => $filteredPeaks === [] ? 0 : max($filteredPeaks)
         ];
     }
 }

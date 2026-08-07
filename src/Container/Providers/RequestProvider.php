@@ -78,6 +78,9 @@ final class RequestProvider extends BaseServiceProvider
         ));
     }
 
+    /**
+     * @return int<0, 63> Bitmask of Request::HEADER_* constants
+     */
     private function trustedHeaderSet(): int
     {
         return Request::HEADER_X_FORWARDED_FOR

@@ -51,7 +51,7 @@ class ValidationHelper
      */
     public static function validateEmail(string $email, string $fieldName = 'email'): void
     {
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
             throw ValidationException::forField($fieldName, "Invalid email format: {$email}");
         }
     }
@@ -67,7 +67,7 @@ class ValidationHelper
     {
         $pattern = '/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i';
 
-        if (!preg_match($pattern, $uuid)) {
+        if (preg_match($pattern, $uuid) !== 1) {
             throw ValidationException::forField($fieldName, "Invalid UUID format: {$uuid}");
         }
     }
@@ -153,7 +153,7 @@ class ValidationHelper
     ): void {
         $dateTime = \DateTime::createFromFormat($format, $date);
 
-        if (!$dateTime || $dateTime->format($format) !== $date) {
+        if ($dateTime === false || $dateTime->format($format) !== $date) {
             throw ValidationException::forField($fieldName, "Invalid date format. Expected: {$format}");
         }
     }
@@ -243,7 +243,7 @@ class ValidationHelper
 
                     // Apply pattern validation
                     if (isset($rule['pattern']) && is_string($value)) {
-                        if (!preg_match($rule['pattern'], $value)) {
+                        if (preg_match($rule['pattern'], $value) !== 1) {
                             $errors[$field] = "{$field} format is invalid";
                             continue;
                         }

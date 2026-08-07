@@ -71,7 +71,7 @@ class DatabaseLogPruner
 
         // Clean each configured channel with its specific retention
         foreach ($retentionConfig as $channel => $days) {
-            $cutoff = date('Y-m-d H:i:s', strtotime("-{$days} days"));
+            $cutoff = $this->cutoff((int) $days);
 
             /** @var int $deleted */
             $deleted = $this->db->table($this->table)
@@ -85,7 +85,7 @@ class DatabaseLogPruner
         // Clean logs from unconfigured channels using default retention
         $configuredChannels = array_keys($retentionConfig);
         if ($configuredChannels !== []) {
-            $cutoff = date('Y-m-d H:i:s', strtotime("-{$defaultRetention} days"));
+            $cutoff = $this->cutoff($defaultRetention);
 
             /** @var int $deleted */
             $deleted = $this->db->table($this->table)
@@ -136,7 +136,7 @@ class DatabaseLogPruner
      */
     private function pruneByAge(): int
     {
-        $cutoffDate = date('Y-m-d H:i:s', strtotime("-{$this->maxAgeInDays} days"));
+        $cutoffDate = $this->cutoff($this->maxAgeInDays);
 
         /** @var int $deleted */
         $deleted = $this->db->table($this->table)
@@ -179,5 +179,18 @@ class DatabaseLogPruner
             ->delete();
 
         return $deleted;
+    }
+
+    /**
+     * Datetime string for "now minus N days".
+     */
+    private function cutoff(int $days): string
+    {
+        $timestamp = strtotime("-{$days} days");
+        if ($timestamp === false) {
+            throw new \RuntimeException("Invalid retention window: {$days} days");
+        }
+
+        return date('Y-m-d H:i:s', $timestamp);
     }
 }

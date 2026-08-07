@@ -101,7 +101,7 @@ final class AdvancedWhitelistMatcher
             }
 
             // Handle conditional patterns (field:if(condition))
-            if (preg_match('/^(.+):if\(([^)]+)\)$/', $pattern, $matches)) {
+            if (preg_match('/^(.+):if\(([^)]+)\)$/', $pattern, $matches) === 1) {
                 $fieldPattern = $matches[1];
                 $condition = $matches[2];
                 $this->conditionalPatterns[$fieldPattern] = $condition;
@@ -282,7 +282,7 @@ final class AdvancedWhitelistMatcher
             $paths = ['user.id', 'user.name', 'user.email', 'user.avatar'];
         } elseif ($pattern === '*.admin') {
             $paths = ['posts.admin', 'user.admin', 'profile.admin'];
-        } elseif (preg_match('/^(.+)\.\*\.(.+)$/', $pattern, $matches)) {
+        } elseif (preg_match('/^(.+)\.\*\.(.+)$/', $pattern, $matches) === 1) {
             // posts.*.comments -> posts.recent.comments, posts.popular.comments
             $prefix = $matches[1];
             $suffix = $matches[2];

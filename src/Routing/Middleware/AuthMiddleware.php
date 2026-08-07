@@ -227,7 +227,7 @@ class AuthMiddleware implements RouteMiddleware
         // Try authentication with configured providers
         if (count($this->providerNames) > 0) {
             try {
-                $user = $this->authManager->authenticateWithProviders($this->providerNames, $request);
+                $user = $this->authManager->authenticateWithProviders(array_values($this->providerNames), $request);
             } catch (\Error) {
                 // Method doesn't exist, fallback to single auth
                 $user = $this->authManager->authenticate($request);
@@ -302,7 +302,7 @@ class AuthMiddleware implements RouteMiddleware
 
         // Query-string bearer tokens leak into logs, history, and Referer; keep
         // this legacy fallback behind the same explicit JWT query-param gate.
-        if ((bool) config($this->context, 'security.tokens.allow_query_param', false) === true) {
+        if ($this->context !== null && (bool) config($this->context, 'security.tokens.allow_query_param', false)) {
             $token = $request->query->get('token');
             if ($token !== null && is_string($token)) {
                 return $token;

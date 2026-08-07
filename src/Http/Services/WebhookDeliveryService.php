@@ -45,11 +45,12 @@ class WebhookDeliveryService
             $duration = round((microtime(true) - $startTime) * 1000, 2);
 
             if ($response->isSuccessful()) {
+                $encodedPayload = json_encode($payload);
                 $this->logger->info('Webhook delivered successfully', [
                     'url' => $this->sanitizeUrl($url),
                     'status_code' => $response->getStatusCode(),
                     'duration_ms' => $duration,
-                    'payload_size' => strlen(json_encode($payload))
+                    'payload_size' => $encodedPayload === false ? 0 : strlen($encodedPayload)
                 ]);
 
                 $this->events?->dispatch(new WebhookDeliveredEvent(
@@ -296,7 +297,7 @@ class WebhookDeliveryService
      */
     private function generateSignature(array $payload, string $secret): string
     {
-        $jsonPayload = json_encode($payload, JSON_UNESCAPED_SLASHES);
+        $jsonPayload = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
         return 'sha256=' . hash_hmac('sha256', $jsonPayload, $secret);
     }
 
@@ -320,11 +321,12 @@ class WebhookDeliveryService
         float $duration,
         ?string $error = null
     ): void {
+        $encodedPayload = json_encode($payload);
         $this->logger->error('Webhook delivery failed', [
             'url' => $this->sanitizeUrl($url),
             'status_code' => $statusCode,
             'duration_ms' => $duration,
-            'payload_size' => strlen(json_encode($payload)),
+            'payload_size' => $encodedPayload === false ? 0 : strlen($encodedPayload),
             'error' => $error
         ]);
     }
@@ -359,7 +361,7 @@ class WebhookDeliveryService
     private function sanitizeUrl(string $url): string
     {
         $parsed = parse_url($url);
-        if (!$parsed) {
+        if ($parsed === false || $parsed === []) {
             return '[INVALID_URL]';
         }
 

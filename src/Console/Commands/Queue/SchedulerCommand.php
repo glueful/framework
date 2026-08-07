@@ -504,8 +504,8 @@ class SchedulerCommand extends BaseCommand
     }
 
     /**
-     * @param array<string, mixed> $jobs
-     * @return array<string, mixed>
+     * @param list<array<string, mixed>> $jobs
+     * @return array<int, array<string, mixed>>
      */
     private function filterJobs(array $jobs, string $filter): array
     {
@@ -521,13 +521,13 @@ class SchedulerCommand extends BaseCommand
     }
 
     /**
-     * @param array<string, mixed> $jobs
+     * @param array<int, array<string, mixed>> $jobs
      */
     private function displayJobs(array $jobs, string $format): void
     {
         switch ($format) {
             case 'json':
-                $this->io->text(json_encode($jobs, JSON_PRETTY_PRINT));
+                $this->io->text($this->jsonForDisplay($jobs, JSON_PRETTY_PRINT));
                 break;
             case 'plain':
                 foreach ($jobs as $job) {
@@ -541,7 +541,7 @@ class SchedulerCommand extends BaseCommand
     }
 
     /**
-     * @param array<string, mixed> $jobs
+     * @param array<int, array<string, mixed>> $jobs
      */
     private function displayJobsTable(array $jobs): void
     {
@@ -566,7 +566,7 @@ class SchedulerCommand extends BaseCommand
     }
 
     /**
-     * @param array<string, mixed> $jobs
+     * @param list<array<string, mixed>> $jobs
      * @return array<string, int>
      */
     private function calculateSchedulerStats(array $jobs): array
@@ -603,8 +603,8 @@ class SchedulerCommand extends BaseCommand
     }
 
     /**
-     * @param array<string, mixed> $jobs
-     * @return array<string, mixed>
+     * @param list<array<string, mixed>> $jobs
+     * @return list<array<string, mixed>>
      */
     private function getUpcomingJobs(array $jobs, int $limit): array
     {
@@ -614,7 +614,7 @@ class SchedulerCommand extends BaseCommand
     }
 
     /**
-     * @param array<string, mixed> $jobs
+     * @param list<array<string, mixed>> $jobs
      */
     private function displayUpcomingJobs(array $jobs): void
     {
@@ -682,7 +682,7 @@ class SchedulerCommand extends BaseCommand
         // Check system resources
         if (function_exists('sys_getloadavg')) {
             $load = sys_getloadavg();
-            if ($load[0] > 5.0) {
+            if ($load !== false && $load[0] > 5.0) {
                 $warnings[] = 'High system load detected: ' . round($load[0], 2);
             }
         }

@@ -366,7 +366,7 @@ abstract class BaseCommand extends Command
      * - Provides clean tabular display
      *
      * @param array<string> $headers Table headers
-     * @param array<array<string>> $rows Table rows
+     * @param array<array<scalar|null>> $rows Table rows (scalars are rendered as strings)
      * @return void
      */
     protected function table(array $headers, array $rows): void
@@ -655,5 +655,15 @@ abstract class BaseCommand extends Command
         $this->warning('This is a destructive operation.');
 
         return $this->confirm($message, false);
+    }
+
+    /**
+     * JSON-encode a value for console display; '[unencodable]' when encoding fails.
+     */
+    protected function jsonForDisplay(mixed $value, int $flags = 0): string
+    {
+        $encoded = json_encode($value, $flags);
+
+        return $encoded === false ? '[unencodable]' : $encoded;
     }
 }

@@ -118,7 +118,7 @@ class ClearCommand extends BaseCommand
     {
         try {
             // Invalidate cache by tags
-            $result = $this->cacheStore->invalidateTags($tags);
+            $result = $this->cacheStore->invalidateTags(array_values($tags));
             if ($result) {
                 foreach ($tags as $tag) {
                     $this->line(sprintf('✓ Cache tag "%s" cleared', $tag));

@@ -385,8 +385,14 @@ class SessionQueryBuilder
 
         foreach ($providers as $provider) {
             try {
-                $providerSessions = call_user_func([$this->managerClass, 'getSessionsByProviderForQuery'], $provider);
-                $sessions = array_merge($sessions, $providerSessions);
+                $sessionsCallable = [$this->managerClass, 'getSessionsByProviderForQuery'];
+                if (!is_callable($sessionsCallable)) {
+                    break;
+                }
+                $providerSessions = $sessionsCallable($provider);
+                if (is_array($providerSessions)) {
+                    $sessions = array_merge($sessions, $providerSessions);
+                }
             } catch (\Exception $e) {
                 // Provider might not exist, continue
                 continue;
@@ -442,6 +448,9 @@ class SessionQueryBuilder
         $results = [];
 
         foreach ($conditions as $condition) {
+            // Conditions are built exclusively by this class's where*() methods,
+            // which always produce this shape.
+            /** @var array{type: string, operator: string, value: mixed} $condition */
             $result = $this->evaluateCondition($session, $condition);
             $results[] = $result;
 
@@ -527,7 +536,7 @@ class SessionQueryBuilder
             case '=':
                 return $sessionProvider === $value;
             case 'in':
-                return in_array($sessionProvider, $value, true);
+                return is_array($value) && in_array($sessionProvider, $value, true);
             default:
                 return false;
         }
@@ -649,7 +658,7 @@ class SessionQueryBuilder
             case '=':
                 return $userUuid === $value;
             case 'in':
-                return in_array($userUuid, $value, true);
+                return is_array($value) && in_array($userUuid, $value, true);
             default:
                 return false;
         }

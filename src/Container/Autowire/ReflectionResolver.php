@@ -22,6 +22,10 @@ final class ReflectionResolver
 
     public function resolve(string $class, ContainerInterface $container): object
     {
+        if (!class_exists($class)) {
+            throw new ContainerException("Cannot autowire unknown class: {$class}");
+        }
+
         $ctor = $this->cache[$class] ??= (new \ReflectionClass($class))->getConstructor();
         if ($ctor === null) {
             return new $class();

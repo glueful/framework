@@ -97,7 +97,9 @@ class TestCommand extends BaseCommand
 
         /** @var string|null $methodsOption */
         $methodsOption = $input->getOption('methods');
-        $methods = $methodsOption !== null ? array_filter(array_map('trim', explode(',', $methodsOption))) : [];
+        $methods = $methodsOption !== null
+            ? array_filter(array_map('trim', explode(',', $methodsOption)), static fn (string $s): bool => $s !== '')
+            : [];
 
         // Normalize the name
         $name = $this->normalizeTestName($name);
@@ -147,7 +149,7 @@ class TestCommand extends BaseCommand
         $this->table(['Property', 'Value'], [
             ['Test Type', ucfirst($testType)],
             ['Class', $className],
-            ['Methods', $methods !== [] ? count($methods) : '1 (example)'],
+            ['Methods', $methods !== [] ? (string) count($methods) : '1 (example)'],
         ]);
 
         $this->line('');
@@ -194,7 +196,7 @@ class TestCommand extends BaseCommand
         $parts = explode('/', str_replace('\\', '/', $name));
 
         foreach ($parts as $part) {
-            if (!preg_match('/^[A-Z][a-zA-Z0-9]*$/', $part)) {
+            if (preg_match('/^[A-Z][a-zA-Z0-9]*$/', $part) !== 1) {
                 return false;
             }
         }

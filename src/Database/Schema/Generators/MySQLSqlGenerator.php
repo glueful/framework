@@ -874,7 +874,7 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
                     $formattedColumns[$columnName]['indexes'][] = [
                         'name' => $index['Key_name'],
                         'type' => $index['Key_name'] === 'PRIMARY' ? 'PRIMARY KEY' :
-                                 ($index['Non_unique'] == 0 ? 'UNIQUE' : 'INDEX'),
+                                 ((int) $index['Non_unique'] === 0 ? 'UNIQUE' : 'INDEX'),
                         'sequence' => $index['Seq_in_index'],
                         'cardinality' => $index['Cardinality']
                     ];

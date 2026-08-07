@@ -64,7 +64,7 @@ abstract class ConfigurableService implements ConfigurableInterface
      */
     public function toJson(int $flags = JSON_THROW_ON_ERROR): string
     {
-        return json_encode($this->options, $flags);
+        return json_encode($this->options, $flags | JSON_THROW_ON_ERROR);
     }
 
     /**

@@ -32,15 +32,34 @@ final class Psr15AdapterFactory
             [$reqFactory, $streamFactory, $uploadedFileFactory, $respFactory] =
                 self::resolvePsr17Factories($psr7FactoryProvider);
 
+            if (
+                !$reqFactory instanceof \Psr\Http\Message\ServerRequestFactoryInterface
+                || !$streamFactory instanceof \Psr\Http\Message\StreamFactoryInterface
+                || !$uploadedFileFactory instanceof \Psr\Http\Message\UploadedFileFactoryInterface
+                || !$respFactory instanceof \Psr\Http\Message\ResponseFactoryInterface
+            ) {
+                throw new \RuntimeException('PSR-17 factory provider returned invalid factories.');
+            }
+
             self::$httpFoundationBridge = new HttpFoundationFactory();
             self::$psrBridge = new PsrHttpFactory($reqFactory, $streamFactory, $uploadedFileFactory, $respFactory);
         }
 
-        return function (SfRequest $request, callable $next) use ($middleware): SfResponse {
-            $handler = new RequestHandlerAdapter($next, self::$psrBridge, self::$httpFoundationBridge);
-            $psrRequest = self::$psrBridge->createRequest($request);
+        $psrBridge = self::$psrBridge;
+        $foundationBridge = self::$httpFoundationBridge;
+
+        return function (
+            SfRequest $request,
+            callable $next
+        ) use (
+            $middleware,
+            $psrBridge,
+            $foundationBridge
+        ): SfResponse {
+            $handler = new RequestHandlerAdapter($next, $psrBridge, $foundationBridge);
+            $psrRequest = $psrBridge->createRequest($request);
             $psrResponse = $middleware->process($psrRequest, $handler);
-            return self::$httpFoundationBridge->createResponse($psrResponse);
+            return $foundationBridge->createResponse($psrResponse);
         };
     }
 

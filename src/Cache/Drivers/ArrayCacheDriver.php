@@ -27,7 +27,7 @@ class ArrayCacheDriver implements CacheStore
     /** @var array<string, array<string>> Tags associated with keys */
     private array $tags = [];
 
-    /** @var array<string, array<int, mixed>> Sorted sets */
+    /** @var array<string, array<int|string, mixed>> Sorted sets, keyed by score */
     private array $sortedSets = [];
 
     /**
@@ -153,6 +153,9 @@ class ArrayCacheDriver implements CacheStore
         }
 
         $newValue = $current + $value;
+        // Numeric counters flow through the generic TValue store by contract —
+        // a variance PHPStan's template types cannot express.
+        // @phpstan-ignore argument.type
         $this->set($key, $newValue);
         return $newValue;
     }
@@ -398,7 +401,7 @@ class ArrayCacheDriver implements CacheStore
         $pattern = '/^' . $pattern . '$/';
 
         foreach ($this->cache as $key => $value) {
-            if (preg_match($pattern, $key)) {
+            if (preg_match($pattern, $key) === 1) {
                 $this->delete($key);
             }
         }
@@ -420,7 +423,7 @@ class ArrayCacheDriver implements CacheStore
 
         $keys = [];
         foreach ($this->cache as $key => $value) {
-            if (preg_match($pattern, $key)) {
+            if (preg_match($pattern, $key) === 1) {
                 $keys[] = $key;
             }
         }

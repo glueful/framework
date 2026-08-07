@@ -102,8 +102,12 @@ class AuthenticationManager
      */
     public function authenticate(Request $request): ?array
     {
-        $result = $this->authenticateWith($this->defaultProvider, $request);
-        return $result;
+        $provider = $this->defaultProvider;
+        if ($provider === null) {
+            return null;
+        }
+
+        return $this->authenticateWith($provider, $request);
     }
 
     /**
@@ -199,10 +203,10 @@ class AuthenticationManager
             error_log('AuthenticationManager::isAdmin: Exception occurred: ' . $e->getMessage());
             error_log('AuthenticationManager::isAdmin: Stack trace: ' . $e->getTraceAsString());
 
-            if (class_exists('\\Glueful\\Logging\\Logger')) {
+            $logCallable = ['\\Glueful\\Logging\\Logger', 'error'];
+            if (is_callable($logCallable)) {
                 try {
-                    call_user_func(
-                        ['\\Glueful\\Logging\\Logger', 'error'],
+                    $logCallable(
                         'Permission check failed in AuthenticationManager::isAdmin',
                         [
                             'user_uuid' => $userUuid,
@@ -272,10 +276,10 @@ class AuthenticationManager
         ];
 
         // Use basic logging if available
-        if (class_exists('\\Glueful\\Logging\\Logger')) {
+        $logCallable = ['\\Glueful\\Logging\\Logger', 'info'];
+        if (is_callable($logCallable)) {
             try {
-                call_user_func(
-                    ['\\Glueful\\Logging\\Logger', 'info'],
+                $logCallable(
                     'Authentication success',
                     $logData
                 );

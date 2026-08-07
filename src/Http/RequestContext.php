@@ -201,7 +201,7 @@ class RequestContext
     public function getBearerToken(): ?string
     {
         $auth = $this->getAuthorizationHeader();
-        if ($auth !== null && preg_match('/Bearer\s+(.+)$/i', $auth, $matches)) {
+        if ($auth !== null && preg_match('/Bearer\s+(.+)$/i', $auth, $matches) === 1) {
             return $matches[1];
         }
 
@@ -298,7 +298,12 @@ class RequestContext
      */
     public function getHeaders(): array
     {
-        return $this->request->getHeaders();
+        $headers = [];
+        foreach ($this->request->getHeaders() as $name => $values) {
+            $headers[(string) $name] = array_values($values);
+        }
+
+        return $headers;
     }
 
     /**

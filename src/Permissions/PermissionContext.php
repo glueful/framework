@@ -36,6 +36,6 @@ class PermissionContext
             'ip_address' => $this->ipAddress,
             'user_agent' => $this->userAgent,
             'request_id' => $this->requestId
-        ]);
+        ], static fn ($value): bool => (bool) $value);
     }
 }

@@ -149,7 +149,7 @@ class ConfigurationLoader
     private function processEnvironmentVariables(array $config): array
     {
         array_walk_recursive($config, function (&$value) {
-            if (is_string($value) && preg_match('/^env\(([^,\)]+)(?:,\s*(.+))?\)$/', $value, $matches)) {
+            if (is_string($value) && preg_match('/^env\(([^,\)]+)(?:,\s*(.+))?\)$/', $value, $matches) === 1) {
                 $envKey = trim($matches[1], '"\'');
                 $default = isset($matches[2]) ? trim($matches[2], '"\'') : null;
 
@@ -198,6 +198,9 @@ class ConfigurationLoader
         // Check application config directory for additional configs
         if (is_dir($this->configPaths['application'])) {
             $configFiles = glob($this->configPaths['application'] . '/*.php');
+            if ($configFiles === false) {
+                $configFiles = [];
+            }
 
             foreach ($configFiles as $configFile) {
                 $configName = basename($configFile, '.php');

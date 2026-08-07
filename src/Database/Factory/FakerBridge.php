@@ -42,12 +42,14 @@ class FakerBridge
             );
         }
 
-        if (self::$instance === null) {
+        $instance = self::$instance;
+        if ($instance === null) {
             // @phpstan-ignore-next-line Faker is an optional dependency
-            self::$instance = \Faker\Factory::create(self::$locale);
+            $instance = \Faker\Factory::create(self::$locale);
+            self::$instance = $instance;
         }
 
-        return self::$instance;
+        return $instance;
     }
 
     /**

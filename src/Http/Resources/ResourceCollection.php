@@ -83,6 +83,9 @@ class ResourceCollection implements Countable, IteratorAggregate, JsonSerializab
      */
     public function __construct(iterable $resource)
     {
+        // Instances come from static::collects(), which names class-string<TResource> —
+        // a generic guarantee PHPStan cannot follow through the trait.
+        // @phpstan-ignore assign.propertyType
         $this->collection = $this->collectResources($resource);
     }
 

@@ -400,8 +400,9 @@ class PoolMonitor
             return 'insufficient_data';
         }
 
-        $first = array_slice($values, 0, max(1, count($values) / 3));
-        $last = array_slice($values, -max(1, count($values) / 3));
+        $chunk = max(1, intdiv(count($values), 3));
+        $first = array_slice($values, 0, $chunk);
+        $last = array_slice($values, -$chunk);
 
         $firstAvg = array_sum($first) / count($first);
         $lastAvg = array_sum($last) / count($last);

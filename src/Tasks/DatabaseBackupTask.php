@@ -61,7 +61,8 @@ class DatabaseBackupTask
             if (file_exists($backupFile)) {
                 $this->stats['backup_created'] = true;
                 $this->stats['backup_file'] = $filename;
-                $this->stats['backup_size'] = filesize($backupFile);
+                $backupSize = filesize($backupFile);
+                $this->stats['backup_size'] = $backupSize === false ? 0 : $backupSize;
             }
         } catch (\Exception $e) {
             $this->stats['errors'][] = "Failed to create backup: " . $e->getMessage();
@@ -144,6 +145,9 @@ class DatabaseBackupTask
 
             $cutoffTime = time() - ($retentionDays * 24 * 60 * 60);
             $files = glob($backupDir . '/backup_*.sql');
+            if ($files === false) {
+                $files = [];
+            }
 
             foreach ($files as $file) {
                 if (filemtime($file) < $cutoffTime) {
@@ -194,7 +198,7 @@ class DatabaseBackupTask
         }
 
         $units = ['B', 'KB', 'MB', 'GB'];
-        $i = floor(log($bytes, 1024));
+        $i = (int) floor(log($bytes, 1024));
 
         return round($bytes / (1024 ** $i), 2) . ' ' . $units[$i];
     }

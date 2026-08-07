@@ -108,8 +108,12 @@ class SignedUrl
             return false;
         }
 
-        // Extract and verify signature
+        // Extract and verify signature. parse_str can yield an array for
+        // "signature[]=…" — that is never a valid signature, not a TypeError.
         $providedSignature = $params['signature'];
+        if (!is_string($providedSignature)) {
+            return false;
+        }
         unset($params['signature']);
         ksort($params);
 

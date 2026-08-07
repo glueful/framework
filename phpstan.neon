@@ -5,7 +5,11 @@ includes:
     - vendor/phpstan/phpstan-phpunit/rules.neon
 
 parameters:
-    level: 6
+    level: 8
+    # Pin analysis to PHP 8.3 (the minimum supported version and the CI runtime).
+    # PHPStan derives core-class signatures from the PHP version it targets, so an
+    # unpinned run on a newer local PHP can pass while the same code fails on CI.
+    phpVersion: 80300
     paths:
         - src
         - config
@@ -18,8 +22,6 @@ parameters:
     
     # Improve analysis quality
     treatPhpDocTypesAsCertain: false
-    # Deprecated in recent PHPStan; omit to avoid warnings
-    checkGenericClassInNonGenericObjectType: true
     # Ignore patterns may be forward-looking; don't fail when unmatched
     reportUnmatchedIgnoredErrors: false
     ignoreErrors:
@@ -85,5 +87,9 @@ parameters:
         - '#Call to function is_string\(\) with string will always evaluate to true\.#'
         # Foreach variable reuse in recursive trait functions
         - '#Foreach overwrites \$class with its value variable\.#'
+        # The framework ships traits as public API for applications and extensions;
+        # zero in-repo users does not mean dead code.
+        -
+            identifier: trait.unused
         # Short ternary in helper functions
         - '#Short ternary operator is not allowed.*#'

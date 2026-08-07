@@ -50,7 +50,7 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
 
             // Fallback: extract from the Symfony Request directly
             if ($token === null || $token === '') {
-                $authHeader = $request->headers->get('Authorization', '');
+                $authHeader = $request->headers->get('Authorization', '') ?? '';
                 if ($authHeader !== '' && preg_match('/Bearer\s+(.+)/i', $authHeader, $matches) === 1) {
                     $token = trim($matches[1]);
                 }
@@ -219,13 +219,16 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
 
         if (
             $authorization_header !== null && $authorization_header !== ''
-            && preg_match('/Bearer\s+(.+)/i', $authorization_header, $matches)
+            && preg_match('/Bearer\s+(.+)/i', $authorization_header, $matches) === 1
         ) {
             return trim($matches[1]);
         }
 
+        if ($this->context === null) {
+            return null;
+        }
         $allowQueryParam = (bool) config($this->context, 'security.tokens.allow_query_param', false);
-        if ($this->context === null || $allowQueryParam !== true) {
+        if ($allowQueryParam !== true) {
             return null;
         }
 
@@ -282,7 +285,13 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
             }
 
             // Generate new token pair for existing session
-            return $this->generateTokens($sessionData);
+            $tokens = $this->generateTokens($sessionData);
+            if (!is_string($tokens['access_token'] ?? null) || !is_string($tokens['refresh_token'] ?? null)) {
+                $this->lastError = 'Token generation failed';
+                return null;
+            }
+            /** @var array{access_token: string, refresh_token: string, expires_in?: int} $tokens */
+            return $tokens;
         } catch (\Throwable $e) {
             $this->lastError = 'Token refresh error: ' . $e->getMessage();
             return null;

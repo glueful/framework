@@ -643,7 +643,7 @@ class AdminPermissionMiddleware implements RouteMiddleware
             [$network, $bits] = explode('/', $pattern);
 
             // IPv4 CIDR
-            if (filter_var($network, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            if (filter_var($network, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
                 $clientLong = ip2long($clientIp);
                 $networkLong = ip2long($network);
                 if ($clientLong === false || $networkLong === false) {
@@ -654,7 +654,7 @@ class AdminPermissionMiddleware implements RouteMiddleware
             }
 
             // IPv6 CIDR (basic support)
-            if (filter_var($network, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            if (filter_var($network, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false) {
                 // Simplified IPv6 matching - could be enhanced
                 $clientBin = inet_pton($clientIp);
                 $networkBin = inet_pton($network);
@@ -796,6 +796,7 @@ class AdminPermissionMiddleware implements RouteMiddleware
      *
      * @param string $userUuid User UUID
      */
+    // @phpstan-ignore void.pure (placeholder until attempt tracking is implemented)
     private function incrementFailedAttempts(string $userUuid): void
     {
         // Implementation would depend on your caching/storage system
@@ -810,6 +811,7 @@ class AdminPermissionMiddleware implements RouteMiddleware
      *
      * @param string $userUuid User UUID
      */
+    // @phpstan-ignore void.pure (placeholder until attempt tracking is implemented)
     private function resetFailedAttempts(string $userUuid): void
     {
         // Implementation would depend on your caching/storage system

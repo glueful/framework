@@ -44,6 +44,10 @@ final readonly class MediaMetadata
     /**
      * Check if dimensions are available
      */
+    /**
+     * @phpstan-assert-if-true int $this->width
+     * @phpstan-assert-if-true int $this->height
+     */
     public function hasDimensions(): bool
     {
         return $this->width !== null && $this->height !== null;

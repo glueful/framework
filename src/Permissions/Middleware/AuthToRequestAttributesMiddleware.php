@@ -81,8 +81,10 @@ final class AuthToRequestAttributesMiddleware implements RouteMiddleware
                     scopes: $claims['scope'] ?? $claims['scopes'] ?? [],
                     attributes: [
                         'permissions' => $this->userCtx->getUserPermissions(),
-                        'email' => $user->email ?? null,
-                        'username' => $user->username ?? null,
+                        // Accessors, not property reads: the props are private, so
+                        // `$user->email ?? null` silently evaluated to null forever.
+                        'email' => $user->email(),
+                        'username' => $user->username(),
                         'tenant_id' => $tenant
                     ]
                 );

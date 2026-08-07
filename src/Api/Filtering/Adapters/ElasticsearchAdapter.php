@@ -43,9 +43,9 @@ class ElasticsearchAdapter extends SearchAdapter
 {
     /**
      * Elasticsearch client instance
-     * Type hint omitted for optional dependency support
+     * Native type stays object for optional dependency support
      *
-     * @var object|null
+     * @var \Elastic\Elasticsearch\Client|null
      */
     private ?object $client = null;
 
@@ -81,6 +81,32 @@ class ElasticsearchAdapter extends SearchAdapter
         $this->client = \Elastic\Elasticsearch\ClientBuilder::create()
             ->setHosts($hosts)
             ->build();
+    }
+
+    /**
+     * Narrow the SDK's sync|async response union — this adapter only issues sync calls.
+     */
+    private function syncResponse(mixed $response): \Elastic\Elasticsearch\Response\Elasticsearch
+    {
+        if (!$response instanceof \Elastic\Elasticsearch\Response\Elasticsearch) {
+            throw new \RuntimeException('Unexpected async Elasticsearch response.');
+        }
+
+        return $response;
+    }
+
+    /**
+     * The client, for operations that require the SDK to be installed and initialized.
+     */
+    private function requireClient(): \Elastic\Elasticsearch\Client
+    {
+        if ($this->client === null) {
+            throw new \RuntimeException(
+                'Elasticsearch client not initialized — install elasticsearch/elasticsearch.'
+            );
+        }
+
+        return $this->client;
     }
 
     /**
@@ -122,12 +148,12 @@ class ElasticsearchAdapter extends SearchAdapter
         }
 
         // Execute search
-        $response = $this->client->search([
+        $response = $this->requireClient()->search([
             'index' => $this->indexName,
             'body' => $body,
         ]);
 
-        $responseData = $response->asArray();
+        $responseData = $this->syncResponse($response)->asArray();
         $took = (microtime(true) - $startTime) * 1000;
 
         $hits = array_map(
@@ -162,7 +188,7 @@ class ElasticsearchAdapter extends SearchAdapter
         }
 
         try {
-            return $this->client->ping()->asBool();
+            return $this->syncResponse($this->requireClient()->ping())->asBool();
         } catch (\Exception) {
             return false;
         }
@@ -187,7 +213,7 @@ class ElasticsearchAdapter extends SearchAdapter
 
         $data = $this->prepareDocument($document);
 
-        $this->client->index([
+        $this->requireClient()->index([
             'index' => $this->indexName,
             'id' => $id,
             'body' => $data,
@@ -205,7 +231,7 @@ class ElasticsearchAdapter extends SearchAdapter
 
         $data = $this->prepareDocument($document);
 
-        $this->client->update([
+        $this->requireClient()->update([
             'index' => $this->indexName,
             'id' => $id,
             'body' => ['doc' => $data],
@@ -222,7 +248,7 @@ class ElasticsearchAdapter extends SearchAdapter
         }
 
         try {
-            $this->client->delete([
+            $this->requireClient()->delete([
                 'index' => $this->indexName,
                 'id' => $id,
             ]);
@@ -253,7 +279,7 @@ class ElasticsearchAdapter extends SearchAdapter
         }
 
         if ($params['body'] !== []) {
-            $this->client->bulk($params);
+            $this->requireClient()->bulk($params);
         }
     }
 
@@ -412,7 +438,7 @@ class ElasticsearchAdapter extends SearchAdapter
             }
         }
 
-        $this->client->indices()->create($params);
+        $this->requireClient()->indices()->create($params);
     }
 
     /**
@@ -425,7 +451,7 @@ class ElasticsearchAdapter extends SearchAdapter
         }
 
         try {
-            $this->client->indices()->delete(['index' => $this->indexName]);
+            $this->requireClient()->indices()->delete(['index' => $this->indexName]);
         } catch (\Exception) {
             // Index might not exist
         }
@@ -440,7 +466,9 @@ class ElasticsearchAdapter extends SearchAdapter
             return false;
         }
 
-        return $this->client->indices()->exists(['index' => $this->indexName])->asBool();
+        return $this->syncResponse(
+            $this->requireClient()->indices()->exists(['index' => $this->indexName])
+        )->asBool();
     }
 
     /**
@@ -452,7 +480,7 @@ class ElasticsearchAdapter extends SearchAdapter
             return;
         }
 
-        $this->client->indices()->refresh(['index' => $this->indexName]);
+        $this->requireClient()->indices()->refresh(['index' => $this->indexName]);
     }
 
     /**

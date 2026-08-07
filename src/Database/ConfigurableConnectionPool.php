@@ -27,7 +27,7 @@ class ConfigurableConnectionPool extends ConnectionPool
      * @param string         $dsn      Database connection string
      * @param string|null    $username Database username
      * @param string|null    $password Database password
-     * @param array<int|string, mixed> $options  PDO connection options
+     * @param array<int, mixed> $options  PDO connection options (keyed by PDO::ATTR_* constants)
      * @param DatabaseDriver $driver   Database driver
      */
     public function __construct(

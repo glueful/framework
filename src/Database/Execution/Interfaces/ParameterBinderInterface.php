@@ -20,7 +20,7 @@ interface ParameterBinderInterface
      * (string keys, from `:name` placeholders), hence the int|string key type.
      *
      * @param array<int|string, mixed> $bindings
-     * @return array<string, mixed>
+     * @return array<int|string, mixed> Positional bindings keep their int keys
      */
     public function flattenBindings(array $bindings): array;
 
@@ -39,8 +39,8 @@ interface ParameterBinderInterface
     /**
      * Sanitize array of parameters for logging
      *
-     * @param array<string, mixed> $bindings
-     * @return array<string, mixed>
+     * @param array<int|string, mixed> $bindings
+     * @return array<int|string, mixed>
      */
     public function sanitizeBindingsForLog(array $bindings): array;
 

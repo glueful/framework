@@ -35,7 +35,7 @@ class SoftDeletingScope implements Scope, ExtendsBuilder
      */
     public function apply(Builder $builder, object $model): void
     {
-        /** @var SoftDeletable $model */
+        /** @var Model&SoftDeletable $model */
         $builder->whereNull($model->getQualifiedDeletedAtColumn());
     }
 
@@ -70,10 +70,12 @@ class SoftDeletingScope implements Scope, ExtendsBuilder
      */
     protected function getDeletedAtColumn(Builder $builder): string
     {
-        /** @var SoftDeletable $model */
+        /** @var Model&SoftDeletable $model */
         $model = $builder->getModel();
 
-        if (count($builder->getQuery()->joins ?? []) > 0) {
+        // hasJoins() replaces a read of a nonexistent $joins property that made
+        // this branch unreachable — joined queries now qualify the column.
+        if ($builder->getQuery()->hasJoins()) {
             return $model->getQualifiedDeletedAtColumn();
         }
 
@@ -92,7 +94,7 @@ class SoftDeletingScope implements Scope, ExtendsBuilder
             /** @phpstan-ignore-next-line Dynamic macro method */
             $builder->withTrashed();
 
-            /** @var SoftDeletable $model */
+            /** @var Model&SoftDeletable $model */
             $model = $builder->getModel();
 
             return $builder->update([
@@ -116,7 +118,7 @@ class SoftDeletingScope implements Scope, ExtendsBuilder
             $instance = $builder->where($attributes)->first();
 
             if ($instance !== null) {
-                /** @var SoftDeletable $instance */
+                /** @var Model&SoftDeletable $instance */
                 $instance->restore();
                 return $instance;
             }
@@ -152,7 +154,7 @@ class SoftDeletingScope implements Scope, ExtendsBuilder
     protected function addWithoutTrashed(Builder $builder): void
     {
         $builder->macro('withoutTrashed', function (Builder $builder) {
-            /** @var SoftDeletable $model */
+            /** @var Model&SoftDeletable $model */
             $model = $builder->getModel();
 
             $builder->withoutGlobalScope('softDeletes')
@@ -171,7 +173,7 @@ class SoftDeletingScope implements Scope, ExtendsBuilder
     protected function addOnlyTrashed(Builder $builder): void
     {
         $builder->macro('onlyTrashed', function (Builder $builder) {
-            /** @var SoftDeletable $model */
+            /** @var Model&SoftDeletable $model */
             $model = $builder->getModel();
 
             $builder->withoutGlobalScope('softDeletes')

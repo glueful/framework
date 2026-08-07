@@ -118,7 +118,7 @@ final class ContainerCompiler
         foreach ($definitions as $id => $definition) {
             $row = [
                 'shared' => (bool) $definition->isShared(),
-                'tags' => array_values($serviceTags[$id] ?? []),
+                'tags' => $serviceTags[$id] ?? [],
                 'provider' => $providerMap[$id] ?? null,
                 'type' => get_class($definition),
             ];
@@ -210,7 +210,12 @@ PHP;
 
     private function emitCtorArgs(AutowireDefinition $definition): string
     {
-        $reflection = new \ReflectionClass($definition->getClass());
+        $class = $definition->getClass();
+        if (!class_exists($class)) {
+            throw new \RuntimeException("Cannot compile autowire definition for unknown class: {$class}");
+        }
+
+        $reflection = new \ReflectionClass($class);
         $constructor = $reflection->getConstructor();
 
         if ($constructor === null) {

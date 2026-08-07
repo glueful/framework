@@ -37,8 +37,13 @@ final class CidrMatcher
         }
 
         $mask = $prefixLen === 0 ? 0 : ((~0) << (32 - $prefixLen)) & 0xFFFFFFFF;
-        $clientInt = unpack('N', $client)[1];
-        $subnetInt = unpack('N', $subnetBin)[1];
+        $clientParts = unpack('N', $client);
+        $subnetParts = unpack('N', $subnetBin);
+        if ($clientParts === false || $subnetParts === false) {
+            return false; // unreadable packed address — never a match
+        }
+        $clientInt = $clientParts[1];
+        $subnetInt = $subnetParts[1];
 
         return ($clientInt & $mask) === ($subnetInt & $mask);
     }

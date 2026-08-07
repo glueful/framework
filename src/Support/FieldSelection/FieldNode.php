@@ -80,7 +80,7 @@ final class FieldNode
         }
 
         // Parse transformation like "format(Y-m-d)" or "currency(USD)"
-        if (preg_match('/^(\w+)\(([^)]*)\)$/', $this->transformation, $matches)) {
+        if (preg_match('/^(\w+)\(([^)]*)\)$/', $this->transformation, $matches) === 1) {
             $function = $matches[1];
             $paramString = $matches[2];
             $params = $paramString !== '' ? array_map('trim', explode(',', $paramString)) : [];

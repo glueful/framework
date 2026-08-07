@@ -158,7 +158,7 @@ class BelongsToMany extends Relation
     /**
      * Set the constraints for an eager load of the relation
      *
-     * @param array<object> $models
+     * @param array<Model> $models
      * @return void
      */
     public function addEagerConstraints(array $models): void
@@ -171,9 +171,9 @@ class BelongsToMany extends Relation
     /**
      * Initialize the relation on a set of models
      *
-     * @param array<object> $models
+     * @param array<Model> $models
      * @param string $relation
-     * @return array<object>
+     * @return array<Model>
      */
     public function initRelation(array $models, string $relation): array
     {
@@ -187,10 +187,10 @@ class BelongsToMany extends Relation
     /**
      * Match the eagerly loaded results to their parents
      *
-     * @param array<object> $models
-     * @param Collection $results
+     * @param array<Model> $models
+     * @param Collection<Model> $results
      * @param string $relation
-     * @return array<object>
+     * @return array<Model>
      */
     public function match(array $models, Collection $results, string $relation): array
     {
@@ -212,7 +212,7 @@ class BelongsToMany extends Relation
     /**
      * Build model dictionary keyed by the relation's foreign key
      *
-     * @param Collection $results
+     * @param Collection<Model> $results
      * @return array<mixed, array<Model>>
      */
     protected function buildDictionary(Collection $results): array
@@ -220,7 +220,8 @@ class BelongsToMany extends Relation
         $dictionary = [];
 
         foreach ($results as $result) {
-            $pivotKey = $result->pivot->{$this->foreignPivotKey} ?? null;
+            $pivot = $result->getRelation('pivot');
+            $pivotKey = is_object($pivot) ? ($pivot->{$this->foreignPivotKey} ?? null) : null;
 
             if ($pivotKey !== null) {
                 $dictionary[$pivotKey][] = $result;

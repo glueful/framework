@@ -145,7 +145,7 @@ class StatusCommand extends BaseCommand
         }
 
         if (is_array($value)) {
-            return json_encode($value);
+            return $this->jsonForDisplay($value);
         }
 
         if (is_object($value)) {

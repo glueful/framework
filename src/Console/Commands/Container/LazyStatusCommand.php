@@ -48,7 +48,7 @@ final class LazyStatusCommand extends BaseCommand
         $rt = array_map(fn(string $id) => [$id], (array) ($stats['request_time'] ?? []));
 
         if ($format === 'json') {
-            $this->line(json_encode([
+            $this->line($this->jsonForDisplay([
                 'background' => $stats['background'] ?? [],
                 'request_time' => $stats['request_time'] ?? [],
             ], JSON_PRETTY_PRINT));

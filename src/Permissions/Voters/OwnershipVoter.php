@@ -21,7 +21,9 @@ final class OwnershipVoter implements VoterInterface
         if ($ownerId === null) {
             return new Vote(Vote::ABSTAIN);
         }
-        return new Vote($ownerId == $user->id() ? Vote::GRANT : Vote::DENY);
+        // String-normalized comparison: owner ids arrive as int from the database
+        // and string from tokens; strict === on the raw values would always deny.
+        return new Vote((string) $ownerId === $user->id() ? Vote::GRANT : Vote::DENY);
     }
 
     public function priority(): int

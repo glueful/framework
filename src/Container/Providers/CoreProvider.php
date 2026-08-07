@@ -34,9 +34,13 @@ final class CoreProvider extends BaseServiceProvider
             $logger = new \Monolog\Logger($channel);
 
             // Level from config/debug
-            $levelName = (string) ($config['level'] ?? 'info');
+            $levelName = strtolower((string) ($config['level'] ?? 'info'));
             if (\function_exists('env') && (bool) env('APP_DEBUG', false)) {
                 $levelName = 'debug';
+            }
+            $validLevels = ['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency'];
+            if (!in_array($levelName, $validLevels, true)) {
+                $levelName = 'info';
             }
             $level = \Monolog\Logger::toMonologLevel($levelName);
 
@@ -151,7 +155,7 @@ final class CoreProvider extends BaseServiceProvider
 
                         // Laravel-style helper if present
                         if (function_exists('auth')) {
-                            /** @var callable():object|null $f */
+                            /** @var callable():(object|null) $f */
                             $f = 'auth';
                             $guard = $f();
                             if (

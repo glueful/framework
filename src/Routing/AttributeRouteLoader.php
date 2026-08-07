@@ -293,16 +293,19 @@ class AttributeRouteLoader
     private function getClassFromFile(string $file): ?string
     {
         $contents = file_get_contents($file);
+        if ($contents === false) {
+            return null;
+        }
 
         // Extract namespace
-        if (preg_match('/namespace\s+([^;]+);/', $contents, $namespaceMatch)) {
+        if (preg_match('/namespace\s+([^;]+);/', $contents, $namespaceMatch) === 1) {
             $namespace = $namespaceMatch[1];
         } else {
             $namespace = '';
         }
 
         // Extract class name
-        if (preg_match('/class\s+(\w+)/', $contents, $classMatch)) {
+        if (preg_match('/class\s+(\w+)/', $contents, $classMatch) === 1) {
             $className = $classMatch[1];
             return $namespace !== '' ? $namespace . '\\' . $className : $className;
         }
@@ -434,11 +437,11 @@ class AttributeRouteLoader
      */
     private function hasGateAttributes(string $className, \ReflectionMethod $method): bool
     {
-        try {
-            $class = new \ReflectionClass($className);
-        } catch (\ReflectionException) {
+        if (!class_exists($className)) {
             return false;
         }
+
+        $class = new \ReflectionClass($className);
 
         $methodName = $method->getName();
         $seenMethods = [];

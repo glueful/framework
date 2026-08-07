@@ -97,7 +97,8 @@ class StorageManager
     private function generateTempPath(string $path): string
     {
         $info = pathinfo($path);
-        $dir = $info['dirname'] !== '.' ? $info['dirname'] . '/' : '';
+        $dirname = $info['dirname'] ?? '.';
+        $dir = $dirname !== '.' ? $dirname . '/' : '';
         $filename = $info['filename'] ?? 'temp';
         $extension = isset($info['extension']) ? '.' . $info['extension'] : '';
 

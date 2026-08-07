@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Notifications\Services;
 
 use Glueful\Cache\CacheFactory;
+use Glueful\Cache\CacheStore;
 use DateTime;
 use Glueful\Logging\LogManager;
 
@@ -19,9 +20,9 @@ use Glueful\Logging\LogManager;
 class NotificationMetricsService
 {
     /**
-     * @var object Cache instance for metrics storage
+     * @var CacheStore<mixed> Cache instance for metrics storage
      */
-    private object $cache;
+    private CacheStore $cache;
 
     /**
      * @var LogManager|null Logger instance

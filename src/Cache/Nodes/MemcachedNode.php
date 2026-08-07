@@ -288,7 +288,7 @@ class MemcachedNode extends CacheNode
                 return [];
             }
 
-            return array_keys($tagSet);
+            return array_map('strval', array_keys($tagSet));
         } catch (\Exception $e) {
             error_log("Memcached getTaggedKeys error for node {$this->id}: " . $e->getMessage());
             return [];

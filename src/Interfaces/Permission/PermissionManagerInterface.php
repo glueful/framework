@@ -194,7 +194,7 @@ interface PermissionManagerInterface
      * Returns detailed information about recent permission
      * operations for debugging purposes.
      *
-     * @return array<string, mixed> Debug information
+     * @return list<array<string, mixed>> Debug information entries, in collection order
      */
     public function getDebugInfo(): array;
 

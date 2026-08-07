@@ -22,16 +22,16 @@ interface WhereClauseInterface
      * - add('column', '>', 'value')        - Operator format
      * - add(callable $callback)            - Closure format
      *
-     * @param string|array<string, mixed> $column
+     * @param string|array<string, mixed>|callable $column
      */
-    public function add(string|array $column, ?string $operator = null, mixed $value = null): void;
+    public function add(string|array|callable $column, ?string $operator = null, mixed $value = null): void;
 
     /**
      * Add an OR WHERE condition
      *
-     * @param string|array<string, mixed> $column
+     * @param string|array<string, mixed>|callable $column
      */
-    public function addOr(string|array $column, ?string $operator = null, mixed $value = null): void;
+    public function addOr(string|array|callable $column, ?string $operator = null, mixed $value = null): void;
 
     /**
      * Add WHERE IN condition
@@ -66,6 +66,13 @@ interface WhereClauseInterface
      * Add OR WHERE NOT NULL condition
      */
     public function orWhereNotNull(string $column): self;
+
+    /**
+     * Add raw WHERE condition joined with OR
+     *
+     * @param array<mixed> $bindings
+     */
+    public function orWhereRaw(string $condition, array $bindings = []): void;
 
     /**
      * Add WHERE BETWEEN condition
@@ -137,9 +144,9 @@ interface WhereClauseInterface
     /**
      * Add OR WHERE condition
      *
-     * @param string|array<string, mixed> $column
+     * @param string|array<string, mixed>|callable $column
      */
-    public function orWhere(string|array $column, ?string $operator = null, mixed $value = null): self;
+    public function orWhere(string|array|callable $column, ?string $operator = null, mixed $value = null): self;
 
     /**
      * Get conditions as array format for update/delete operations

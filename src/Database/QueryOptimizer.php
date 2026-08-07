@@ -252,13 +252,13 @@ class QueryOptimizer
         // - Use STRAIGHT_JOIN hint for complex joins when beneficial
         // - Reorder joins for better execution based on execution plan
 
-        if (isset($analysis['execution_plan']) && preg_match('/\bJOIN\b/i', $query)) {
+        if (isset($analysis['execution_plan']) && preg_match('/\bJOIN\b/i', $query) === 1) {
             $potentialIssues = $analysis['potential_issues'] ?? [];
 
             foreach ($potentialIssues as $issue) {
                 if (($issue['type'] ?? '') === 'inefficient_join' && ($issue['severity'] ?? '') === 'high') {
                     // For severe join issues in MySQL, consider using STRAIGHT_JOIN hint
-                    return preg_replace('/\bJOIN\b/i', 'STRAIGHT_JOIN', $query, 1);
+                    return preg_replace('/\bJOIN\b/i', 'STRAIGHT_JOIN', $query, 1) ?? $query;
                 }
             }
         }
@@ -403,9 +403,9 @@ class QueryOptimizer
 
         // Check if this is an aggregate query with COUNT, SUM, etc.
         if (
-            preg_match('/\b(COUNT|SUM|AVG|MIN|MAX)\s*\(/i', $query)
-            && preg_match('/\bGROUP\s+BY\b/i', $query)
-            && !preg_match('/\bWITH\s+ROLLUP\b/i', $query)
+            preg_match('/\b(COUNT|SUM|AVG|MIN|MAX)\s*\(/i', $query) === 1
+            && preg_match('/\bGROUP\s+BY\b/i', $query) === 1
+            && preg_match('/\bWITH\s+ROLLUP\b/i', $query) !== 1
         ) {
             // Check if rollup would be beneficial based on analysis
             if (isset($analysis['potential_issues'])) {
@@ -416,7 +416,7 @@ class QueryOptimizer
                             '/\bGROUP\s+BY\b(.*?)(?=ORDER BY|LIMIT|HAVING|$)/is',
                             'GROUP BY$1 WITH ROLLUP ',
                             $query
-                        );
+                        ) ?? $query;
                     }
                 }
             }
@@ -492,7 +492,7 @@ class QueryOptimizer
             foreach ($analysis['potential_issues'] as $issue) {
                 if (($issue['type'] ?? '') === 'filesort' && isset($issue['suggestion'])) {
                     // Replace with a more efficient ordering based on available indexes
-                    if (preg_match('/\bORDER\s+BY\s+(.*?)(?=LIMIT|$)/is', $query, $matches)) {
+                    if (preg_match('/\bORDER\s+BY\s+(.*?)(?=LIMIT|$)/is', $query, $matches) === 1) {
                         return str_replace($matches[0], "ORDER BY {$issue['suggestion']} ", $query);
                     }
                 }

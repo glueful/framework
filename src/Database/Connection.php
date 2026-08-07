@@ -453,7 +453,7 @@ class Connection implements DatabaseInterface
         // If absolute, use as-is
         if (
             str_starts_with($path, '/') || str_starts_with($path, DIRECTORY_SEPARATOR) ||
-            (PHP_OS_FAMILY === 'Windows' && preg_match('/^[a-zA-Z]:/', $path))
+            (PHP_OS_FAMILY === 'Windows' && preg_match('/^[a-zA-Z]:/', $path) === 1)
         ) {
             return $path;
         }
@@ -542,7 +542,11 @@ class Connection implements DatabaseInterface
             if ($this->pooledConnection === null) {
                 $this->pooledConnection = $this->pool->acquire();
             }
-            return $this->pooledConnection->getPDO();
+            $pdo = $this->pooledConnection->getPDO();
+            if ($pdo === null) {
+                throw new \RuntimeException('Pooled connection has no active PDO handle.');
+            }
+            return $pdo;
         }
 
         // Fallback to legacy connection reuse

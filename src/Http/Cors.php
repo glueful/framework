@@ -132,7 +132,7 @@ class Cors
             $allowedOrigins = ['*'];
         } elseif (is_string($allowedOrigins)) {
             $allowedOrigins = array_map('trim', explode(',', $allowedOrigins));
-            $allowedOrigins = array_values(array_filter($allowedOrigins));
+            $allowedOrigins = array_values(array_filter($allowedOrigins, static fn (string $s): bool => $s !== ''));
         } elseif (!is_array($allowedOrigins)) {
             $allowedOrigins = [];
         }
@@ -142,7 +142,7 @@ class Cors
         ];
         if (is_string($allowedHeaders)) {
             $allowedHeaders = array_map('trim', explode(',', $allowedHeaders));
-            $allowedHeaders = array_filter($allowedHeaders);
+            $allowedHeaders = array_filter($allowedHeaders, static fn (string $s): bool => $s !== '');
         } elseif (!is_array($allowedHeaders)) {
             $allowedHeaders = [];
         }
@@ -152,7 +152,7 @@ class Cors
         ];
         if (is_string($exposedHeaders)) {
             $exposedHeaders = array_map('trim', explode(',', $exposedHeaders));
-            $exposedHeaders = array_filter($exposedHeaders);
+            $exposedHeaders = array_filter($exposedHeaders, static fn (string $s): bool => $s !== '');
         } elseif (!is_array($exposedHeaders)) {
             $exposedHeaders = [];
         }
@@ -353,7 +353,7 @@ class Cors
      */
     public function applyToResponse(Request $request, SymfonyResponse $response): void
     {
-        $origin = $request->headers->get('Origin', '');
+        $origin = $request->headers->get('Origin', '') ?? '';
         if ($origin === '' || $response->headers->has('Access-Control-Allow-Origin')) {
             return;
         }

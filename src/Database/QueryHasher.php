@@ -83,13 +83,11 @@ class QueryHasher
     protected function normalizeQuery(string $query): string
     {
         // Remove comments
-        $query = preg_replace('/--.*$/m', '', $query);
-        $query = preg_replace('!/\*.*?\*/!s', '', $query);
+        $query = preg_replace('/--.*$/m', '', $query) ?? $query;
+        $query = preg_replace('!/\*.*?\*/!s', '', $query) ?? $query;
 
         // Normalize whitespace
-        $query = preg_replace('/\s+/', ' ', trim($query));
-
-        return $query;
+        return preg_replace('/\s+/', ' ', trim($query)) ?? trim($query);
     }
 
     /**
@@ -104,7 +102,9 @@ class QueryHasher
         ksort($params);
 
         // Use JSON encoding to handle various data types consistently
-        return json_encode($params, JSON_UNESCAPED_SLASHES);
+        $encoded = json_encode($params, JSON_UNESCAPED_SLASHES);
+
+        return $encoded === false ? '' : $encoded;
     }
 
     /**

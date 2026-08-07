@@ -195,7 +195,7 @@ class QueueManager
      */
     public function getAvailableConnections(): array
     {
-        return array_keys($this->config['connections'] ?? []);
+        return array_map('strval', array_keys($this->config['connections'] ?? []));
     }
 
     /**
@@ -322,9 +322,13 @@ class QueueManager
     private function normalizeConfig(array $config): array
     {
         // Set defaults
+        $connections = $config['connections'] ?? [];
+        if (!is_array($connections)) {
+            $connections = [];
+        }
         $normalized = [
             'default' => $config['default'] ?? 'database',
-            'connections' => $config['connections'] ?? []
+            'connections' => $connections
         ];
 
         // Add default database connection if none specified

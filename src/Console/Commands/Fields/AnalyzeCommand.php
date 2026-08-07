@@ -432,7 +432,7 @@ class AnalyzeCommand extends BaseCommand
      */
     private function outputJson(array $analysis): void
     {
-        $this->line(json_encode($analysis, JSON_PRETTY_PRINT));
+        $this->line($this->jsonForDisplay($analysis, JSON_PRETTY_PRINT));
     }
 
     /**

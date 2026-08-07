@@ -63,7 +63,7 @@ trait AuthorizationTrait
 
         if (!$this->can($permission, $resource, $context)) {
             throw new UnauthorizedException(
-                $this->getCachedUserUuid(),
+                $this->getCachedUserUuid() ?? '',
                 $permission,
                 $resource,
                 sprintf('You do not have permission to %s on %s', $permission, $resource)
@@ -103,7 +103,7 @@ trait AuthorizationTrait
         );
 
         return PermissionHelper::hasAnyPermission(
-            $this->getCachedUserUuid(),
+            $this->getCachedUserUuid() ?? '',
             $permissions,
             $resource,
             $permissionContext->toArray()

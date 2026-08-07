@@ -44,7 +44,13 @@ class AnonymousResourceCollection extends ResourceCollection
             if ($resource instanceof JsonResource) {
                 $collected[$key] = $resource;
             } else {
-                $collected[$key] = new $collects($resource);
+                $instance = new $collects($resource);
+                if (!$instance instanceof JsonResource) {
+                    throw new \InvalidArgumentException(
+                        "Collected resource class must extend JsonResource: {$collects}"
+                    );
+                }
+                $collected[$key] = $instance;
             }
         }
 

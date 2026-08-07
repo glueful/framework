@@ -45,7 +45,7 @@ class RequestHelper
     public static function getRequestData(?Request $request = null): array
     {
         $request = $request ?? self::resolveRequest();
-        $contentType = $request->headers->get('Content-Type', '');
+        $contentType = $request->headers->get('Content-Type', '') ?? '';
 
         if (str_contains($contentType, 'application/json')) {
             $content = $request->getContent();
@@ -64,17 +64,21 @@ class RequestHelper
     public static function getPutData(?Request $request = null): array
     {
         $request = $request ?? self::resolveRequest();
-        $contentType = $request->headers->get('Content-Type', '');
+        $contentType = $request->headers->get('Content-Type', '') ?? '';
 
         if (str_contains($contentType, 'application/json')) {
             $content = $request->getContent();
             return ($content !== '' && $content !== false) ? (json_decode($content, true) ?? []) : [];
         }
 
-        // For form-encoded PUT data
+        // For form-encoded PUT data (parse_str yields int keys for numeric names)
         $content = $request->getContent();
         parse_str($content, $data);
-        return $data;
+        $result = [];
+        foreach ($data as $key => $value) {
+            $result[(string) $key] = $value;
+        }
+        return $result;
     }
 
     /**
