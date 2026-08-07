@@ -7,6 +7,7 @@ namespace Glueful\Database\Execution;
 use PDO;
 use PDOStatement;
 use PDOException;
+use Glueful\Database\Exceptions\ExceptionClassifier;
 use Glueful\Database\Execution\Interfaces\QueryExecutorInterface;
 use Glueful\Database\Execution\Interfaces\ParameterBinderInterface;
 use Glueful\Database\QueryLogger;
@@ -24,6 +25,7 @@ class QueryExecutor implements QueryExecutorInterface
     protected PDO $pdo;
     protected ParameterBinderInterface $binder;
     protected QueryLogger $logger;
+    protected ExceptionClassifier $classifier;
     protected ?QueryCacheService $cache = null;
     protected bool $cacheEnabled = false;
     protected ?int $cacheTtl = null;
@@ -38,6 +40,7 @@ class QueryExecutor implements QueryExecutorInterface
         $this->pdo = $pdo;
         $this->binder = $binder;
         $this->logger = $logger;
+        $this->classifier = new ExceptionClassifier();
     }
 
     /**
@@ -259,7 +262,7 @@ class QueryExecutor implements QueryExecutorInterface
             } catch (PDOException $e) {
                 $sanitizedBindings = $this->binder->sanitizeBindingsForLog($flattenedParams);
                 $this->logger->logQuery($sql, $sanitizedBindings, $timerId, $e, $purpose);
-                throw $e;
+                throw $this->classifier->classify($e, $this->getDriverName());
             }
         };
 

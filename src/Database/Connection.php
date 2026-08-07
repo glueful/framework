@@ -825,7 +825,8 @@ class Connection implements DatabaseInterface
             $this->transactionManager = new \Glueful\Database\Transaction\TransactionManager(
                 $this->getPDO(),
                 $savepointManager,
-                $queryLogger
+                $queryLogger,
+                $this->getDriverName()
             );
         }
 

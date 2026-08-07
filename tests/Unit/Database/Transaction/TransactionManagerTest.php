@@ -10,6 +10,10 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use Glueful\Database\Transaction\TransactionManager;
 use Glueful\Database\Transaction\Interfaces\SavepointManagerInterface;
 use Glueful\Database\QueryLogger;
+use Glueful\Database\Exceptions\ConnectionLostException;
+use Glueful\Database\Exceptions\DatabaseException;
+use Glueful\Database\Exceptions\DeadlockException;
+use Glueful\Database\Exceptions\LockContentionException;
 use PDO;
 
 #[CoversClass(TransactionManager::class)]
@@ -318,5 +322,239 @@ class TransactionManagerTest extends TestCase
         $this->manager->commit();
 
         $this->assertEquals(1, $executionCount, 'Callback should only execute once');
+    }
+
+    /**
+     * @param array{0: string, 1?: int|string|null, 2?: string} $errorInfo
+     */
+    private function rawPdoException(string $message, array $errorInfo): \PDOException
+    {
+        $e = new \PDOException($message);
+        $e->errorInfo = $errorInfo;
+
+        return $e;
+    }
+
+    /** A real SQLite PDO whose transaction methods can be made to fail. */
+    private function faultInjectingPdo(int $failBeginTimes): PDO
+    {
+        return new class ('sqlite::memory:', $failBeginTimes) extends PDO {
+            public int $beginAttempts = 0;
+            public int $rollbackCalls = 0;
+            public bool $failCommit = false;
+            public bool $failRollback = false;
+
+            public function __construct(string $dsn, private int $failBeginTimes)
+            {
+                parent::__construct($dsn);
+                $this->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            }
+
+            private function lockedException(): \PDOException
+            {
+                $e = new \PDOException('database is locked');
+                $e->errorInfo = ['HY000', 5, 'database is locked'];
+
+                return $e;
+            }
+
+            public function beginTransaction(): bool
+            {
+                $this->beginAttempts++;
+                if ($this->beginAttempts <= $this->failBeginTimes) {
+                    throw $this->lockedException();
+                }
+
+                return parent::beginTransaction();
+            }
+
+            public function commit(): bool
+            {
+                if ($this->failCommit) {
+                    throw $this->lockedException();
+                }
+
+                return parent::commit();
+            }
+
+            public function rollBack(): bool
+            {
+                $this->rollbackCalls++;
+                if ($this->failRollback) {
+                    throw $this->lockedException();
+                }
+
+                return parent::rollBack();
+            }
+        };
+    }
+
+    #[Test]
+    public function retryableFailureRetriesAndSucceeds(): void
+    {
+        $attempts = 0;
+        $deadlock = DeadlockException::fromPdo(
+            $this->rawPdoException('deadlock detected', ['40P01', 7, 'deadlock detected']),
+            'pgsql'
+        );
+
+        $result = $this->manager->transaction(function () use (&$attempts, $deadlock): string {
+            $attempts++;
+            if ($attempts === 1) {
+                throw $deadlock;
+            }
+
+            return 'done';
+        });
+
+        $this->assertSame('done', $result);
+        $this->assertSame(2, $attempts);
+    }
+
+    #[Test]
+    public function exhaustionRethrowsTheLastTypedFailure(): void
+    {
+        $this->manager->setMaxRetries(1);
+        $deadlock = DeadlockException::fromPdo(
+            $this->rawPdoException('deadlock detected', ['40P01', 7, 'deadlock detected']),
+            'pgsql'
+        );
+
+        try {
+            $this->manager->transaction(static function () use ($deadlock): never {
+                throw $deadlock;
+            });
+            $this->fail('Expected the deadlock to be rethrown');
+        } catch (DeadlockException $caught) {
+            $this->assertSame($deadlock, $caught);
+        }
+    }
+
+    #[Test]
+    public function connectionLostIsNotRetried(): void
+    {
+        $attempts = 0;
+        $lost = ConnectionLostException::fromPdo(
+            $this->rawPdoException('server has gone away', ['HY000', 2006, 'gone']),
+            'mysql'
+        );
+
+        try {
+            $this->manager->transaction(function () use (&$attempts, $lost): never {
+                $attempts++;
+                throw $lost;
+            });
+            $this->fail('Expected the failure to propagate');
+        } catch (ConnectionLostException $caught) {
+            $this->assertSame($lost, $caught);
+            $this->assertSame(1, $attempts);
+        }
+    }
+
+    #[Test]
+    public function maxRetriesZeroKeepsTheExistingGenericException(): void
+    {
+        $this->manager->setMaxRetries(0);
+        $invoked = false;
+
+        try {
+            $this->manager->transaction(function () use (&$invoked): string {
+                $invoked = true;
+
+                return 'unreachable';
+            });
+            $this->fail('Expected the exhaustion exception');
+        } catch (\Exception $e) {
+            $this->assertSame('Transaction failed after 0 retries due to deadlock.', $e->getMessage());
+            $this->assertNotInstanceOf(DatabaseException::class, $e);
+            $this->assertFalse($invoked, 'maxRetries=0 must keep making zero attempts');
+        }
+    }
+
+    #[Test]
+    public function rawPdoExceptionFromCallbackIsClassifiedBeforeTheMarkerCheck(): void
+    {
+        $manager = new TransactionManager(
+            $this->pdo,
+            $this->savepointManager,
+            $this->logger,
+            'mysql'
+        );
+        $manager->setMaxRetries(1);
+
+        try {
+            $manager->transaction(function (): never {
+                throw $this->rawPdoException(
+                    'Deadlock found when trying to get lock',
+                    ['40001', 1213, 'Deadlock found when trying to get lock']
+                );
+            });
+            $this->fail('Expected a classified deadlock');
+        } catch (DeadlockException $e) {
+            $this->assertSame('mysql', $e->driver());
+        }
+    }
+
+    #[Test]
+    public function beginTimeLockContentionRetriesWithoutRollingBack(): void
+    {
+        $pdo = $this->faultInjectingPdo(failBeginTimes: 1);
+        $manager = new TransactionManager($pdo, $this->savepointManager, $this->logger);
+
+        $result = $manager->transaction(static fn (): string => 'reached');
+
+        $this->assertSame('reached', $result);
+        $this->assertSame(2, $pdo->beginAttempts);
+        $this->assertSame(0, $pdo->rollbackCalls, 'rollback must not run when begin never succeeded');
+    }
+
+    #[Test]
+    public function directBeginClassifiesItsOwnFailure(): void
+    {
+        $pdo = $this->faultInjectingPdo(failBeginTimes: PHP_INT_MAX);
+        $manager = new TransactionManager($pdo, $this->savepointManager, $this->logger);
+
+        $this->expectException(LockContentionException::class);
+        $manager->begin();
+    }
+
+    #[Test]
+    public function directCommitClassifiesItsOwnFailure(): void
+    {
+        $pdo = $this->faultInjectingPdo(failBeginTimes: 0);
+        $manager = new TransactionManager($pdo, $this->savepointManager, $this->logger);
+        $manager->begin();
+        $pdo->failCommit = true;
+
+        $this->expectException(LockContentionException::class);
+        $manager->commit();
+    }
+
+    #[Test]
+    public function directRollbackClassifiesItsOwnFailure(): void
+    {
+        $pdo = $this->faultInjectingPdo(failBeginTimes: 0);
+        $manager = new TransactionManager($pdo, $this->savepointManager, $this->logger);
+        $manager->begin();
+        $pdo->failRollback = true;
+
+        $this->expectException(LockContentionException::class);
+        $manager->rollback();
+    }
+
+    #[Test]
+    public function nonPdoExceptionsRollBackAndRethrowUnclassified(): void
+    {
+        $domainFailure = new \RuntimeException('domain rule violated');
+
+        try {
+            $this->manager->transaction(static function () use ($domainFailure): never {
+                throw $domainFailure;
+            });
+            $this->fail('Expected the domain exception to propagate');
+        } catch (\RuntimeException $caught) {
+            $this->assertSame($domainFailure, $caught);
+            $this->assertFalse($this->manager->isActive(), 'transaction must have been rolled back');
+        }
     }
 }

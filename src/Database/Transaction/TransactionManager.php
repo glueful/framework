@@ -10,6 +10,9 @@ use Throwable;
 use Glueful\Database\Transaction\Interfaces\TransactionManagerInterface;
 use Glueful\Database\Transaction\Interfaces\SavepointManagerInterface;
 use Glueful\Database\QueryLogger;
+use Glueful\Database\Exceptions\DatabaseException;
+use Glueful\Database\Exceptions\ExceptionClassifier;
+use Glueful\Database\Exceptions\RetryableTransactionFailureInterface;
 
 /**
  * TransactionManager
@@ -26,6 +29,8 @@ class TransactionManager implements TransactionManagerInterface
     protected QueryLogger $logger;
     protected int $transactionLevel = 0;
     protected int $maxRetries = 3;
+    protected string $driver;
+    protected ExceptionClassifier $classifier;
 
     /**
      * Callbacks to execute after transaction commits, indexed by transaction level.
@@ -44,11 +49,15 @@ class TransactionManager implements TransactionManagerInterface
     public function __construct(
         PDO $pdo,
         SavepointManagerInterface $savepointManager,
-        QueryLogger $logger
+        QueryLogger $logger,
+        ?string $driver = null
     ) {
         $this->pdo = $pdo;
         $this->savepointManager = $savepointManager;
         $this->logger = $logger;
+        $driverName = $driver ?? $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        $this->driver = is_string($driverName) ? $driverName : '';
+        $this->classifier = new ExceptionClassifier();
     }
 
     /**
@@ -57,12 +66,15 @@ class TransactionManager implements TransactionManagerInterface
     public function transaction(callable $callback): mixed
     {
         $retryCount = 0;
+        $lastFailure = null;
 
         $this->logger->logEvent("Starting transaction", ['retries_allowed' => $this->maxRetries]);
 
         while ($retryCount < $this->maxRetries) {
-            $this->begin();
+            $began = false;
             try {
+                $this->begin();
+                $began = true;
                 $result = $callback($this);
                 $this->commit();
 
@@ -78,8 +90,17 @@ class TransactionManager implements TransactionManagerInterface
 
                 return $result;
             } catch (Exception $e) {
-                if ($this->isDeadlock($e)) {
-                    $this->rollback();
+                // begin()/commit()/rollback() classify their own failures; a raw
+                // PDOException here came from the callback's direct PDO use.
+                if ($e instanceof \PDOException && !$e instanceof DatabaseException) {
+                    $e = $this->classifier->classify($e, $this->driver);
+                }
+
+                if ($e instanceof RetryableTransactionFailureInterface) {
+                    if ($began) {
+                        $this->rollback();
+                    }
+                    $lastFailure = $e;
                     $retryCount++;
 
                     // Log deadlock and retry
@@ -96,7 +117,9 @@ class TransactionManager implements TransactionManagerInterface
                     // Progressive backoff
                     usleep(500000 * $retryCount);
                 } else {
-                    $this->rollback();
+                    if ($began) {
+                        $this->rollback();
+                    }
 
                     // Log transaction failure
                     $this->logger->logEvent(
@@ -122,6 +145,13 @@ class TransactionManager implements TransactionManagerInterface
             'error'
         );
 
+        if ($lastFailure !== null) {
+            throw $lastFailure;
+        }
+
+        // setMaxRetries(0) is valid and makes zero attempts, so no typed
+        // failure exists; retain the historical generic exception for that
+        // compatibility edge only.
         throw new Exception("Transaction failed after {$this->maxRetries} retries due to deadlock.");
     }
 
@@ -130,12 +160,16 @@ class TransactionManager implements TransactionManagerInterface
      */
     public function begin(): void
     {
-        if ($this->transactionLevel === 0) {
-            $this->pdo->beginTransaction();
-            $this->logger->logEvent("Transaction started", ['level' => 1], 'debug');
-        } else {
-            $this->savepointManager->create($this->transactionLevel);
-            $this->logger->logEvent("Savepoint created", ['level' => $this->transactionLevel + 1], 'debug');
+        try {
+            if ($this->transactionLevel === 0) {
+                $this->pdo->beginTransaction();
+                $this->logger->logEvent("Transaction started", ['level' => 1], 'debug');
+            } else {
+                $this->savepointManager->create($this->transactionLevel);
+                $this->logger->logEvent("Savepoint created", ['level' => $this->transactionLevel + 1], 'debug');
+            }
+        } catch (\PDOException $e) {
+            throw $this->classifier->classify($e, $this->driver);
         }
         $this->transactionLevel++;
     }
@@ -154,7 +188,11 @@ class TransactionManager implements TransactionManagerInterface
 
         if ($level === 1) {
             // Outermost transaction - actually commit to database
-            $this->pdo->commit();
+            try {
+                $this->pdo->commit();
+            } catch (\PDOException $e) {
+                throw $this->classifier->classify($e, $this->driver);
+            }
             $this->logger->logEvent("Transaction committed", ['level' => 1], 'debug');
             $this->transactionLevel = 0;
 
@@ -184,7 +222,11 @@ class TransactionManager implements TransactionManagerInterface
 
         if ($level === 1) {
             // Outermost transaction - actually rollback
-            $this->pdo->rollBack();
+            try {
+                $this->pdo->rollBack();
+            } catch (\PDOException $e) {
+                throw $this->classifier->classify($e, $this->driver);
+            }
             $this->logger->logEvent("Transaction rolled back", ['level' => 1], 'debug');
             $this->transactionLevel = 0;
 
@@ -193,7 +235,11 @@ class TransactionManager implements TransactionManagerInterface
             $this->clearCallbacks($level);
         } else {
             // Nested transaction (savepoint) - rollback to previous savepoint
-            $this->savepointManager->rollbackTo($level - 1);
+            try {
+                $this->savepointManager->rollbackTo($level - 1);
+            } catch (\PDOException $e) {
+                throw $this->classifier->classify($e, $this->driver);
+            }
             $this->logger->logEvent("Rolled back to savepoint", ['level' => $level - 1], 'debug');
             $this->transactionLevel--;
 
@@ -232,18 +278,6 @@ class TransactionManager implements TransactionManagerInterface
     public function getMaxRetries(): int
     {
         return $this->maxRetries;
-    }
-
-    /**
-     * Check if exception is a deadlock
-     */
-    protected function isDeadlock(Exception $e): bool
-    {
-        // MySQL deadlock error codes: 1213, 1205
-        // PostgreSQL deadlock error code: 40001
-        $deadlockCodes = ['1213', '1205', '40001'];
-
-        return in_array((string) $e->getCode(), $deadlockCodes, true);
     }
 
     /**
