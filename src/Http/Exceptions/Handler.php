@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Glueful\Http\Exceptions;
 
+use Glueful\Database\Exceptions\DatabaseExceptionInterface;
+use Glueful\Database\Exceptions\UniqueConstraintViolationException;
 use Glueful\Http\Response;
 use Glueful\Http\Exceptions\Contracts\ExceptionHandlerInterface;
 use Glueful\Http\Exceptions\Contracts\RenderableException;
@@ -83,6 +85,7 @@ class Handler implements ExceptionHandlerInterface
         HttpAuthException::class,
         HttpProtocolException::class,
         ExtensionException::class,
+        UniqueConstraintViolationException::class,
     ];
 
     /**
@@ -335,6 +338,14 @@ class Handler implements ExceptionHandlerInterface
      */
     protected function resolveLogChannel(Throwable $e): string
     {
+        // Typed database failures route to the database channel. This check
+        // must precede isFrameworkException(): these exceptions are
+        // constructed inside framework src/, so the origin check would
+        // otherwise capture every one of them as 'framework'.
+        if ($e instanceof DatabaseExceptionInterface) {
+            return 'database';
+        }
+
         if ($this->isFrameworkException($e)) {
             return 'framework';
         }
@@ -508,6 +519,7 @@ class Handler implements ExceptionHandlerInterface
         return match (true) {
             $e instanceof ValidationException => $this->renderValidationException($e),
             $e instanceof PermissionUnauthorizedException => $this->renderPermissionException($e),
+            $e instanceof UniqueConstraintViolationException => $this->renderUniqueConstraintViolation($e),
             $e instanceof HttpException => $this->renderHttpException($e),
             default => $this->renderGenericException($e),
         };
@@ -558,6 +570,21 @@ class Handler implements ExceptionHandlerInterface
             'message' => $e->getMessage() !== '' ? $e->getMessage() : $this->getDefaultMessage(403),
             'error' => $this->buildErrorDetails($e, 403),
         ], 403);
+    }
+
+    /**
+     * Render a unique-constraint violation as a conflict
+     *
+     * The message is fixed even in debug mode: the driver message leaks
+     * table, column, and value detail.
+     */
+    protected function renderUniqueConstraintViolation(UniqueConstraintViolationException $e): Response
+    {
+        return new Response([
+            'success' => false,
+            'message' => 'A conflicting record already exists.',
+            'error' => $this->buildErrorDetails($e, 409),
+        ], 409);
     }
 
     /**

@@ -6,6 +6,45 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Added
+- **Typed database exceptions** (`Glueful\Database\Exceptions`) — database failures are
+  now classified at the execution boundary into a typed hierarchy rooted at
+  `DatabaseException extends \PDOException` (so every existing `catch (\PDOException)`
+  keeps working): `UniqueConstraintViolationException`,
+  `ForeignKeyConstraintViolationException`, `NotNullConstraintViolationException` (all
+  under a `ConstraintViolationException` parent), `DeadlockException`,
+  `SerializationFailureException`, `LockContentionException`, and
+  `ConnectionLostException`, each carrying `sqlState()` / `driverCode()` / `driver()`
+  accessors with the original message, code, `errorInfo`, and exception chained as
+  `previous`. A stateless `ExceptionClassifier` maps SQLSTATE plus vendor codes with
+  driver-specific codes taking precedence (MySQL reports deadlocks under SQLSTATE
+  40001, so vendor-first is correctness, not style); no message matching. Retryability
+  is declared on the types: `RetryableTransactionFailureInterface` (deadlock,
+  serialization failure, lock contention) extends `TransientFailureInterface`
+  (additionally connection loss). Under default SQLite configuration all constraint
+  kinds are indistinguishable and classify as the generic parent; SQLite extended
+  result codes are honored when an application enables them.
+
+### Changed
+- **`TransactionManager` recognizes retryable failures by type, not by code list** —
+  the mixed driver-code/SQLSTATE list is gone; the retry loop checks
+  `RetryableTransactionFailureInterface`, `begin()` participates in the retry window,
+  and after exhaustion the final typed failure is rethrown instead of a generic
+  `Exception` (the `setMaxRetries(0)` zero-attempt edge keeps the historical generic
+  exception). Retry count, backoff, and callback semantics are unchanged. `begin()`/
+  `commit()`/`rollback()` classify their own PDO failures for direct callers. The
+  constructor gains an optional trailing `?string $driver` (derived from the PDO when
+  omitted).
+- **Unique-constraint violations render as HTTP 409** with a fixed conflict message
+  (in debug mode too — the driver message leaks column/value detail), are excluded
+  from error reporting, and all typed database exceptions route to the `database` log
+  channel.
+
+### Fixed
+- **PostgreSQL deadlocks (`40P01`) were never retried** — the old code list only
+  matched serialization failure (`40001`); deadlock-victim transactions now retry.
+  SQLite `SQLITE_BUSY`/`SQLITE_LOCKED` also become retryable.
+
 ## [1.75.0] - 2026-08-07 — Algieba
 
 **Theme: the whole framework type-checks at PHPStan level 8 with zero suppressed errors** —
