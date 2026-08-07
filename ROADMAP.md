@@ -26,7 +26,7 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
   errors of typing debt, raised the CI gate from level 6 to `level: 8` over `src/` + `config/`,
   and eliminated the PHPStan-2 upgrade baseline (all 111 entries fixed, file deleted). Engine
   upgraded to PHPStan 2.x; Rector adopted as advisory dev tooling (conservative wave-0 config,
-  non-blocking CI job).
+  local dry-run only).
 - **Latent bugs fixed by the sweep:** `orHas()`/`orWhereHas()` family fatal (missing
   `orWhereRaw`, now public API); post-auth request `email`/`username` attributes were always
   `null`; soft-delete on joined queries never qualified `deleted_at` (new

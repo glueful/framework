@@ -274,8 +274,10 @@ final class ClassSchemaReflector
         }
 
         if ($reflection->isBacked()) {
-            $backingType = (string) $reflection->getBackingType();
-            $type = $backingType === 'int' ? 'integer' : 'string';
+            $backingType = $reflection->getBackingType();
+            $type = $backingType instanceof \ReflectionNamedType && $backingType->getName() === 'int'
+                ? 'integer'
+                : 'string';
             $values = array_map(
                 static fn (\UnitEnum $case): string|int => $case instanceof \BackedEnum ? $case->value : $case->name,
                 $enum::cases(),

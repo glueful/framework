@@ -29,8 +29,8 @@ Notes.
   no dead-code or type-declaration sets yet (the level-8 campaign applies those per
   component), and `ReadOnlyClassRector` / `ReadOnlyPropertyRector` are skipped permanently
   as framework-BC hazards (extensions subclass framework classes). New scripts:
-  `composer rector` (dry-run) / `composer rector:fix` (apply); CI gains an advisory,
-  non-blocking Rector job. Current advisory surface: 440 files.
+  `composer rector` (dry-run) / `composer rector:fix` (apply); Rector runs locally on
+  demand, not in CI. Current advisory surface: 440 files.
 
 ### Changed
 - **`src/Container` is level-8 clean — first lane of the level-8 campaign.** The seven
