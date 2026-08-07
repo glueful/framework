@@ -184,17 +184,18 @@ class ServeCommand extends BaseCommand
     ): int {
         $basePath = dirname($publicDir);
 
-        $this->watcher = new FileWatcher(['api', 'src', 'config', 'routes'], $basePath);
-        $this->watcher->setOutput($this->output);
-        $this->watcher->setInterval($pollInterval);
-        $this->watcher->addExtensions(['php', 'env', 'json', 'yaml', 'yml']);
+        $watcher = new FileWatcher(['api', 'src', 'config', 'routes'], $basePath);
+        $this->watcher = $watcher;
+        $watcher->setOutput($this->output);
+        $watcher->setInterval($pollInterval);
+        $watcher->addExtensions(['php', 'env', 'json', 'yaml', 'yml']);
 
         while (!$this->shutdownRequested) {
             // Start server process
             $this->startServerProcess($host, $port, $publicDir);
 
             // Initialize watcher
-            $this->watcher->initialize();
+            $watcher->initialize();
 
             // Monitor for changes while server is running
             while (
@@ -203,7 +204,7 @@ class ServeCommand extends BaseCommand
                 && !$this->shutdownRequested
             ) {
                 // Check for file changes
-                $changes = $this->watcher->checkOnce();
+                $changes = $watcher->checkOnce();
 
                 if ($changes !== []) {
                     $firstFile = array_key_first($changes);
@@ -241,12 +242,13 @@ class ServeCommand extends BaseCommand
         $this->startServerProcess($host, $port, $publicDir);
 
         // Wait for process to exit
-        if ($this->serverProcess !== null) {
-            $this->serverProcess->wait(function (string $_type, string $buffer) {
+        $process = $this->serverProcess;
+        if ($process !== null) {
+            $process->wait(function (string $_type, string $buffer) {
                 $this->handleServerOutput($buffer);
             });
 
-            return $this->serverProcess->getExitCode() ?? self::SUCCESS;
+            return $process->getExitCode() ?? self::SUCCESS;
         }
 
         return self::SUCCESS;
@@ -332,7 +334,7 @@ class ServeCommand extends BaseCommand
     private function formatAndOutputLogLine(string $line): void
     {
         // Parse: [timestamp] ip [status]: METHOD /path
-        if (preg_match('/\[([^\]]+)\]\s+\S+\s+\[(\d+)\]:\s+(\w+)\s+(.+)/', $line, $m)) {
+        if (preg_match('/\[([^\]]+)\]\s+\S+\s+\[(\d+)\]:\s+(\w+)\s+(.+)/', $line, $m) === 1) {
             $entry = LogEntry::create(
                 method: $m[3],
                 path: $m[4],
@@ -346,7 +348,7 @@ class ServeCommand extends BaseCommand
         }
 
         // Handle connection messages (Accepted, Closed, etc.)
-        if (preg_match('/\[([^\]]+)\]\s+\S+\s+(.+)/', $line, $m)) {
+        if (preg_match('/\[([^\]]+)\]\s+\S+\s+(.+)/', $line, $m) === 1) {
             // Skip connection lifecycle messages in watch mode for cleaner output
             return;
         }

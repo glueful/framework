@@ -656,4 +656,14 @@ abstract class BaseCommand extends Command
 
         return $this->confirm($message, false);
     }
+
+    /**
+     * JSON-encode a value for console display; '[unencodable]' when encoding fails.
+     */
+    protected function jsonForDisplay(mixed $value, int $flags = 0): string
+    {
+        $encoded = json_encode($value, $flags);
+
+        return $encoded === false ? '[unencodable]' : $encoded;
+    }
 }

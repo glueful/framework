@@ -179,7 +179,7 @@ class ContainerCompileCommand extends BaseCommand
 
         // Clean existing compiled files
         $files = glob($outputDir . '/Compiled*.php');
-        foreach ($files as $file) {
+        foreach ($files === false ? [] : $files as $file) {
             unlink($file);
         }
 
@@ -339,6 +339,9 @@ class ContainerCompileCommand extends BaseCommand
 
         $containerFile = $outputDir . '/CompiledContainer.php';
         $fileSize = file_exists($containerFile) ? filesize($containerFile) : 0;
+        if ($fileSize === false) {
+            $fileSize = 0;
+        }
 
         $this->table(['Metric', 'Value'], [
             ['Compilation Time', sprintf('%.2f seconds', $compileTime)],

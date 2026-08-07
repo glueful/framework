@@ -85,7 +85,7 @@ final class ContainerMapCommand extends BaseCommand
                 $aliasTarget = ($def instanceof AliasDefinition) ? $def->getTarget() : '';
                 $tags = $serviceTags[$id] ?? [];
                 $deps = [];
-                if ($includeDeps && $def instanceof AutowireDefinition) {
+                if ($includeDeps && $def instanceof AutowireDefinition && class_exists($def->getClass())) {
                     $class = $def->getClass();
                     try {
                         $rc = new \ReflectionClass($class);

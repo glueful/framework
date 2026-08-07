@@ -438,10 +438,15 @@ class ProductionCommand extends BaseCommand
 
         // Apply template
         $templateContent = file_get_contents($templatePath);
+        if ($templateContent === false) {
+            throw new \RuntimeException("Failed to read env template: {$templatePath}");
+        }
 
         if (file_exists($envPath)) {
             $existingContent = file_get_contents($envPath);
-            $templateContent = $this->mergeEnvConfigs($existingContent, $templateContent);
+            if ($existingContent !== false) {
+                $templateContent = $this->mergeEnvConfigs($existingContent, $templateContent);
+            }
         }
 
         file_put_contents($envPath, $templateContent);
@@ -681,10 +686,13 @@ class ProductionCommand extends BaseCommand
         }
 
         $content = file_get_contents($envPath);
+        if ($content === false) {
+            return false;
+        }
         $pattern = "/^{$key}=.*/m";
 
-        if (preg_match($pattern, $content)) {
-            $content = preg_replace($pattern, "{$key}={$value}", $content);
+        if (preg_match($pattern, $content) === 1) {
+            $content = preg_replace($pattern, "{$key}={$value}", $content) ?? $content;
         } else {
             $content .= "\n{$key}={$value}";
         }

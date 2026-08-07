@@ -150,7 +150,8 @@ class ExpireCommand extends BaseCommand
         $totalSeconds = 0;
 
         // Parse patterns like 1h30m, 2d, 30m, 1h, etc.
-        if (preg_match_all('/(\d+)([dhms])/', $timeString, $matches, PREG_SET_ORDER)) {
+        $matchCount = preg_match_all('/(\d+)([dhms])/', $timeString, $matches, PREG_SET_ORDER);
+        if ($matchCount !== false && $matchCount > 0) {
             foreach ($matches as $match) {
                 $value = (int) $match[1];
                 $unit = $match[2];

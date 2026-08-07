@@ -82,7 +82,9 @@ final class CacheCommand extends BaseCommand
         // Step 4: Build cache from the resolved list.
         $output->writeln('4. <info>Building cache...</info>');
         try {
-            $this->extensions->writeCacheNow($classes);
+            /** @var list<class-string<\Glueful\Extensions\ServiceProvider>> $providerClasses */
+            $providerClasses = $classes;
+            $this->extensions->writeCacheNow($providerClasses);
             $output->writeln('   ✓ Cache built successfully');
         } catch (\Throwable $e) {
             $output->writeln("   <error>✗ Cache build failed: {$e->getMessage()}</error>");
@@ -93,7 +95,8 @@ final class CacheCommand extends BaseCommand
         $output->writeln('5. <info>Verifying cache...</info>');
         $verification = $this->verifyCacheIntegrity();
         if (!$verification['valid']) {
-            $output->writeln("<error>   ✗ Cache verification failed: {$verification['error']}</error>");
+            $verificationError = $verification['error'] ?? 'unknown error';
+            $output->writeln("<error>   ✗ Cache verification failed: {$verificationError}</error>");
             return self::FAILURE;
         }
         $output->writeln('   ✓ Cache verification passed');

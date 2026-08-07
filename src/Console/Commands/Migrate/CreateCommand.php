@@ -134,7 +134,7 @@ class CreateCommand extends BaseCommand
         $maxNumber = 0;
 
         foreach ($migrationFiles as $file) {
-            if (preg_match('/^(\d{3})_/', $file->getFilename(), $matches)) {
+            if (preg_match('/^(\d{3})_/', $file->getFilename(), $matches) === 1) {
                 $number = (int) $matches[1];
                 if ($number > $maxNumber) {
                     $maxNumber = $number;

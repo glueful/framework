@@ -129,7 +129,7 @@ class ControllerCommand extends BaseCommand
             return false;
         }
 
-        if (!preg_match('/^[A-Z][a-zA-Z0-9]*Controller$/', $name)) {
+        if (preg_match('/^[A-Z][a-zA-Z0-9]*Controller$/', $name) !== 1) {
             $this->error('Controller name must be in PascalCase and end with "Controller".');
             $this->tip('Example: TaskController, UserController, ApiController');
             return false;

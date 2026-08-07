@@ -71,7 +71,7 @@ class VersionCommand extends BaseCommand
             ];
         }
 
-        $this->line(json_encode($data, JSON_PRETTY_PRINT));
+        $this->line($this->jsonForDisplay($data, JSON_PRETTY_PRINT));
     }
 
     private function outputFormatted(bool $includeSystem): void

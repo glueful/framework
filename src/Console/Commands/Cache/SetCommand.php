@@ -153,7 +153,7 @@ class SetCommand extends BaseCommand
         $this->line('');
         $this->info('Stored value:');
         if (is_array($value) || is_object($value)) {
-            $this->line(json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+            $this->line($this->jsonForDisplay($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
         } else {
             $this->line((string) $value);
         }

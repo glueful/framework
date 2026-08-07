@@ -156,7 +156,7 @@ class ContainerDebugCommand extends BaseCommand
         $serviceData = $this->getServiceDetails($serviceId, $service, $showArguments);
 
         if ($format === 'json') {
-            $this->line(json_encode($serviceData, JSON_PRETTY_PRINT));
+            $this->line($this->jsonForDisplay($serviceData, JSON_PRETTY_PRINT));
         } elseif ($format === 'yaml') {
             $this->line($this->arrayToYaml($serviceData));
         } else {
@@ -193,7 +193,7 @@ class ContainerDebugCommand extends BaseCommand
         }
 
         if ($format === 'json') {
-            $this->line(json_encode($services, JSON_PRETTY_PRINT));
+            $this->line($this->jsonForDisplay($services, JSON_PRETTY_PRINT));
         } elseif ($format === 'yaml') {
             $this->line($this->arrayToYaml(['services' => $services]));
         } else {
@@ -232,7 +232,7 @@ class ContainerDebugCommand extends BaseCommand
         ];
 
         if ($format === 'json') {
-            $this->line(json_encode($aliases, JSON_PRETTY_PRINT));
+            $this->line($this->jsonForDisplay($aliases, JSON_PRETTY_PRINT));
         } elseif ($format === 'yaml') {
             $this->line($this->arrayToYaml(['aliases' => $aliases]));
         } else {
@@ -252,7 +252,7 @@ class ContainerDebugCommand extends BaseCommand
         ];
 
         if ($format === 'json') {
-            $this->line(json_encode($taggedServices, JSON_PRETTY_PRINT));
+            $this->line($this->jsonForDisplay($taggedServices, JSON_PRETTY_PRINT));
         } elseif ($format === 'yaml') {
             $this->line($this->arrayToYaml(['tagged_services' => $taggedServices]));
         } else {
@@ -279,7 +279,7 @@ class ContainerDebugCommand extends BaseCommand
         ];
 
         if ($format === 'json') {
-            $this->line(json_encode($parameters, JSON_PRETTY_PRINT));
+            $this->line($this->jsonForDisplay($parameters, JSON_PRETTY_PRINT));
         } elseif ($format === 'yaml') {
             $this->line($this->arrayToYaml(['parameters' => $parameters]));
         } else {
@@ -330,7 +330,7 @@ class ContainerDebugCommand extends BaseCommand
         ];
 
         if ($format === 'json') {
-            $this->line(json_encode($overview, JSON_PRETTY_PRINT));
+            $this->line($this->jsonForDisplay($overview, JSON_PRETTY_PRINT));
         } elseif ($format === 'yaml') {
             $this->line($this->arrayToYaml($overview));
         } else {

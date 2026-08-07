@@ -132,6 +132,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   a guarded JSON helper; attribute route loading and gate-attribute checks guard
   `class_exists` before reflection; `Route::where()` rejects a null constraint by name; and
   the auth middleware's query-param token gate null-checks its context before `config()`.
+- **`Console` is level-8 clean** (85 errors) — 30 of 31 areas now clean and CI-enforced;
+  only `Database` (214) remains. `BaseCommand` gains a protected `jsonForDisplay()` helper —
+  JSON-encode for console output with an `'[unencodable]'` fallback — replacing ~30 raw
+  `json_encode()` display calls that could pass `false` into `line()`/`text()`/`writeln()`.
+  Elsewhere: scaffold/event generators pin their class-name `preg_match` validation;
+  `db:profile` throws named errors on unreadable query files and guards empty benchmark
+  samples; `system:production` guards env template/file reads; `serve`'s watcher and server
+  process are held in non-null locals; container compile/validate guard `glob`/`filesize`;
+  and load-average displays guard `sys_getloadavg()` returning `false`.
 - **Static analysis upgraded to PHPStan 2.x** (`phpstan/phpstan ^2.0` with `phpstan-phpunit`,
   `phpstan-strict-rules`, and `phpstan-deprecation-rules` on their 2.x majors). The level-6 CI
   gate stays green: the 2.x engine's new findings are frozen in `phpstan-baseline.neon`

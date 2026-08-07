@@ -527,7 +527,7 @@ class SchedulerCommand extends BaseCommand
     {
         switch ($format) {
             case 'json':
-                $this->io->text(json_encode($jobs, JSON_PRETTY_PRINT));
+                $this->io->text($this->jsonForDisplay($jobs, JSON_PRETTY_PRINT));
                 break;
             case 'plain':
                 foreach ($jobs as $job) {
@@ -682,7 +682,7 @@ class SchedulerCommand extends BaseCommand
         // Check system resources
         if (function_exists('sys_getloadavg')) {
             $load = sys_getloadavg();
-            if ($load[0] > 5.0) {
+            if ($load !== false && $load[0] > 5.0) {
                 $warnings[] = 'High system load detected: ' . round($load[0], 2);
             }
         }

@@ -67,7 +67,7 @@ class WebhookTestCommand extends BaseCommand
             $subscription = Webhook::findSubscription($subscriptionUuid);
             if ($subscription === null) {
                 if ($jsonOutput) {
-                    $this->line(json_encode(['error' => 'Subscription not found']));
+                    $this->line($this->jsonForDisplay(['error' => 'Subscription not found']));
                 } else {
                     $this->error('Subscription not found: ' . $subscriptionUuid);
                 }
@@ -87,11 +87,12 @@ class WebhookTestCommand extends BaseCommand
         $result = Webhook::test($url, $event, $secret);
 
         if ($jsonOutput) {
-            $this->line(json_encode($result, JSON_PRETTY_PRINT));
+            $this->line($this->jsonForDisplay($result, JSON_PRETTY_PRINT));
         } else {
             if ($result['success']) {
                 $this->success('Webhook test successful!');
-                $this->line("  Status Code: {$result['status_code']}");
+                $statusCode = $result['status_code'] ?? 'n/a';
+                $this->line("  Status Code: {$statusCode}");
                 if (isset($result['response']) && $result['response'] !== '') {
                     $responsePreview = substr($result['response'], 0, 500);
                     if (strlen($result['response']) > 500) {

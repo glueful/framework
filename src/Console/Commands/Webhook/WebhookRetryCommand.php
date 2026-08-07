@@ -83,7 +83,7 @@ class WebhookRetryCommand extends BaseCommand
         if (!$jsonOutput) {
             $this->error('Please specify either a delivery UUID or use --failed for bulk retry');
         } else {
-            $this->line(json_encode(['error' => 'No delivery specified']));
+            $this->line($this->jsonForDisplay(['error' => 'No delivery specified']));
         }
 
         return self::FAILURE;
@@ -95,7 +95,7 @@ class WebhookRetryCommand extends BaseCommand
 
         if ($delivery === null) {
             if ($jsonOutput) {
-                $this->line(json_encode(['error' => 'Delivery not found']));
+                $this->line($this->jsonForDisplay(['error' => 'Delivery not found']));
             } else {
                 $this->error('Delivery not found: ' . $uuid);
             }
@@ -105,7 +105,7 @@ class WebhookRetryCommand extends BaseCommand
         if (!$delivery->isFailed() && !$delivery->isRetrying()) {
             if ($jsonOutput) {
                 $response = ['error' => 'Delivery is not in a failed state', 'status' => $delivery->status];
-                $this->line(json_encode($response));
+                $this->line($this->jsonForDisplay($response));
             } else {
                 $this->error("Delivery is not in a failed state (current: {$delivery->status})");
             }
@@ -114,7 +114,7 @@ class WebhookRetryCommand extends BaseCommand
 
         if ($dryRun) {
             if ($jsonOutput) {
-                $this->line(json_encode(['dry_run' => true, 'would_retry' => $uuid]));
+                $this->line($this->jsonForDisplay(['dry_run' => true, 'would_retry' => $uuid]));
             } else {
                 $this->info("Would retry delivery: {$uuid}");
             }
@@ -124,7 +124,7 @@ class WebhookRetryCommand extends BaseCommand
         $success = Webhook::retry($uuid);
 
         if ($jsonOutput) {
-            $this->line(json_encode([
+            $this->line($this->jsonForDisplay([
                 'success' => $success,
                 'uuid' => $uuid,
                 'queued' => $success,
@@ -147,7 +147,7 @@ class WebhookRetryCommand extends BaseCommand
             $timestamp = strtotime($since);
             if ($timestamp === false) {
                 if ($jsonOutput) {
-                    $this->line(json_encode(['error' => 'Invalid date format']));
+                    $this->line($this->jsonForDisplay(['error' => 'Invalid date format']));
                 } else {
                     $this->error('Invalid date format: ' . $since);
                 }
@@ -160,7 +160,7 @@ class WebhookRetryCommand extends BaseCommand
 
         if (count($deliveries) === 0) {
             if ($jsonOutput) {
-                $this->line(json_encode(['message' => 'No failed deliveries found', 'count' => 0]));
+                $this->line($this->jsonForDisplay(['message' => 'No failed deliveries found', 'count' => 0]));
             } else {
                 $this->info('No failed deliveries found');
             }
@@ -170,7 +170,7 @@ class WebhookRetryCommand extends BaseCommand
         if ($dryRun) {
             $uuids = array_map(fn(WebhookDelivery $d) => $d->uuid, $deliveries);
             if ($jsonOutput) {
-                $this->line(json_encode([
+                $this->line($this->jsonForDisplay([
                     'dry_run' => true,
                     'would_retry' => count($deliveries),
                     'deliveries' => $uuids,
@@ -200,7 +200,7 @@ class WebhookRetryCommand extends BaseCommand
         }
 
         if ($jsonOutput) {
-            $this->line(json_encode([
+            $this->line($this->jsonForDisplay([
                 'total' => count($deliveries),
                 'queued' => $queued,
                 'failed' => $failed,

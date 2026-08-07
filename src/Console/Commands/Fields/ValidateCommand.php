@@ -509,6 +509,6 @@ class ValidateCommand extends BaseCommand
      */
     private function outputJson(array $validation): void
     {
-        $this->line(json_encode($validation, JSON_PRETTY_PRINT));
+        $this->line($this->jsonForDisplay($validation, JSON_PRETTY_PRINT));
     }
 }

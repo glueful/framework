@@ -24,11 +24,11 @@ vendor/bin/phpstan analyse src/Database --level=8 --no-progress --memory-limit=1
 
 ## Scope by area
 
-| Area | Errors | | Area | Errors |
-|---|---:|---|---|---:|
-| `Database` | 214 | | `Console` | 85 |
+| Area | Errors |
+|---|---:|
+| `Database` | 214 |
 
-**299 total across the 2 remaining areas.** The other 29 areas are level-8 clean ✓ and
+**214 total in the 1 remaining area.** The other 30 areas are level-8 clean ✓ and
 ratcheted in CI. Regenerate for the exact, current set.
 
 **Cleaned lanes (ratcheted):** a lane cleaned to level 8 joins the CI static job's
@@ -60,6 +60,9 @@ each newly cleaned directory to its path list.
   (a bare numeric-string key was being silently cast to int by PHP); CSRF token caching
   throws on an unencodable token record; lockdown state files read through a guarded
   JSON helper.
+- `Console` — cleaned 2026-08-07. `BaseCommand::jsonForDisplay()` centralizes JSON output
+  for commands ('[unencodable]' on failure); scaffold name validation pins `preg_match`;
+  file reads/`glob`/`sys_getloadavg` guard their falses.
 
 ## Recommended adoption strategy
 

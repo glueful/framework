@@ -161,7 +161,7 @@ class PerformanceCommand extends BaseCommand
         switch ($format) {
             case 'json':
                 $report = $dashboard->generateJsonReport();
-                $this->line(json_encode($report, JSON_PRETTY_PRINT));
+                $this->line($this->jsonForDisplay($report, JSON_PRETTY_PRINT));
                 break;
 
             case 'metrics':
