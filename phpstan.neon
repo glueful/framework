@@ -6,6 +6,10 @@ includes:
 
 parameters:
     level: 8
+    # Pin analysis to PHP 8.3 (the minimum supported version and the CI runtime).
+    # PHPStan derives core-class signatures from the PHP version it targets, so an
+    # unpinned run on a newer local PHP can pass while the same code fails on CI.
+    phpVersion: 80300
     paths:
         - src
         - config

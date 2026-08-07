@@ -274,14 +274,13 @@ final class ClassSchemaReflector
         }
 
         if ($reflection->isBacked()) {
-            $backingType = $reflection->getBackingType();
-            $type = $backingType instanceof \ReflectionNamedType && $backingType->getName() === 'int'
-                ? 'integer'
-                : 'string';
             $values = array_map(
                 static fn (\UnitEnum $case): string|int => $case instanceof \BackedEnum ? $case->value : $case->name,
                 $enum::cases(),
             );
+            // Infer the schema type from the values themselves rather than
+            // getBackingType(), whose reflected type varies across PHP versions.
+            $type = is_int($values[0] ?? null) ? 'integer' : 'string';
             return ['type' => $type, 'enum' => array_values($values)];
         }
 

@@ -255,7 +255,8 @@ class LockdownMiddleware implements RouteMiddleware
                 }
 
                 // Validate IP and exclude private/reserved ranges for public IPs
-                if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false) {
+                $flags = FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE;
+                if (filter_var($ip, FILTER_VALIDATE_IP, $flags) !== false) {
                     return $ip;
                 }
 

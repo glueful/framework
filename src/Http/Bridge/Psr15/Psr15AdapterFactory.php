@@ -48,7 +48,14 @@ final class Psr15AdapterFactory
         $psrBridge = self::$psrBridge;
         $foundationBridge = self::$httpFoundationBridge;
 
-        return function (SfRequest $request, callable $next) use ($middleware, $psrBridge, $foundationBridge): SfResponse {
+        return function (
+            SfRequest $request,
+            callable $next
+        ) use (
+            $middleware,
+            $psrBridge,
+            $foundationBridge
+        ): SfResponse {
             $handler = new RequestHandlerAdapter($next, $psrBridge, $foundationBridge);
             $psrRequest = $psrBridge->createRequest($request);
             $psrResponse = $middleware->process($psrRequest, $handler);

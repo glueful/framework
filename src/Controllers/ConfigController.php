@@ -425,9 +425,13 @@ class ConfigController extends BaseController
 
     /**
      * Load all configuration files
-     */
-    /**
-     * @return array<int, array{name: string, config: array<string, mixed>, source: string, extension_version?: string|null}>
+     *
+     * @return array<int, array{
+     *     name: string,
+     *     config: array<string, mixed>,
+     *     source: string,
+     *     extension_version?: string|null
+     * }>
      */
     private function loadAllConfigs(): array
     {
