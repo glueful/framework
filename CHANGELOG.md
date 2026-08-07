@@ -6,6 +6,17 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.75.0] - 2026-08-07 — Algieba
+
+**Theme: the whole framework type-checks at PHPStan level 8 with zero suppressed errors** —
+a 31-area campaign took the gate from level 6 (914 errors of debt) to level 8 with no baseline
+file, on the PHPStan 2.x engine, with Rector adopted alongside as advisory dev tooling. The
+sweep surfaced and fixed real latent bugs: a reachable `orHas()` fatal, auth request attributes
+that were always `null`, an unreachable soft-delete branch, and more below. Moderate risk: the
+diff surface is wide but behavior-preserving by construction — every area landed behind the
+full test suite, and the handful of genuine behavior changes are called out in the Upgrade
+Notes.
+
 ### Added
 - **`QueryBuilder::orWhereRaw()` / `WhereClause::orWhereRaw()`** — raw WHERE condition joined
   with `OR`. Fixes a reachable fatal: the ORM's relation-count machinery dispatched to
@@ -197,6 +208,27 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   in median/`formatBytes` calculations (`intdiv`/`(int) floor` instead of float keys), a
   malformed `@SuppressWarnings` docblock in `CSRFMiddleware` that broke PHPDoc parsing, and a
   dead `is_bool` branch on `delete()`'s `int`-typed return in `BaseRepository`.
+
+### Upgrade Notes
+- **For applications: `composer update glueful/framework` is enough.** No new env vars, no new
+  config keys, no migrations, no default changes.
+- **Contract-visible changes to audit if you extend framework internals:**
+  - `WhereClauseInterface` gained `orWhereRaw()` — a custom implementation of that interface
+    (rare) must add the method.
+  - `Model::toJson()` / `Collection::toJson()` now throw a named error on an unencodable
+    payload instead of returning `false` typed as `string`; likewise
+    `FileUploader::calculateChecksum()` throws `UploadException` on an unreadable file.
+  - The ORM relation machinery is typed against `Model` instead of `object` — an extension
+    subclassing `Relation` with non-Model parents would now fail analysis (it never worked at
+    runtime).
+- **Behavior restored by bug fixes** (previously broken, now working as documented): the
+  post-auth request attributes `email`/`username` are populated instead of always `null`;
+  soft-delete restore/delete on joined queries qualifies the `deleted_at` column; installs
+  with an empty `keyPrefix` get `QueryCacheService`'s intended default prefix — their query
+  cache re-keys once after upgrade (a one-time round of cache misses, not an error).
+- **For contributors and CI forks:** the analysis gate is now `level: 8` over `src/` +
+  `config/` with no baseline file — new findings are fixed at the source, not suppressed.
+  PHPStan runs on the 2.x engine; `composer rector` exists as an advisory dry-run.
 
 ## [1.74.1] - 2026-07-30 — Algenib
 
