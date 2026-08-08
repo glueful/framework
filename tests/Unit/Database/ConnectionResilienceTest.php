@@ -9,7 +9,9 @@ use Glueful\Database\Connection;
 use Glueful\Database\ConnectionPool;
 use Glueful\Database\Exceptions\CommitOutcomeUnknownException;
 use Glueful\Database\Exceptions\ConnectionLostException;
+use Glueful\Database\Exceptions\DatabaseException;
 use Glueful\Database\Exceptions\DeadlockException;
+use Glueful\Database\Exceptions\ExceptionClassifier;
 use Glueful\Database\PooledConnection;
 use Glueful\Database\QueryLogger;
 use Glueful\Database\Resilience\UsleepSleeper;
@@ -319,6 +321,147 @@ final class ConnectionResilienceTest extends TestCase
             $invocations,
             'a failed reconnect must never fall through to the manager or the callback'
         );
+    }
+
+    #[Test]
+    public function failedEstablishmentIsTreatedAsAConnectionLoss(): void
+    {
+        // Premise (the seam this pins): a REFUSED connect is not a statement-level
+        // loss to the classifier. MySQL reports 2002/HY000, which has no vendor-map
+        // entry and no SQLSTATE family rule.
+        $refused = new \PDOException('SQLSTATE[HY000] [2002] Connection refused');
+        $refused->errorInfo = ['HY000', 2002, 'Connection refused'];
+        $classified = (new ExceptionClassifier())->classify($refused, 'mysql');
+        self::assertNotInstanceOf(
+            ConnectionLostException::class,
+            $classified,
+            'precondition: the statement-level classifier maps a refused connect to a generic failure'
+        );
+        self::assertInstanceOf(DatabaseException::class, $classified);
+
+        $connection = new class ([
+            'engine' => 'sqlite',
+            'sqlite' => ['primary' => $this->newDbPath()],
+            'pooling' => ['enabled' => false],
+            'retry' => ['max_attempts' => 3, 'backoff_base_ms' => 0],
+        ]) extends Connection {
+            public bool $failEstablish = false;
+            public int $establishAttempts = 0;
+
+            public function getPDO(): PDO
+            {
+                if ($this->failEstablish) {
+                    $this->establishAttempts++;
+                    $e = new \PDOException('SQLSTATE[HY000] [2002] Connection refused');
+                    $e->errorInfo = ['HY000', 2002, 'Connection refused'];
+
+                    throw $e;
+                }
+
+                return parent::getPDO();
+            }
+        };
+        $connection->getPDO();
+        $invocations = 0;
+
+        try {
+            // Establishment starts failing only AFTER the manager is built, so this
+            // exercises the RECOVERY path (reconnect), not lazy first construction.
+            $connection->transaction(function () use ($connection, &$invocations): never {
+                $invocations++;
+                $connection->failEstablish = true;
+                throw $this->loss('the original statement-level loss');
+            });
+            self::fail('Expected the exhausted budget to rethrow');
+        } catch (\Throwable $caught) {
+            self::assertInstanceOf(
+                ConnectionLostException::class,
+                $caught,
+                'a failed establishment must surface as a LOSS, never as a generic DatabaseException'
+            );
+            self::assertSame('HY000', $caught->sqlState(), 'the connect failure metadata is preserved');
+            self::assertSame(2002, $caught->driverCode());
+            self::assertInstanceOf(
+                DatabaseException::class,
+                $caught->getPrevious(),
+                'the classified connect failure is chained, not discarded'
+            );
+        }
+
+        self::assertSame(
+            2,
+            $connection->establishAttempts,
+            'the recovery loop keeps consuming attempts instead of aborting on the first connect error'
+        );
+        self::assertSame(1, $invocations, 'no unguarded callback invocation between failed reconnects');
+    }
+
+    #[Test]
+    public function guardRefusalPreservesTheOriginalLoss(): void
+    {
+        $path = $this->newDbPath();
+        $connection = $this->sqliteConnection(path: $path);
+        $this->createItemsTable($connection);
+
+        // A rollback that reports a NON-loss error WITHOUT rolling back: the manager
+        // resets its own bookkeeping but the server-side transaction stays open, so
+        // the reconnect guard will refuse.
+        $faulting = new class ('sqlite:' . $path) extends PDO {
+            public bool $failRollback = false;
+
+            public function __construct(string $dsn)
+            {
+                parent::__construct($dsn);
+                $this->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            }
+
+            public function rollBack(): bool
+            {
+                if ($this->failRollback) {
+                    $e = new \PDOException('rollback reported a driver error');
+                    $e->errorInfo = ['HY000', 1, 'rollback reported a driver error'];
+
+                    throw $e;
+                }
+
+                return parent::rollBack();
+            }
+        };
+
+        self::setOn(Connection::class, $connection, 'pdo', $faulting);
+        $manager = new TransactionManager(
+            $faulting,
+            new SavepointManager($faulting),
+            new QueryLogger(),
+            'sqlite',
+            new UsleepSleeper()
+        );
+        self::setOn(Connection::class, $connection, 'transactionManager', $manager);
+
+        $loss = $this->loss('the classified primary loss');
+        $invocations = 0;
+
+        try {
+            $connection->transaction(function () use ($faulting, $loss, &$invocations): never {
+                $invocations++;
+                $faulting->failRollback = true;
+                throw $loss;
+            });
+            self::fail('Expected the original loss');
+        } catch (\Throwable $caught) {
+            self::assertSame(
+                $loss,
+                $caught,
+                'a refused reconnect must rethrow the classified loss, never mask it with a LogicException'
+            );
+        }
+
+        self::assertSame(1, $invocations, 'the refusal is terminal: nothing replays');
+        self::assertFalse(
+            $manager->connectionPresumedDead(),
+            'precondition: a non-loss rollback failure never flags the handle'
+        );
+        self::assertTrue($faulting->inTransaction(), 'precondition: the guard saw a live raw transaction');
     }
 
     // -------------------------------------------------------- idempotentRead

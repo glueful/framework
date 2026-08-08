@@ -1123,6 +1123,23 @@ class Connection implements DatabaseInterface
                     'warning'
                 );
                 // Loop back: the NEXT reconnect is gated by another tryConsume().
+            } catch (\LogicException $guardRefusal) {
+                // The guard refused because a transaction is still open on the raw
+                // handle — e.g. the manager's rollback failed with a NON-loss error,
+                // which resets its bookkeeping but leaves the server-side transaction
+                // untouched. Recovery is impossible, but the classified loss is the
+                // truthful failure: never let the guard's LogicException mask it.
+                $this->resilienceLogger->logEvent(
+                    'connection.reconnect.refused',
+                    [
+                        'surface' => $surface,
+                        'attempt' => $budget->attemptsUsed(),
+                        'reason' => $guardRefusal->getMessage(),
+                    ],
+                    'error'
+                );
+
+                throw $lastLoss;
             }
         }
     }
@@ -1133,7 +1150,7 @@ class Connection implements DatabaseInterface
      * Refused while a transaction is open: reconnecting would silently abandon it.
      *
      * @throws \LogicException If a transaction is active on the current handle
-     * @throws \Glueful\Database\Exceptions\DatabaseException If the new connection cannot be established
+     * @throws ConnectionLostException If the new connection cannot be established
      */
     public function reconnect(): void
     {
@@ -1161,13 +1178,31 @@ class Connection implements DatabaseInterface
             $classified = $e instanceof DatabaseException
                 ? $e
                 : (new ExceptionClassifier())->classify($e, $this->getDriverName());
+
+            // A failure to ESTABLISH a connection IS a connection loss, whatever the
+            // driver calls it: MySQL refuses a connect with 2002/2003/2005 under
+            // SQLSTATE HY000, which the STATEMENT-level classifier deliberately maps
+            // to a generic failure (there is no family rule for HY000). Left
+            // unwrapped, the bounded recovery loop — which only catches losses —
+            // would abort after one consumed attempt and surface the connect error
+            // in place of the original loss. Wrapping here keeps the classifier's
+            // statement semantics untouched; the classified failure is chained as
+            // previous and its SQLSTATE/vendor code/errorInfo are preserved.
+            $loss = $classified instanceof ConnectionLostException
+                ? $classified
+                : ConnectionLostException::fromPdo($classified, $this->getDriverName());
+
             $this->resilienceLogger->logEvent(
                 'connection.reconnect.establish_failed',
-                ['engine' => $this->engine, 'error' => $classified->getMessage()],
+                [
+                    'engine' => $this->engine,
+                    'error' => $loss->getMessage(),
+                    'sqlstate' => $loss->sqlState(),
+                ],
                 'error'
             );
 
-            throw $classified;
+            throw $loss;
         }
 
         $this->resilienceLogger->logEvent(
