@@ -73,6 +73,14 @@ return [
         'role' => env('DB_SQLITE_ROLE', 'backup')
     ],
 
+    // Database-operation retry budget (transaction replay after connection loss,
+    // deadlock retries, idempotentRead). DISTINCT from pooling.retry_attempts,
+    // which governs connection ACQUISITION, not operation recovery.
+    'retry' => [
+        'max_attempts' => (int) env('DB_RETRY_MAX_ATTEMPTS', 3),
+        'backoff_base_ms' => (int) env('DB_RETRY_BACKOFF_MS', 500),
+    ],
+
     // Connection pooling settings
     'pooling' => [
         'enabled' => env('DB_POOLING_ENABLED', true),

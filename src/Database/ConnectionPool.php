@@ -108,6 +108,7 @@ class ConnectionPool
         'total_destroyed' => 0,
         'total_acquisitions' => 0,
         'total_releases' => 0,
+        'total_discards' => 0,
         'total_timeouts' => 0,
         'peak_active' => 0,
         'total_health_checks' => 0,
@@ -270,6 +271,29 @@ class ConnectionPool
         $connection->markIdle();
         $this->availableConnections[] = $connection;
         $this->stats['total_releases']++;
+    }
+
+    /**
+     * Discard a connection whose handle is presumed DEAD.
+     *
+     * Unlike release(), nothing is asked of the handle on the way out: no rollback, no
+     * session reset, no health ping. Those would issue statements on a connection the
+     * caller has already established is gone -- at best a wasted round trip, at worst a
+     * blocking wait or a second exception masking the original failure. The connection
+     * is removed from the active set, marked unhealthy and destroyed, so it can never
+     * return to the available pool.
+     *
+     * @param  PooledConnection $connection Connection to discard
+     * @return void
+     */
+    public function discard(PooledConnection $connection): void
+    {
+        unset($this->activeConnections[$connection->getId()]);
+
+        $connection->markUnhealthy();
+        $this->destroyConnection($connection);
+
+        $this->stats['total_discards']++;
     }
 
     /**
