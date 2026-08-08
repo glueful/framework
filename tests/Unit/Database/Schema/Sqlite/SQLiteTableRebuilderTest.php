@@ -6,6 +6,7 @@ namespace Glueful\Tests\Unit\Database\Schema\Sqlite;
 
 use Glueful\Database\Schema\DTOs\ColumnDefinition;
 use Glueful\Database\Schema\DTOs\ForeignKeyDefinition;
+use Glueful\Database\Schema\DTOs\IndexDefinition;
 use Glueful\Database\Schema\Exceptions\UnsupportedSchemaOperationException;
 use Glueful\Database\Schema\Sqlite\SqliteAlterationPlan;
 use Glueful\Database\Schema\Sqlite\SqliteSchemaIntrospector;
@@ -1107,5 +1108,153 @@ final class SQLiteTableRebuilderTest extends TestCase
         $this->pdo->exec("INSERT INTO t (a, b) VALUES ('1', '2')"); // previously rejected
         $count = $this->pdo->query('SELECT COUNT(*) FROM t');
         $this->assertSame(2, (int) ($count !== false ? $count->fetchColumn() : 0));
+    }
+
+    #[Test]
+    public function selfReferencingForeignKeyChangesSurviveACombinedRename(): void
+    {
+        // inboundForeignKeys() counts the rebuilt table's OWN self-references, so
+        // a pre-rebuild baseline would report a phantom before/after mismatch for
+        // any plan that legitimately adds or removes one. The baseline must be
+        // taken after the swap and before the rename.
+        $create = 'CREATE TABLE t ("id" INTEGER PRIMARY KEY, "parent_id" INTEGER, '
+            . 'FOREIGN KEY ("parent_id") REFERENCES "t" ("id"))';
+        $introspector = new SqliteSchemaIntrospector($this->pdo);
+
+        // 1. Dropping the self-FK: 1 inbound before, 0 after.
+        $this->pdo->exec($create);
+        $this->rebuilder()->rebuild(SqliteAlterationPlan::fromChanges('t', [
+            'drop_foreign_keys' => ['parent_id'],
+            'rename_table' => 'targets',
+        ]));
+        $this->assertSame([], $introspector->snapshot('targets')->foreignKeys);
+        $this->pdo->exec('DROP TABLE targets');
+
+        // 2. Adding a self-FK: 0 inbound before, 1 after — and it must follow the
+        // rename onto the new name.
+        $this->pdo->exec('CREATE TABLE t ("id" INTEGER PRIMARY KEY, "parent_id" INTEGER)');
+        $this->rebuilder()->rebuild(SqliteAlterationPlan::fromChanges('t', [
+            'add_foreign_keys' => [new ForeignKeyDefinition(
+                localColumn: 'parent_id',
+                referencedTable: 't',
+                referencedColumn: 'id',
+                name: 'fk_t_parent_id'
+            )],
+            'rename_table' => 'targets',
+        ]));
+        $this->assertSame('targets', $introspector->snapshot('targets')->foreignKeys[0]['table']);
+        $this->pdo->exec('DROP TABLE targets');
+
+        // 3. Dropping the column the self-FK lives on takes the constraint with it.
+        $this->pdo->exec($create);
+        $this->rebuilder()->rebuild(SqliteAlterationPlan::fromChanges('t', [
+            'drop_columns' => ['parent_id'],
+            'rename_table' => 'targets',
+        ]));
+        $this->assertSame(['id'], $introspector->snapshot('targets')->columnNames());
+        $this->assertSame([], $introspector->snapshot('targets')->foreignKeys);
+    }
+
+    #[Test]
+    public function distinctExpressionIndexesArePreservedByNameAndDefinition(): void
+    {
+        $this->pdo->exec('CREATE TABLE t ("id" INTEGER PRIMARY KEY, "a" TEXT, "b" TEXT, "gone" TEXT)');
+        $this->pdo->exec('CREATE INDEX t_a_len ON t (LENGTH("a"))');
+        $this->pdo->exec('CREATE INDEX t_b_len ON t (LENGTH("b"))');
+        $introspector = new SqliteSchemaIntrospector($this->pdo);
+        $before = $introspector->snapshot('t');
+
+        // Canonical index entries carry neither name nor SQL: both expression
+        // indexes reduce to the same shape, so shape comparison alone could not
+        // tell a lost or swapped one from a preserved one.
+        $canonical = $before->toCanonicalArray();
+        $this->assertIsArray($canonical['indexes']);
+        $this->assertSame($canonical['indexes'][0], $canonical['indexes'][1]);
+
+        $this->rebuilder()->rebuild(SqliteAlterationPlan::fromChanges('t', [
+            'drop_columns' => ['gone'],
+            'add_indexes' => [new IndexDefinition(columns: ['a'], name: 't_a_index')],
+        ]));
+
+        $after = $introspector->snapshot('t');
+        $this->assertSame(
+            [
+                't_a_index' => 'CREATE INDEX "t_a_index" ON "t" ("a")',
+                't_a_len' => 'CREATE INDEX t_a_len ON t (LENGTH("a"))',
+                't_b_len' => 'CREATE INDEX t_b_len ON t (LENGTH("b"))',
+            ],
+            $this->indexSqlByName($after),
+            'every preserved and added index survives under its own name and definition'
+        );
+    }
+
+    #[Test]
+    public function namedIndexDriftInvisibleToShapeComparisonRollsBackTheRebuild(): void
+    {
+        $this->pdo->exec('CREATE TABLE t ("id" INTEGER PRIMARY KEY, "a" TEXT, "gone" TEXT)');
+        $this->pdo->exec('CREATE INDEX t_a_len ON t (LENGTH("a"))');
+        $before = $this->schemaDump();
+
+        // The injected drift changes only the stored index SQL, which
+        // toCanonicalArray() excludes — so only the explicit (name, normalized
+        // sql) comparison can catch it.
+        $introspector = new class ($this->pdo) extends SqliteSchemaIntrospector {
+            private int $snapshots = 0;
+
+            public function snapshot(string $table): \Glueful\Database\Schema\Sqlite\SqliteTableSnapshot
+            {
+                $snapshot = parent::snapshot($table);
+                $this->snapshots++;
+                if ($this->snapshots < 2) {
+                    return $snapshot;
+                }
+
+                $indexes = array_map(static function (array $index): array {
+                    if ($index['sql'] !== null) {
+                        $index['sql'] = str_replace('LENGTH', 'ABS', $index['sql']);
+                    }
+
+                    return $index;
+                }, $snapshot->indexes);
+
+                return new \Glueful\Database\Schema\Sqlite\SqliteTableSnapshot(
+                    table: $snapshot->table,
+                    createSql: $snapshot->createSql,
+                    columns: $snapshot->columns,
+                    checks: $snapshot->checks,
+                    primaryKey: $snapshot->primaryKey,
+                    autoIncrement: $snapshot->autoIncrement,
+                    foreignKeys: $snapshot->foreignKeys,
+                    indexes: $indexes,
+                    triggers: $snapshot->triggers,
+                    withoutRowid: $snapshot->withoutRowid,
+                    strict: $snapshot->strict,
+                    sequenceValue: $snapshot->sequenceValue,
+                );
+            }
+        };
+
+        try {
+            (new SQLiteTableRebuilder($this->pdo, introspector: $introspector))->rebuild(
+                SqliteAlterationPlan::fromChanges('t', ['drop_columns' => ['gone']])
+            );
+            $this->fail('Expected named-index verification mismatch');
+        } catch (\RuntimeException $e) {
+            $this->assertNotInstanceOf(UnsupportedSchemaOperationException::class, $e);
+            $this->assertStringContainsString('named indexes', $e->getMessage());
+            $this->assertSame($before, $this->schemaDump(), 'original schema restored');
+        }
+    }
+
+    /** @return array<string, string> */
+    private function indexSqlByName(\Glueful\Database\Schema\Sqlite\SqliteTableSnapshot $snapshot): array
+    {
+        $indexes = [];
+        foreach ($snapshot->namedIndexes() as $index) {
+            $indexes[$index['name']] = trim((string) preg_replace('/\s+/', ' ', (string) $index['sql']));
+        }
+        ksort($indexes);
+
+        return $indexes;
     }
 }

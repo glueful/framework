@@ -115,7 +115,6 @@ final class SQLiteTableRebuilder
         $snapshot = $this->snapshotOrReject($plan->table());
         $views = $this->introspector->allViews();
         $triggers = $this->introspector->allTriggers();
-        $inbound = $this->introspector->inboundForeignKeys($plan->table());
 
         $this->preflight($plan, $snapshot, $views);
 
@@ -125,7 +124,7 @@ final class SQLiteTableRebuilder
             $indexSql[] = $this->generator->createIndex($plan->table(), $index);
         }
 
-        $this->execute($plan, $snapshot, $target, $indexSql, $views, $triggers, $inbound);
+        $this->execute($plan, $snapshot, $target, $indexSql, $views, $triggers);
     }
 
     // =========================================================================
@@ -1117,7 +1116,6 @@ final class SQLiteTableRebuilder
      * @param list<string> $indexSql
      * @param list<array{name: string, sql: string}> $views
      * @param list<array{name: string, table: string, sql: string}> $triggers
-     * @param list<array{childTable: string, id: int, from: list<string>, to: list<string>}> $inbound
      */
     private function execute(
         SqliteAlterationPlan $plan,
@@ -1125,8 +1123,7 @@ final class SQLiteTableRebuilder
         array $target,
         array $indexSql,
         array $views,
-        array $triggers,
-        array $inbound
+        array $triggers
     ): void {
         $this->assertNoForeignKeyViolations('pre-existing');
         $legacyBefore = $this->pragmaInt('legacy_alter_table');
@@ -1145,7 +1142,6 @@ final class SQLiteTableRebuilder
                             $indexSql,
                             $views,
                             $triggers,
-                            $inbound,
                             $legacyBefore
                         );
                         $this->pdo->exec('COMMIT');
@@ -1167,7 +1163,6 @@ final class SQLiteTableRebuilder
                         $indexSql,
                         $views,
                         $triggers,
-                        $inbound,
                         $legacyBefore
                     );
                     $this->pdo->exec('RELEASE ' . $savepoint);
@@ -1191,7 +1186,6 @@ final class SQLiteTableRebuilder
      * @param list<string> $indexSql
      * @param list<array{name: string, sql: string}> $views
      * @param list<array{name: string, table: string, sql: string}> $triggers
-     * @param list<array{childTable: string, id: int, from: list<string>, to: list<string>}> $inbound
      */
     private function runUnitOfWork(
         SqliteAlterationPlan $plan,
@@ -1200,14 +1194,13 @@ final class SQLiteTableRebuilder
         array $indexSql,
         array $views,
         array $triggers,
-        array $inbound,
         int $legacyBefore
     ): void {
         $this->swap($plan, $snapshot, $target, $indexSql, $legacyBefore);
         $this->verify($plan, $snapshot, $target['definition'], $indexSql, $triggers);
 
         if ($plan->renameTable() !== null) {
-            $this->renameStage($plan, $views, $triggers, $inbound, $legacyBefore);
+            $this->renameStage($plan, $views, $triggers, $legacyBefore);
         }
 
         $this->assertNoForeignKeyViolations('post-change');
@@ -1328,6 +1321,22 @@ final class SQLiteTableRebuilder
             ));
         }
 
+        // Canonical index entries carry neither name nor SQL — two different
+        // expression indexes both reduce to columns:[null] — so preserved and
+        // added indexes are additionally compared by name and definition. The
+        // expectation is the planned index DDL as SQLite itself stored it.
+        $expectedIndexes = $this->normalizedIndexSql($expected);
+        $actualIndexes = $this->normalizedIndexSql($actual);
+        if ($expectedIndexes !== $actualIndexes) {
+            throw new \RuntimeException(sprintf(
+                'Rebuild verification failed for table "%s": named indexes do not match the planned set '
+                . '(expected %s, got %s)',
+                $plan->table(),
+                $this->encode($expectedIndexes),
+                $this->encode($actualIndexes)
+            ));
+        }
+
         if ($actual->sequenceValue !== $snapshot->sequenceValue) {
             throw new \RuntimeException(sprintf(
                 'Rebuild verification failed for table "%s": sqlite_sequence high-water mark is %s, expected %s',
@@ -1366,17 +1375,20 @@ final class SQLiteTableRebuilder
     /**
      * @param list<array{name: string, sql: string}> $views
      * @param list<array{name: string, table: string, sql: string}> $triggers
-     * @param list<array{childTable: string, id: int, from: list<string>, to: list<string>}> $inbound
      */
     private function renameStage(
         SqliteAlterationPlan $plan,
         array $views,
         array $triggers,
-        array $inbound,
         int $legacyBefore
     ): void {
         $from = $plan->table();
         $to = (string) $plan->renameTable();
+
+        // Measured here, after the swap, and never from a pre-rebuild capture:
+        // inboundForeignKeys() includes the rebuilt table's own self-references,
+        // which the rebuild itself may legitimately have added or removed.
+        $inbound = $this->introspector->inboundForeignKeys($from);
 
         // Forced OFF so SQLite rewrites inbound foreign keys and dependent
         // trigger/view bodies onto the new name — the point of a user rename.
@@ -1645,6 +1657,24 @@ final class SQLiteTableRebuilder
             }
             $seen[$lower] = true;
         }
+    }
+
+    /**
+     * Named indexes as `name => whitespace-normalized CREATE INDEX SQL`.
+     * Auto-indexes are excluded: they carry no SQL and are already covered by
+     * the canonical constraint comparison.
+     *
+     * @return array<string, string>
+     */
+    private function normalizedIndexSql(SqliteTableSnapshot $snapshot): array
+    {
+        $indexes = [];
+        foreach ($snapshot->namedIndexes() as $index) {
+            $indexes[$index['name']] = trim((string) preg_replace('/\s+/', ' ', (string) $index['sql']));
+        }
+        ksort($indexes);
+
+        return $indexes;
     }
 
     /**
