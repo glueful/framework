@@ -24,6 +24,21 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   (additionally connection loss). Under default SQLite configuration all constraint
   kinds are indistinguishable and classify as the generic parent; SQLite extended
   result codes are honored when an application enables them.
+- **SQLite table rebuilds** (`Glueful\Database\Schema\Sqlite`) — the schema builder now
+  performs SQLite's documented create-copy-swap procedure for alterations SQLite cannot
+  express natively: modify column, drop column, add/drop foreign key, drop inline
+  unique constraint, and combinations of those in one `alterTable()` call (exactly one
+  rebuild per call). The rebuild is audited before any DDL runs (a preservation audit
+  fails closed on anything it cannot reconstruct: generated columns, COLLATE, composite
+  foreign keys, expression uniques, indexes/triggers/views referencing changed columns,
+  `journal_mode=OFF`, an open transaction with `foreign_keys` ON), atomic (own
+  transaction or savepoint; global `PRAGMA foreign_key_check` before mutation and
+  before commit; `foreign_keys`/`legacy_alter_table` state captured, restored, and
+  verified), and verified (the rebuilt table is re-introspected and canonically
+  compared against the planned target — including preserved indexes, triggers, table
+  options, rowids, and the `sqlite_sequence` high-water mark). Combined
+  rebuild+rename requires SQLite ≥ 3.26.0. New
+  `UnsupportedSchemaOperationException` carries table, operation, feature, and reason.
 
 ### Changed
 - **`TransactionManager` recognizes retryable failures by type, not by code list** —
@@ -44,6 +59,41 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - **PostgreSQL deadlocks (`40P01`) were never retried** — the old code list only
   matched serialization failure (`40001`); deadlock-victim transactions now retry.
   SQLite `SQLITE_BUSY`/`SQLITE_LOCKED` also become retryable.
+- **Six SQLite alteration paths silently did nothing.** `modifyColumn`/`dropColumn`/
+  `addForeignKey`/`dropForeignKey` generated SQL *comments* that executed as successful
+  no-ops, and `alterTable()` discarded `rename_columns` and foreign-key changes
+  entirely — migrations "passed" on SQLite while leaving the schema untouched. All six
+  paths now take real effect (rebuild or native SQL) or throw before mutation.
+- **`TableBuilder` compiled modified columns as additions** and dropped
+  rename/drop-foreign-key changes from the change-set on every driver; MySQL and
+  PostgreSQL generators now receive complete change-sets from the fluent alter path.
+  The public builder now exposes table rename; `dropPrimary()` and alteration-time
+  table comments, which remain outside this slice, throw explicitly instead of being
+  silently discarded. Native multi-statement SQLite alteration calls execute as one
+  transaction/savepoint.
+
+### Upgrade Notes
+- Migrations that previously "succeeded" on SQLite by silently doing nothing will now
+  either take real effect or fail with `UnsupportedSchemaOperationException`. Audit
+  SQLite-targeting migrations that modify/drop columns or foreign keys: their intent
+  will now actually apply.
+- Fluent `dropPrimary()` and table-comment alterations now fail closed until their
+  cross-driver implementations are completed; they no longer report false success.
+- `MigrationManager`'s docblock claimed migrations run inside a transaction; they never
+  did, and the docblock now says so (behavior unchanged).
+- **For implementors of the schema interfaces:** `SchemaBuilderInterface` gained
+  `executeSqliteRebuild()` and `getTableColumns()`, and `TableBuilderInterface` gained
+  `rename()` — external decorators or test doubles implementing these interfaces must add
+  the new methods. In-repo implementations and PHPUnit mocks are unaffected.
+- **`ColumnDefinition::$collation` on a modified column now fails closed on SQLite** (the
+  generator cannot emit COLLATE); previously the flag was silently discarded. Portable
+  migrations that set collation for MySQL must gate it by driver.
+- **Tables with bare SQL-keyword column names** (`key`, `order`, `match`, `values`, …) cannot
+  be rebuilt — the preservation audit fails closed on unscannable definitions. Quote such
+  identifiers at creation time, or rename them first.
+- **A rebuild cannot run while the caller holds an unconsumed read cursor** on the same
+  connection (SQLite returns "database table is locked" for the swap's `DROP TABLE`). Consume
+  or `closeCursor()` result sets before altering tables.
 
 ## [1.75.0] - 2026-08-07 — Algieba
 

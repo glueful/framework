@@ -23,7 +23,7 @@ use Glueful\Bootstrap\ApplicationContext;
  * - Checksum verification for file integrity
  * - Migration history tracking
  *
- * Each migration is executed within a transaction and tracked in the
+ * Each migration executes its schema operations immediately (no wrapping transaction) and is tracked in the
  * migrations table. Supports rollback operations by batch number
  * and maintains migration order.
  *
@@ -392,7 +392,7 @@ class MigrationManager
      * Runs a specific migration file:
      * 1. Loads migration class
      * 2. Verifies interface implementation
-     * 3. Executes migration within transaction
+     * 3. Executes migration (schema operations apply immediately; there is no wrapping transaction)
      * 4. Records successful execution with extension tracking
      *
      * @param  string   $file  Migration file path

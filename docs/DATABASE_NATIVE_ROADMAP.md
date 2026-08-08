@@ -61,13 +61,18 @@ MySQL driver codes with SQLSTATEs, does not distinguish PostgreSQL `40P01`
 `SQLITE_BUSY` / `SQLITE_LOCKED` coverage. Route this through the new exception
 classifier so MySQL / PostgreSQL / SQLite behavior is explicit and testable per driver.
 
-### 3. Complete SQLite rebuild operations
+### 3. Complete SQLite rebuild operations — DONE (see CHANGELOG [Unreleased])
 
-Implement the documented create-copy-swap sequence **once** for alterations SQLite
-cannot express natively — the known gap is dropping an inline unique constraint (the
-payvia `007` migration works around it today). The rebuild must preserve indexes,
-foreign keys, defaults, and unique constraints. After this, the schema builder has no
-known holes.
+Implemented the documented create-copy-swap sequence for alterations SQLite cannot
+express natively: modify column, drop column, add/drop foreign key, and drop inline
+unique constraint. The rebuild is audited before any DDL runs (fails closed on generated
+columns, COLLATE, composite foreign keys, expression uniques, indexes/triggers/views
+referencing changed columns, journal_mode=OFF, or an open transaction), atomic (own
+transaction or savepoint; global foreign_key_check before mutation and commit; state
+restoration and verification), and verified (re-introspected and canonically compared
+against the planned target). Six formerly silent alteration paths now take real effect
+or throw before mutation. Design record:
+`docs/superpowers/specs/2026-08-07-sqlite-alteration-correctness-design.md`.
 
 ### 4. Reconnect resilience — carefully
 
