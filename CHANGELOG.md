@@ -98,6 +98,15 @@ migrations that silently did nothing on SQLite now take effect or fail loudly �
 - **PostgreSQL deadlocks (`40P01`) were never retried** — the old code list only
   matched serialization failure (`40001`); deadlock-victim transactions now retry.
   SQLite `SQLITE_BUSY`/`SQLITE_LOCKED` also become retryable.
+- **`AlterTableBuilder::comment()` silently did nothing on every driver** — the last
+  instance of the silent-no-op bug class: the change key was passed to generators that
+  ignored it. Table-comment alteration now fails closed with
+  `UnsupportedSchemaOperationException` before any operation is queued.
+- **A failed savepoint rollback no longer leaks the outer transaction** — when rolling
+  back a nested savepoint failed with a non-connection-loss error, the manager reset
+  its bookkeeping to level 0, so the outer frame's rollback early-returned and the PDO
+  transaction stayed open on the shared handle. The outer level is now preserved so the
+  outermost rollback really executes.
 - **Six SQLite alteration paths silently did nothing.** `modifyColumn`/`dropColumn`/
   `addForeignKey`/`dropForeignKey` generated SQL *comments* that executed as successful
   no-ops, and `alterTable()` discarded `rename_columns` and foreign-key changes

@@ -162,7 +162,10 @@ class TransactionManager implements TransactionManagerInterface
                         'warning'
                     );
                 } else {
-                    if ($began) {
+                    // commit() already cleared bookkeeping on the ambiguity
+                    // path; a rollback attempt here would only log a spurious
+                    // "no active transaction" warning against a dead handle.
+                    if ($began && !$e instanceof CommitOutcomeUnknownException) {
                         $this->rollbackForFailure($e);
                     }
 
@@ -205,6 +208,8 @@ class TransactionManager implements TransactionManagerInterface
      */
     private function rollbackForFailure(Throwable $primary): ?Throwable
     {
+        $levelAtFailure = $this->transactionLevel;
+
         try {
             $this->rollback();
 
@@ -216,17 +221,33 @@ class TransactionManager implements TransactionManagerInterface
 
             if (!$classified instanceof ConnectionLostException) {
                 // Non-loss rollback failure: rollback() threw BEFORE reaching
-                // its own `transactionLevel = 0`, so this manager's transaction
-                // state is unknown. Reset bookkeeping anyway — otherwise the
-                // retryable branch would retry at level 1 (begin() takes the
-                // savepoint path against a possibly-nonexistent transaction)
-                // and a later loss primary would trip Connection's reconnect
-                // guard and be masked by a LogicException. The connection may
-                // well be alive, so do NOT set connectionPresumedDead — only
-                // loss-classified rollback failures flag the handle.
-                $this->transactionLevel = 0;
-                $this->commitCallbacks = [];
-                $this->rollbackCallbacks = [];
+                // its own bookkeeping update, so this manager's transaction
+                // state is unknown at the failed level. When the failure was a
+                // SAVEPOINT rollback (level > 1), the OUTER PDO transaction is
+                // still open — leave level 1 so the outer frame's rollback
+                // really rolls it back instead of early-returning at level 0
+                // and leaking the transaction; discard only the savepoint
+                // levels' callbacks. When the outermost rollback itself failed,
+                // reset fully. The connection may well be alive, so do NOT set
+                // connectionPresumedDead — only loss-classified rollback
+                // failures flag the handle.
+                if ($levelAtFailure > 1) {
+                    $this->transactionLevel = 1;
+                    foreach (array_keys($this->commitCallbacks) as $level) {
+                        if ($level >= 2) {
+                            unset($this->commitCallbacks[$level]);
+                        }
+                    }
+                    foreach (array_keys($this->rollbackCallbacks) as $level) {
+                        if ($level >= 2) {
+                            unset($this->rollbackCallbacks[$level]);
+                        }
+                    }
+                } else {
+                    $this->transactionLevel = 0;
+                    $this->commitCallbacks = [];
+                    $this->rollbackCallbacks = [];
+                }
                 $this->logger->logEvent(
                     'Rollback failed while handling a transaction failure',
                     ['primary' => $primary->getMessage(), 'secondary' => $classified->getMessage()],

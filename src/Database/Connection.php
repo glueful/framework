@@ -979,6 +979,10 @@ class Connection implements DatabaseInterface
      * Nested calls delegate to the manager with that same budget, so nesting can never
      * multiply the allowance.
      *
+     * Replay callbacks MUST build their query chains inside the callback from this
+     * Connection (e.g. via table()) — a QueryBuilder or executor captured before the
+     * call retains the pre-reconnect PDO and will fail on replay.
+     *
      * @param callable $callback The callback to execute within the transaction
      * @return mixed The return value of the callback
      * @throws \Exception If the transaction fails after max retries or callback throws
@@ -1055,7 +1059,8 @@ class Connection implements DatabaseInterface
      * Re-run a caller-declared IDEMPOTENT read, reconnecting after a connection loss.
      *
      * Only the caller knows a read is safe to repeat, so this is opt-in: nothing
-     * replays a statement implicitly.
+     * replays a statement implicitly. Build query chains inside the callback from
+     * the supplied Connection — prebuilt builders retain the stale PDO on replay.
      *
      * @param callable $fn Receives this Connection; must be free of side effects
      * @return mixed The callback's return value
@@ -1098,6 +1103,11 @@ class Connection implements DatabaseInterface
     ): void {
         while (true) {
             if (!$budget->tryConsume()) {
+                $this->resilienceLogger->logEvent(
+                    'connection.retry.exhausted',
+                    ['surface' => $surface, 'attempts' => $budget->attemptsUsed()],
+                    'error'
+                );
                 throw $lastLoss; // exact final classified failure, unchanged
             }
 

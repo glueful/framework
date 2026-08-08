@@ -482,4 +482,43 @@ final class TransactionManagerResilienceTest extends TestCase
         });
         $this->assertSame([1], $observedLevels);
     }
+
+    #[Test]
+    public function nestedSavepointRollbackFailureDoesNotLeakTheOuterTransaction(): void
+    {
+        // A NON-loss failure while rolling back a SAVEPOINT (level > 1) must
+        // leave the outer transaction's bookkeeping at level 1 so the outer
+        // frame's rollback really rolls the PDO transaction back — resetting
+        // to 0 here previously left pdo->inTransaction() true forever.
+        $pdo = $this->pdo();
+        $savepoints = $this->createMock(SavepointManagerInterface::class);
+        $rollbackFailure = new \PDOException('savepoint rollback failed');
+        $rollbackFailure->errorInfo = ['HY000', 1, 'savepoint rollback failed'];
+        $savepoints->method('rollbackTo')->willThrowException($rollbackFailure);
+
+        $manager = new TransactionManager(
+            $pdo,
+            $savepoints,
+            new QueryLogger(),
+            'sqlite',
+            $this->sleeper()
+        );
+        $domain = new \RuntimeException('inner domain failure');
+
+        try {
+            $manager->transaction(function () use ($manager, $domain): string {
+                $manager->transaction(static function () use ($domain): never {
+                    throw $domain;
+                });
+
+                return 'unreachable';
+            });
+            $this->fail('Expected the inner domain failure to propagate');
+        } catch (\RuntimeException $caught) {
+            $this->assertSame($domain, $caught, 'primary preserved through both frames');
+            $this->assertFalse($pdo->inTransaction(), 'outer PDO transaction must be rolled back, not leaked');
+            $this->assertFalse($manager->isActive());
+            $this->assertFalse($manager->connectionPresumedDead());
+        }
+    }
 }

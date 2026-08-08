@@ -14,6 +14,7 @@ use Glueful\Database\Exceptions\ConnectionLostException;
 use Glueful\Database\Exceptions\DatabaseException;
 use Glueful\Database\Exceptions\DeadlockException;
 use Glueful\Database\Exceptions\LockContentionException;
+use Glueful\Database\Resilience\SleeperInterface;
 use PDO;
 
 #[CoversClass(TransactionManager::class)]
@@ -23,6 +24,7 @@ class TransactionManagerTest extends TestCase
     private SavepointManagerInterface $savepointManager;
     private QueryLogger $logger;
     private TransactionManager $manager;
+    private SleeperInterface $noSleep;
 
     protected function setUp(): void
     {
@@ -33,11 +35,19 @@ class TransactionManagerTest extends TestCase
         // Create a mock SavepointManager
         $this->savepointManager = $this->createMock(SavepointManagerInterface::class);
         $this->logger = new QueryLogger();
+        // No-op sleeper: retry backoff must never really sleep in tests.
+        $this->noSleep = new class implements SleeperInterface {
+            public function sleepMilliseconds(int $milliseconds): void
+            {
+            }
+        };
 
         $this->manager = new TransactionManager(
             $this->pdo,
             $this->savepointManager,
-            $this->logger
+            $this->logger,
+            null,
+            $this->noSleep
         );
     }
 
@@ -478,7 +488,8 @@ class TransactionManagerTest extends TestCase
             $this->pdo,
             $this->savepointManager,
             $this->logger,
-            'mysql'
+            'mysql',
+            $this->noSleep
         );
         $manager->setMaxRetries(1);
 
@@ -499,7 +510,7 @@ class TransactionManagerTest extends TestCase
     public function beginTimeLockContentionRetriesWithoutRollingBack(): void
     {
         $pdo = $this->faultInjectingPdo(failBeginTimes: 1);
-        $manager = new TransactionManager($pdo, $this->savepointManager, $this->logger);
+        $manager = new TransactionManager($pdo, $this->savepointManager, $this->logger, null, $this->noSleep);
 
         $result = $manager->transaction(static fn (): string => 'reached');
 
@@ -520,7 +531,7 @@ class TransactionManagerTest extends TestCase
         $savepoints = $this->createMock(SavepointManagerInterface::class);
         $savepoints->method('create')->willThrowException($savepointFailure);
 
-        $manager = new TransactionManager($pdo, $savepoints, $this->logger);
+        $manager = new TransactionManager($pdo, $savepoints, $this->logger, null, $this->noSleep);
         $manager->setMaxRetries(1);
         $manager->begin();
 
@@ -537,7 +548,7 @@ class TransactionManagerTest extends TestCase
     public function directBeginClassifiesItsOwnFailure(): void
     {
         $pdo = $this->faultInjectingPdo(failBeginTimes: PHP_INT_MAX);
-        $manager = new TransactionManager($pdo, $this->savepointManager, $this->logger);
+        $manager = new TransactionManager($pdo, $this->savepointManager, $this->logger, null, $this->noSleep);
 
         $this->expectException(LockContentionException::class);
         $manager->begin();
@@ -547,7 +558,7 @@ class TransactionManagerTest extends TestCase
     public function directCommitClassifiesItsOwnFailure(): void
     {
         $pdo = $this->faultInjectingPdo(failBeginTimes: 0);
-        $manager = new TransactionManager($pdo, $this->savepointManager, $this->logger);
+        $manager = new TransactionManager($pdo, $this->savepointManager, $this->logger, null, $this->noSleep);
         $manager->begin();
         $pdo->failCommit = true;
 
@@ -559,7 +570,7 @@ class TransactionManagerTest extends TestCase
     public function directRollbackClassifiesItsOwnFailure(): void
     {
         $pdo = $this->faultInjectingPdo(failBeginTimes: 0);
-        $manager = new TransactionManager($pdo, $this->savepointManager, $this->logger);
+        $manager = new TransactionManager($pdo, $this->savepointManager, $this->logger, null, $this->noSleep);
         $manager->begin();
         $pdo->failRollback = true;
 

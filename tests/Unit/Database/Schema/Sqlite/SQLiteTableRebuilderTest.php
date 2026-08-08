@@ -1246,6 +1246,75 @@ final class SQLiteTableRebuilderTest extends TestCase
         }
     }
 
+    #[Test]
+    public function withoutRowidTablesRebuildEndToEnd(): void
+    {
+        $this->pdo->exec(
+            'CREATE TABLE t ("a" TEXT NOT NULL, "b" TEXT NOT NULL, "c" TEXT, '
+            . 'PRIMARY KEY ("a", "b")) WITHOUT ROWID'
+        );
+        $this->pdo->exec("INSERT INTO t (a, b, c) VALUES ('a1', 'b1', 'c1'), ('a2', 'b2', 'c2')");
+
+        $this->rebuilder()->rebuild(SqliteAlterationPlan::fromChanges('t', [
+            'drop_columns' => ['c'],
+        ]));
+
+        $snapshot = (new SqliteSchemaIntrospector($this->pdo))->snapshot('t');
+        $this->assertSame(['a', 'b'], $snapshot->columnNames());
+        $this->assertTrue($snapshot->withoutRowid, 'WITHOUT ROWID option must survive the rebuild');
+        $this->assertSame(['a', 'b'], $snapshot->primaryKey);
+
+        $rows = $this->pdo->query('SELECT a, b FROM t ORDER BY a');
+        $this->assertSame(
+            [['a' => 'a1', 'b' => 'b1'], ['a' => 'a2', 'b' => 'b2']],
+            $rows !== false ? $rows->fetchAll(\PDO::FETCH_ASSOC) : []
+        );
+        // Composite PK still enforced after the swap.
+        $this->expectException(\PDOException::class);
+        $this->pdo->exec("INSERT INTO t (a, b) VALUES ('a1', 'b1')");
+    }
+
+    #[Test]
+    public function unsettablePragmaFailsPreflightBeforeAnyMutation(): void
+    {
+        // A connection where PRAGMA legacy_alter_table cannot be set (writes
+        // are silently ignored, so the read-back never matches) must be
+        // rejected during preflight — the swap rename depends on that pragma.
+        $pdo = new class ('sqlite::memory:') extends \PDO {
+            public function __construct(string $dsn)
+            {
+                parent::__construct($dsn);
+                $this->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+            }
+
+            public function exec(string $statement): int|false
+            {
+                if (stripos($statement, 'legacy_alter_table') !== false) {
+                    return 0; // silently ignore the write; read-back stays at the default
+                }
+
+                return parent::exec($statement);
+            }
+        };
+        $pdo->exec('CREATE TABLE t ("id" INTEGER PRIMARY KEY, "x" TEXT)');
+        $stmt = $pdo->query("SELECT type, name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY name");
+        $before = json_encode($stmt !== false ? $stmt->fetchAll(\PDO::FETCH_ASSOC) : [], JSON_THROW_ON_ERROR);
+
+        try {
+            (new SQLiteTableRebuilder($pdo))->rebuild(SqliteAlterationPlan::fromChanges('t', [
+                'drop_columns' => ['x'],
+            ]));
+            $this->fail('Expected the unsettable-pragma preflight rejection');
+        } catch (UnsupportedSchemaOperationException $e) {
+            $this->assertStringContainsString('legacy_alter_table', $e->getMessage());
+            $stmt = $pdo->query(
+                "SELECT type, name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY name"
+            );
+            $after = json_encode($stmt !== false ? $stmt->fetchAll(\PDO::FETCH_ASSOC) : [], JSON_THROW_ON_ERROR);
+            $this->assertSame($before, $after, 'no mutation before the rejection');
+        }
+    }
+
     /** @return array<string, string> */
     private function indexSqlByName(\Glueful\Database\Schema\Sqlite\SqliteTableSnapshot $snapshot): array
     {
