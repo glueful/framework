@@ -96,7 +96,10 @@ class TransactionManager implements TransactionManagerInterface
      */
     public function transaction(callable $callback, ?RetryBudget $budget = null): mixed
     {
-        $this->logger->logEvent("Starting transaction", ['retries_allowed' => $this->maxRetries]);
+        $this->logger->logEvent(
+            "Starting transaction",
+            ['retries_allowed' => $budget !== null ? $budget->maxAttempts() - 1 : $this->maxRetries]
+        );
 
         if ($budget === null && $this->maxRetries === 0) {
             // setMaxRetries(0) is valid and makes zero attempts, so no typed
@@ -152,7 +155,7 @@ class TransactionManager implements TransactionManagerInterface
                         "Transaction deadlock detected, retrying",
                         [
                         'attempt' => $budget->attemptsUsed(),
-                        'max_retries' => $this->maxRetries,
+                        'max_retries' => $budget->maxAttempts() - 1,
                         'delay_ms' => $budget->lastDelayMilliseconds(),
                         'error' => $e->getMessage()
                         ],
@@ -182,7 +185,7 @@ class TransactionManager implements TransactionManagerInterface
         $this->logger->logEvent(
             "Transaction failed after maximum retries",
             [
-            'max_retries' => $this->maxRetries
+            'max_retries' => $budget->maxAttempts() - 1
             ],
             'error'
         );

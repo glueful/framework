@@ -347,6 +347,11 @@ class Connection implements DatabaseInterface
             'pooling' => [
                 'enabled' => (bool) env('DB_POOLING_ENABLED', false),
             ],
+
+            'retry' => [
+                'max_attempts' => (int) env('DB_RETRY_MAX_ATTEMPTS', 3),
+                'backoff_base_ms' => (int) env('DB_RETRY_BACKOFF_MS', 500),
+            ],
         ];
     }
 
