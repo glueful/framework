@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Glueful\Database\Transaction\Interfaces;
 
+use Glueful\Database\Resilience\RetryBudget;
+
 /**
  * TransactionManager Interface
  *
@@ -14,9 +16,17 @@ namespace Glueful\Database\Transaction\Interfaces;
 interface TransactionManagerInterface
 {
     /**
-     * Execute callback within a transaction
+     * Execute callback within a transaction, retrying on classified
+     * deadlock/lock-contention failures.
+     *
+     * @param callable $callback The transactional work to run
+     * @param RetryBudget|null $budget Shared retry budget (e.g. supplied by
+     *        Connection so a connection-loss reconnect attempt and a
+     *        transaction-level deadlock retry draw from the same allowance).
+     *        When null, a local budget honoring setMaxRetries() and the
+     *        historical 500ms backoff is constructed for this call only.
      */
-    public function transaction(callable $callback): mixed;
+    public function transaction(callable $callback, ?RetryBudget $budget = null): mixed;
 
     /**
      * Begin a new transaction or create savepoint
