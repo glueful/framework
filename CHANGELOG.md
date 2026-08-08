@@ -6,6 +6,18 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.76.0] - 2026-08-08 — Algol
+
+**Theme: the database layer keeps its promises** — the complete native database-layer
+roadmap in one release. Failures are typed (SQLSTATE + vendor codes, `\PDOException`-rooted
+for full BC), retries are honest (one shared, configurable budget for deadlocks and
+connection losses; commit-ambiguous losses are never replayed), SQLite alterations are
+fail-closed (six silently-no-op paths now really execute via audited atomic rebuilds, or
+throw before mutation), and connections recover (replay of provably-uncommitted
+transactions, explicit idempotent reads, lazy reconnection). Moderate risk: new env keys,
+three interface additions for external implementors (called out in Upgrade Notes), and
+migrations that silently did nothing on SQLite now take effect or fail loudly — the point.
+
 ### Added
 - **Typed database exceptions** (`Glueful\Database\Exceptions`) — database failures are
   now classified at the execution boundary into a typed hierarchy rooted at

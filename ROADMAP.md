@@ -21,6 +21,24 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.76.0 — Algol (Minor, Released 2026-08-08)
+- **The complete database-layer roadmap** (`docs/DATABASE_NATIVE_ROADMAP.md` items 1–4)
+  in one release — the native alternative to adopting doctrine/dbal.
+- **Typed database exceptions + unified retry classification.** `Glueful\Database\Exceptions`
+  hierarchy rooted at `\PDOException` (full catch-site BC) with a vendor-first
+  `ExceptionClassifier`; `TransactionManager` recognizes retryable failures by marker
+  interface; unique violations render HTTP 409; PostgreSQL `40P01` deadlocks finally retry.
+- **SQLite alteration correctness.** Six silently-no-op alteration paths now execute via
+  audited, atomic create-copy-swap rebuilds (preservation audit fails closed before any
+  DDL; global FK checks; rowid/sequence preservation; runtime verification) or throw
+  `UnsupportedSchemaOperationException` — a SQLite migration can never again succeed by
+  doing nothing.
+- **Reconnect resilience.** One shared configurable retry budget
+  (`DB_RETRY_MAX_ATTEMPTS`/`DB_RETRY_BACKOFF_MS`) spans deadlock retries and
+  connection-loss replays; outermost `Connection::transaction()` replays provably-uncommitted
+  work after reconnecting; `idempotentRead()` and `reconnect()` primitives;
+  commit-ambiguous losses surface as non-replayable `CommitOutcomeUnknownException`.
+
 ### 1.75.0 — Algieba (Minor, Released 2026-08-07)
 - **Framework-wide PHPStan level 8, zero suppressed errors.** A 31-area campaign cleaned 914
   errors of typing debt, raised the CI gate from level 6 to `level: 8` over `src/` + `config/`,
