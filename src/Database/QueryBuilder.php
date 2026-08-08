@@ -828,6 +828,9 @@ class QueryBuilder implements QueryBuilderInterface
     /**
      * {@inheritdoc}
      *
+     * Delegates to the captured manager/PDO and does not support connection-loss replay.
+     * Use {@see Connection::transaction()} for replay capability.
+     *
      * @return mixed
      */
     public function transaction(callable $callback): mixed

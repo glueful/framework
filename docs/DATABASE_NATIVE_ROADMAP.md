@@ -34,7 +34,8 @@ at any time without core changes.
 ## The native roadmap
 
 In sequence. Items 1–2 are roughly a week combined and deliver most of what DBAL
-adoption promised, with zero new dependencies.
+adoption promised, with zero new dependencies. **Items 1–4 are complete; item 5
+remains deliberately deferred.**
 
 ### 1. Typed database exceptions — DONE (see CHANGELOG [Unreleased])
 
@@ -74,11 +75,17 @@ against the planned target). Six formerly silent alteration paths now take real 
 or throw before mutation. Design record:
 `docs/superpowers/specs/2026-08-07-sqlite-alteration-correctness-design.md`.
 
-### 4. Reconnect resilience — carefully
+### 4. Reconnect resilience — DONE (see CHANGELOG [Unreleased])
 
-Retry/reconnect primitives built on the typed exceptions (which are what make retry
-logic safe to write). Only retry operations proven safe: **transactions at their outer
-boundary** and **explicitly idempotent reads** — never arbitrary writes.
+Shipped as `Glueful\Database\Resilience`: retry/reconnect primitives built on the typed
+exceptions. `Connection::transaction()` replays callbacks after connection loss during
+begin/callback phases (proven safe; server rolls back on disconnect); connection loss
+during COMMIT surfaces as non-retryable `CommitOutcomeUnknownException` (server may have
+committed despite acknowledgement loss). New `Connection::idempotentRead(callable)`
+re-runs caller-declared idempotent reads after reconnecting. All failures (deadlock,
+serialization, lock contention, eligible connection loss) share one retry budget
+(`DB_RETRY_MAX_ATTEMPTS`/`DB_RETRY_BACKOFF_MS`, default 3 attempts / 500 ms backoff).
+Design record: `docs/superpowers/specs/2026-08-08-reconnect-resilience-design.md`.
 
 ### 5. Defer schema introspection/diffing
 

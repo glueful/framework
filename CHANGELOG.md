@@ -39,6 +39,21 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   options, rowids, and the `sqlite_sequence` high-water mark). Combined
   rebuild+rename requires SQLite ≥ 3.26.0. New
   `UnsupportedSchemaOperationException` carries table, operation, feature, and reason.
+- **Reconnect resilience** (`Glueful\Database\Resilience`) — the database layer now
+  recovers from connection loss at the two provably-safe boundaries. Outermost
+  `Connection::transaction()` calls replay the callback after a connection loss the
+  framework can prove uncommitted (begin- or callback-phase; the server rolls back on
+  disconnect) — the same replay contract deadlock retries always had, under ONE shared
+  budget: deadlocks, serialization failures, lock contention, and eligible connection
+  losses all draw from the same configurable allowance
+  (`DB_RETRY_MAX_ATTEMPTS`/`DB_RETRY_BACKOFF_MS`, default 3 total attempts with
+  500 ms linear backoff; distinct from the pool's `DB_POOL_RETRY_*` acquisition
+  settings). New `Connection::idempotentRead(callable)` re-runs a caller-declared
+  idempotent read after reconnecting, and `Connection::reconnect()` re-establishes a
+  connection outside transactions. A connection loss detected while COMMIT is in
+  flight is NEVER replayed — the server may have committed before the acknowledgement
+  was lost — and surfaces as the new non-retryable `CommitOutcomeUnknownException`
+  with the connection invalidated for lazy reconnection.
 
 ### Changed
 - **`TransactionManager` recognizes retryable failures by type, not by code list** —
@@ -50,6 +65,18 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   `commit()`/`rollback()` classify their own PDO failures for direct callers. The
   constructor gains an optional trailing `?string $driver` (derived from the PDO when
   omitted).
+- **`TransactionManager` retry mechanics**: retries are driven by an injectable
+  `RetryBudget` + `SleeperInterface` (tests no longer really sleep); the historical
+  sleep AFTER the final failed attempt is removed (~1.5 s saved at defaults);
+  `transaction()` now catches `\Throwable`, so an `Error` thrown by a callback rolls
+  the transaction back before propagating; rollback failures during exception handling
+  follow explicit precedence (a connection loss during rollback of a retryable failure
+  now surfaces the loss instead of retrying on a dead handle; a loss during rollback
+  of a non-retryable failure preserves the primary and flags the connection for
+  invalidation). `TransactionManagerInterface::transaction()` gained an optional
+  trailing `?RetryBudget` parameter — external implementors must add it (BC note);
+  `setMaxRetries()` keeps its exact historical semantics including the zero-execution
+  edge.
 - **Unique-constraint violations render as HTTP 409** with a fixed conflict message
   (in debug mode too — the driver message leaks column/value detail), are excluded
   from error reporting, and all typed database exceptions route to the `database` log
@@ -99,6 +126,18 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - **A rebuild cannot run while the caller holds an unconsumed read cursor** on the same
   connection (SQLite returns "database table is locked" for the swap's `DROP TABLE`). Consume
   or `closeCursor()` result sets before altering tables.
+- Replay is available through `Connection::transaction()` and
+  `Connection::idempotentRead()` only. `QueryBuilder::transaction()` delegates to its
+  captured manager and cannot reconnect. Replay callbacks must build query chains
+  INSIDE the callback from the supplied connection — prebuilt builders retain the
+  stale PDO.
+- Commit-phase connection loss previously surfaced as `ConnectionLostException`; it
+  is now `CommitOutcomeUnknownException` (still a `PDOException` subclass). Code that
+  retried on the old type was risking duplicate commits — audit any such handler.
+- `Connection::transaction()` now derives its retry allowance from the `retry` config
+  block; `TransactionManager::setMaxRetries()` no longer influences that path (it still
+  governs direct manager use). Code tuning retries for `Connection::transaction()` /
+  `db($context)->transaction()` should set `DB_RETRY_MAX_ATTEMPTS` instead.
 
 ## [1.75.0] - 2026-08-07 — Algieba
 
