@@ -78,13 +78,18 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   SQLite-targeting migrations that modify/drop columns or foreign keys: their intent
   will now actually apply.
 - Fluent `dropPrimary()` and table-comment alterations now fail closed until their
-  cross-driver implementations are completed; they no longer report false success.
+  cross-driver implementations are completed; they no longer report false success — as do
+  `engine()`, `charset()`, and `collation()` table options and `->primary()` on an
+  added/modified column inside an `alterTable()` callback, all of which were previously
+  silently discarded on every driver. A migration calling e.g. `->engine('InnoDB')` in an
+  alter callback now fails explicitly instead of passing while doing nothing.
 - `MigrationManager`'s docblock claimed migrations run inside a transaction; they never
   did, and the docblock now says so (behavior unchanged).
 - **For implementors of the schema interfaces:** `SchemaBuilderInterface` gained
-  `executeSqliteRebuild()` and `getTableColumns()`, and `TableBuilderInterface` gained
-  `rename()` — external decorators or test doubles implementing these interfaces must add
-  the new methods. In-repo implementations and PHPUnit mocks are unaffected.
+  `executeSqliteRebuild()` and `executeSqliteNativeAlteration()`, and
+  `TableBuilderInterface` gained `rename()` — external decorators or test doubles
+  implementing these interfaces must add the new methods. In-repo implementations and
+  PHPUnit mocks are unaffected.
 - **`ColumnDefinition::$collation` on a modified column now fails closed on SQLite** (the
   generator cannot emit COLLATE); previously the flag was silently discarded. Portable
   migrations that set collation for MySQL must gate it by driver.
