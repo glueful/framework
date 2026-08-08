@@ -14,6 +14,9 @@ use Glueful\Database\Schema\DTOs\TableDefinition;
 use Glueful\Database\Schema\DTOs\ColumnDefinition;
 use Glueful\Database\Schema\DTOs\IndexDefinition;
 use Glueful\Database\Schema\DTOs\ForeignKeyDefinition;
+use Glueful\Database\Schema\Exceptions\UnsupportedSchemaOperationException;
+use Glueful\Database\Schema\Generators\SQLiteSqlGenerator;
+use Glueful\Database\Schema\Sqlite\SqliteAlterationPlan;
 
 /**
  * Concrete Table Builder Implementation
@@ -589,6 +592,26 @@ class TableBuilder implements TableBuilderInterface, TableBuilderContextInterfac
     }
 
     // ===========================================
+    // Table Operations (for alterations)
+    // ===========================================
+
+    /**
+     * Rename the table (alteration only)
+     *
+     * @param  string $newName New table name
+     * @return self For method chaining
+     */
+    public function rename(string $newName): self
+    {
+        if ($newName === '') {
+            throw new \InvalidArgumentException('New table name cannot be empty');
+        }
+        $this->options['_rename_table'] = $newName;
+
+        return $this;
+    }
+
+    // ===========================================
     // Table Options
     // ===========================================
 
@@ -770,8 +793,14 @@ class TableBuilder implements TableBuilderInterface, TableBuilderContextInterfac
     {
         $this->columns[] = $column;
 
-        // Auto-add to primary key if marked as primary
-        if ($column->primary) {
+        // Auto-add to primary key if marked as primary — but only for a genuinely
+        // new column. A modifyColumn() replacement carries options['_modify'] === true;
+        // treating its ->primary() the same as a brand-new column's would make
+        // preservePrimaryKeyMembership()'s forwarding indistinguishable from a real
+        // primary-key change and trip the add_or_modify_primary guard with no escape
+        // hatch. A modify replacement that claims NEW primary-key membership still
+        // fails closed — just at the rebuilder's own audit, with the correct message.
+        if ($column->primary && ($column->options['_modify'] ?? false) !== true) {
             $this->primaryKey[] = $column->name;
         }
     }
@@ -817,18 +846,181 @@ class TableBuilder implements TableBuilderInterface, TableBuilderContextInterfac
             comment: $this->comment
         );
 
-        $changes = [
-            'add_columns'      => $this->columns,
-            'add_indexes'      => $this->indexes,
-            'drop_indexes'     => $this->options['_drop_indexes'] ?? [],
-            'add_foreign_keys' => $this->foreignKeys,
-            'drop_columns'     => $this->options['_drops'] ?? [],
+        $addColumns = [];
+        $modifyColumns = [];
+        foreach ($this->columns as $column) {
+            if (($column->options['_modify'] ?? false) === true) {
+                $modifyColumns[] = $column;
+            } else {
+                $addColumns[] = $column;
+            }
+        }
+
+        if ($modifyColumns !== []) {
+            $modifyColumns = $this->preservePrimaryKeyMembership($modifyColumns);
+        }
+
+        $renames = [];
+        foreach ($this->options['_renames'] ?? [] as $rename) {
+            $renames[$rename['from']] = $rename['to'];
+        }
+
+        // Fail-closed on every driver until these have complete generator coverage:
+        // today's silent success for drop/add-primary, comments, and
+        // engine/charset/collation-style alteration options is replaced with an
+        // explicit rejection, before any change-set is built or dispatched.
+        if (($this->options['_drop_primary'] ?? false) === true) {
+            throw UnsupportedSchemaOperationException::forFeature(
+                $this->tableName,
+                'drop_primary',
+                'primary key',
+                'the fluent alter seam does not yet implement primary-key removal'
+            );
+        }
+        if ($this->primaryKey !== []) {
+            throw UnsupportedSchemaOperationException::forFeature(
+                $this->tableName,
+                'add_or_modify_primary',
+                'primary key',
+                'primary-key alteration is not implemented by the fluent alter seam'
+            );
+        }
+        if ($this->comment !== null) {
+            throw UnsupportedSchemaOperationException::forFeature(
+                $this->tableName,
+                'comment',
+                'table comment',
+                'table-comment alteration is not implemented by the fluent alter seam'
+            );
+        }
+        $handledOptionKeys = [
+            '_drops', '_renames', '_drop_indexes', '_drop_foreign_keys',
+            '_drop_primary', '_rename_table',
         ];
+        foreach (array_keys($this->options) as $optionKey) {
+            if (!in_array($optionKey, $handledOptionKeys, true)) {
+                throw UnsupportedSchemaOperationException::forFeature(
+                    $this->tableName,
+                    'table_option',
+                    (string) $optionKey,
+                    'this alteration-time table option has no implemented SQL path'
+                );
+            }
+        }
+
+        $changes = [
+            'add_columns'       => $addColumns,
+            'modify_columns'    => $modifyColumns,
+            'drop_columns'      => $this->options['_drops'] ?? [],
+            'rename_columns'    => $renames,
+            'add_indexes'       => $this->indexes,
+            'drop_indexes'      => $this->options['_drop_indexes'] ?? [],
+            'add_foreign_keys'  => $this->foreignKeys,
+            'drop_foreign_keys' => $this->options['_drop_foreign_keys'] ?? [],
+            'rename_table'      => $this->options['_rename_table'] ?? null,
+        ];
+        $changes = array_filter($changes, static fn ($v) => $v !== [] && $v !== null);
+
+        if ($this->sqlGenerator instanceof SQLiteSqlGenerator) {
+            $plan = SqliteAlterationPlan::fromChanges($this->tableName, $changes);
+            if ($plan->requiresRebuild()) {
+                $this->schemaBuilder->executeSqliteRebuild($plan);
+                return;
+            }
+
+            $statements = array_values($this->sqlGenerator->alterTable($tableDefinition, $changes));
+            $this->schemaBuilder->executeSqliteNativeAlteration($statements);
+            return;
+        }
 
         $sqlStatements = $this->sqlGenerator->alterTable($tableDefinition, $changes);
-
         foreach ($sqlStatements as $sql) {
             $this->schemaBuilder->addPendingOperation($sql);
         }
+    }
+
+    /**
+     * Carry a modified column's current primary-key membership (and, best
+     * effort, its auto-increment status) onto the replacement definition.
+     *
+     * modifyColumn() starts every replacement from scratch (primary: false),
+     * but the SQLite rebuilder freezes primary-key membership: a replacement
+     * that declares primary: false for a column that is currently part of
+     * the primary key is rejected outright. Without this, an ordinary type
+     * change on e.g. "id" would be impossible unless the caller also
+     * re-declared ->primary() (and ->autoIncrement()) just to describe the
+     * status quo. Introspection failure is not fatal here — this is a
+     * best-effort convenience, not a source of truth; any real conflict is
+     * still caught downstream by the generator or the rebuilder's own audit.
+     *
+     * @param  list<ColumnDefinition> $modifyColumns
+     * @return list<ColumnDefinition>
+     */
+    private function preservePrimaryKeyMembership(array $modifyColumns): array
+    {
+        // Flush any already-queued pending operations first — e.g. a table created
+        // via the fluent builder without a callback (`$schema->table('x')->...->create()`)
+        // only queues its CREATE TABLE; it does not execute until the next flush.
+        // Without this, introspecting an unflushed table returns an empty PRAGMA
+        // result and forwarding is silently skipped, landing on the frozen-PK
+        // rejection for a table that in fact already has the column as primary.
+        $this->schemaBuilder->execute();
+
+        try {
+            $existingColumns = $this->schemaBuilder->getTableColumns($this->tableName);
+        } catch (\Throwable) {
+            return $modifyColumns;
+        }
+
+        $existingByName = [];
+        foreach ($existingColumns as $existingColumn) {
+            if (isset($existingColumn['name']) && is_string($existingColumn['name'])) {
+                $existingByName[strtolower($existingColumn['name'])] = $existingColumn;
+            }
+        }
+
+        foreach ($modifyColumns as $index => $column) {
+            if ($column->primary) {
+                continue;
+            }
+
+            $existing = $existingByName[strtolower($column->name)] ?? null;
+            if ($existing === null || !(bool) ($existing['is_primary'] ?? false)) {
+                continue;
+            }
+
+            $autoIncrement = $column->autoIncrement
+                || ($column->supportsAutoIncrement() && $this->existingColumnIsAutoIncrement($existing));
+
+            // Primary key columns cannot be nullable (enforced by ColumnDefinition
+            // itself); forcing it here mirrors ColumnBuilder::primary(), which does
+            // the same when the column is declared primary directly.
+            $modifyColumns[$index] = $column->with([
+                'primary' => true,
+                'nullable' => false,
+                'autoIncrement' => $autoIncrement,
+            ]);
+        }
+
+        return $modifyColumns;
+    }
+
+    /**
+     * Best-effort, driver-neutral auto-increment detection from the shape
+     * SchemaBuilderInterface::getTableColumns() returns: MySQL's 'extra'
+     * field or PostgreSQL's 'is_identity' flag. SQLite exposes neither —
+     * its rebuild derives the AUTOINCREMENT flag from the source table
+     * directly, independent of the replacement definition, so returning
+     * false here is a safe no-op for that driver.
+     *
+     * @param array<string, mixed> $existingColumn
+     */
+    private function existingColumnIsAutoIncrement(array $existingColumn): bool
+    {
+        if (isset($existingColumn['extra']) && is_string($existingColumn['extra'])) {
+            return str_contains(strtolower($existingColumn['extra']), 'auto_increment');
+        }
+
+        return (bool) ($existingColumn['is_identity'] ?? false);
     }
 }

@@ -7,6 +7,8 @@ namespace Glueful\Database\Schema\Builders;
 use Glueful\Database\Schema\Interfaces\SchemaBuilderInterface;
 use Glueful\Database\Schema\Interfaces\TableBuilderInterface;
 use Glueful\Database\Schema\Interfaces\SqlGeneratorInterface;
+use Glueful\Database\Schema\Sqlite\SqliteAlterationPlan;
+use Glueful\Database\Schema\Sqlite\SQLiteTableRebuilder;
 use Glueful\Database\Connection;
 
 /**
@@ -458,6 +460,83 @@ class SchemaBuilder implements SchemaBuilderInterface
     public function addPendingOperation(string $sql): void
     {
         $this->pendingOperations[] = $sql;
+    }
+
+    /**
+     * Run a procedural SQLite table rebuild.
+     *
+     * Rebuilds cannot be queued as SQL strings, so all previously queued
+     * operations are flushed IN ORDER first, then the rebuild executes
+     * immediately; subsequent operations queue as normal.
+     *
+     * @param  SqliteAlterationPlan $plan Validated alteration plan
+     * @return void
+     */
+    public function executeSqliteRebuild(SqliteAlterationPlan $plan): void
+    {
+        $this->execute();
+
+        $rebuilder = new SQLiteTableRebuilder($this->connection->getPDO());
+        $rebuilder->rebuild($plan);
+    }
+
+    /**
+     * Execute one native SQLite alteration call atomically.
+     *
+     * Flush earlier queued operations first. The statements belonging to this
+     * alterTable() call then execute inside their own transaction, or a unique
+     * savepoint when the caller already owns a transaction. Any statement
+     * failure rolls back every native change from this call.
+     *
+     * @param  list<string> $statements
+     * @return void
+     */
+    public function executeSqliteNativeAlteration(array $statements): void
+    {
+        $this->execute();
+        if ($statements === []) {
+            return;
+        }
+
+        $pdo = $this->connection->getPDO();
+        $ownsTransaction = !$pdo->inTransaction();
+        $savepoint = 'glueful_native_' . bin2hex(random_bytes(4));
+        $scopeStarted = false;
+
+        try {
+            if ($ownsTransaction) {
+                $pdo->beginTransaction();
+            } else {
+                $pdo->exec('SAVEPOINT ' . $savepoint);
+            }
+            $scopeStarted = true;
+            foreach ($statements as $statement) {
+                $pdo->exec($statement);
+            }
+            if ($ownsTransaction) {
+                $pdo->commit();
+            } else {
+                $pdo->exec('RELEASE SAVEPOINT ' . $savepoint);
+            }
+        } catch (\Throwable $failure) {
+            try {
+                if ($ownsTransaction && $pdo->inTransaction()) {
+                    $pdo->rollBack();
+                } elseif (!$ownsTransaction && $scopeStarted) {
+                    $pdo->exec('ROLLBACK TO SAVEPOINT ' . $savepoint);
+                    $pdo->exec('RELEASE SAVEPOINT ' . $savepoint);
+                }
+            } catch (\Throwable $rollbackFailure) {
+                throw new \RuntimeException(
+                    'SQLite native alteration failed and rollback also failed: '
+                    . $rollbackFailure->getMessage(),
+                    0,
+                    $failure
+                );
+            }
+
+            throw $failure;
+        }
     }
 
     /**

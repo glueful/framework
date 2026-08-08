@@ -338,6 +338,18 @@ interface TableBuilderInterface
     public function dropForeign(string $name): self;
 
     // ===========================================
+    // Table Operations (for alterations)
+    // ===========================================
+
+    /**
+     * Rename the table (alteration only)
+     *
+     * @param  string $newName New table name
+     * @return self For method chaining
+     */
+    public function rename(string $newName): self;
+
+    // ===========================================
     // Table Options
     // ===========================================
 

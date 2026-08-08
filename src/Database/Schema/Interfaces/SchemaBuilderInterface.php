@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Glueful\Database\Schema\Interfaces;
 
+use Glueful\Database\Schema\Sqlite\SqliteAlterationPlan;
+
 /**
  * Schema Builder Interface
  *
@@ -208,6 +210,32 @@ interface SchemaBuilderInterface
      * @return void
      */
     public function addPendingOperation(string $sql): void;
+
+    /**
+     * Run a procedural SQLite table rebuild (for internal use by builders).
+     *
+     * Rebuilds cannot be queued as SQL strings, so all previously queued
+     * operations are flushed in order first, then the rebuild executes
+     * immediately; subsequent operations queue as normal.
+     *
+     * @param  SqliteAlterationPlan $plan Validated alteration plan
+     * @return void
+     */
+    public function executeSqliteRebuild(SqliteAlterationPlan $plan): void;
+
+    /**
+     * Execute one native SQLite alteration call atomically (for internal use
+     * by builders).
+     *
+     * Flushes earlier queued operations first, then runs the given
+     * statements inside their own transaction (or a savepoint if the caller
+     * already owns a transaction). Any statement failure rolls back every
+     * native change from this call.
+     *
+     * @param  list<string> $statements SQL statements belonging to one alterTable() call
+     * @return void
+     */
+    public function executeSqliteNativeAlteration(array $statements): void;
 
     /**
      * Get the database connection

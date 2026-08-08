@@ -12,6 +12,7 @@ use Glueful\Database\Schema\Interfaces\SqlGeneratorInterface;
 use Glueful\Database\Schema\Interfaces\TableBuilderContextInterface;
 use Glueful\Database\Schema\DTOs\TableDefinition;
 use Glueful\Database\Schema\DTOs\ColumnDefinition;
+use Glueful\Database\Schema\Exceptions\UnsupportedSchemaOperationException;
 use Glueful\Database\Schema\DTOs\IndexDefinition;
 use Glueful\Database\Schema\DTOs\ForeignKeyDefinition;
 
@@ -606,6 +607,18 @@ class AlterTableBuilder implements AlterTableBuilderInterface, TableBuilderConte
      */
     public function execute(): bool
     {
+        // Table-comment alteration has no cross-driver implementation; every
+        // generator silently ignored the key. Fail closed instead of
+        // reporting false success (the last instance of that bug class).
+        if (($this->changes['comment'] ?? null) !== null) {
+            throw UnsupportedSchemaOperationException::forFeature(
+                $this->tableName,
+                'comment',
+                'table comment alteration',
+                'not implemented for any driver via ALTER; previously this silently did nothing'
+            );
+        }
+
         if (array_filter($this->changes, static fn ($changeSet): bool => $changeSet !== []) === []) {
             return true; // No changes to execute
         }

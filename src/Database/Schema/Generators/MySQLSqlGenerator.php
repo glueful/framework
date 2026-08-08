@@ -128,6 +128,13 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
             }
         }
 
+        // Rename columns
+        if (isset($changes['rename_columns']) && $changes['rename_columns'] !== []) {
+            foreach ($changes['rename_columns'] as $from => $to) {
+                $statements[] = $this->renameColumn($table->name, (string) $from, (string) $to);
+            }
+        }
+
         // Add indexes
         if (isset($changes['add_indexes']) && $changes['add_indexes'] !== []) {
             foreach ($changes['add_indexes'] as $index) {
@@ -154,6 +161,12 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
             foreach ($changes['drop_foreign_keys'] as $constraintName) {
                 $statements[] = $this->dropForeignKey($table->name, $constraintName);
             }
+        }
+
+        // Rename table — last, so every earlier statement in this call still
+        // addresses the table under its original name.
+        if (isset($changes['rename_table']) && $changes['rename_table'] !== '') {
+            $statements[] = $this->renameTable($table->name, (string) $changes['rename_table']);
         }
 
         return $statements;

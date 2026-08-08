@@ -17,6 +17,11 @@ use Glueful\Database\Schema\Interfaces\SchemaBuilderInterface;
 use Glueful\Database\Schema\Interfaces\SqlGeneratorInterface;
 use Glueful\Database\ConnectionPoolManager;
 use Glueful\Database\PooledConnection;
+use Glueful\Database\Exceptions\ConnectionLostException;
+use Glueful\Database\Exceptions\DatabaseException;
+use Glueful\Database\Exceptions\ExceptionClassifier;
+use Glueful\Database\Resilience\RetryBudget;
+use Glueful\Database\Resilience\UsleepSleeper;
 use Glueful\Http\Exceptions\Domain\BusinessLogicException;
 
 /**
@@ -62,7 +67,8 @@ class Connection implements DatabaseInterface
      * }
      */
     /**
-     * @var array<string, PDO> Connection pool indexed by engine type
+     * @var array<string, PDO> Process-global handles indexed by connectionKey()
+     *                         (full connection identity), never by engine alone.
      */
     protected static array $instances = [];
 
@@ -125,6 +131,21 @@ class Connection implements DatabaseInterface
     private ?\Glueful\Database\Transaction\TransactionManager $transactionManager = null;
 
     /**
+     * @var QueryLogger Logger owned by this connection: every resilience event
+     *                  (invalidation, reconnect, replay) and the memoized
+     *                  TransactionManager share this one instance.
+     */
+    private QueryLogger $resilienceLogger;
+
+    /**
+     * @var RetryBudget|null Budget governing the operation currently in flight.
+     *                       Set for the duration of the OUTERMOST transaction()
+     *                       call so nested calls share one allowance instead of
+     *                       minting their own.
+     */
+    private ?RetryBudget $activeRetryBudget = null;
+
+    /**
      * Initialize database connection with optional pooling
      *
      * Creates or reuses database connections based on engine type.
@@ -143,6 +164,7 @@ class Connection implements DatabaseInterface
     public function __construct(array $config = [], ?ApplicationContext $context = null)
     {
         $this->context = $context;
+        $this->resilienceLogger = new QueryLogger(null, $this->context);
         $this->config = array_merge($this->loadConfig(), $config);
         // Fallback to env() when config is not available (e.g., during CLI bootstrap)
         $this->engine = $this->config['engine']
@@ -158,46 +180,92 @@ class Connection implements DatabaseInterface
 
         $this->driver = $this->resolveDriver($this->engine);
 
-        // Initialize PDO connection only if pooling is disabled.
+        // Initialize PDO connection only if pooling is disabled. Adoption of the
+        // process-global handle (and the exclusions from it) lives in one place —
+        // see sharesStaticHandle() — so this path and the lazy getPDO() fallback
+        // can never drift apart.
         if ($poolingEnabled === false) {
-            // FRAMEWORK-MANAGED connections (constructed WITH an ApplicationContext — the DI
-            // container's 'database' factory and other framework paths) reuse a process-global
-            // PDO keyed by the FULL connection identity (DSN + user + schema): without pooling,
-            // each new Connection otherwise leaks a PDO that is only released on GC — and cached
-            // test-harness app contexts (and cyclic container graphs) keep those objects alive,
-            // exhausting the server's connection ceiling ("too many clients") once enough
-            // containers are booted. The identity key (NOT engine alone) still guards a managed
-            // connection built for a different schema/host/db/user getting its OWN backend.
-            //
-            // AD-HOC connections (constructed WITHOUT a context — `new Connection([...])` in
-            // application/test code) always open a FRESH backend. A caller hand-building a
-            // Connection is asking for an independent session — e.g. a second session to hold a
-            // lock/transaction open while another session contends with it. Silently collapsing
-            // such pairs into one backend when their configs happen to match turns session-level
-            // semantics (advisory locks, transactions) into self-interactions and deadlocks the
-            // caller (a pair of "racing" sessions that are secretly one session can block forever).
-            //
-            // SQLite is excluded from reuse entirely: a ':memory:' database is private to each
-            // connection and file databases are cheap to open, so reuse there would wrongly share
-            // one in-memory schema across connections meant to be isolated. This keeps SQLite's
-            // pooling-off behaviour exactly as before.
-            if ($this->engine === 'sqlite' || $context === null) {
-                $this->pdo = $this->createPDOConnection($this->engine);
-            } else {
-                $dbConfig = $this->config[$this->engine] ?? [];
-                $key = $this->engine . '|' . $this->buildDSN($this->engine, $dbConfig)
-                    . '|' . ($dbConfig['user'] ?? '')
-                    . '|' . ($dbConfig['schema'] ?? '');
-                if (isset(self::$instances[$key])) {
-                    $this->pdo = self::$instances[$key];
-                } else {
-                    $this->pdo = $this->createPDOConnection($this->engine);
-                    self::$instances[$key] = $this->pdo;
-                }
-            }
+            $this->pdo = $this->openOrAdoptSharedPdo();
         }
 
         // Note: Schema manager is initialized lazily when first accessed
+    }
+
+    /**
+     * Whether this connection participates in the process-global handle cache.
+     *
+     * FRAMEWORK-MANAGED connections (constructed WITH an ApplicationContext — the DI
+     * container's 'database' factory and other framework paths) reuse a process-global
+     * PDO keyed by the FULL connection identity (DSN + user + schema): without pooling,
+     * each new Connection otherwise leaks a PDO that is only released on GC — and cached
+     * test-harness app contexts (and cyclic container graphs) keep those objects alive,
+     * exhausting the server's connection ceiling ("too many clients") once enough
+     * containers are booted. The identity key (NOT engine alone) still guards a managed
+     * connection built for a different schema/host/db/user getting its OWN backend.
+     *
+     * AD-HOC connections (constructed WITHOUT a context — `new Connection([...])` in
+     * application/test code) always open a FRESH backend. A caller hand-building a
+     * Connection is asking for an independent session — e.g. a second session to hold a
+     * lock/transaction open while another session contends with it. Silently collapsing
+     * such pairs into one backend when their configs happen to match turns session-level
+     * semantics (advisory locks, transactions) into self-interactions and deadlocks the
+     * caller (a pair of "racing" sessions that are secretly one session can block forever).
+     *
+     * SQLite is excluded from reuse entirely: a ':memory:' database is private to each
+     * connection and file databases are cheap to open, so reuse there would wrongly share
+     * one in-memory schema across connections meant to be isolated. This keeps SQLite's
+     * pooling-off behaviour exactly as before.
+     *
+     * An excluded connection bypasses the cache READ **and** the cache WRITE: it always
+     * opens a fresh backend and never publishes it — at construction time, on the lazy
+     * fallback, and after an invalidation.
+     */
+    private function sharesStaticHandle(): bool
+    {
+        return $this->engine !== 'sqlite' && $this->context !== null;
+    }
+
+    /**
+     * Canonical key for the process-global handle cache: this connection's FULL
+     * identity (engine|dsn|user|schema, never the password).
+     *
+     * The constructor, the lazy getPDO() fallback and invalidate() all key off this
+     * one method, so they cannot disagree about which cached handle is "ours".
+     */
+    private function connectionKey(): string
+    {
+        $dbConfig = $this->engineConfig();
+        $user = $dbConfig['user'] ?? '';
+        $schema = $dbConfig['schema'] ?? '';
+
+        return $this->engine . '|' . $this->buildDSN($this->engine, $dbConfig)
+            . '|' . (is_scalar($user) ? (string) $user : '')
+            . '|' . (is_scalar($schema) ? (string) $schema : '');
+    }
+
+    /**
+     * Engine-specific slice of the database configuration.
+     *
+     * @return array<string, mixed>
+     */
+    private function engineConfig(): array
+    {
+        $dbConfig = $this->config[$this->engine] ?? [];
+
+        return is_array($dbConfig) ? $dbConfig : [];
+    }
+
+    /**
+     * Establish this connection's PDO handle: adopt (or publish) the shared handle
+     * when this connection participates in sharing, otherwise open a private backend.
+     */
+    private function openOrAdoptSharedPdo(): PDO
+    {
+        if (!$this->sharesStaticHandle()) {
+            return $this->createPDOConnection($this->engine);
+        }
+
+        return self::$instances[$this->connectionKey()] ??= $this->createPDOConnection($this->engine);
     }
 
     /**
@@ -279,6 +347,11 @@ class Connection implements DatabaseInterface
             'pooling' => [
                 'enabled' => (bool) env('DB_POOLING_ENABLED', false),
             ],
+
+            'retry' => [
+                'max_attempts' => (int) env('DB_RETRY_MAX_ATTEMPTS', 3),
+                'backoff_base_ms' => (int) env('DB_RETRY_BACKOFF_MS', 500),
+            ],
         ];
     }
 
@@ -294,7 +367,8 @@ class Connection implements DatabaseInterface
      *
      * @param  string $engine Target database engine
      * @return PDO Configured PDO instance
-     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException On connection failure or invalid credentials
+     * @throws \PDOException On connection failure or invalid credentials (raw, unclassified)
+     * @throws \Glueful\Http\Exceptions\Domain\BusinessLogicException For unsupported engines
      */
     private function createPDOConnection(string $engine): PDO
     {
@@ -533,7 +607,8 @@ class Connection implements DatabaseInterface
      * otherwise falls back to legacy connection.
      *
      * @return PDO Active database connection
-     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException If connection lost
+     * @throws \PDOException If a new connection cannot be established (raw, unclassified)
+     * @throws \RuntimeException If a pooled connection has no active PDO handle
      */
     public function getPDO(): PDO
     {
@@ -549,15 +624,11 @@ class Connection implements DatabaseInterface
             return $pdo;
         }
 
-        // Fallback to legacy connection reuse
+        // Lazy (re)establishment: the constructor skipped it (pooling was enabled at
+        // build time) or invalidate() dropped a dead handle. Same identity rules as
+        // the constructor — an excluded connection opens a private backend here too.
         if (!isset($this->pdo)) {
-            // Use existing connection if available (Legacy Pooling)
-            if (isset(self::$instances[$this->engine])) {
-                $this->pdo = self::$instances[$this->engine];
-            } else {
-                $this->pdo = $this->createPDOConnection($this->engine);
-                self::$instances[$this->engine] = $this->pdo; // Store connection
-            }
+            $this->pdo = $this->openOrAdoptSharedPdo();
         }
 
         return $this->pdo;
@@ -820,12 +891,13 @@ class Connection implements DatabaseInterface
     {
         if ($this->transactionManager === null) {
             $savepointManager = new \Glueful\Database\Transaction\SavepointManager($this->getPDO());
-            $queryLogger = new \Glueful\Database\QueryLogger();
 
             $this->transactionManager = new \Glueful\Database\Transaction\TransactionManager(
                 $this->getPDO(),
                 $savepointManager,
-                $queryLogger
+                $this->resilienceLogger,
+                $this->getDriverName(),
+                new UsleepSleeper()
             );
         }
 
@@ -901,8 +973,15 @@ class Connection implements DatabaseInterface
     /**
      * Execute a callback within a database transaction.
      *
-     * Convenience method that delegates to the TransactionManager.
-     * Supports automatic retry on deadlock and nested transactions via savepoints.
+     * The OUTERMOST call owns one shared RetryBudget: the TransactionManager consumes
+     * it for retryable failures (deadlock, lock contention) and this wrapper consumes
+     * it for connection losses, reconnecting and replaying the whole transaction.
+     * Nested calls delegate to the manager with that same budget, so nesting can never
+     * multiply the allowance.
+     *
+     * Replay callbacks MUST build their query chains inside the callback from this
+     * Connection (e.g. via table()) — a QueryBuilder or executor captured before the
+     * call retains the pre-reconnect PDO and will fail on replay.
      *
      * @param callable $callback The callback to execute within the transaction
      * @return mixed The return value of the callback
@@ -910,7 +989,331 @@ class Connection implements DatabaseInterface
      */
     public function transaction(callable $callback): mixed
     {
-        return $this->getTransactionManager()->transaction($callback);
+        // Nested call (or an outer wrapper already active): delegate with the
+        // active budget — a null here would mint a second retry allowance.
+        if ($this->activeRetryBudget !== null || $this->transactionManager?->isActive() === true) {
+            return $this->getTransactionManager()->transaction($callback, $this->activeRetryBudget);
+        }
+
+        $retryConfig = $this->config['retry'] ?? [];
+        $budget = RetryBudget::fromConfig(
+            is_array($retryConfig) ? $retryConfig : [],
+            new UsleepSleeper()
+        );
+        $this->activeRetryBudget = $budget;
+
+        try {
+            while (true) {
+                $manager = null;
+                try {
+                    // Manager construction is inside the catch boundary: on a
+                    // pooled/lazy connection it may itself detect connection loss.
+                    $manager = $this->getTransactionManager();
+                    return $manager->transaction($callback, $budget);
+                } catch (\Throwable $failure) {
+                    // ONE arm, deliberately. Invalidation FIRST, dispatch second:
+                    // every classified database failure here is a PDOException
+                    // subclass, so type-ordered arms cannot separate them safely.
+                    if ($manager?->connectionPresumedDead() === true) {
+                        $this->invalidate();
+                    }
+
+                    $loss = null;
+                    if ($failure instanceof ConnectionLostException) {
+                        $loss = $failure;
+                    } elseif ($failure instanceof \PDOException && !$failure instanceof DatabaseException) {
+                        // Defensive boundary for a RAW failure during lazy
+                        // manager/PDO construction — the only unclassified
+                        // shape that reaches here. Manager callback failures
+                        // classify internally.
+                        $classified = (new ExceptionClassifier())->classify($failure, $this->getDriverName());
+                        if (!$classified instanceof ConnectionLostException) {
+                            throw $classified;
+                        }
+                        $loss = $classified;
+                    }
+
+                    if ($loss === null) {
+                        // Already-classified non-loss failures — including
+                        // CommitOutcomeUnknownException and rule-2 primaries —
+                        // propagate unchanged, unmasked, never replayed. The
+                        // dead handle was already dropped above.
+                        throw $failure;
+                    }
+
+                    $this->reconnectWithinBudget($budget, $loss, 'transaction');
+                    $this->resilienceLogger->logEvent(
+                        'connection.transaction.replay',
+                        ['attempt' => $budget->attemptsUsed()],
+                        'warning'
+                    );
+                    // Fall out of the catch: the while(true) loop replays.
+                }
+            }
+        } finally {
+            $this->activeRetryBudget = null;
+        }
+    }
+
+    /**
+     * Re-run a caller-declared IDEMPOTENT read, reconnecting after a connection loss.
+     *
+     * Only the caller knows a read is safe to repeat, so this is opt-in: nothing
+     * replays a statement implicitly. Build query chains inside the callback from
+     * the supplied Connection — prebuilt builders retain the stale PDO on replay.
+     *
+     * @param callable $fn Receives this Connection; must be free of side effects
+     * @return mixed The callback's return value
+     * @throws \LogicException If called inside an active transaction
+     */
+    public function idempotentRead(callable $fn): mixed
+    {
+        if ($this->hasActiveTransaction()) {
+            throw new \LogicException(
+                'idempotentRead() cannot run inside a transaction: a reconnect would abandon it'
+            );
+        }
+
+        $retryConfig = $this->config['retry'] ?? [];
+        $budget = RetryBudget::fromConfig(
+            is_array($retryConfig) ? $retryConfig : [],
+            new UsleepSleeper()
+        );
+
+        while (true) {
+            try {
+                return $fn($this);
+            } catch (ConnectionLostException $loss) {
+                $this->reconnectWithinBudget($budget, $loss, 'idempotent_read');
+            }
+        }
+    }
+
+    /**
+     * Reconnect under the shared budget, or rethrow the newest classified loss.
+     *
+     * Every recovery cycle consumes exactly one attempt, and a failed establishment
+     * loops back here instead of falling through to an unguarded manager/callback
+     * invocation on a handle that was never restored.
+     */
+    private function reconnectWithinBudget(
+        RetryBudget $budget,
+        ConnectionLostException $lastLoss,
+        string $surface
+    ): void {
+        while (true) {
+            if (!$budget->tryConsume()) {
+                $this->resilienceLogger->logEvent(
+                    'connection.retry.exhausted',
+                    ['surface' => $surface, 'attempts' => $budget->attemptsUsed()],
+                    'error'
+                );
+                throw $lastLoss; // exact final classified failure, unchanged
+            }
+
+            $this->resilienceLogger->logEvent(
+                'connection.reconnect.attempt',
+                [
+                    'surface' => $surface,
+                    'attempt' => $budget->attemptsUsed(),
+                    'delay_ms' => $budget->lastDelayMilliseconds(),
+                ],
+                'warning'
+            );
+
+            try {
+                $this->reconnect();
+                $this->resilienceLogger->logEvent(
+                    'connection.reconnect.success',
+                    ['surface' => $surface, 'attempt' => $budget->attemptsUsed()],
+                    'info'
+                );
+
+                return;
+            } catch (ConnectionLostException $reconnectLoss) {
+                $lastLoss = $reconnectLoss;
+                $this->resilienceLogger->logEvent(
+                    'connection.reconnect.failure',
+                    ['surface' => $surface, 'attempt' => $budget->attemptsUsed()],
+                    'warning'
+                );
+                // Loop back: the NEXT reconnect is gated by another tryConsume().
+            } catch (\LogicException $guardRefusal) {
+                // The guard refused because a transaction is still open on the raw
+                // handle — e.g. the manager's rollback failed with a NON-loss error,
+                // which resets its bookkeeping but leaves the server-side transaction
+                // untouched. Recovery is impossible, but the classified loss is the
+                // truthful failure: never let the guard's LogicException mask it.
+                $this->resilienceLogger->logEvent(
+                    'connection.reconnect.refused',
+                    [
+                        'surface' => $surface,
+                        'attempt' => $budget->attemptsUsed(),
+                        'reason' => $guardRefusal->getMessage(),
+                    ],
+                    'error'
+                );
+
+                throw $lastLoss;
+            }
+        }
+    }
+
+    /**
+     * Drop the current handle and establish a new one.
+     *
+     * Refused while a transaction is open: reconnecting would silently abandon it.
+     *
+     * @throws \LogicException If a transaction is active on the current handle
+     * @throws ConnectionLostException If the new connection cannot be established
+     */
+    public function reconnect(): void
+    {
+        // The guard is deliberately non-lazy (see hasActiveTransaction()): asking
+        // transactionLevel()/getTransactionManager()/getPDO() would create or acquire
+        // a handle merely to discard it.
+        if ($this->hasActiveTransaction()) {
+            throw new \LogicException(
+                'reconnect() refused: a transaction is active on this connection and '
+                . 'reconnecting would silently abandon it.'
+            );
+        }
+
+        $this->resilienceLogger->logEvent(
+            'connection.reconnect.establishing',
+            ['engine' => $this->engine],
+            'warning'
+        );
+
+        $this->invalidate();
+
+        try {
+            $this->getPDO();
+        } catch (\PDOException $e) {
+            $classified = $e instanceof DatabaseException
+                ? $e
+                : (new ExceptionClassifier())->classify($e, $this->getDriverName());
+
+            // A failure to ESTABLISH a connection IS a connection loss, whatever the
+            // driver calls it: MySQL refuses a connect with 2002/2003/2005 under
+            // SQLSTATE HY000, which the STATEMENT-level classifier deliberately maps
+            // to a generic failure (there is no family rule for HY000). Left
+            // unwrapped, the bounded recovery loop — which only catches losses —
+            // would abort after one consumed attempt and surface the connect error
+            // in place of the original loss. Wrapping here keeps the classifier's
+            // statement semantics untouched; the classified failure is chained as
+            // previous and its SQLSTATE/vendor code/errorInfo are preserved.
+            $loss = $classified instanceof ConnectionLostException
+                ? $classified
+                : ConnectionLostException::fromPdo($classified, $this->getDriverName());
+
+            $this->resilienceLogger->logEvent(
+                'connection.reconnect.establish_failed',
+                [
+                    'engine' => $this->engine,
+                    'error' => $loss->getMessage(),
+                    'sqlstate' => $loss->sqlState(),
+                ],
+                'error'
+            );
+
+            throw $loss;
+        }
+
+        $this->resilienceLogger->logEvent(
+            'connection.reconnect.established',
+            ['engine' => $this->engine],
+            'info'
+        );
+    }
+
+    /**
+     * Discard the handle this connection is holding WITHOUT touching it.
+     *
+     * The handle is presumed dead: no rollback, no session reset, no ping. A pooled
+     * handle is discarded from the pool (never released back into it); a non-pooled
+     * one is unpublished from the shared cache — but only when that cache entry is
+     * still THIS handle, so a replacement installed by another Connection survives.
+     */
+    private function invalidate(): void
+    {
+        $deadPdo = $this->currentPdo();
+
+        if ($this->pool !== null) {
+            if ($this->pooledConnection !== null) {
+                $this->pool->discard($this->pooledConnection);
+            }
+            // Clearing the reference keeps __destruct() and getPDO() off the dead
+            // handle; the next getPDO() acquires a fresh one.
+            $this->pooledConnection = null;
+        } else {
+            if ($deadPdo !== null) {
+                $key = $this->connectionKey();
+                if ((self::$instances[$key] ?? null) === $deadPdo) {
+                    unset(self::$instances[$key]);
+                }
+            }
+            unset($this->pdo);
+        }
+
+        $this->transactionManager = null;
+
+        $this->resilienceLogger->logEvent(
+            'connection.invalidated',
+            ['engine' => $this->engine, 'pooled' => $this->pool !== null],
+            'warning'
+        );
+    }
+
+    /**
+     * The PDO handle this connection is CURRENTLY holding, or null.
+     *
+     * Never acquires from the pool and never opens a connection: it reports state,
+     * it does not create it.
+     */
+    private function currentPdo(): ?PDO
+    {
+        if ($this->pool !== null) {
+            // PooledConnection::getPDO() is a pure accessor — no acquisition.
+            return $this->pooledConnection?->getPDO();
+        }
+
+        return isset($this->pdo) ? $this->pdo : null;
+    }
+
+    /**
+     * Whether a transaction is open on the handle this connection is holding.
+     *
+     * Consults the EXISTING transaction manager and the CURRENT raw handle only —
+     * including the pooled one, whose transactions are invisible to the manager when
+     * a borrower used the raw PDO directly. Nothing here may construct a manager or
+     * acquire a connection.
+     */
+    public function hasActiveTransaction(): bool
+    {
+        if ($this->transactionManager?->isActive() === true) {
+            return true;
+        }
+
+        $pdo = $this->currentPdo();
+        if ($pdo === null) {
+            return false;
+        }
+
+        try {
+            return $pdo->inTransaction();
+        } catch (\PDOException $e) {
+            $classified = $e instanceof DatabaseException
+                ? $e
+                : (new ExceptionClassifier())->classify($e, $this->getDriverName());
+            if ($classified instanceof ConnectionLostException) {
+                // The handle is already unusable, so it cannot be holding a
+                // transaction a reconnect could abandon: invalidation may proceed.
+                return false;
+            }
+
+            throw $classified;
+        }
     }
 
     /**

@@ -6,6 +6,160 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.76.0] - 2026-08-08 — Algol
+
+**Theme: the database layer keeps its promises** — the complete native database-layer
+roadmap in one release. Failures are typed (SQLSTATE + vendor codes, `\PDOException`-rooted
+for full BC), retries are honest (one shared, configurable budget for deadlocks and
+connection losses; commit-ambiguous losses are never replayed), SQLite alterations are
+fail-closed (six silently-no-op paths now really execute via audited atomic rebuilds, or
+throw before mutation), and connections recover (replay of provably-uncommitted
+transactions, explicit idempotent reads, lazy reconnection). Moderate risk: new env keys,
+three interface additions for external implementors (called out in Upgrade Notes), and
+migrations that silently did nothing on SQLite now take effect or fail loudly — the point.
+
+### Added
+- **Typed database exceptions** (`Glueful\Database\Exceptions`) — database failures are
+  now classified at the execution boundary into a typed hierarchy rooted at
+  `DatabaseException extends \PDOException` (so every existing `catch (\PDOException)`
+  keeps working): `UniqueConstraintViolationException`,
+  `ForeignKeyConstraintViolationException`, `NotNullConstraintViolationException` (all
+  under a `ConstraintViolationException` parent), `DeadlockException`,
+  `SerializationFailureException`, `LockContentionException`, and
+  `ConnectionLostException`, each carrying `sqlState()` / `driverCode()` / `driver()`
+  accessors with the original message, code, `errorInfo`, and exception chained as
+  `previous`. A stateless `ExceptionClassifier` maps SQLSTATE plus vendor codes with
+  driver-specific codes taking precedence (MySQL reports deadlocks under SQLSTATE
+  40001, so vendor-first is correctness, not style); no message matching. Retryability
+  is declared on the types: `RetryableTransactionFailureInterface` (deadlock,
+  serialization failure, lock contention) extends `TransientFailureInterface`
+  (additionally connection loss). Under default SQLite configuration all constraint
+  kinds are indistinguishable and classify as the generic parent; SQLite extended
+  result codes are honored when an application enables them.
+- **SQLite table rebuilds** (`Glueful\Database\Schema\Sqlite`) — the schema builder now
+  performs SQLite's documented create-copy-swap procedure for alterations SQLite cannot
+  express natively: modify column, drop column, add/drop foreign key, drop inline
+  unique constraint, and combinations of those in one `alterTable()` call (exactly one
+  rebuild per call). The rebuild is audited before any DDL runs (a preservation audit
+  fails closed on anything it cannot reconstruct: generated columns, COLLATE, composite
+  foreign keys, expression uniques, indexes/triggers/views referencing changed columns,
+  `journal_mode=OFF`, an open transaction with `foreign_keys` ON), atomic (own
+  transaction or savepoint; global `PRAGMA foreign_key_check` before mutation and
+  before commit; `foreign_keys`/`legacy_alter_table` state captured, restored, and
+  verified), and verified (the rebuilt table is re-introspected and canonically
+  compared against the planned target — including preserved indexes, triggers, table
+  options, rowids, and the `sqlite_sequence` high-water mark). Combined
+  rebuild+rename requires SQLite ≥ 3.26.0. New
+  `UnsupportedSchemaOperationException` carries table, operation, feature, and reason.
+- **Reconnect resilience** (`Glueful\Database\Resilience`) — the database layer now
+  recovers from connection loss at the two provably-safe boundaries. Outermost
+  `Connection::transaction()` calls replay the callback after a connection loss the
+  framework can prove uncommitted (begin- or callback-phase; the server rolls back on
+  disconnect) — the same replay contract deadlock retries always had, under ONE shared
+  budget: deadlocks, serialization failures, lock contention, and eligible connection
+  losses all draw from the same configurable allowance
+  (`DB_RETRY_MAX_ATTEMPTS`/`DB_RETRY_BACKOFF_MS`, default 3 total attempts with
+  500 ms linear backoff; distinct from the pool's `DB_POOL_RETRY_*` acquisition
+  settings). New `Connection::idempotentRead(callable)` re-runs a caller-declared
+  idempotent read after reconnecting, and `Connection::reconnect()` re-establishes a
+  connection outside transactions. A connection loss detected while COMMIT is in
+  flight is NEVER replayed — the server may have committed before the acknowledgement
+  was lost — and surfaces as the new non-retryable `CommitOutcomeUnknownException`
+  with the connection invalidated for lazy reconnection.
+
+### Changed
+- **`TransactionManager` recognizes retryable failures by type, not by code list** —
+  the mixed driver-code/SQLSTATE list is gone; the retry loop checks
+  `RetryableTransactionFailureInterface`, `begin()` participates in the retry window,
+  and after exhaustion the final typed failure is rethrown instead of a generic
+  `Exception` (the `setMaxRetries(0)` zero-attempt edge keeps the historical generic
+  exception). Retry count, backoff, and callback semantics are unchanged. `begin()`/
+  `commit()`/`rollback()` classify their own PDO failures for direct callers. The
+  constructor gains an optional trailing `?string $driver` (derived from the PDO when
+  omitted).
+- **`TransactionManager` retry mechanics**: retries are driven by an injectable
+  `RetryBudget` + `SleeperInterface` (tests no longer really sleep); the historical
+  sleep AFTER the final failed attempt is removed (~1.5 s saved at defaults);
+  `transaction()` now catches `\Throwable`, so an `Error` thrown by a callback rolls
+  the transaction back before propagating; rollback failures during exception handling
+  follow explicit precedence (a connection loss during rollback of a retryable failure
+  now surfaces the loss instead of retrying on a dead handle; a loss during rollback
+  of a non-retryable failure preserves the primary and flags the connection for
+  invalidation). `TransactionManagerInterface::transaction()` gained an optional
+  trailing `?RetryBudget` parameter — external implementors must add it (BC note);
+  `setMaxRetries()` keeps its exact historical semantics including the zero-execution
+  edge.
+- **Unique-constraint violations render as HTTP 409** with a fixed conflict message
+  (in debug mode too — the driver message leaks column/value detail), are excluded
+  from error reporting, and all typed database exceptions route to the `database` log
+  channel.
+
+### Fixed
+- **PostgreSQL deadlocks (`40P01`) were never retried** — the old code list only
+  matched serialization failure (`40001`); deadlock-victim transactions now retry.
+  SQLite `SQLITE_BUSY`/`SQLITE_LOCKED` also become retryable.
+- **`AlterTableBuilder::comment()` silently did nothing on every driver** — the last
+  instance of the silent-no-op bug class: the change key was passed to generators that
+  ignored it. Table-comment alteration now fails closed with
+  `UnsupportedSchemaOperationException` before any operation is queued.
+- **A failed savepoint rollback no longer leaks the outer transaction** — when rolling
+  back a nested savepoint failed with a non-connection-loss error, the manager reset
+  its bookkeeping to level 0, so the outer frame's rollback early-returned and the PDO
+  transaction stayed open on the shared handle. The outer level is now preserved so the
+  outermost rollback really executes.
+- **Six SQLite alteration paths silently did nothing.** `modifyColumn`/`dropColumn`/
+  `addForeignKey`/`dropForeignKey` generated SQL *comments* that executed as successful
+  no-ops, and `alterTable()` discarded `rename_columns` and foreign-key changes
+  entirely — migrations "passed" on SQLite while leaving the schema untouched. All six
+  paths now take real effect (rebuild or native SQL) or throw before mutation.
+- **`TableBuilder` compiled modified columns as additions** and dropped
+  rename/drop-foreign-key changes from the change-set on every driver; MySQL and
+  PostgreSQL generators now receive complete change-sets from the fluent alter path.
+  The public builder now exposes table rename; `dropPrimary()` and alteration-time
+  table comments, which remain outside this slice, throw explicitly instead of being
+  silently discarded. Native multi-statement SQLite alteration calls execute as one
+  transaction/savepoint.
+
+### Upgrade Notes
+- Migrations that previously "succeeded" on SQLite by silently doing nothing will now
+  either take real effect or fail with `UnsupportedSchemaOperationException`. Audit
+  SQLite-targeting migrations that modify/drop columns or foreign keys: their intent
+  will now actually apply.
+- Fluent `dropPrimary()` and table-comment alterations now fail closed until their
+  cross-driver implementations are completed; they no longer report false success — as do
+  `engine()`, `charset()`, and `collation()` table options and `->primary()` on an
+  added/modified column inside an `alterTable()` callback, all of which were previously
+  silently discarded on every driver. A migration calling e.g. `->engine('InnoDB')` in an
+  alter callback now fails explicitly instead of passing while doing nothing.
+- `MigrationManager`'s docblock claimed migrations run inside a transaction; they never
+  did, and the docblock now says so (behavior unchanged).
+- **For implementors of the schema interfaces:** `SchemaBuilderInterface` gained
+  `executeSqliteRebuild()` and `executeSqliteNativeAlteration()`, and
+  `TableBuilderInterface` gained `rename()` — external decorators or test doubles
+  implementing these interfaces must add the new methods. In-repo implementations and
+  PHPUnit mocks are unaffected.
+- **`ColumnDefinition::$collation` on a modified column now fails closed on SQLite** (the
+  generator cannot emit COLLATE); previously the flag was silently discarded. Portable
+  migrations that set collation for MySQL must gate it by driver.
+- **Tables with bare SQL-keyword column names** (`key`, `order`, `match`, `values`, …) cannot
+  be rebuilt — the preservation audit fails closed on unscannable definitions. Quote such
+  identifiers at creation time, or rename them first.
+- **A rebuild cannot run while the caller holds an unconsumed read cursor** on the same
+  connection (SQLite returns "database table is locked" for the swap's `DROP TABLE`). Consume
+  or `closeCursor()` result sets before altering tables.
+- Replay is available through `Connection::transaction()` and
+  `Connection::idempotentRead()` only. `QueryBuilder::transaction()` delegates to its
+  captured manager and cannot reconnect. Replay callbacks must build query chains
+  INSIDE the callback from the supplied connection — prebuilt builders retain the
+  stale PDO.
+- Commit-phase connection loss previously surfaced as `ConnectionLostException`; it
+  is now `CommitOutcomeUnknownException` (still a `PDOException` subclass). Code that
+  retried on the old type was risking duplicate commits — audit any such handler.
+- `Connection::transaction()` now derives its retry allowance from the `retry` config
+  block; `TransactionManager::setMaxRetries()` no longer influences that path (it still
+  governs direct manager use). Code tuning retries for `Connection::transaction()` /
+  `db($context)->transaction()` should set `DB_RETRY_MAX_ATTEMPTS` instead.
+
 ## [1.75.0] - 2026-08-07 — Algieba
 
 **Theme: the whole framework type-checks at PHPStan level 8 with zero suppressed errors** —

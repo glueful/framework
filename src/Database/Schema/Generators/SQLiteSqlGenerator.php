@@ -9,6 +9,7 @@ use Glueful\Database\Schema\DTOs\TableDefinition;
 use Glueful\Database\Schema\DTOs\ColumnDefinition;
 use Glueful\Database\Schema\DTOs\IndexDefinition;
 use Glueful\Database\Schema\DTOs\ForeignKeyDefinition;
+use Glueful\Database\Schema\Exceptions\UnsupportedSchemaOperationException;
 
 /**
  * SQLite SQL Generator Implementation
@@ -79,8 +80,29 @@ class SQLiteSqlGenerator implements SqlGeneratorInterface
             $parts[] = '  ' . $this->buildForeignKeyDefinition($foreignKey);
         }
 
+        // Table-level CHECK constraints (round-tripped from introspection)
+        $tableChecks = $table->options['table_checks'] ?? [];
+        if (is_array($tableChecks)) {
+            foreach ($tableChecks as $checkExpression) {
+                if (is_string($checkExpression) && $checkExpression !== '') {
+                    $parts[] = '  CHECK (' . $checkExpression . ')';
+                }
+            }
+        }
+
         $sql .= implode(",\n", $parts) . "\n";
         $sql .= ')';
+
+        $suffixes = [];
+        if (($table->options['without_rowid'] ?? false) === true) {
+            $suffixes[] = 'WITHOUT ROWID';
+        }
+        if (($table->options['strict'] ?? false) === true) {
+            $suffixes[] = 'STRICT';
+        }
+        if ($suffixes !== []) {
+            $sql .= ' ' . implode(', ', $suffixes);
+        }
 
         return $sql . ';';
     }
@@ -99,6 +121,30 @@ class SQLiteSqlGenerator implements SqlGeneratorInterface
      */
     public function alterTable(TableDefinition $table, array $changes): array
     {
+        // Rebuild-triggering keys are always routed to SQLiteTableRebuilder by the
+        // schema-builder dispatch before this point (see TableBuilder::executeAlterations()
+        // and SqliteAlterationPlan::requiresRebuild()). Throwing here is the terminal
+        // backstop for direct API use, never silently degrading to a comment no-op.
+        // array_key_first() (rather than a literal [0]) tolerates a non-list payload —
+        // e.g. a caller-supplied associative array — without a warning/TypeError; any
+        // non-empty value for these keys is unsupported regardless of its array shape.
+        if (isset($changes['modify_columns']) && $changes['modify_columns'] !== []) {
+            $key = array_key_first($changes['modify_columns']);
+            $this->modifyColumn($table->name, $changes['modify_columns'][$key]);
+        }
+        if (isset($changes['drop_columns']) && $changes['drop_columns'] !== []) {
+            $key = array_key_first($changes['drop_columns']);
+            $this->dropColumn($table->name, $changes['drop_columns'][$key]);
+        }
+        if (isset($changes['add_foreign_keys']) && $changes['add_foreign_keys'] !== []) {
+            $key = array_key_first($changes['add_foreign_keys']);
+            $this->addForeignKey($table->name, $changes['add_foreign_keys'][$key]);
+        }
+        if (isset($changes['drop_foreign_keys']) && $changes['drop_foreign_keys'] !== []) {
+            $key = array_key_first($changes['drop_foreign_keys']);
+            $this->dropForeignKey($table->name, $changes['drop_foreign_keys'][$key]);
+        }
+
         $statements = [];
         $tableName = $this->quoteIdentifier($table->name);
 
@@ -110,19 +156,11 @@ class SQLiteSqlGenerator implements SqlGeneratorInterface
             }
         }
 
-        // Column modifications are very limited in SQLite
-        // Most changes require recreating the table
-        $hasModifyColumns = isset($changes['modify_columns']) && $changes['modify_columns'] !== [];
-        $hasDropColumns = isset($changes['drop_columns']) && $changes['drop_columns'] !== [];
-        if ($hasModifyColumns || $hasDropColumns) {
-            $statements[] = "-- WARNING: SQLite does not support modifying/dropping columns directly.";
-            $statements[] = "-- These operations require recreating the table.";
-        }
-
-        // Rename table (supported)
-        if (isset($changes['rename_table']) && $changes['rename_table'] !== '') {
-            $newName = $this->quoteIdentifier($changes['rename_table']);
-            $statements[] = "ALTER TABLE {$tableName} RENAME TO {$newName};";
+        // Rename columns (native, SQLite 3.25.0+)
+        if (isset($changes['rename_columns']) && $changes['rename_columns'] !== []) {
+            foreach ($changes['rename_columns'] as $from => $to) {
+                $statements[] = $this->renameColumn($table->name, (string) $from, (string) $to);
+            }
         }
 
         // Add indexes (create separate statements)
@@ -137,6 +175,13 @@ class SQLiteSqlGenerator implements SqlGeneratorInterface
             foreach ($changes['drop_indexes'] as $indexName) {
                 $statements[] = $this->dropIndex($table->name, $indexName);
             }
+        }
+
+        // Rename table (supported) — last, so every earlier statement in this
+        // call still addresses the table under its original name.
+        if (isset($changes['rename_table']) && $changes['rename_table'] !== '') {
+            $newName = $this->quoteIdentifier($changes['rename_table']);
+            $statements[] = "ALTER TABLE {$tableName} RENAME TO {$newName};";
         }
 
         return $statements;
@@ -192,27 +237,41 @@ class SQLiteSqlGenerator implements SqlGeneratorInterface
     }
 
     /**
-     * Generate column modification (not supported in SQLite)
+     * SQLite cannot modify columns natively.
      *
      * @param  string           $table  Table name
      * @param  ColumnDefinition $column New column definition
-     * @return string SQL statement with warning
+     * @return never
+     * @throws UnsupportedSchemaOperationException Always; route through the schema builder instead.
      */
     public function modifyColumn(string $table, ColumnDefinition $column): string
     {
-        return "-- SQLite does not support modifying columns. Table recreation required.";
+        throw UnsupportedSchemaOperationException::forFeature(
+            $table,
+            'modify_column',
+            "column \"{$column->name}\"",
+            'SQLite cannot modify columns natively; route through the schema builder, '
+            . 'which performs an audited table rebuild'
+        );
     }
 
     /**
-     * Generate DROP COLUMN (not supported in SQLite)
+     * SQLite cannot drop columns natively.
      *
      * @param  string $table  Table name
      * @param  string $column Column name
-     * @return string SQL statement with warning
+     * @return never
+     * @throws UnsupportedSchemaOperationException Always; route through the schema builder instead.
      */
     public function dropColumn(string $table, string $column): string
     {
-        return "-- SQLite does not support dropping columns. Table recreation required.";
+        throw UnsupportedSchemaOperationException::forFeature(
+            $table,
+            'drop_column',
+            "column \"{$column}\"",
+            'SQLite cannot drop columns natively; route through the schema builder, '
+            . 'which performs an audited table rebuild'
+        );
     }
 
     /**
@@ -293,27 +352,41 @@ class SQLiteSqlGenerator implements SqlGeneratorInterface
     // ===========================================
 
     /**
-     * Generate ADD FOREIGN KEY (not supported after table creation in SQLite)
+     * SQLite cannot add foreign keys after table creation.
      *
      * @param  string               $table      Table name
      * @param  ForeignKeyDefinition $foreignKey Foreign key definition
-     * @return string SQL statement with warning
+     * @return never
+     * @throws UnsupportedSchemaOperationException Always; route through the schema builder instead.
      */
     public function addForeignKey(string $table, ForeignKeyDefinition $foreignKey): string
     {
-        return "-- SQLite does not support adding foreign keys after table creation.";
+        throw UnsupportedSchemaOperationException::forFeature(
+            $table,
+            'add_foreign_key',
+            "foreign key \"{$foreignKey->name}\"",
+            'SQLite cannot add foreign keys natively; route through the schema builder, '
+            . 'which performs an audited table rebuild'
+        );
     }
 
     /**
-     * Generate DROP FOREIGN KEY (not supported in SQLite)
+     * SQLite cannot drop foreign key constraints natively.
      *
      * @param  string $table      Table name
      * @param  string $constraint Constraint name
-     * @return string SQL statement with warning
+     * @return never
+     * @throws UnsupportedSchemaOperationException Always; route through the schema builder instead.
      */
     public function dropForeignKey(string $table, string $constraint): string
     {
-        return "-- SQLite does not support dropping foreign key constraints.";
+        throw UnsupportedSchemaOperationException::forFeature(
+            $table,
+            'drop_foreign_key',
+            "foreign key \"{$constraint}\"",
+            'SQLite cannot drop foreign keys natively; route through the schema builder, '
+            . 'which performs an audited table rebuild'
+        );
     }
 
     // ===========================================
@@ -370,7 +443,7 @@ class SQLiteSqlGenerator implements SqlGeneratorInterface
             'string', 'varchar', 'char' => 'TEXT',
             'text', 'longText', 'mediumText', 'tinyText' => 'TEXT',
             'integer', 'bigInteger', 'smallInteger', 'tinyInteger' => 'INTEGER',
-            'decimal', 'numeric', 'float', 'double' => 'REAL',
+            'decimal', 'numeric', 'float', 'double', 'real' => 'REAL',
             'boolean' => 'INTEGER',
             'timestamp', 'datetime', 'date', 'time', 'year' => 'TEXT',
             'json' => 'TEXT',
@@ -558,8 +631,10 @@ class SQLiteSqlGenerator implements SqlGeneratorInterface
         }
 
         // Default value
-        if ($column->hasDefault() && !$column->autoIncrement) {
-            $parts[] = 'DEFAULT ' . $this->formatDefaultValue($column->getDefaultValue(), $column->type);
+        if ($column->defaultRaw !== null && !$column->autoIncrement) {
+            $parts[] = 'DEFAULT ' . $column->defaultRaw;
+        } elseif ($column->default !== null && !$column->autoIncrement) {
+            $parts[] = 'DEFAULT ' . $this->formatDefaultValue($column->default, $column->type);
         }
 
         // Unique constraint
@@ -659,7 +734,10 @@ class SQLiteSqlGenerator implements SqlGeneratorInterface
                 'type' => $column['type'],
                 'nullable' => (int) $column['notnull'] === 0,
                 'default' => $column['dflt_value'],
-                'is_primary' => (int) $column['pk'] === 1,
+                // PRAGMA table_info's "pk" is a 1-based ordinal, not a boolean flag: only
+                // the first member of a composite primary key would report 1, so every
+                // member of a composite key must be recognized by testing > 0, not === 1.
+                'is_primary' => (int) $column['pk'] > 0,
                 'is_unique' => false, // Will be populated later
                 'is_indexed' => false, // Will be populated later
                 'relationships' => [],

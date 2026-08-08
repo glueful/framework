@@ -10,6 +10,14 @@ use Throwable;
 use Glueful\Database\Transaction\Interfaces\TransactionManagerInterface;
 use Glueful\Database\Transaction\Interfaces\SavepointManagerInterface;
 use Glueful\Database\QueryLogger;
+use Glueful\Database\Exceptions\CommitOutcomeUnknownException;
+use Glueful\Database\Exceptions\ConnectionLostException;
+use Glueful\Database\Exceptions\DatabaseException;
+use Glueful\Database\Exceptions\ExceptionClassifier;
+use Glueful\Database\Exceptions\RetryableTransactionFailureInterface;
+use Glueful\Database\Resilience\RetryBudget;
+use Glueful\Database\Resilience\SleeperInterface;
+use Glueful\Database\Resilience\UsleepSleeper;
 
 /**
  * TransactionManager
@@ -26,6 +34,16 @@ class TransactionManager implements TransactionManagerInterface
     protected QueryLogger $logger;
     protected int $transactionLevel = 0;
     protected int $maxRetries = 3;
+    protected string $driver;
+    protected ExceptionClassifier $classifier;
+    private SleeperInterface $sleeper;
+
+    /**
+     * Set when a rollback or commit failure is classified as a connection
+     * loss: the handle is presumed dead and callers should invalidate/
+     * reconnect rather than reuse it.
+     */
+    private bool $connectionPresumedDead = false;
 
     /**
      * Callbacks to execute after transaction commits, indexed by transaction level.
@@ -44,25 +62,60 @@ class TransactionManager implements TransactionManagerInterface
     public function __construct(
         PDO $pdo,
         SavepointManagerInterface $savepointManager,
-        QueryLogger $logger
+        QueryLogger $logger,
+        ?string $driver = null,
+        ?SleeperInterface $sleeper = null
     ) {
         $this->pdo = $pdo;
         $this->savepointManager = $savepointManager;
         $this->logger = $logger;
+        $driverName = $driver ?? $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        $this->driver = is_string($driverName) ? $driverName : '';
+        $this->classifier = new ExceptionClassifier();
+        $this->sleeper = $sleeper ?? new UsleepSleeper();
     }
 
     /**
-     * Execute callback within a transaction
+     * Whether the underlying connection is presumed dead after a rollback
+     * or commit failure classified as a connection loss. Callers (e.g.
+     * Connection) should invalidate/reconnect rather than reuse this handle.
      */
-    public function transaction(callable $callback): mixed
+    public function connectionPresumedDead(): bool
     {
-        $retryCount = 0;
+        return $this->connectionPresumedDead;
+    }
 
-        $this->logger->logEvent("Starting transaction", ['retries_allowed' => $this->maxRetries]);
+    /**
+     * Execute callback within a transaction, retrying on classified
+     * deadlock/lock-contention failures.
+     *
+     * @param callable $callback The transactional work to run
+     * @param RetryBudget|null $budget Shared retry budget (e.g. supplied by
+     *        Connection); when null, a local budget honoring setMaxRetries()
+     *        and the historical 500ms backoff is constructed for this call.
+     */
+    public function transaction(callable $callback, ?RetryBudget $budget = null): mixed
+    {
+        $this->logger->logEvent(
+            "Starting transaction",
+            ['retries_allowed' => $budget !== null ? $budget->maxAttempts() - 1 : $this->maxRetries]
+        );
 
-        while ($retryCount < $this->maxRetries) {
-            $this->begin();
+        if ($budget === null && $this->maxRetries === 0) {
+            // setMaxRetries(0) is valid and makes zero attempts, so no typed
+            // failure exists; retain the historical generic exception for
+            // that compatibility edge only.
+            throw new Exception("Transaction failed after {$this->maxRetries} retries due to deadlock.");
+        }
+
+        $budget ??= RetryBudget::forAttempts($this->maxRetries, 500, $this->sleeper);
+        $lastFailure = null;
+
+        do {
+            $began = false;
             try {
+                $this->begin();
+                $began = true;
                 $result = $callback($this);
                 $this->commit();
 
@@ -70,33 +123,51 @@ class TransactionManager implements TransactionManagerInterface
                 $this->logger->logEvent(
                     "Transaction completed successfully",
                     [
-                    'retries' => $retryCount,
+                    'retries' => $budget->attemptsUsed() - 1,
                     'level' => $this->transactionLevel
                     ],
                     'info'
                 );
 
                 return $result;
-            } catch (Exception $e) {
-                if ($this->isDeadlock($e)) {
-                    $this->rollback();
-                    $retryCount++;
+            } catch (Throwable $e) {
+                // begin()/commit()/rollback() classify their own failures; a raw
+                // PDOException here came from the callback's direct PDO use.
+                if ($e instanceof \PDOException && !$e instanceof DatabaseException) {
+                    $e = $this->classifier->classify($e, $this->driver);
+                }
+
+                if ($e instanceof RetryableTransactionFailureInterface) {
+                    if ($began) {
+                        $superseding = $this->rollbackForFailure($e);
+                        if ($superseding !== null) {
+                            throw $superseding;
+                        }
+                    }
+                    $lastFailure = $e;
+
+                    if (!$budget->tryConsume()) {
+                        break;
+                    }
 
                     // Log deadlock and retry
                     $this->logger->logEvent(
                         "Transaction deadlock detected, retrying",
                         [
-                        'retry' => $retryCount,
-                        'max_retries' => $this->maxRetries,
+                        'attempt' => $budget->attemptsUsed(),
+                        'max_retries' => $budget->maxAttempts() - 1,
+                        'delay_ms' => $budget->lastDelayMilliseconds(),
                         'error' => $e->getMessage()
                         ],
                         'warning'
                     );
-
-                    // Progressive backoff
-                    usleep(500000 * $retryCount);
                 } else {
-                    $this->rollback();
+                    // commit() already cleared bookkeeping on the ambiguity
+                    // path; a rollback attempt here would only log a spurious
+                    // "no active transaction" warning against a dead handle.
+                    if ($began && !$e instanceof CommitOutcomeUnknownException) {
+                        $this->rollbackForFailure($e);
+                    }
 
                     // Log transaction failure
                     $this->logger->logEvent(
@@ -112,17 +183,113 @@ class TransactionManager implements TransactionManagerInterface
                     throw $e;
                 }
             }
-        }
+        } while (true);
 
         $this->logger->logEvent(
             "Transaction failed after maximum retries",
             [
-            'max_retries' => $this->maxRetries
+            'max_retries' => $budget->maxAttempts() - 1
             ],
             'error'
         );
 
-        throw new Exception("Transaction failed after {$this->maxRetries} retries due to deadlock.");
+        // $lastFailure is always set here: the only way to reach this point is
+        // via `break`, which is always preceded by `$lastFailure = $e;` in the
+        // same iteration.
+        throw $lastFailure;
+    }
+
+    /**
+     * Roll back after a transaction failure, resolving precedence between
+     * the primary failure and any failure the rollback itself produces.
+     *
+     * Returns null when the primary should be (re)thrown by the caller, or
+     * a superseding \Throwable that must be thrown instead (rule 3 below).
+     */
+    private function rollbackForFailure(Throwable $primary): ?Throwable
+    {
+        $levelAtFailure = $this->transactionLevel;
+
+        try {
+            $this->rollback();
+
+            return null;
+        } catch (\PDOException $rollbackFailure) {
+            $classified = $rollbackFailure instanceof DatabaseException
+                ? $rollbackFailure
+                : $this->classifier->classify($rollbackFailure, $this->driver);
+
+            if (!$classified instanceof ConnectionLostException) {
+                // Non-loss rollback failure: rollback() threw BEFORE reaching
+                // its own bookkeeping update, so this manager's transaction
+                // state is unknown at the failed level. When the failure was a
+                // SAVEPOINT rollback (level > 1), the OUTER PDO transaction is
+                // still open — leave level 1 so the outer frame's rollback
+                // really rolls it back instead of early-returning at level 0
+                // and leaking the transaction; discard only the savepoint
+                // levels' callbacks. When the outermost rollback itself failed,
+                // reset fully. The connection may well be alive, so do NOT set
+                // connectionPresumedDead — only loss-classified rollback
+                // failures flag the handle.
+                if ($levelAtFailure > 1) {
+                    $this->transactionLevel = 1;
+                    foreach (array_keys($this->commitCallbacks) as $level) {
+                        if ($level >= 2) {
+                            unset($this->commitCallbacks[$level]);
+                        }
+                    }
+                    foreach (array_keys($this->rollbackCallbacks) as $level) {
+                        if ($level >= 2) {
+                            unset($this->rollbackCallbacks[$level]);
+                        }
+                    }
+                } else {
+                    $this->transactionLevel = 0;
+                    $this->commitCallbacks = [];
+                    $this->rollbackCallbacks = [];
+                }
+                $this->logger->logEvent(
+                    'Rollback failed while handling a transaction failure',
+                    ['primary' => $primary->getMessage(), 'secondary' => $classified->getMessage()],
+                    'error'
+                );
+
+                return null; // preserve the primary
+            }
+
+            // The connection died during rollback. The server rolls back on
+            // disconnect; reset bookkeeping and flag the dead handle.
+            $this->transactionLevel = 0;
+            $this->commitCallbacks = [];
+            $this->rollbackCallbacks = [];
+            $this->connectionPresumedDead = true;
+
+            if ($primary instanceof ConnectionLostException) {
+                $this->logger->logEvent(
+                    'Connection also lost during rollback; preserving primary loss',
+                    ['secondary' => $classified->getMessage()],
+                    'warning'
+                );
+
+                return null; // rule 1: preserve primary loss
+            }
+            if ($primary instanceof RetryableTransactionFailureInterface) {
+                $this->logger->logEvent(
+                    'Retryable failure superseded by connection loss during rollback',
+                    ['primary' => $primary->getMessage()],
+                    'warning'
+                );
+
+                return $classified; // rule 3: surface the loss to Connection
+            }
+            $this->logger->logEvent(
+                'Connection lost during rollback; preserving non-retryable primary',
+                ['primary' => $primary->getMessage(), 'secondary' => $classified->getMessage()],
+                'error'
+            );
+
+            return null; // rule 2: preserve primary, dead handle flagged
+        }
     }
 
     /**
@@ -130,12 +297,16 @@ class TransactionManager implements TransactionManagerInterface
      */
     public function begin(): void
     {
-        if ($this->transactionLevel === 0) {
-            $this->pdo->beginTransaction();
-            $this->logger->logEvent("Transaction started", ['level' => 1], 'debug');
-        } else {
-            $this->savepointManager->create($this->transactionLevel);
-            $this->logger->logEvent("Savepoint created", ['level' => $this->transactionLevel + 1], 'debug');
+        try {
+            if ($this->transactionLevel === 0) {
+                $this->pdo->beginTransaction();
+                $this->logger->logEvent("Transaction started", ['level' => 1], 'debug');
+            } else {
+                $this->savepointManager->create($this->transactionLevel);
+                $this->logger->logEvent("Savepoint created", ['level' => $this->transactionLevel + 1], 'debug');
+            }
+        } catch (\PDOException $e) {
+            throw $this->classifier->classify($e, $this->driver);
         }
         $this->transactionLevel++;
     }
@@ -154,7 +325,22 @@ class TransactionManager implements TransactionManagerInterface
 
         if ($level === 1) {
             // Outermost transaction - actually commit to database
-            $this->pdo->commit();
+            try {
+                $this->pdo->commit();
+            } catch (\PDOException $e) {
+                $classified = $e instanceof DatabaseException ? $e : $this->classifier->classify($e, $this->driver);
+                if ($classified instanceof ConnectionLostException) {
+                    // Ambiguous outcome: the server may have committed before
+                    // the acknowledgement was lost. Never replayable; nothing
+                    // about either callback set can be inferred.
+                    $this->transactionLevel = 0;
+                    $this->commitCallbacks = [];
+                    $this->rollbackCallbacks = [];
+                    $this->connectionPresumedDead = true;
+                    throw CommitOutcomeUnknownException::fromLoss($classified);
+                }
+                throw $classified;
+            }
             $this->logger->logEvent("Transaction committed", ['level' => 1], 'debug');
             $this->transactionLevel = 0;
 
@@ -184,7 +370,11 @@ class TransactionManager implements TransactionManagerInterface
 
         if ($level === 1) {
             // Outermost transaction - actually rollback
-            $this->pdo->rollBack();
+            try {
+                $this->pdo->rollBack();
+            } catch (\PDOException $e) {
+                throw $this->classifier->classify($e, $this->driver);
+            }
             $this->logger->logEvent("Transaction rolled back", ['level' => 1], 'debug');
             $this->transactionLevel = 0;
 
@@ -193,7 +383,11 @@ class TransactionManager implements TransactionManagerInterface
             $this->clearCallbacks($level);
         } else {
             // Nested transaction (savepoint) - rollback to previous savepoint
-            $this->savepointManager->rollbackTo($level - 1);
+            try {
+                $this->savepointManager->rollbackTo($level - 1);
+            } catch (\PDOException $e) {
+                throw $this->classifier->classify($e, $this->driver);
+            }
             $this->logger->logEvent("Rolled back to savepoint", ['level' => $level - 1], 'debug');
             $this->transactionLevel--;
 
@@ -232,18 +426,6 @@ class TransactionManager implements TransactionManagerInterface
     public function getMaxRetries(): int
     {
         return $this->maxRetries;
-    }
-
-    /**
-     * Check if exception is a deadlock
-     */
-    protected function isDeadlock(Exception $e): bool
-    {
-        // MySQL deadlock error codes: 1213, 1205
-        // PostgreSQL deadlock error code: 40001
-        $deadlockCodes = ['1213', '1205', '40001'];
-
-        return in_array((string) $e->getCode(), $deadlockCodes, true);
     }
 
     /**
