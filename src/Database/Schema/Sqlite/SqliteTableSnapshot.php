@@ -101,4 +101,64 @@ final class SqliteTableSnapshot
 
         return null;
     }
+
+    /**
+     * Canonical comparable form: everything semantic, nothing cosmetic.
+     *
+     * Auto-index names are positional (sqlite_autoindex_<table>_N) and carry
+     * no meaning of their own, so indexes compare on shape; declared types and
+     * identifiers compare case-insensitively; CHECK ownership (scope + owning
+     * column) is semantic and included; the raw createSql is deliberately
+     * excluded — it is evidence, not semantics.
+     *
+     * Used by both equivalence gates: the test-time model round-trip and the
+     * rebuilder's post-swap runtime verification.
+     *
+     * @return array<string, mixed>
+     */
+    public function toCanonicalArray(): array
+    {
+        $indexes = array_map(static fn (array $ix): array => [
+            'unique' => $ix['unique'],
+            'origin' => $ix['origin'],
+            'partial' => $ix['partial'],
+            'columns' => array_map(
+                static fn (?string $c): ?string => $c === null ? null : strtolower($c),
+                $ix['columns']
+            ),
+        ], $this->indexes);
+        usort($indexes, static fn (array $a, array $b): int => json_encode($a) <=> json_encode($b));
+
+        $foreignKeys = array_map(static fn (array $fk): array => [
+            'table' => strtolower($fk['table']),
+            'from' => array_map('strtolower', $fk['from']),
+            'to' => array_map('strtolower', $fk['to']),
+            'onUpdate' => strtoupper($fk['onUpdate']),
+            'onDelete' => strtoupper($fk['onDelete']),
+        ], $this->foreignKeys);
+
+        $checks = array_map(static fn (array $c): array => [
+            'identifiers' => $c['identifiers'],
+            'scope' => $c['scope'],
+            'column' => $c['column'] === null ? null : strtolower($c['column']),
+            'normalized' => strtolower(preg_replace('/\s+/', ' ', $c['expression']) ?? $c['expression']),
+        ], $this->checks);
+
+        return [
+            'columns' => array_map(static fn (array $c): array => [
+                'name' => strtolower($c['name']),
+                'type' => strtolower($c['type']),
+                'notNull' => $c['notNull'],
+                'default' => $c['default'] === null ? null : strtolower($c['default']),
+                'pkOrdinal' => $c['pkOrdinal'],
+            ], $this->columns),
+            'primaryKey' => array_map('strtolower', $this->primaryKey),
+            'autoIncrement' => $this->autoIncrement,
+            'checks' => $checks,
+            'indexes' => $indexes,
+            'foreignKeys' => $foreignKeys,
+            'withoutRowid' => $this->withoutRowid,
+            'strict' => $this->strict,
+        ];
+    }
 }

@@ -7,7 +7,6 @@ namespace Glueful\Tests\Unit\Database\Schema\Sqlite;
 use Glueful\Database\Schema\Generators\SQLiteSqlGenerator;
 use Glueful\Database\Schema\Sqlite\SqliteSchemaIntrospector;
 use Glueful\Database\Schema\Sqlite\SqliteSnapshotMapper;
-use Glueful\Database\Schema\Sqlite\SqliteTableSnapshot;
 use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
@@ -87,64 +86,13 @@ final class SqliteModelRoundTripTest extends TestCase
 
         $regenerated = (new SqliteSchemaIntrospector($scratch))->snapshot('t');
 
+        // Canonicalization lives on the snapshot itself (SqliteTableSnapshot::
+        // toCanonicalArray()) so the test-time model gate and the rebuilder's
+        // runtime verification compare through exactly one implementation.
         $this->assertSame(
-            $this->canonical($snapshot),
-            $this->canonical($regenerated),
+            $snapshot->toCanonicalArray(),
+            $regenerated->toCanonicalArray(),
             "Round-trip drift.\nOriginal SQL: {$snapshot->createSql}\nRegenerated SQL: {$regeneratedSql}"
         );
-    }
-
-    /**
-     * Canonical comparable form: everything semantic, nothing cosmetic.
-     * Auto-index names are positional (sqlite_autoindex_t_N) and already
-     * comparable; declared types compare case-insensitively; the raw
-     * createSql is deliberately excluded (it is evidence, not semantics).
-     *
-     * @return array<string, mixed>
-     */
-    private function canonical(SqliteTableSnapshot $s): array
-    {
-        $indexes = array_map(static fn (array $ix): array => [
-            'unique' => $ix['unique'],
-            'origin' => $ix['origin'],
-            'partial' => $ix['partial'],
-            'columns' => array_map(
-                static fn (?string $c): ?string => $c === null ? null : strtolower($c),
-                $ix['columns']
-            ),
-        ], $s->indexes);
-        usort($indexes, static fn (array $a, array $b): int => json_encode($a) <=> json_encode($b));
-
-        $fks = array_map(static fn (array $fk): array => [
-            'table' => strtolower($fk['table']),
-            'from' => array_map('strtolower', $fk['from']),
-            'to' => array_map('strtolower', $fk['to']),
-            'onUpdate' => strtoupper($fk['onUpdate']),
-            'onDelete' => strtoupper($fk['onDelete']),
-        ], $s->foreignKeys);
-
-        $checks = array_map(static fn (array $c): array => [
-            'identifiers' => $c['identifiers'],
-            'scope' => $c['scope'],
-            'column' => $c['column'],
-            'normalized' => strtolower(preg_replace('/\s+/', ' ', $c['expression']) ?? $c['expression']),
-        ], $s->checks);
-
-        return [
-            'columns' => array_map(static fn (array $c): array => [
-                'name' => strtolower($c['name']),
-                'type' => strtolower($c['type']),
-                'notNull' => $c['notNull'],
-                'default' => $c['default'] === null ? null : strtolower($c['default']),
-                'pkOrdinal' => $c['pkOrdinal'],
-            ], $s->columns),
-            'primaryKey' => array_map('strtolower', $s->primaryKey),
-            'autoIncrement' => $s->autoIncrement,
-            'checks' => $checks,
-            'indexes' => $indexes,
-            'foreignKeys' => $fks,
-            'withoutRowid' => $s->withoutRowid,
-            'strict' => $s->strict,
-        ];
     }
 }
