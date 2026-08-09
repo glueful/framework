@@ -6,6 +6,21 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.77.0] - 2026-08-09 — Alhena
+
+**Theme: deterministic OpenAPI artifacts.** Generated specifications are now byte-stable
+regardless of route registration order, so committed `openapi.json` artifacts produce
+clean, reviewable diffs instead of order-churn.
+
+### Fixed
+- **Canonical OpenAPI path ordering** — `DocGenerator::getSwaggerJson()` canonicalizes
+  `paths` after tag filtering and before schema pruning: path keys sort lexicographically,
+  and each path item orders its operations `get, put, post, delete, options, head, patch,
+  trace` followed by non-operation keys (e.g. `parameters`) lexicographically. Two
+  generations over the same route set — in any registration order — now emit byte-identical
+  JSON under both OpenAPI 3.0 and 3.1. Operation bodies, operationIds, tag lists, and
+  schema pruning are unaffected.
+
 ## [1.76.0] - 2026-08-08 — Algol
 
 **Theme: the database layer keeps its promises** — the complete native database-layer
