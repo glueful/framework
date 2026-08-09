@@ -813,6 +813,12 @@ class DocGenerator
             $this->configList('documentation.options.tags.exclude'),
         );
 
+        // Canonicalize ordering so the serialized spec is deterministic regardless of the
+        // insertion order mergePaths()/generateFrom*() built it in: path keys lexicographic,
+        // and within each path item, HTTP method operations in a fixed order followed by
+        // non-operation keys (parameters, $ref, summary, servers, …) lexicographically.
+        $this->paths = self::canonicalizePaths($this->paths);
+
         $baseUrl = '';
         if ($this->context !== null && function_exists('api_url')) {
             $baseUrl = api_url($this->context);
@@ -941,6 +947,60 @@ class DocGenerator
             }
         }
         return $out;
+    }
+
+    /**
+     * Canonical HTTP method order applied within each path item, per OpenAPI's own
+     * Path Item Object field listing.
+     */
+    private const METHOD_ORDER = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'];
+
+    /**
+     * Reorder the paths object into a deterministic, insertion-order-independent shape:
+     * path keys sorted lexicographically, and within each path item, HTTP method
+     * operations ordered `get, put, post, delete, options, head, patch, trace`, followed
+     * by any non-operation keys (`parameters`, `$ref`, `summary`, `servers`, …) sorted
+     * lexicographically. Non-array path entries (e.g. a bare `$ref` string) pass through
+     * untouched. Pure + static so it can be unit-tested directly.
+     *
+     * @param array<string, mixed> $paths path => (verb|key) => operation
+     * @return array<string, mixed>
+     */
+    private static function canonicalizePaths(array $paths): array
+    {
+        uksort($paths, 'strcmp');
+
+        $methodRank = array_flip(self::METHOD_ORDER);
+
+        foreach ($paths as $path => $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $operationKeys = [];
+            $otherKeys = [];
+            foreach (array_keys($item) as $key) {
+                if (isset($methodRank[strtolower((string) $key)])) {
+                    $operationKeys[] = $key;
+                } else {
+                    $otherKeys[] = $key;
+                }
+            }
+
+            usort(
+                $operationKeys,
+                static fn($a, $b): int => $methodRank[strtolower((string) $a)] <=> $methodRank[strtolower((string) $b)]
+            );
+            usort($otherKeys, static fn($a, $b): int => strcmp((string) $a, (string) $b));
+
+            $ordered = [];
+            foreach ([...$operationKeys, ...$otherKeys] as $key) {
+                $ordered[$key] = $item[$key];
+            }
+            $paths[$path] = $ordered;
+        }
+
+        return $paths;
     }
 
     /**
