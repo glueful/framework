@@ -21,6 +21,14 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.77.0 — Alhena (Minor, Released 2026-08-09)
+- **Canonical, deterministic OpenAPI path ordering.** `DocGenerator::getSwaggerJson()` now
+  sorts `paths` lexicographically and orders each path item's operations
+  `get, put, post, delete, options, head, patch, trace` before non-operation keys
+  (`parameters`, `$ref`, `summary`, …), which sort lexicographically among themselves. The
+  same route set now serializes byte-identical JSON regardless of registration order, under
+  both OpenAPI 3.0 and 3.1 — committed spec artifacts get clean diffs instead of order-churn.
+
 ### 1.76.0 — Algol (Minor, Released 2026-08-08)
 - **The complete database-layer roadmap** (`docs/DATABASE_NATIVE_ROADMAP.md` items 1–4)
   in one release — the native alternative to adopting doctrine/dbal.
