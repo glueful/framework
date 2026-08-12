@@ -8,6 +8,7 @@ use Psr\Container\ContainerInterface;
 use Glueful\Routing\Router;
 use Glueful\Http\Cors;
 use Glueful\Http\Exceptions\Contracts\ExceptionHandlerInterface;
+use Glueful\Support\SensitiveParamRedactor;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
@@ -64,7 +65,9 @@ class Application
                 'type' => 'request',
                 'request_id' => $requestId,
                 'method' => $request->getMethod(),
-                'uri' => $request->getPathInfo(),
+                // Paths can themselves be credentials (signed links, magic links).
+                // Redact registered sensitive path segments before they reach a sink.
+                'uri' => SensitiveParamRedactor::sanitizePath($request->getPathInfo()),
                 'time_ms' => $totalTime,
                 'status' => $response->getStatusCode(),
                 'timestamp' => date('c')

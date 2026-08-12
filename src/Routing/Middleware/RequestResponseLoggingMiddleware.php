@@ -274,7 +274,7 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
             'correlation_id' => $this->correlationId,
             'method' => $request->getMethod(),
             'uri' => $this->sanitizeUrl($request->getRequestUri()),
-            'path' => $request->getPathInfo(),
+            'path' => SensitiveParamRedactor::sanitizePath($request->getPathInfo()),
             'query_string' => $this->sanitizeQueryString($request->getQueryString()),
             'scheme' => $request->getScheme(),
             'client_ip' => $this->getClientIp($request),

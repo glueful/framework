@@ -92,6 +92,33 @@ return [
     'default_profile' => $defaultProfile,
     'profiles' => $profiles,
 
+    /*
+    |--------------------------------------------------------------------------
+    | Sensitive Request Paths
+    |--------------------------------------------------------------------------
+    |
+    | Route templates whose path itself carries a credential — signed payment
+    | links, magic links, one-time downloads. Placeholder segments written as
+    | {name} are replaced with [REDACTED] in every log message and structured
+    | log context (request logging, exception reports, activity logs); a bare
+    | '*' segment matches any single segment and is kept. Literal segments are
+    | matched case-insensitively and after percent-decoding, so an encoded path
+    | cannot slip past. Redaction is log-emission-time only and never mutates
+    | the request, so routing and handlers see the original path.
+    |
+    |   'sensitive_paths' => ['/checkout/pay/{token}', '/d/{signature}/file'],
+    |
+    | Only the application knows which of its routes are credential-bearing, so
+    | the framework default is empty (paths are logged unchanged). Reverse-proxy
+    | and web-server access logs are outside the framework's reach and remain
+    | the host's responsibility.
+    |
+    */
+    'sensitive_paths' => array_values(array_filter(
+        array_map('trim', explode(',', (string) env('LOG_SENSITIVE_PATHS', ''))),
+        static fn(string $pattern): bool => $pattern !== ''
+    )),
+
     // Framework-level logging configuration
     'framework' => [
         'enabled' => env('FRAMEWORK_LOGGING_ENABLED', true),

@@ -34,21 +34,28 @@ the "What would close it" column is the work item.
   text parts whose field names match `SensitiveParamRedactor` patterns, or
   refuse to log multipart bodies at all.
 
-### Secrets in URL path segments are not redacted
+### Secrets in URL path segments are redacted only for paths the app registers
 
-- **Where:** `Glueful\Support\SensitiveParamRedactor::sanitizeUrl()` and every
-  caller (request/response logging, exception reporting, auth access logs,
-  security-violation listener).
-- **What:** Redaction is keyed on parameter *names*, so it covers query strings
-  and form/JSON fields. A secret embedded in the path itself —
-  `/password-reset/{token}`, `/verify/abc123` — is logged verbatim (including
-  the middleware's separate raw `path` field).
-- **Why accepted:** Path segments carry no name to match on; heuristic
+*Closed in 1.78.0 for registered paths — previously "not redacted at all".*
+
+- **Where:** `Glueful\Support\SensitiveParamRedactor::sanitizePath()`, applied by
+  `sanitizeUrl()` and every caller (request/response logging including its
+  separate `path` field, exception reporting, auth access logs,
+  security-violation listener) plus `Application::handle()`'s request log.
+- **What:** Name-based redaction covers query strings and form/JSON fields. A
+  secret embedded in the path itself — `/password-reset/{token}`,
+  `/checkout/pay/{token}` — is redacted only when the application registers that
+  route template under `logging.sensitive_paths`. Unregistered paths are logged
+  verbatim.
+- **Why accepted:** Path segments carry no name to match on, and heuristic
   entropy-based redaction produces false positives that destroy log usability.
-  The framework's own routes don't put bearer-grade secrets in paths.
-- **What would close it:** Application-level discipline (prefer one-time POST
-  bodies over tokenized GET paths), or a per-route opt-in that masks named
-  route parameters (e.g. any param named `token`) before logging.
+  Only the application knows which of its routes are credential-bearing, so the
+  registration is an explicit host obligation; the framework's own routes put no
+  bearer-grade secrets in paths.
+- **What would close it:** Nothing further inside the framework — but note that
+  redaction applies to *framework* log sinks only. Reverse-proxy, web-server and
+  CDN access logs record the raw request line and remain the operator's
+  responsibility (drop or mask the path there too).
 
 ### Dormant raw-URL logging surfaces
 
@@ -233,3 +240,4 @@ deployment provides their configuration:
 | `CORS_ALLOWED_ORIGINS` | Cross-origin access control | Standalone CORS handler denies all cross-origin requests (fail-closed) |
 | `TOKEN_ALLOW_QUERY_PARAM` (default off) | Keeps bearer tokens out of URLs/logs | Enabling it re-opens query-string token exposure |
 | `QUEUE_REQUIRE_SIGNED_PAYLOADS` (default on) | Rejects unsigned queue rows | Disable only temporarily while draining pre-signing payloads |
+| `logging.sensitive_paths` / `LOG_SENSITIVE_PATHS` (default empty) | Masks credential-bearing URL path segments in framework logs | Signed/magic-link tokens in paths are written verbatim to every log sink |
