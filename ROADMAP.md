@@ -21,6 +21,20 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.78.0 — Alioth (Minor, Released 2026-08-12)
+- **Configurable sensitive path redaction.** Applications register credential-bearing route
+  templates under `logging.sensitive_paths` (e.g. `/checkout/pay/{token}`) and
+  `SensitiveParamRedactor::sanitizePath()` masks those segments in every framework log
+  sink — the `Application::handle()` request log, `Handler::report()` exception context,
+  the request/response logging middleware, the CSRF/auth/security-header/admin-permission
+  middleware, API version negotiation, tracing spans, field selection, auth access logs,
+  the activity subscriber and the *persisted* API-metrics `endpoint`. Matching mirrors
+  `Router::match()`'s normalization, so encoded and slash-collapsed spellings of a live
+  route are covered, and the request's base URL is stripped before matching so one template
+  serves both base-URL-mounted and root-mounted apps. Never mutates the request. Empty by
+  default, so unregistered paths log byte-identically to before, and proxy/CDN access logs
+  remain the operator's responsibility.
+
 ### 1.77.0 — Alhena (Minor, Released 2026-08-09)
 - **Canonical, deterministic OpenAPI path ordering.** `DocGenerator::getSwaggerJson()` now
   sorts `paths` lexicographically and orders each path item's operations

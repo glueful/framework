@@ -6,6 +6,70 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.78.0] - 2026-08-12 — Alioth
+
+**Theme: credentials in URL paths stop reaching the logs.** Redaction has always been
+keyed on parameter *names*, which covers query strings and body fields but not a secret
+carried in the path itself. Applications that issue signed payment links, magic links or
+one-time download URLs can now register those route templates and have the credential
+segment masked in every framework log sink.
+
+### Added
+- **Configurable sensitive path redaction** — `SensitiveParamRedactor::configureSensitivePaths()`
+  and `sanitizePath()` mask credential-bearing URL path segments. Applications register
+  route templates under the new `logging.sensitive_paths` config key (or the
+  `LOG_SENSITIVE_PATHS` comma-separated env var), and `Framework::boot()` wires them into
+  the redactor after provider/extension config is merged:
+
+  ```php
+  // config/logging.php
+  'sensitive_paths' => ['/checkout/pay/{token}', '/d/{signature}/file'],
+  ```
+
+  A `{name}` segment is replaced with `[REDACTED]`; a bare `*` segment matches any single
+  segment and is kept; segments beyond the pattern are preserved. Matching is anchored at
+  the start of the path and **mirrors `Router::match()`'s own normalization** — literal
+  segments compare case-insensitively after percent-decoding, repeated slashes collapse,
+  and `%2F` is treated as a segment boundary — so the spellings that reach a live route
+  (`//checkout/pay/x`, `/checkout%2Fpay/x`) are redacted too, while a `%2F` *inside* a
+  credential cannot split the secret across segments and half-redact it.
+
+  Templates are written **without** the deployment's base URL. `Request::getBaseUrl()` is
+  passed alongside every `getRequestUri()` value and stripped before matching, so one
+  template covers both base-URL-mounted and root-mounted deployments.
+
+### Security
+- **The request logger and the exception handler no longer emit raw path credentials** —
+  `Application::handle()` logged `'uri' => $request->getPathInfo()` verbatim at info level
+  (dev/staging, or any profile with `APP_DEBUG` on), and `Handler::report()` logged the
+  request URI at error level in *every* profile, because `SensitiveParamRedactor::sanitizeUrl()`
+  redacted the query string but reassembled the path untouched. Both now route through
+  `sanitizePath()`.
+- **Every remaining request-path log sink was swept** — the request/response logging
+  middleware's separate raw `path` field, `CSRFMiddleware` (error level, and the
+  `SecurityException` details it raises), `AuthMiddleware`, `SecurityHeadersMiddleware`,
+  `AdminPermissionMiddleware`, `VersionManager`, `FieldSelectionMiddleware`,
+  `TracingMiddleware`'s span attributes and `MetricsMiddleware`'s `endpoint` — which is
+  *persisted* to the metrics store, not just logged. Auth access logs and the activity
+  subscriber inherit the fix through `sanitizeUrl()`. Rate-limit bucket keys are
+  deliberately left raw: they are not a log sink, and redacting them would collapse every
+  credentialed path onto one bucket.
+- **`sanitizeUrl()` no longer mis-parses a schemeless `//…` request URI** — `parse_url()`
+  read its first segment as a *host*, carrying the rest of the path past redaction
+  untouched.
+
+  Redaction happens at log-emission time only and never mutates the request, so routing,
+  signature verification and handlers still see the original path.
+
+  **Host obligation:** only the application knows which of its routes are credential-bearing,
+  so nothing is redacted until it registers its patterns — with `logging.sensitive_paths`
+  empty (the framework default) every path is logged exactly as before, byte-identical.
+  Redaction also covers framework log sinks only: reverse-proxy, web-server and CDN access
+  logs record the raw request line and remain the operator's responsibility. And redaction
+  applies to path- and query-shaped *values*: an exception whose **message** interpolates
+  the request URI is still logged verbatim (see `docs/SECURITY_NOTES.md`) — put the URI in
+  the exception context, which is redacted, not in the message.
+
 ## [1.77.0] - 2026-08-09 — Alhena
 
 **Theme: deterministic OpenAPI artifacts.** Generated specifications are now byte-stable
