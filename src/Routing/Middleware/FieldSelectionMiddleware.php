@@ -12,6 +12,7 @@ use Glueful\Support\FieldSelection\{FieldSelector, FieldTree, Projector, FieldNo
 use Glueful\Support\FieldSelection\Exceptions\InvalidFieldSelectionException;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Glueful\Support\SensitiveParamRedactor;
 
 final class FieldSelectionMiddleware implements RouteMiddleware
 {
@@ -160,7 +161,7 @@ final class FieldSelectionMiddleware implements RouteMiddleware
             'user' => $request->attributes->get('user'),
             'request_id' => $request->headers->get('X-Request-Id'),
             'method' => $request->getMethod(),
-            'uri' => $request->getRequestUri(),
+            'uri' => SensitiveParamRedactor::sanitizeUrl($request->getRequestUri(), $request->getBaseUrl()),
         ];
 
         // Extract collection IDs for batch loading

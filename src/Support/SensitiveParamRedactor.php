@@ -106,10 +106,23 @@ final class SensitiveParamRedactor
      *
      * Literal segments are compared case-insensitively and after percent-decoding,
      * so an encoded path cannot slip past. Segments beyond the pattern are kept.
-     * Registering nothing leaves every path byte-identical.
+     * Matching mirrors the router's own path normalization, so the forms that
+     * reach a live route — `//checkout/pay/x`, `/checkout%2Fpay/x` — are redacted
+     * too; see {@see self::sanitizePath()}. Registering nothing leaves every path
+     * byte-identical.
+     *
+     * Templates are written WITHOUT the deployment's base URL: callers that log
+     * `Request::getRequestUri()` pass `Request::getBaseUrl()` alongside, so one
+     * template covers both the request log and the exception log.
      *
      * This is log-emission-time only: no request is ever mutated, so routing,
      * signature verification and handlers still see the untouched path.
+     *
+     * Sentinel note: placeholder/wildcard tokens are represented internally by
+     * NUL-prefixed strings, so a literal segment written as `%00placeholder` or
+     * `%00wildcard` decodes onto a sentinel and behaves as that token rather
+     * than as a literal. Both collisions only ever redact more, and neither is
+     * expressible in a real URL path, so they are left uncontested.
      *
      * @param array<int|string, mixed> $patterns
      */
@@ -182,14 +195,100 @@ final class SensitiveParamRedactor
     /**
      * Redact credential-bearing segments of a URL path. Returns the path
      * unchanged when no pattern matches (and always when none are registered).
+     *
+     * Matching runs twice, because the router and the raw request line disagree
+     * about where segment boundaries are:
+     *
+     *  1. over the RAW path, decoding each segment only to compare literals —
+     *     this keeps a `%2F` inside a credential from splitting the secret
+     *     across two segments and half-redacting it;
+     *  2. over the path normalized the way {@see \Glueful\Routing\Router::match()}
+     *     normalizes it (whole-string percent-decode, then repeated slashes
+     *     collapsed) — this catches the forms that reach a live route but not a
+     *     naive splitter: `//checkout/pay/<secret>` and `/checkout%2Fpay/<secret>`.
+     *
+     * The first pass that actually redacts something wins, and a match from the
+     * second pass emits the normalized form (that is the path the router acted
+     * on). A path that matches nothing is returned byte-identical.
+     *
+     * @param string $basePath The request's base URL (`Request::getBaseUrl()`),
+     *                         stripped before matching so a single registered
+     *                         template covers both `getPathInfo()` (base URL
+     *                         already removed) and `getRequestUri()` (base URL
+     *                         still present). The prefix is restored on output.
      */
-    public static function sanitizePath(?string $path): ?string
+    public static function sanitizePath(?string $path, string $basePath = ''): ?string
     {
         if ($path === null || $path === '' || self::$compiledPathPatterns === []) {
             return $path;
         }
 
-        $segments = explode('/', $path);
+        $redacted = self::redactWithBasePath($path, false, $basePath);
+        if ($redacted !== null) {
+            return $redacted;
+        }
+
+        $normalized = self::normalizePath($path);
+        if ($normalized !== $path) {
+            $redacted = self::redactWithBasePath($normalized, true, $basePath);
+            if ($redacted !== null) {
+                return $redacted;
+            }
+        }
+
+        return $path;
+    }
+
+    /**
+     * Normalize the way the router does before it matches: percent-decode the
+     * whole string (so `%2F` becomes a segment boundary) and collapse repeated
+     * slashes (the router's `ltrim($path, '/')` collapses the leading run; we
+     * collapse interior runs too, which can only redact more, never less).
+     */
+    private static function normalizePath(string $path): string
+    {
+        $decoded = rawurldecode($path);
+        $collapsed = preg_replace('#/{2,}#', '/', $decoded);
+
+        return $collapsed ?? $decoded;
+    }
+
+    /**
+     * Try the patterns against the subject, then — if a base URL is configured —
+     * against the subject with that prefix removed.
+     *
+     * @param bool $decoded Whether $subject has already been percent-decoded
+     * @return string|null The redacted subject, or null when nothing changed
+     */
+    private static function redactWithBasePath(string $subject, bool $decoded, string $basePath): ?string
+    {
+        $redacted = self::redactSegments($subject, $decoded);
+        if ($redacted !== null) {
+            return $redacted;
+        }
+
+        $prefix = rtrim($decoded ? self::normalizePath($basePath) : $basePath, '/');
+        if ($prefix === '' || !str_starts_with($subject, $prefix)) {
+            return null;
+        }
+
+        $remainder = substr($subject, strlen($prefix));
+        if ($remainder === '' || !str_starts_with($remainder, '/')) {
+            return null;
+        }
+
+        $redacted = self::redactSegments($remainder, $decoded);
+
+        return $redacted === null ? null : $prefix . $redacted;
+    }
+
+    /**
+     * @param bool $decoded Whether $subject has already been percent-decoded
+     * @return string|null The redacted subject, or null when nothing changed
+     */
+    private static function redactSegments(string $subject, bool $decoded): ?string
+    {
+        $segments = explode('/', $subject);
         // A path-absolute value explodes to a leading empty element; logical
         // segment 0 starts after it.
         $offset = $segments[0] === '' ? 1 : 0;
@@ -216,7 +315,8 @@ final class SensitiveParamRedactor
                     continue;
                 }
 
-                if (strtolower(rawurldecode($segment)) !== $token) {
+                $literal = $decoded ? strtolower($segment) : strtolower(rawurldecode($segment));
+                if ($literal !== $token) {
                     $matched = false;
                     break;
                 }
@@ -236,7 +336,7 @@ final class SensitiveParamRedactor
             }
         }
 
-        return $changed ? implode('/', $segments) : $path;
+        return $changed ? implode('/', $segments) : null;
     }
 
     /**
@@ -304,16 +404,28 @@ final class SensitiveParamRedactor
     }
 
     /**
-     * Redact sensitive query parameters in a URL or request URI. Userinfo and
-     * fragments are dropped; an unparseable URL is fully redacted.
+     * Redact sensitive query parameters — and registered sensitive path
+     * segments — in a URL or request URI. Userinfo and fragments are dropped;
+     * an unparseable URL is fully redacted.
+     *
+     * @param string $basePath The request's base URL, when the caller has a
+     *                         Request to hand; see {@see self::sanitizePath()}.
      */
-    public static function sanitizeUrl(?string $url): ?string
+    public static function sanitizeUrl(?string $url, string $basePath = ''): ?string
     {
         if ($url === null || $url === '') {
             return $url;
         }
 
-        $parts = parse_url($url);
+        // A schemeless value starting with '//' is a request URI whose leading
+        // slash run was doubled (a base-url concatenation bug), not a
+        // scheme-relative URL — but parse_url() reads its first segment as a
+        // HOST, which would carry the rest of the path past path redaction
+        // untouched. Split such values by hand instead.
+        $parts = self::isSchemelessRequestUri($url)
+            ? self::splitRequestUri($url)
+            : parse_url($url);
+
         if ($parts === false) {
             return self::REDACTED;
         }
@@ -331,7 +443,7 @@ final class SensitiveParamRedactor
             $sanitized .= ':' . $parts['port'];
         }
 
-        $sanitized .= self::sanitizePath($parts['path'] ?? null) ?? '';
+        $sanitized .= self::sanitizePath($parts['path'] ?? null, $basePath) ?? '';
 
         $query = self::sanitizeQueryString($parts['query'] ?? null);
         if ($query !== null && $query !== '') {
@@ -339,5 +451,29 @@ final class SensitiveParamRedactor
         }
 
         return $sanitized !== '' ? $sanitized : $url;
+    }
+
+    private static function isSchemelessRequestUri(string $url): bool
+    {
+        return str_starts_with($url, '//') && preg_match('#^[a-z][a-z0-9+.\-]*:#i', $url) !== 1;
+    }
+
+    /**
+     * @return array{path: string, query?: string}
+     */
+    private static function splitRequestUri(string $url): array
+    {
+        // Fragments are dropped, matching parse_url()-based handling.
+        $hash = strpos($url, '#');
+        if ($hash !== false) {
+            $url = substr($url, 0, $hash);
+        }
+
+        $mark = strpos($url, '?');
+        if ($mark === false) {
+            return ['path' => $url];
+        }
+
+        return ['path' => substr($url, 0, $mark), 'query' => substr($url, $mark + 1)];
     }
 }

@@ -14,7 +14,11 @@ use PHPUnit\Framework\TestCase;
  */
 final class SensitiveParamRedactorPathTest extends TestCase
 {
-    private const TOKEN = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2';
+    /** Reserved characters, so rawurlencode() genuinely changes the string. */
+    private const TOKEN = 'sk_live+9f=2a';
+
+    /** A credential whose own '/' becomes a segment boundary once decoded. */
+    private const SLASH_TOKEN = 'sk_live/9f+2a';
 
     protected function setUp(): void
     {
@@ -87,7 +91,13 @@ final class SensitiveParamRedactorPathTest extends TestCase
         self::assertSame('/checkout/pay', SensitiveParamRedactor::sanitizePath('/checkout/pay'));
         self::assertSame('/orders/42', SensitiveParamRedactor::sanitizePath('/orders/42'));
         self::assertSame('/checkout/refund/x', SensitiveParamRedactor::sanitizePath('/checkout/refund/x'));
+        // Anchored: without a base URL, a prefixed path is NOT a match...
         self::assertSame('/api/checkout/pay/x', SensitiveParamRedactor::sanitizePath('/api/checkout/pay/x'));
+        // ...and a base URL that does not prefix the path changes nothing either.
+        self::assertSame(
+            '/api/checkout/pay/x',
+            SensitiveParamRedactor::sanitizePath('/api/checkout/pay/x', '/admin')
+        );
     }
 
     public function testTrailingSegmentsBeyondThePatternArePreserved(): void
@@ -182,5 +192,109 @@ final class SensitiveParamRedactorPathTest extends TestCase
         SensitiveParamRedactor::configureSensitivePaths([' /checkout/pay/{token} ', '']);
 
         self::assertSame(['/checkout/pay/{token}'], SensitiveParamRedactor::sensitivePathPatterns());
+    }
+
+    // --- Router-normalized matching -------------------------------------------------
+    //
+    // Router::match() normalizes with '/' . ltrim(rawurldecode($path), '/') BEFORE
+    // splitting, so these forms all reach the same live route. A matcher that splits
+    // the raw path would log the live credential in full.
+
+    public function testCollapsedLeadingSlashesAreRedacted(): void
+    {
+        SensitiveParamRedactor::configureSensitivePaths(['/checkout/pay/{token}']);
+
+        $sanitized = SensitiveParamRedactor::sanitizePath('//checkout/pay/' . self::TOKEN);
+
+        self::assertIsString($sanitized);
+        self::assertStringNotContainsString(self::TOKEN, $sanitized);
+        self::assertSame('/checkout/pay/' . SensitiveParamRedactor::REDACTED, $sanitized);
+    }
+
+    public function testRepeatedInteriorSlashesAreRedacted(): void
+    {
+        SensitiveParamRedactor::configureSensitivePaths(['/checkout/pay/{token}']);
+
+        $sanitized = SensitiveParamRedactor::sanitizePath('/checkout//pay/' . self::TOKEN);
+
+        self::assertIsString($sanitized);
+        self::assertStringNotContainsString(self::TOKEN, $sanitized);
+    }
+
+    public function testEncodedSlashSeparatorIsRedacted(): void
+    {
+        SensitiveParamRedactor::configureSensitivePaths(['/checkout/pay/{token}']);
+
+        $sanitized = SensitiveParamRedactor::sanitizePath('/checkout%2Fpay/' . self::TOKEN);
+
+        self::assertIsString($sanitized);
+        self::assertStringNotContainsString(self::TOKEN, $sanitized);
+        self::assertSame('/checkout/pay/' . SensitiveParamRedactor::REDACTED, $sanitized);
+    }
+
+    public function testEncodedSlashInsideTheCredentialDoesNotSplitTheSecret(): void
+    {
+        SensitiveParamRedactor::configureSensitivePaths(['/checkout/pay/{token}']);
+
+        $sanitized = SensitiveParamRedactor::sanitizePath('/checkout/pay/' . rawurlencode(self::SLASH_TOKEN));
+
+        self::assertIsString($sanitized);
+        // Neither the whole credential nor either half of it survives.
+        self::assertStringNotContainsString(self::SLASH_TOKEN, $sanitized);
+        self::assertStringNotContainsString('sk_live', $sanitized);
+        self::assertStringNotContainsString('9f', $sanitized);
+        self::assertSame('/checkout/pay/' . SensitiveParamRedactor::REDACTED, $sanitized);
+    }
+
+    // --- Base URL -------------------------------------------------------------------
+
+    public function testBaseUrlIsStrippedBeforeMatchingAndRestoredAfter(): void
+    {
+        SensitiveParamRedactor::configureSensitivePaths(['/checkout/pay/{token}']);
+
+        self::assertSame(
+            '/api/checkout/pay/' . SensitiveParamRedactor::REDACTED,
+            SensitiveParamRedactor::sanitizePath('/api/checkout/pay/' . self::TOKEN, '/api')
+        );
+        // Trailing slash on the base URL is tolerated.
+        self::assertSame(
+            '/api/checkout/pay/' . SensitiveParamRedactor::REDACTED,
+            SensitiveParamRedactor::sanitizePath('/api/checkout/pay/' . self::TOKEN, '/api/')
+        );
+    }
+
+    public function testBaseUrlStrippingStillHonoursRouterNormalization(): void
+    {
+        SensitiveParamRedactor::configureSensitivePaths(['/checkout/pay/{token}']);
+
+        $sanitized = SensitiveParamRedactor::sanitizePath('/api/checkout%2Fpay/' . self::TOKEN, '/api');
+
+        self::assertIsString($sanitized);
+        self::assertStringNotContainsString(self::TOKEN, $sanitized);
+    }
+
+    public function testBaseUrlMustBeAWholeSegmentPrefix(): void
+    {
+        SensitiveParamRedactor::configureSensitivePaths(['/checkout/pay/{token}']);
+
+        // '/api' must not swallow '/apifoo'.
+        self::assertSame(
+            '/apifoo/checkout/pay/x',
+            SensitiveParamRedactor::sanitizePath('/apifoo/checkout/pay/x', '/api')
+        );
+    }
+
+    public function testSanitizeUrlAcceptsTheBaseUrl(): void
+    {
+        SensitiveParamRedactor::configureSensitivePaths(['/checkout/pay/{token}']);
+
+        $sanitized = SensitiveParamRedactor::sanitizeUrl(
+            '/api/checkout/pay/' . self::TOKEN . '?keep=1',
+            '/api'
+        );
+
+        self::assertIsString($sanitized);
+        self::assertStringNotContainsString(self::TOKEN, $sanitized);
+        self::assertSame('/api/checkout/pay/' . SensitiveParamRedactor::REDACTED . '?keep=1', $sanitized);
     }
 }

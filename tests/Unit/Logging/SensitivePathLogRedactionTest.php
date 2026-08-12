@@ -26,7 +26,9 @@ use Symfony\Component\HttpFoundation\Response;
  */
 final class SensitivePathLogRedactionTest extends TestCase
 {
-    private const TOKEN = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2';
+    /** Reserved characters, so the encoded row of the data provider is a genuinely
+     *  different input string from the decoded one. */
+    private const TOKEN = 'sk_live+9f=2a';
 
     protected function setUp(): void
     {
@@ -49,6 +51,28 @@ final class SensitivePathLogRedactionTest extends TestCase
     private function flatten(array $record): string
     {
         return $record['message'] . ' ' . (string) json_encode($record['context']);
+    }
+
+    /**
+     * Build a request straight from server variables. Request::create() parses its
+     * URI argument with parse_url(), which reads '//checkout/...' as a HOST — the
+     * very mis-parse this suite exists to pin — so the raw request line is set here
+     * the way a web server would set it.
+     */
+    private function requestFor(string $requestUri, string $method = 'GET', string $baseUrl = ''): Request
+    {
+        $script = $baseUrl . '/index.php';
+        $mark = strpos($requestUri, '?');
+
+        return new Request([], [], [], [], [], [
+            'REQUEST_METHOD' => $method,
+            'REQUEST_URI' => $requestUri,
+            'QUERY_STRING' => $mark === false ? '' : substr($requestUri, $mark + 1),
+            'SCRIPT_NAME' => $script,
+            'SCRIPT_FILENAME' => '/var/www' . $script,
+            'HTTP_HOST' => 'shop.test',
+            'REMOTE_ADDR' => '127.0.0.1',
+        ]);
     }
 
     private function capturingLogger(): LoggerInterface
@@ -118,6 +142,10 @@ final class SensitivePathLogRedactionTest extends TestCase
         return [
             'decoded' => ['/checkout/pay/' . self::TOKEN],
             'encoded' => ['/checkout/pay/' . rawurlencode(self::TOKEN)],
+            // Forms that reach the same live route through Router::match()'s
+            // normalization but defeat a naive raw-path splitter.
+            'collapsed slashes' => ['//checkout/pay/' . self::TOKEN],
+            'encoded separator' => ['/checkout%2Fpay/' . self::TOKEN],
         ];
     }
 
@@ -131,14 +159,16 @@ final class SensitivePathLogRedactionTest extends TestCase
         $logger = $this->capturingLogger();
         $app = $this->application($logger);
 
-        $app->handle(Request::create($path, 'GET'));
+        $app->handle($this->requestFor($path));
 
         /** @var array<int, array{level: mixed, message: string, context: array<string, mixed>}> $records */
         $records = $logger->records; // @phpstan-ignore-line anonymous class property
         self::assertNotSame([], $records, 'the request logger must have emitted a record');
 
         foreach ($records as $record) {
-            self::assertStringNotContainsString(self::TOKEN, $this->flatten($record));
+            $flat = $this->flatten($record);
+            self::assertStringNotContainsString(self::TOKEN, $flat);
+            self::assertStringNotContainsString(rawurlencode(self::TOKEN), $flat);
         }
 
         self::assertSame(
@@ -154,7 +184,7 @@ final class SensitivePathLogRedactionTest extends TestCase
         $logger = $this->capturingLogger();
         $app = $this->application($logger);
 
-        $app->handle(Request::create('/orders/42', 'GET'));
+        $app->handle($this->requestFor('/orders/42'));
 
         /** @var array<int, array{level: mixed, message: string, context: array<string, mixed>}> $records */
         $records = $logger->records; // @phpstan-ignore-line anonymous class property
@@ -167,7 +197,7 @@ final class SensitivePathLogRedactionTest extends TestCase
         $app = $this->application($logger);
 
         $path = '/checkout/pay/' . self::TOKEN;
-        $app->handle(Request::create($path, 'GET'));
+        $app->handle($this->requestFor($path));
 
         /** @var array<int, array{level: mixed, message: string, context: array<string, mixed>}> $records */
         $records = $logger->records; // @phpstan-ignore-line anonymous class property
@@ -185,7 +215,10 @@ final class SensitivePathLogRedactionTest extends TestCase
         // debug: false — the production profile, where this call site logs at error level.
         $handler = new Handler($logger, debug: false);
 
-        $handler->report(new \RuntimeException('payment gateway unreachable'), Request::create($path . '?ref=1'));
+        $handler->report(
+            new \RuntimeException('payment gateway unreachable'),
+            $this->requestFor($path . '?ref=1')
+        );
 
         /** @var array<int, array{level: mixed, message: string, context: array<string, mixed>}> $records */
         $records = $logger->records; // @phpstan-ignore-line anonymous class property
@@ -214,7 +247,7 @@ final class SensitivePathLogRedactionTest extends TestCase
         // bypasses the shouldReport() suppression so the branch is exercised.
         $handler->report(
             new \Glueful\Http\Exceptions\Client\NotFoundException('no such link'),
-            Request::create('/checkout/pay/' . self::TOKEN)
+            $this->requestFor('/checkout/pay/' . self::TOKEN)
         );
 
         /** @var array<int, array{level: mixed, message: string, context: array<string, mixed>}> $records */
@@ -231,7 +264,7 @@ final class SensitivePathLogRedactionTest extends TestCase
         $logger = $this->capturingLogger();
         $handler = new Handler($logger, debug: false);
 
-        $handler->report(new \RuntimeException('boom'), Request::create('/checkout/pay/' . self::TOKEN));
+        $handler->report(new \RuntimeException('boom'), $this->requestFor('/checkout/pay/' . self::TOKEN));
 
         /** @var array<int, array{level: mixed, message: string, context: array<string, mixed>}> $records */
         $records = $logger->records; // @phpstan-ignore-line anonymous class property
@@ -247,5 +280,220 @@ final class SensitivePathLogRedactionTest extends TestCase
         self::assertIsArray($config);
         self::assertArrayHasKey('sensitive_paths', $config);
         self::assertSame([], $config['sensitive_paths']);
+    }
+
+    /**
+     * A base-URL-mounted app registers ONE template. Application::handle() feeds
+     * getPathInfo() (base URL already stripped) while Handler::report() feeds
+     * getRequestUri() (base URL still attached) — the error-level sink that fires
+     * in every profile. Both must be covered by that single registration.
+     */
+    public function testExceptionReportRedactsUnderABaseUrl(): void
+    {
+        SensitiveParamRedactor::configureSensitivePaths(['/checkout/pay/{token}']);
+
+        $request = $this->requestFor('/api/checkout/pay/' . self::TOKEN, 'GET', '/api');
+        self::assertSame('/api', $request->getBaseUrl(), 'precondition: the request is base-URL mounted');
+        self::assertSame('/checkout/pay/' . self::TOKEN, $request->getPathInfo());
+
+        $logger = $this->capturingLogger();
+        (new Handler($logger, debug: false))->report(new \RuntimeException('boom'), $request);
+
+        /** @var array<int, array{level: mixed, message: string, context: array<string, mixed>}> $records */
+        $records = $logger->records; // @phpstan-ignore-line anonymous class property
+        foreach ($records as $record) {
+            self::assertStringNotContainsString(self::TOKEN, $this->flatten($record));
+        }
+
+        $context = $records[0]['context']['request'];
+        self::assertIsArray($context);
+        self::assertSame('/api/checkout/pay/' . SensitiveParamRedactor::REDACTED, $context['uri']);
+    }
+
+    // --- Residual sinks -----------------------------------------------------------------
+    //
+    // One representative per middleware family that logs (or persists) a raw request
+    // path. The architecture guard below covers the whole set, including future sites.
+
+    public function testCsrfMiddlewareErrorLogIsRedacted(): void
+    {
+        SensitiveParamRedactor::configureSensitivePaths(['/checkout/pay/{token}']);
+
+        $logger = $this->capturingLogger();
+        $middleware = new \Glueful\Routing\Middleware\CSRFMiddleware(
+            validateOrigin: false,
+            logger: $logger
+        );
+
+        try {
+            $middleware->handle(
+                $this->requestFor('/checkout/pay/' . self::TOKEN, 'POST'),
+                static fn(): Response => new Response('ok', 200)
+            );
+        } catch (\Throwable) {
+            // The rejection itself is not under test; the log record it emits is.
+        }
+
+        /** @var array<int, array{level: mixed, message: string, context: array<string, mixed>}> $records */
+        $records = $logger->records; // @phpstan-ignore-line anonymous class property
+        self::assertNotSame([], $records, 'a failing POST must have been logged');
+
+        foreach ($records as $record) {
+            self::assertStringNotContainsString(self::TOKEN, $this->flatten($record));
+        }
+
+        $paths = array_column(array_column($records, 'context'), 'path');
+        self::assertContains(
+            '/checkout/pay/' . SensitiveParamRedactor::REDACTED,
+            $paths,
+            'the error-level CSRF rejection must log the redacted path'
+        );
+    }
+
+    public function testMetricsMiddlewarePersistsARedactedEndpoint(): void
+    {
+        SensitiveParamRedactor::configureSensitivePaths(['/checkout/pay/{token}']);
+
+        $recorded = [];
+        $metrics = new class ($recorded) extends \Glueful\Services\ApiMetricsService {
+            /** @param array<int, array<string, mixed>> $recorded */
+            public function __construct(private array &$recorded)
+            {
+            }
+
+            /** @param array<string, mixed> $metric */
+            public function recordMetricAsync(array $metric): void
+            {
+                $this->recorded[] = $metric;
+            }
+        };
+
+        (new \Glueful\Routing\Middleware\MetricsMiddleware($metrics))->handle(
+            $this->requestFor('/checkout/pay/' . self::TOKEN),
+            static fn(): Response => new Response('ok', 200)
+        );
+
+        self::assertCount(1, $recorded);
+        self::assertSame('/checkout/pay/' . SensitiveParamRedactor::REDACTED, $recorded[0]['endpoint']);
+    }
+
+    public function testTracingMiddlewareSpanAttributesAreRedacted(): void
+    {
+        SensitiveParamRedactor::configureSensitivePaths(['/checkout/pay/{token}']);
+
+        $attributes = [];
+        $tracer = new class ($attributes) implements \Glueful\Observability\Tracing\TracerInterface {
+            /** @param array<string, mixed> $attributes */
+            public function __construct(private array &$attributes)
+            {
+            }
+
+            /** @param array<string, mixed> $attrs */
+            public function startSpan(
+                string $name,
+                array $attrs = []
+            ): \Glueful\Observability\Tracing\SpanBuilderInterface {
+                $this->attributes = $attrs;
+
+                return new class implements \Glueful\Observability\Tracing\SpanBuilderInterface {
+                    public function setAttribute(string $key, mixed $value): self
+                    {
+                        return $this;
+                    }
+
+                    public function setParent(?\Glueful\Observability\Tracing\SpanInterface $parent): self
+                    {
+                        return $this;
+                    }
+
+                    public function startSpan(): \Glueful\Observability\Tracing\SpanInterface
+                    {
+                        return new class implements \Glueful\Observability\Tracing\SpanInterface {
+                            public function setAttribute(string $key, mixed $value): void
+                            {
+                            }
+
+                            public function end(): void
+                            {
+                            }
+                        };
+                    }
+                };
+            }
+        };
+
+        (new \Glueful\Routing\Middleware\TracingMiddleware($tracer))->handle(
+            $this->requestFor('/checkout/pay/' . self::TOKEN),
+            static fn(): Response => new Response('ok', 200)
+        );
+
+        self::assertSame('/checkout/pay/' . SensitiveParamRedactor::REDACTED, $attributes['http.route']);
+    }
+
+    public function testVersionManagerDebugLogIsRedacted(): void
+    {
+        SensitiveParamRedactor::configureSensitivePaths(['/checkout/pay/{token}']);
+
+        $logger = $this->capturingLogger();
+        $manager = new \Glueful\Api\Versioning\VersionManager(
+            \Glueful\Api\Versioning\ApiVersion::default(),
+            false,
+            $logger
+        );
+
+        $manager->negotiate($this->requestFor('/checkout/pay/' . self::TOKEN));
+
+        /** @var array<int, array{level: mixed, message: string, context: array<string, mixed>}> $records */
+        $records = $logger->records; // @phpstan-ignore-line anonymous class property
+        self::assertNotSame([], $records);
+
+        foreach ($records as $record) {
+            self::assertStringNotContainsString(self::TOKEN, $this->flatten($record));
+        }
+    }
+
+    /**
+     * Guard for the whole sweep: anywhere in src/ that puts a request path into an
+     * array literal — a log context, a span attribute, a persisted metric — must
+     * route it through the redactor. Catches future call sites, not just today's.
+     */
+    public function testNoSourceFilePutsARawRequestPathIntoAnArrayPayload(): void
+    {
+        $src = dirname(__DIR__, 3) . '/src';
+        $allowed = [
+            // Rate-limit bucket keys, not a log sink: redacting here would collapse
+            // every credentialed path onto one bucket.
+            'src/Api/RateLimiting/RateLimitManager.php' => ["'{path}' => \$request->getPathInfo(),"],
+        ];
+
+        $offenders = [];
+        $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($src));
+
+        foreach ($files as $file) {
+            if (!$file->isFile() || $file->getExtension() !== 'php') {
+                continue;
+            }
+
+            $relative = 'src' . substr($file->getPathname(), strlen($src));
+
+            foreach (file($file->getPathname()) ?: [] as $number => $line) {
+                if (!str_contains($line, '=>')) {
+                    continue;
+                }
+                if (!str_contains($line, 'getPathInfo()') && !str_contains($line, 'getRequestUri()')) {
+                    continue;
+                }
+                if (str_contains($line, 'SensitiveParamRedactor') || str_contains($line, 'sanitize')) {
+                    continue;
+                }
+                if (in_array(trim($line), $allowed[$relative] ?? [], true)) {
+                    continue;
+                }
+
+                $offenders[] = $relative . ':' . ($number + 1) . ' ' . trim($line);
+            }
+        }
+
+        self::assertSame([], $offenders, "Raw request path in an array payload:\n" . implode("\n", $offenders));
     }
 }

@@ -41,7 +41,13 @@ the "What would close it" column is the work item.
 - **Where:** `Glueful\Support\SensitiveParamRedactor::sanitizePath()`, applied by
   `sanitizeUrl()` and every caller (request/response logging including its
   separate `path` field, exception reporting, auth access logs,
-  security-violation listener) plus `Application::handle()`'s request log.
+  security-violation listener), `Application::handle()`'s request log, and the
+  CSRF / auth / security-header / admin-permission middleware, API version
+  negotiation, request tracing, field selection and the persisted API metrics
+  `endpoint`. Matching mirrors `Router::match()`'s normalization, so the forms
+  that reach a live route (`//checkout/pay/x`, `/checkout%2Fpay/x`) are covered
+  too. `Request::getBaseUrl()` is passed alongside every `getRequestUri()` value,
+  so one registered template covers both base-URL-mounted and root-mounted logs.
 - **What:** Name-based redaction covers query strings and form/JSON fields. A
   secret embedded in the path itself — `/password-reset/{token}`,
   `/checkout/pay/{token}` — is redacted only when the application registers that
@@ -57,11 +63,29 @@ the "What would close it" column is the work item.
   CDN access logs record the raw request line and remain the operator's
   responsibility (drop or mask the path there too).
 
+### Exception *messages* embedding a URI are not scanned
+
+- **Where:** `Glueful\Http\Exceptions\Handler::report()`, which logs
+  `$e->getMessage()` as the log message alongside the redacted context.
+- **What:** Path and parameter redaction operate on path- and query-shaped
+  *values*. If application code throws an exception whose **message** embeds the
+  request URI (`"payment link {$request->getRequestUri()} expired"`), that
+  message is logged verbatim.
+- **Why accepted:** Redacting arbitrary free text would mean pattern-scanning
+  every log message emitted anywhere, with false positives that corrupt messages
+  and a cost paid on every log call. No framework-thrown exception embeds the
+  request URI in its message.
+- **What would close it:** Application discipline (never interpolate a request
+  URI into an exception message — put it in the context, which *is* redacted), or
+  an opt-in message-scanning processor on the log channel.
+
 ### Dormant raw-URL logging surfaces
 
 - **Where:** `Glueful\Logging\LogManager::logApiRequest()` (no in-framework
   callers); `Glueful\Http\RequestUserContext::getRequestMetadata()` (stores raw
-  `REQUEST_URI` as request metadata, not a log emission).
+  `REQUEST_URI` as request metadata, not a log emission). These are the only two
+  raw-URL surfaces left after the 1.78.0 sweep routed every live log/metric/span
+  call site through the redactor.
 - **What:** These public APIs would record unredacted URLs if a consumer wires
   them up.
 - **Why accepted:** Neither is called by the framework itself; redacting

@@ -100,13 +100,22 @@ return [
     | Route templates whose path itself carries a credential — signed payment
     | links, magic links, one-time downloads. Placeholder segments written as
     | {name} are replaced with [REDACTED] in every log message and structured
-    | log context (request logging, exception reports, activity logs); a bare
+    | log context (request logging, exception reports, activity logs, the CSRF/
+    | auth/security middleware, tracing spans and persisted API metrics); a bare
     | '*' segment matches any single segment and is kept. Literal segments are
-    | matched case-insensitively and after percent-decoding, so an encoded path
-    | cannot slip past. Redaction is log-emission-time only and never mutates
-    | the request, so routing and handlers see the original path.
+    | matched case-insensitively and after percent-decoding, and matching mirrors
+    | the router's own path normalization, so the forms that reach a live route
+    | ('//checkout/pay/x', '/checkout%2Fpay/x') cannot slip past. Redaction is
+    | log-emission-time only and never mutates the request, so routing and
+    | handlers see the original path.
     |
     |   'sensitive_paths' => ['/checkout/pay/{token}', '/d/{signature}/file'],
+    |
+    | Write templates WITHOUT the deployment's base URL — an app mounted at
+    | /api registers '/checkout/pay/{token}', not '/api/checkout/pay/{token}'.
+    | The base URL is stripped before matching and restored on output, so one
+    | template covers both the request log (which sees the path with the base URL
+    | already removed) and the exception log (which sees it still attached).
     |
     | Only the application knows which of its routes are credential-bearing, so
     | the framework default is empty (paths are logged unchanged). Reverse-proxy

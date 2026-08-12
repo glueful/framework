@@ -16,6 +16,7 @@ use Psr\Container\ContainerInterface;
 use Glueful\Events\Security\CSRFViolationEvent;
 use Glueful\Events\EventService;
 use Psr\Log\LoggerInterface;
+use Glueful\Support\SensitiveParamRedactor;
 
 /**
  * CSRF Protection Middleware for Next-Gen Router
@@ -234,7 +235,7 @@ class CSRFMiddleware implements RouteMiddleware
         // Skip if route is exempt
         if ($this->isExemptRoute($request)) {
             $this->logger?->debug('CSRF protection skipped for exempt route', [
-                'path' => $request->getPathInfo(),
+                'path' => SensitiveParamRedactor::sanitizePath($request->getPathInfo()),
                 'method' => $request->getMethod()
             ]);
             return $next($request);
@@ -251,7 +252,7 @@ class CSRFMiddleware implements RouteMiddleware
         if (!$this->checkRateLimit($request)) {
             $this->logger?->warning('CSRF token generation rate limit exceeded', [
                 'ip' => $request->getClientIp(),
-                'path' => $request->getPathInfo()
+                'path' => SensitiveParamRedactor::sanitizePath($request->getPathInfo())
             ]);
 
             return new JsonResponse([
@@ -265,7 +266,7 @@ class CSRFMiddleware implements RouteMiddleware
             $this->logger?->warning('CSRF Origin/Referer validation failed', [
                 'origin' => $request->headers->get('Origin'),
                 'referer' => $request->headers->get('Referer'),
-                'path' => $request->getPathInfo()
+                'path' => SensitiveParamRedactor::sanitizePath($request->getPathInfo())
             ]);
 
             $this->getEventService()?->dispatch(new CSRFViolationEvent(
@@ -279,7 +280,7 @@ class CSRFMiddleware implements RouteMiddleware
                 [
                     'error_code' => 'CSRF_ORIGIN_MISMATCH',
                     'method' => $request->getMethod(),
-                    'path' => $request->getPathInfo()
+                    'path' => SensitiveParamRedactor::sanitizePath($request->getPathInfo())
                 ]
             );
         }
@@ -288,7 +289,7 @@ class CSRFMiddleware implements RouteMiddleware
         if (!$this->validateToken($request, $useDoubleSubmit)) {
             $this->logger?->error('CSRF token validation failed', [
                 'ip' => $request->getClientIp(),
-                'path' => $request->getPathInfo(),
+                'path' => SensitiveParamRedactor::sanitizePath($request->getPathInfo()),
                 'method' => $request->getMethod()
             ]);
 
@@ -311,7 +312,7 @@ class CSRFMiddleware implements RouteMiddleware
                 [
                     'error_code' => 'CSRF_TOKEN_MISMATCH',
                     'method' => $request->getMethod(),
-                    'path' => $request->getPathInfo()
+                    'path' => SensitiveParamRedactor::sanitizePath($request->getPathInfo())
                 ]
             );
         }

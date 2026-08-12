@@ -21,6 +21,7 @@ use Glueful\Events\Security\AdminSecurityViolationEvent;
 use Glueful\Events\EventService;
 use Psr\Log\LoggerInterface;
 use Psr\Container\ContainerInterface;
+use Glueful\Support\SensitiveParamRedactor;
 
 /**
  * Admin Permission Middleware for Next-Gen Router
@@ -1041,7 +1042,7 @@ class AdminPermissionMiddleware implements RouteMiddleware
         $context = array_merge($this->context, [
             'admin_request' => true,
             'request_method' => $request->getMethod(),
-            'request_path' => $request->getPathInfo(),
+            'request_path' => SensitiveParamRedactor::sanitizePath($request->getPathInfo()),
             'request_ip' => $request->getClientIp(),
             'user_agent' => $request->headers->get('User-Agent'),
             'timestamp' => time(),
@@ -1112,7 +1113,7 @@ class AdminPermissionMiddleware implements RouteMiddleware
             'timestamp' => date('c'),
             'ip' => $request->getClientIp(),
             'user_agent' => $request->headers->get('User-Agent'),
-            'path' => $request->getPathInfo(),
+            'path' => SensitiveParamRedactor::sanitizePath($request->getPathInfo()),
             'method' => $request->getMethod(),
             'permission' => $this->adminPermission,
             'resource' => $this->resource,

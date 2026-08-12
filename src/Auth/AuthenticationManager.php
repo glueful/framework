@@ -271,7 +271,7 @@ class AuthenticationManager
             'ip_address' => $request->getClientIp(),
             'user_agent' => $request->headers->get('User-Agent'),
             'timestamp' => date('Y-m-d H:i:s'),
-            'request_uri' => $this->sanitizeLogUri($request->getRequestUri()),
+            'request_uri' => $this->sanitizeLogUri($request->getRequestUri(), $request->getBaseUrl()),
             'method' => $request->getMethod()
         ];
 
@@ -289,8 +289,8 @@ class AuthenticationManager
         }
     }
 
-    private function sanitizeLogUri(string $uri): string
+    private function sanitizeLogUri(string $uri, string $basePath = ''): string
     {
-        return SensitiveParamRedactor::sanitizeUrl($uri) ?? $uri;
+        return SensitiveParamRedactor::sanitizeUrl($uri, $basePath) ?? $uri;
     }
 }
