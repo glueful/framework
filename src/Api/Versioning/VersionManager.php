@@ -13,6 +13,7 @@ use Glueful\Api\Versioning\Resolvers\AcceptHeaderResolver;
 use Symfony\Component\HttpFoundation\Request;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use Glueful\Support\SensitiveParamRedactor;
 
 /**
  * Central manager for API versioning
@@ -171,7 +172,7 @@ final class VersionManager implements VersionNegotiatorInterface
                 $this->logger->debug('API version resolved', [
                     'version' => $version->toString(),
                     'resolver' => $resolver->getName(),
-                    'path' => $request->getPathInfo(),
+                    'path' => SensitiveParamRedactor::sanitizePath($request->getPathInfo()),
                 ]);
 
                 // Validate version is supported in strict mode
@@ -189,7 +190,7 @@ final class VersionManager implements VersionNegotiatorInterface
 
         $this->logger->debug('Using default API version', [
             'version' => $this->defaultVersion->toString(),
-            'path' => $request->getPathInfo(),
+            'path' => SensitiveParamRedactor::sanitizePath($request->getPathInfo()),
         ]);
 
         return $this->defaultVersion;

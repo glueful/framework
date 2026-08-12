@@ -132,7 +132,10 @@ class ActivityLoggingSubscriber implements EventSubscriberInterface
             // Event details
             'violation_type' => $event->violationType,
             'message' => $event->message,
-            'request_uri' => SensitiveParamRedactor::sanitizeUrl($event->request->getRequestUri()),
+            'request_uri' => SensitiveParamRedactor::sanitizeUrl(
+                $event->request->getRequestUri(),
+                $event->request->getBaseUrl()
+            ),
             'request_method' => $event->request->getMethod(),
             'client_ip' => $event->request->getClientIp(),
             'event_id' => $event->getEventId(),

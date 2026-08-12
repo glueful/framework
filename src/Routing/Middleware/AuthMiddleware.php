@@ -19,6 +19,7 @@ use Glueful\Events\Http\HttpAuthFailureEvent;
 use Glueful\Events\Http\HttpAuthSuccessEvent;
 use Glueful\Events\EventService;
 use Psr\Log\LoggerInterface;
+use Glueful\Support\SensitiveParamRedactor;
 
 /**
  * Enterprise Authentication Middleware for Next-Gen Router
@@ -429,7 +430,7 @@ class AuthMiddleware implements RouteMiddleware
             'type' => 'auth_success',
             'user_id' => $user['id'] ?? $user['uuid'] ?? 'unknown',
             'provider' => $user['auth_provider'] ?? 'unknown',
-            'path' => $request->getPathInfo(),
+            'path' => SensitiveParamRedactor::sanitizePath($request->getPathInfo()),
             'method' => $request->getMethod(),
             'ip' => $request->getClientIp(),
             'user_agent' => $request->headers->get('User-Agent'),
@@ -454,7 +455,7 @@ class AuthMiddleware implements RouteMiddleware
         $this->logger->warning('Authentication failed', [
             'type' => 'auth_failure',
             'reason' => $reason,
-            'path' => $request->getPathInfo(),
+            'path' => SensitiveParamRedactor::sanitizePath($request->getPathInfo()),
             'method' => $request->getMethod(),
             'ip' => $request->getClientIp(),
             'user_agent' => $request->headers->get('User-Agent'),
@@ -481,7 +482,7 @@ class AuthMiddleware implements RouteMiddleware
             'type' => 'auth_error',
             'exception' => $exception->getMessage(),
             'trace' => $exception->getTraceAsString(),
-            'path' => $request->getPathInfo(),
+            'path' => SensitiveParamRedactor::sanitizePath($request->getPathInfo()),
             'method' => $request->getMethod(),
             'request_id' => $requestId
         ]);
@@ -695,7 +696,7 @@ class AuthMiddleware implements RouteMiddleware
             if ($this->logger !== null) {
                 $this->logger->debug('Failed to auto-enrich request with auth attributes', [
                     'error' => $e->getMessage(),
-                    'path' => $request->getPathInfo()
+                    'path' => SensitiveParamRedactor::sanitizePath($request->getPathInfo())
                 ]);
             }
         }

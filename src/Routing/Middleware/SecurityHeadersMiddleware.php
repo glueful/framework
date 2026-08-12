@@ -8,6 +8,7 @@ use Glueful\Routing\RouteMiddleware;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Psr\Log\LoggerInterface;
+use Glueful\Support\SensitiveParamRedactor;
 
 /**
  * Security Headers Middleware for Next-Gen Router
@@ -177,7 +178,7 @@ class SecurityHeadersMiddleware implements RouteMiddleware
         // Check if path is exempt
         if ($this->isExemptPath($request)) {
             $this->logger?->debug('Security headers skipped for exempt path', [
-                'path' => $request->getPathInfo()
+                'path' => SensitiveParamRedactor::sanitizePath($request->getPathInfo())
             ]);
             return $next($request);
         }
@@ -204,7 +205,7 @@ class SecurityHeadersMiddleware implements RouteMiddleware
 
             // Log security headers application
             $this->logger?->debug('Security headers applied', [
-                'path' => $request->getPathInfo(),
+                'path' => SensitiveParamRedactor::sanitizePath($request->getPathInfo()),
                 'profile' => $profile,
                 'score' => $this->calculateSecurityScore($response)
             ]);

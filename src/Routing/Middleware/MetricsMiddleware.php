@@ -8,6 +8,7 @@ use Glueful\Http\Response;
 use Glueful\Routing\RouteMiddleware;
 use Glueful\Services\ApiMetricsService;
 use Symfony\Component\HttpFoundation\Request;
+use Glueful\Support\SensitiveParamRedactor;
 
 class MetricsMiddleware implements RouteMiddleware
 {
@@ -29,7 +30,7 @@ class MetricsMiddleware implements RouteMiddleware
             }
 
             $this->metrics->recordMetricAsync([
-                'endpoint' => $request->getPathInfo(),
+                'endpoint' => SensitiveParamRedactor::sanitizePath($request->getPathInfo()),
                 'method' => $request->getMethod(),
                 'response_time' => $durationMs,
                 'status_code' => $status,

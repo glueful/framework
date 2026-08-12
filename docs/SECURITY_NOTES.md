@@ -34,27 +34,58 @@ the "What would close it" column is the work item.
   text parts whose field names match `SensitiveParamRedactor` patterns, or
   refuse to log multipart bodies at all.
 
-### Secrets in URL path segments are not redacted
+### Secrets in URL path segments are redacted only for paths the app registers
 
-- **Where:** `Glueful\Support\SensitiveParamRedactor::sanitizeUrl()` and every
-  caller (request/response logging, exception reporting, auth access logs,
-  security-violation listener).
-- **What:** Redaction is keyed on parameter *names*, so it covers query strings
-  and form/JSON fields. A secret embedded in the path itself —
-  `/password-reset/{token}`, `/verify/abc123` — is logged verbatim (including
-  the middleware's separate raw `path` field).
-- **Why accepted:** Path segments carry no name to match on; heuristic
+*Closed in 1.78.0 for registered paths — previously "not redacted at all".*
+
+- **Where:** `Glueful\Support\SensitiveParamRedactor::sanitizePath()`, applied by
+  `sanitizeUrl()` and every caller (request/response logging including its
+  separate `path` field, exception reporting, auth access logs,
+  security-violation listener), `Application::handle()`'s request log, and the
+  CSRF / auth / security-header / admin-permission middleware, API version
+  negotiation, request tracing, field selection and the persisted API metrics
+  `endpoint`. Matching mirrors `Router::match()`'s normalization, so the forms
+  that reach a live route (`//checkout/pay/x`, `/checkout%2Fpay/x`) are covered
+  too. `Request::getBaseUrl()` is passed alongside every `getRequestUri()` value,
+  so one registered template covers both base-URL-mounted and root-mounted logs.
+- **What:** Name-based redaction covers query strings and form/JSON fields. A
+  secret embedded in the path itself — `/password-reset/{token}`,
+  `/checkout/pay/{token}` — is redacted only when the application registers that
+  route template under `logging.sensitive_paths`. Unregistered paths are logged
+  verbatim.
+- **Why accepted:** Path segments carry no name to match on, and heuristic
   entropy-based redaction produces false positives that destroy log usability.
-  The framework's own routes don't put bearer-grade secrets in paths.
-- **What would close it:** Application-level discipline (prefer one-time POST
-  bodies over tokenized GET paths), or a per-route opt-in that masks named
-  route parameters (e.g. any param named `token`) before logging.
+  Only the application knows which of its routes are credential-bearing, so the
+  registration is an explicit host obligation; the framework's own routes put no
+  bearer-grade secrets in paths.
+- **What would close it:** Nothing further inside the framework — but note that
+  redaction applies to *framework* log sinks only. Reverse-proxy, web-server and
+  CDN access logs record the raw request line and remain the operator's
+  responsibility (drop or mask the path there too).
+
+### Exception *messages* embedding a URI are not scanned
+
+- **Where:** `Glueful\Http\Exceptions\Handler::report()`, which logs
+  `$e->getMessage()` as the log message alongside the redacted context.
+- **What:** Path and parameter redaction operate on path- and query-shaped
+  *values*. If application code throws an exception whose **message** embeds the
+  request URI (`"payment link {$request->getRequestUri()} expired"`), that
+  message is logged verbatim.
+- **Why accepted:** Redacting arbitrary free text would mean pattern-scanning
+  every log message emitted anywhere, with false positives that corrupt messages
+  and a cost paid on every log call. No framework-thrown exception embeds the
+  request URI in its message.
+- **What would close it:** Application discipline (never interpolate a request
+  URI into an exception message — put it in the context, which *is* redacted), or
+  an opt-in message-scanning processor on the log channel.
 
 ### Dormant raw-URL logging surfaces
 
 - **Where:** `Glueful\Logging\LogManager::logApiRequest()` (no in-framework
   callers); `Glueful\Http\RequestUserContext::getRequestMetadata()` (stores raw
-  `REQUEST_URI` as request metadata, not a log emission).
+  `REQUEST_URI` as request metadata, not a log emission). These are the only two
+  raw-URL surfaces left after the 1.78.0 sweep routed every live log/metric/span
+  call site through the redactor.
 - **What:** These public APIs would record unredacted URLs if a consumer wires
   them up.
 - **Why accepted:** Neither is called by the framework itself; redacting
@@ -233,3 +264,4 @@ deployment provides their configuration:
 | `CORS_ALLOWED_ORIGINS` | Cross-origin access control | Standalone CORS handler denies all cross-origin requests (fail-closed) |
 | `TOKEN_ALLOW_QUERY_PARAM` (default off) | Keeps bearer tokens out of URLs/logs | Enabling it re-opens query-string token exposure |
 | `QUEUE_REQUIRE_SIGNED_PAYLOADS` (default on) | Rejects unsigned queue rows | Disable only temporarily while draining pre-signing payloads |
+| `logging.sensitive_paths` / `LOG_SENSITIVE_PATHS` (default empty) | Masks credential-bearing URL path segments in framework logs | Signed/magic-link tokens in paths are written verbatim to every log sink |

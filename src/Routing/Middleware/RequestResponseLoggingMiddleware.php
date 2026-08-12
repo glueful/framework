@@ -273,8 +273,8 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
             'type' => 'http_request',
             'correlation_id' => $this->correlationId,
             'method' => $request->getMethod(),
-            'uri' => $this->sanitizeUrl($request->getRequestUri()),
-            'path' => $request->getPathInfo(),
+            'uri' => $this->sanitizeUrl($request->getRequestUri(), $request->getBaseUrl()),
+            'path' => SensitiveParamRedactor::sanitizePath($request->getPathInfo()),
             'query_string' => $this->sanitizeQueryString($request->getQueryString()),
             'scheme' => $request->getScheme(),
             'client_ip' => $this->getClientIp($request),
@@ -350,7 +350,7 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
             'type' => 'http_response',
             'correlation_id' => $this->correlationId,
             'method' => $request->getMethod(),
-            'uri' => $this->sanitizeUrl($request->getRequestUri()),
+            'uri' => $this->sanitizeUrl($request->getRequestUri(), $request->getBaseUrl()),
             'status_code' => $statusCode,
             'reason_phrase' => Response::$statusTexts[$statusCode] ?? 'Unknown',
             'duration_ms' => round($duration * 1000, 2),
@@ -393,7 +393,7 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
             'type' => 'slow_request',
             'correlation_id' => $this->correlationId,
             'method' => $request->getMethod(),
-            'uri' => $this->sanitizeUrl($request->getRequestUri()),
+            'uri' => $this->sanitizeUrl($request->getRequestUri(), $request->getBaseUrl()),
             'duration_ms' => round($duration * 1000, 2),
             'threshold_ms' => $config['slow_threshold'],
             'status_code' => $response instanceof Response ? $response->getStatusCode() : null,
@@ -418,7 +418,7 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
             'type' => 'request_failure',
             'correlation_id' => $this->correlationId,
             'method' => $request->getMethod(),
-            'uri' => $this->sanitizeUrl($request->getRequestUri()),
+            'uri' => $this->sanitizeUrl($request->getRequestUri(), $request->getBaseUrl()),
             'duration_ms' => round($duration * 1000, 2),
             'error' => $exception->getMessage(),
             'error_class' => get_class($exception),
@@ -461,10 +461,14 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
 
     /**
      * Sanitize a URL or request URI before logging.
+     *
+     * $basePath is the request's base URL, which getRequestUri() includes and
+     * getPathInfo() does not; passing it lets one registered sensitive-path
+     * template cover both fields.
      */
-    private function sanitizeUrl(?string $url): ?string
+    private function sanitizeUrl(?string $url, string $basePath = ''): ?string
     {
-        return SensitiveParamRedactor::sanitizeUrl($url);
+        return SensitiveParamRedactor::sanitizeUrl($url, $basePath);
     }
 
     /**

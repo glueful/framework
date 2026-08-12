@@ -384,7 +384,7 @@ class Handler implements ExceptionHandlerInterface
             if ($request !== null) {
                 $context['request'] = [
                     'method' => $request->getMethod(),
-                    'uri' => $this->sanitizeUrl($request->getRequestUri()),
+                    'uri' => $this->sanitizeUrl($request->getRequestUri(), $request->getBaseUrl()),
                     'ip' => $request->getClientIp(),
                 ];
             }
@@ -396,7 +396,7 @@ class Handler implements ExceptionHandlerInterface
         if ($request !== null) {
             $context['request'] = [
                 'method' => $request->getMethod(),
-                'uri' => $this->sanitizeUrl($request->getRequestUri()),
+                'uri' => $this->sanitizeUrl($request->getRequestUri(), $request->getBaseUrl()),
                 'ip' => $request->getClientIp(),
                 'user_agent' => $request->headers->get('User-Agent', 'unknown'),
             ];
@@ -420,10 +420,14 @@ class Handler implements ExceptionHandlerInterface
 
     /**
      * Sanitize a URL or request URI before logging.
+     *
+     * $basePath is the request's base URL: getRequestUri() still carries it,
+     * while getPathInfo() does not, so passing it keeps a single registered
+     * sensitive-path template covering both log sites.
      */
-    private function sanitizeUrl(?string $url): ?string
+    private function sanitizeUrl(?string $url, string $basePath = ''): ?string
     {
-        return SensitiveParamRedactor::sanitizeUrl($url);
+        return SensitiveParamRedactor::sanitizeUrl($url, $basePath);
     }
 
     /**

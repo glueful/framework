@@ -23,6 +23,7 @@ use Glueful\Exceptions\ExceptionHandler;
 use Glueful\Events\QueueContextHolder;
 use Glueful\Helpers\Utils;
 use Glueful\Security\SecurityManager;
+use Glueful\Support\SensitiveParamRedactor;
 use Psr\Log\LoggerInterface;
 use Glueful\Auth\AuthenticationGuard;
 use Glueful\Auth\SessionStore;
@@ -141,6 +142,10 @@ class Framework
 
         // Phase 7: Framework Validation (15-17ms)
         $profiler->time('validation', fn() => $this->validateFramework());
+
+        // Log redaction is configured last so extension- and provider-supplied
+        // config defaults are already merged into logging.sensitive_paths.
+        $this->configureSensitivePathRedaction($context);
 
         // Create Application instance
         $application = new Application($context);
@@ -559,6 +564,24 @@ class Framework
     /**
      * Configure structured logging
      */
+    /**
+     * Register the application's credential-bearing request paths with the
+     * shared redactor, so those segments are masked in every log sink.
+     *
+     * Configured under `logging.sensitive_paths`; empty by default, in which
+     * case paths are logged exactly as before.
+     */
+    private function configureSensitivePathRedaction(ApplicationContext $context): void
+    {
+        try {
+            $patterns = config($context, 'logging.sensitive_paths', []);
+            SensitiveParamRedactor::configureSensitivePaths(is_array($patterns) ? $patterns : []);
+        } catch (\Throwable $e) {
+            // Redaction configuration must never take down a boot.
+            error_log('Failed to configure sensitive path redaction: ' . $e->getMessage());
+        }
+    }
+
     private function configureStructuredLogging(): void
     {
         try {
