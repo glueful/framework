@@ -9,7 +9,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ## [1.78.1] - 2026-08-14 — Alioth
 
 **Theme: API documentation generates with the route cache in place** — a leftover
-`storage/cache/routes_dev.php` made `docs:generate` abort on a duplicate route name, and the
+`storage/cache/routes_dev.php` made `generate:openapi` abort on a duplicate route name, and the
 only workaround was deleting the (gitignored) cache by hand before every run. Low risk: a pure
 bugfix confined to generation; runtime routing and dispatch are untouched.
 
@@ -20,7 +20,7 @@ bugfix confined to generation; runtime routing and dispatch are untouched.
   router instance. Boot (`Framework::initializeHttpLayer()`) has already loaded the manifest
   over the hydrated table, so the second pass re-registered every `->name()` and
   `Router::registerNamedRoute()` — which rejects duplicates — threw
-  `Route name '…' already exists`, aborting `docs:generate` (and `api:docs`) until the cache
+  `Route name '…' already exists`, aborting `generate:openapi` until the cache
   file was removed. The reset bought no freshness it did not already have: `Router::add()`
   overwrites (static) or replaces (dynamic) the cache-hydrated entry for the same
   method + path, so every live route is a fresh `Route` object carrying the `name` / `where` /

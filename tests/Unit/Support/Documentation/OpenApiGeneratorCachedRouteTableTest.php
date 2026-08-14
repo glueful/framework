@@ -161,7 +161,7 @@ final class OpenApiGeneratorCachedRouteTableTest extends TestCase
 
     private function makeContext(): ApplicationContext
     {
-        $context = new ApplicationContext($this->tmpDir);
+        $context = new ApplicationContext($this->tmpDir, environment: 'development');
         $container = new Container();
         $container->load([
             ApplicationContext::class => new ValueDefinition(ApplicationContext::class, $context),
