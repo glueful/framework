@@ -6,6 +6,31 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.78.1] - 2026-08-14 — Alioth
+
+**Theme: API documentation generates with the route cache in place** — a leftover
+`storage/cache/routes_dev.php` made `generate:openapi` abort on a duplicate route name, and the
+only workaround was deleting the (gitignored) cache by hand before every run. Low risk: a pure
+bugfix confined to generation; runtime routing and dispatch are untouched.
+
+### Fixed
+- **`OpenApiGenerator::obtainRouter()` no longer re-registers the route files onto an
+  already-loaded router.** When the `Router` had been hydrated from the compiled route cache,
+  generation reset the `RouteManifest` guard and re-ran every route file against that same
+  router instance. Boot (`Framework::initializeHttpLayer()`) has already loaded the manifest
+  over the hydrated table, so the second pass re-registered every `->name()` and
+  `Router::registerNamedRoute()` — which rejects duplicates — threw
+  `Route name '…' already exists`, aborting `generate:openapi` until the cache
+  file was removed. The reset bought no freshness it did not already have: `Router::add()`
+  overwrites (static) or replaces (dynamic) the cache-hydrated entry for the same
+  method + path, so every live route is a fresh `Route` object carrying the `name` / `where` /
+  `rateLimit` / `requireScope` / `fields` metadata reflection needs by the time generation
+  runs. Generation now relies on the manifest's idempotent load, which still performs a full
+  load when it runs without a boot that loaded routes. Reflecting the container's router
+  rather than rebuilding one also keeps extension routes in the spec — those are registered
+  directly on that router by `Extensions\ServiceProvider`, and the manifest does not know
+  about them. The emitted document is byte-identical with and without a populated cache.
+
 ## [1.78.0] - 2026-08-12 — Alioth
 
 **Theme: credentials in URL paths stop reaching the logs.** Redaction has always been

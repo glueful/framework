@@ -21,6 +21,17 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.78.1 — Alioth (Patch, Released 2026-08-14)
+- **OpenAPI generation survives a populated route cache.** `OpenApiGenerator::obtainRouter()` no
+  longer resets the `RouteManifest` guard and re-runs the route files against a router that boot
+  already loaded — the second pass re-registered every `->name()` and aborted generation with
+  `Route name '…' already exists` whenever `storage/cache/routes_{env}.php` existed. Cache-hydrated
+  routes are overwritten by the fresh registrations at boot, so the reset gained nothing; reflecting
+  the container's router also keeps extension-registered routes in the spec. The document is
+  byte-identical with and without the cache.
+- Notes: **Patch release** — bugfix only, confined to documentation generation; no runtime routing
+  change, no new env vars, no migrations, no default changes.
+
 ### 1.78.0 — Alioth (Minor, Released 2026-08-12)
 - **Configurable sensitive path redaction.** Applications register credential-bearing route
   templates under `logging.sensitive_paths` (e.g. `/checkout/pay/{token}`) and

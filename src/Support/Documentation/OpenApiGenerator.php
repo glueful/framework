@@ -196,10 +196,24 @@ class OpenApiGenerator
      * Resolve and populate the application Router from the container.
      *
      * Mirrors route:debug's load sequence: RouteManifest::load() (idempotent)
-     * plus attribute-route scanning of app/Controllers. If the router was built
-     * from the compiled route cache (which strips where/name/rateLimit/scope/
-     * fields metadata needed for reflection), the manifest is reset and reloaded
-     * so reflection sees fresh Route objects.
+     * plus attribute-route scanning of app/Controllers — both of which are
+     * no-ops when boot already ran them, and do the full load when generation
+     * runs before/without a boot that loaded routes.
+     *
+     * The manifest guard must be honoured even when the router was hydrated
+     * from the compiled route cache (storage/cache/routes_{env}.php). Cache
+     * hydration alone loses per-route metadata (name/rateLimit/scope/fields),
+     * but it is never the end state: Framework::initializeHttpLayer() loads the
+     * manifest over the hydrated table, and Router::add() overwrites (static) or
+     * replaces (dynamic) the cached entry for the same method+path, so every
+     * live route is already a fresh Route object by the time generation runs.
+     * Resetting the guard and re-running the route files against that same
+     * router therefore buys no freshness — it re-registers every ->name(), and
+     * Router::registerNamedRoute() rejects duplicates, aborting generation with
+     * "Route name '…' already exists" until the gitignored cache file is deleted
+     * by hand. Extension routes registered directly on the container's router
+     * are another reason to reflect that router rather than rebuild one: the
+     * manifest does not know about them.
      */
     private function obtainRouter(): ?Router
     {
@@ -210,14 +224,6 @@ class OpenApiGenerator
 
         /** @var Router $router */
         $router = $container->get(Router::class);
-
-        if ($router->wasLoadedFromCache()) {
-            $this->log(
-                "Reflect generator: route cache detected; rebuilding fresh routes "
-                . "(ROUTE_CACHE strips per-route metadata)."
-            );
-            RouteManifest::reset();
-        }
 
         RouteManifest::load($router, $this->context);
 
