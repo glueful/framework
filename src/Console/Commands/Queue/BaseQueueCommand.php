@@ -129,6 +129,7 @@ abstract class BaseQueueCommand extends BaseCommand
     /**
      * Confirm user action using Symfony Console helper
      */
+    #[\Override]
     protected function confirm(string $question, bool $default = false): bool
     {
         /** @var QuestionHelper $helper */

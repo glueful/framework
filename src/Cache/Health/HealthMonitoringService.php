@@ -160,7 +160,6 @@ class HealthMonitoringService
         }
 
         $property = $reflection->getProperty('circuitBreakers');
-        $property->setAccessible(true);
 
         $circuitBreakers = $property->getValue($this->failoverManager);
         return $circuitBreakers[$nodeId] ?? null;

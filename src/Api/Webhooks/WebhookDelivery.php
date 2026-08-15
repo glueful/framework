@@ -69,6 +69,7 @@ class WebhookDelivery extends Model
     /**
      * Boot the model
      */
+    #[\Override]
     protected static function boot(): void
     {
         parent::boot();

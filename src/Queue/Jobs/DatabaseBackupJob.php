@@ -87,6 +87,7 @@ class DatabaseBackupJob extends Job
     /**
      * Handle job failure
      */
+    #[\Override]
     public function failed(Throwable $exception): void
     {
         $data = $this->getData();

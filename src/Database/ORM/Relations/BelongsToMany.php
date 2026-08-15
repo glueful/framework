@@ -253,6 +253,7 @@ class BelongsToMany extends Relation
      * @param array<string> $columns
      * @return Collection
      */
+    #[\Override]
     public function get(array $columns = ['*']): Collection
     {
         // Get the base table columns

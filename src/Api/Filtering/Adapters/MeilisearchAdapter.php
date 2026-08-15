@@ -270,6 +270,7 @@ class MeilisearchAdapter extends SearchAdapter
     /**
      * {@inheritdoc}
      */
+    #[\Override]
     protected function doBulkIndex(array $documents): void
     {
         if (!$this->isAvailable()) {

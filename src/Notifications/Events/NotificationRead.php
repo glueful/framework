@@ -84,6 +84,7 @@ class NotificationRead extends NotificationEvent
      *
      * @return array<string, mixed> Event as array
      */
+    #[\Override]
     public function toArray(): array
     {
         $data = parent::toArray();

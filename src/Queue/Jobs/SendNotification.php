@@ -148,6 +148,7 @@ class SendNotification extends Job
      * @param \Exception $exception Exception that caused failure
      * @return void
      */
+    #[\Override]
     public function failed(\Exception $exception): void
     {
         $data = $this->getData();
@@ -178,6 +179,7 @@ class SendNotification extends Job
      *
      * @return int Max attempts
      */
+    #[\Override]
     public function getMaxAttempts(): int
     {
         // Check if specific max attempts is set in job data
@@ -195,6 +197,7 @@ class SendNotification extends Job
      *
      * @return int Timeout in seconds
      */
+    #[\Override]
     public function getTimeout(): int
     {
         $data = $this->getData();
@@ -432,6 +435,7 @@ class SendNotification extends Job
      *
      * @return string Job description
      */
+    #[\Override]
     public function getDescription(): string
     {
         $data = $this->getData();
