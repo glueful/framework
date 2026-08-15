@@ -6,6 +6,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.78.2] - 2026-08-15 — Alioth
+
+**Theme: the Rector experiment concludes** — its one-time value harvested (`#[\Override]`
+drift protection, dead reflection calls removed), the tool retired. Internal-only: no API,
+env, config, or behavioral changes for applications. Low risk.
+
 ### Changed
 - **`#[\Override]` adopted on every parent-class method override in `src/`**, and the
   long-dead `ReflectionProperty/ReflectionMethod::setAccessible(true)` calls (no-ops
