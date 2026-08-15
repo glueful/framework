@@ -6,6 +6,25 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Changed
+- **`#[\Override]` adopted on every parent-class method override in `src/`**, and the
+  long-dead `ReflectionProperty/ReflectionMethod::setAccessible(true)` calls (no-ops
+  since PHP 8.1) are removed — the one-time harvest from Rector's advisory surface.
+  Analyser enforcement of the attribute was evaluated and declined: PHPStan's
+  `checkMissingOverrideMethodAttribute` follows full PHP semantics and would require
+  the attribute on ~1,760 interface-implementation sites as well — churn out of
+  proportion to value.
+
+### Removed
+- **Rector retired from dev tooling** (`rector/rector` dev dependency, `rector.php`,
+  and the `composer rector`/`rector:fix` scripts). The experiment ran its course: the
+  dry-run surface was ~660 findings across 451 files, none of them bugs — 40% declined
+  on principle (constructor-promotion churn on a stable published framework; typed
+  constants as a subclass-BC hazard), most of the rest cosmetic on an already-modern
+  PHP 8.3 codebase whose correctness is enforced by PHPStan level 8 (no baseline) and
+  the test suite. Rector's genuine sweet spot — PHP-version and PHPUnit major
+  migrations — is episodic: reinstall it ad hoc when that day comes.
+
 ## [1.78.1] - 2026-08-14 — Alioth
 
 **Theme: API documentation generates with the route cache in place** — a leftover
