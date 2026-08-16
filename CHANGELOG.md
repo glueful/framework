@@ -6,6 +6,28 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.78.3] - 2026-08-16 — Alioth
+
+**Theme: the console works before the database does.** A patch for first-run installs:
+every `glueful` invocation previously required a reachable, writable database just to
+REGISTER commands. Low risk: console-internal, no API/env/config changes.
+
+### Fixed
+- **Migrate commands no longer open a database connection at console registration** —
+  `migrate:run`/`migrate:rollback`/`migrate:status` resolved `MigrationManager` in their
+  constructors, and its constructor connects AND runs `ensureVersionTable()` DDL. Because
+  the console constructs every command at boot, `glueful list` (and every other command)
+  died with a connection error on any install whose `.env` database did not exist yet —
+  precisely the state a first-run provisioning command exists to repair. Resolution now
+  happens on first use, pinned by a refusing-container regression test. (Surfaced by
+  Thallo's v1.0.0-beta.1 clean-machine install gate.)
+- **PostgreSQL `hasTable()` no longer lies about tables the current role cannot access** —
+  the existence check counted `information_schema.tables`, which is privilege-filtered, so
+  a table owned by another role read as absent and the caller's guarded CREATE collided
+  with a misleading "Duplicate table" error. Existence now reads `pg_catalog.pg_tables`
+  (schema scoping preserved); access problems surface on the actual operation with
+  PostgreSQL's own honest error. (Same install-gate discovery.)
+
 ## [1.78.2] - 2026-08-15 — Alioth
 
 **Theme: the Rector experiment concludes** — its one-time value harvested (`#[\Override]`

@@ -21,6 +21,12 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.78.3 — Alioth (Patch, Released 2026-08-16)
+- Migrate commands resolve their migration manager lazily — the console no longer requires
+  a reachable database to register commands (first-run install fix, surfaced by the Thallo
+  Developer Preview artifact gate).
+- Notes: console-internal bugfix; no application-facing changes.
+
 ### 1.78.2 — Alioth (Patch, Released 2026-08-15)
 - **Rector retired; its one-time value harvested.** `#[\Override]` now marks every
   parent-class method override in `src/` (signature drift fails at parse time) and the
