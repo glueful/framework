@@ -205,7 +205,6 @@ class ContainerCompileCommand extends BaseCommand
             // Extract definitions via reflection from runtime container
             $ref = new \ReflectionClass($runtime);
             $prop = $ref->getProperty('definitions');
-            $prop->setAccessible(true);
             /** @var array<string, \Glueful\Container\Definition\DefinitionInterface> $definitions */
             $definitions = (array) $prop->getValue($runtime);
 

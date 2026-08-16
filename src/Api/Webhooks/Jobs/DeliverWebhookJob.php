@@ -249,6 +249,7 @@ class DeliverWebhookJob extends Job
     /**
      * Handle job failure after all attempts exhausted
      */
+    #[\Override]
     public function failed(\Exception $exception): void
     {
         $deliveryId = $this->getData()['delivery_id'] ?? null;
@@ -282,6 +283,7 @@ class DeliverWebhookJob extends Job
     /**
      * Get maximum number of delivery attempts
      */
+    #[\Override]
     public function getMaxAttempts(): int
     {
         if (function_exists('config') && $this->context !== null) {
@@ -491,6 +493,7 @@ class DeliverWebhookJob extends Job
     /**
      * Get job timeout (longer than request timeout to allow for processing)
      */
+    #[\Override]
     public function getTimeout(): int
     {
         return $this->getConfigTimeout() + 30;

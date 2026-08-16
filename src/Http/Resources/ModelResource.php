@@ -313,6 +313,7 @@ class ModelResource extends JsonResource
      *
      * @phpstan-ignore-next-line
      */
+    #[\Override]
     public static function collection(iterable $resources): AnonymousResourceCollection
     {
         // Handle ORM Collection

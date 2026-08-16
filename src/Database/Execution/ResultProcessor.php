@@ -139,9 +139,7 @@ class ResultProcessor implements ResultProcessorInterface
                     if ($reflectionProperty->isPublic()) {
                         $reflectionProperty->setValue($object, $value);
                     } elseif ($reflectionProperty->isPrivate() || $reflectionProperty->isProtected()) {
-                        $reflectionProperty->setAccessible(true);
                         $reflectionProperty->setValue($object, $value);
-                        $reflectionProperty->setAccessible(false);
                     }
                 }
             }

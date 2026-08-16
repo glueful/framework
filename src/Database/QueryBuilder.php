@@ -1068,12 +1068,6 @@ class QueryBuilder implements QueryBuilderInterface
         $optimizeEnabledProp = $cloneReflection->getProperty('optimizeEnabled');
         $debugEnabledProp = $cloneReflection->getProperty('debugEnabled');
 
-        $cacheEnabledProp->setAccessible(true);
-        $cacheTtlProp->setAccessible(true);
-        $cacheTagsProp->setAccessible(true);
-        $optimizeEnabledProp->setAccessible(true);
-        $debugEnabledProp->setAccessible(true);
-
         $cacheEnabledProp->setValue($clone, $this->cacheEnabled);
         $cacheTtlProp->setValue($clone, $this->cacheTtl);
         $cacheTagsProp->setValue($clone, $this->cacheTags);

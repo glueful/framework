@@ -21,6 +21,15 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.78.2 — Alioth (Patch, Released 2026-08-15)
+- **Rector retired; its one-time value harvested.** `#[\Override]` now marks every
+  parent-class method override in `src/` (signature drift fails at parse time) and the
+  long-dead `setAccessible(true)` reflection calls are removed. The dev dependency,
+  `rector.php`, and composer scripts are gone — the dry-run experiment found zero bugs
+  on an already-modern PHP 8.3 codebase; correctness enforcement stays with PHPStan
+  level 8 (no baseline) and the test suite. Reinstall Rector ad hoc for future
+  PHP-version/PHPUnit migrations. Internal-only; no application-facing changes.
+
 ### 1.78.1 — Alioth (Patch, Released 2026-08-14)
 - **OpenAPI generation survives a populated route cache.** `OpenApiGenerator::obtainRouter()` no
   longer resets the `RouteManifest` guard and re-runs the route files against a router that boot

@@ -215,6 +215,7 @@ class HasOneThrough extends Relation
      *
      * @return Model|null
      */
+    #[\Override]
     public function first(): ?Model
     {
         $results = $this->get();
@@ -227,6 +228,7 @@ class HasOneThrough extends Relation
      *
      * @return Collection
      */
+    #[\Override]
     public function get(): Collection
     {
         $columns = $this->shouldSelect(['*']);

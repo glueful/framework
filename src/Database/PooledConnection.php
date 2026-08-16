@@ -148,7 +148,6 @@ class PooledConnection
         $reflection = new \ReflectionClass($this->pdo);
         if ($reflection->hasProperty($name)) {
             $property = $reflection->getProperty($name);
-            $property->setAccessible(true);
             return $property->getValue($this->pdo);
         }
 
@@ -171,7 +170,6 @@ class PooledConnection
         $reflection = new \ReflectionClass($this->pdo);
         if ($reflection->hasProperty($name)) {
             $property = $reflection->getProperty($name);
-            $property->setAccessible(true);
             $property->setValue($this->pdo, $value);
             return;
         }

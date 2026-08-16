@@ -228,6 +228,7 @@ class HasManyThrough extends Relation
      * @param array<string> $columns
      * @return Collection
      */
+    #[\Override]
     public function get(array $columns = ['*']): Collection
     {
         $columns = $this->shouldSelect($columns);

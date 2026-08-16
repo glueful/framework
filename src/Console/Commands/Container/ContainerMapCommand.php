@@ -63,7 +63,6 @@ final class ContainerMapCommand extends BaseCommand
             $container = ContainerFactory::create($this->getContext(), false);
             $ref = new \ReflectionClass($container);
             $prop = $ref->getProperty('definitions');
-            $prop->setAccessible(true);
             /** @var array<string, mixed> $defs */
             $defs = (array) $prop->getValue($container);
 

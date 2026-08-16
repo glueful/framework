@@ -11,7 +11,6 @@ trait Serializable
         $data = [];
         $reflection = new \ReflectionClass($this);
         foreach ($reflection->getProperties() as $property) {
-            $property->setAccessible(true);
             $name = $property->getName();
             $value = $property->getValue($this);
             $data[$name] = $this->serializeValue($value);
@@ -25,7 +24,6 @@ trait Serializable
         foreach ($data as $name => $value) {
             if ($reflection->hasProperty($name)) {
                 $property = $reflection->getProperty($name);
-                $property->setAccessible(true);
                 $property->setValue($this, $this->unserializeValue($value));
             }
         }

@@ -35,6 +35,7 @@ class AnonymousResourceCollection extends ResourceCollection
      * @param iterable<mixed> $resources
      * @return array<int|string, JsonResource<mixed>>
      */
+    #[\Override]
     protected function collectResources(iterable $resources): array
     {
         $collected = [];

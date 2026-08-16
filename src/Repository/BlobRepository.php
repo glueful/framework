@@ -152,6 +152,7 @@ class BlobRepository extends BaseRepository
     /**
      * @param array<string, mixed> $blobData
      */
+    #[\Override]
     public function create(array $blobData): string
     {
         // Validate required fields
@@ -205,6 +206,7 @@ class BlobRepository extends BaseRepository
      * @param mixed $deletedValue Value for deleted status (defaults to 'deleted')
      * @return bool Success status
      */
+    #[\Override]
     public function softDelete(string $uuid, string $statusColumn = 'status', $deletedValue = 'deleted'): bool
     {
         return parent::softDelete($uuid, $statusColumn, $deletedValue);
@@ -432,6 +434,7 @@ class BlobRepository extends BaseRepository
      * @param string $uuid Blob UUID to check
      * @return bool True if blob exists and is active
      */
+    #[\Override]
     public function exists(string $uuid): bool
     {
         return $this->count([
