@@ -2,10 +2,8 @@
 
 namespace Glueful\Console\Commands\Migrate;
 
-use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Console\BaseCommand;
 use Glueful\Database\Migrations\MigrationManager;
-use Psr\Container\ContainerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -26,13 +24,21 @@ use Symfony\Component\Console\Output\OutputInterface;
 )]
 class RollbackCommand extends BaseCommand
 {
-    private MigrationManager $migrationManager;
+    private ?MigrationManager $migrationManager = null;
 
-    public function __construct(?ContainerInterface $container = null, ?ApplicationContext $context = null)
+    /**
+     * Resolved on FIRST USE, never at construction: the console registers every command at
+     * boot, and MigrationManager's constructor opens a database connection and runs
+     * `ensureVersionTable()` DDL. Eager resolution therefore made EVERY console invocation
+     * (`glueful list` included) require a reachable, writable database — which is precisely
+     * the state a first-run provisioning command exists to repair. (Surfaced by a clean-machine
+     * first-run install audit, 2026-08-16.)
+     */
+    private function migrations(): MigrationManager
     {
-        parent::__construct($container, $context);
-        $this->migrationManager = $this->getService(MigrationManager::class);
+        return $this->migrationManager ??= $this->getService(MigrationManager::class);
     }
+
 
     protected function configure(): void
     {
@@ -79,7 +85,7 @@ class RollbackCommand extends BaseCommand
 
         try {
             // Get applied migrations to potentially rollback
-            $appliedMigrations = $this->migrationManager->getAppliedMigrationsList();
+            $appliedMigrations = $this->migrations()->getAppliedMigrationsList();
 
             if (count($appliedMigrations) === 0) {
                 $this->info('No migrations to rollback.');
@@ -106,7 +112,7 @@ class RollbackCommand extends BaseCommand
             }
 
             // Execute rollback using MigrationManager
-            $result = $this->migrationManager->rollback($steps);
+            $result = $this->migrations()->rollback($steps);
 
             // Display results
             if (isset($result['reverted']) && count($result['reverted']) > 0) {
