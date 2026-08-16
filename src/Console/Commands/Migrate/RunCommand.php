@@ -2,10 +2,8 @@
 
 namespace Glueful\Console\Commands\Migrate;
 
-use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Console\BaseCommand;
 use Glueful\Database\Migrations\MigrationManager;
-use Psr\Container\ContainerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -26,13 +24,21 @@ use Symfony\Component\Console\Output\OutputInterface;
 )]
 class RunCommand extends BaseCommand
 {
-    private MigrationManager $migrationManager;
+    private ?MigrationManager $migrationManager = null;
 
-    public function __construct(?ContainerInterface $container = null, ?ApplicationContext $context = null)
+    /**
+     * Resolved on FIRST USE, never at construction: the console registers every command at
+     * boot, and MigrationManager's constructor opens a database connection and runs
+     * `ensureVersionTable()` DDL. Eager resolution therefore made EVERY console invocation
+     * (`glueful list` included) require a reachable, writable database — which is precisely
+     * the state a first-run provisioning command exists to repair. (Surfaced by the Thallo
+     * v1.0.0-beta.1 clean-machine install gate, 2026-08-16.)
+     */
+    private function migrations(): MigrationManager
     {
-        parent::__construct($container, $context);
-        $this->migrationManager = $this->getService(MigrationManager::class);
+        return $this->migrationManager ??= $this->getService(MigrationManager::class);
     }
+
 
     protected function configure(): void
     {
@@ -82,7 +88,7 @@ class RunCommand extends BaseCommand
 
         try {
             // Get migration status efficiently (single query)
-            $status = $this->migrationManager->getMigrationStatus();
+            $status = $this->migrations()->getMigrationStatus();
             $pendingMigrations = $status['pending'];
 
             if (count($pendingMigrations) === 0) {
@@ -117,7 +123,7 @@ class RunCommand extends BaseCommand
             $this->info('Executing migrations...');
             $this->line('');
 
-            $result = $this->migrationManager->migrate($pendingMigrations);
+            $result = $this->migrations()->migrate($pendingMigrations);
 
             // Display execution results
             $this->displayExecutionResults($result, $pendingMigrations);
