@@ -572,8 +572,15 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
      */
     public function tableExistsQuery(string $table): string
     {
-        return "SELECT COUNT(*) FROM information_schema.tables " .
-               "WHERE table_schema = current_schema() AND table_name = " . $this->quoteValue($table);
+        // pg_catalog, NOT information_schema: the information schema only lists tables the
+        // CURRENT ROLE has privileges on, so a table owned by another role (e.g. created
+        // during a mis-credentialed first boot) made hasTable() answer false — and the
+        // caller's CREATE then collided with a bewildering "Duplicate table" error instead
+        // of an honest permissions failure. pg_catalog reports existence regardless of
+        // privileges; any access problem then surfaces on the actual operation, where
+        // PostgreSQL's own error names the real cause. (Thallo v1.0.0-beta.1 install gate.)
+        return "SELECT COUNT(*) FROM pg_catalog.pg_tables " .
+               "WHERE schemaname = current_schema() AND tablename = " . $this->quoteValue($table);
     }
 
     /**
