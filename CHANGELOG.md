@@ -6,6 +6,76 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.79.0] - 2026-08-17 — Alioth
+
+The framework half of the schema-on-enable program (Thallo schema policy spec 2026-08-17,
+Section B): manifest migration descriptors become the sole schema inventory, and extension
+enablement becomes a bootstrap-ordered, lock-serialized, migrate-first operation with a
+truthful persisted record.
+
+### Added
+- **Manifest migration descriptors** (`extra.glueful.migrations`): every Glueful package
+  declares descriptor rows (stable id, relative path, closed priority enum, mode
+  `core|on_enable`, legacy source aliases, optional structural-verifier FQCN) or the explicit
+  string `"none"`. `PackageManifest::migrationDescriptors()` projects them for ALL package
+  types; `undeclaredGluefulPackages()` lists legacy holdouts; malformed declarations fail
+  closed (`migrations: []` is rejected — an empty schema declares `"none"`).
+- **`DescriptorInventory`**: the validated global inventory (framework built-in leaves
+  included, their receipt sources preserved byte-for-byte). Duplicate sources, duplicate or
+  ancestor/descendant canonical paths, contested aliases, unresolvable or empty paths, and
+  duplicate basenames within a descriptor all fail closed. Ownership resolves by declared
+  provider or file containment.
+- **Checksum-driven readiness** (`SchemaReadiness`): ready/pending/divergent per descriptor
+  from ledger receipts and exact SHA-256s; never `hasTable` probes; ledger-absent means
+  pending with zero DDL.
+- **Receipt normalization** (`migrate:normalize-receipts`): checksum-verified rewrite of
+  legacy-alias receipts to descriptor identity, duplicate reconciliation, ambiguity refusal.
+- **Bootstrap-safe migration locks**: pg advisory (`pg_try_advisory_lock`, bounded waits),
+  MySQL named locks, flock for SQLite/local — sorted acquisition, partial-custody rollback,
+  no TTL. `MigrationLockFactory` is the single driver selector.
+- **Source-scoped execution**: `MigrationManager::pendingForSources()` / `migrateSources()`
+  with per-file outcome reports.
+- **The enable executor** (`ExtensionSchemaExecutor`) + core-owned `extension_operations`
+  table: bootstrap check, dependency dry-resolve, source locks, migrate-first,
+  readiness-verified, enabled state written LAST, cache recompiled, terminal states
+  `succeeded | failed | manual_repair | enabled_cache_stale` persisted with the failing
+  migration. CLI (`extensions:enable/disable`) and the HTTP controller drive this one
+  executor; `ExtensionStateWriter` is executor-internal (architecture-tested).
+- **Verifier-gated adoption** (`migrate:verify`, `--adopt <source>`): three states
+  (ready/adoptable/divergent) where adoptable requires the manifest-declared structural
+  verifier to PASS every missing basename; adopt re-verifies under the lock and writes all
+  receipts atomically with each shipped file's exact checksum. Nothing is ever dropped.
+
+### Changed
+- **UPGRADE NOTE — run `php glueful migrate:run` once after upgrading, before any extension
+  enable**: the operation ledger (`extension_operations`) is a new core migration and the
+  executor refuses (`SchemaNotBootstrappedException`) until it exists.
+- **Core leaves now provision unconditionally** (`auth`, `extensions`, `locks`, `metrics`,
+  `notifications`, `queue`, `scheduler`, `uploads`): configuration governs runtime behavior,
+  not schema presence. The old config-gated registration in `CoreProvider` is gone.
+- **Production enable/disable is allowed**: the `APP_ENV=production` refusals are removed
+  from `extensions:enable`/`extensions:disable`; authority, locking, and audit are the
+  safety boundary.
+- **`loadMigrationsFrom()` validates descriptor-covered paths** instead of appending: a
+  declared package's provider call must match its manifest exactly (a `migrations: none`
+  package registers nothing); only undeclared/app-local providers keep the legacy append.
+- **Global migration runs are policy-scoped and serialized**: `migrate:run` and the
+  Installer take the migration lock over a single source snapshot with a fresh in-lock
+  pending read; global runs skip disabled `on_enable` descriptors, and explicit
+  `migrate($file)`/`migrate([$files])` arguments are validated against the same scope
+  (`MigrationScopeException`) before any DDL.
+
+### Fixed
+- **Per-migration transactions on transactional-DDL drivers** (PostgreSQL, SQLite): a
+  migration's DDL and its ledger receipt now commit or roll back together, closing the
+  partial-DDL-without-receipt gap; non-transactional drivers surface `manual_repair`.
+
+### Compatibility
+- Packages without manifest declarations boot unchanged, and legacy global `migrate:run`
+  still executes their appended paths. The NEW schema-on-enable, readiness, normalization,
+  and adoption operations fail closed on them (`extensions:enable` now refuses undeclared
+  packages with the manifest remedy).
+
 ## [1.78.4] - 2026-08-17 — Alioth
 
 **Theme: the lazy-ledger contract completes 1.78.3.** That patch deferred database work in
