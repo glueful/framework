@@ -21,6 +21,22 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.79.0 — Alkaid (Minor, Released 2026-08-17)
+- **Schema-on-enable** — the framework half of the Thallo schema policy program. Manifest
+  migration descriptors (`extra.glueful.migrations`) become the sole schema inventory
+  (validated `DescriptorInventory`, fail-closed on collisions/nesting/malformed manifests),
+  and extension enablement becomes a bootstrap-ordered, lock-serialized, migrate-first
+  operation (`ExtensionSchemaExecutor`) with truthful terminal states persisted in a
+  core-owned `extension_operations` ledger.
+- Checksum-driven readiness (ready/pending/divergent, no `hasTable` probes), receipt
+  normalization (`migrate:normalize-receipts`), verifier-gated adoption (`migrate:verify
+  --adopt`), bootstrap-safe migration locks (pg advisory / MySQL named / flock), and
+  source-scoped policy-enforced migration runs. Core leaves provision unconditionally;
+  production enable/disable refusals removed. New `platform` (-50) priority tier.
+- Notes: **upgrade requires one `php glueful migrate:run` before any extension enable**
+  (new core `extension_operations` migration); undeclared legacy packages keep booting and
+  migrating globally, but the new enable/readiness/adoption operations fail closed on them.
+
 ### 1.78.4 — Alioth (Patch, Released 2026-08-17)
 - **`MigrationManager` construction no longer touches the database** — completes 1.78.3's
   lazy-resolution fix. Extension providers construct the manager at boot via

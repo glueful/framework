@@ -6,7 +6,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
-## [1.79.0] - 2026-08-17 — Alioth
+## [1.79.0] - 2026-08-17 — Alkaid
 
 The framework half of the schema-on-enable program (Thallo schema policy spec 2026-08-17,
 Section B): manifest migration descriptors become the sole schema inventory, and extension
