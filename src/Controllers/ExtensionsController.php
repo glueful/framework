@@ -11,7 +11,6 @@ use Glueful\Extensions\EnabledProviders;
 use Glueful\Extensions\ExtensionCatalog;
 use Glueful\Extensions\ExtensionManager;
 use Glueful\Extensions\ExtensionResolver;
-use Glueful\Extensions\ExtensionStateWriter;
 use Glueful\Extensions\ProtectedProviders;
 use Glueful\Extensions\Install\ExtensionInstaller;
 use Glueful\Extensions\Install\HostCapability;

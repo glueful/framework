@@ -9,7 +9,7 @@ use Glueful\Bootstrap\ApplicationContext;
 /**
  * Generic-activation refusal for providers whose enable/disable is OWNED elsewhere — a domain
  * lifecycle flow (e.g. glueful/tenancy's enablement state machine) or a product's
- * bundled-required set. Enforcement lives here, ABOVE the policy-free ExtensionStateWriter,
+ * bundled-required set. Enforcement lives here, ABOVE the policy-free enabled-list writer,
  * so owning flows keep using the low-level writer directly. Host config shape:
  *
  *   'protected' => [
