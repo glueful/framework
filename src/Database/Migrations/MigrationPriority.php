@@ -19,6 +19,12 @@ final class MigrationPriority
     /** Identity/auth schema (glueful/users). */
     public const IDENTITY = -100;
 
+    /**
+     * Control-plane tiers that must land after identity but before app/default —
+     * e.g. glueful/tenancy's control-plane tables.
+     */
+    public const PLATFORM = -50;
+
     /** App / skeleton and ordinary feature migrations. */
     public const DEFAULT = 0;
 

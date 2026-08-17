@@ -123,6 +123,14 @@ final class ManifestMigrationDescriptorsTest extends TestCase
         $m->migrationDescriptors();
     }
 
+    public function testPlatformPriorityMapsToItsDedicatedSlot(): void
+    {
+        $m = $this->manifest([$this->extensionPkg(['migrations' => [
+            ['id' => 'default', 'path' => 'migrations', 'priority' => 'platform', 'mode' => 'on_enable'],
+        ]])]);
+        self::assertSame(-50, $m->migrationDescriptors()['acme/widgets'][0]->priority);
+    }
+
     public function testInstallPathsResolveAgainstTheVendorComposerDir(): void
     {
         $m = $this->manifest([$this->extensionPkg(['migrations' => 'none'])]);

@@ -14,6 +14,8 @@ enablement becomes a bootstrap-ordered, lock-serialized, migrate-first operation
 truthful persisted record.
 
 ### Added
+- **`platform` (-50) migration priority name** — control-plane tiers that land after identity
+  but before app/default; used by glueful/tenancy's control-plane descriptor.
 - **Manifest migration descriptors** (`extra.glueful.migrations`): every Glueful package
   declares descriptor rows (stable id, relative path, closed priority enum, mode
   `core|on_enable`, legacy source aliases, optional structural-verifier FQCN) or the explicit

@@ -161,6 +161,7 @@ final class PackageManifest
         $priorities = [
             'foundation' => \Glueful\Database\Migrations\MigrationPriority::FOUNDATION,
             'identity' => \Glueful\Database\Migrations\MigrationPriority::IDENTITY,
+            'platform' => \Glueful\Database\Migrations\MigrationPriority::PLATFORM,
             'default' => \Glueful\Database\Migrations\MigrationPriority::DEFAULT,
             'dependent' => \Glueful\Database\Migrations\MigrationPriority::DEPENDENT,
         ];
@@ -193,7 +194,7 @@ final class PackageManifest
                 if (!isset($priorities[$priorityKey]) || $mode === null) {
                     throw new Schema\DescriptorValidationException(
                         "Package {$name}: descriptor priority/mode must use the closed enums "
-                        . '(foundation|identity|default|dependent, core|on_enable).'
+                        . '(foundation|identity|platform|default|dependent, core|on_enable).'
                     );
                 }
                 $verifier = $row['verifier'] ?? null;
