@@ -13,6 +13,8 @@ use Glueful\Extensions\ExtensionCatalog;
 use Glueful\Extensions\ExtensionManager;
 use Glueful\Extensions\Install\ExtensionInstaller;
 use Glueful\Extensions\Install\HostCapability;
+use Glueful\Extensions\Schema\ExtensionOperation;
+use Glueful\Extensions\Schema\ExtensionSchemaExecutor;
 use Glueful\Support\Process\ComposerBinaryResolver;
 use Glueful\Support\Process\ProcessRunner;
 use PHPUnit\Framework\TestCase;
@@ -114,17 +116,19 @@ final class ExtensionsControllerTest extends TestCase
         $this->assertSame([], (require $c->base . '/config/extensions.php')['enabled']);
     }
 
-    public function test_enable_happy_writes_config_and_returns_enabled(): void
+    public function test_enable_happy_delegates_to_the_executor_and_returns_the_operation(): void
     {
+        // Config writes, migrations, and cache recompiles are the EXECUTOR's job now (spec B5,
+        // covered by ExtensionSchemaExecutorTest); this surface owns HTTP concerns + delegation.
         $provider = 'Glueful\\Tests\\Support\\DummyAegisProvider';
         $c = $this->build(killSwitch: true, catalog: [], installedProvider: $provider);
 
         $res = $c->controller->enable(new ExtensionToggleData('glueful/aegis'));
 
         $this->assertSame(200, $res->getStatusCode());
-        $enabled = (require $c->base . '/config/extensions.php')['enabled'];
-        $this->assertContains($provider, $enabled);
-        $this->assertFileExists($c->base . '/bootstrap/cache/extensions.php');
+        $this->assertSame([['op' => 'enable', 'package' => 'glueful/aegis']], $c->executor->calls);
+        $payload = json_decode((string) $res->getContent(), true);
+        $this->assertSame('succeeded', $payload['data']['operation']['status'] ?? null);
     }
 
     public function test_enable_409_when_host_read_only(): void
@@ -233,14 +237,51 @@ final class ExtensionsControllerTest extends TestCase
             chmod($base, 0555);
         }
 
+        $spyExecutor = new class extends ExtensionSchemaExecutor {
+            /** @var list<array{op: string, package: string}> */
+            public array $calls = [];
+
+            // phpcs:ignore
+            public function __construct()
+            {
+                // Spy: none of the collaborators are needed.
+            }
+
+            public function enable(
+                string $package,
+                string $actor,
+                bool $dryRun = false,
+                bool $backup = false
+            ): ExtensionOperation {
+                $this->calls[] = ['op' => 'enable', 'package' => $package];
+                return new ExtensionOperation(3, $package, 'enable', 'enabled', ExtensionOperation::STATUS_SUCCEEDED, $actor);
+            }
+
+            public function disable(
+                string $package,
+                string $actor,
+                bool $dryRun = false,
+                bool $backup = false
+            ): ExtensionOperation {
+                $this->calls[] = ['op' => 'disable', 'package' => $package];
+                return new ExtensionOperation(4, $package, 'disable', 'disabled', ExtensionOperation::STATUS_SUCCEEDED, $actor);
+            }
+        };
+
         $controller = new class extends ExtensionsController {
             /** @var list<string> */
             public array $perms = [];
+            public ?ExtensionSchemaExecutor $executor = null;
 
             // phpcs:ignore
             public function __construct()
             {
                 // Skip BaseController's container-dependent constructor.
+            }
+
+            protected function schemaExecutor(): ExtensionSchemaExecutor
+            {
+                return $this->executor ?? throw new \RuntimeException('no executor bound');
             }
 
             protected function requirePermission(string $permission, string $resource = 'system', array $context = []): void
@@ -261,7 +302,14 @@ final class ExtensionsControllerTest extends TestCase
         $this->inject($controller, ExtensionsController::class, 'extensions', $extensions);
         $this->inject($controller, ExtensionsController::class, 'auditLog', new NullLogger());
 
-        return (object) ['controller' => $controller, 'base' => $base, 'context' => $context];
+        $controller->executor = $spyExecutor;
+
+        return (object) [
+            'controller' => $controller,
+            'base' => $base,
+            'context' => $context,
+            'executor' => $spyExecutor,
+        ];
     }
 
     private function inject(object $obj, string $class, string $prop, mixed $value): void

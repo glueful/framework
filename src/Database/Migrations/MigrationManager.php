@@ -548,7 +548,7 @@ class MigrationManager
         if (is_string($specificFileOrPendingMigrations)) {
             $this->assertWithinGlobalScope([$specificFileOrPendingMigrations]);
         } elseif (is_array($specificFileOrPendingMigrations)) {
-            $this->assertWithinGlobalScope($specificFileOrPendingMigrations);
+            $this->assertWithinGlobalScope(array_values($specificFileOrPendingMigrations));
         }
         $this->ensureVersionTable();
         // Handle specific file migration

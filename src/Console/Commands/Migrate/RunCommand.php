@@ -119,11 +119,29 @@ class RunCommand extends BaseCommand
                 return self::SUCCESS;
             }
 
-            // Execute all migrations in a single batch (pass pending migrations to avoid duplicate query)
+            // Execute all migrations in a single batch. Custody (schema policy spec B4): ONE
+            // source snapshot, locked, with a FRESH pending read INSIDE the lock — the pre-lock
+            // status read above is display-only, and a source enabled after the snapshot was not
+            // locked and therefore must not join this run (its enable executor migrates it).
             $this->info('Executing migrations...');
             $this->line('');
 
-            $result = $this->migrations()->migrate($pendingMigrations);
+            $manager = $this->migrations();
+            $snapshot = $manager->globalSources();
+            /** @var \Glueful\Extensions\Schema\MigrationLockInterface $lock */
+            $lock = $this->getService(\Glueful\Extensions\Schema\MigrationLockInterface::class);
+            $handle = $lock->acquireAll($snapshot);
+            try {
+                $fresh = array_map(
+                    static fn(array $row): string => $row['file'],
+                    $manager->pendingForSources($snapshot)
+                );
+                $result = $fresh === []
+                    ? ['applied' => [], 'failed' => []]
+                    : $manager->migrate($fresh);
+            } finally {
+                $handle->release();
+            }
 
             // Display execution results
             $this->displayExecutionResults($result, $pendingMigrations);

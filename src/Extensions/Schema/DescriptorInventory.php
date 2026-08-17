@@ -101,8 +101,8 @@ final class DescriptorInventory
         }
         usort($discovered, static fn(string $a, string $b): int => strcmp(basename($a), basename($b)));
         $seen = [];
-        foreach ($discovered as $file) {
-            $basename = basename($file);
+        foreach ($discovered as $candidateFile) {
+            $basename = basename($candidateFile);
             if (isset($seen[$basename])) {
                 throw new DescriptorValidationException(
                     "Descriptor '{$source}' contains duplicate migration basename '{$basename}' "
@@ -210,11 +210,11 @@ final class DescriptorInventory
         if (!class_exists($class)) {
             return null;
         }
-        $file = (new \ReflectionClass($class))->getFileName();
-        if ($file === false) {
+        $classFile = (new \ReflectionClass($class))->getFileName();
+        if ($classFile === false) {
             return null;
         }
-        $real = realpath($file);
+        $real = realpath($classFile);
         if ($real === false) {
             return null;
         }
