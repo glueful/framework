@@ -542,6 +542,15 @@ final class CoreProvider extends BaseServiceProvider
                 $c->get(\Glueful\Extensions\Schema\MigrationLockInterface::class)
             )
         );
+        $defs[\Glueful\Extensions\Schema\AdoptionService::class] = new FactoryDefinition(
+            \Glueful\Extensions\Schema\AdoptionService::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Extensions\Schema\AdoptionService(
+                \Glueful\Database\Connection::fromContext($this->context),
+                $c->get(\Glueful\Extensions\Schema\DescriptorInventory::class),
+                $c->get(\Glueful\Extensions\Schema\SchemaReadiness::class),
+                $c->get(\Glueful\Extensions\Schema\MigrationLockInterface::class)
+            )
+        );
         // The one extension enable/disable executor (spec B5). Explicit definition — this
         // container does not autowire unknown ids.
         $defs[\Glueful\Extensions\Schema\ExtensionSchemaExecutor::class] = new FactoryDefinition(
