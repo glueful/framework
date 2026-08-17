@@ -146,4 +146,124 @@ final class PackageManifest
 
         return $owners;
     }
+
+    /**
+     * Declared migration descriptors, all packages (schema policy spec B1): any package whose
+     * extra.glueful block declares a `migrations` key participates — a list of descriptor rows
+     * or the explicit string "none" (empty list). Absence is NOT fatal here (legacy packages
+     * stay bootable); it is reported by undeclaredGluefulPackages() and the schema-on-enable
+     * operations fail closed on it. Malformed declarations throw.
+     *
+     * @return array<string, list<Schema\MigrationDescriptor>>
+     */
+    public function migrationDescriptors(): array
+    {
+        $priorities = [
+            'foundation' => \Glueful\Database\Migrations\MigrationPriority::FOUNDATION,
+            'identity' => \Glueful\Database\Migrations\MigrationPriority::IDENTITY,
+            'default' => \Glueful\Database\Migrations\MigrationPriority::DEFAULT,
+            'dependent' => \Glueful\Database\Migrations\MigrationPriority::DEPENDENT,
+        ];
+        $out = [];
+        foreach ($this->rawPackages() as $name => $pkg) {
+            $glueful = $pkg['extra']['glueful'] ?? null;
+            if (!is_array($glueful) || !array_key_exists('migrations', $glueful)) {
+                continue;
+            }
+            $migrations = $glueful['migrations'];
+            if ($migrations === 'none') {
+                $out[(string) $name] = [];
+                continue;
+            }
+            if (!is_array($migrations) || $migrations === [] || !array_is_list($migrations)) {
+                throw new Schema\DescriptorValidationException(
+                    "Package {$name}: 'migrations' must be a non-empty list of descriptor rows or the "
+                    . 'explicit string "none" (an empty schema declares "none").'
+                );
+            }
+            $list = [];
+            foreach ($migrations as $row) {
+                if (!is_array($row)) {
+                    throw new Schema\DescriptorValidationException(
+                        "Package {$name}: every migrations row must be an object/array."
+                    );
+                }
+                $priorityKey = (string) ($row['priority'] ?? '');
+                $mode = Schema\DescriptorMode::tryFrom((string) ($row['mode'] ?? ''));
+                if (!isset($priorities[$priorityKey]) || $mode === null) {
+                    throw new Schema\DescriptorValidationException(
+                        "Package {$name}: descriptor priority/mode must use the closed enums "
+                        . '(foundation|identity|default|dependent, core|on_enable).'
+                    );
+                }
+                $verifier = $row['verifier'] ?? null;
+                $list[] = new Schema\MigrationDescriptor(
+                    id: (string) ($row['id'] ?? ''),
+                    package: (string) $name,
+                    packageType: (string) ($pkg['type'] ?? 'library'),
+                    relativePath: (string) ($row['path'] ?? ''),
+                    priority: $priorities[$priorityKey],
+                    mode: $mode,
+                    legacyAliases: array_values((array) ($row['legacyAliases'] ?? [])),
+                    verifierClass: is_string($verifier) ? $verifier : null,
+                );
+            }
+            $out[(string) $name] = $list;
+        }
+        ksort($out);
+        return $out;
+    }
+
+    /**
+     * Glueful packages (extra.glueful present) that declare no `migrations` key. They remain
+     * bootable; the schema-on-enable operations refuse them with UndeclaredSchemaException.
+     *
+     * @return list<string>
+     */
+    public function undeclaredGluefulPackages(): array
+    {
+        $out = [];
+        foreach ($this->rawPackages() as $name => $pkg) {
+            $glueful = $pkg['extra']['glueful'] ?? null;
+            if (is_array($glueful) && !array_key_exists('migrations', $glueful)) {
+                $out[] = (string) $name;
+            }
+        }
+        sort($out);
+        return $out;
+    }
+
+    /**
+     * Absolute install dir per package, resolved from installed.json's `install-path`
+     * (relative to vendor/composer/). Textually normalized, not realpath'd — descriptor path
+     * containment does its own canonical checks against the live filesystem.
+     *
+     * @return array<string, string>
+     */
+    public function installPaths(): array
+    {
+        $composerDir = base_path($this->context, 'vendor/composer');
+        $out = [];
+        foreach ($this->rawPackages() as $name => $pkg) {
+            $rel = $pkg['install-path'] ?? null;
+            if (!is_string($rel) || $rel === '') {
+                continue;
+            }
+            $joined = str_starts_with($rel, '/') ? $rel : $composerDir . '/' . $rel;
+            $parts = [];
+            foreach (explode('/', $joined) as $seg) {
+                if ($seg === '' || $seg === '.') {
+                    continue;
+                }
+                if ($seg === '..') {
+                    array_pop($parts);
+                    continue;
+                }
+                $parts[] = $seg;
+            }
+            $out[(string) $name] = '/' . implode('/', $parts);
+        }
+        ksort($out);
+        return $out;
+    }
 }
