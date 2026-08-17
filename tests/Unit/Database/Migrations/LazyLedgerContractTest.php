@@ -70,6 +70,22 @@ final class LazyLedgerContractTest extends TestCase
         self::assertSame([], $this->tables(), 'reads must not create the ledger');
     }
 
+    public function testDiscoverableMigrationIsReportedPendingOnLedgerlessDatabaseWithoutDdl(): void
+    {
+        $file = $this->emptyMigrationsDir . '/001_CreateWidgets.php';
+        file_put_contents($file, "<?php\n// discovery-only fixture; never executed by a read\n");
+        try {
+            $manager = $this->manager();
+
+            $status = $manager->getMigrationStatus();
+            self::assertSame([], $status['applied'], 'no ledger means zero applied');
+            self::assertSame([$file], $status['pending'], 'the discoverable migration must be reported pending');
+            self::assertSame([], $this->tables(), 'a non-empty pending read must not create the ledger');
+        } finally {
+            @unlink($file);
+        }
+    }
+
     public function testRollbackOnLedgerlessDatabaseReportsNothingWithoutDdl(): void
     {
         $manager = $this->manager();
