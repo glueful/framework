@@ -8,6 +8,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [1.78.4] - 2026-08-17 — Alioth
 
+**Theme: the lazy-ledger contract completes 1.78.3.** That patch deferred database work in
+the three migrate *commands*; this one removes it from `MigrationManager` itself, so
+migration discovery and registration — including every extension provider's
+`loadMigrationsFrom()` at boot — perform zero database work. Low risk: migration-internal,
+no API/env/config changes.
+
 ### Fixed
 - **`MigrationManager` construction no longer touches the database.** 1.78.3 made the three
   migrate console commands resolve the manager lazily, but every extension provider still
