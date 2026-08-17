@@ -101,7 +101,7 @@ class MigrationManager
      * @param  FileFinder|null       $fileFinder        File finder service instance
      * @param  ApplicationContext|null $context         Application context for service resolution
      * @param  Connection|null       $connection        Optional injected connection (falls back to context)
-     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException If database connection fails
+     * @throws DatabaseException If database connection fails
      */
     public function __construct(
         ?string $migrationsPath = null,
