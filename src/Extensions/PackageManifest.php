@@ -234,6 +234,24 @@ final class PackageManifest
     }
 
     /**
+     * Provider FQCN => package name, for EVERY package with an extra.glueful.provider — extension
+     * AND library types alike (the inventory's provider-ownership fast path needs both).
+     *
+     * @return array<string, string>
+     */
+    public function providerPackages(): array
+    {
+        $out = [];
+        foreach ($this->rawPackages() as $name => $pkg) {
+            $provider = $pkg['extra']['glueful']['provider'] ?? null;
+            if (is_string($provider) && str_contains($provider, '\\')) {
+                $out[ltrim($provider, '\\')] = (string) $name;
+            }
+        }
+        return $out;
+    }
+
+    /**
      * Absolute install dir per package, resolved from installed.json's `install-path`
      * (relative to vendor/composer/). Textually normalized, not realpath'd — descriptor path
      * containment does its own canonical checks against the live filesystem.
