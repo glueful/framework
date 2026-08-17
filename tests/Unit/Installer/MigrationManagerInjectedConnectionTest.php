@@ -15,14 +15,16 @@ final class MigrationManagerInjectedConnectionTest extends TestCase
     public function testUsesTheInjectedConnectionNotFromContext(): void
     {
         $file = sys_get_temp_dir() . '/mm_injected_' . uniqid() . '.sqlite';
+        $migrationsDir = sys_get_temp_dir() . '/mm_injected_dir_' . uniqid();
+        mkdir($migrationsDir);
         $config = new DatabaseConfig('sqlite', database: $file);
         $connection = new Connection($config->toConnectionConfig());
 
-        // Constructing with an injected connection must ensure the version table on THAT db,
-        // i.e. it must not throw resolving a context and the file must exist + carry the table.
-        // A migrations path + FileFinder are supplied because the constructor resolves those
-        // before ensureVersionTable() and, with a null context, cannot derive them from config.
-        new MigrationManager(sys_get_temp_dir(), new FileFinder(), null, $connection);
+        // migrate() must ensure the version table on THAT db, i.e. the manager must not
+        // resolve a connection from the (null) context. Construction itself performs no
+        // database work under the lazy-ledger contract, so the assertion runs after migrate().
+        $manager = new MigrationManager($migrationsDir, new FileFinder(), null, $connection);
+        $manager->migrate();
 
         self::assertFileExists($file);
         $tables = $connection->getPDO()
@@ -30,5 +32,6 @@ final class MigrationManagerInjectedConnectionTest extends TestCase
             ->fetchAll(\PDO::FETCH_COLUMN);
         self::assertNotEmpty($tables, 'version table should have been created on the injected connection');
         @unlink($file);
+        @rmdir($migrationsDir);
     }
 }

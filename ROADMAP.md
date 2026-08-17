@@ -21,6 +21,16 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.78.4 — Alioth (Patch, Released 2026-08-17)
+- **`MigrationManager` construction no longer touches the database** — completes 1.78.3's
+  lazy-resolution fix. Extension providers construct the manager at boot via
+  `loadMigrationsFrom()`, and its constructor connected and ran version-table DDL as
+  whatever role `.env` named. The manager now follows a lazy-ledger contract: only
+  `migrate()` creates the ledger; status/pending reads treat a missing ledger as zero
+  applied; `rollback()` reports nothing-to-rollback. Read-only operational commands now
+  work with read-only database credentials.
+- Notes: migration-internal bugfix; no application-facing changes.
+
 ### 1.78.3 — Alioth (Patch, Released 2026-08-16)
 - Migrate commands resolve their migration manager lazily — the console no longer requires
   a reachable database to register commands (first-run install fix, surfaced by a clean-machine

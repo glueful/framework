@@ -90,6 +90,7 @@ final class MigrationOrderingTest extends MigrationTestCase
         $this->writeFixture(dirname($outside), basename($outside), 'evil_tbl');
 
         $mm = new MigrationManager($this->tempMigrationsDir(), null, $this->context());
+        $mm->migrate(); // lazy-ledger contract: the history table exists only after migrate()
         $db = Connection::fromContext($this->context());
         $db->table('migrations')->insert([
             'migration' => '../evil.php',
