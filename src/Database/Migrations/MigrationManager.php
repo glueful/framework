@@ -278,6 +278,70 @@ class MigrationManager
     }
 
     /**
+     * Run exactly the named sources' pending migrations in order, stopping at the first failure
+     * (later files stay pending). The executor's explicit, intentionally policy-unfiltered path.
+     *
+     * @param list<string> $sources
+     */
+    public function migrateSources(array $sources): MigrationRunReport
+    {
+        $this->ensureVersionTable();
+        $outcomes = [];
+        $batch = null;
+        foreach ($this->pendingForSources($sources) as $row) {
+            $batch ??= $this->getNextBatchNumber();
+            $status = $this->runMigration($row['file'], $batch);
+            $outcomes[] = [
+                'file' => $row['file'],
+                'source' => $row['source'],
+                'status' => $status['success'] ? 'applied' : 'failed',
+                'requiresManualRepair' => (bool) ($status['requiresManualRepair'] ?? false),
+                'error' => $status['error'] ?? null,
+            ];
+            if (!$status['success']) {
+                break;
+            }
+        }
+        return new MigrationRunReport($outcomes);
+    }
+
+    /**
+     * Whether the driver couples a migration's DDL and its receipt in one transaction. On other
+     * drivers a failure can leave partial DDL, which the caller must surface as manual_repair.
+     */
+    protected function transactionalDdl(): bool
+    {
+        return in_array($this->db()->getDriverName(), ['pgsql', 'sqlite'], true);
+    }
+
+    /** The registered source owning $file ('app' when only the app dir matches). */
+    private function sourceOfFile(string $file): string
+    {
+        foreach ($this->additionalMigrationPaths as $entry) {
+            if ($this->fileBelongsToDir($file, $entry['path'])) {
+                return $entry['source'];
+            }
+        }
+        return 'app';
+    }
+
+    /** @param list<string> $files */
+    private function assertWithinGlobalScope(array $files): void
+    {
+        $global = $this->globalSources();
+        foreach ($files as $file) {
+            $source = $this->sourceOfFile((string) $file);
+            if (!in_array($source, $global, true)) {
+                throw new MigrationScopeException(
+                    basename((string) $file) . " belongs to source '{$source}', which is outside the "
+                    . 'global migration scope (a disabled on_enable descriptor?); enable the extension '
+                    . 'or use the enable executor.'
+                );
+            }
+        }
+    }
+
+    /**
      * The complete, ordered set of migration sources: the main app path (source 'app',
      * DEFAULT priority) followed by all registered additional paths.
      *
@@ -477,6 +541,15 @@ class MigrationManager
     public function migrate($specificFileOrPendingMigrations = null): array
     {
         $results = ['applied' => [], 'failed' => []];
+        // Global scope enforcement (schema policy spec B2): explicit string/array arguments are
+        // resolved to their registered sources and validated against globalSources() BEFORE any
+        // ledger work, DDL, or receipt — a disabled on_enable descriptor cannot be applied by
+        // naming its files. migrateSources() is the sole intentional scoped bypass.
+        if (is_string($specificFileOrPendingMigrations)) {
+            $this->assertWithinGlobalScope([$specificFileOrPendingMigrations]);
+        } elseif (is_array($specificFileOrPendingMigrations)) {
+            $this->assertWithinGlobalScope($specificFileOrPendingMigrations);
+        }
         $this->ensureVersionTable();
         // Handle specific file migration
         if (is_string($specificFileOrPendingMigrations)) {
@@ -589,11 +662,11 @@ class MigrationManager
             }
         }
 
-        try {
+        $apply = function () use ($migration, $filename, $batch, $checksum, $extensionName, $source): void {
             // Run the migration schema operations - these will execute immediately
             $migration->up($this->schema());
 
-            // Insert migration record after schema operations complete
+            // The receipt is part of the same unit of work as the DDL.
             $this->db()
                 ->table(self::VERSION_TABLE)
                 ->insert(
@@ -606,11 +679,29 @@ class MigrationManager
                     'source' => $source
                     ]
                 );
+        };
 
+        $transactional = $this->transactionalDdl();
+        try {
+            if ($transactional) {
+                // DDL + receipt commit or roll back together: no partial-DDL-without-receipt
+                // state can exist on transactional-DDL drivers (schema policy spec B4).
+                $this->db()->transaction(static function () use ($apply) {
+                    $apply();
+                    return true;
+                });
+            } else {
+                $apply();
+            }
             return ['success' => true, 'file' => $filename];
         } catch (\Exception $e) {
             error_log("Migration failed: " . $e->getMessage());
-            return ['success' => false, 'file' => $filename, 'error' => $e->getMessage()];
+            return [
+                'success' => false,
+                'file' => $filename,
+                'error' => $e->getMessage(),
+                'requiresManualRepair' => !$transactional,
+            ];
         }
     }
 
