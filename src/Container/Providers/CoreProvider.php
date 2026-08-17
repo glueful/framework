@@ -518,6 +518,31 @@ final class CoreProvider extends BaseServiceProvider
             fn() => \Glueful\Extensions\Schema\MigrationManagerFactory::create($this->context)
         );
 
+        // Schema-on-enable services (spec B3/B4): all lazy factories — resolving the definition
+        // list performs no work; construction happens on first use inside a command/executor.
+        $defs[\Glueful\Extensions\Schema\MigrationLockInterface::class] = new FactoryDefinition(
+            \Glueful\Extensions\Schema\MigrationLockInterface::class,
+            fn() => \Glueful\Extensions\Schema\MigrationLockFactory::forConnection(
+                \Glueful\Database\Connection::fromContext($this->context),
+                $this->context
+            )
+        );
+        $defs[\Glueful\Extensions\Schema\SchemaReadiness::class] = new FactoryDefinition(
+            \Glueful\Extensions\Schema\SchemaReadiness::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Extensions\Schema\SchemaReadiness(
+                \Glueful\Database\Connection::fromContext($this->context),
+                $c->get(\Glueful\Extensions\Schema\DescriptorInventory::class)
+            )
+        );
+        $defs[\Glueful\Extensions\Schema\ReceiptNormalizer::class] = new FactoryDefinition(
+            \Glueful\Extensions\Schema\ReceiptNormalizer::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Extensions\Schema\ReceiptNormalizer(
+                \Glueful\Database\Connection::fromContext($this->context),
+                $c->get(\Glueful\Extensions\Schema\DescriptorInventory::class),
+                $c->get(\Glueful\Extensions\Schema\MigrationLockInterface::class)
+            )
+        );
+
         // Field selection
         $defs[\Glueful\Support\FieldSelection\Projector::class] = new FactoryDefinition(
             \Glueful\Support\FieldSelection\Projector::class,
