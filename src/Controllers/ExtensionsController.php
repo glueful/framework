@@ -11,7 +11,6 @@ use Glueful\Extensions\EnabledProviders;
 use Glueful\Extensions\ExtensionCatalog;
 use Glueful\Extensions\ExtensionManager;
 use Glueful\Extensions\ExtensionResolver;
-use Glueful\Extensions\ExtensionStateWriter;
 use Glueful\Extensions\ProtectedProviders;
 use Glueful\Extensions\Install\ExtensionInstaller;
 use Glueful\Extensions\Install\HostCapability;
@@ -117,30 +116,54 @@ class ExtensionsController extends BaseController
             return Response::error('Host not writable', 409, ['reason' => $cap['reason']]);
         }
 
-        $current = EnabledProviders::from($this->context);
-        $proposed = $enable
-            ? [...$current, $provider]
-            : array_values(array_filter($current, static fn($p) => $p !== $provider));
-
-        $result = (new ExtensionResolver())->resolve($candidates, $proposed, Version::VERSION);
-        if ($result->hasErrors()) {
-            return $this->validationError(['extension' => array_map(
-                static fn($e) => "[{$e->kind}] {$e->message}",
-                $result->errors,
-            )]);
+        // Everything else — dependency dry-resolve, source locks, migrate-first/enable-last,
+        // cache recompile, the persisted operation record — is the executor's (spec B5). This
+        // surface keeps only HTTP concerns: permission, protected refusal, host writability.
+        try {
+            $executor = $this->schemaExecutor();
+            $operation = $enable
+                ? $executor->enable($package, 'http')
+                : $executor->disable($package, 'http');
+        } catch (
+            \Glueful\Extensions\Schema\SchemaNotBootstrappedException |
+            \Glueful\Extensions\Schema\UndeclaredSchemaException |
+            \Glueful\Database\Exceptions\LockContentionException $e
+        ) {
+            return Response::error($e->getMessage(), 409);
+        } catch (\RuntimeException $e) {
+            return $this->validationError(['extension' => [$e->getMessage()]]);
         }
 
-        $writer = new ExtensionStateWriter();
-        $configPath = config_path($this->context, 'extensions.php');
-        $enable ? $writer->enable($configPath, $provider) : $writer->disable($configPath, $provider);
-        $this->extensions->writeCacheNow();
-
-        $this->audit($enable ? 'extension.enable' : 'extension.disable', $package, 'succeeded');
-        return $this->success([
+        $succeeded = in_array($operation->status, [
+            \Glueful\Extensions\Schema\ExtensionOperation::STATUS_SUCCEEDED,
+            \Glueful\Extensions\Schema\ExtensionOperation::STATUS_CACHE_STALE,
+        ], true);
+        $this->audit(
+            $enable ? 'extension.enable' : 'extension.disable',
+            $package,
+            "operation #{$operation->id}: {$operation->status}"
+        );
+        $payload = [
             'package' => $package,
             'provider' => $provider,
-            'state' => $enable ? 'enabled' : 'available',
-        ]);
+            'state' => $enable && $succeeded ? 'enabled' : ($enable ? 'available' : 'available'),
+            'operation' => [
+                'id' => $operation->id,
+                'status' => $operation->status,
+                'failed_migration' => $operation->failedMigration,
+                'error' => $operation->error,
+            ],
+        ];
+        if (!$succeeded) {
+            return Response::error('Extension operation did not complete', 409, $payload);
+        }
+        return $this->success($payload);
+    }
+
+    /** Overridable seam: the executor comes from the app container in production. */
+    protected function schemaExecutor(): \Glueful\Extensions\Schema\ExtensionSchemaExecutor
+    {
+        return container($this->context)->get(\Glueful\Extensions\Schema\ExtensionSchemaExecutor::class);
     }
 
     private function audit(string $action, string $package, string $result): void

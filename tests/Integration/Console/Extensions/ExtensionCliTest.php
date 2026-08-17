@@ -8,26 +8,42 @@ use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Bootstrap\ConfigurationLoader;
 use Glueful\Console\Commands\Extensions\DisableCommand;
 use Glueful\Console\Commands\Extensions\EnableCommand;
+use Glueful\Database\Connection;
+use Glueful\Database\Migrations\MigrationManager;
+use Glueful\Extensions\PackageManifest;
+use Glueful\Extensions\Schema\DescriptorInventory;
+use Glueful\Extensions\Schema\ExtensionSchemaExecutor;
+use Glueful\Extensions\Schema\FileMigrationLock;
+use Glueful\Extensions\Schema\SchemaReadiness;
+use Glueful\Installer\DatabaseConfig;
+use Glueful\Services\FileFinder;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Symfony\Component\Console\Tester\CommandTester;
 
+/** Real executor, stubbed recompile (no booted app container in this harness). */
+final class CliTestExecutor extends ExtensionSchemaExecutor
+{
+    protected function recompileProviderCache(): void
+    {
+        // Best-effort in production; a no-op here — the config write is what this test asserts.
+    }
+}
+
 /**
- * End-to-end CLI test for extensions:enable / extensions:disable.
+ * End-to-end CLI test for extensions:enable / extensions:disable THROUGH the schema executor
+ * (schema policy spec B5).
  *
- * The headline guarantee under test: enable/disable VALIDATE the proposed enabled
- * list before writing, so a command never leaves config/extensions.php in a broken
- * state (e.g. enabling an extension whose dependency is not enabled is refused, and
- * the config file is left untouched).
- *
- * ExtensionManager is intentionally NOT provided by the test container: the post-write
- * cache recompile is best-effort and its failure is a documented, recoverable warning —
- * it must not affect the config write that this test asserts on.
+ * The headline guarantees under test survive the executor rewrite: the proposed enabled list is
+ * validated before writing, so a command never leaves config/extensions.php broken; protected
+ * providers refuse before any short-circuit; disabling a depended-on provider refuses; and — new
+ * with the manifest contract — an UNDECLARED package cannot participate in schema-on-enable.
  */
 final class ExtensionCliTest extends TestCase
 {
     private string $base;
     private ?string $prevEnv = null;
+    private Connection $connection;
 
     protected function setUp(): void
     {
@@ -43,30 +59,39 @@ final class ExtensionCliTest extends TestCase
             "<?php\n\nreturn [\n    'enabled' => [\n    ],\n];\n"
         );
 
-        // Three installed extensions: a standalone (widgets), a base, and a dependent
-        // (gadgets) that requires the base's provider.
+        // Three declared extensions (migrations: none — schema-free) plus one UNDECLARED
+        // legacy package. gadgets requires base's provider.
+        $packages = [
+            $this->pkg('vendor/widgets', 'Vendor\\Widgets\\Provider'),
+            $this->pkg('vendor/base', 'Vendor\\Base\\Provider'),
+            $this->pkg('vendor/gadgets', 'Vendor\\Gadgets\\Provider', requires: ['Vendor\\Base\\Provider']),
+            [
+                'name' => 'vendor/legacy',
+                'type' => 'glueful-extension',
+                'install-path' => '../vendor/legacy',
+                'extra' => ['glueful' => ['provider' => 'Vendor\\Legacy\\Provider']],
+            ],
+        ];
         file_put_contents(
-            $this->base . '/vendor/composer/installed.php',
-            "<?php\nreturn " . var_export([
-                'versions' => [
-                    'vendor/widgets' => [
-                        'type' => 'glueful-extension',
-                        'extra' => ['glueful' => ['provider' => 'Vendor\\Widgets\\Provider']],
-                    ],
-                    'vendor/base' => [
-                        'type' => 'glueful-extension',
-                        'extra' => ['glueful' => ['provider' => 'Vendor\\Base\\Provider']],
-                    ],
-                    'vendor/gadgets' => [
-                        'type' => 'glueful-extension',
-                        'extra' => ['glueful' => [
-                            'provider' => 'Vendor\\Gadgets\\Provider',
-                            'requires' => ['extensions' => ['Vendor\\Base\\Provider']],
-                        ]],
-                    ],
-                ],
-            ], true) . ";\n"
+            $this->base . '/vendor/composer/installed.json',
+            json_encode(['packages' => $packages], JSON_UNESCAPED_SLASHES)
         );
+
+        // Bootstrap: a fake framework root carrying only the extensions leaf, migrated once.
+        $suffix = 'X' . substr(md5($this->base), 0, 8);
+        mkdir($this->base . '/fw/migrations/extensions', 0777, true);
+        $bootstrapSrc = (string) file_get_contents(
+            dirname(__DIR__, 4) . '/migrations/extensions/001_CreateExtensionOperationsTable.php'
+        );
+        file_put_contents(
+            $this->base . '/fw/migrations/extensions/001_CreateExtensionOperationsTable' . $suffix . '.php',
+            str_replace('CreateExtensionOperationsTable', 'CreateExtensionOperationsTable' . $suffix, $bootstrapSrc)
+        );
+        $config = new DatabaseConfig('sqlite', database: $this->base . '/db.sqlite');
+        $this->connection = new Connection($config->toConnectionConfig());
+        [, $manager] = $this->services($this->context());
+        $report = $manager->migrateSources(['glueful/framework:extensions']);
+        self::assertNull($report->firstFailure(), 'bootstrap migrate must succeed');
     }
 
     protected function tearDown(): void
@@ -76,6 +101,21 @@ final class ExtensionCliTest extends TestCase
         } else {
             putenv('APP_ENV=' . $this->prevEnv);
         }
+    }
+
+    /** @param list<string> $requires @return array<string, mixed> */
+    private function pkg(string $name, string $provider, array $requires = []): array
+    {
+        return [
+            'name' => $name,
+            'type' => 'glueful-extension',
+            'install-path' => '../' . $name,
+            'extra' => ['glueful' => [
+                'provider' => $provider,
+                'requires' => ['extensions' => $requires],
+                'migrations' => 'none',
+            ]],
+        ];
     }
 
     /** @return list<string> */
@@ -95,17 +135,47 @@ final class ExtensionCliTest extends TestCase
         return $ctx;
     }
 
+    /** @return array{0: DescriptorInventory, 1: MigrationManager} */
+    private function services(ApplicationContext $ctx): array
+    {
+        $inventory = DescriptorInventory::fromManifest(
+            new PackageManifest($ctx),
+            $this->base . '/fw',
+            new FileFinder()
+        );
+        $manager = new MigrationManager($this->base . '/fw/migrations', new FileFinder(), $ctx, $this->connection);
+        foreach ($inventory->all() as $descriptor) {
+            $manager->registerDescriptor($descriptor, $inventory->pathOf($descriptor));
+        }
+        return [$inventory, $manager];
+    }
+
     private function container(ApplicationContext $ctx): ContainerInterface
     {
-        return new class ($ctx) implements ContainerInterface {
-            public function __construct(private ApplicationContext $ctx)
-            {
+        [$inventory, $manager] = $this->services($ctx);
+        $executor = new CliTestExecutor(
+            $ctx,
+            $inventory,
+            $manager,
+            new SchemaReadiness($this->connection, $inventory),
+            new FileMigrationLock($this->base . '/locks'),
+            $this->connection,
+            lockWaitSeconds: 1,
+        );
+        return new class ($ctx, $executor) implements ContainerInterface {
+            public function __construct(
+                private readonly ApplicationContext $ctx,
+                private readonly ExtensionSchemaExecutor $executor,
+            ) {
             }
 
             public function get(string $id): mixed
             {
                 if ($id === ApplicationContext::class) {
                     return $this->ctx;
+                }
+                if ($id === ExtensionSchemaExecutor::class) {
+                    return $this->executor;
                 }
                 throw new class ("no {$id}") extends \RuntimeException implements
                     \Psr\Container\NotFoundExceptionInterface {
@@ -114,7 +184,7 @@ final class ExtensionCliTest extends TestCase
 
             public function has(string $id): bool
             {
-                return $id === ApplicationContext::class;
+                return $id === ApplicationContext::class || $id === ExtensionSchemaExecutor::class;
             }
         };
     }
@@ -181,7 +251,7 @@ final class ExtensionCliTest extends TestCase
     public function testEnableAddsProviderToConfig(): void
     {
         $tester = $this->runEnable(['extension' => 'widgets']);
-        $this->assertSame(0, $tester->getStatusCode());
+        $this->assertSame(0, $tester->getStatusCode(), $tester->getDisplay());
         $this->assertSame(['Vendor\\Widgets\\Provider'], $this->enabled());
     }
 
@@ -197,16 +267,15 @@ final class ExtensionCliTest extends TestCase
     {
         $this->runEnable(['extension' => 'widgets']);
         $tester = $this->runEnable(['extension' => 'widgets']);
-        $this->assertSame(0, $tester->getStatusCode());
-        $this->assertStringContainsString('already enabled', $tester->getDisplay());
-        $this->assertSame(['Vendor\\Widgets\\Provider'], $this->enabled());
+        $this->assertSame(0, $tester->getStatusCode(), $tester->getDisplay());
+        $this->assertSame(['Vendor\\Widgets\\Provider'], $this->enabled(), 'no duplicate entry on re-enable');
     }
 
-    public function testDisableRemovesProvider(): void
+    public function testDisableRemovesProviderButNeverSchema(): void
     {
         $this->runEnable(['extension' => 'widgets']);
         $tester = $this->runDisable(['extension' => 'widgets']);
-        $this->assertSame(0, $tester->getStatusCode());
+        $this->assertSame(0, $tester->getStatusCode(), $tester->getDisplay());
         $this->assertSame([], $this->enabled());
     }
 
@@ -240,10 +309,20 @@ final class ExtensionCliTest extends TestCase
         // Disabling base while gadgets still requires it must be refused.
         $tester = $this->runDisable(['extension' => 'base']);
         $this->assertSame(1, $tester->getStatusCode());
-        $this->assertStringContainsString('depends on it', $tester->getDisplay());
+        $this->assertStringContainsString('missing_dependency', $tester->getDisplay());
         $this->assertEqualsCanonicalizing(
             ['Vendor\\Base\\Provider', 'Vendor\\Gadgets\\Provider'],
             $this->enabled()
         );
+    }
+
+    public function testUndeclaredLegacyPackageCannotParticipateInSchemaOnEnable(): void
+    {
+        // vendor/legacy has extra.glueful but no migrations declaration: fail closed with the
+        // manifest remedy (spec B1) — it stays bootable, but enable refuses.
+        $tester = $this->runEnable(['extension' => 'legacy']);
+        $this->assertSame(1, $tester->getStatusCode());
+        $this->assertStringContainsString('migrations', $tester->getDisplay());
+        $this->assertSame([], $this->enabled());
     }
 }

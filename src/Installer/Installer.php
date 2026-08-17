@@ -75,14 +75,27 @@ final class Installer
             $steps[] = new InstallStep('database-config', InstallStep::OK, 'Database credentials written.');
         }
 
-        // 5. Migrate the SAME connection (injected) — never fromContext().
+        // 5. Migrate the SAME connection (injected) — never fromContext(). Serialized under the
+        // migration lock from the SAME connection (schema policy spec B4): provision cannot race
+        // a concurrent migrate:run or enable, and the lock backend can never drift from the
+        // connection actually migrating.
         if (!$options->skipDatabase) {
             try {
                 // MigrationManager resolves app.paths.migrations via the context; with no context
                 // (e.g. a unit test) it would TypeError, so pass an explicit path when provided.
                 // In production context !== null, so $this->migrationsPath stays null and is resolved.
                 $manager = new MigrationManager($this->migrationsPath, null, $this->context, $migrationConnection);
-                $manager->migrate();
+                $lockConnection = $migrationConnection ?? Connection::fromContext($this->context);
+                $lock = \Glueful\Extensions\Schema\MigrationLockFactory::forConnection(
+                    $lockConnection,
+                    $this->context
+                );
+                $handle = $lock->acquireAll(['app']);
+                try {
+                    $manager->migrate();
+                } finally {
+                    $handle->release();
+                }
                 $steps[] = new InstallStep('migrate', InstallStep::OK, 'Migrations applied.');
             } catch (\Throwable $e) {
                 $steps[] = new InstallStep('migrate', InstallStep::FAILED, $e->getMessage());

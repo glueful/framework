@@ -77,6 +77,15 @@ class MigrationManager
     private array $additionalMigrationPaths = [];
 
     /**
+     * @var array<string, array{mode: string, package: string}> descriptor-registered sources —
+     *      mode 'core'|'on_enable' and owning package, for the global source policy.
+     */
+    private array $descriptorSources = [];
+
+    /** @var \Closure|null Returns the currently-enabled package names; evaluated per call. */
+    private ?\Closure $globalSourcePolicy = null;
+
+    /**
      * @var string Name of migrations tracking table
      */
     private const VERSION_TABLE = 'migrations';
@@ -92,7 +101,7 @@ class MigrationManager
      * @param  FileFinder|null       $fileFinder        File finder service instance
      * @param  ApplicationContext|null $context         Application context for service resolution
      * @param  Connection|null       $connection        Optional injected connection (falls back to context)
-     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException If database connection fails
+     * @throws DatabaseException If database connection fails
      */
     public function __construct(
         ?string $migrationsPath = null,
@@ -161,6 +170,186 @@ class MigrationManager
             $source = end($parts) !== false ? (string) end($parts) : 'extension';
         }
         $this->additionalMigrationPaths[] = ['path' => $path, 'priority' => $priority, 'source' => $source];
+    }
+
+    /**
+     * Register a manifest descriptor as a migration source. The container factory is the sole
+     * caller for described paths — ServiceProvider::loadMigrationsFrom() validates and returns
+     * for them instead of appending a second source.
+     */
+    public function registerDescriptor(
+        \Glueful\Extensions\Schema\MigrationDescriptor $descriptor,
+        string $absolutePath
+    ): void {
+        $this->addMigrationPath($absolutePath, $descriptor->priority, $descriptor->source());
+        $this->descriptorSources[$descriptor->source()] = [
+            'mode' => $descriptor->mode->value,
+            'package' => $descriptor->package,
+        ];
+    }
+
+    public function hasSource(string $source): bool
+    {
+        if ($source === 'app') {
+            return true;
+        }
+        foreach ($this->additionalMigrationPaths as $entry) {
+            if ($entry['source'] === $source) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Install the global source policy (schema policy spec B2): the closure returns the
+     * currently-enabled package names and is evaluated at EACH global read/run, never captured.
+     */
+    public function setGlobalSourcePolicy(\Closure $enabledPackages): void
+    {
+        $this->globalSourcePolicy = $enabledPackages;
+    }
+
+    /**
+     * The sources a GLOBAL operation may touch: app + legacy-appended sources + core descriptors
+     * + on_enable descriptors of currently-enabled packages. Without a policy (bare
+     * constructions, tests, legacy), every registered source is global.
+     *
+     * @return list<string>
+     */
+    public function globalSources(): array
+    {
+        $all = ['app'];
+        foreach ($this->additionalMigrationPaths as $entry) {
+            $all[] = $entry['source'];
+        }
+        $all = array_values(array_unique($all));
+        if ($this->globalSourcePolicy === null) {
+            return $all;
+        }
+        /** @var list<string> $enabled */
+        $enabled = ($this->globalSourcePolicy)();
+        $out = [];
+        foreach ($all as $source) {
+            $descriptor = $this->descriptorSources[$source] ?? null;
+            if ($descriptor === null || $descriptor['mode'] === 'core') {
+                $out[] = $source;
+                continue;
+            }
+            if (in_array($descriptor['package'], $enabled, true)) {
+                $out[] = $source;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Pending files discovered DIRECTLY from exactly the named registered sources, in global
+     * priority order. Intentionally independent of the global source policy — this is the
+     * executor's explicit-source API, so a disabled extension's descriptor stays discoverable.
+     *
+     * @param list<string> $sources
+     * @return list<array{file: string, source: string}>
+     */
+    public function pendingForSources(array $sources): array
+    {
+        $appliedKeys = $this->appliedKeys();
+        $candidates = [];
+        foreach ($this->allSources() as $src) {
+            if (!in_array($src['source'], $sources, true)) {
+                continue;
+            }
+            foreach ($this->fileFinder->findMigrations($src['path']) as $file) {
+                $path = $file->getPathname();
+                if (in_array($this->sourceKey($src['source'], basename($path)), $appliedKeys, true)) {
+                    continue;
+                }
+                $candidates[] = ['file' => $path, 'priority' => $src['priority'], 'source' => $src['source']];
+            }
+        }
+        usort($candidates, function (array $a, array $b): int {
+            return [$a['priority'], basename($a['file']), $a['source']]
+                <=> [$b['priority'], basename($b['file']), $b['source']];
+        });
+        return array_map(
+            static fn(array $c): array => ['file' => $c['file'], 'source' => $c['source']],
+            $candidates
+        );
+    }
+
+    /**
+     * Run exactly the named sources' pending migrations in order, stopping at the first failure
+     * (later files stay pending). The executor's explicit, intentionally policy-unfiltered path.
+     *
+     * @param list<string> $sources
+     */
+    public function migrateSources(array $sources): MigrationRunReport
+    {
+        $this->ensureVersionTable();
+        $outcomes = [];
+        $batch = null;
+        foreach ($this->pendingForSources($sources) as $row) {
+            $batch ??= $this->getNextBatchNumber();
+            $status = $this->runMigration($row['file'], $batch);
+            $outcomes[] = [
+                'file' => $row['file'],
+                'source' => $row['source'],
+                'status' => $status['success'] ? 'applied' : 'failed',
+                'requiresManualRepair' => (bool) ($status['requiresManualRepair'] ?? false),
+                'error' => $status['error'] ?? null,
+            ];
+            if (!$status['success']) {
+                break;
+            }
+        }
+        return new MigrationRunReport($outcomes);
+    }
+
+    /** Detects PDO's nested-begin failure (any driver wording) anywhere in the chain. */
+    private function isNestedTransactionFailure(\Throwable $e): bool
+    {
+        for ($cursor = $e; $cursor !== null; $cursor = $cursor->getPrevious()) {
+            if (str_contains(strtolower($cursor->getMessage()), 'already an active transaction')) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether the driver couples a migration's DDL and its receipt in one transaction. On other
+     * drivers a failure can leave partial DDL, which the caller must surface as manual_repair.
+     */
+    protected function transactionalDdl(): bool
+    {
+        return in_array($this->db()->getDriverName(), ['pgsql', 'sqlite'], true);
+    }
+
+    /** The registered source owning $file ('app' when only the app dir matches). */
+    private function sourceOfFile(string $file): string
+    {
+        foreach ($this->additionalMigrationPaths as $entry) {
+            if ($this->fileBelongsToDir($file, $entry['path'])) {
+                return $entry['source'];
+            }
+        }
+        return 'app';
+    }
+
+    /** @param list<string> $files */
+    private function assertWithinGlobalScope(array $files): void
+    {
+        $global = $this->globalSources();
+        foreach ($files as $file) {
+            $source = $this->sourceOfFile((string) $file);
+            if (!in_array($source, $global, true)) {
+                throw new MigrationScopeException(
+                    basename((string) $file) . " belongs to source '{$source}', which is outside the "
+                    . 'global migration scope (a disabled on_enable descriptor?); enable the extension '
+                    . 'or use the enable executor.'
+                );
+            }
+        }
     }
 
     /**
@@ -266,28 +455,13 @@ class MigrationManager
      */
     public function getPendingMigrations(): array
     {
-        $appliedKeys = $this->appliedKeys();
-
-        // Collect candidate files with their source + priority.
-        $candidates = []; // array<int, array{file:string, priority:int, source:string}>
-        foreach ($this->allSources() as $src) {
-            foreach ($this->fileFinder->findMigrations($src['path']) as $file) {
-                $path = $file->getPathname();
-                if (in_array($this->sourceKey($src['source'], basename($path)), $appliedKeys, true)) {
-                    continue;
-                }
-                $candidates[] = ['file' => $path, 'priority' => $src['priority'], 'source' => $src['source']];
-            }
-        }
-
-        // (priority ASC, basename ASC, source ASC) — source breaks ties so multiple sources
-        // shipping the same basename at the same priority order deterministically.
-        usort($candidates, function (array $a, array $b): int {
-            return [$a['priority'], basename($a['file']), $a['source']]
-                <=> [$b['priority'], basename($b['file']), $b['source']];
-        });
-
-        return array_map(fn(array $c) => $c['file'], $candidates);
+        // The legacy global view: the policy-filtered projection of pendingForSources() down to
+        // its historical list-of-files shape. Disabled on_enable descriptors are excluded here
+        // (and only here) — the explicit-source APIs stay unfiltered.
+        return array_map(
+            static fn(array $row): string => $row['file'],
+            $this->pendingForSources($this->globalSources())
+        );
     }
 
     /**
@@ -378,6 +552,15 @@ class MigrationManager
     public function migrate($specificFileOrPendingMigrations = null): array
     {
         $results = ['applied' => [], 'failed' => []];
+        // Global scope enforcement (schema policy spec B2): explicit string/array arguments are
+        // resolved to their registered sources and validated against globalSources() BEFORE any
+        // ledger work, DDL, or receipt — a disabled on_enable descriptor cannot be applied by
+        // naming its files. migrateSources() is the sole intentional scoped bypass.
+        if (is_string($specificFileOrPendingMigrations)) {
+            $this->assertWithinGlobalScope([$specificFileOrPendingMigrations]);
+        } elseif (is_array($specificFileOrPendingMigrations)) {
+            $this->assertWithinGlobalScope(array_values($specificFileOrPendingMigrations));
+        }
         $this->ensureVersionTable();
         // Handle specific file migration
         if (is_string($specificFileOrPendingMigrations)) {
@@ -490,11 +673,11 @@ class MigrationManager
             }
         }
 
-        try {
+        $apply = function () use ($migration, $filename, $batch, $checksum, $extensionName, $source): void {
             // Run the migration schema operations - these will execute immediately
             $migration->up($this->schema());
 
-            // Insert migration record after schema operations complete
+            // The receipt is part of the same unit of work as the DDL.
             $this->db()
                 ->table(self::VERSION_TABLE)
                 ->insert(
@@ -507,11 +690,40 @@ class MigrationManager
                     'source' => $source
                     ]
                 );
+        };
 
+        $transactional = $this->transactionalDdl();
+        try {
+            if ($transactional) {
+                try {
+                    // DDL + receipt commit or roll back together: no partial-DDL-without-receipt
+                    // state can exist on transactional-DDL drivers (schema policy spec B4).
+                    $this->db()->transaction(static function () use ($apply) {
+                        $apply();
+                        return true;
+                    });
+                } catch (\Exception $e) {
+                    // A migration that manages its OWN transaction (raw PDO beginTransaction in
+                    // up()) cannot run inside the runner's wrapper — the nested begin throws
+                    // before any effect and the wrapper rolls back clean. Re-run unwrapped: such
+                    // a migration supplies its own atomicity; the receipt lands right after it.
+                    if (!$this->isNestedTransactionFailure($e)) {
+                        throw $e;
+                    }
+                    $apply();
+                }
+            } else {
+                $apply();
+            }
             return ['success' => true, 'file' => $filename];
         } catch (\Exception $e) {
             error_log("Migration failed: " . $e->getMessage());
-            return ['success' => false, 'file' => $filename, 'error' => $e->getMessage()];
+            return [
+                'success' => false,
+                'file' => $filename,
+                'error' => $e->getMessage(),
+                'requiresManualRepair' => !$transactional,
+            ];
         }
     }
 

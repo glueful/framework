@@ -501,49 +501,68 @@ final class CoreProvider extends BaseServiceProvider
             $this->autowire(\Glueful\Cache\NullEdgeCache::class);
         $defs[\Glueful\Database\QueryCacheService::class] = $this->autowire(\Glueful\Database\QueryCacheService::class);
 
-        // Database migrations. Factory (not bare autowire) so core can register its OWN schema —
-        // the security spine plus DB-backed platform capabilities — whose owning subsystems all
-        // live in core. They ship as first-class, versioned, source-tracked migrations applied
-        // through the runner (NOT lazy runtime DDL).
-        //
-        // findMigrations() RECURSES, so we register only explicit LEAF subdirs of migrations/,
-        // never the parent (registering the parent would slurp every capability subdir under the
-        // wrong source and bypass the gates). auth/ is always-on (source 'glueful/framework');
-        // each capability subdir is registered only when its config gate is on, under its own
-        // source 'glueful/framework:<capability>'. All at FOUNDATION priority. Shared, so
-        // extensions' loadMigrationsFrom() and the migrate commands see the same instance; tests
-        // that construct `new MigrationManager(...)` directly stay isolated (no core paths).
+        // Database migrations. The MigrationManagerFactory is the SOLE registrar for
+        // descriptor-backed sources (schema policy spec B1): framework core leaves are built-in
+        // descriptors (all unconditional — config governs runtime behavior, not schema
+        // presence), declared manifest descriptors register here rather than at provider boot,
+        // and the call-time global source policy keeps disabled on_enable schemas out of global
+        // runs. Shared, so extensions' loadMigrationsFrom() and the migrate commands see the
+        // same instance; tests that construct `new MigrationManager(...)` directly stay
+        // isolated (no core paths).
+        $defs[\Glueful\Extensions\Schema\DescriptorInventory::class] = new FactoryDefinition(
+            \Glueful\Extensions\Schema\DescriptorInventory::class,
+            fn() => \Glueful\Extensions\Schema\MigrationManagerFactory::inventory($this->context)
+        );
         $defs[\Glueful\Database\Migrations\MigrationManager::class] = new FactoryDefinition(
             \Glueful\Database\Migrations\MigrationManager::class,
-            function (): \Glueful\Database\Migrations\MigrationManager {
-                $base = \dirname(__DIR__, 3) . '/migrations';
-                $foundation = \Glueful\Database\Migrations\MigrationPriority::FOUNDATION;
-                $mm = new \Glueful\Database\Migrations\MigrationManager(null, null, $this->context);
+            fn() => \Glueful\Extensions\Schema\MigrationManagerFactory::create($this->context)
+        );
 
-                $cfg = fn(string $key, mixed $default): mixed =>
-                    \function_exists('config') ? config($this->context, $key, $default) : $default;
-
-                // subdir => enabled. auth is unconditional. locks/queue/uploads derive from their
-                // own driver/enable config; the rest are explicit flags in config/capabilities.php.
-                $gates = [
-                    'auth' => true,
-                    'locks' => $cfg('lock.default', 'file') === 'database',
-                    'uploads' => (bool) $cfg('uploads.enabled', true),
-                    'queue' => $cfg('queue.default', 'sync') === 'database',
-                    'scheduler' => (bool) $cfg('capabilities.scheduler', true),
-                    'notifications' => (bool) $cfg('capabilities.notifications', true),
-                    'metrics' => (bool) $cfg('capabilities.metrics', true),
-                ];
-                foreach ($gates as $dir => $enabled) {
-                    if ($enabled) {
-                        // Source is 'glueful/framework' for auth, 'glueful/framework:<cap>' otherwise.
-                        $source = $dir === 'auth' ? 'glueful/framework' : 'glueful/framework:' . $dir;
-                        // addMigrationPath() no-ops when the dir is absent (safe before a subdir exists).
-                        $mm->addMigrationPath($base . '/' . $dir, $foundation, $source);
-                    }
-                }
-                return $mm;
-            }
+        // Schema-on-enable services (spec B3/B4): all lazy factories — resolving the definition
+        // list performs no work; construction happens on first use inside a command/executor.
+        $defs[\Glueful\Extensions\Schema\MigrationLockInterface::class] = new FactoryDefinition(
+            \Glueful\Extensions\Schema\MigrationLockInterface::class,
+            fn() => \Glueful\Extensions\Schema\MigrationLockFactory::forConnection(
+                \Glueful\Database\Connection::fromContext($this->context),
+                $this->context
+            )
+        );
+        $defs[\Glueful\Extensions\Schema\SchemaReadiness::class] = new FactoryDefinition(
+            \Glueful\Extensions\Schema\SchemaReadiness::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Extensions\Schema\SchemaReadiness(
+                \Glueful\Database\Connection::fromContext($this->context),
+                $c->get(\Glueful\Extensions\Schema\DescriptorInventory::class)
+            )
+        );
+        $defs[\Glueful\Extensions\Schema\ReceiptNormalizer::class] = new FactoryDefinition(
+            \Glueful\Extensions\Schema\ReceiptNormalizer::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Extensions\Schema\ReceiptNormalizer(
+                \Glueful\Database\Connection::fromContext($this->context),
+                $c->get(\Glueful\Extensions\Schema\DescriptorInventory::class),
+                $c->get(\Glueful\Extensions\Schema\MigrationLockInterface::class)
+            )
+        );
+        $defs[\Glueful\Extensions\Schema\AdoptionService::class] = new FactoryDefinition(
+            \Glueful\Extensions\Schema\AdoptionService::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Extensions\Schema\AdoptionService(
+                \Glueful\Database\Connection::fromContext($this->context),
+                $c->get(\Glueful\Extensions\Schema\DescriptorInventory::class),
+                $c->get(\Glueful\Extensions\Schema\SchemaReadiness::class),
+                $c->get(\Glueful\Extensions\Schema\MigrationLockInterface::class)
+            )
+        );
+        // The one extension enable/disable executor (spec B5). Explicit definition — this
+        // container does not autowire unknown ids.
+        $defs[\Glueful\Extensions\Schema\ExtensionSchemaExecutor::class] = new FactoryDefinition(
+            \Glueful\Extensions\Schema\ExtensionSchemaExecutor::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Extensions\Schema\ExtensionSchemaExecutor(
+                $this->context,
+                $c->get(\Glueful\Extensions\Schema\DescriptorInventory::class),
+                $c->get(\Glueful\Database\Migrations\MigrationManager::class),
+                $c->get(\Glueful\Extensions\Schema\SchemaReadiness::class),
+                $c->get(\Glueful\Extensions\Schema\MigrationLockInterface::class),
+                \Glueful\Database\Connection::fromContext($this->context)
+            )
         );
 
         // Field selection
