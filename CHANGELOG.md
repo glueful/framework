@@ -6,6 +6,20 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.78.4] - 2026-08-17 — Alioth
+
+### Fixed
+- **`MigrationManager` construction no longer touches the database.** 1.78.3 made the three
+  migrate console commands resolve the manager lazily, but every extension provider still
+  constructed it at boot via `loadMigrationsFrom()` — and the constructor connected and ran
+  `ensureVersionTable()` DDL, so any console or web boot with a reachable database created
+  the `migrations` table as whatever role `.env` named. The manager now resolves its
+  connection on first database operation and follows a lazy-ledger contract: `migrate()` is
+  the only operation that ensures/creates the ledger; status and pending reads treat a
+  missing ledger as zero applied migrations; `rollback()` reports nothing-to-rollback when
+  the ledger is absent. Migration discovery and registration now perform zero database work,
+  and read-only operational commands work with read-only database credentials.
+
 ## [1.78.3] - 2026-08-16 — Alioth
 
 **Theme: the console works before the database does.** A patch for first-run installs:

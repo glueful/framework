@@ -44,14 +44,19 @@ use Glueful\Bootstrap\ApplicationContext;
 class MigrationManager
 {
     /**
-     * @var SchemaBuilderInterface Database schema builder for table operations
+     * @var SchemaBuilderInterface|null Schema builder, resolved on first database operation
      */
-    private SchemaBuilderInterface $schema;
+    private ?SchemaBuilderInterface $schema = null;
 
     /**
-     * @var Connection Database connection for fluent query operations
+     * @var Connection|null Connection, resolved on first database operation
      */
-    private Connection $db;
+    private ?Connection $db = null;
+
+    /**
+     * @var bool True only after ensureVersionTable() has completed successfully
+     */
+    private bool $ledgerEnsured = false;
 
     /**
      * @var string Directory containing migration files
@@ -79,7 +84,9 @@ class MigrationManager
     /**
      * Initialize migration manager
      *
-     * Sets up schema manager and ensures version table exists.
+     * Performs no database work: the connection is resolved on first database operation and
+     * the version table is created only by migrate() (status/pending/rollback treat a
+     * missing ledger as zero applied migrations).
      *
      * @param  string|null           $migrationsPath    Custom path to migrations directory
      * @param  FileFinder|null       $fileFinder        File finder service instance
@@ -94,15 +101,28 @@ class MigrationManager
         ?Connection $connection = null
     ) {
         $this->context = $context;
-        $connection = $connection ?? Connection::fromContext($context);
+        // Lazy-ledger contract: extension providers construct this manager at boot merely to
+        // register migration paths, so construction must resolve no connection and run no DDL.
+        // The connection opens on first database operation; only migrate() creates the ledger.
         $this->db = $connection;
-        $this->schema = $connection->getSchemaBuilder();
 
         $this->migrationsPath = $migrationsPath ?? $this->getConfig('app.paths.migrations');
         $this->fileFinder = $fileFinder ?? $this->resolveFileFinder();
-        // echo $this->migrationsPath;
-        // exit;
-        $this->ensureVersionTable();
+    }
+
+    private function db(): Connection
+    {
+        return $this->db ??= Connection::fromContext($this->context);
+    }
+
+    private function schema(): SchemaBuilderInterface
+    {
+        return $this->schema ??= $this->db()->getSchemaBuilder();
+    }
+
+    private function ledgerExists(): bool
+    {
+        return $this->ledgerEnsured || $this->schema()->hasTable(self::VERSION_TABLE);
     }
 
     private function resolveFileFinder(): FileFinder
@@ -191,8 +211,11 @@ class MigrationManager
      */
     private function ensureVersionTable(): void
     {
-        if (!$this->schema->hasTable(self::VERSION_TABLE)) {
-            $table = $this->schema->table(self::VERSION_TABLE);
+        if ($this->ledgerEnsured) {
+            return;
+        }
+        if (!$this->schema()->hasTable(self::VERSION_TABLE)) {
+            $table = $this->schema()->table(self::VERSION_TABLE);
 
             // Add columns
             $table->id();
@@ -211,21 +234,23 @@ class MigrationManager
             // Create the table
             $table->create()->execute();
 
+            $this->ledgerEnsured = true;
             return;
         }
 
         // Upgrade path for existing version tables (pre-release dev DBs).
-        if (!$this->schema->hasColumn(self::VERSION_TABLE, 'source')) {
+        if (!$this->schema()->hasColumn(self::VERSION_TABLE, 'source')) {
             // Callback form runs the column builder, calls execute(), and flushes pending ops.
-            $this->schema->alterTable(self::VERSION_TABLE, function ($table): void {
+            $this->schema()->alterTable(self::VERSION_TABLE, function ($table): void {
                 $table->string('source', 191)->default('app');
             });
             // Backfill any pre-existing rows to the app source.
-            $this->db->table(self::VERSION_TABLE)->whereNull('source')->update(['source' => 'app']);
+            $this->db()->table(self::VERSION_TABLE)->whereNull('source')->update(['source' => 'app']);
             // IMPORTANT: existing tables still carry the legacy unique(migration). That constraint
             // contradicts package-scoped tracking and must be replaced with unique(source, migration)
             // via a clean migration-history reset (pre-release) — SQLite cannot portably drop it.
         }
+        $this->ledgerEnsured = true;
     }
 
     /**
@@ -272,7 +297,10 @@ class MigrationManager
      */
     private function getAppliedMigrations(): array
     {
-        $result = $this->db
+        if (!$this->ledgerExists()) {
+            return [];
+        }
+        $result = $this->db()
             ->table(self::VERSION_TABLE)
             ->select(['migration'])
             ->get();
@@ -287,7 +315,10 @@ class MigrationManager
      */
     private function appliedKeys(): array
     {
-        $rows = $this->db->table(self::VERSION_TABLE)->select(['migration', 'source'])->get();
+        if (!$this->ledgerExists()) {
+            return [];
+        }
+        $rows = $this->db()->table(self::VERSION_TABLE)->select(['migration', 'source'])->get();
         $keys = [];
         foreach ($rows as $row) {
             $source = (string) ($row['source'] ?? 'app');
@@ -347,6 +378,7 @@ class MigrationManager
     public function migrate($specificFileOrPendingMigrations = null): array
     {
         $results = ['applied' => [], 'failed' => []];
+        $this->ensureVersionTable();
         // Handle specific file migration
         if (is_string($specificFileOrPendingMigrations)) {
             $batch = $this->getNextBatchNumber();
@@ -460,10 +492,10 @@ class MigrationManager
 
         try {
             // Run the migration schema operations - these will execute immediately
-            $migration->up($this->schema);
+            $migration->up($this->schema());
 
             // Insert migration record after schema operations complete
-            $this->db
+            $this->db()
                 ->table(self::VERSION_TABLE)
                 ->insert(
                     [
@@ -490,7 +522,7 @@ class MigrationManager
      */
     private function getNextBatchNumber(): int
     {
-        $maxBatch = $this->db
+        $maxBatch = $this->db()
             ->table(self::VERSION_TABLE)
             ->max('batch');
 
@@ -539,7 +571,10 @@ class MigrationManager
      */
     private function getMigrationsToRollback(int $steps): array
     {
-        $result = $this->db
+        if (!$this->ledgerExists()) {
+            return [];
+        }
+        $result = $this->db()
             ->table(self::VERSION_TABLE)
             ->select(['migration', 'source'])
             ->orderBy('batch', 'DESC')
@@ -625,13 +660,13 @@ class MigrationManager
 
         try {
             // Run migration rollback - operations will execute immediately
-            $migration->down($this->schema);
+            $migration->down($this->schema());
 
             // Delete the version row by (source, migration) — basename alone is not unique.
             // The migrations table has no deleted_at, so delete() now hard-deletes it (the
             // soft-delete handler is column-aware). Explicit operators: where() does not
             // normalize a 2-arg string value to equality.
-            $this->db->table(self::VERSION_TABLE)
+            $this->db()->table(self::VERSION_TABLE)
                 ->where('migration', '=', $filename)
                 ->where('source', '=', $source)
                 ->delete();
@@ -651,7 +686,7 @@ class MigrationManager
     public function executeMigration(MigrationInterface $migration): void
     {
         // Run migration - operations execute immediately
-        $migration->up($this->schema);
+        $migration->up($this->schema());
     }
 
     /**
@@ -662,6 +697,6 @@ class MigrationManager
     public function executeRollback(MigrationInterface $migration): void
     {
         // Run migration rollback - operations execute immediately
-        $migration->down($this->schema);
+        $migration->down($this->schema());
     }
 }

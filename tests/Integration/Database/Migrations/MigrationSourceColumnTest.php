@@ -12,8 +12,8 @@ final class MigrationSourceColumnTest extends MigrationTestCase
 {
     public function test_version_table_has_source_column(): void
     {
-        // Constructing the manager runs ensureVersionTable().
-        new MigrationManager($this->tempMigrationsDir(), null, $this->context());
+        // Lazy-ledger contract: migrate() (not construction) runs ensureVersionTable().
+        (new MigrationManager($this->tempMigrationsDir(), null, $this->context()))->migrate();
 
         $schema = Connection::fromContext($this->context())->getSchemaBuilder();
         self::assertTrue($schema->hasColumn('migrations', 'source'));
