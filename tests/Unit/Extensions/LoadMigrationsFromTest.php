@@ -22,7 +22,11 @@ final class LoadMigrationsFromTest extends TestCase
             ->with($dir, MigrationPriority::IDENTITY, 'glueful/users');
 
         $container = $this->createMock(ContainerInterface::class);
-        $container->method('has')->willReturn(true);
+        // Inventory absent => legacy append path (the descriptor-covered path is exercised by
+        // SingleInventoryTest; this test pins the back-compat forwarding contract).
+        $container->method('has')->willReturnCallback(
+            static fn(string $id): bool => $id === MigrationManager::class
+        );
         $container->method('get')->willReturn($mm);
 
         $provider = new class ($container) extends ServiceProvider {

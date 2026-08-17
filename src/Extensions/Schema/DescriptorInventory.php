@@ -30,6 +30,8 @@ final class DescriptorInventory
     private array $declared = [];
     /** @var array<string, string> provider FQCN => package */
     private array $providers = [];
+    /** @var array<string, string> package => canonical (realpath) install root */
+    private array $installRoots = [];
 
     private function __construct()
     {
@@ -40,6 +42,12 @@ final class DescriptorInventory
         $inv = new self();
         $installPaths = $manifest->installPaths();
         $inv->providers = $manifest->providerPackages();
+        foreach ($installPaths as $package => $dir) {
+            $real = realpath($dir);
+            if ($real !== false) {
+                $inv->installRoots[$package] = $real;
+            }
+        }
 
         foreach (FrameworkDescriptors::all($frameworkRoot) as $descriptor) {
             $inv->add($descriptor, $frameworkRoot, $files);
@@ -189,5 +197,35 @@ final class DescriptorInventory
     public function aliasIndex(): array
     {
         return $this->aliases;
+    }
+
+    /**
+     * Package ownership of an arbitrary class by FILE containment: the class file's realpath is
+     * matched against the canonical install roots (longest prefix wins). This is the slow path
+     * behind packageOfProvider() — a second, undeclared provider class shipped inside a declared
+     * package still answers to that package's manifest. Returns null for app-local classes.
+     */
+    public function packageOfClassFile(string $class): ?string
+    {
+        if (!class_exists($class)) {
+            return null;
+        }
+        $file = (new \ReflectionClass($class))->getFileName();
+        if ($file === false) {
+            return null;
+        }
+        $real = realpath($file);
+        if ($real === false) {
+            return null;
+        }
+        $bestPackage = null;
+        $bestLength = -1;
+        foreach ($this->installRoots as $package => $root) {
+            if (str_starts_with($real, $root . '/') && strlen($root) > $bestLength) {
+                $bestPackage = $package;
+                $bestLength = strlen($root);
+            }
+        }
+        return $bestPackage;
     }
 }

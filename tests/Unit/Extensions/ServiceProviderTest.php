@@ -81,8 +81,9 @@ class ServiceProviderTest extends TestCase
                         ->method('addMigrationPath');
 
         $this->container->method('has')
-                       ->with(MigrationManager::class)
-                       ->willReturn(true);
+                       ->willReturnCallback(
+                           static fn(string $id): bool => $id === MigrationManager::class
+                       );
         $this->container->method('get')
                        ->with(MigrationManager::class)
                        ->willReturn($migrationManager);

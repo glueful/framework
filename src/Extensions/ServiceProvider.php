@@ -195,6 +195,36 @@ abstract class ServiceProvider
         if (!is_dir($dir) || !$this->app->has(MigrationManager::class)) {
             return;
         }
+        if ($this->app->has(\Glueful\Extensions\Schema\DescriptorInventory::class)) {
+            /** @var \Glueful\Extensions\Schema\DescriptorInventory $inventory */
+            $inventory = $this->app->get(\Glueful\Extensions\Schema\DescriptorInventory::class);
+            // Ownership: declared provider map is the fast path; file containment is the
+            // authority (a second, undeclared provider class inside a declared package still
+            // answers to that package's manifest). App-local providers are ownerless => legacy.
+            $package = $inventory->packageOfProvider(static::class)
+                ?? $inventory->packageOfClassFile(static::class);
+            if ($package !== null && $inventory->isDeclared($package)) {
+                $canonical = realpath($dir);
+                foreach ($inventory->forPackage($package) as $descriptor) {
+                    if ($canonical === false || $inventory->pathOf($descriptor) !== $canonical) {
+                        continue;
+                    }
+                    $expected = $descriptor->source();
+                    if (($source !== null && $source !== $expected) || $priority !== $descriptor->priority) {
+                        throw new \Glueful\Extensions\Schema\DescriptorValidationException(
+                            static::class . " registers {$dir} with source/priority that contradict "
+                            . "descriptor '{$expected}' — align the call with the manifest."
+                        );
+                    }
+                    return; // the container factory is the sole registrar for described paths
+                }
+                throw new \Glueful\Extensions\Schema\DescriptorValidationException(
+                    static::class . " registers {$dir}, which package {$package}'s migration manifest "
+                    . 'does not describe — a declared manifest cannot be bypassed '
+                    . '(declare the path, or migrations: none packages register nothing).'
+                );
+            }
+        }
         /** @var MigrationManager $mm */
         $mm = $this->app->get(MigrationManager::class);
         $mm->addMigrationPath($dir, $priority, $source);
