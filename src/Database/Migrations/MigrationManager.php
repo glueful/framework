@@ -305,6 +305,17 @@ class MigrationManager
         return new MigrationRunReport($outcomes);
     }
 
+    /** Detects PDO's nested-begin failure (any driver wording) anywhere in the chain. */
+    private function isNestedTransactionFailure(\Throwable $e): bool
+    {
+        for ($cursor = $e; $cursor !== null; $cursor = $cursor->getPrevious()) {
+            if (str_contains(strtolower($cursor->getMessage()), 'already an active transaction')) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Whether the driver couples a migration's DDL and its receipt in one transaction. On other
      * drivers a failure can leave partial DDL, which the caller must surface as manual_repair.
@@ -684,12 +695,23 @@ class MigrationManager
         $transactional = $this->transactionalDdl();
         try {
             if ($transactional) {
-                // DDL + receipt commit or roll back together: no partial-DDL-without-receipt
-                // state can exist on transactional-DDL drivers (schema policy spec B4).
-                $this->db()->transaction(static function () use ($apply) {
+                try {
+                    // DDL + receipt commit or roll back together: no partial-DDL-without-receipt
+                    // state can exist on transactional-DDL drivers (schema policy spec B4).
+                    $this->db()->transaction(static function () use ($apply) {
+                        $apply();
+                        return true;
+                    });
+                } catch (\Exception $e) {
+                    // A migration that manages its OWN transaction (raw PDO beginTransaction in
+                    // up()) cannot run inside the runner's wrapper — the nested begin throws
+                    // before any effect and the wrapper rolls back clean. Re-run unwrapped: such
+                    // a migration supplies its own atomicity; the receipt lands right after it.
+                    if (!$this->isNestedTransactionFailure($e)) {
+                        throw $e;
+                    }
                     $apply();
-                    return true;
-                });
+                }
             } else {
                 $apply();
             }

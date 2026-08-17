@@ -201,6 +201,31 @@ final class TransactionalMigrationTest extends TestCase
         self::assertTrue($report->outcomes[0]['requiresManualRepair']);
     }
 
+    public function testSelfTransactingMigrationRunsUnwrappedAndStillGetsItsReceipt(): void
+    {
+        // Shipped migrations may manage their own PDO transaction inside up() (e.g. payvia's
+        // 012 attempt-lifecycle rebuild). The runner's wrapper must detect the clean nested-begin
+        // failure and re-run unwrapped — the migration supplies its own atomicity.
+        $dir = $this->base . '/pkg-txn';
+        $this->writeMigration(
+            $dir,
+            '001',
+            'SelfTxn',
+            "\$pdo = \$schema->getConnection()->getPDO();\n"
+            . "            \$pdo->beginTransaction();\n"
+            . "            \$pdo->exec('CREATE TABLE selftxn (name VARCHAR(50))');\n"
+            . "            \$pdo->commit();"
+        );
+        $manager = $this->manager();
+        $manager->addMigrationPath($dir, MigrationPriority::DEFAULT, 'pkg/txn');
+
+        $report = $manager->migrateSources(['pkg/txn']);
+
+        self::assertSame('applied', $report->outcomes[0]['status']);
+        self::assertContains('selftxn', $this->tables());
+        self::assertSame(1, $this->allReceiptCount());
+    }
+
     public function testExplicitMigrateArgumentsCannotBypassTheGlobalPolicy(): void
     {
         $dir = $this->base . '/pkg-e';
