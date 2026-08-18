@@ -25,21 +25,6 @@ return [
      */
     'protected' => [],
 
-    /**
-     * Schema manifest policy.
-     *
-     * `require_declared_packages`: when true, a provider owned by an installed Glueful package
-     * that declares no extra.glueful.migrations manifest may not register migration paths at
-     * all — loadMigrationsFrom() throws instead of falling back to the legacy append. Hosts
-     * should opt in only once EVERY installed package declares descriptors or "migrations":
-     * "none". Ownerless app-local providers keep the append lane in both modes — that lane is
-     * permanent. Default false in 1.x for minor-version compatibility; the framework-wide
-     * default flips only in the next major release.
-     */
-    'schema' => [
-        'require_declared_packages' => false,
-    ],
-
     'enabled' => [
         // 'Glueful\\Extensions\\Aegis\\Services\\AegisServiceProvider',
     ],

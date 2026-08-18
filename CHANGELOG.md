@@ -8,10 +8,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [1.80.0] - 2026-08-18 — Almach
 
-**Theme: schema custody closure** — provision, protected providers, and host-enforced
-manifests complete the schema-on-enable program's framework half. All three changes are
-additive; the strict-manifest flag defaults OFF, so 1.79 hosts upgrade without behavior
-change.
+**Theme: schema custody closure** — provision, protected providers, and unconditional
+manifest enforcement complete the schema-on-enable program's framework half. Breaking for
+any host still leaning on 1.79's legacy seams (none are known to exist): the undeclared-package
+migration append and the legacy-alias receipt machinery are both gone.
 
 ### Added
 - **Provision is a complete locked pass**: with a context, the installer builds its migration
@@ -29,13 +29,12 @@ change.
   `protected_migrate` operation — but it refuses non-protected packages, never writes
   extension state, and never recompiles the provider cache: those belong to the owning
   lifecycle flow.
-- **`extensions.schema.require_declared_packages` config (default `false`)**: a host that
-  opts in refuses the legacy migration-path append for any provider owned by an installed
-  Glueful package that declares no `extra.glueful.migrations` manifest —
-  `loadMigrationsFrom()` throws `UndeclaredSchemaException` instead. Opt in only once EVERY
-  installed package declares descriptors or `"migrations": "none"`. Ownerless app-local
-  providers keep the append lane in both modes — that lane is permanent. The framework-wide
-  default flips only in the next major release.
+- **Manifest declaration is unconditional**: a provider owned by an installed Glueful package
+  that declares no `extra.glueful.migrations` manifest can no longer register migration paths
+  at all — `loadMigrationsFrom()` throws `UndeclaredSchemaException` instead of falling back
+  to the 1.79 append. Every installed Glueful package must declare descriptors or
+  `"migrations": "none"`. Ownerless app-local providers keep their append lane — that lane is
+  permanent, this release included.
 
 ### Removed
 - **The legacy-alias receipt machinery**: `legacyAliases` on migration descriptors, the alias

@@ -224,12 +224,15 @@ abstract class ServiceProvider
                     . '(declare the path, or migrations: none packages register nothing).'
                 );
             }
-            // The provider belongs to an installed Glueful package that declares NOTHING. A
-            // strict host refuses the legacy append outright; a compatibility host (the 1.x
-            // default) retains it. Ownerless app-local providers never reach here — their
-            // append lane below is permanent in both modes.
-            if ($package !== null && $this->hostRequiresDeclaredPackages()) {
-                throw \Glueful\Extensions\Schema\UndeclaredSchemaException::requiredByHost($package, static::class);
+            // The provider belongs to an installed Glueful package that declares NOTHING:
+            // manifest declaration is unconditional — there is no legacy append for package
+            // code. Ownerless app-local providers never reach here; their append lane below
+            // is permanent.
+            if ($package !== null) {
+                throw \Glueful\Extensions\Schema\UndeclaredSchemaException::forProviderRegistration(
+                    $package,
+                    static::class
+                );
             }
         }
         /** @var MigrationManager $mm */
@@ -237,16 +240,6 @@ abstract class ServiceProvider
         $mm->addMigrationPath($dir, $priority, $source);
     }
 
-    /** The host's extensions.schema.require_declared_packages policy (false when unset). */
-    private function hostRequiresDeclaredPackages(): bool
-    {
-        if (!$this->app->has(ApplicationContext::class)) {
-            return false;
-        }
-        $context = $this->app->get(ApplicationContext::class);
-        return $context instanceof ApplicationContext
-            && (bool) config($context, 'extensions.schema.require_declared_packages', false);
-    }
 
     /**
      * Merge default config (app overrides always win).
