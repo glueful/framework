@@ -37,6 +37,15 @@ change.
   providers keep the append lane in both modes — that lane is permanent. The framework-wide
   default flips only in the next major release.
 
+### Removed
+- **The legacy-alias receipt machinery**: `legacyAliases` on migration descriptors, the alias
+  index and collision validation in `DescriptorInventory`, `ReceiptNormalizer` /
+  `NormalizationReport`, the `migrate:normalize-receipts` command, and `SchemaReadiness`'s
+  alias-divergence branch. The machinery existed solely to migrate beta-era ledgers whose pack
+  receipts were recorded under pre-manifest source names; with no supported installs carrying
+  such ledgers, upgrades from those pre-release ledgers are no longer supported — re-provision,
+  or rewrite the ledger `source` values by hand before upgrading.
+
 ## [1.79.1] - 2026-08-18 — Alkaid
 
 **Theme: first follow-through on 1.79.0's per-migration transaction** — a tolerant schema

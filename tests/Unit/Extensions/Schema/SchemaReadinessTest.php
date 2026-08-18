@@ -40,7 +40,6 @@ final class SchemaReadinessTest extends TestCase
                     'path' => 'migrations',
                     'priority' => 'default',
                     'mode' => 'on_enable',
-                    'legacyAliases' => ['acme-widgets'],
                 ]],
             ]],
         ], [
@@ -83,9 +82,9 @@ final class SchemaReadinessTest extends TestCase
             ->fetchAll(\PDO::FETCH_COLUMN);
     }
 
-    private function readiness(bool $aliasesNormalized = false): SchemaReadiness
+    private function readiness(): SchemaReadiness
     {
-        return new SchemaReadiness($this->connection, $this->inventory, $aliasesNormalized);
+        return new SchemaReadiness($this->connection, $this->inventory);
     }
 
     private function widgetFile(string $basename): string
@@ -139,23 +138,6 @@ final class SchemaReadinessTest extends TestCase
 
         $d = $this->inventory->bySource('acme/widgets');
         self::assertSame(ReadinessState::Divergent, $this->readiness()->classify($d));
-    }
-
-    public function testAliasReceiptsAreDivergentUntilNormalizedThenReady(): void
-    {
-        $this->createLedger();
-        $this->seedReceipt('acme-widgets', $this->widgetFile('001_A.php'));
-        $this->seedReceipt('acme-widgets', $this->widgetFile('002_B.php'));
-
-        $d = $this->inventory->bySource('acme/widgets');
-        $before = $this->readiness(aliasesNormalized: false);
-        self::assertSame(ReadinessState::Divergent, $before->classify($d));
-        self::assertNotEmpty(array_filter(
-            $before->explain($d),
-            static fn(string $r): bool => str_contains($r, 'migrate:normalize-receipts')
-        ));
-
-        self::assertSame(ReadinessState::Ready, $this->readiness(aliasesNormalized: true)->classify($d));
     }
 
     public function testUndeclaredPackageFailsClosed(): void

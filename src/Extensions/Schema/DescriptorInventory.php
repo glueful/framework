@@ -24,8 +24,6 @@ final class DescriptorInventory
     private array $paths = [];
     /** @var array<string, list<string>> source => discovered migration files (basename-sorted) */
     private array $files = [];
-    /** @var array<string, string> alias => source */
-    private array $aliases = [];
     /** @var array<string, true> declared package names */
     private array $declared = [];
     /** @var array<string, string> provider FQCN => package */
@@ -68,7 +66,6 @@ final class DescriptorInventory
         }
 
         $inv->assertNoNestedPaths();
-        $inv->assertAliasIntegrity();
         return $inv;
     }
 
@@ -116,14 +113,6 @@ final class DescriptorInventory
         $this->byPackage[$descriptor->package][] = $descriptor;
         $this->paths[$source] = $path;
         $this->files[$source] = $discovered;
-        foreach ($descriptor->legacyAliases as $alias) {
-            if (isset($this->aliases[$alias])) {
-                throw new DescriptorValidationException(
-                    "Legacy alias '{$alias}' is claimed by both '{$this->aliases[$alias]}' and '{$source}'."
-                );
-            }
-            $this->aliases[$alias] = $source;
-        }
     }
 
     private function assertNoNestedPaths(): void
@@ -144,16 +133,6 @@ final class DescriptorInventory
         }
     }
 
-    private function assertAliasIntegrity(): void
-    {
-        foreach ($this->aliases as $alias => $source) {
-            if (isset($this->bySource[$alias])) {
-                throw new DescriptorValidationException(
-                    "Legacy alias '{$alias}' (of '{$source}') collides with a live descriptor source."
-                );
-            }
-        }
-    }
 
     /** @return list<MigrationDescriptor> */
     public function all(): array
@@ -191,12 +170,6 @@ final class DescriptorInventory
     public function filesOf(MigrationDescriptor $descriptor): array
     {
         return $this->files[$descriptor->source()];
-    }
-
-    /** @return array<string, string> alias => source */
-    public function aliasIndex(): array
-    {
-        return $this->aliases;
     }
 
     /**

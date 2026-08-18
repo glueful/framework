@@ -13,7 +13,6 @@ namespace Glueful\Extensions\Schema;
 final class MigrationDescriptor
 {
     /**
-     * @param list<string> $legacyAliases Ledger sources this descriptor also answers for.
      * @param string|null $verifierClass Structural-verifier FQCN — manifest metadata (not a
      *        provider contribution) so adoption can discover it while the owning extension is
      *        disabled. Syntax-validated here; existence/conformance checked at use.
@@ -25,7 +24,6 @@ final class MigrationDescriptor
         public readonly string $relativePath,
         public readonly int $priority,
         public readonly DescriptorMode $mode,
-        public readonly array $legacyAliases = [],
         public readonly ?string $verifierClass = null,
     ) {
         if (preg_match('/^[a-z0-9][a-z0-9_-]*$/', $id) !== 1) {
@@ -41,15 +39,6 @@ final class MigrationDescriptor
             throw new DescriptorValidationException(
                 "Descriptor '{$package}:{$id}' path '{$relativePath}' must be relative and traversal-free."
             );
-        }
-        $seen = [];
-        foreach ($legacyAliases as $alias) {
-            if (!is_string($alias) || $alias === '' || isset($seen[$alias])) {
-                throw new DescriptorValidationException(
-                    "Descriptor '{$package}:{$id}' legacy aliases must be unique non-empty strings."
-                );
-            }
-            $seen[$alias] = true;
         }
         if (
             $verifierClass !== null

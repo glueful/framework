@@ -534,14 +534,6 @@ final class CoreProvider extends BaseServiceProvider
                 $c->get(\Glueful\Extensions\Schema\DescriptorInventory::class)
             )
         );
-        $defs[\Glueful\Extensions\Schema\ReceiptNormalizer::class] = new FactoryDefinition(
-            \Glueful\Extensions\Schema\ReceiptNormalizer::class,
-            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Extensions\Schema\ReceiptNormalizer(
-                \Glueful\Database\Connection::fromContext($this->context),
-                $c->get(\Glueful\Extensions\Schema\DescriptorInventory::class),
-                $c->get(\Glueful\Extensions\Schema\MigrationLockInterface::class)
-            )
-        );
         $defs[\Glueful\Extensions\Schema\AdoptionService::class] = new FactoryDefinition(
             \Glueful\Extensions\Schema\AdoptionService::class,
             fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Extensions\Schema\AdoptionService(
