@@ -6,9 +6,32 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.79.1] - 2026-08-18 — Alkaid
+
+**Theme: first follow-through on 1.79.0's per-migration transaction** — a tolerant schema
+operation that predates it learns to stay out of its way. Low risk: schema-internal, no
+API/env/config changes.
+
+### Fixed
+- **Tolerant index drops no longer poison the per-migration transaction**: `dropIndex` now emits
+  `DROP INDEX IF EXISTS` on PostgreSQL and SQLite. `SchemaBuilder::dropIndex()` has always
+  swallowed a failed drop, but under 1.79.0's per-migration transaction the errored statement
+  aborted the transaction (PostgreSQL 25P02) and failed every later statement — surfaced by
+  fresh-chain migrations that defensively drop-then-recreate an index.
+
+
+### Changed
+- Release notes no longer reference the host application by name (1.79.0 intro and the 1.68.0
+  config-override entry now describe the consuming application generically).
+
+### Removed
+- The pre-release ledger upgrade path in `ensureVersionTable()` (retrofitting a `source`
+  column onto sourceless dev-era version tables): every real install's ledger was created
+  with the column, and there are no external framework consumers to carry the seam for.
+
 ## [1.79.0] - 2026-08-17 — Alkaid
 
-The framework half of the schema-on-enable program (Thallo schema policy spec 2026-08-17,
+The framework half of the schema-on-enable program (schema policy design spec 2026-08-17,
 Section B): manifest migration descriptors become the sole schema inventory, and extension
 enablement becomes a bootstrap-ordered, lock-serialized, migrate-first operation with a
 truthful persisted record.
@@ -942,8 +965,8 @@ completes. No new env vars, no migrations, no default changes; existing apps are
   `Framework::boot()` calls `ApplicationContext::markBooted()` once all boot phases (including
   extension/provider boot) complete, after which `overrideConfig()` throws — mid-request config
   mutation would create split-brain services that read config at different times. Built for (and
-  consumed by) the Thallo tenancy public-origin surface, which persists a base domain + default hosts
-  and applies them over config at boot; the seam itself is application-agnostic.
+  consumed by) host applications that persist a base domain + default hosts and apply them over
+  config at boot; the seam itself is application-agnostic.
 
 ## [1.68.0] - 2026-07-10 — Ain
 

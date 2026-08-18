@@ -75,7 +75,9 @@ final class SchemaBuilderAlterIndexTest extends TestCase
 
         $this->createItemsTable($conn);
 
-        self::assertFalse($schema->dropIndex('items', 'idx_items_status'));
+        // IF EXISTS semantics (1.79.1): dropping a missing index is a successful no-op — the
+        // statement can no longer error and poison a wrapping migration transaction.
+        self::assertTrue($schema->dropIndex('items', 'idx_items_status'));
 
         $schema->alterTable('items', function ($table): void {
             $table->index('status', 'idx_items_status');

@@ -427,18 +427,9 @@ class MigrationManager
             return;
         }
 
-        // Upgrade path for existing version tables (pre-release dev DBs).
-        if (!$this->schema()->hasColumn(self::VERSION_TABLE, 'source')) {
-            // Callback form runs the column builder, calls execute(), and flushes pending ops.
-            $this->schema()->alterTable(self::VERSION_TABLE, function ($table): void {
-                $table->string('source', 191)->default('app');
-            });
-            // Backfill any pre-existing rows to the app source.
-            $this->db()->table(self::VERSION_TABLE)->whereNull('source')->update(['source' => 'app']);
-            // IMPORTANT: existing tables still carry the legacy unique(migration). That constraint
-            // contradicts package-scoped tracking and must be replaced with unique(source, migration)
-            // via a clean migration-history reset (pre-release) — SQLite cannot portably drop it.
-        }
+        // Every real install's ledger was created WITH the source column (the pre-release
+        // upgrade path that retrofitted it onto sourceless dev tables was removed once no
+        // such database remained anywhere).
         $this->ledgerEnsured = true;
     }
 

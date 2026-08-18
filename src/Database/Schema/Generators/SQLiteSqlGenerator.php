@@ -344,7 +344,8 @@ class SQLiteSqlGenerator implements SqlGeneratorInterface
     public function dropIndex(string $table, string $index): string
     {
         $indexName = $this->quoteIdentifier($index);
-        return "DROP INDEX {$indexName};";
+        // IF EXISTS keeps the tolerant-drop contract from erroring inside a wrapped transaction.
+        return "DROP INDEX IF EXISTS {$indexName};";
     }
 
     // ===========================================

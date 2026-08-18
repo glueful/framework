@@ -201,6 +201,28 @@ final class TransactionalMigrationTest extends TestCase
         self::assertTrue($report->outcomes[0]['requiresManualRepair']);
     }
 
+    public function testTolerantDropOfAMissingIndexCannotPoisonTheMigrationTransaction(): void
+    {
+        // dropIndex is tolerant by contract (SchemaBuilder swallows its failure), but before the
+        // IF EXISTS fix the errored statement poisoned the wrapped transaction and failed every
+        // later statement — the payvia 006 fresh-chain regression.
+        $dir = $this->base . '/pkg-drop';
+        $this->writeMigration(
+            $dir,
+            '001',
+            'DropThenCreate',
+            "\$schema->dropIndex('ghost_table_never_existed', 'idx_ghost');\n"
+            . "            \$schema->createTable('after_drop', function (\$t) { \$t->string('name', 50); });"
+        );
+        $manager = $this->manager();
+        $manager->addMigrationPath($dir, MigrationPriority::DEFAULT, 'pkg/drop');
+
+        $report = $manager->migrateSources(['pkg/drop']);
+
+        self::assertSame('applied', $report->outcomes[0]['status'], $report->outcomes[0]['error'] ?? '');
+        self::assertContains('after_drop', $this->tables());
+    }
+
     public function testSelfTransactingMigrationRunsUnwrappedAndStillGetsItsReceipt(): void
     {
         // Shipped migrations may manage their own PDO transaction inside up() (e.g. payvia's

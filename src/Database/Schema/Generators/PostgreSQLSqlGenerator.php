@@ -321,7 +321,10 @@ class PostgreSQLSqlGenerator implements SqlGeneratorInterface
     public function dropIndex(string $table, string $index): string
     {
         $indexName = $this->quoteIdentifier($index);
-        return "DROP INDEX {$indexName};";
+        // IF EXISTS: dropIndex is tolerant by contract (SchemaBuilder swallows its failure), but a
+        // plain DROP INDEX error POISONS the per-migration transaction on PostgreSQL (25P02) and
+        // fails every later statement — surfaced by a fresh-chain drop-then-recreate migration.
+        return "DROP INDEX IF EXISTS {$indexName};";
     }
 
     // ===========================================
