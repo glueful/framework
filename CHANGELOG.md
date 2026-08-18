@@ -6,6 +6,16 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.79.1] - 2026-08-18 — Alkaid
+
+### Fixed
+- **Tolerant index drops no longer poison the per-migration transaction**: `dropIndex` now emits
+  `DROP INDEX IF EXISTS` on PostgreSQL and SQLite. `SchemaBuilder::dropIndex()` has always
+  swallowed a failed drop, but under 1.79.0's per-migration transaction the errored statement
+  aborted the transaction (PostgreSQL 25P02) and failed every later statement — surfaced by
+  fresh-chain migrations that defensively drop-then-recreate an index.
+
+
 ### Changed
 - Release notes no longer reference the host application by name (1.79.0 intro and the 1.68.0
   config-override entry now describe the consuming application generically).
