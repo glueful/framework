@@ -6,6 +6,18 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.80.1] - 2026-08-18 — Almach
+
+### Fixed
+- **`extension_operations.operation` widened to 32 characters**: 1.80.0's protected migration
+  lane records `protected_migrate` (17 chars) into a column created as `string(16)` — fine on
+  SQLite (which ignores varchar lengths, so the framework suite never saw it) but a hard
+  `22001` truncation error on PostgreSQL, making `migrateProtected()` unable to record its own
+  operation. The create migration now sizes the column for every operation the executor
+  writes. The file's checksum changes with it: a database provisioned on exactly 1.80.0 will
+  report this migration Divergent — re-provision, or widen the column and update the recorded
+  checksum by hand.
+
 ## [1.80.0] - 2026-08-18 — Almach
 
 **Theme: schema custody closure** — provision, protected providers, and unconditional

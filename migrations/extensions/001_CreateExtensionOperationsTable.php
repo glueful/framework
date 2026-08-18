@@ -21,7 +21,7 @@ class CreateExtensionOperationsTable implements MigrationInterface
         $schema->createTable('extension_operations', function ($table) {
             $table->id();
             $table->string('package', 191);
-            $table->string('operation', 16);   // enable | disable
+            $table->string('operation', 32);   // enable | disable | protected_migrate
             $table->string('step', 64);
             $table->string('status', 32);      // running | succeeded | failed | manual_repair | enabled_cache_stale
             $table->string('actor', 191);
