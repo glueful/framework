@@ -81,34 +81,10 @@ class ExtensionSchemaExecutor
         try {
             $operation = $this->record($package, 'enable', 'migrating', $actor);
 
-            foreach ([$coreSources, $packageSources] as $sources) {
-                if ($sources === []) {
-                    continue;
-                }
-                $report = $this->manager->migrateSources($sources);
-                $failure = $report->firstFailure();
-                if ($failure !== null) {
-                    $status = $failure['requiresManualRepair']
-                        ? ExtensionOperation::STATUS_MANUAL_REPAIR
-                        : ExtensionOperation::STATUS_FAILED;
-                    return $this->update($operation->with(
-                        'migrating',
-                        $status,
-                        basename($failure['file']),
-                        $failure['error']
-                    ));
-                }
-            }
-
-            foreach ($this->readiness->forPackage($package) as $source => $result) {
-                if ($result['state'] !== ReadinessState::Ready) {
-                    return $this->update($operation->with(
-                        'verify-readiness',
-                        ExtensionOperation::STATUS_FAILED,
-                        null,
-                        "{$source} not ready after migrate: " . implode('; ', $result['reasons'])
-                    ));
-                }
+            $failed = $this->migrateGroups($operation, [$coreSources, $packageSources])
+                ?? $this->verifyPackageReadiness($operation, $package);
+            if ($failed !== null) {
+                return $failed;
             }
 
             $this->writer->enable($this->configPath(), $provider, dryRun: false, backup: $backup);
@@ -116,6 +92,91 @@ class ExtensionSchemaExecutor
         } finally {
             $handle->release();
         }
+    }
+
+    /**
+     * The protected-provider migration lane: a provider whose enable/disable is OWNED elsewhere
+     * (ProtectedProviders) still gets its schema applied through the shared custody — bootstrap
+     * asserted, core-then-package sources locked and migrated, readiness verified, the outcome
+     * recorded truthfully as a `protected_migrate` operation. It NEVER writes extension state and
+     * NEVER recompiles the provider cache: those belong to the owning lifecycle flow.
+     */
+    public function migrateProtected(string $package, string $actor): ExtensionOperation
+    {
+        $this->assertBootstrapped();
+        $provider = $this->providerOf($package);
+        if (ProtectedProviders::refusalFor($this->context, $provider) === null) {
+            throw new \RuntimeException(
+                "{$package} is not a protected provider — the protected migration lane exists only for "
+                . 'providers whose activation is owned elsewhere; use enable() for the generic lifecycle.'
+            );
+        }
+
+        $packageSources = array_map(
+            static fn(MigrationDescriptor $d): string => $d->source(),
+            $this->inventory->forPackage($package)
+        );
+        $coreSources = $this->pendingCoreSources();
+
+        $handle = $this->lock->acquireAll([...$coreSources, ...$packageSources], $this->lockWaitSeconds);
+        try {
+            $operation = $this->record($package, 'protected_migrate', 'migrating', $actor);
+
+            $failed = $this->migrateGroups($operation, [$coreSources, $packageSources])
+                ?? $this->verifyPackageReadiness($operation, $package);
+            if ($failed !== null) {
+                return $failed;
+            }
+
+            return $this->update($operation->with('migrated', ExtensionOperation::STATUS_SUCCEEDED));
+        } finally {
+            $handle->release();
+        }
+    }
+
+    /**
+     * Migrate each source group in order, stopping at the first failure and recording it on the
+     * operation. Returns the terminal failure operation, or null when every group applied.
+     *
+     * @param list<list<string>> $sourceGroups
+     */
+    private function migrateGroups(ExtensionOperation $operation, array $sourceGroups): ?ExtensionOperation
+    {
+        foreach ($sourceGroups as $sources) {
+            if ($sources === []) {
+                continue;
+            }
+            $report = $this->manager->migrateSources($sources);
+            $failure = $report->firstFailure();
+            if ($failure !== null) {
+                $status = $failure['requiresManualRepair']
+                    ? ExtensionOperation::STATUS_MANUAL_REPAIR
+                    : ExtensionOperation::STATUS_FAILED;
+                return $this->update($operation->with(
+                    'migrating',
+                    $status,
+                    basename($failure['file']),
+                    $failure['error']
+                ));
+            }
+        }
+        return null;
+    }
+
+    /** Returns the terminal failure operation when any package source is not Ready, else null. */
+    private function verifyPackageReadiness(ExtensionOperation $operation, string $package): ?ExtensionOperation
+    {
+        foreach ($this->readiness->forPackage($package) as $source => $result) {
+            if ($result['state'] !== ReadinessState::Ready) {
+                return $this->update($operation->with(
+                    'verify-readiness',
+                    ExtensionOperation::STATUS_FAILED,
+                    null,
+                    "{$source} not ready after migrate: " . implode('; ', $result['reasons'])
+                ));
+            }
+        }
+        return null;
     }
 
     public function disable(
