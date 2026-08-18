@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Glueful\Tests\Unit\Extensions\Schema;
 
 use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Bootstrap\ConfigurationLoader;
 use Glueful\Database\Connection;
 use Glueful\Database\Migrations\MigrationManager;
 use Glueful\Database\Migrations\MigrationPriority;
 use Glueful\Extensions\PackageManifest;
 use Glueful\Extensions\Schema\DescriptorInventory;
 use Glueful\Extensions\Schema\DescriptorValidationException;
+use Glueful\Extensions\Schema\UndeclaredSchemaException;
 use Glueful\Extensions\ServiceProvider;
 use Glueful\Installer\DatabaseConfig;
 use Glueful\Services\FileFinder;
@@ -94,12 +96,16 @@ final class SingleInventoryTest extends TestCase
         return new MigrationManager($this->appMigrations, new FileFinder(), null, $this->connection);
     }
 
-    private function container(MigrationManager $manager, ?DescriptorInventory $inventory): ContainerInterface
-    {
-        return new class ($manager, $inventory) implements ContainerInterface {
+    private function container(
+        MigrationManager $manager,
+        ?DescriptorInventory $inventory,
+        ?ApplicationContext $context = null,
+    ): ContainerInterface {
+        return new class ($manager, $inventory, $context) implements ContainerInterface {
             public function __construct(
                 private readonly MigrationManager $manager,
                 private readonly ?DescriptorInventory $inventory,
+                private readonly ?ApplicationContext $context,
             ) {
             }
 
@@ -111,15 +117,32 @@ final class SingleInventoryTest extends TestCase
                 if ($id === DescriptorInventory::class && $this->inventory !== null) {
                     return $this->inventory;
                 }
+                if ($id === ApplicationContext::class && $this->context !== null) {
+                    return $this->context;
+                }
                 throw new \RuntimeException("no service {$id}");
             }
 
             public function has(string $id): bool
             {
                 return $id === MigrationManager::class
-                    || ($id === DescriptorInventory::class && $this->inventory !== null);
+                    || ($id === DescriptorInventory::class && $this->inventory !== null)
+                    || ($id === ApplicationContext::class && $this->context !== null);
             }
         };
+    }
+
+    /** A host context whose extensions.schema.require_declared_packages flag is ON. */
+    private function strictContext(): ApplicationContext
+    {
+        @mkdir($this->base . '/config');
+        file_put_contents(
+            $this->base . '/config/extensions.php',
+            "<?php\nreturn ['schema' => ['require_declared_packages' => true]];\n"
+        );
+        $context = new ApplicationContext($this->base);
+        $context->setConfigLoader(new ConfigurationLoader($this->base, 'testing'));
+        return $context;
     }
 
     public function testDescribedPathIsValidatedNotReRegistered(): void
@@ -325,5 +348,100 @@ final class SingleInventoryTest extends TestCase
             ->query("SELECT name FROM sqlite_master WHERE type='table'")
             ->fetchAll(\PDO::FETCH_COLUMN);
         self::assertSame([], $tables, 'registration and reads must perform zero DDL');
+    }
+
+    /** @return array{0: DescriptorInventory, 1: string} inventory + the undeclared migrations dir */
+    private function undeclaredLegacyPackage(): array
+    {
+        $undeclared = [
+            'name' => 'acme/legacy',
+            'type' => 'glueful-extension',
+            'install-path' => '../acme/legacy',
+            'extra' => ['glueful' => ['provider' => LooseFixtureProvider::class]],
+        ];
+        $dir = $this->base . '/vendor/acme/legacy/migrations';
+        mkdir($dir, 0777, true);
+        file_put_contents($dir . '/001_L.php', "<?php // fixture\n");
+        return [$this->inventory([$undeclared]), $dir];
+    }
+
+    public function testStrictHostRefusesAnUndeclaredPackageProvider(): void
+    {
+        [$inv, $dir] = $this->undeclaredLegacyPackage();
+        $manager = $this->manager();
+        $provider = new LooseFixtureProvider($this->container($manager, $inv, $this->strictContext()));
+
+        $this->expectException(UndeclaredSchemaException::class);
+        $this->expectExceptionMessage('require_declared_packages');
+        $provider->callLoad($dir);
+    }
+
+    public function testStrictHostRefusesAClassPhysicallyInsideAnUndeclaredPackage(): void
+    {
+        // No declared-provider FQCN match: attribution falls to file containment.
+        $undeclared = [
+            'name' => 'acme/legacy',
+            'type' => 'glueful-extension',
+            'install-path' => '../acme/legacy',
+            'extra' => ['glueful' => ['provider' => 'Acme\\Legacy\\SomeOtherProvider']],
+        ];
+        $dir = $this->base . '/vendor/acme/legacy/migrations';
+        mkdir($dir, 0777, true);
+        file_put_contents($dir . '/001_L.php', "<?php // fixture\n");
+        $ns = 'FixtureStrict' . preg_replace('/[^A-Za-z0-9]/', '', uniqid());
+        $classFile = $this->base . '/vendor/acme/legacy/EmbeddedProvider.php';
+        file_put_contents($classFile, <<<PHP
+            <?php
+            namespace {$ns};
+
+            use Glueful\\Database\\Migrations\\MigrationPriority;
+            use Glueful\\Extensions\\ServiceProvider;
+
+            final class EmbeddedProvider extends ServiceProvider
+            {
+                public function callLoad(string \$dir): void
+                {
+                    \$this->loadMigrationsFrom(\$dir, MigrationPriority::DEFAULT, null);
+                }
+            }
+            PHP);
+        require $classFile;
+        $inv = $this->inventory([$undeclared]);
+        $manager = $this->manager();
+        $class = $ns . '\\EmbeddedProvider';
+        $provider = new $class($this->container($manager, $inv, $this->strictContext()));
+
+        $this->expectException(UndeclaredSchemaException::class);
+        $provider->callLoad($dir);
+    }
+
+    public function testCompatibilityHostRetainsTheUndeclaredAppend(): void
+    {
+        // Same undeclared package, flag unset (the 1.x default): the 1.79 append stands.
+        [$inv, $dir] = $this->undeclaredLegacyPackage();
+        $manager = $this->manager();
+        $provider = new LooseFixtureProvider($this->container($manager, $inv));
+
+        $provider->callLoad($dir);
+
+        self::assertTrue($manager->hasSource('migrations'), 'compatibility hosts keep the legacy append');
+    }
+
+    public function testAppLocalProviderStillAppendsUnderAStrictHost(): void
+    {
+        // A genuine root-app provider: no package owns its class file — the ownerless
+        // app-local append lane is PERMANENT, strict mode included.
+        $inv = $this->inventory([$this->pkg('acme/widgets', ['migrations/001_A.php'], [
+            ['id' => 'default', 'path' => 'migrations', 'priority' => 'default', 'mode' => 'on_enable'],
+        ], 'Acme\\Widgets\\NotThisTestClass')]);
+        $dir = $this->base . '/local-migrations';
+        mkdir($dir);
+        file_put_contents($dir . '/001_APP.php', "<?php // fixture\n");
+        $manager = $this->manager();
+        $provider = new LooseFixtureProvider($this->container($manager, $inv, $this->strictContext()));
+
+        $provider->callLoad($dir, MigrationPriority::DEFAULT, 'app-local');
+
+        self::assertTrue($manager->hasSource('app-local'), 'strict mode never closes the app-local lane');
     }
 }
