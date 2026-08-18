@@ -21,6 +21,15 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.79.1 — Alkaid (Patch, Released 2026-08-18)
+- **Tolerant index drops no longer poison the per-migration transaction** — `dropIndex`
+  emits `DROP INDEX IF EXISTS` on PostgreSQL and SQLite. `SchemaBuilder::dropIndex()`
+  always swallowed a failed drop, but under 1.79.0's per-migration transaction the errored
+  statement aborted the transaction (PostgreSQL 25P02) and failed every later statement.
+- Also: host-agnostic release notes; the dead pre-release ledger upgrade seam removed from
+  `ensureVersionTable()`.
+- Notes: schema-internal bugfix; no application-facing changes.
+
 ### 1.79.0 — Alkaid (Minor, Released 2026-08-17)
 - **Schema-on-enable** — the framework half of the Thallo schema policy program. Manifest
   migration descriptors (`extra.glueful.migrations`) become the sole schema inventory

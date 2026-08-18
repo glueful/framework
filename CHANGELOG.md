@@ -8,6 +8,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [1.79.1] - 2026-08-18 — Alkaid
 
+**Theme: first follow-through on 1.79.0's per-migration transaction** — a tolerant schema
+operation that predates it learns to stay out of its way. Low risk: schema-internal, no
+API/env/config changes.
+
 ### Fixed
 - **Tolerant index drops no longer poison the per-migration transaction**: `dropIndex` now emits
   `DROP INDEX IF EXISTS` on PostgreSQL and SQLite. `SchemaBuilder::dropIndex()` has always
