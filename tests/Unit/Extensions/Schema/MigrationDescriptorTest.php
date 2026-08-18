@@ -12,13 +12,11 @@ use PHPUnit\Framework\TestCase;
 
 final class MigrationDescriptorTest extends TestCase
 {
-    /** @param list<string> $aliases */
     private function descriptor(
         string $id = 'default',
         string $type = 'glueful-extension',
         string $path = 'migrations',
         DescriptorMode $mode = DescriptorMode::OnEnable,
-        array $aliases = [],
     ): MigrationDescriptor {
         return new MigrationDescriptor(
             id: $id,
@@ -27,7 +25,6 @@ final class MigrationDescriptorTest extends TestCase
             relativePath: $path,
             priority: MigrationPriority::DEFAULT,
             mode: $mode,
-            legacyAliases: $aliases,
         );
     }
 
@@ -110,12 +107,6 @@ final class MigrationDescriptorTest extends TestCase
     {
         $this->expectException(DescriptorValidationException::class);
         $this->descriptor(id: 'Bad Id!');
-    }
-
-    public function testAliasListMustBeUniqueStrings(): void
-    {
-        $this->expectException(DescriptorValidationException::class);
-        $this->descriptor(aliases: ['legacy', 'legacy']);
     }
 
     public function testVerifierClassMustLookLikeAnFqcnWhenGiven(): void

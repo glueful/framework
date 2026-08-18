@@ -160,17 +160,21 @@ final class ExtensionSchemaExecutorTest extends TestCase
             PHP);
     }
 
-    /** @param list<string> $providers */
-    private function writeEnabled(array $providers): void
+    /**
+     * @param list<string> $providers
+     * @param array<string, array{reason?: string, managed_by?: string}> $protected
+     */
+    private function writeEnabled(array $providers, array $protected = []): void
     {
         // The state writer only edits SHORT-syntax flat string-literal lists.
         $exported = '[' . implode(', ', array_map(
             static fn(string $p): string => var_export($p, true),
             $providers
         )) . ']';
+        $protectedExport = var_export($protected, true);
         file_put_contents(
             $this->base . '/config/extensions.php',
-            "<?php\nreturn ['enabled' => {$exported}];\n"
+            "<?php\nreturn ['enabled' => {$exported}, 'protected' => {$protectedExport}];\n"
         );
         if (isset($this->context)) {
             $this->context->clearConfigCache();
@@ -355,5 +359,43 @@ final class ExtensionSchemaExecutorTest extends TestCase
         $ops = (int) $this->connection->getPDO()
             ->query('SELECT COUNT(*) FROM extension_operations')->fetchColumn();
         self::assertSame(0, $ops, 'no operation row in dry-run');
+    }
+
+    public function testMigrateProtectedAppliesSchemaWithoutTogglingState(): void
+    {
+        $this->writeEnabled([], protected: [WidgetsExecProvider::class => [
+            'reason' => 'Managed by the widgets lifecycle.',
+            'managed_by' => 'acme/widgets flow',
+        ]]);
+        $this->bootstrap();
+
+        $executor = $this->executor();
+        // The protected lane must never touch the cache seam: a poisoned recompile is invisible.
+        $executor->failRecompile = true;
+        $operation = $executor->migrateProtected('acme/widgets', 'tester');
+
+        self::assertSame(ExtensionOperation::STATUS_SUCCEEDED, $operation->status);
+        self::assertSame('protected_migrate', $operation->operation);
+        self::assertContains('acme_widgets', $this->tables(), 'the package schema applied');
+        self::assertSame([], $this->enabledList(), 'the protected lane cannot toggle provider state');
+
+        $row = $this->lastOperationRow();
+        self::assertSame('protected_migrate', $row['operation'] ?? null);
+        self::assertSame(ExtensionOperation::STATUS_SUCCEEDED, $row['status'] ?? null);
+    }
+
+    public function testMigrateProtectedRefusesANonProtectedPackage(): void
+    {
+        $this->bootstrap();
+
+        try {
+            $this->executor()->migrateProtected('acme/widgets', 'tester');
+            self::fail('a non-protected package must be refused the protected lane');
+        } catch (\RuntimeException $e) {
+            self::assertStringContainsString('not a protected provider', $e->getMessage());
+        }
+        self::assertNotContains('acme_widgets', $this->tables(), 'no schema applied on refusal');
+        self::assertNull($this->lastOperationRow(), 'no operation is recorded for a refused package');
+        self::assertSame([], $this->enabledList());
     }
 }

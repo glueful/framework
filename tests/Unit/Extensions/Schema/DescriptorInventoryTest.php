@@ -114,55 +114,6 @@ final class DescriptorInventoryTest extends TestCase
         self::assertFalse($inv->isDeclared('acme/legacy'));
     }
 
-    public function testDuplicateSourcesAcrossPackagesFailClosed(): void
-    {
-        // Named descriptor 'tenant' on acme/widgets collides with an alias-free source of the
-        // same name declared by another package via legacy alias equality below; simplest direct
-        // collision: two descriptors yielding the same source string is impossible across
-        // packages (source embeds the package), so the cross-package collision surface is the
-        // ALIAS index — this test pins the alias-vs-source collision instead.
-        $this->expectException(DescriptorValidationException::class);
-        $this->inventory([
-            $this->pkg('acme/widgets', ['migrations/001_A.php'], [
-                ['id' => 'default', 'path' => 'migrations', 'priority' => 'default', 'mode' => 'on_enable'],
-            ]),
-            $this->pkg('acme/gadgets', ['migrations/001_G.php'], [
-                [
-                    'id' => 'default',
-                    'path' => 'migrations',
-                    'priority' => 'default',
-                    'mode' => 'on_enable',
-                    'legacyAliases' => ['acme/widgets'],
-                ],
-            ]),
-        ]);
-    }
-
-    public function testAliasClaimedTwiceFailsClosed(): void
-    {
-        $this->expectException(DescriptorValidationException::class);
-        $this->inventory([
-            $this->pkg('acme/widgets', ['migrations/001_A.php'], [
-                [
-                    'id' => 'default',
-                    'path' => 'migrations',
-                    'priority' => 'default',
-                    'mode' => 'on_enable',
-                    'legacyAliases' => ['old-name'],
-                ],
-            ]),
-            $this->pkg('acme/gadgets', ['migrations/001_G.php'], [
-                [
-                    'id' => 'default',
-                    'path' => 'migrations',
-                    'priority' => 'default',
-                    'mode' => 'on_enable',
-                    'legacyAliases' => ['old-name'],
-                ],
-            ]),
-        ]);
-    }
-
     public function testDeclaredPathThatDoesNotResolveFailsClosed(): void
     {
         $row = $this->pkg('acme/widgets', ['migrations/001_A.php'], [
@@ -209,17 +160,4 @@ final class DescriptorInventoryTest extends TestCase
         ])]);
     }
 
-    public function testAliasIndexMapsAliasToSource(): void
-    {
-        $inv = $this->inventory([$this->pkg('acme/widgets', ['migrations/001_A.php'], [
-            [
-                'id' => 'default',
-                'path' => 'migrations',
-                'priority' => 'default',
-                'mode' => 'on_enable',
-                'legacyAliases' => ['acme-widgets'],
-            ],
-        ])]);
-        self::assertSame(['acme-widgets' => 'acme/widgets'], $inv->aliasIndex());
-    }
 }

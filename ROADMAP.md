@@ -21,6 +21,21 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.80.0 — Almach (Minor, Released 2026-08-18)
+- **Schema custody closure** — the framework half of schema-on-enable completes. Installer
+  provision is a complete locked pass over the global-source snapshot (app path + every
+  manifest core descriptor in one custody sequence; failed migrations are FAILED install
+  steps naming the basename, never quiet successes).
+  `ExtensionSchemaExecutor::migrateProtected()` gives protected providers a migration lane
+  under enable-grade custody without touching extension state or the provider cache.
+  New `extensions.schema.require_declared_packages` opt-in (default false): strict hosts
+  refuse the legacy migration-path append for undeclared Glueful packages.
+- **Removed (breaking, called out):** the legacy-alias receipt machinery (`legacyAliases`,
+  `ReceiptNormalizer`, `migrate:normalize-receipts`, alias-divergence readiness) — it
+  existed solely for beta-era pre-manifest ledgers; none remain supported.
+- Notes: all additive at runtime — the strict flag defaults OFF, so 1.79 hosts upgrade
+  without behavior change; the app-local append lane is permanent in both modes.
+
 ### 1.79.1 — Alkaid (Patch, Released 2026-08-18)
 - **Tolerant index drops no longer poison the per-migration transaction** — `dropIndex`
   emits `DROP INDEX IF EXISTS` on PostgreSQL and SQLite. `SchemaBuilder::dropIndex()`

@@ -111,10 +111,13 @@ APP_KEY=
             PHP);
 
         $result = $this->installer()->run(new InstallOptions(database: $this->sqliteConfig(), skipKeys: true));
-        // migrate() collects per-file failures without throwing, so the STEP may be OK while the
-        // run report carries the failure; either way the lock must be free afterwards.
+        // The run report drives the step: a failed migration is a FAILED install naming the
+        // file — and the lock must be free afterwards either way.
         $probe = (new FileMigrationLock($this->fallbackLockDir()))->acquireAll(['app'], waitSeconds: 1);
         $probe->release();
-        self::assertNotNull($this->step($result->steps, 'migrate'));
+        $migrate = $this->step($result->steps, 'migrate');
+        self::assertSame(InstallStep::FAILED, $migrate?->status);
+        self::assertStringContainsString('001_AlwaysFails.php', (string) $migrate?->message);
+        self::assertStringContainsString('installer fixture failure', (string) $migrate?->message);
     }
 }

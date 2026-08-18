@@ -6,6 +6,45 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.80.0] - 2026-08-18 — Almach
+
+**Theme: schema custody closure** — provision, protected providers, and unconditional
+manifest enforcement complete the schema-on-enable program's framework half. Breaking for
+any host still leaning on 1.79's legacy seams (none are known to exist): the undeclared-package
+migration append and the legacy-alias receipt machinery are both gone.
+
+### Added
+- **Provision is a complete locked pass**: with a context, the installer builds its migration
+  manager through `MigrationManagerFactory`, so install applies the app path AND every
+  manifest core descriptor in one custody sequence — global-source snapshot, all-source lock,
+  fresh pending read inside the lock, run-report-driven outcome. A failed migration is a
+  FAILED install step naming the basename and error (with manual-repair wording when the
+  driver could not roll it back atomically), never a quiet success; later files stay pending.
+  Context-less installs keep a bare manager whose only global source is `app` under the same
+  custody.
+- **`ExtensionSchemaExecutor::migrateProtected(string $package, string $actor)`**: the
+  migration lane for providers whose activation is owned elsewhere (`ProtectedProviders`).
+  Same custody as `enable()` — bootstrap asserted, pending core sources plus the package's
+  descriptor sources locked and migrated in order, readiness verified, outcome recorded as a
+  `protected_migrate` operation — but it refuses non-protected packages, never writes
+  extension state, and never recompiles the provider cache: those belong to the owning
+  lifecycle flow.
+- **Manifest declaration is unconditional**: a provider owned by an installed Glueful package
+  that declares no `extra.glueful.migrations` manifest can no longer register migration paths
+  at all — `loadMigrationsFrom()` throws `UndeclaredSchemaException` instead of falling back
+  to the 1.79 append. Every installed Glueful package must declare descriptors or
+  `"migrations": "none"`. Ownerless app-local providers keep their append lane — that lane is
+  permanent, this release included.
+
+### Removed
+- **The legacy-alias receipt machinery**: `legacyAliases` on migration descriptors, the alias
+  index and collision validation in `DescriptorInventory`, `ReceiptNormalizer` /
+  `NormalizationReport`, the `migrate:normalize-receipts` command, and `SchemaReadiness`'s
+  alias-divergence branch. The machinery existed solely to migrate beta-era ledgers whose pack
+  receipts were recorded under pre-manifest source names; with no supported installs carrying
+  such ledgers, upgrades from those pre-release ledgers are no longer supported — re-provision,
+  or rewrite the ledger `source` values by hand before upgrading.
+
 ## [1.79.1] - 2026-08-18 — Alkaid
 
 **Theme: first follow-through on 1.79.0's per-migration transaction** — a tolerant schema

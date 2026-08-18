@@ -20,7 +20,6 @@ final class SchemaReadiness
     public function __construct(
         private readonly Connection $db,
         private readonly DescriptorInventory $inventory,
-        private readonly bool $aliasesNormalized = false,
     ) {
     }
 
@@ -64,20 +63,6 @@ final class SchemaReadiness
         }
 
         $receipts = $this->receiptsFor($source);
-        $aliasReceipts = [];
-        foreach ($descriptor->legacyAliases as $alias) {
-            foreach ($this->receiptsFor($alias) as $basename => $checksum) {
-                $aliasReceipts[$basename] = $checksum;
-            }
-        }
-        if ($aliasReceipts !== [] && !$this->aliasesNormalized) {
-            return ['state' => ReadinessState::Divergent, 'reasons' => [
-                "receipts exist under a legacy alias of {$source}; run migrate:normalize-receipts",
-            ]];
-        }
-        if ($this->aliasesNormalized) {
-            $receipts += $aliasReceipts; // descriptor rows win over alias rows
-        }
 
         $currentBasenames = [];
         $missing = 0;

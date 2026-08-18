@@ -75,26 +75,43 @@ final class Installer
             $steps[] = new InstallStep('database-config', InstallStep::OK, 'Database credentials written.');
         }
 
-        // 5. Migrate the SAME connection (injected) — never fromContext(). Serialized under the
-        // migration lock from the SAME connection (schema policy spec B4): provision cannot race
-        // a concurrent migrate:run or enable, and the lock backend can never drift from the
-        // connection actually migrating.
+        // 5. Migrate the SAME connection (injected) — never fromContext(). A COMPLETE pass
+        // (schema policy spec B4): with a context, the factory-built manager carries the app path
+        // plus every manifest descriptor, so provision applies core schema in one custody
+        // sequence — snapshot globalSources(), lock EVERY source in the snapshot, take the fresh
+        // pending read inside the lock, and report truthfully from the run report. Context-less
+        // (unit) installs keep a bare manager whose only global source is 'app' under the same
+        // custody. The lock backend comes from the SAME connection that migrates, so the two can
+        // never drift, and provision cannot race a concurrent migrate:run or enable.
         if (!$options->skipDatabase) {
             try {
-                // MigrationManager resolves app.paths.migrations via the context; with no context
-                // (e.g. a unit test) it would TypeError, so pass an explicit path when provided.
-                // In production context !== null, so $this->migrationsPath stays null and is resolved.
-                $manager = new MigrationManager($this->migrationsPath, null, $this->context, $migrationConnection);
+                $manager = $this->context !== null
+                    ? \Glueful\Extensions\Schema\MigrationManagerFactory::create($this->context, $migrationConnection)
+                    : new MigrationManager($this->migrationsPath, null, null, $migrationConnection);
                 $lockConnection = $migrationConnection ?? Connection::fromContext($this->context);
                 $lock = \Glueful\Extensions\Schema\MigrationLockFactory::forConnection(
                     $lockConnection,
                     $this->context
                 );
-                $handle = $lock->acquireAll(['app']);
+                $snapshot = $manager->globalSources();
+                $handle = $lock->acquireAll($snapshot);
                 try {
-                    $manager->migrate();
+                    $report = $manager->migrateSources($snapshot);
                 } finally {
                     $handle->release();
+                }
+                $failure = $report->firstFailure();
+                if ($failure !== null) {
+                    // Truthful failure: never report install success from a report carrying a
+                    // failed migration. migrateSources() stopped at it, so later files stay
+                    // pending for the next attempt.
+                    $message = basename($failure['file']) . ' failed: ' . ($failure['error'] ?? 'unknown error');
+                    if ($failure['requiresManualRepair']) {
+                        $message .= ' — the driver could not roll this back atomically; manual repair'
+                            . ' required before re-running provision (see migrate:verify).';
+                    }
+                    $steps[] = new InstallStep('migrate', InstallStep::FAILED, $message);
+                    return InstallResult::from($steps);
                 }
                 $steps[] = new InstallStep('migrate', InstallStep::OK, 'Migrations applied.');
             } catch (\Throwable $e) {

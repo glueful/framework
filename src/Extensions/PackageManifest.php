@@ -205,7 +205,6 @@ final class PackageManifest
                     relativePath: (string) ($row['path'] ?? ''),
                     priority: $priorities[$priorityKey],
                     mode: $mode,
-                    legacyAliases: array_values((array) ($row['legacyAliases'] ?? [])),
                     verifierClass: is_string($verifier) ? $verifier : null,
                 );
             }

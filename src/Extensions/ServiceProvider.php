@@ -224,11 +224,22 @@ abstract class ServiceProvider
                     . '(declare the path, or migrations: none packages register nothing).'
                 );
             }
+            // The provider belongs to an installed Glueful package that declares NOTHING:
+            // manifest declaration is unconditional — there is no legacy append for package
+            // code. Ownerless app-local providers never reach here; their append lane below
+            // is permanent.
+            if ($package !== null) {
+                throw \Glueful\Extensions\Schema\UndeclaredSchemaException::forProviderRegistration(
+                    $package,
+                    static::class
+                );
+            }
         }
         /** @var MigrationManager $mm */
         $mm = $this->app->get(MigrationManager::class);
         $mm->addMigrationPath($dir, $priority, $source);
     }
+
 
     /**
      * Merge default config (app overrides always win).
