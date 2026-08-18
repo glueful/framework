@@ -6,7 +6,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
-## [1.80.0] - 2026-08-18 — Alkaid
+## [1.80.0] - 2026-08-18 — Almach
 
 **Theme: schema custody closure** — provision, protected providers, and host-enforced
 manifests complete the schema-on-enable program's framework half. All three changes are

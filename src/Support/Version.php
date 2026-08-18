@@ -17,7 +17,7 @@ final class Version
 
 
     /** Release code name */
-    public const NAME = 'Alkaid';
+    public const NAME = 'Almach';
 
 
     /** Release date */
