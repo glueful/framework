@@ -21,6 +21,24 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.80.2 — Almach (Patch, Released 2026-08-19)
+- **Untouched migration sources classify Pending, never Divergent** — `AdoptionState` gains
+  `Pending`; a source with zero receipts whose effects are absent or unverifiable is simply
+  not migrated yet (the healthy state of every disabled extension's schema), so
+  `migrate:verify` stops failing healthy installs and the documented
+  `migrate:run && migrate:verify` upgrade chain works for hosts shipping disabled engines.
+- Divergent now strictly means conflict (partial receipts with absent/unverifiable effects);
+  the zero-receipts-with-effects-present adoption path stays Adoptable.
+- Notes: classification-only; low risk.
+
+### 1.80.1 — Almach (Patch, Released 2026-08-18)
+- **`extension_operations.operation` widened to 32 chars** — 1.80.0's protected migration
+  lane records `protected_migrate` (17 chars) into a column created as `string(16)`; fine on
+  SQLite (ignores varchar lengths) but a hard 22001 truncation on PostgreSQL. A width
+  tripwire test pins operation/status values against the declared DDL.
+- Notes: the create-migration's checksum changes — a database provisioned on exactly 1.80.0
+  reports it Divergent; re-provision or repair by hand.
+
 ### 1.80.0 — Almach (Minor, Released 2026-08-18)
 - **Schema custody closure** — the framework half of schema-on-enable completes. Installer
   provision is a complete locked pass over the global-source snapshot (app path + every
@@ -28,13 +46,15 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
   steps naming the basename, never quiet successes).
   `ExtensionSchemaExecutor::migrateProtected()` gives protected providers a migration lane
   under enable-grade custody without touching extension state or the provider cache.
-  New `extensions.schema.require_declared_packages` opt-in (default false): strict hosts
-  refuse the legacy migration-path append for undeclared Glueful packages.
+  Manifest declaration is UNCONDITIONAL: a provider owned by an installed Glueful package
+  that declares no `extra.glueful.migrations` manifest cannot register migration paths at
+  all (the planned opt-in flag never shipped — strictness is the contract, not host policy).
 - **Removed (breaking, called out):** the legacy-alias receipt machinery (`legacyAliases`,
   `ReceiptNormalizer`, `migrate:normalize-receipts`, alias-divergence readiness) — it
   existed solely for beta-era pre-manifest ledgers; none remain supported.
-- Notes: all additive at runtime — the strict flag defaults OFF, so 1.79 hosts upgrade
-  without behavior change; the app-local append lane is permanent in both modes.
+- Notes: breaking for hosts leaning on 1.79's legacy seams (none known to exist) — the
+  undeclared-package append and the alias machinery are both gone; the ownerless app-local
+  append lane is permanent.
 
 ### 1.79.1 — Alkaid (Patch, Released 2026-08-18)
 - **Tolerant index drops no longer poison the per-migration transaction** — `dropIndex`

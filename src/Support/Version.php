@@ -21,7 +21,7 @@ final class Version
 
 
     /** Release date */
-    public const RELEASE_DATE = '2026-08-18';
+    public const RELEASE_DATE = '2026-08-19';
 
     /** Minimum required PHP version */
     public const MIN_PHP_VERSION = '8.3.0';
