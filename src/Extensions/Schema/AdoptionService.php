@@ -113,18 +113,23 @@ final class AdoptionService
             return ['state' => AdoptionState::Divergent, 'reasons' => $this->readiness->explain($descriptor)];
         }
 
-        // Pending: adoption depends on the verifier PASSING every missing basename.
+        // Pending: adoption depends on the verifier PASSING every missing basename (effects
+        // present without receipts = adoptable, e.g. a lost ledger). When effects are ABSENT
+        // (or unverifiable), the receipt count decides what that means: an UNTOUCHED source
+        // (zero receipts) is simply not migrated yet — the healthy state of every disabled
+        // extension's schema — while a partially receipted source with absent effects is a
+        // genuine conflict. Divergence means conflict; an untouched source has none.
+        $untouched = !$this->hasAnyReceipt($descriptor);
+
         $source = $descriptor->source();
         $verifier = null;
         try {
             $verifier = $this->verifierFor($descriptor);
         } catch (\RuntimeException $e) {
-            return ['state' => AdoptionState::Divergent, 'reasons' => [$e->getMessage()]];
+            return $this->notMigratedOrDivergent($untouched, [$e->getMessage()]);
         }
         if ($verifier === null) {
-            return ['state' => AdoptionState::Divergent, 'reasons' => [
-                "no structural verifier registered for {$source}",
-            ]];
+            return $this->notMigratedOrDivergent($untouched, ["no structural verifier registered for {$source}"]);
         }
         $reasons = [];
         foreach ($this->missingBasenames($descriptor) as $basename) {
@@ -133,9 +138,39 @@ final class AdoptionService
             }
         }
         if ($reasons !== []) {
-            return ['state' => AdoptionState::Divergent, 'reasons' => $reasons];
+            return $this->notMigratedOrDivergent($untouched, $reasons);
         }
         return ['state' => AdoptionState::Adoptable, 'reasons' => []];
+    }
+
+    /**
+     * Absent (or unverifiable) effects resolve by receipt count: an untouched source is
+     * simply not migrated yet, a partially receipted one is a conflict.
+     *
+     * @param list<string> $reasons
+     * @return array{state: AdoptionState, reasons: list<string>}
+     */
+    private function notMigratedOrDivergent(bool $untouched, array $reasons): array
+    {
+        if ($untouched) {
+            return ['state' => AdoptionState::Pending, 'reasons' => [
+                'not migrated yet — nothing applied and nothing claimed (applies on enable / migrate)',
+            ]];
+        }
+        return ['state' => AdoptionState::Divergent, 'reasons' => $reasons];
+    }
+
+    /** Whether ANY receipt exists under the descriptor's source. */
+    private function hasAnyReceipt(MigrationDescriptor $descriptor): bool
+    {
+        if (!$this->ledgerExists()) {
+            return false;
+        }
+        $row = $this->db->table(self::LEDGER)
+            ->select(['migration'])
+            ->where('source', $descriptor->source())
+            ->first();
+        return $row !== null;
     }
 
     /**

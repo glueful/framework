@@ -12,5 +12,7 @@ enum AdoptionState: string
 {
     case Ready = 'ready';
     case Adoptable = 'adoptable';
+    /** Nothing applied and nothing claimed — the healthy not-yet-migrated state. */
+    case Pending = 'pending';
     case Divergent = 'divergent';
 }

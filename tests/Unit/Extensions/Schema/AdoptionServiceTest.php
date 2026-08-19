@@ -110,6 +110,7 @@ final class AdoptionServiceTest extends TestCase
             $dir = $this->base . '/vendor/' . $name . '/migrations';
             mkdir($dir, 0777, true);
             file_put_contents($dir . '/001_Fixture.php', "<?php // {$name} fixture\n");
+            file_put_contents($dir . '/002_Later.php', "<?php // {$name} later fixture\n");
             $descriptor = [
                 'id' => 'default',
                 'path' => 'migrations',
@@ -177,33 +178,77 @@ final class AdoptionServiceTest extends TestCase
         );
     }
 
-    private function seedReadyReceipt(string $source): void
+    private function seedReceipt(string $source, string $basename): void
     {
-        $file = $this->base . '/vendor/' . $source . '/migrations/001_Fixture.php';
+        $file = $this->base . '/vendor/' . $source . '/migrations/' . $basename;
         $stmt = $this->connection->getPDO()->prepare(
             'INSERT INTO migrations (migration, batch, checksum, source) VALUES (?, 1, ?, ?)'
         );
-        $stmt->execute(['001_Fixture.php', hash_file('sha256', $file), $source]);
+        $stmt->execute([$basename, hash_file('sha256', $file), $source]);
+    }
+
+    private function seedReadyReceipt(string $source): void
+    {
+        $this->seedReceipt($source, '001_Fixture.php');
+        $this->seedReceipt($source, '002_Later.php');
     }
 
     public function testClassificationTruthTable(): void
     {
         $this->createLedger();
         $this->seedReadyReceipt('acme/pass'); // fully receipted => Ready regardless of verifier
+        // Partially receipted: 001 applied, 002 pending — absent effects here are a CONFLICT.
+        $this->seedReceipt('acme/fail', '001_Fixture.php');
+        $this->seedReceipt('acme/none', '001_Fixture.php');
+        $this->seedReceipt('acme/needy', '001_Fixture.php');
 
         $classified = $this->service()->classify();
 
         self::assertSame(AdoptionState::Ready, $classified['acme/pass']['state']);
-        self::assertSame(AdoptionState::Divergent, $classified['acme/fail']['state'], 'verifier refusal => divergent');
+        self::assertSame(
+            AdoptionState::Divergent,
+            $classified['acme/fail']['state'],
+            'partial receipts + verifier refusal => divergent'
+        );
         self::assertNotEmpty(array_filter(
             $classified['acme/fail']['reasons'],
-            static fn(string $r): bool => str_contains($r, '001_Fixture.php')
+            static fn(string $r): bool => str_contains($r, '002_Later.php')
         ), 'the refusing basename is named');
-        self::assertSame(AdoptionState::Divergent, $classified['acme/none']['state'], 'no verifier => divergent');
-        self::assertSame(AdoptionState::Divergent, $classified['acme/mismatch']['state'], 'source mismatch');
-        self::assertSame(AdoptionState::Divergent, $classified['acme/needy']['state'], 'needy constructor');
-        self::assertSame(AdoptionState::Divergent, $classified['acme/ghostclass']['state'], 'missing class');
-        self::assertSame(AdoptionState::Divergent, $classified['acme/wrongiface']['state'], 'wrong interface');
+        self::assertSame(
+            AdoptionState::Divergent,
+            $classified['acme/none']['state'],
+            'partial receipts + no verifier => divergent'
+        );
+        self::assertSame(
+            AdoptionState::Divergent,
+            $classified['acme/needy']['state'],
+            'partial receipts + nonconforming verifier => divergent'
+        );
+
+        // UNTOUCHED sources (zero receipts) with absent or unverifiable effects are simply
+        // not migrated yet — the healthy state of every disabled extension's schema. The
+        // documented upgrade chain relies on this: migrate:verify must not fail a fresh
+        // install for engines that are deliberately off.
+        foreach (['acme/mismatch', 'acme/ghostclass', 'acme/wrongiface'] as $untouched) {
+            self::assertSame(
+                AdoptionState::Pending,
+                $classified[$untouched]['state'],
+                "{$untouched}: untouched => pending, never divergent"
+            );
+        }
+    }
+
+    public function testAnUntouchedSourceWithRefusedEffectsIsPendingNotDivergent(): void
+    {
+        $this->createLedger();
+
+        $classified = $this->service()->classify();
+
+        self::assertSame(AdoptionState::Pending, $classified['acme/fail']['state']);
+        self::assertNotEmpty(array_filter(
+            $classified['acme/fail']['reasons'],
+            static fn(string $r): bool => str_contains($r, 'not migrated yet')
+        ));
     }
 
     public function testPendingWithPassingVerifierIsAdoptableAndAdoptWritesAtomically(): void
@@ -215,7 +260,7 @@ final class AdoptionServiceTest extends TestCase
 
         $report = $this->service()->adopt('acme/pass');
 
-        self::assertSame(['001_Fixture.php'], $report->adopted);
+        self::assertSame(['001_Fixture.php', '002_Later.php'], $report->adopted);
         $row = $this->connection->getPDO()
             ->query("SELECT checksum FROM migrations WHERE source = 'acme/pass'")
             ->fetch(\PDO::FETCH_ASSOC);
