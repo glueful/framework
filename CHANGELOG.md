@@ -6,6 +6,19 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.80.2] - 2026-08-19 — Almach
+
+### Fixed
+- **An untouched migration source classifies Pending, never Divergent**: `AdoptionState` gains
+  `Pending`, and `AdoptionService` reports it for any source with ZERO receipts whose effects
+  are absent or unverifiable — the healthy state of every disabled extension's schema on a
+  fresh install. Previously such sources classified Divergent ("structural verifier refused
+  …"), which made `migrate:verify` exit non-zero on perfectly healthy installs and broke the
+  documented `migrate:run && migrate:verify` upgrade chain for any host shipping disabled
+  engines. Divergence now strictly means CONFLICT: a partially receipted source with absent
+  or unverifiable effects. The lost-ledger adoption path is unchanged — zero receipts with
+  effects PRESENT (verifier passes) stays Adoptable.
+
 ## [1.80.1] - 2026-08-18 — Almach
 
 ### Fixed
