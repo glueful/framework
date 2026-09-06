@@ -14,6 +14,7 @@ class BootProfiler
     private array $phases = [];
     private float $startTime;
     private ?LoggerInterface $logger = null;
+    private ?string $dumpPath = null;
 
     public function __construct()
     {
@@ -23,6 +24,34 @@ class BootProfiler
     public function setLogger(LoggerInterface $logger): void
     {
         $this->logger = $logger;
+    }
+
+    /**
+     * Where to write the human-readable phase breakdown after boot. Null (the default) writes
+     * nothing; the dump is an opt-in diagnostic, never a boot obligation.
+     */
+    public function setDumpPath(?string $path): void
+    {
+        $this->dumpPath = ($path === null || $path === '') ? null : $path;
+    }
+
+    /**
+     * Resolve the BOOT_PROFILE_LOG setting: unset/false/empty/"0" disables the dump, boolean
+     * true (or "1") selects a per-user file under the system temp directory, and any other
+     * string is taken as an explicit path. Per-user, because one shared path on a multi-user
+     * host is unwritable for every user but the first.
+     */
+    public static function dumpPathFromEnv(mixed $value): ?string
+    {
+        if ($value === null || $value === false || $value === '' || $value === '0' || $value === 0) {
+            return null;
+        }
+
+        if ($value === true || $value === '1' || $value === 1) {
+            return sys_get_temp_dir() . '/glueful-boot-profile-' . getmyuid() . '.log';
+        }
+
+        return is_string($value) ? $value : null;
     }
 
     /**
@@ -119,8 +148,14 @@ class BootProfiler
             ];
         }
 
-        // Write phase breakdown to temp file for analysis
-        file_put_contents('/tmp/boot_profile.log', $this->formatSummary($summary));
+        // Opt-in phase breakdown dump; a failed write is never allowed to abort boot.
+        if ($this->dumpPath !== null) {
+            try {
+                @file_put_contents($this->dumpPath, $this->formatSummary($summary));
+            } catch (\Throwable) {
+                // best-effort diagnostic only
+            }
+        }
 
         // Log with different levels based on performance
         if ($total < 0.015) { // Under 15ms

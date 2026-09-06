@@ -6,6 +6,16 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+- **Boot no longer writes `/tmp/boot_profile.log` on every request**: the boot profiler's
+  phase-breakdown dump is now opt-in via `BOOT_PROFILE_LOG` (`true` for a per-user file under
+  the system temp directory, or an explicit path) and is best-effort — a dump that cannot be
+  written is skipped, never surfaced. Previously every boot wrote a hard-coded shared path
+  unconditionally, so on any host where a second OS user (a second site, or a CLI run as root
+  followed by one as the site user) had created the file first, the denied write became a
+  fatal `ErrorException` under the framework's error handler and no command — including
+  first-run provisioning — could boot.
+
 ## [1.80.2] - 2026-08-19 — Almach
 
 ### Fixed

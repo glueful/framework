@@ -120,6 +120,7 @@ class Framework
 
         // Phase 1: Environment & Globals (0-2ms)
         $profiler->time('environment', fn() => $this->initializeEnvironment($context));
+        $profiler->setDumpPath(BootProfiler::dumpPathFromEnv(env('BOOT_PROFILE_LOG')));
 
         // Phase 2: Configuration (now instant!) - Just initialize lazy loading
         $profiler->time('config', fn() => $this->initializeConfiguration($context));
