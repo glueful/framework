@@ -107,6 +107,7 @@ By default the command prints the shell command so you can pin a specific genera
 ## Deployment Notes
 
 - For long-running servers (RoadRunner, Swoole, FrankenPHP), set `APP_LONG_RUNNING=true` to enable worker-safe lifecycle handling.
+- To capture a per-phase boot timing breakdown, set `BOOT_PROFILE_LOG=true` (writes a per-user file under the system temp directory) or `BOOT_PROFILE_LOG=/path/to/file.log`. Off by default; a dump that cannot be written is skipped silently.
 - If your deploy process preserves file mtimes and you see stale routing, clear the route cache as part of deploy:
   - `php glueful route:cache:clear`
 

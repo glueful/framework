@@ -101,9 +101,9 @@ class PasswordHasher
         $info = password_get_info($hash);
 
         return [
-            'algo' => is_string($info['algo'] ?? null) ? $info['algo'] : null,
-            'algoName' => (string) ($info['algoName'] ?? 'unknown'),
-            'options' => is_array($info['options'] ?? null) ? $info['options'] : [],
+            'algo' => $info['algo'],
+            'algoName' => $info['algoName'],
+            'options' => $info['options'],
         ];
     }
 }
