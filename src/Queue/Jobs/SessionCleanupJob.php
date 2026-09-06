@@ -93,11 +93,24 @@ class SessionCleanupJob extends Job
         $logger = $this->context !== null
             ? container($this->context)->get(LogManager::class)
             : LogManager::getInstance();
-        $logger->info('Session cleanup completed', [
-            'cleanup_type' => $cleanupType,
-            'sessions_cleaned' => $result['cleaned_count'] ?? 0,
-            'errors' => $result['errors'] ?? []
-        ]);
+        $logger->info('Session cleanup completed', ['cleanup_type' => $cleanupType] + self::summarizeStats($result));
+    }
+
+    /**
+     * Collapse the task's per-category counts into the completion-log shape. The task never
+     * returns a single total, so the log used to report zero sessions cleaned on every run.
+     *
+     * @param array{expired_access: int, expired_refresh: int, old_revoked: int,
+     *     old_refresh_rows: int, errors: string[]} $stats
+     * @return array{sessions_cleaned: int, errors: string[]}
+     */
+    public static function summarizeStats(array $stats): array
+    {
+        return [
+            'sessions_cleaned' => $stats['expired_access'] + $stats['expired_refresh']
+                + $stats['old_revoked'] + $stats['old_refresh_rows'],
+            'errors' => $stats['errors'],
+        ];
     }
 
 

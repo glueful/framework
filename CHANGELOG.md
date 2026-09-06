@@ -17,6 +17,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   followed by one as the site user) had created the file first, the denied write became a
   fatal `ErrorException` under the framework's error handler and no command — including
   first-run provisioning — could boot.
+- **`SessionCleanupJob` logs what was actually removed**: the completion log read a
+  `cleaned_count` key the task never returns, so every run reported zero sessions cleaned.
+  It now totals the task's four per-category counts. Surfaced by PHPStan 2.2.13's precise
+  array-shape inference, which also retired three redundant guards in
+  `PasswordHasher::getInfo()`.
 
 ### Upgrade Notes
 - **`/tmp/boot_profile.log` is no longer written.** Nothing depends on it inside the framework;
