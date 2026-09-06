@@ -21,6 +21,17 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.81.0 — Alnair (Minor, Released 2026-09-06)
+- **Boot profiler dump is opt-in and best-effort** — every boot used to write a hard-coded
+  `/tmp/boot_profile.log`; on any host where another OS user had created the file first
+  (a second site, or a root CLI run followed by the site user), the denied write became a
+  fatal `ErrorException` and nothing — including first-run provisioning — could boot.
+- New `BOOT_PROFILE_LOG` env var: `true` for a per-user file under the system temp
+  directory, an explicit path, or unset (default) for no dump. A dump that cannot be
+  written is skipped silently; the structured summary still reaches the logger.
+- Notes: minor for the new env var and the changed default (no dump); low risk — no
+  framework code read the file.
+
 ### 1.80.2 — Almach (Patch, Released 2026-08-19)
 - **Untouched migration sources classify Pending, never Divergent** — `AdoptionState` gains
   `Pending`; a source with zero receipts whose effects are absent or unverifiable is simply

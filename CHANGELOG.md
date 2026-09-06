@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.81.0] - 2026-09-06 — Alnair
+
 ### Fixed
 - **Boot no longer writes `/tmp/boot_profile.log` on every request**: the boot profiler's
   phase-breakdown dump is now opt-in via `BOOT_PROFILE_LOG` (`true` for a per-user file under
@@ -15,6 +17,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   followed by one as the site user) had created the file first, the denied write became a
   fatal `ErrorException` under the framework's error handler and no command — including
   first-run provisioning — could boot.
+
+### Upgrade Notes
+- **`/tmp/boot_profile.log` is no longer written.** Nothing depends on it inside the framework;
+  if external tooling tailed that file, set `BOOT_PROFILE_LOG=/tmp/boot_profile.log` to keep
+  it, or `BOOT_PROFILE_LOG=true` for a per-user file under the system temp directory. The
+  structured boot summary still reaches the framework logger exactly as before.
 
 ## [1.80.2] - 2026-08-19 — Almach
 
