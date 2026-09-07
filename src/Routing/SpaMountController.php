@@ -40,7 +40,7 @@ final class SpaMountController
         }
 
         return $mount['spaFallback']
-            ? $this->serveIndex($request, $mount['dir'])
+            ? $this->serveIndex($request, $mount['dir'], $mount['csp'] ?? null)
             : new Response('', 404);
     }
 
@@ -90,7 +90,7 @@ final class SpaMountController
         if (pathinfo($rest, PATHINFO_EXTENSION) !== '') {
             return new Response('', 404);
         }
-        return $this->serveIndex($request, $realDir);
+        return $this->serveIndex($request, $realDir, $mount['csp'] ?? null);
     }
 
     /**
@@ -134,7 +134,7 @@ final class SpaMountController
     /**
      * Serve index.html (200, no-cache, hardened headers, revalidatable).
      */
-    private function serveIndex(Request $request, string $realDir): Response
+    private function serveIndex(Request $request, string $realDir, ?string $csp = null): Response
     {
         $index = $realDir . DIRECTORY_SEPARATOR . 'index.html';
         if (!is_file($index)) {
@@ -142,8 +142,13 @@ final class SpaMountController
         }
         $resp = new BinaryFileResponse($index);
         $resp->headers->set('Content-Type', 'text/html; charset=UTF-8');
-        foreach (SecurityHeaders::defaultStaticAssetHeaders() as $header => $value) {
+        // A DOCUMENT policy, not the static-asset one: the asset-grade `style-src 'self'`
+        // strips every runtime-injected style from a built SPA. A mount may supply its own.
+        foreach (SecurityHeaders::defaultDocumentHeaders() as $header => $value) {
             $resp->headers->set($header, $value);
+        }
+        if ($csp !== null && $csp !== '') {
+            $resp->headers->set('Content-Security-Policy', $csp);
         }
         $resp->headers->set('Cache-Control', 'no-cache');
         $mtime = filemtime($index) !== false ? filemtime($index) : time();

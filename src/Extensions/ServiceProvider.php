@@ -299,6 +299,7 @@ abstract class ServiceProvider
 
         $spaFallback = (bool) ($options['spaFallback'] ?? true);
         $name = (string) ($options['name'] ?? $path);
+        $csp = isset($options['csp']) && is_string($options['csp']) && $options['csp'] !== '' ? $options['csp'] : null;
 
         if (!$this->app->has(\Glueful\Routing\Router::class) || !is_dir($dir)) {
             return;
@@ -320,7 +321,7 @@ abstract class ServiceProvider
         // registry is always populated before dispatch.
         /** @var \Glueful\Routing\FrontendMountRegistry $registry */
         $registry = $this->app->get(\Glueful\Routing\FrontendMountRegistry::class);
-        $registry->register($path, $realDir, $spaFallback, $name);
+        $registry->register($path, $realDir, $spaFallback, $name, $csp);
 
         // Register controller-array handlers, NOT closures: the route table must stay
         // serializable so RouteCache can cache it (closures disable route caching for

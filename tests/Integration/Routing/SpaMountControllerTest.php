@@ -56,6 +56,40 @@ class SpaMountControllerTest extends TestCase
         return new SpaMountController($registry);
     }
 
+    /**
+     * index.html is an application DOCUMENT, not a static asset: a built SPA injects style
+     * elements at runtime (component libraries apply their theme that way), so the asset-grade
+     * `style-src 'self'` used to strip every runtime style from the admin — a primary button
+     * rendered with no background. Assets keep the strict set; the document gets one a built
+     * SPA can actually run under; a mount may override it.
+     */
+    public function testIndexGetsADocumentCspAssetsKeepTheStrictOne(): void
+    {
+        $controller = $this->mount();
+
+        $index = $controller->root(Request::create('/admin'));
+        $indexCsp = (string) $index->headers->get('Content-Security-Policy');
+        self::assertStringContainsString("style-src 'self' 'unsafe-inline'", $indexCsp, 'the document allows runtime styles');
+        self::assertStringContainsString("script-src 'self'", $indexCsp, 'scripts stay self-only');
+        self::assertStringNotContainsString("'unsafe-eval'", $indexCsp);
+
+        $asset = $controller->asset(Request::create('/admin/style.css'), 'style.css');
+        $assetCsp = (string) $asset->headers->get('Content-Security-Policy');
+        self::assertStringContainsString("style-src 'self';", $assetCsp, 'assets keep the strict asset policy');
+        self::assertStringNotContainsString("'unsafe-inline'", $assetCsp);
+    }
+
+    public function testAMountCanOverrideTheDocumentCsp(): void
+    {
+        $registry = new FrontendMountRegistry();
+        $registry->register('/admin', (string) realpath($this->dir), true, 'admin', "default-src 'self'; img-src *");
+        $controller = new SpaMountController($registry);
+
+        $index = $controller->root(Request::create('/admin'));
+
+        self::assertSame("default-src 'self'; img-src *", $index->headers->get('Content-Security-Policy'));
+    }
+
     public function testUnknownMountReturns404(): void
     {
         $controller = $this->mount('/admin');

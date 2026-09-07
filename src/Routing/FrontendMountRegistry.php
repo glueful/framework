@@ -29,12 +29,14 @@ final class FrontendMountRegistry
      * resolves and validates it before registering), so the controller can
      * safely use it as the containment boundary for path-traversal checks.
      */
-    public function register(string $path, string $dir, bool $spaFallback, string $name): void
+    /** @param string|null $csp Content-Security-Policy for the mount's HTML document (null = framework default). */
+    public function register(string $path, string $dir, bool $spaFallback, string $name, ?string $csp = null): void
     {
         $this->mounts[$this->normalize($path)] = [
             'dir' => $dir,
             'spaFallback' => $spaFallback,
             'name' => $name,
+            'csp' => $csp,
         ];
     }
 

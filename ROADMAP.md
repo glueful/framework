@@ -21,6 +21,14 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.82.2 — Alnasl (Patch, Released 2026-09-07)
+- **Mounted SPA documents get a document CSP** — `SpaMountController` applied the static-asset
+  header set (`style-src 'self'`) to index.html, stripping every runtime-injected style from a
+  built front-end (a primary button with no background). index.html now carries
+  `SecurityHeaders::defaultDocumentHeaders()`; assets keep the strict set; `serveFrontend()`
+  takes a `csp` option per mount.
+- Notes: behaviour-restoring for every served SPA; low risk.
+
 ### 1.82.1 — Alnasl (Patch, Released 2026-09-07)
 - **Boot-time re-pins reach the compiled container** — `Glueful\Container\RebindableContainer`
   (implemented by the runtime `Container` and every compiled container) gives `load()` a home
