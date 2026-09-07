@@ -21,6 +21,13 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.81.1 — Alnair (Patch, Released 2026-09-07)
+- **Cached providers get `register()`** — `discover()` returned straight after loading the
+  extension cache, so `register()` only ran on live discovery and never in production (where
+  the cache is mandatory). Console commands and runtime bindings registered there vanished on
+  every production boot. `registerProviders()` now runs on both paths.
+- Notes: behaviour-restoring; low risk. Surfaced by Thallo's first production-mode install.
+
 ### 1.81.0 — Alnair (Minor, Released 2026-09-06)
 - **Boot profiler dump is opt-in and best-effort** — every boot used to write a hard-coded
   `/tmp/boot_profile.log`; on any host where another OS user had created the file first
