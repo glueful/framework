@@ -526,11 +526,23 @@ PHP;
 
         $type = $parameter->getType();
         if ($type instanceof \ReflectionNamedType && !$type->isBuiltin()) {
-            return '$this->get(' . var_export($type->getName(), true) . ')';
+            $id = var_export($type->getName(), true);
+            // Mirror the runtime autowirer (ReflectionResolver): a typed dependency the container
+            // does not hold falls back to the parameter's default, then to null — decided at
+            // RUNTIME, because load() may add the id after compilation.
+            if ($parameter->isDefaultValueAvailable()) {
+                return '($this->has(' . $id . ') ? $this->get(' . $id . ') : '
+                    . $this->exportDefault($parameter) . ')';
+            }
+            if ($parameter->allowsNull()) {
+                return '($this->has(' . $id . ') ? $this->get(' . $id . ') : null)';
+            }
+
+            return '$this->get(' . $id . ')';
         }
 
         if ($parameter->isDefaultValueAvailable()) {
-            return $this->exportValue($parameter->getDefaultValue());
+            return $this->exportDefault($parameter);
         }
 
         if ($parameter->allowsNull()) {
@@ -546,6 +558,27 @@ PHP;
         );
 
         return '$this->fail(' . var_export($message, true) . ')';
+    }
+
+    /**
+     * A parameter default as code. Scalars, arrays and the exportable object kinds become
+     * literals; anything else (an object built in the initializer, `= new Foo()`) is evaluated
+     * at RUNTIME through reflection — the same value the runtime autowirer would hand over.
+     */
+    private function exportDefault(\ReflectionParameter $parameter): string
+    {
+        try {
+            return $this->exportValue($parameter->getDefaultValue());
+        } catch (\RuntimeException) {
+            $class = $parameter->getDeclaringClass()?->getName();
+            $function = $parameter->getDeclaringFunction()->getName();
+            $owner = $class !== null
+                ? '[' . var_export($class, true) . ', ' . var_export($function, true) . ']'
+                : var_export($function, true);
+
+            return '(new \\ReflectionParameter(' . $owner . ', ' . var_export($parameter->getName(), true)
+                . '))->getDefaultValue()';
+        }
     }
 
     private function exportValue(mixed $value): string
