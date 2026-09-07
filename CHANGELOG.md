@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.82.2] - 2026-09-07 — Alnasl
+
 ### Fixed
 - **A mounted SPA's index.html gets a document CSP, not the static-asset one.**
   `SpaMountController` applied `SecurityHeaders::defaultStaticAssetHeaders()` — whose
