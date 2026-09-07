@@ -69,11 +69,13 @@ final class ExtensionManager
         }
         $this->discovered = true;
 
-        // Try cache first
+        // Try cache first. The cache decides WHICH providers load (already in declarative
+        // order); their lifecycle still runs — register() here, boot() from boot().
         $cached = $this->loadFromCache();
         if ($cached !== null) {
             $this->providers = $cached;
             $this->cacheUsed = true;
+            $this->registerProviders();
             return;
         }
 
