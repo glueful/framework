@@ -6,6 +6,22 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.81.2] - 2026-09-07 — Alnair
+
+### Fixed
+- **The production command manifest is app-owned and validated**: `ConsoleProvider` cached the
+  discovered command classes in the framework package's own `storage/cache` — which does not
+  exist in a dist install — so every host fell through to ONE shared
+  `/tmp/glueful_commands_manifest.php`, and loaded it verbatim. A manifest written by an older
+  framework (or another site's user) on the same host then fed phantom command classes into
+  every boot: container compilation failed on the unknown class, and resolving the tagged
+  commands threw a 500 out of the console itself (`Cannot compile autowire definition for
+  unknown class: Glueful\Console\Commands\Archive\ManageCommand` on a host that once ran a
+  pre-1.41 framework). The manifest now lives in the APP's `storage/cache` (per-user,
+  per-version temp file only as a fallback), every cached class is re-validated with
+  `class_exists()` and a stale manifest is rediscovered and rewritten. `commands:cache` /
+  `commands:clear` work on the app path and also retire the two legacy locations.
+
 ## [1.81.1] - 2026-09-07 — Alnair
 
 ### Fixed
