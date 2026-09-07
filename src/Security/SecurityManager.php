@@ -125,8 +125,11 @@ class SecurityManager
                                      'consider restricting to specific domains';
             }
 
-            if (env('FORCE_HTTPS') !== true && env('FORCE_HTTPS') !== 'true') {
-                $recommendations[] = 'FORCE_HTTPS not enabled - consider enabling HTTPS enforcement';
+            // Unset means ENABLED in production (config/app.php defaults force_https to
+            // APP_ENV === 'production'); only an explicit opt-out is worth a recommendation.
+            $forceHttps = env('FORCE_HTTPS', true);
+            if ($forceHttps === false || $forceHttps === 'false' || $forceHttps === '0' || $forceHttps === 0) {
+                $recommendations[] = 'FORCE_HTTPS explicitly disabled - consider enabling HTTPS enforcement';
             }
 
             // Logging recommendations

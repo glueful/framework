@@ -22,6 +22,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - `InstallState::isInstalled()` — first run is complete once `APP_KEY`, `JWT_KEY` and
   `TOKEN_SALT` are all present in `.env`.
 
+### Fixed
+- **"FORCE_HTTPS not enabled" no longer fires on correctly configured production hosts**: the
+  boot-time recommendation read the raw variable, but in production an unset `FORCE_HTTPS`
+  already means enabled (`config/app.php`). Only an explicit opt-out is flagged now.
+
 ### Changed
 - **A never-installed production checkout boots quietly and bootstraps itself.** Until the
   security keys exist, production skips the boot-time security validation (every warning would
