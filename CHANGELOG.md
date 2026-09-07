@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.81.1] - 2026-09-07 — Alnair
+
 ### Fixed
 - **Providers loaded from the extension cache get `register()` called**: `discover()` used to
   construct the cached providers and return, so `register()` ran only on live (uncached)
