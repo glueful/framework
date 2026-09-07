@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+- **Boot-time re-pins reach the compiled container.** Providers that re-bind a service after
+  the container is built (`$this->app->load([...])` in `boot()`) used to guard on
+  `instanceof Glueful\Container\Container`, which the compiled container is not — so with
+  1.82.0 making compilation succeed, such re-pins silently no-op'd in production and the
+  service reverted to whatever was compiled. The compiled container now implements the new
+  `Glueful\Container\RebindableContainer` (as does the runtime `Container`) with a `load()`
+  whose definitions win over compiled ones; guard on that interface, never the concrete class.
+
 ## [1.82.0] - 2026-09-07 — Alnasl
 
 ### Added

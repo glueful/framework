@@ -394,7 +394,7 @@ namespace {$namespace};
 use Psr\Container\ContainerInterface;
 use Psr\Container\NotFoundExceptionInterface;
 
-final class {$className} implements ContainerInterface
+final class {$className} implements ContainerInterface, \\Glueful\\Container\\RebindableContainer
 {
     /** Service ids whose live objects must be handed in via withRuntimeValues(). */
     public const RUNTIME_VALUE_IDS = {$runtimeIdsStr};
@@ -410,6 +410,22 @@ final class {$className} implements ContainerInterface
 
     /** @var array<string, callable> */
     private array \$runtimeFactories = [];
+
+    /** Definitions loaded AFTER construction (boot-time re-pins); they win over compiled ones. */
+    /** @var array<string, \\Glueful\\Container\\Definition\\DefinitionInterface> */
+    private array \$overrides = [];
+
+    /** @param array<string, \\Glueful\\Container\\Definition\\DefinitionInterface|callable|mixed> \$defs */
+    public function load(array \$defs): void
+    {
+        foreach (\$defs as \$id => \$d) {
+            \$this->overrides[\$id] = \$d instanceof \\Glueful\\Container\\Definition\\DefinitionInterface ? \$d
+                : (is_callable(\$d)
+                    ? new \\Glueful\\Container\\Definition\\FactoryDefinition(\$id, \$d)
+                    : new \\Glueful\\Container\\Definition\\ValueDefinition(\$id, \$d));
+            unset(\$this->singletons[\$id]); // a re-pin must not serve the stale compiled instance
+        }
+    }
 
     /** @param array<string, callable> \$factories */
     public function withRuntimeFactories(array \$factories): static
@@ -431,6 +447,9 @@ final class {$className} implements ContainerInterface
 
     public function has(string \$id): bool
     {
+        if (isset(\$this->overrides[\$id])) {
+            return true;
+        }
         switch (\$id) {
 {$hasCasesStr}
             default: return false;
@@ -441,6 +460,14 @@ final class {$className} implements ContainerInterface
     {
         if (isset(\$this->singletons[\$id])) {
             return \$this->singletons[\$id];
+        }
+        if (isset(\$this->overrides[\$id])) {
+            \$def = \$this->overrides[\$id];
+            \$val = \$def->resolve(\$this);
+            if (\$def->isShared()) {
+                \$this->singletons[\$id] = \$val;
+            }
+            return \$val;
         }
         switch (\$id) {
 {$getCasesStr}

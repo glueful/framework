@@ -8,6 +8,8 @@ use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Container\Compile\ContainerCompiler;
 use Glueful\Container\Definition\FactoryDefinition;
 use Glueful\Container\Definition\ValueDefinition;
+use Glueful\Container\Autowire\AutowireDefinition;
+use Glueful\Container\RebindableContainer;
 use Glueful\Container\Exception\ContainerException;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
@@ -108,6 +110,30 @@ final class ContainerCompilerTest extends TestCase
         ]);
 
         self::assertSame($c, $c->get(ContainerInterface::class));
+    }
+
+    public function testRuntimeLoadOverridesACompiledDefinitionAndAddsNewOnes(): void
+    {
+        $c = $this->compiled([
+            CompilerFixtureProduct::class => new AutowireDefinition(CompilerFixtureProduct::class, CompilerFixtureProduct::class),
+        ]);
+
+        self::assertInstanceOf(RebindableContainer::class, $c, 'compiled containers accept runtime rebinds');
+
+        $override = new CompilerFixtureProduct($c);
+        $c->load([
+            CompilerFixtureProduct::class => new FactoryDefinition(
+                CompilerFixtureProduct::class,
+                static fn (ContainerInterface $container): object => $override,
+            ),
+            'late.value' => 'added at runtime',
+            'late.factory' => static fn (ContainerInterface $container): object => new \stdClass(),
+        ]);
+
+        self::assertSame($override, $c->get(CompilerFixtureProduct::class), 'a runtime rebind wins over the compiled definition');
+        self::assertTrue($c->has('late.value'));
+        self::assertSame('added at runtime', $c->get('late.value'));
+        self::assertSame($c->get('late.factory'), $c->get('late.factory'), 'runtime factories are shared by default');
     }
 
     /** @param array<string, object> $definitions */
