@@ -394,7 +394,7 @@ namespace {$namespace};
 use Psr\Container\ContainerInterface;
 use Psr\Container\NotFoundExceptionInterface;
 
-final class {$className} implements ContainerInterface
+final class {$className} implements ContainerInterface, \\Glueful\\Container\\RebindableContainer
 {
     /** Service ids whose live objects must be handed in via withRuntimeValues(). */
     public const RUNTIME_VALUE_IDS = {$runtimeIdsStr};
@@ -410,6 +410,22 @@ final class {$className} implements ContainerInterface
 
     /** @var array<string, callable> */
     private array \$runtimeFactories = [];
+
+    /** Definitions loaded AFTER construction (boot-time re-pins); they win over compiled ones. */
+    /** @var array<string, \\Glueful\\Container\\Definition\\DefinitionInterface> */
+    private array \$overrides = [];
+
+    /** @param array<string, \\Glueful\\Container\\Definition\\DefinitionInterface|callable|mixed> \$defs */
+    public function load(array \$defs): void
+    {
+        foreach (\$defs as \$id => \$d) {
+            \$this->overrides[\$id] = \$d instanceof \\Glueful\\Container\\Definition\\DefinitionInterface ? \$d
+                : (is_callable(\$d)
+                    ? new \\Glueful\\Container\\Definition\\FactoryDefinition(\$id, \$d)
+                    : new \\Glueful\\Container\\Definition\\ValueDefinition(\$id, \$d));
+            unset(\$this->singletons[\$id]); // a re-pin must not serve the stale compiled instance
+        }
+    }
 
     /** @param array<string, callable> \$factories */
     public function withRuntimeFactories(array \$factories): static
@@ -431,6 +447,9 @@ final class {$className} implements ContainerInterface
 
     public function has(string \$id): bool
     {
+        if (isset(\$this->overrides[\$id])) {
+            return true;
+        }
         switch (\$id) {
 {$hasCasesStr}
             default: return false;
@@ -441,6 +460,14 @@ final class {$className} implements ContainerInterface
     {
         if (isset(\$this->singletons[\$id])) {
             return \$this->singletons[\$id];
+        }
+        if (isset(\$this->overrides[\$id])) {
+            \$def = \$this->overrides[\$id];
+            \$val = \$def->resolve(\$this);
+            if (\$def->isShared()) {
+                \$this->singletons[\$id] = \$val;
+            }
+            return \$val;
         }
         switch (\$id) {
 {$getCasesStr}
@@ -499,11 +526,23 @@ PHP;
 
         $type = $parameter->getType();
         if ($type instanceof \ReflectionNamedType && !$type->isBuiltin()) {
-            return '$this->get(' . var_export($type->getName(), true) . ')';
+            $id = var_export($type->getName(), true);
+            // Mirror the runtime autowirer (ReflectionResolver): a typed dependency the container
+            // does not hold falls back to the parameter's default, then to null — decided at
+            // RUNTIME, because load() may add the id after compilation.
+            if ($parameter->isDefaultValueAvailable()) {
+                return '($this->has(' . $id . ') ? $this->get(' . $id . ') : '
+                    . $this->exportDefault($parameter) . ')';
+            }
+            if ($parameter->allowsNull()) {
+                return '($this->has(' . $id . ') ? $this->get(' . $id . ') : null)';
+            }
+
+            return '$this->get(' . $id . ')';
         }
 
         if ($parameter->isDefaultValueAvailable()) {
-            return $this->exportValue($parameter->getDefaultValue());
+            return $this->exportDefault($parameter);
         }
 
         if ($parameter->allowsNull()) {
@@ -519,6 +558,27 @@ PHP;
         );
 
         return '$this->fail(' . var_export($message, true) . ')';
+    }
+
+    /**
+     * A parameter default as code. Scalars, arrays and the exportable object kinds become
+     * literals; anything else (an object built in the initializer, `= new Foo()`) is evaluated
+     * at RUNTIME through reflection — the same value the runtime autowirer would hand over.
+     */
+    private function exportDefault(\ReflectionParameter $parameter): string
+    {
+        try {
+            return $this->exportValue($parameter->getDefaultValue());
+        } catch (\RuntimeException) {
+            $class = $parameter->getDeclaringClass()?->getName();
+            $function = $parameter->getDeclaringFunction()->getName();
+            $owner = $class !== null
+                ? '[' . var_export($class, true) . ', ' . var_export($function, true) . ']'
+                : var_export($function, true);
+
+            return '(new \\ReflectionParameter(' . $owner . ', ' . var_export($parameter->getName(), true)
+                . '))->getDefaultValue()';
+        }
     }
 
     private function exportValue(mixed $value): string

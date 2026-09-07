@@ -21,6 +21,15 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.82.1 — Alnasl (Patch, Released 2026-09-07)
+- **Boot-time re-pins reach the compiled container** — `Glueful\Container\RebindableContainer`
+  (implemented by the runtime `Container` and every compiled container) gives `load()` a home
+  that providers can guard on; loaded definitions win over compiled ones. Without it, 1.82.0's
+  working compiler made every `instanceof Container`-guarded re-pin silently no-op in production.
+- **Compiled autowiring mirrors the runtime autowirer** for optional (nullable/defaulted)
+  dependencies and for object defaults built in the initializer.
+- Notes: behaviour-restoring for apps that re-pin at boot; low risk.
+
 ### 1.82.0 — Alnasl (Minor, Released 2026-09-07)
 - **The compiled container works for real applications** — static factories compile to
   direct calls; closure/instance factories and live objects (the `ApplicationContext`) become

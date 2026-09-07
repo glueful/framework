@@ -8,7 +8,7 @@ use Glueful\Container\Definition\{DefinitionInterface, ValueDefinition, FactoryD
 use Glueful\Container\Exception\{ContainerException, NotFoundException};
 use Psr\Container\ContainerInterface as PsrContainer;
 
-final class Container implements PsrContainer
+final class Container implements RebindableContainer
 {
     /** @var array<string, DefinitionInterface> */
     private array $definitions = [];

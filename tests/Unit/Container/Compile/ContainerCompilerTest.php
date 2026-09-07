@@ -8,6 +8,8 @@ use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Container\Compile\ContainerCompiler;
 use Glueful\Container\Definition\FactoryDefinition;
 use Glueful\Container\Definition\ValueDefinition;
+use Glueful\Container\Autowire\AutowireDefinition;
+use Glueful\Container\RebindableContainer;
 use Glueful\Container\Exception\ContainerException;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
@@ -110,6 +112,76 @@ final class ContainerCompilerTest extends TestCase
         self::assertSame($c, $c->get(ContainerInterface::class));
     }
 
+    public function testRuntimeLoadOverridesACompiledDefinitionAndAddsNewOnes(): void
+    {
+        $c = $this->compiled([
+            CompilerFixtureProduct::class => new AutowireDefinition(CompilerFixtureProduct::class, CompilerFixtureProduct::class),
+        ]);
+
+        self::assertInstanceOf(RebindableContainer::class, $c, 'compiled containers accept runtime rebinds');
+
+        $override = new CompilerFixtureProduct($c);
+        $c->load([
+            CompilerFixtureProduct::class => new FactoryDefinition(
+                CompilerFixtureProduct::class,
+                static fn (ContainerInterface $container): object => $override,
+            ),
+            'late.value' => 'added at runtime',
+            'late.factory' => static fn (ContainerInterface $container): object => new \stdClass(),
+        ]);
+
+        self::assertSame($override, $c->get(CompilerFixtureProduct::class), 'a runtime rebind wins over the compiled definition');
+        self::assertTrue($c->has('late.value'));
+        self::assertSame('added at runtime', $c->get('late.value'));
+        self::assertSame($c->get('late.factory'), $c->get('late.factory'), 'runtime factories are shared by default');
+    }
+
+    public function testOptionalDependenciesAbsentFromTheContainerFallBackLikeTheRuntimeAutowirer(): void
+    {
+        $c = $this->compiled([
+            CompilerFixtureOptionalDeps::class => new AutowireDefinition(
+                CompilerFixtureOptionalDeps::class,
+                CompilerFixtureOptionalDeps::class,
+            ),
+        ]);
+
+        $made = $c->get(CompilerFixtureOptionalDeps::class);
+
+        self::assertNull($made->nullable, 'a nullable dependency the container lacks resolves to null');
+        self::assertNull($made->defaulted, 'a defaulted dependency the container lacks keeps its default');
+        self::assertSame('x', $made->scalar, 'scalar defaults are kept');
+    }
+
+    public function testAnOptionalDependencyAddedAtRuntimeIsPickedUp(): void
+    {
+        $c = $this->compiled([
+            CompilerFixtureOptionalDeps::class => new AutowireDefinition(
+                CompilerFixtureOptionalDeps::class,
+                CompilerFixtureOptionalDeps::class,
+                shared: false,
+            ),
+        ]);
+        $dep = new CompilerFixtureProduct($c);
+        $c->load([CompilerFixtureProduct::class => $dep]);
+
+        self::assertSame($dep, $c->get(CompilerFixtureOptionalDeps::class)->nullable);
+    }
+
+    public function testANonExportableObjectDefaultIsEvaluatedAtRuntime(): void
+    {
+        $c = $this->compiled([
+            CompilerFixtureObjectDefault::class => new AutowireDefinition(
+                CompilerFixtureObjectDefault::class,
+                CompilerFixtureObjectDefault::class,
+            ),
+        ]);
+
+        $made = $c->get(CompilerFixtureObjectDefault::class);
+
+        self::assertInstanceOf(CompilerFixtureNonExportable::class, $made->dep, 'the initializer runs at runtime');
+        self::assertSame(7, $made->dep->n);
+    }
+
     /** @param array<string, object> $definitions */
     private function compiled(array $definitions, bool $hydrate = true): object
     {
@@ -151,5 +223,30 @@ final class CompilerFixtureFactory
     public static function make(ContainerInterface $container): CompilerFixtureProduct
     {
         return new CompilerFixtureProduct($container);
+    }
+}
+
+final class CompilerFixtureOptionalDeps
+{
+    public function __construct(
+        public readonly ?CompilerFixtureProduct $nullable = null,
+        public readonly ?CompilerFixtureFactory $defaulted = null,
+        public readonly string $scalar = 'x',
+    ) {
+    }
+}
+
+final class CompilerFixtureNonExportable
+{
+    public function __construct(public readonly int $n = 7)
+    {
+    }
+}
+
+final class CompilerFixtureObjectDefault
+{
+    public function __construct(
+        public readonly CompilerFixtureNonExportable $dep = new CompilerFixtureNonExportable(),
+    ) {
     }
 }
