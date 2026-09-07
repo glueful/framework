@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.82.3] - 2026-09-07 — Alnasl
+
 ### Fixed
 - **`router.php` (the `php -S` quickstart) serves deep links under a mounted SPA.** For
   `/admin/setup` with `public/admin/index.html` present, PHP's built-in server resolves the
