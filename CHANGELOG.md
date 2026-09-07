@@ -6,6 +6,17 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+- **A mounted SPA's index.html gets a document CSP, not the static-asset one.**
+  `SpaMountController` applied `SecurityHeaders::defaultStaticAssetHeaders()` — whose
+  `style-src 'self'` forbids inline styles — to the HTML document too. A built front-end
+  injects style elements at runtime (component libraries apply their theme that way), so the
+  admin rendered with those styles stripped: a primary button with no background, on every
+  served admin in every environment. index.html now carries
+  `SecurityHeaders::defaultDocumentHeaders()` (`style-src 'self' 'unsafe-inline'`, `img-src`
+  with `data:`/`blob:`, scripts still self-only); assets keep the strict set. `serveFrontend()`
+  accepts a `csp` option to override the document policy per mount.
+
 ## [1.82.1] - 2026-09-07 — Alnasl
 
 ### Fixed
