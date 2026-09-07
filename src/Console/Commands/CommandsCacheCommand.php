@@ -6,6 +6,7 @@ namespace Glueful\Console\Commands;
 
 use Glueful\Console\BaseCommand;
 use Glueful\Container\Providers\ConsoleProvider;
+use Glueful\Container\Providers\TagCollector;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -61,25 +62,13 @@ HELP);
     {
         $output->writeln('<info>Generating command cache...</info>');
 
-        // Clear existing cache first
-        ConsoleProvider::clearCache();
+        // Clear every existing manifest first (including pre-1.81.2 shared locations)
+        ConsoleProvider::clearCache($this->getContext()->getBasePath());
 
-        // Force cache regeneration by getting commands in "production" mode
-        // We'll manually trigger the discovery and cache it
-        $provider = new \ReflectionClass(ConsoleProvider::class);
-        $discoverMethod = $provider->getMethod('discoverCommands');
-
-        $instance = $provider->newInstanceWithoutConstructor();
+        $provider = new ConsoleProvider(new TagCollector(), $this->getContext());
         /** @var array<string> $commands */
-        $commands = $discoverMethod->invoke($instance);
-
-        // Write cache manually
-        $getCachePath = $provider->getMethod('getCacheFilePath');
-        /** @var string $cachePath */
-        $cachePath = $getCachePath->invoke($instance);
-
-        $writeCache = $provider->getMethod('writeCache');
-        $writeCache->invoke($instance, $cachePath, $commands);
+        $commands = $provider->rebuildCache();
+        $cachePath = $provider->getCacheFilePath();
 
         $output->writeln(sprintf(
             '<info>Cached %d commands to:</info> %s',
@@ -101,14 +90,14 @@ HELP);
 
     private function clearCache(OutputInterface $output): int
     {
-        $location = ConsoleProvider::getCacheLocation();
+        $location = ConsoleProvider::getCacheLocation($this->getContext()->getBasePath());
 
         if ($location === null) {
             $output->writeln('<comment>No command cache exists.</comment>');
             return self::SUCCESS;
         }
 
-        if (ConsoleProvider::clearCache()) {
+        if (ConsoleProvider::clearCache($this->getContext()->getBasePath())) {
             $output->writeln('<info>Command cache cleared:</info> ' . $location);
             return self::SUCCESS;
         }
@@ -119,7 +108,7 @@ HELP);
 
     private function showStatus(OutputInterface $output): int
     {
-        $location = ConsoleProvider::getCacheLocation();
+        $location = ConsoleProvider::getCacheLocation($this->getContext()->getBasePath());
         $env = $_ENV['APP_ENV'] ?? $_SERVER['APP_ENV'] ?? getenv('APP_ENV') ?: 'development';
 
         $output->writeln('<info>Command Cache Status</info>');

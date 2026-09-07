@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Container\Providers;
 
 use Glueful\Container\Definition\DefinitionInterface;
+use Glueful\Support\Version;
 use Symfony\Component\Console\Attribute\AsCommand;
 use ReflectionClass;
 
@@ -48,11 +49,18 @@ final class ConsoleProvider extends BaseServiceProvider
         $isProduction = $this->isProduction();
         $cacheFile = $this->getCacheFilePath();
 
-        // Production: use cache if available
+        // Production: use the cache if it is present AND every entry still exists. A manifest
+        // written by an older framework (or, before 1.81.2, by another user on the same host)
+        // can name classes that are gone; trusting it fed phantom definitions into the
+        // container, failed compilation, and threw out of the console when the tagged commands
+        // were resolved. Any stale entry means rediscover and rewrite.
         if ($isProduction && file_exists($cacheFile)) {
             $cached = require $cacheFile;
             if (is_array($cached)) {
-                return $cached;
+                $valid = array_values(array_filter($cached, static fn ($c): bool => is_string($c) && class_exists($c)));
+                if ($valid !== [] && count($valid) === count($cached)) {
+                    return $valid;
+                }
             }
         }
 
@@ -168,18 +176,44 @@ final class ConsoleProvider extends BaseServiceProvider
     }
 
     /**
-     * Get the cache file path
+     * The manifest belongs to the APP (base path from the context), never to the framework
+     * package dir — which does not exist in a dist install — and never to a host-wide temp
+     * file shared across users, sites and framework versions.
      */
-    private function getCacheFilePath(): string
+    public function getCacheFilePath(): string
     {
-        // Use framework's storage/cache if available, otherwise sys_get_temp_dir
-        $storageCache = dirname(__DIR__, 3) . '/storage/cache';
+        return self::cacheFilePathFor($this->context->getBasePath());
+    }
 
-        if (is_dir($storageCache) && is_writable($storageCache)) {
-            return $storageCache . '/' . self::CACHE_FILE;
+    public static function cacheFilePathFor(?string $basePath): string
+    {
+        if ($basePath !== null) {
+            $storageCache = rtrim($basePath, '/') . '/storage/cache';
+            if (is_dir($storageCache) && is_writable($storageCache)) {
+                return $storageCache . '/' . self::CACHE_FILE;
+            }
         }
 
-        return sys_get_temp_dir() . '/' . self::CACHE_FILE;
+        return self::temporaryCachePath();
+    }
+
+    /** Per-user AND per-framework-version, so two sites (or two upgrades) never share one. */
+    private static function temporaryCachePath(): string
+    {
+        return sys_get_temp_dir() . '/glueful-commands-manifest-' . Version::VERSION . '-' . getmyuid() . '.php';
+    }
+
+    /**
+     * Discover from disk and (re)write the manifest. Used by `commands:cache`.
+     *
+     * @return array<string>
+     */
+    public function rebuildCache(): array
+    {
+        $commands = $this->discoverCommands();
+        $this->writeCache($this->getCacheFilePath(), $commands);
+
+        return $commands;
     }
 
     /**
@@ -199,21 +233,13 @@ final class ConsoleProvider extends BaseServiceProvider
     /**
      * Clear the command cache (called by commands:clear)
      */
-    public static function clearCache(): bool
+    public static function clearCache(?string $basePath = null): bool
     {
-        $storageCache = dirname(__DIR__, 3) . '/storage/cache/' . self::CACHE_FILE;
-        $tempCache = sys_get_temp_dir() . '/' . self::CACHE_FILE;
-
         $cleared = false;
-
-        if (file_exists($storageCache)) {
-            unlink($storageCache);
-            $cleared = true;
-        }
-
-        if (file_exists($tempCache)) {
-            unlink($tempCache);
-            $cleared = true;
+        foreach (self::candidateLocations($basePath) as $file) {
+            if (file_exists($file) && @unlink($file)) {
+                $cleared = true;
+            }
         }
 
         return $cleared;
@@ -222,19 +248,34 @@ final class ConsoleProvider extends BaseServiceProvider
     /**
      * Get cache file location (for status/debugging)
      */
-    public static function getCacheLocation(): ?string
+    public static function getCacheLocation(?string $basePath = null): ?string
     {
-        $storageCache = dirname(__DIR__, 3) . '/storage/cache/' . self::CACHE_FILE;
-        $tempCache = sys_get_temp_dir() . '/' . self::CACHE_FILE;
-
-        if (file_exists($storageCache)) {
-            return $storageCache;
-        }
-
-        if (file_exists($tempCache)) {
-            return $tempCache;
+        foreach (self::candidateLocations($basePath) as $file) {
+            if (file_exists($file)) {
+                return $file;
+            }
         }
 
         return null;
+    }
+
+    /**
+     * Every place a manifest may live: the app's storage/cache, the per-user temp file, and the
+     * two pre-1.81.2 locations (framework package dir, host-shared temp file) so `commands:clear`
+     * can retire a stale legacy manifest.
+     *
+     * @return list<string>
+     */
+    private static function candidateLocations(?string $basePath): array
+    {
+        $files = [];
+        if ($basePath !== null) {
+            $files[] = rtrim($basePath, '/') . '/storage/cache/' . self::CACHE_FILE;
+        }
+        $files[] = self::temporaryCachePath();
+        $files[] = dirname(__DIR__, 3) . '/storage/cache/' . self::CACHE_FILE;
+        $files[] = sys_get_temp_dir() . '/' . self::CACHE_FILE;
+
+        return array_values(array_unique($files));
     }
 }
