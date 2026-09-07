@@ -21,6 +21,16 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.81.2 — Alnair (Patch, Released 2026-09-07)
+- **Production command manifest is app-owned and validated** — the cached command list lived
+  in the framework package's own `storage/cache` (absent in a dist install), so every host
+  shared one `/tmp/glueful_commands_manifest.php` and trusted it verbatim. A manifest from an
+  older framework on the same host fed phantom command classes into every production boot:
+  compilation failed and resolving the tagged commands threw a 500 from the console. Now under
+  the app's `storage/cache` (per-user, per-version temp fallback), re-validated on load, and
+  rediscovered when stale; `commands:clear` retires the legacy locations.
+- Notes: behaviour-restoring; low risk. Surfaced on thallo.dev's VPS.
+
 ### 1.81.1 — Alnair (Patch, Released 2026-09-07)
 - **Cached providers get `register()`** — `discover()` returned straight after loading the
   extension cache, so `register()` only ran on live discovery and never in production (where

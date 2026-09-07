@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.81.2] - 2026-09-07 — Alnair
+
 ### Fixed
 - **The production command manifest is app-owned and validated**: `ConsoleProvider` cached the
   discovered command classes in the framework package's own `storage/cache` — which does not
