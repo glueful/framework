@@ -6,6 +6,7 @@ namespace Glueful\Container\Compile;
 
 use Glueful\Container\Definition\DefinitionInterface;
 use Glueful\Container\Definition\ValueDefinition;
+use Psr\Container\ContainerInterface;
 use Glueful\Container\Definition\FactoryDefinition;
 use Glueful\Container\Definition\TaggedIteratorDefinition;
 use Glueful\Container\Definition\AliasDefinition;
@@ -26,13 +27,26 @@ final class ContainerCompiler
         $getCases = [];
         $singletonInits = [];
         $unsupported = [];
+        $runtimeIds = [];
+        $runtimeFactoryIds = [];
 
         foreach ($definitions as $id => $definition) {
             $method = $this->methodName($id);
             $hasCases[] = '            case ' . var_export($id, true) . ': return true;';
 
             if ($definition instanceof ValueDefinition) {
-                $methods[] = $this->emitValue($id, $definition, $method);
+                $value = $definition->getValue();
+                if ($value instanceof ContainerInterface) {
+                    // The container's self-reference: in the compiled world that is $this.
+                    $methods[] = $this->emitSelfReference($method);
+                } elseif (is_object($value) && !$this->isExportable($value)) {
+                    // Live objects (ApplicationContext, …) cannot become code; they are handed
+                    // in after construction via withRuntimeValues() — see RUNTIME_VALUE_IDS.
+                    $runtimeIds[] = (string) $id;
+                    $methods[] = $this->emitRuntimeValue($id, $method);
+                } else {
+                    $methods[] = $this->emitValue($id, $definition, $method);
+                }
                 $getCases[] = $this->emitGetCase($id, $method, true);
                 $singletonInits[] = var_export($id, true) . ' => null';
                 continue;
@@ -60,7 +74,23 @@ final class ContainerCompiler
             }
 
             if ($definition instanceof FactoryDefinition) {
-                $unsupported[] = $id . ' (FactoryDefinition)';
+                $call = $this->staticFactoryCall($definition->getFactory());
+                if ($call === null) {
+                    // A closure / instance factory cannot become code; the live callable is
+                    // handed in after construction via withRuntimeFactories(). The service is
+                    // still served by the compiled container — the win is every autowired
+                    // service around it compiling to plain constructor calls.
+                    $runtimeFactoryIds[] = (string) $id;
+                    $missing = "Runtime factory '{$id}' was not provided — call withRuntimeFactories() "
+                        . 'on the compiled container';
+                    $call = '($this->runtimeFactories[' . var_export($id, true) . '] ?? $this->fail('
+                        . var_export($missing, true) . '))';
+                }
+                $methods[] = $this->emitFactory($id, $call, $method, $definition->isShared());
+                $getCases[] = $this->emitGetCase($id, $method, $definition->isShared());
+                if ($definition->isShared()) {
+                    $singletonInits[] = var_export($id, true) . ' => null';
+                }
                 continue;
             }
 
@@ -83,8 +113,107 @@ final class ContainerCompiler
             $singletons,
             $hasCases,
             $getCases,
-            $methods
+            $methods,
+            $runtimeIds,
+            $runtimeFactoryIds
         );
+    }
+
+    /**
+     * A factory compiles only when it is a static callable we can name in code.
+     * Returns the call expression (without arguments) or null.
+     *
+     * @param callable|string|array{0: mixed, 1: string} $factory
+     */
+    private function staticFactoryCall(mixed $factory): ?string
+    {
+        if (is_string($factory) && str_contains($factory, '::')) {
+            [$class, $method] = explode('::', $factory, 2);
+            return $this->staticCallIfValid($class, $method);
+        }
+        if (is_array($factory) && count($factory) === 2 && is_string($factory[0]) && is_string($factory[1])) {
+            return $this->staticCallIfValid($factory[0], $factory[1]);
+        }
+
+        return null; // Closure, invokable object, [$instance, 'method'] …
+    }
+
+    private function staticCallIfValid(string $class, string $method): ?string
+    {
+        $class = ltrim($class, '\\');
+        if (!class_exists($class) || !method_exists($class, $method)) {
+            return null;
+        }
+        if (!(new \ReflectionMethod($class, $method))->isStatic()) {
+            return null;
+        }
+
+        return '\\' . $class . '::' . $method;
+    }
+
+    private function emitFactory(string $id, string $call, string $method, bool $shared): string
+    {
+        $build = <<<PHP
+    private function {$method}(): mixed
+    {
+        return {$call}(\$this);
+    }
+PHP;
+        if ($shared) {
+            $idExport = var_export($id, true);
+            $build .= "\n\n    private function get_{$method}(): mixed\n" .
+                "    {\n" .
+                "        return \$this->singletons[{$idExport}] ??= \$this->{$method}();\n" .
+                "    }";
+        }
+
+        return $build;
+    }
+
+    private function emitSelfReference(string $method): string
+    {
+        return <<<PHP
+    private function {$method}(): mixed
+    {
+        return \$this;
+    }
+
+    private function get_{$method}(): mixed
+    {
+        return \$this;
+    }
+PHP;
+    }
+
+    private function emitRuntimeValue(string $id, string $method): string
+    {
+        $idExport = var_export($id, true);
+        $message = var_export(
+            "Runtime value '{$id}' was not provided — call withRuntimeValues() on the compiled container",
+            true
+        );
+
+        return <<<PHP
+    private function {$method}(): mixed
+    {
+        return \$this->runtimeValues[{$idExport}] ?? \$this->fail({$message});
+    }
+
+    private function get_{$method}(): mixed
+    {
+        return \$this->{$method}();
+    }
+PHP;
+    }
+
+    private function isExportable(object $value): bool
+    {
+        try {
+            $this->exportValue($value);
+            return true;
+        } catch (\RuntimeException) {
+            return false;
+        }
     }
 
     /**
@@ -239,6 +368,8 @@ PHP;
      * @param array<string> $hasCases
      * @param array<string> $getCases
      * @param array<string> $methods
+     * @param array<string> $runtimeIds
+     * @param array<string> $runtimeFactoryIds
      */
     private function generateClassCode(
         string $namespace,
@@ -246,11 +377,15 @@ PHP;
         string $singletons,
         array $hasCases,
         array $getCases,
-        array $methods
+        array $methods,
+        array $runtimeIds = [],
+        array $runtimeFactoryIds = []
     ): string {
         $hasCasesStr = implode("\n", $hasCases);
         $getCasesStr = implode("\n", $getCases);
         $methodsStr = implode("\n\n", $methods);
+        $runtimeIdsStr = var_export(array_values($runtimeIds), true);
+        $runtimeFactoryIdsStr = var_export(array_values($runtimeFactoryIds), true);
 
         return <<<PHP
 <?php
@@ -261,8 +396,38 @@ use Psr\Container\NotFoundExceptionInterface;
 
 final class {$className} implements ContainerInterface
 {
+    /** Service ids whose live objects must be handed in via withRuntimeValues(). */
+    public const RUNTIME_VALUE_IDS = {$runtimeIdsStr};
+
+    /** Service ids whose factories are closures handed in via withRuntimeFactories(). */
+    public const RUNTIME_FACTORY_IDS = {$runtimeFactoryIdsStr};
+
     /** @var array<string, mixed> */
     private array \$singletons = [{$singletons}];
+
+    /** @var array<string, mixed> */
+    private array \$runtimeValues = [];
+
+    /** @var array<string, callable> */
+    private array \$runtimeFactories = [];
+
+    /** @param array<string, callable> \$factories */
+    public function withRuntimeFactories(array \$factories): static
+    {
+        foreach (\$factories as \$id => \$factory) {
+            \$this->runtimeFactories[\$id] = \$factory;
+        }
+        return \$this;
+    }
+
+    /** @param array<string, mixed> \$values */
+    public function withRuntimeValues(array \$values): static
+    {
+        foreach (\$values as \$id => \$value) {
+            \$this->runtimeValues[\$id] = \$value;
+        }
+        return \$this;
+    }
 
     public function has(string \$id): bool
     {

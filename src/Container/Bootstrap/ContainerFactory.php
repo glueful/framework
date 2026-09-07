@@ -64,36 +64,37 @@ final class ContainerFactory
         $container->load([ContainerInterface::class => new ValueDefinition(ContainerInterface::class, $container)]);
 
         if ($prod) {
-            // Prefer precompiled container dumped by CLI
-            $precompiled = self::loadPrecompiledIfAvailable();
+            $defsRef = (new \ReflectionClass($container))->getProperty('definitions');
+            /** @var array<string, mixed> $normalized */
+            $normalized = $defsRef->getValue($container);
+
+            // Prefer a container precompiled by `container:compile` (under the APP's storage).
+            $precompiled = self::loadPrecompiledIfAvailable($context);
             if ($precompiled !== null) {
-                return $precompiled;
+                return self::hydrate($precompiled, $normalized);
             }
 
             try {
-                $defsRef = (new \ReflectionClass($container))->getProperty('definitions');
-                /** @var array<string, mixed> $normalized */
-                $normalized = $defsRef->getValue($container);
-
                 $compiler = new ContainerCompiler();
                 $php = $compiler->compile($normalized, 'CompiledContainer', 'Glueful\\Container\\Compiled');
-                $cacheFile = sys_get_temp_dir() . '/glueful_compiled_container.php';
-                file_put_contents($cacheFile, $php);
-                // Emit a simple services map artifact alongside compiled container
+                $artifactDir = self::compiledArtifactDir($context);
+                $cacheFile = $artifactDir . '/CompiledContainer.runtime.php';
+                file_put_contents($cacheFile, $php, LOCK_EX);
+                // Emit a simple services map artifact alongside the compiled container
                 $map = [];
                 foreach ($normalized as $id => $def) {
                     $type = is_object($def) ? get_class($def) : gettype($def);
                     $alias = $def instanceof \Glueful\Container\Definition\AliasDefinition ? $def->getTarget() : '';
                     $map[] = ['id' => (string) $id, 'type' => $type, 'alias_of' => $alias];
                 }
-                file_put_contents(sys_get_temp_dir() . '/glueful_services_map.json', json_encode($map));
+                file_put_contents($artifactDir . '/services_map.json', json_encode($map), LOCK_EX);
                 require_once $cacheFile;
 
                 $compiledClass = '\\Glueful\\Container\\Compiled\\CompiledContainer';
                 if (class_exists($compiledClass)) {
                     /** @var ContainerInterface $compiled */
                     $compiled = new $compiledClass();
-                    return $compiled;
+                    return self::hydrate($compiled, $normalized);
                 }
             } catch (\Throwable $e) {
                 // Best-effort compilation: fall back to the runtime container if a definition
@@ -127,10 +128,71 @@ final class ContainerFactory
         return array_replace($coreDefs, $extDefs);
     }
 
-    private static function loadPrecompiledIfAvailable(): ?ContainerInterface
+    /**
+     * Hand the live objects the compiler could not express as code (ApplicationContext, …) to
+     * the compiled container. A container precompiled before RUNTIME_VALUE_IDS existed is
+     * returned untouched.
+     *
+     * @param array<string, mixed> $definitions
+     */
+    private static function hydrate(ContainerInterface $compiled, array $definitions): ContainerInterface
     {
-        $root = dirname(__DIR__, 3);
-        $primary = $root . '/storage/cache/container/CompiledContainer.php';
+        $class = get_class($compiled);
+        if (!defined($class . '::RUNTIME_VALUE_IDS') || !method_exists($compiled, 'withRuntimeValues')) {
+            return $compiled;
+        }
+        $values = [];
+        /** @var list<string> $ids */
+        $ids = constant(get_class($compiled) . '::RUNTIME_VALUE_IDS');
+        foreach ($ids as $id) {
+            $def = $definitions[$id] ?? null;
+            if ($def instanceof \Glueful\Container\Definition\ValueDefinition) {
+                $values[$id] = $def->getValue();
+            }
+        }
+        $compiled->withRuntimeValues($values);
+
+        if (defined($class . '::RUNTIME_FACTORY_IDS') && method_exists($compiled, 'withRuntimeFactories')) {
+            $factories = [];
+            /** @var list<string> $factoryIds */
+            $factoryIds = constant(get_class($compiled) . '::RUNTIME_FACTORY_IDS');
+            foreach ($factoryIds as $id) {
+                $def = $definitions[$id] ?? null;
+                if ($def instanceof \Glueful\Container\Definition\FactoryDefinition) {
+                    $factories[$id] = $def->getFactory();
+                }
+            }
+            $compiled->withRuntimeFactories($factories);
+        }
+
+        return $compiled;
+    }
+
+    /**
+     * Compiled artifacts belong to the APP: <base>/storage/cache/container. Never the framework
+     * package dir (absent in a dist install) and never a host-shared temp file — a per-user,
+     * per-version temp dir is the only fallback.
+     */
+    private static function compiledArtifactDir(ApplicationContext $context): string
+    {
+        $dir = rtrim($context->getBasePath(), '/') . '/storage/cache/container';
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+        if (is_dir($dir) && is_writable($dir)) {
+            return $dir;
+        }
+        $fallback = sys_get_temp_dir() . '/glueful-container-' . \Glueful\Support\Version::VERSION . '-' . getmyuid();
+        if (!is_dir($fallback)) {
+            @mkdir($fallback, 0700, true);
+        }
+
+        return $fallback;
+    }
+
+    private static function loadPrecompiledIfAvailable(ApplicationContext $context): ?ContainerInterface
+    {
+        $primary = rtrim($context->getBasePath(), '/') . '/storage/cache/container/CompiledContainer.php';
 
         if (!is_file($primary)) {
             return null;

@@ -25,4 +25,10 @@ final class FactoryDefinition implements DefinitionInterface
     {
         return $this->shared;
     }
+
+    /** @return callable|string|array{0: mixed, 1: string} */
+    public function getFactory(): mixed
+    {
+        return $this->factory;
+    }
 }

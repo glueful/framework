@@ -6,6 +6,32 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Added
+- **The compiled container works for real applications.** `ContainerCompiler` now emits static
+  factories (`'Class::method'` / `[Class::class, 'method']`) as direct calls, hands closure and
+  instance factories in after construction (`RUNTIME_FACTORY_IDS` / `withRuntimeFactories()`)
+  instead of refusing them, and does the same for live objects it cannot express as code such as
+  the `ApplicationContext` (`RUNTIME_VALUE_IDS` / `withRuntimeValues()`); the container
+  self-reference compiles to `$this`. `ContainerFactory` hydrates both on every production boot
+  and for a precompiled container. Previously every production boot logged
+  `[Container][WARNING] container compilation failed` and ran the runtime container — the
+  framework's own 86 core factories were all "unsupported". The compiled artifact now lives in
+  the APP's `storage/cache/container` (a per-user, per-version temp dir only as fallback), not
+  the framework package dir or a host-shared `/tmp` file. `container:compile`'s precompiled
+  output is read from the same app path.
+- `InstallState::isInstalled()` — first run is complete once `APP_KEY`, `JWT_KEY` and
+  `TOKEN_SALT` are all present in `.env`.
+
+### Changed
+- **A never-installed production checkout boots quietly and bootstraps itself.** Until the
+  security keys exist, production skips the boot-time security validation (every warning would
+  be about state the installer is about to create; `doctor` reports the missing keys) and
+  extension discovery resolves live ONCE and writes the extension cache instead of failing
+  with "Extension cache missing in production". Once installed, both behave as before: a
+  missing cache is a deploy mistake and fails loudly. Apps that copy a production-mode
+  `.env.example` (Thallo, and any api-skeleton app that sets `APP_ENV=production` before
+  `php glueful install`) no longer see a wall of warnings and a 500 on their first command.
+
 ## [1.81.2] - 2026-09-07 — Alnair
 
 ### Fixed

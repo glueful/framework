@@ -79,14 +79,20 @@ final class ExtensionManager
             return;
         }
 
-        // Production must boot from a compiled manifest — never resolve live.
-        if ($this->isProduction()) {
+        // Production must boot from a compiled manifest — never resolve live — EXCEPT on first
+        // run: a checkout that has never been installed (no security keys yet) cannot have a
+        // cache, and the command that builds one needs a booted framework. Resolve live once
+        // and write the cache; from then on a missing cache is a deploy mistake.
+        $production = $this->isProduction();
+        $firstRun = $production
+            && !(new \Glueful\Installer\InstallState(base_path($this->getContext())))->isInstalled();
+        if ($production && !$firstRun) {
             throw new \RuntimeException(
                 'Extension cache missing in production. Run: php glueful extensions:cache'
             );
         }
 
-        // Development: resolve live via the shared resolver.
+        // Development (or production first run): resolve live via the shared resolver.
         $this->loadAllProviders();
 
         // Sort providers by priority and dependencies
@@ -94,6 +100,10 @@ final class ExtensionManager
 
         // Register all providers
         $this->registerProviders();
+
+        if ($firstRun) {
+            $this->saveToCache();
+        }
     }
 
     /**

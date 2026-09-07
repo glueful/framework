@@ -24,6 +24,26 @@ final class InstallState
         return is_file($this->basePath . '/.env');
     }
 
+    /**
+     * First run is complete once the installer has written all three security keys. Boot uses
+     * this to tell "never installed" (quiet, self-bootstrapping) from "installed but broken"
+     * (fail loudly): a production checkout without keys has not been through provision yet.
+     */
+    public function isInstalled(): bool
+    {
+        if (!$this->hasEnv()) {
+            return false;
+        }
+        $env = new EnvWriter($this->basePath . '/.env');
+        foreach (['APP_KEY', 'JWT_KEY', 'TOKEN_SALT'] as $key) {
+            if (($env->get($key) ?? '') === '') {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public function isDatabaseConfigured(): bool
     {
         $env = new EnvWriter($this->basePath . '/.env');
