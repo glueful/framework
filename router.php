@@ -17,6 +17,19 @@ $uri = urldecode(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?? '/');
 // The document root is set by -t flag (DOCUMENT_ROOT in $_SERVER)
 $documentRoot = $_SERVER['DOCUMENT_ROOT'] ?? getcwd();
 
+// Present the front controller the way nginx/Apache do. For a deep link under a mounted SPA
+// (public/admin/index.html + /admin/setup) the built-in server resolves the DIRECTORY INDEX:
+// SCRIPT_NAME=/admin/index.html, PATH_INFO=/setup. Symfony's Request then infers '/admin' as
+// the base path and strips it, so the application router sees '/setup' and the deep link 404s
+// locally while real web servers (SCRIPT_NAME=/index.php) serve it. Normalising these
+// variables makes the built-in server indistinguishable from a real one for the app.
+$presentFrontController = static function (string $documentRoot): void {
+    $_SERVER['SCRIPT_NAME'] = '/index.php';
+    $_SERVER['PHP_SELF'] = '/index.php';
+    $_SERVER['SCRIPT_FILENAME'] = $documentRoot . '/index.php';
+    unset($_SERVER['PATH_INFO'], $_SERVER['ORIG_PATH_INFO']);
+};
+
 // Check if the requested file exists as a static file
 $staticFile = $documentRoot . $uri;
 
@@ -26,6 +39,7 @@ if ($uri !== '/' && is_file($staticFile)) {
 
     // Don't serve PHP files as static - route them through index.php
     if (strtolower($extension) === 'php') {
+        $presentFrontController($documentRoot);
         require $documentRoot . '/index.php';
         return;
     }
@@ -35,4 +49,5 @@ if ($uri !== '/' && is_file($staticFile)) {
 }
 
 // Route everything else through index.php
+$presentFrontController($documentRoot);
 require $documentRoot . '/index.php';

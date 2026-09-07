@@ -6,6 +6,18 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.82.3] - 2026-09-07 — Alnasl
+
+### Fixed
+- **`router.php` (the `php -S` quickstart) serves deep links under a mounted SPA.** For
+  `/admin/setup` with `public/admin/index.html` present, PHP's built-in server resolves the
+  DIRECTORY INDEX (`SCRIPT_NAME=/admin/index.html`, `PATH_INFO=/setup`); Symfony's Request then
+  infers `/admin` as a base path and strips it, so the application router saw `/setup`, the
+  render catch-all answered, and every admin deep link (or reload) 404'd locally — while
+  nginx/Apache served them. The router script now presents the front controller the way a real
+  web server does (`SCRIPT_NAME`/`PHP_SELF`/`SCRIPT_FILENAME` = `index.php`). Pinned by an
+  end-to-end test that spawns the built-in server.
+
 ## [1.82.2] - 2026-09-07 — Alnasl
 
 ### Fixed

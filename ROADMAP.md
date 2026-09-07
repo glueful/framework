@@ -21,6 +21,13 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.82.3 — Alnasl (Patch, Released 2026-09-07)
+- **`router.php` serves deep links under a mounted SPA** — the built-in server resolved
+  `/admin/setup` to the directory index `admin/index.html` with `PATH_INFO=/setup`, and
+  Symfony stripped `/admin` as a base path; the script now presents the front controller like
+  nginx/Apache do (`SCRIPT_NAME`/`PHP_SELF`/`SCRIPT_FILENAME` = `index.php`).
+- Notes: local-development only (`php -S`); low risk.
+
 ### 1.82.2 — Alnasl (Patch, Released 2026-09-07)
 - **Mounted SPA documents get a document CSP** — `SpaMountController` applied the static-asset
   header set (`style-src 'self'`) to index.html, stripping every runtime-injected style from a
