@@ -21,6 +21,19 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.82.0 — Alnasl (Minor, Released 2026-09-07)
+- **The compiled container works for real applications** — static factories compile to
+  direct calls; closure/instance factories and live objects (the `ApplicationContext`) become
+  runtime-injected slots hydrated by `ContainerFactory`; the self-reference compiles to
+  `$this`. Every production boot used to log a compile failure and run the runtime container.
+  Artifacts move to the app's `storage/cache/container` (never the framework dir or `/tmp`).
+- **Quiet, self-bootstrapping first run** — `InstallState::isInstalled()` (all three security
+  keys present). Until then, production skips boot-time security validation and extension
+  discovery resolves live once and writes the cache; installed hosts are unchanged.
+- **`FORCE_HTTPS` recommendation** no longer fires when unset in production (unset = enabled).
+- Notes: minor for the behaviour change on never-installed production checkouts and the new
+  compiled-container plumbing; installed hosts see only the compiled container engaging.
+
 ### 1.81.2 — Alnair (Patch, Released 2026-09-07)
 - **Production command manifest is app-owned and validated** — the cached command list lived
   in the framework package's own `storage/cache` (absent in a dist install), so every host

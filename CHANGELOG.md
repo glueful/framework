@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.82.0] - 2026-09-07 — Alnasl
+
 ### Added
 - **The compiled container works for real applications.** `ContainerCompiler` now emits static
   factories (`'Class::method'` / `[Class::class, 'method']`) as direct calls, hands closure and
@@ -36,6 +38,18 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   missing cache is a deploy mistake and fails loudly. Apps that copy a production-mode
   `.env.example` (Thallo, and any api-skeleton app that sets `APP_ENV=production` before
   `php glueful install`) no longer see a wall of warnings and a 500 on their first command.
+
+### Upgrade Notes
+- **Production now actually runs the compiled container.** If a service misbehaves only in
+  production after this update, `APP_DEBUG=true` (or `APP_ENV` other than production) restores
+  the runtime container for comparison; please report the difference. The compiled artifact
+  and services map now live in `<app>/storage/cache/container/` — delete that directory to
+  force a fresh compile; the old `/tmp/glueful_compiled_container.php` is no longer read.
+- **`container:compile` output is read from `<app>/storage/cache/container/CompiledContainer.php`**
+  (the command's default output dir); a precompiled container built before 1.82.0 is still
+  loaded but gets no runtime values — recompile it once.
+- No change for installed hosts: security validation and the mandatory extension cache behave
+  exactly as before once `APP_KEY`, `JWT_KEY` and `TOKEN_SALT` exist.
 
 ## [1.81.2] - 2026-09-07 — Alnair
 
