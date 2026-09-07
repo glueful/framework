@@ -6,6 +6,51 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.82.0] - 2026-09-07 — Alnasl
+
+### Added
+- **The compiled container works for real applications.** `ContainerCompiler` now emits static
+  factories (`'Class::method'` / `[Class::class, 'method']`) as direct calls, hands closure and
+  instance factories in after construction (`RUNTIME_FACTORY_IDS` / `withRuntimeFactories()`)
+  instead of refusing them, and does the same for live objects it cannot express as code such as
+  the `ApplicationContext` (`RUNTIME_VALUE_IDS` / `withRuntimeValues()`); the container
+  self-reference compiles to `$this`. `ContainerFactory` hydrates both on every production boot
+  and for a precompiled container. Previously every production boot logged
+  `[Container][WARNING] container compilation failed` and ran the runtime container — the
+  framework's own 86 core factories were all "unsupported". The compiled artifact now lives in
+  the APP's `storage/cache/container` (a per-user, per-version temp dir only as fallback), not
+  the framework package dir or a host-shared `/tmp` file. `container:compile`'s precompiled
+  output is read from the same app path.
+- `InstallState::isInstalled()` — first run is complete once `APP_KEY`, `JWT_KEY` and
+  `TOKEN_SALT` are all present in `.env`.
+
+### Fixed
+- **"FORCE_HTTPS not enabled" no longer fires on correctly configured production hosts**: the
+  boot-time recommendation read the raw variable, but in production an unset `FORCE_HTTPS`
+  already means enabled (`config/app.php`). Only an explicit opt-out is flagged now.
+
+### Changed
+- **A never-installed production checkout boots quietly and bootstraps itself.** Until the
+  security keys exist, production skips the boot-time security validation (every warning would
+  be about state the installer is about to create; `doctor` reports the missing keys) and
+  extension discovery resolves live ONCE and writes the extension cache instead of failing
+  with "Extension cache missing in production". Once installed, both behave as before: a
+  missing cache is a deploy mistake and fails loudly. Apps that copy a production-mode
+  `.env.example` (Thallo, and any api-skeleton app that sets `APP_ENV=production` before
+  `php glueful install`) no longer see a wall of warnings and a 500 on their first command.
+
+### Upgrade Notes
+- **Production now actually runs the compiled container.** If a service misbehaves only in
+  production after this update, `APP_DEBUG=true` (or `APP_ENV` other than production) restores
+  the runtime container for comparison; please report the difference. The compiled artifact
+  and services map now live in `<app>/storage/cache/container/` — delete that directory to
+  force a fresh compile; the old `/tmp/glueful_compiled_container.php` is no longer read.
+- **`container:compile` output is read from `<app>/storage/cache/container/CompiledContainer.php`**
+  (the command's default output dir); a precompiled container built before 1.82.0 is still
+  loaded but gets no runtime values — recompile it once.
+- No change for installed hosts: security validation and the mandatory extension cache behave
+  exactly as before once `APP_KEY`, `JWT_KEY` and `TOKEN_SALT` exist.
+
 ## [1.81.2] - 2026-09-07 — Alnair
 
 ### Fixed

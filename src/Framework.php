@@ -7,6 +7,7 @@ namespace Glueful;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Bootstrap\ConfigurationLoader;
 use Glueful\Bootstrap\BootProfiler;
+use Glueful\Installer\InstallState;
 use Glueful\Bootstrap\RequestLifecycle;
 use Psr\Container\ContainerInterface;
 use Glueful\Container\Support\LazyInitializer;
@@ -180,8 +181,10 @@ class Framework
             $_SERVER['DOTENV_LOADED'] = '1';
         }
 
-        // Production security validation
-        if ($this->environment === 'production') {
+        // Production security validation — skipped while first run is pending (no security
+        // keys yet): every warning would be about state the installer is about to create, and
+        // `doctor` reports the missing keys explicitly.
+        if ($this->environment === 'production' && (new InstallState($this->basePath))->isInstalled()) {
             $validation = SecurityManager::validateProductionEnvironment();
             try {
                 if (

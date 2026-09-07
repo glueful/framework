@@ -20,4 +20,20 @@ final class InstallStateTest extends TestCase
 
         @rmdir($dir);
     }
+    public function testIsInstalledMeansAllThreeSecurityKeysArePresent(): void
+    {
+        $dir = sys_get_temp_dir() . '/installstate_' . uniqid();
+        mkdir($dir, 0775, true);
+
+        self::assertFalse((new InstallState($dir))->isInstalled(), 'no .env => not installed');
+
+        file_put_contents($dir . '/.env', "APP_KEY=abc\nJWT_KEY=\nTOKEN_SALT=\n");
+        self::assertFalse((new InstallState($dir))->isInstalled(), 'a missing key => first run still pending');
+
+        file_put_contents($dir . '/.env', "APP_KEY=abc\nJWT_KEY=def\nTOKEN_SALT=ghi\n");
+        self::assertTrue((new InstallState($dir))->isInstalled());
+
+        @unlink($dir . '/.env');
+        @rmdir($dir);
+    }
 }
