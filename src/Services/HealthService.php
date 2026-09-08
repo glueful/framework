@@ -59,8 +59,9 @@ class HealthService
     {
         if (self::$instance === null) {
             self::$instance = new self(null, null, $context);
-        } elseif ($context !== null && self::$instance->context === null) {
-            // Context provided but instance was created without it - recreate with proper context
+        } elseif ($context !== null && self::$instance->context !== $context) {
+            // A different (or no) context built the instance — recreate so base paths and
+            // connections belong to the caller's application, not a stale one.
             self::$instance = new self(null, null, $context);
         }
 
@@ -275,7 +276,7 @@ class HealthService
     {
         $instance = self::getInstance($context);
         $issues = [];
-        $warnings = [];
+        $recommendations = [];
 
         // Critical configuration checks
         if (env('JWT_KEY') === null || env('JWT_KEY') === '' || env('JWT_KEY') === 'your-secure-jwt-key-here') {
@@ -301,32 +302,29 @@ class HealthService
                 $issues[] = "Production: $warning";
             }
 
-            // Convert production recommendations to health check warnings
+            // Recommendations are ADVISORY: they ride along under their own key and never
+            // degrade the status — a host that deliberately runs without a CSP is not unhealthy,
+            // and health status is what monitors alert on.
             foreach ($prodValidation['recommendations'] as $recommendation) {
-                $warnings[] = "Production: $recommendation";
+                $recommendations[] = "Production: $recommendation";
             }
         }
+
+        $advice = $recommendations !== [] ? ['recommendations' => $recommendations] : [];
 
         if ($issues !== []) {
             return [
                 'status' => 'error',
                 'message' => 'Critical configuration issues detected',
                 'issues' => $issues,
-                'warnings' => $warnings
-            ];
-        } elseif ($warnings !== []) {
-            return [
-                'status' => 'warning',
-                'message' => 'Configuration warnings detected',
-                'warnings' => $warnings
-            ];
-        } else {
-            return [
-                'status' => 'ok',
-                'message' => 'Configuration is valid',
-                'environment' => env('APP_ENV', 'unknown')
-            ];
+            ] + $advice;
         }
+
+        return [
+            'status' => 'ok',
+            'message' => 'Configuration is valid',
+            'environment' => env('APP_ENV', 'unknown')
+        ] + $advice;
     }
 
     /**
@@ -456,6 +454,13 @@ class HealthService
 
         if (isset($healthResult['warnings'])) {
             $details = array_merge($details, array_map(fn($w) => "Warning: $w", $healthResult['warnings']));
+        }
+
+        if (isset($healthResult['recommendations'])) {
+            $details = array_merge(
+                $details,
+                array_map(fn($r) => "Recommendation: $r", $healthResult['recommendations'])
+            );
         }
 
         if (isset($healthResult['suggestion'])) {
