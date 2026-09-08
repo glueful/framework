@@ -13,15 +13,15 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.82.3';
+    public const VERSION = '1.83.0';
 
 
     /** Release code name */
-    public const NAME = 'Alnasl';
+    public const NAME = 'Alnilam';
 
 
     /** Release date */
-    public const RELEASE_DATE = '2026-09-07';
+    public const RELEASE_DATE = '2026-09-08';
 
     /** Minimum required PHP version */
     public const MIN_PHP_VERSION = '8.3.0';

@@ -21,6 +21,18 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.83.0 — Alnilam (Minor, Released 2026-09-08)
+- **`CSP_HEADER` is honoured** — sent verbatim as `Content-Security-Policy` from the
+  `Application::handle()` chokepoint on every response that does not already carry a policy;
+  mounted SPA documents and explicit controller headers keep precedence. The variable had
+  shipped in every `.env.example` and been recommended at production boot without being read.
+- **`CSP_REPORT_ONLY=true`** sends the same value as `Content-Security-Policy-Report-Only` so
+  operators can audit before enforcing. No nonces; HSTS/CORP/COOP untouched.
+- **Honest production recommendation** — the boot message now says what an empty value means
+  and how to fill it.
+- Notes: minor for the new env var; behaviour changes only for hosts that already had a
+  non-empty `CSP_HEADER` (previously ignored, now sent). Empty remains a no-op.
+
 ### 1.82.3 — Alnasl (Patch, Released 2026-09-07)
 - **`router.php` serves deep links under a mounted SPA** — the built-in server resolved
   `/admin/setup` to the directory index `admin/index.html` with `PATH_INFO=/setup`, and
