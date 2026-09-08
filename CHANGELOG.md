@@ -6,6 +6,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+- **Production recommendations are logged once per boot cache, not once per request.**
+  PHP-FPM boots the framework per request, so every applicable `[security] RECOMMENDATION`
+  (e.g. an empty `CSP_HEADER`) landed in the error log on every hit. `RecommendationLog` keeps
+  a marker under the app's `storage/cache`: the same set stays silent until it changes or the
+  cache is cleared; an empty set drops the marker so a regression is logged again. Warnings
+  keep their per-request logging.
+
 ## [1.83.0] - 2026-09-08 — Alnilam
 
 ### Upgrade Notes

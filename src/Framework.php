@@ -23,6 +23,7 @@ use Glueful\Database\DevelopmentQueryMonitor;
 use Glueful\Exceptions\ExceptionHandler;
 use Glueful\Events\QueueContextHolder;
 use Glueful\Helpers\Utils;
+use Glueful\Security\RecommendationLog;
 use Glueful\Security\SecurityManager;
 use Glueful\Support\SensitiveParamRedactor;
 use Psr\Log\LoggerInterface;
@@ -195,14 +196,11 @@ class Framework
                         error_log('[security] WARNING: ' . $warning);
                     }
                 }
-                if (
-                    isset($validation['recommendations']) && is_array($validation['recommendations']) &&
-                    count($validation['recommendations']) > 0
-                ) {
-                    foreach ($validation['recommendations'] as $rec) {
-                        error_log('[security] RECOMMENDATION: ' . $rec);
-                    }
-                }
+                // Recommendations are advisory: once per boot cache, not once per request.
+                $recommendations = isset($validation['recommendations']) && is_array($validation['recommendations'])
+                    ? array_values(array_filter($validation['recommendations'], 'is_string'))
+                    : [];
+                (new RecommendationLog($this->basePath . '/storage/cache'))->logOnce($recommendations);
             } catch (\Throwable) {
                 // best-effort logging only
             }
