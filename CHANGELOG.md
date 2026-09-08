@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.83.2] - 2026-09-08 — Alnilam
+
 ### Fixed
 - **The Installer publishes freshly written database credentials to the running process.** A
   fresh `create-project` boots with the sample's placeholder credentials and the operator types
