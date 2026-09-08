@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.83.1] - 2026-09-08 — Alnilam
+
 ### Fixed
 - **Production recommendations are logged once per boot cache, not once per request.**
   PHP-FPM boots the framework per request, so every applicable `[security] RECOMMENDATION`
