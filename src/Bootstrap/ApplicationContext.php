@@ -102,6 +102,22 @@ final class ApplicationContext
         $this->booted = true;
     }
 
+    /**
+     * Drop the cached values for one config name (e.g. 'database') so the next read reloads the
+     * file — and therefore the env() values it reads — from the CURRENT environment. For code
+     * that rewrites `.env` after boot (the Installer publishing freshly typed database
+     * credentials); overrideConfig() is boot-only and cannot serve that case.
+     */
+    public function forgetConfig(string $configName): void
+    {
+        unset($this->loadedConfigs[$configName]);
+        foreach (array_keys($this->configCache) as $key) {
+            if ($key === $configName || str_starts_with($key, $configName . '.')) {
+                unset($this->configCache[$key]);
+            }
+        }
+    }
+
     public function getConfig(string $key, mixed $default = null): mixed
     {
         if (array_key_exists($key, $this->configCache)) {

@@ -6,6 +6,19 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.83.2] - 2026-09-08 — Alnilam
+
+### Fixed
+- **The Installer publishes freshly written database credentials to the running process.** A
+  fresh `create-project` boots with the sample's placeholder credentials and the operator types
+  real ones at the provision prompt (or passes `--db-*`). The Installer wrote them to `.env` and
+  migrated over an injected connection, but any migration that opens its OWN connection — pack
+  permission seeds, Aegis's role seed — still read the boot-time placeholders and failed with
+  "role your_database_user does not exist". After writing credentials the Installer now sets
+  them on `$_ENV`/`$_SERVER`/`putenv` and drops the context's cached `database` config
+  (new `ApplicationContext::forgetConfig()`), so every later connection in that process sees the
+  real database. No change when `.env` already held real credentials.
+
 ## [1.83.1] - 2026-09-08 — Alnilam
 
 ### Fixed

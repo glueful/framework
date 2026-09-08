@@ -70,7 +70,14 @@ final class Installer
             if ($options->database->engine === 'sqlite') {
                 $this->ensureSqliteFile($options->database->database);
             }
-            $env->setMany($options->database->toEnvPairs());
+            $pairs = $options->database->toEnvPairs();
+            $env->setMany($pairs);
+            // The process booted with whatever `.env` held before (a fresh create-project: the
+            // sample's placeholders). Migrations receive the injected connection below, but any
+            // that open their OWN connection (pack permission seeds, Aegis's role seed) read the
+            // live environment and cached config — publish the credentials just written so they
+            // see the real database, not "role your_database_user does not exist".
+            $this->publishEnvironment($pairs);
             $migrationConnection = new Connection($options->database->toConnectionConfig(), $this->context);
             $steps[] = new InstallStep('database-config', InstallStep::OK, 'Database credentials written.');
         }
@@ -126,6 +133,22 @@ final class Installer
         }
 
         return InstallResult::from($steps);
+    }
+
+    /**
+     * Make freshly written `.env` pairs visible to the running process: env(), getenv() and the
+     * context's cached `database` config all answer with the new values from here on.
+     *
+     * @param array<string, string> $pairs
+     */
+    private function publishEnvironment(array $pairs): void
+    {
+        foreach ($pairs as $key => $value) {
+            $_ENV[$key] = $value;
+            $_SERVER[$key] = $value;
+            putenv($key . '=' . $value);
+        }
+        $this->context?->forgetConfig('database');
     }
 
     private function ensureSqliteFile(string $path): void

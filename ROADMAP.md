@@ -21,6 +21,14 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.83.2 — Alnilam (Patch, Released 2026-09-08)
+- **Installer publishes written credentials to the process** — on a fresh `create-project`
+  the operator's typed credentials reached `.env` but not the running process, so migrations
+  opening their own connection (pack permission seeds, Aegis's role seed) failed against the
+  sample placeholders. The Installer now sets them on the live environment and drops the
+  cached `database` config via the new `ApplicationContext::forgetConfig()`.
+- Notes: installer-only; low risk.
+
 ### 1.83.1 — Alnilam (Patch, Released 2026-09-08)
 - **Production recommendations log once per boot cache** — PHP-FPM boots per request, so
   every applicable `[security] RECOMMENDATION` (an empty `CSP_HEADER`, say) hit the error
