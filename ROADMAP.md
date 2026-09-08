@@ -21,6 +21,17 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.83.1 — Alnilam (Patch, Released 2026-09-08)
+- **Production recommendations log once per boot cache** — PHP-FPM boots per request, so
+  every applicable `[security] RECOMMENDATION` (an empty `CSP_HEADER`, say) hit the error
+  log on every request. `RecommendationLog` keeps a marker under the app's `storage/cache`;
+  the same set stays silent until it changes or the cache is cleared. Warnings unchanged.
+- **Recommendations no longer degrade the config health check** — `HealthService::checkConfiguration()`
+  turned every production recommendation into its `warning` status, so a deliberately
+  configured host looked unhealthy to monitors. Recommendations now ride along under a
+  `recommendations` key with the status left `ok`; production warnings still fail the check.
+- Notes: logging and health payload only; low risk.
+
 ### 1.83.0 — Alnilam (Minor, Released 2026-09-08)
 - **`CSP_HEADER` is honoured** — sent verbatim as `Content-Security-Policy` from the
   `Application::handle()` chokepoint on every response that does not already carry a policy;
