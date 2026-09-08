@@ -6,15 +6,6 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
-## [1.83.2] - 2026-09-08 — Alnilam
-
-### Fixed
-- **A production recommendation no longer degrades the config health check.** `HealthService::checkConfiguration()`
-  folded every `SecurityManager` recommendation (an empty `CSP_HEADER`, say) into its
-  `warning` status, so a deliberately configured host reported degraded health to every
-  monitor. Recommendations now ride along under their own `recommendations` key on the check
-  while the status stays `ok`; production warnings still fail the check as before.
-
 ## [1.83.1] - 2026-09-08 — Alnilam
 
 ### Fixed
