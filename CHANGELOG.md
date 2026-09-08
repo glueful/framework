@@ -6,6 +6,17 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+- **`CSP_HEADER` does something.** The variable shipped in every `.env.example` and was nagged
+  about at production boot ("CSP_HEADER not configured"), yet nothing in the framework read it —
+  setting it changed no response. `Application::handle()` now sends it verbatim as
+  `Content-Security-Policy` on every response that does not already carry a policy, so a mounted
+  SPA's document policy and any explicit controller header keep precedence. New
+  `CSP_REPORT_ONLY=true` sends the value as `Content-Security-Policy-Report-Only` so operators can
+  audit a policy in the browser console before enforcing it. No other header is touched (no
+  nonces, no HSTS/CORP/COOP). The production recommendation now says what the empty value means
+  and how to fill it. Pinned by `ContentSecurityPolicyEnvTest` and `ProductionValidationCspTest`.
+
 ## [1.82.3] - 2026-09-07 — Alnasl
 
 ### Fixed

@@ -6,6 +6,7 @@ namespace Glueful;
 
 use Psr\Container\ContainerInterface;
 use Glueful\Routing\Router;
+use Glueful\Http\ContentSecurityPolicy;
 use Glueful\Http\Cors;
 use Glueful\Http\Exceptions\Contracts\ExceptionHandlerInterface;
 use Glueful\Support\SensitiveParamRedactor;
@@ -57,6 +58,10 @@ class Application
         // CORS headers to the final response here, the single chokepoint that sees both the
         // dispatch and the exception-handler branches. No-op for same-origin or when already set.
         (new Cors([], $this->context))->applyToResponse($request, $response);
+
+        // Same chokepoint for the operator's CSP_HEADER: sent verbatim on every response that does
+        // not already carry a policy (SPA documents and explicit controller headers win).
+        ContentSecurityPolicy::fromEnv()->applyToResponse($response);
 
         $totalTime = round((microtime(true) - $startTime) * 1000, 2);
         $this->logger->info(

@@ -149,7 +149,9 @@ class SecurityManager
             }
 
             if (env('CSP_HEADER') === '' || env('CSP_HEADER') === null) {
-                $recommendations[] = 'CSP_HEADER not configured - consider adding Content Security Policy';
+                $recommendations[] = 'CSP_HEADER is empty - no Content-Security-Policy is sent on responses that '
+                    . 'do not set their own; set it to a policy to send verbatim '
+                    . '(CSP_REPORT_ONLY=true audits before enforcing)';
             }
         }
 
