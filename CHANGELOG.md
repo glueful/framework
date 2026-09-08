@@ -6,6 +6,18 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.83.0] - 2026-09-08 — Alnilam
+
+### Upgrade Notes
+- If your `.env` already carries a non-empty `CSP_HEADER`, that value is now sent as
+  `Content-Security-Policy` on every response without a policy of its own. Review it before
+  upgrading (or set `CSP_REPORT_ONLY=true` first and read the browser console). Empty stays a
+  no-op, which is what every shipped `.env.example` has.
+
+### Added
+- **`CSP_REPORT_ONLY`** — when `true`, `CSP_HEADER` goes out as
+  `Content-Security-Policy-Report-Only` instead, so a policy can be audited before it blocks.
+
 ### Fixed
 - **`CSP_HEADER` does something.** The variable shipped in every `.env.example` and was nagged
   about at production boot ("CSP_HEADER not configured"), yet nothing in the framework read it —
