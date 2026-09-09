@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.83.3] - 2026-09-09 — Alnilam
+
 ### Fixed
 - **The production container is compiled once, atomically, under a signed name.** Every
   PHP-FPM worker compiled the container on its own boot and rewrote one shared
