@@ -6,6 +6,23 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.83.3] - 2026-09-09 — Alnilam
+
+### Fixed
+- **The production container is compiled once, atomically, under a signed name.** Every
+  PHP-FPM worker compiled the container on its own boot and rewrote one shared
+  `CompiledContainer.runtime.php` before requiring it: a 783 KB write per request, workers
+  requiring a file another worker was mid-writing ("Unclosed '{' on line 9557" → silent
+  runtime-container fallback), and — with OPcache not revalidating timestamps — workers executing
+  whatever version of the file they cached first, long after a deploy rewrote it. The artifact is
+  now `CompiledContainer_<signature>.php`, where the signature (new `DefinitionSignature`) is a
+  cheap hash of the definitions it was built from: a boot reuses the artifact while nothing
+  changed and compiles a new one — a path OPcache has never seen — when a service, alias, factory,
+  tag or the framework version changes. Writes go to a temp file renamed into place, so a reader
+  only ever sees a complete file; artifacts for other definition sets are pruned. Compiled
+  containers now carry `DEFINITIONS_SIGNATURE`, and a `container:compile` artifact is used only
+  when its signature matches this boot (unsigned, pre-1.83.3 artifacts are treated as stale).
+
 ## [1.83.2] - 2026-09-08 — Alnilam
 
 ### Fixed

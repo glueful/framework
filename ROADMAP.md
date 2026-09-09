@@ -21,6 +21,16 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.83.3 — Alnilam (Patch, Released 2026-09-09)
+- **Production container compiled once, atomically, under a signed name** — every FPM
+  worker used to compile and rewrite one shared artifact per boot (783 KB per request,
+  half-written files falling back to the runtime container, stale OPcache copies surviving
+  deploys). `DefinitionSignature` names `CompiledContainer_<signature>.php`; writes are
+  temp+rename; `container:compile` output carries the signature and is used only when it
+  matches the boot's definitions.
+- Notes: production boot path only; low risk. Old `CompiledContainer.runtime.php` and
+  unsigned precompiled artifacts are ignored/pruned.
+
 ### 1.83.2 — Alnilam (Patch, Released 2026-09-08)
 - **Installer publishes written credentials to the process** — on a fresh `create-project`
   the operator's typed credentials reached `.env` but not the running process, so migrations

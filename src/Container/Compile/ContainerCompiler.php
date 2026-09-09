@@ -20,7 +20,8 @@ final class ContainerCompiler
     public function compile(
         array $definitions,
         string $className = 'CompiledContainer',
-        string $namespace = 'Glueful\\Container\\Compiled'
+        string $namespace = 'Glueful\\Container\\Compiled',
+        ?string $signature = null
     ): string {
         $methods = [];
         $hasCases = [];
@@ -115,7 +116,8 @@ final class ContainerCompiler
             $getCases,
             $methods,
             $runtimeIds,
-            $runtimeFactoryIds
+            $runtimeFactoryIds,
+            $signature
         );
     }
 
@@ -370,6 +372,7 @@ PHP;
      * @param array<string> $methods
      * @param array<string> $runtimeIds
      * @param array<string> $runtimeFactoryIds
+     * @param string|null $signature DefinitionSignature::of() the definitions ('' when unsigned)
      */
     private function generateClassCode(
         string $namespace,
@@ -379,11 +382,13 @@ PHP;
         array $getCases,
         array $methods,
         array $runtimeIds = [],
-        array $runtimeFactoryIds = []
+        array $runtimeFactoryIds = [],
+        ?string $signature = null
     ): string {
         $hasCasesStr = implode("\n", $hasCases);
         $getCasesStr = implode("\n", $getCases);
         $methodsStr = implode("\n\n", $methods);
+        $signatureStr = var_export($signature ?? '', true);
         $runtimeIdsStr = var_export(array_values($runtimeIds), true);
         $runtimeFactoryIdsStr = var_export(array_values($runtimeFactoryIds), true);
 
@@ -396,6 +401,9 @@ use Psr\Container\NotFoundExceptionInterface;
 
 final class {$className} implements ContainerInterface, \\Glueful\\Container\\RebindableContainer
 {
+    /** DefinitionSignature::of() the definitions this container was compiled from ('' = unsigned). */
+    public const DEFINITIONS_SIGNATURE = {$signatureStr};
+
     /** Service ids whose live objects must be handed in via withRuntimeValues(). */
     public const RUNTIME_VALUE_IDS = {$runtimeIdsStr};
 

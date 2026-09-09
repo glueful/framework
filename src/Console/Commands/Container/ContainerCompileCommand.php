@@ -212,7 +212,12 @@ class ContainerCompileCommand extends BaseCommand
             $compiler = new ContainerCompiler();
             $namespace = 'Glueful\\Container\\Compiled';
             $className = 'CompiledContainer';
-            $code = $compiler->compile($definitions, $className, $namespace);
+            $code = $compiler->compile(
+                $definitions,
+                $className,
+                $namespace,
+                \Glueful\Container\Compile\DefinitionSignature::of($definitions),
+            );
             $this->writeCompiledFile($outputDir, $className, $code);
             // Also emit a services.json manifest for tooling in production environments
             $servicesIndex = $compiler->buildServicesIndex($definitions, DefaultServicesLoader::getProviderMap());
