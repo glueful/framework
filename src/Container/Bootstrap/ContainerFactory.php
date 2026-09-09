@@ -9,6 +9,7 @@ use Glueful\Container\Container;
 use Glueful\Container\Support\ParamBag;
 use Glueful\Container\Definition\{ValueDefinition, TaggedIteratorDefinition};
 use Glueful\Container\Compile\ContainerCompiler;
+use Glueful\Container\Compile\DefinitionSignature;
 use Glueful\Container\Providers\{TagCollector, BaseServiceProvider};
 use Glueful\Container\Loader\{ServicesLoader, DefaultServicesLoader};
 use Glueful\Extensions\ProviderClassResolver;
@@ -67,33 +68,18 @@ final class ContainerFactory
             $defsRef = (new \ReflectionClass($container))->getProperty('definitions');
             /** @var array<string, mixed> $normalized */
             $normalized = $defsRef->getValue($container);
+            $signature = DefinitionSignature::of($normalized);
 
-            // Prefer a container precompiled by `container:compile` (under the APP's storage).
-            $precompiled = self::loadPrecompiledIfAvailable($context);
+            // Prefer a container precompiled by `container:compile` (under the APP's storage) —
+            // only when it was compiled from THESE definitions.
+            $precompiled = self::loadPrecompiledIfAvailable($context, $signature);
             if ($precompiled !== null) {
                 return self::hydrate($precompiled, $normalized);
             }
 
             try {
-                $compiler = new ContainerCompiler();
-                $php = $compiler->compile($normalized, 'CompiledContainer', 'Glueful\\Container\\Compiled');
-                $artifactDir = self::compiledArtifactDir($context);
-                $cacheFile = $artifactDir . '/CompiledContainer.runtime.php';
-                file_put_contents($cacheFile, $php, LOCK_EX);
-                // Emit a simple services map artifact alongside the compiled container
-                $map = [];
-                foreach ($normalized as $id => $def) {
-                    $type = is_object($def) ? get_class($def) : gettype($def);
-                    $alias = $def instanceof \Glueful\Container\Definition\AliasDefinition ? $def->getTarget() : '';
-                    $map[] = ['id' => (string) $id, 'type' => $type, 'alias_of' => $alias];
-                }
-                file_put_contents($artifactDir . '/services_map.json', json_encode($map), LOCK_EX);
-                require_once $cacheFile;
-
-                $compiledClass = '\\Glueful\\Container\\Compiled\\CompiledContainer';
-                if (class_exists($compiledClass)) {
-                    /** @var ContainerInterface $compiled */
-                    $compiled = new $compiledClass();
+                $compiled = self::compiledForSignature($context, $normalized, $signature);
+                if ($compiled !== null) {
                     return self::hydrate($compiled, $normalized);
                 }
             } catch (\Throwable $e) {
@@ -106,7 +92,6 @@ final class ContainerFactory
                 );
             }
         }
-
         return $container;
     }
 
@@ -190,26 +175,118 @@ final class ContainerFactory
         return $fallback;
     }
 
-    private static function loadPrecompiledIfAvailable(ApplicationContext $context): ?ContainerInterface
-    {
-        $primary = rtrim($context->getBasePath(), '/') . '/storage/cache/container/CompiledContainer.php';
+    /**
+     * The compiled container for this exact definition set, compiled ONCE per signature.
+     *
+     * Every PHP-FPM worker used to compile and rewrite one shared artifact on its own boot and
+     * require that same path: a 783 KB write per request, workers requiring a file another
+     * worker was mid-writing ("Unclosed '{' on line 9557" → runtime fallback), and — with
+     * OPcache not revalidating timestamps — workers executing whatever version of the file they
+     * cached first, long after it was rewritten. The artifact is now named by the signature
+     * (a changed container is a NEW path OPcache has never seen), written to a temp file and
+     * renamed into place (a reader only ever sees a complete file), and never rewritten while
+     * it exists. The class name carries the signature too, so two artifacts can never collide
+     * inside one process.
+     *
+     * @param array<string, mixed> $normalized
+     */
+    private static function compiledForSignature(
+        ApplicationContext $context,
+        array $normalized,
+        string $signature
+    ): ?ContainerInterface {
+        $className = 'CompiledContainer_' . $signature;
+        $fqcn = '\\Glueful\\Container\\Compiled\\' . $className;
+        $artifactDir = self::compiledArtifactDir($context);
+        $cacheFile = $artifactDir . '/' . $className . '.php';
 
+        if (!is_file($cacheFile)) {
+            $compiler = new ContainerCompiler();
+            $php = $compiler->compile($normalized, $className, 'Glueful\\Container\\Compiled', $signature);
+            self::writeAtomically($cacheFile, $php);
+
+            // Emit a simple services map artifact alongside the compiled container.
+            $map = [];
+            foreach ($normalized as $id => $def) {
+                $type = is_object($def) ? get_class($def) : gettype($def);
+                $alias = $def instanceof \Glueful\Container\Definition\AliasDefinition ? $def->getTarget() : '';
+                $map[] = ['id' => (string) $id, 'type' => $type, 'alias_of' => $alias];
+            }
+            self::writeAtomically($artifactDir . '/services_map.json', (string) json_encode($map));
+            self::pruneOtherArtifacts($artifactDir, $cacheFile);
+        }
+        if (!class_exists($fqcn, false)) {
+            require_once $cacheFile;
+        }
+
+        if (!class_exists($fqcn, false)) {
+            return null;
+        }
+        /** @var ContainerInterface $compiled */
+        $compiled = new $fqcn();
+        return $compiled;
+    }
+
+    /** Temp file + rename: a concurrent reader sees either nothing or the whole file, never a part. */
+    private static function writeAtomically(string $file, string $contents): void
+    {
+        $tmp = $file . '.' . bin2hex(random_bytes(6)) . '.tmp';
+        if (file_put_contents($tmp, $contents, LOCK_EX) === false) {
+            throw new ContainerException("Cannot write compiled container artifact: {$file}");
+        }
+        if (!rename($tmp, $file)) {
+            @unlink($tmp);
+            throw new ContainerException("Cannot move compiled container artifact into place: {$file}");
+        }
+        if (function_exists('opcache_invalidate')) {
+            @opcache_invalidate($file, true);
+        }
+    }
+
+    /** Artifacts for other definition sets (earlier releases) are dead weight; drop them best-effort. */
+    private static function pruneOtherArtifacts(string $artifactDir, string $keep): void
+    {
+        foreach (glob($artifactDir . '/CompiledContainer_*.php') ?: [] as $file) {
+            if ($file !== $keep) {
+                @unlink($file);
+            }
+        }
+        // The pre-1.83.3 per-boot artifact, rewritten on every request: no longer produced.
+        @unlink($artifactDir . '/CompiledContainer.runtime.php');
+    }
+
+    /**
+     * A container precompiled by `container:compile`, used only when its DEFINITIONS_SIGNATURE
+     * matches the definitions of this boot. The signature is read from the file's head without
+     * loading it, so a stale precompiled class never enters the process. Unsigned files (compiled
+     * before signatures existed) are treated as stale.
+     */
+    private static function loadPrecompiledIfAvailable(
+        ApplicationContext $context,
+        string $signature
+    ): ?ContainerInterface {
+        $primary = rtrim($context->getBasePath(), '/') . '/storage/cache/container/CompiledContainer.php';
         if (!is_file($primary)) {
             return null;
         }
-
+        $head = (string) @file_get_contents($primary, false, null, 0, 8192);
+        if (
+            preg_match('/DEFINITIONS_SIGNATURE = \'([a-f0-9]+)\';/', $head, $m) !== 1
+            || !hash_equals($signature, $m[1])
+        ) {
+            return null;
+        }
         try {
             require_once $primary;
             $compiledClass = '\\Glueful\\Container\\Compiled\\CompiledContainer';
-            if (class_exists($compiledClass)) {
+            if (class_exists($compiledClass, false)) {
                 /** @var ContainerInterface $compiled */
                 $compiled = new $compiledClass();
                 return $compiled;
             }
         } catch (\Throwable $e) {
-            // Ignore and fall back to runtime container
+            // Ignore and fall back to the signed runtime artifact
         }
-
         return null;
     }
 
