@@ -83,6 +83,7 @@ class DocumentationUIGenerator
      */
     private function generateScalarHtml(): string
     {
+        $specUrl = $this->specUrl();
         $title = $this->escapeHtml($this->getConfig('documentation.ui.title', 'API Documentation'));
         $config = $this->getConfig('documentation.ui.scalar', []);
 
@@ -107,7 +108,7 @@ class DocumentationUIGenerator
     </style>
 </head>
 <body>
-    <script id="api-reference" data-url="/docs/openapi.json"></script>
+    <script id="api-reference" data-url="{$specUrl}"></script>
     <script>
         var configuration = {
             theme: '{$theme}',
@@ -134,6 +135,7 @@ HTML;
      */
     private function generateSwaggerUIHtml(): string
     {
+        $specUrl = $this->specUrl();
         $title = $this->escapeHtml($this->getConfig('documentation.ui.title', 'API Documentation'));
         $config = $this->getConfig('documentation.ui.swagger_ui', []);
 
@@ -161,7 +163,7 @@ HTML;
     <script>
         window.onload = function() {
             SwaggerUIBundle({
-                url: '/docs/openapi.json',
+                url: '{$specUrl}',
                 dom_id: '#swagger-ui',
                 deepLinking: {$deepLinking},
                 displayRequestDuration: {$displayRequestDuration},
@@ -187,6 +189,7 @@ HTML;
      */
     private function generateRedocHtml(): string
     {
+        $specUrl = $this->specUrl();
         $title = $this->escapeHtml($this->getConfig('documentation.ui.title', 'API Documentation'));
         $config = $this->getConfig('documentation.ui.redoc', []);
 
@@ -207,7 +210,7 @@ HTML;
 </head>
 <body>
     <redoc
-        spec-url="/docs/openapi.json"
+        spec-url="{$specUrl}"
         expand-responses="{$expandResponses}"
         hide-download-button="{$hideDownload}"
         lazy-rendering
@@ -221,6 +224,12 @@ HTML;
     /**
      * Escape HTML special characters
      */
+    /** Where the served spec lives — the configured API-docs path plus `/openapi.json`. */
+    private function specUrl(): string
+    {
+        return $this->escapeHtml(ApiDocsPath::resolve($this->context) . '/openapi.json');
+    }
+
     private function escapeHtml(string $value): string
     {
         return htmlspecialchars($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');

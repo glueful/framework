@@ -67,7 +67,9 @@ return [
     'urls' => [
         'base' => env('BASE_URL', 'http://localhost'),
         'cdn' => rtrim(env('BASE_URL', 'http://localhost'), '/') . '/storage/cdn/',
-        'docs' => rtrim(env('BASE_URL', 'http://localhost'), '/') . '/docs/',
+        // The API reference's address: BASE_URL + the configured API-docs path (API_DOCS_PATH).
+        'docs' => rtrim(env('BASE_URL', 'http://localhost'), '/')
+            . \Glueful\Support\Documentation\ApiDocsPath::normalize((string) env('API_DOCS_PATH', '/api-docs')) . '/',
     ],
 
     // Performance Settings
