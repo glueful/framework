@@ -6,6 +6,18 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.83.4] - 2026-09-11 — Alnilam
+
+### Fixed
+- **A mounted SPA document may frame itself and its own `blob:` documents.** The document CSP
+  `SpaMountController` sends (`SecurityHeaders::DEFAULT_DOCUMENT_CSP`) had no `frame-src`, so
+  `default-src 'self'` applied and a browser refused an iframe pointing at a `blob:` URL the
+  page minted itself — a CMS admin previewing its rendered header/footer showed nothing but
+  "Framing 'blob:…' violates … default-src 'self'". The policy now carries
+  `frame-src 'self' blob:`. Framing the same origin and the document's own blobs is the
+  document's own content; no third-party origin is allowed and `frame-ancestors 'self'` is
+  unchanged. A mount's explicit `csp` override is untouched.
+
 ## [1.83.3] - 2026-09-09 — Alnilam
 
 ### Fixed

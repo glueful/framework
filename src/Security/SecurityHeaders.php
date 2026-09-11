@@ -43,7 +43,12 @@ final class SecurityHeaders
         ];
     }
 
+    /**
+     * The policy a mounted SPA document runs under. `frame-src 'self' blob:` lets the document
+     * frame the same origin and blobs it minted itself (an admin previewing its own rendered
+     * output); without it `default-src 'self'` applies and the browser refuses a `blob:` frame.
+     */
     public const DEFAULT_DOCUMENT_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-        . "img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; "
+        . "img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self' blob:; "
         . "object-src 'none'; base-uri 'self'; frame-ancestors 'self';";
 }
