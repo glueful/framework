@@ -79,6 +79,23 @@ class SpaMountControllerTest extends TestCase
         self::assertStringNotContainsString("'unsafe-inline'", $assetCsp);
     }
 
+    /**
+     * A document previews its own output in an iframe — a `blob:` URL it minted itself (a CMS
+     * admin rendering a header/footer preview). With no `frame-src`, `default-src 'self'`
+     * applied and the browser refused the frame: "Framing 'blob:…' violates … default-src
+     * 'self'". Framing the same origin and the document's own blobs is the document's own
+     * content, not a third party; nothing else is opened up.
+     */
+    public function testTheDocumentMayFrameItselfAndItsOwnBlobs(): void
+    {
+        $index = $this->mount()->root(Request::create('/admin'));
+        $csp = (string) $index->headers->get('Content-Security-Policy');
+
+        self::assertStringContainsString("frame-src 'self' blob:", $csp);
+        self::assertStringNotContainsString('frame-src *', $csp);
+        self::assertStringContainsString("frame-ancestors 'self'", $csp, 'being framed stays same-origin');
+    }
+
     public function testAMountCanOverrideTheDocumentCsp(): void
     {
         $registry = new FrontendMountRegistry();
