@@ -13,11 +13,11 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.83.4';
+    public const VERSION = '1.84.0';
 
 
     /** Release code name */
-    public const NAME = 'Alnilam';
+    public const NAME = 'Alnitak';
 
 
     /** Release date */

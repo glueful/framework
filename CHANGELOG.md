@@ -6,6 +6,29 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.84.0] - 2026-09-11 — Alnitak
+
+### Upgrade Notes
+- **The API reference moved from `/docs` to `/api-docs`.** The reference UI and its
+  `openapi.json` are now served at the path in `documentation.route_prefix` (env
+  `API_DOCS_PATH`, default `/api-docs`), leaving `/docs` to the application's own
+  documentation. Bookmarks, links and tooling that used `/docs` need the new address — or set
+  `API_DOCS_PATH=/docs` to keep the old one. Regenerate the UI page
+  (`php glueful generate:openapi --ui`) so it loads the spec from the configured path; a page
+  generated before this release still points at `/docs/openapi.json`. Mirror `API_DOCS_PATH`
+  into your `.env.example` if you keep one.
+
+### Added
+- **`API_DOCS_PATH`** (`documentation.route_prefix`) — the URL path of the API reference. One
+  setting now drives the route group in `routes/docs.php`, the spec URL every generated UI page
+  (Scalar, Swagger UI, Redoc) embeds, `app.urls.docs`, and the URL `generate:openapi` prints.
+  Normalised to a leading slash and no trailing slash; empty or `/` falls back to the default.
+  `Glueful\Support\Documentation\ApiDocsPath` is the resolver.
+
+### Changed
+- **Default API-docs path is `/api-docs`** (was `/docs`, hard-coded in four places). A framework
+  claiming `/docs` collided with any application that documents itself there.
+
 ## [1.83.4] - 2026-09-11 — Alnilam
 
 ### Fixed
