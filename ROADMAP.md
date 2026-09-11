@@ -21,6 +21,13 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.83.4 — Alnilam (Patch, Released 2026-09-11)
+- **Mounted SPA documents may frame themselves and their own `blob:` documents** — the
+  document CSP had no `frame-src`, so `default-src 'self'` refused a `blob:` iframe the page
+  minted itself (an admin previewing its rendered chrome). `frame-src 'self' blob:` added;
+  no third-party origin, `frame-ancestors 'self'` unchanged.
+- Notes: SPA document responses only; low risk. A mount's explicit `csp` override is untouched.
+
 ### 1.83.3 — Alnilam (Patch, Released 2026-09-09)
 - **Production container compiled once, atomically, under a signed name** — every FPM
   worker used to compile and rewrite one shared artifact per boot (783 KB per request,
