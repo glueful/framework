@@ -21,6 +21,14 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.84.0 — Alnitak (Minor, Released 2026-09-11)
+- **The API reference has a configurable path, default `/api-docs`** — `documentation.route_prefix`
+  / `API_DOCS_PATH` drives the route group, the spec URL in every generated UI page,
+  `app.urls.docs` and the printed URL. It was `/docs`, hard-coded four times, colliding with an
+  application's own documentation. `ApiDocsPath` is the single resolver.
+- Notes: minor for the changed default; `API_DOCS_PATH=/docs` restores the old address.
+  Regenerate the UI page after upgrading.
+
 ### 1.83.4 — Alnilam (Patch, Released 2026-09-11)
 - **Mounted SPA documents may frame themselves and their own `blob:` documents** — the
   document CSP had no `frame-src`, so `default-src 'self'` refused a `blob:` iframe the page

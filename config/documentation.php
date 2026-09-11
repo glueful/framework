@@ -99,6 +99,16 @@ return [
     | All paths are relative to base_path() unless absolute.
     |
     */
+    /*
+    |--------------------------------------------------------------------------
+    | URL path of the API reference
+    |--------------------------------------------------------------------------
+    | Where the reference UI and its openapi.json are served (`GET {prefix}` and
+    | `GET {prefix}/openapi.json`). Default /api-docs, leaving /docs to the
+    | application's own documentation. Set API_DOCS_PATH=/docs for the pre-1.84 address.
+    */
+    'route_prefix' => env('API_DOCS_PATH', '/api-docs'),
+
     'paths' => [
         // Main documentation output directory
         'output' => $root . '/docs',
