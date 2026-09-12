@@ -459,11 +459,10 @@ class JobScheduler
             }
             // error_log('Core jobs: ' . json_encode($coreJobs['jobs']));
             foreach ($coreJobs['jobs'] as $job) {
-                // Skip disabled jobs
-
-                // if (isset($job['enabled']) && !$job['enabled']) {
-                //     continue;
-                // }
+                // A job declared `enabled => false` (typically an env switch) never runs.
+                if (isset($job['enabled']) && (bool) $job['enabled'] === false) {
+                    continue;
+                }
 
                 // Skip jobs with missing required fields
                 if (!isset($job['name']) || !isset($job['schedule']) || !isset($job['handler_class'])) {
@@ -488,19 +487,27 @@ class JobScheduler
                     );
                     // $this->log("Registered persistent job: {$job['name']}", 'info');
                 } else {
-                    // $this->register($job['schedule'], function() use ($job) {
-                    //     $handler = new $job['handler_class']();
-                    //     return method_exists($handler, 'handle') ?
-                    //         $handler->handle($job['parameters'] ?? []) :
-                    //         false;
-                    // }, $job['name']);
+                    // In-memory job: resolve and run the handler exactly as a database job is run
+                    // (JobInterface required, the application context handed over). The parameters
+                    // come from the app's own config file, so no payload signature is involved.
                     $this->register($job['schedule'], function () use ($job) {
-                        return [
-                            'handler_class' => $job['handler_class'],
-                            'parameters' => $job['parameters'] ?? [],
-                        ];
+                        $handlerClass = (string) $job['handler_class'];
+                        $parameters = (array) ($job['parameters'] ?? []);
+
+                        try {
+                            $handler = JobHandlerResolver::resolve($handlerClass, $parameters, $this->context);
+                        } catch (\Throwable $e) {
+                            error_log("Refusing to run scheduled job handler '{$handlerClass}': " . $e->getMessage());
+                            return false;
+                        }
+
+                        if (method_exists($handler, 'handle')) {
+                            return $handler->handle($parameters);
+                        }
+
+                        error_log("Job handler '{$handlerClass}' has no handle() method");
+                        return false;
                     }, $job['name']);
-                    // $this->log("Registered in-memory job: {$job['name']}", 'info');
                 }
             }
             // error_log('Core jobs loaded successfully:'.json_encode($coreJobs['jobs']));

@@ -6,6 +6,21 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.85.4] - 2026-09-12 — Alphard
+
+### Fixed
+- **Jobs declared in `config/schedule.php` run.** The in-memory registration wrapped each job
+  in a callback that only returned its handler class name, so `queue:scheduler run` logged
+  "Executed job (0ms)" and never instantiated the handler: every config-declared job was a
+  no-op unless it had been persisted to the `scheduled_jobs` table. Config jobs now resolve
+  and run their handler exactly as database jobs do (`JobInterface` required, the application
+  context handed over), and a job declared `enabled => false` is skipped, as the key always
+  promised.
+- **`queue:scheduler` runs with the booted context.** The command built the scheduler without
+  a context, so `config/schedule.php` was resolved from the working directory and handlers
+  that need the context could not run.
+- **`queue:scheduler list` no longer fails** on a job without an `enabled` key.
+
 ## [1.85.3] - 2026-09-12 — Alphard
 
 ### Fixed
