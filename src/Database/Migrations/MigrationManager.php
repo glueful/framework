@@ -537,9 +537,11 @@ class MigrationManager
     /**
      * Rewrite ledger rows recorded under a lane's previous source names to the lane's current
      * source — only for files the lane actually ships, so a previous source that is also a live
-     * lane (the operator's 'app') keeps its own rows. Idempotent; runs before every migration run.
+     * lane (the operator's 'app') keeps its own rows. Idempotent; every migration run calls it
+     * first, and `migrate:run` calls it even when nothing is pending, so an up-to-date database
+     * still adopts on the next run.
      */
-    private function adoptPreviousSources(): void
+    public function adoptPreviousSources(): void
     {
         if (!$this->ledgerExists()) {
             return;

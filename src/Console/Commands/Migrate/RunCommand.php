@@ -87,6 +87,13 @@ class RunCommand extends BaseCommand
         }
 
         try {
+            // Rows recorded under a lane's previous source names are adopted first (see
+            // MigrationDescriptor::$previousSources): a database with nothing to run still gets
+            // its ledger brought up to date. Never in a dry run.
+            if (!$dryRun) {
+                $this->migrations()->adoptPreviousSources();
+            }
+
             // Get migration status efficiently (single query)
             $status = $this->migrations()->getMigrationStatus();
             $pendingMigrations = $status['pending'];

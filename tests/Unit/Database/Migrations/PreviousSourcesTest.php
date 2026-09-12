@@ -131,6 +131,18 @@ final class PreviousSourcesTest extends TestCase
         self::assertSame(['glueful/thing-core:dependent'], $this->sourcesRecordedFor('001_CreateThings.php'));
     }
 
+    public function testAdoptionCanBeInvokedOnItsOwnWhenNothingIsPending(): void
+    {
+        $this->recordApplied('app', '001_CreateThings.php');
+        $manager = $this->manager();
+        $manager->addMigrationPath($this->dir, MigrationPriority::DEFAULT, 'glueful/thing-core', ['app']);
+
+        $manager->adoptPreviousSources();
+
+        self::assertSame(['glueful/thing-core'], $this->sourcesRecordedFor('001_CreateThings.php'));
+        self::assertSame([], $manager->getPendingMigrations());
+    }
+
     public function testAdoptionOnlyTouchesFilesTheLaneActuallyShips(): void
     {
         $this->recordApplied('app', '001_CreateThings.php');
