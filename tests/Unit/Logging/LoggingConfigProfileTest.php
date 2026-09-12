@@ -11,6 +11,9 @@ final class LoggingConfigProfileTest extends TestCase
     /** @var array<string, string|false> */
     private array $originalEnv = [];
 
+    /** @var array<string, string|false> */
+    private array $originalRealEnv = [];
+
     /** @var list<string> */
     private array $managedKeys = [
         'APP_ENV',
@@ -25,9 +28,13 @@ final class LoggingConfigProfileTest extends TestCase
     {
         parent::setUp();
 
+        // env() reads $_ENV first and then the real process environment, so a managed key must be
+        // cleared from both (and restored to both) for the profile defaults to apply.
         foreach ($this->managedKeys as $key) {
             $this->originalEnv[$key] = $_ENV[$key] ?? false;
-            unset($_ENV[$key]);
+            $this->originalRealEnv[$key] = getenv($key);
+            unset($_ENV[$key], $_SERVER[$key]);
+            putenv($key);
         }
     }
 
@@ -39,6 +46,12 @@ final class LoggingConfigProfileTest extends TestCase
                 unset($_ENV[$key]);
             } else {
                 $_ENV[$key] = $original;
+            }
+            $real = $this->originalRealEnv[$key] ?? false;
+            if ($real === false) {
+                putenv($key);
+            } else {
+                putenv($key . '=' . $real);
             }
         }
 
