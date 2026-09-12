@@ -6,6 +6,23 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.85.0] - 2026-09-12 — Alphard
+
+### Added
+- **`previous_sources` on migration descriptors.** The ledger records every applied file under
+  its source (the declaring package), so files that change owner — an application that becomes
+  a package (rows recorded as `app`), a renamed package, a lane split out of a package — used to
+  look brand new to every existing database. A lane may now declare the names its files were
+  recorded under before (`"previous_sources": ["app"]` in `extra.glueful.migrations`, or the new
+  fourth argument of `ServiceProvider::loadMigrationsFrom()`): rows under a previous source count
+  as applied, and the next `migrate:run` / `migrateSources()` rewrites them to the current source
+  (only for files the lane ships, so a previous source that is still a live lane keeps its own
+  rows). `MigrationDescriptor::$previousSources`, `MigrationManager::addMigrationPath(...,
+  $previousSources)`. Documented in `docs/MIGRATIONS_AND_CAPABILITIES.md`.
+
+### Upgrade Notes
+- No action required. The key is optional; without it nothing changes.
+
 ## [1.84.0] - 2026-09-11 — Alnitak
 
 ### Upgrade Notes

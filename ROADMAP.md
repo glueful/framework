@@ -21,6 +21,13 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.85.0 — Alphard (Minor, Released 2026-09-12)
+- **`previous_sources` on migration descriptors** — a lane declares the source names its files
+  were recorded under before (an app that became a package, a renamed package, a split lane);
+  rows under them count as applied and are adopted under the current source on the next run.
+  Manifest key and a new `loadMigrationsFrom()` argument. First consumer: Thallo's core package.
+- Notes: minor for the new optional key; no behaviour change without it.
+
 ### 1.84.0 — Alnitak (Minor, Released 2026-09-11)
 - **The API reference has a configurable path, default `/api-docs`** — `documentation.route_prefix`
   / `API_DOCS_PATH` drives the route group, the spec URL in every generated UI page,
