@@ -412,7 +412,7 @@ class QueueMaintenance
 
         // Fallback to environment variables
         $envKey = strtoupper(str_replace('.', '_', $key));
-        return $_ENV[$envKey] ?? $default;
+        return env($envKey, $default);
     }
 
     /**

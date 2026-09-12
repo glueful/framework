@@ -21,6 +21,14 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.85.3 — Alphard (Patch, Released 2026-09-12)
+- **The boot environment comes from `env('APP_ENV')`** — `Framework::create()` and console
+  commands read `$_ENV` alone, so a process-exported `APP_ENV` (CI, containers) was ignored and
+  a CLI run booted as the wrong environment, compiling an extension cache with the wrong list.
+- **The extension cache is stamped with its environment** — a cache compiled under another
+  environment is not consumed outside production; bare-list caches still load.
+- Notes: patch; skeleton bootstraps pass `env('APP_ENV', 'development')` to `withEnvironment()`.
+
 ### 1.85.2 — Alphard (Patch, Released 2026-09-12)
 - **`env()` reads the real process environment** — `$_ENV`, then `$_SERVER`, then `getenv()`.
   Real environment variables were invisible under PHP's default `variables_order` and skipped

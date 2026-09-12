@@ -107,7 +107,7 @@ abstract class BaseCommand extends Command
     private function buildDefaultContext(): ApplicationContext
     {
         $basePath = getcwd() ?: dirname(__DIR__, 2);
-        $env = $_ENV['APP_ENV'] ?? 'production';
+        $env = (string) env('APP_ENV', 'production');
         $configPath = $basePath . '/config';
 
         $context = new ApplicationContext(

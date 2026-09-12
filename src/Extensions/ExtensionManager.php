@@ -403,12 +403,27 @@ final class ExtensionManager
         }
 
         try {
-            /** @var array<class-string<ServiceProvider>> $providerClasses */
-            $providerClasses = require $cacheFile;
+            $cached = self::readCacheFile($cacheFile);
+
+            // The enabled list is environment-specific (config/{env}/ overrides), so a cache
+            // compiled under another environment lists the wrong providers for this boot. Outside
+            // production resolve live instead; production must boot from its cache regardless
+            // (discover() refuses to resolve live there), so only say what happened.
+            $environment = $this->getContext()->getEnvironment();
+            if ($cached['environment'] !== null && $cached['environment'] !== $environment) {
+                $this->log('Extension cache was compiled for another environment', [
+                    'cache' => $cached['environment'],
+                    'current' => $environment,
+                ]);
+                if (!$this->isProduction()) {
+                    return null;
+                }
+            }
+
             $providers = [];
 
-            foreach ($providerClasses as $providerClass) {
-                if (class_exists($providerClass)) {
+            foreach ($cached['providers'] as $providerClass) {
+                if (class_exists($providerClass) && is_subclass_of($providerClass, ServiceProvider::class)) {
                     $providers[$providerClass] = new $providerClass($this->container);
                 }
             }
@@ -418,6 +433,42 @@ final class ExtensionManager
             $this->log("Failed to load extensions cache", ['error' => $e->getMessage()]);
             return null;
         }
+    }
+
+    /**
+     * Read a compiled extension cache: the environment it was compiled for (null for a cache
+     * written before the stamp existed, or by hand as a bare list) and its provider classes.
+     *
+     * @return array{environment: string|null, providers: list<string>}
+     */
+    public static function readCacheFile(string $cacheFile): array
+    {
+        $data = require $cacheFile;
+        if (!is_array($data)) {
+            throw new \RuntimeException('Extension cache does not return an array: ' . $cacheFile);
+        }
+
+        if (array_is_list($data)) {
+            $providers = $data;
+            $environment = null;
+        } else {
+            $providers = $data['providers'] ?? [];
+            $environment = $data['environment'] ?? null;
+            if (!is_array($providers) || ($environment !== null && !is_string($environment))) {
+                throw new \RuntimeException('Extension cache has an unexpected shape: ' . $cacheFile);
+            }
+        }
+
+        foreach ($providers as $provider) {
+            if (!is_string($provider)) {
+                throw new \RuntimeException('Extension cache contains a non-string provider class: ' . $cacheFile);
+            }
+        }
+
+        /** @var list<string> $providers */
+        $providers = array_values($providers);
+
+        return ['environment' => $environment, 'providers' => $providers];
     }
 
     /**
@@ -435,7 +486,10 @@ final class ExtensionManager
         $content = "<?php\n\n";
         $content .= "// Auto-generated extensions cache\n";
         $content .= "// Generated: " . date('Y-m-d H:i:s') . "\n\n";
-        $content .= "return " . var_export(array_keys($this->providers), true) . ";\n";
+        $content .= "return " . var_export([
+            'environment' => $this->getContext()->getEnvironment(),
+            'providers' => array_keys($this->providers),
+        ], true) . ";\n";
 
         file_put_contents($cacheFile . '.tmp', $content, LOCK_EX);
         rename($cacheFile . '.tmp', $cacheFile);

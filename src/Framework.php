@@ -58,7 +58,9 @@ class Framework
     {
         $this->basePath = rtrim($basePath, '/');
         $this->configPath = $this->basePath . '/config';
-        $this->environment = $_ENV['APP_ENV'] ?? 'production';
+        // env(), not $_ENV alone: the real process environment (a CI job's or a container's
+        // exported APP_ENV) is invisible in $_ENV under PHP's default variables_order.
+        $this->environment = (string) env('APP_ENV', 'production');
     }
 
     /**

@@ -139,11 +139,11 @@ final class ProviderOrderParityTest extends TestCase
         $manager = new ExtensionManager($this->container);
         $manager->writeCacheNow();
         $cache = $this->base . '/bootstrap/cache/extensions.php';
-        self::assertEarlyBeforeLate(require $cache, 'implicit cache write');
+        self::assertEarlyBeforeLate(ExtensionManager::readCacheFile($cache)['providers'], 'implicit cache write');
 
         // An explicit list arriving in the WRONG order is ordered before persistence.
         $manager->writeCacheNow([ParityLateAppProvider::class, ParityEarlyExtensionProvider::class]);
-        self::assertEarlyBeforeLate(require $cache, 'explicit cache write');
+        self::assertEarlyBeforeLate(ExtensionManager::readCacheFile($cache)['providers'], 'explicit cache write');
     }
 
     public function testCachedAndUncachedDiscoveryPreserveTheOrder(): void
@@ -180,7 +180,7 @@ final class ProviderOrderParityTest extends TestCase
 
         self::assertContains(
             ParityEarlyExtensionProvider::class,
-            require $this->base . '/bootstrap/cache/extensions.php',
+            ExtensionManager::readCacheFile($this->base . '/bootstrap/cache/extensions.php')['providers'],
             'writeCacheNow() must recompile from current file state, not the primed config cache',
         );
     }
