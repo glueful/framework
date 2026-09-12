@@ -21,6 +21,13 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.85.2 — Alphard (Patch, Released 2026-09-12)
+- **`env()` reads the real process environment** — `$_ENV`, then `$_SERVER`, then `getenv()`.
+  Real environment variables were invisible under PHP's default `variables_order` and skipped
+  by Dotenv, so CI jobs and containers that export `DB_*` fell to the sqlite default for the
+  first connections of a fresh install.
+- Notes: patch; tests that need a key absent must also `putenv('KEY')`.
+
 ### 1.85.1 — Alphard (Patch, Released 2026-09-12)
 - **`migrate:run` adopts previous sources with nothing pending** — the early "No pending
   migrations" return skipped adoption; `adoptPreviousSources()` is public and runs first.

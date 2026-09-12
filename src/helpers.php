@@ -22,10 +22,17 @@ if (!function_exists('env')) {
      */
     function env(string $key, mixed $default = null): mixed
     {
-        $value = $_ENV[$key] ?? false;
+        // $_ENV (what Dotenv loads) first, then the real process environment: PHP fills $_ENV
+        // only when variables_order includes "E" (the php.ini defaults do not), and Dotenv's
+        // immutable loader skips keys the real environment already holds — so a variable a CI
+        // job or a container exported must be read from getenv() or it is invisible.
+        $value = $_ENV[$key] ?? $_SERVER[$key] ?? getenv($key);
 
-        if ($value === false) {
+        if ($value === false || $value === null) {
             return $default;
+        }
+        if (!is_string($value)) {
+            return $value;
         }
 
         switch (strtolower($value)) {

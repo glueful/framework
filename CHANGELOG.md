@@ -6,6 +6,20 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.85.2] - 2026-09-12 — Alphard
+
+### Fixed
+- **`env()` sees variables the real process environment holds.** The helper read `$_ENV` alone,
+  which PHP fills only when `variables_order` includes "E" (the php.ini defaults do not) — and
+  Dotenv's immutable loader skips any key the real environment already holds. Under a CI job
+  or a container that exports `DB_*`/`APP_*`, every `env('DB_DRIVER', 'sqlite')` therefore
+  returned the default until the installer published its credentials into `$_ENV`: a Postgres
+  install's first connections (the shared repository connection created at boot, the RBAC
+  provider) silently went to sqlite, and a fresh install's role grants failed with "no such
+  table: permissions". `env()` now reads `$_ENV`, then `$_SERVER`, then `getenv()`, with the
+  same boolean/null casting for all three. A test that wants a key absent must clear it from
+  the real environment too (`putenv('KEY')`), as `LoggingConfigProfileTest` now does.
+
 ## [1.85.1] - 2026-09-12 — Alphard
 
 ### Fixed
