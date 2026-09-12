@@ -21,6 +21,11 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.85.1 — Alphard (Patch, Released 2026-09-12)
+- **`migrate:run` adopts previous sources with nothing pending** — the early "No pending
+  migrations" return skipped adoption; `adoptPreviousSources()` is public and runs first.
+- Notes: patch; no behaviour change for lanes without `previous_sources`.
+
 ### 1.85.0 — Alphard (Minor, Released 2026-09-12)
 - **`previous_sources` on migration descriptors** — a lane declares the source names its files
   were recorded under before (an app that became a package, a renamed package, a split lane);

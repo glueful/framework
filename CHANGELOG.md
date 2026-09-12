@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.85.1] - 2026-09-12 — Alphard
+
+### Fixed
+- **`migrate:run` adopts previous sources even when nothing is pending.** The command returned
+  at "No pending migrations found" before the adoption step ever ran, so a database whose rows
+  were recorded under a lane's previous source names stayed that way until some other migration
+  arrived. `MigrationManager::adoptPreviousSources()` is public and the run command calls it
+  first (never in a dry run); every migration run still adopts before it starts.
+
 ## [1.85.0] - 2026-09-12 — Alphard
 
 ### Added
