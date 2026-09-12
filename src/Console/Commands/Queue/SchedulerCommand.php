@@ -173,7 +173,8 @@ class SchedulerCommand extends BaseCommand
     private function initializeServices(): void
     {
         $lockManager = $this->getService(LockManagerInterface::class);
-        $this->scheduler = new JobScheduler($lockManager);
+        // The booted context: config/schedule.php is resolved from it and every handler receives it.
+        $this->scheduler = new JobScheduler($lockManager, $this->getContext());
     }
 
     private function executeRun(InputInterface $input): int
@@ -548,7 +549,7 @@ class SchedulerCommand extends BaseCommand
         $rows = [['Name', 'Schedule', 'Status', 'Last Run', 'Next Run']];
 
         foreach ($jobs as $job) {
-            $enabled = is_bool($job['enabled']) ? $job['enabled'] : true;
+            $enabled = is_bool($job['enabled'] ?? null) ? $job['enabled'] : true;
             $status = $enabled === true ? '✅ Enabled' : '❌ Disabled';
             $lastRun = $job['last_run'] ?? 'Never';
             $nextRun = $job['next_run'] ?? 'Calculating...';

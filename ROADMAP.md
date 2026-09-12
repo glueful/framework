@@ -21,6 +21,14 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.85.4 — Alphard (Patch, Released 2026-09-12)
+- **Config-declared scheduled jobs run** — the in-memory registration only returned the handler
+  class name, so `queue:scheduler run` executed nothing for `config/schedule.php` jobs; they now
+  resolve and run their handler like database jobs, `enabled => false` is honoured, and the
+  command hands the scheduler the booted context. `queue:scheduler list` tolerates a missing
+  `enabled` key.
+- Notes: patch; jobs an app believed were running may start running — review `config/schedule.php`.
+
 ### 1.85.3 — Alphard (Patch, Released 2026-09-12)
 - **The boot environment comes from `env('APP_ENV')`** — `Framework::create()` and console
   commands read `$_ENV` alone, so a process-exported `APP_ENV` (CI, containers) was ignored and
