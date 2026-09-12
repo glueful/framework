@@ -114,6 +114,27 @@ public function register(ApplicationContext $context): void
 - Reference a user/principal as an **indexed UUID with no cross-package FK** — validate existence in service logic, not via SQL (keeps packages decoupled).
 - Migration filenames must start with three digits (`001_…`); cross-source ordering comes from the priority, not the prefix.
 
+### When your migrations change owner: `previous_sources`
+
+The ledger records every applied file under its **source**. If files change owner — an
+application that becomes a package (its rows say `app`), a renamed package, a lane split out of
+a package (`vendor/name` → `vendor/name:lane`) — every existing database would see them as new.
+Declare the names they were recorded under before and the framework treats those rows as
+applied, then rewrites them to the current source on the next run. Fresh installs never see the
+key; after one run on an existing install it is inert.
+
+In the manifest (`extra.glueful.migrations`):
+
+```json
+{ "id": "default", "path": "database/migrations", "priority": "default", "mode": "core",
+  "previous_sources": ["app"] }
+```
+
+From a provider: `$this->loadMigrationsFrom($dir, $priority, 'vendor/name', ['old/name']);`
+
+Only files the lane actually ships are adopted: a previous source that is still a live lane of
+its own (the skeleton's `app`) keeps every other row.
+
 ## Quick reference
 
 ```bash

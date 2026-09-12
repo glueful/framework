@@ -25,6 +25,14 @@ final class MigrationDescriptor
         public readonly int $priority,
         public readonly DescriptorMode $mode,
         public readonly ?string $verifierClass = null,
+        /**
+         * Source names this lane's files were recorded under before (an application that became a
+         * package, a renamed package, a lane split out of a package). Rows under any of them count
+         * as applied for this lane, and the next run adopts them under {@see source()}.
+         *
+         * @var list<string>
+         */
+        public readonly array $previousSources = [],
     ) {
         if (preg_match('/^[a-z0-9][a-z0-9_-]*$/', $id) !== 1) {
             throw new DescriptorValidationException("Descriptor id '{$id}' is not a lowercase slug.");
@@ -47,6 +55,25 @@ final class MigrationDescriptor
             throw new DescriptorValidationException(
                 "Descriptor '{$package}:{$id}' verifier must be a canonical, non-leading-slash FQCN."
             );
+        }
+        $this->assertPreviousSources();
+    }
+
+    /** Validates {@see $previousSources}; called by the constructor after the other checks. */
+    private function assertPreviousSources(): void
+    {
+        foreach ($this->previousSources as $previous) {
+            if (!is_string($previous) || preg_match('/^[a-z0-9][a-z0-9_\-\/.:]*$/', $previous) !== 1) {
+                throw new DescriptorValidationException(
+                    "Descriptor '{$this->package}:{$this->id}' previous_sources must be source names "
+                    . "(e.g. 'app', 'vendor/package', 'vendor/package:lane')."
+                );
+            }
+            if ($previous === $this->source()) {
+                throw new DescriptorValidationException(
+                    "Descriptor '{$this->package}:{$this->id}' lists its own source '{$previous}' as a previous source."
+                );
+            }
         }
     }
 

@@ -198,6 +198,12 @@ final class PackageManifest
                     );
                 }
                 $verifier = $row['verifier'] ?? null;
+                $previous = $row['previous_sources'] ?? [];
+                if (!is_array($previous) || !array_is_list($previous)) {
+                    throw new Schema\DescriptorValidationException(
+                        "Package {$name}: previous_sources must be a list of source names."
+                    );
+                }
                 $list[] = new Schema\MigrationDescriptor(
                     id: (string) ($row['id'] ?? ''),
                     package: (string) $name,
@@ -206,6 +212,7 @@ final class PackageManifest
                     priority: $priorities[$priorityKey],
                     mode: $mode,
                     verifierClass: is_string($verifier) ? $verifier : null,
+                    previousSources: $previous,
                 );
             }
             $out[(string) $name] = $list;
