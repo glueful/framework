@@ -71,8 +71,9 @@ class MigrationManager
     private FileFinder $fileFinder;
 
     /**
-     * @var array<int, array{path: string, priority: int, source: string}>
-     *      Additional migration sources from extensions.
+     * @var array<int, array{path: string, priority: int, source: string, previous: list<string>}>
+     *      Additional migration sources from extensions; `previous` = source names the lane's
+     *      files were recorded under before (see MigrationDescriptor::$previousSources).
      */
     private array $additionalMigrationPaths = [];
 
@@ -156,11 +157,13 @@ class MigrationManager
      * Add a migration path for extensions
      *
      * @param string $path Path to migration directory
+     * @param list<string> $previousSources Source names this lane's files were recorded under before
      */
     public function addMigrationPath(
         string $path,
         int $priority = MigrationPriority::DEFAULT,
-        ?string $source = null
+        ?string $source = null,
+        array $previousSources = []
     ): void {
         if (!is_dir($path)) {
             return;
@@ -169,7 +172,14 @@ class MigrationManager
             $parts = explode('/', str_replace('\\', '/', rtrim($path, '/')));
             $source = end($parts) !== false ? (string) end($parts) : 'extension';
         }
-        $this->additionalMigrationPaths[] = ['path' => $path, 'priority' => $priority, 'source' => $source];
+        $this->additionalMigrationPaths[] = [
+            'path' => $path,
+            'priority' => $priority,
+            'source' => $source,
+            // Names this lane's files were recorded under before (see MigrationDescriptor):
+            // rows under them count as applied, and a run adopts them under $source.
+            'previous' => array_values($previousSources),
+        ];
     }
 
     /**
@@ -181,7 +191,12 @@ class MigrationManager
         \Glueful\Extensions\Schema\MigrationDescriptor $descriptor,
         string $absolutePath
     ): void {
-        $this->addMigrationPath($absolutePath, $descriptor->priority, $descriptor->source());
+        $this->addMigrationPath(
+            $absolutePath,
+            $descriptor->priority,
+            $descriptor->source(),
+            $descriptor->previousSources
+        );
         $this->descriptorSources[$descriptor->source()] = [
             'mode' => $descriptor->mode->value,
             'package' => $descriptor->package,
@@ -261,7 +276,7 @@ class MigrationManager
             }
             foreach ($this->fileFinder->findMigrations($src['path']) as $file) {
                 $path = $file->getPathname();
-                if (in_array($this->sourceKey($src['source'], basename($path)), $appliedKeys, true)) {
+                if ($this->isApplied($src, basename($path), $appliedKeys)) {
                     continue;
                 }
                 $candidates[] = ['file' => $path, 'priority' => $src['priority'], 'source' => $src['source']];
@@ -286,6 +301,7 @@ class MigrationManager
     public function migrateSources(array $sources): MigrationRunReport
     {
         $this->ensureVersionTable();
+        $this->adoptPreviousSources();
         $outcomes = [];
         $batch = null;
         foreach ($this->pendingForSources($sources) as $row) {
@@ -364,6 +380,7 @@ class MigrationManager
             'path' => $this->migrationsPath,
             'priority' => MigrationPriority::DEFAULT,
             'source' => 'app',
+            'previous' => [],
         ]];
         foreach ($this->additionalMigrationPaths as $entry) {
             $sources[] = $entry;
@@ -498,6 +515,59 @@ class MigrationManager
     }
 
     /**
+     * Applied under the lane's own source, or under any name the lane declared it was recorded
+     * under before ({@see MigrationDescriptor::$previousSources}).
+     *
+     * @param array{source: string, previous?: list<string>} $lane
+     * @param array<string> $appliedKeys
+     */
+    private function isApplied(array $lane, string $basename, array $appliedKeys): bool
+    {
+        if (in_array($this->sourceKey($lane['source'], $basename), $appliedKeys, true)) {
+            return true;
+        }
+        foreach ($lane['previous'] ?? [] as $previous) {
+            if (in_array($this->sourceKey($previous, $basename), $appliedKeys, true)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Rewrite ledger rows recorded under a lane's previous source names to the lane's current
+     * source — only for files the lane actually ships, so a previous source that is also a live
+     * lane (the operator's 'app') keeps its own rows. Idempotent; runs before every migration run.
+     */
+    private function adoptPreviousSources(): void
+    {
+        if (!$this->ledgerExists()) {
+            return;
+        }
+        foreach ($this->allSources() as $lane) {
+            $previous = $lane['previous'] ?? [];
+            if ($previous === []) {
+                continue;
+            }
+            $files = [];
+            foreach ($this->fileFinder->findMigrations($lane['path']) as $file) {
+                $files[] = basename($file->getPathname());
+            }
+            if ($files === []) {
+                continue;
+            }
+            foreach ($previous as $name) {
+                foreach ($files as $basename) {
+                    $this->db()->table(self::VERSION_TABLE)
+                        ->where('source', '=', $name)
+                        ->where('migration', '=', $basename)
+                        ->update(['source' => $lane['source']]);
+                }
+            }
+        }
+    }
+
+    /**
      * Get list of applied migrations (public method)
      *
      * @return array<string> List of applied migration filenames
@@ -553,6 +623,7 @@ class MigrationManager
             $this->assertWithinGlobalScope(array_values($specificFileOrPendingMigrations));
         }
         $this->ensureVersionTable();
+        $this->adoptPreviousSources();
         // Handle specific file migration
         if (is_string($specificFileOrPendingMigrations)) {
             $batch = $this->getNextBatchNumber();

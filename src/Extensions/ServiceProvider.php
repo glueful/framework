@@ -186,11 +186,15 @@ abstract class ServiceProvider
      * @param int         $priority Lower runs first (see MigrationPriority). Default DEFAULT (app tier).
      * @param string|null $source   Composer package name (e.g. "glueful/users"); defaults to the
      *                              directory's last segment for back-compat.
+     * @param list<string> $previousSources Source names these files were recorded under before
+     *                              (an app that became a package, a renamed package): rows under
+     *                              them count as applied and are adopted on the next run.
      */
     protected function loadMigrationsFrom(
         string $dir,
         int $priority = \Glueful\Database\Migrations\MigrationPriority::DEFAULT,
-        ?string $source = null
+        ?string $source = null,
+        array $previousSources = []
     ): void {
         if (!is_dir($dir) || !$this->app->has(MigrationManager::class)) {
             return;
@@ -237,7 +241,7 @@ abstract class ServiceProvider
         }
         /** @var MigrationManager $mm */
         $mm = $this->app->get(MigrationManager::class);
-        $mm->addMigrationPath($dir, $priority, $source);
+        $mm->addMigrationPath($dir, $priority, $source, $previousSources);
     }
 
 
