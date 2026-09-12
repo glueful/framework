@@ -133,14 +133,8 @@ final class CacheCommand extends BaseCommand
         }
 
         try {
-            $cachedProviders = require $cacheFile;
-            if (!is_array($cachedProviders)) {
-                return ['valid' => false, 'error' => 'Cache file does not return array'];
-            }
+            $cachedProviders = ExtensionManager::readCacheFile($cacheFile)['providers'];
             foreach ($cachedProviders as $providerClass) {
-                if (!is_string($providerClass)) {
-                    return ['valid' => false, 'error' => 'Cache contains non-string provider class'];
-                }
                 if (!class_exists($providerClass)) {
                     return ['valid' => false, 'error' => "Cached provider class not found: {$providerClass}"];
                 }

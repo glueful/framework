@@ -50,7 +50,8 @@ class AsEncryptedString implements CastsAttributes
      */
     protected function getKey(): string
     {
-        $key = self::$key ?? ($_ENV['ENCRYPTION_KEY'] ?? null);
+        $fromEnvironment = env('ENCRYPTION_KEY');
+        $key = self::$key ?? (is_string($fromEnvironment) && $fromEnvironment !== '' ? $fromEnvironment : null);
 
         if ($key === null) {
             throw new RuntimeException(

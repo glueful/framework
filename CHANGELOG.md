@@ -6,6 +6,30 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.85.3] - 2026-09-12 — Alphard
+
+### Fixed
+- **The boot environment is read the way `env()` reads everything else.** `Framework::create()`
+  and a console command's default context chose the environment from `$_ENV['APP_ENV']` alone,
+  which is empty under PHP's default `variables_order` whenever the process itself exports
+  `APP_ENV` (a CI job, a container): Dotenv's immutable loader skips a key the real environment
+  already holds. A CLI run then booted as `production` (a skeleton bootstrap as `development`),
+  its `config/{env}/` overrides were not applied, and `extensions:cache` compiled the wrong
+  enabled list for whoever booted next. Both read `env('APP_ENV')` now. The encryption cast's
+  `ENCRYPTION_KEY` and queue maintenance's config fallback, the last `$_ENV`-only reads without
+  a fallback, read through `env()` too.
+- **The extension cache records the environment it was compiled for.**
+  `bootstrap/cache/extensions.php` returns `['environment' => …, 'providers' => […]]`; a boot
+  under a different environment logs the mismatch and resolves live outside production
+  (production boots from its cache regardless). A bare-list cache written by an older framework
+  is still honoured; `ExtensionManager::readCacheFile()` reads either shape, and cached classes
+  are checked to be service providers exactly as live discovery checks them.
+
+### Upgrade Notes
+- A skeleton bootstrap that passes `$_ENV['APP_ENV'] ?? 'development'` to `withEnvironment()`
+  has the same blind spot; pass `env('APP_ENV', 'development')` instead (the api-skeleton does
+  as of this release).
+
 ## [1.85.2] - 2026-09-12 — Alphard
 
 ### Fixed
