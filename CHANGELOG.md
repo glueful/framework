@@ -6,6 +6,21 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.85.5] - 2026-09-13 — Alphard
+
+### Fixed
+- **A failed token generation can no longer poison every later login.** The JWT provider
+  answers empty strings for both tokens when generation throws (a missing or invalid JWT key,
+  an unsupported algorithm), and `createUserSession()` accepted them — an empty string is a
+  string — stored a session, and issued a refresh token of `""`. Its hash is a constant, so the
+  first such login left a row in `auth_refresh_tokens` and every login after it answered
+  `409 A conflicting record already exists` on the unique token hash, with nothing in the logs.
+  Empty tokens are a failed login now (`TokenManager::tokensAreUsable()`), the refresh-token
+  store refuses an empty token outright, and the provider logs the swallowed cause.
+- **Unique-constraint violations are reported.** They were on the handler's do-not-report list,
+  so a 409 from the database left no trace. They are logged at warning with the driver's detail
+  (the constraint name); the client response is unchanged.
+
 ## [1.85.4] - 2026-09-12 — Alphard
 
 ### Fixed

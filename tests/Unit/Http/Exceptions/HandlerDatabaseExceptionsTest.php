@@ -31,6 +31,33 @@ final class HandlerDatabaseExceptionsTest extends TestCase
     }
 
     #[Test]
+    public function uniqueViolationIsReportedAtWarningWithTheDriverDetail(): void
+    {
+        // A constraint violation that reaches the handler is an integrity signal worth a log line:
+        // silent 409s hid a poisoned auth_refresh_tokens row behind a generic "conflicting record".
+        $logged = [];
+        $logger = new class ($logged) extends \Psr\Log\AbstractLogger {
+            /** @param list<array{0: string, 1: string}> $logged */
+            public function __construct(private array &$logged)
+            {
+            }
+
+            public function log($level, \Stringable|string $message, array $context = []): void
+            {
+                $this->logged[] = [(string) $level, (string) $message];
+            }
+        };
+        $handler = new Handler(logger: $logger, debug: false);
+
+        $response = $handler->handle($this->uniqueViolation());
+
+        $this->assertSame(409, $response->getStatusCode());
+        $this->assertCount(1, $logged);
+        $this->assertSame('warning', $logged[0][0]);
+        $this->assertStringContainsString('Duplicate entry', $logged[0][1]);
+    }
+
+    #[Test]
     public function uniqueViolationRendersFixed409InNonDebugMode(): void
     {
         $handler = new Handler(debug: false);
@@ -58,11 +85,12 @@ final class HandlerDatabaseExceptionsTest extends TestCase
     }
 
     #[Test]
-    public function uniqueViolationIsNotReported(): void
+    public function uniqueViolationIsReported(): void
     {
+        // Reported (at warning, see the test above): a silent 409 hid a poisoned row for days.
         $handler = new Handler(debug: false);
 
-        $this->assertFalse($handler->shouldReport($this->uniqueViolation()));
+        $this->assertTrue($handler->shouldReport($this->uniqueViolation()));
     }
 
     #[Test]

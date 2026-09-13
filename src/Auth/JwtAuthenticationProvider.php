@@ -255,6 +255,9 @@ class JwtAuthenticationProvider implements AuthenticationProviderInterface
             );
         } catch (\Throwable $e) {
             $this->lastError = 'Token generation error: ' . $e->getMessage();
+            // Empty tokens make the login fail (TokenManager::tokensAreUsable); say why somewhere
+            // an operator will look, or a misconfigured JWT key surfaces only as a failed login.
+            error_log('[Auth] Token generation failed: ' . $e->getMessage());
             return [
                 'access_token' => '',
                 'refresh_token' => '',
