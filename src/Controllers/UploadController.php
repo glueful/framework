@@ -307,8 +307,10 @@ class UploadController extends BaseController
             return Response::notFound('Blob file not found');
         }
 
-        $isImage = str_starts_with((string) ($blob['mime_type'] ?? ''), 'image/');
         $mime = (string) ($blob['mime_type'] ?? 'application/octet-stream');
+        // Only raster formats have variants. A vector image (SVG) served with a width hint
+        // is the original: the raster validator would refuse it with a 422 otherwise.
+        $isImage = $this->formatFromMime($mime) !== null;
         $resize = $this->getResizeParams($request);
 
         if (
