@@ -85,7 +85,6 @@ class Handler implements ExceptionHandlerInterface
         HttpAuthException::class,
         HttpProtocolException::class,
         ExtensionException::class,
-        UniqueConstraintViolationException::class,
     ];
 
     /**
@@ -285,8 +284,11 @@ class Handler implements ExceptionHandlerInterface
         $context['channel'] = $channel;
         $context['type'] = $isFramework ? 'framework_exception' : 'application_exception';
 
-        // Log the exception
-        $this->logger?->error($e->getMessage(), $context);
+        // Log the exception. A unique-constraint violation is a 409 to the client but an integrity
+        // signal to the operator (a poisoned row, a sequence behind its table): warning, with the
+        // driver's detail, instead of the silence that hid a broken login behind a generic 409.
+        $level = $e instanceof UniqueConstraintViolationException ? 'warning' : 'error';
+        $this->logger?->log($level, $e->getMessage(), $context);
 
         // Call custom reporters
         foreach ($this->reporters as $reporter) {

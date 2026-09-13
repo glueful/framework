@@ -34,6 +34,11 @@ class RefreshTokenStore
         int $ttlSeconds,
         ?string $parentUuid = null
     ): bool {
+        if ($refreshToken === '') {
+            // Its hash is a constant: one stored row would make every later issue a unique violation.
+            throw new \InvalidArgumentException('Refusing to issue an empty refresh token.');
+        }
+
         $now = date('Y-m-d H:i:s');
         $expiresAt = date('Y-m-d H:i:s', time() + max(1, $ttlSeconds));
 

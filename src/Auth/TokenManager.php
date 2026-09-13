@@ -36,6 +36,20 @@ class TokenManager
     private ?ApplicationContext $context = null;
     private ?AuthenticationManager $authManager = null;
 
+    /**
+     * A token pair a session may be built from: both tokens present and non-empty. The JWT
+     * provider answers empty strings when generation throws; those are a failed login.
+     *
+     * @param array<string, mixed> $tokens
+     */
+    public static function tokensAreUsable(array $tokens): bool
+    {
+        $access = $tokens['access_token'] ?? null;
+        $refresh = $tokens['refresh_token'] ?? null;
+
+        return is_string($access) && $access !== '' && is_string($refresh) && $refresh !== '';
+    }
+
     public function __construct(
         ?ApplicationContext $context = null,
         ?Connection $db = null,
@@ -497,8 +511,10 @@ class TokenManager
             $tokens = $this->generateTokenPair($user, $accessTokenLifetime, $refreshTokenLifetime);
         }
 
-        // Store session using SessionStore for unified database/cache management
-        if (!is_string($tokens['access_token'] ?? null) || !is_string($tokens['refresh_token'] ?? null)) {
+        // Empty tokens are a FAILED login, never a session: the JWT provider answers empty strings
+        // when generation throws, and storing them issued a refresh token of "" whose constant hash
+        // poisoned auth_refresh_tokens (every later login answered 409).
+        if (!self::tokensAreUsable($tokens)) {
             return [];
         }
         /** @var array{access_token: string, refresh_token: string, expires_in?: int} $tokens */

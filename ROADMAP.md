@@ -21,6 +21,13 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.85.5 — Alphard (Patch, Released 2026-09-13)
+- **Empty tokens are a failed login, never a session** — a swallowed token-generation failure
+  stored a session with a refresh token of `""`, whose constant hash made every later login a
+  409. Guarded in the token manager and the refresh-token store; the cause is logged.
+- **Unique-constraint violations are reported at warning** with the driver's detail.
+- Notes: patch; a poisoned `auth_refresh_tokens` row from an affected install must be deleted once.
+
 ### 1.85.4 — Alphard (Patch, Released 2026-09-12)
 - **Config-declared scheduled jobs run** — the in-memory registration only returned the handler
   class name, so `queue:scheduler run` executed nothing for `config/schedule.php` jobs; they now
