@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.85.6] - 2026-09-13 — Alphard
+
+### Fixed
+- **A vector image served with a width hint is the original, not a 422.** `GET /blobs/{uuid}?width=160`
+  took every `image/*` blob into the resizer, whose raster validator only knows JPEG, PNG, GIF and
+  WebP, so an SVG answered `422 Unprocessable Content` to any thumbnail request. Only raster
+  formats take the variant path now; SVG (and any other non-raster image type) falls through to
+  the original bytes with the resize parameters ignored.
+
 ## [1.85.5] - 2026-09-13 — Alphard
 
 ### Fixed

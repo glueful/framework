@@ -279,6 +279,41 @@ final class UploadControllerVariantTest extends TestCase
         $this->assertSame(0, $fake->renderCalls);
     }
 
+    public function testSvgWithWidthServesTheOriginalWithoutTouchingTheProcessor(): void
+    {
+        $uuid = 'blob00000004';
+        $relPath = 'posts/logo.svg';
+        $full = $this->uploadsRoot . '/' . $relPath;
+        $svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4"/></svg>';
+        file_put_contents($full, $svg);
+        \Glueful\Database\Connection::fromContext($this->context)
+            ->table('blobs')
+            ->insert([
+                'uuid' => $uuid,
+                'name' => 'logo.svg',
+                'mime_type' => 'image/svg+xml',
+                'size' => strlen($svg),
+                'url' => $relPath,
+                'storage_type' => 'uploads',
+                'visibility' => 'public',
+                'status' => 'active',
+                'created_by' => 'usr123456789',
+            ]);
+
+        $fake = new VariantFakeMediaProcessor();
+        $response = $this->makeController($fake)->show(
+            Request::create('/blobs/' . $uuid, 'GET', ['width' => 160]),
+            $uuid
+        );
+
+        // A vector image has no raster variant: the width hint is ignored and the
+        // original is served as-is, never a 422 from the raster validator.
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame('image/svg+xml', $response->headers->get('Content-Type'));
+        $this->assertSame($svg, $this->bodyOf($response));
+        $this->assertSame(0, $fake->renderCalls);
+    }
+
     public function testTenancyPolicyCanHideAnOtherwisePublicBlob(): void
     {
         $policy = new class implements BlobCreatedHook, BlobAccessPolicy {

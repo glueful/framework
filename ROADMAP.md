@@ -21,6 +21,12 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.85.6 — Alphard (Patch, Released 2026-09-13)
+- **SVG blobs with a width hint serve the original** — every `image/*` blob took the resizer,
+  whose raster validator refused SVG with a 422; only JPEG, PNG, GIF and WebP take the variant
+  path now.
+- Notes: patch; no migration.
+
 ### 1.85.5 — Alphard (Patch, Released 2026-09-13)
 - **Empty tokens are a failed login, never a session** — a swallowed token-generation failure
   stored a session with a refresh token of `""`, whose constant hash made every later login a
