@@ -47,6 +47,8 @@ use Throwable;
  */
 class CacheMaintenanceJob extends Job
 {
+    use ResolvesJobLogger;
+
     public function __construct(array $data = [], ?ApplicationContext $context = null)
     {
         parent::__construct($data, $context);
@@ -81,9 +83,7 @@ class CacheMaintenanceJob extends Job
             default => throw new \InvalidArgumentException("Unknown operation: {$operation}")
         };
 
-        $logger = $this->context !== null
-            ? container($this->context)->get(LogManager::class)
-            : LogManager::getInstance();
+        $logger = $this->jobLogger();
         $logger->info('Cache maintenance job completed', [
             'operation' => $operation,
             'result' => $result
@@ -101,9 +101,7 @@ class CacheMaintenanceJob extends Job
         $operation = $data['operation'] ?? 'clearExpiredKeys';
         $options = $data['options'] ?? [];
 
-        $logger = $this->context !== null
-            ? container($this->context)->get(LogManager::class)
-            : LogManager::getInstance();
+        $logger = $this->jobLogger();
         $logger->error('Cache maintenance job failed', [
             'operation' => $operation,
             'options' => $options,

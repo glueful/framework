@@ -62,6 +62,33 @@ final class NotificationJobsContextTest extends TestCase
 
     /**
      * @dataProvider scheduledJobs
+     */
+    public function testAJobWithAContextWhoseContainerLacksTheLoggerStillLogs(string $class): void
+    {
+        // A skeleton install's container binds no LogManager: the job must not fail its tick
+        // on the lookup, it reports through the static instance instead.
+        $context = new ApplicationContext(sys_get_temp_dir() . '/jobs_logger_' . uniqid());
+        $job = JobHandlerResolver::resolve($class, ['limit' => 1], $context);
+        $method = new \ReflectionMethod($job, 'jobLogger');
+        self::assertInstanceOf(\Glueful\Logging\LogManager::class, $method->invoke($job), 'no container at all');
+
+        $empty = new class implements \Psr\Container\ContainerInterface {
+            public function get(string $id): mixed
+            {
+                throw new \RuntimeException("Service '{$id}' not found");
+            }
+
+            public function has(string $id): bool
+            {
+                return false;
+            }
+        };
+        $context->setContainer($empty);
+        self::assertInstanceOf(\Glueful\Logging\LogManager::class, $method->invoke($job), 'a container without the binding');
+    }
+
+    /**
+     * @dataProvider scheduledJobs
      * @param class-string $class
      */
     public function testAScheduledJobKeepsTheContextTheResolverHandsIt(string $class): void

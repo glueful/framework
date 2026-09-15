@@ -48,6 +48,8 @@ use Throwable;
  */
 class SessionCleanupJob extends Job
 {
+    use ResolvesJobLogger;
+
     public function __construct(array $data = [], ?ApplicationContext $context = null)
     {
         parent::__construct($data, $context);
@@ -91,9 +93,7 @@ class SessionCleanupJob extends Job
             default => throw new \InvalidArgumentException("Unknown cleanup type: {$cleanupType}")
         };
 
-        $logger = $this->context !== null
-            ? container($this->context)->get(LogManager::class)
-            : LogManager::getInstance();
+        $logger = $this->jobLogger();
         $logger->info('Session cleanup completed', ['cleanup_type' => $cleanupType] + self::summarizeStats($result));
     }
 
@@ -125,9 +125,7 @@ class SessionCleanupJob extends Job
         $cleanupType = $data['cleanupType'] ?? 'expired';
         $options = $data['options'] ?? [];
 
-        $logger = $this->context !== null
-            ? container($this->context)->get(LogManager::class)
-            : LogManager::getInstance();
+        $logger = $this->jobLogger();
         $logger->error('Session cleanup job failed', [
             'cleanup_type' => $cleanupType,
             'options' => $options,
