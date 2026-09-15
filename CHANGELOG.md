@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+- **Scheduled framework jobs keep the application context.** `JobHandlerResolver` hands the
+  context to a job's constructor, but `NotificationRetryJob`, `SessionCleanupJob`,
+  `LogCleanupJob`, `CacheMaintenanceJob` and `DatabaseBackupJob` overrode that constructor
+  without the parameter and dropped it. The notification retry job then threw
+  `NotificationContextRequiredException` on every due tick (`queue:scheduler run` failed every
+  tenth minute on a fresh install); the others ran context-less. Every one now forwards the
+  context.
+
 ## [1.85.6] - 2026-09-13 — Alphard
 
 ### Fixed
