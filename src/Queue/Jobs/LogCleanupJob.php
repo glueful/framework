@@ -48,6 +48,8 @@ use Throwable;
  */
 class LogCleanupJob extends Job
 {
+    use ResolvesJobLogger;
+
     public function __construct(array $data = [], ?ApplicationContext $context = null)
     {
         parent::__construct($data, $context);
@@ -95,9 +97,7 @@ class LogCleanupJob extends Job
             default => throw new \InvalidArgumentException("Unknown cleanup type: {$cleanupType}")
         };
 
-        $logger = $this->context !== null
-            ? container($this->context)->get(LogManager::class)
-            : LogManager::getInstance();
+        $logger = $this->jobLogger();
         $logger->info('Log cleanup completed', [
             'cleanup_type' => $cleanupType,
             'deleted_files' => $result['deleted_files'] ?? 0,
@@ -117,9 +117,7 @@ class LogCleanupJob extends Job
         $cleanupType = $data['cleanupType'] ?? 'all';
         $options = $data['options'] ?? [];
 
-        $logger = $this->context !== null
-            ? container($this->context)->get(LogManager::class)
-            : LogManager::getInstance();
+        $logger = $this->jobLogger();
         $logger->error('Log cleanup job failed', [
             'cleanup_type' => $cleanupType,
             'options' => $options,

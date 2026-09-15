@@ -6,6 +6,16 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.85.8] - 2026-09-15 — Alphard
+
+### Fixed
+- **A scheduled framework job never fails its tick on the logger lookup.** With their context
+  restored (1.85.7), `NotificationRetryJob`, `SessionCleanupJob`, `LogCleanupJob`,
+  `CacheMaintenanceJob` and `DatabaseBackupJob` resolved `LogManager` from the container
+  unguarded, and a container that binds none — a skeleton install — failed every due tick with
+  `Service 'Glueful\Logging\LogManager' not found`. The five jobs share one guarded lookup that
+  falls back to the static instance.
+
 ## [1.85.7] - 2026-09-15 — Alphard
 
 ### Fixed

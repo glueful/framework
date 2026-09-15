@@ -21,6 +21,14 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.85.8 — Alphard (Patch, Released 2026-09-15)
+- **A scheduled framework job never fails its tick on the logger lookup** — with their context
+  restored in 1.85.7, the five shipped jobs resolved `LogManager` from the container unguarded,
+  and a container that binds none (a skeleton install) failed every due tick with
+  `Service 'Glueful\Logging\LogManager' not found`. One guarded lookup, shared by the five,
+  falls back to the static instance.
+- Notes: patch; no migration.
+
 ### 1.85.7 — Alphard (Patch, Released 2026-09-15)
 - **Scheduled framework jobs keep the application context** — five shipped jobs overrode the
   constructor without the context parameter and dropped what `JobHandlerResolver` handed them;

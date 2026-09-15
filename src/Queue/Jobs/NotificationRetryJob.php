@@ -47,6 +47,8 @@ use Throwable;
  */
 class NotificationRetryJob extends Job
 {
+    use ResolvesJobLogger;
+
     public function __construct(array $data = [], ?ApplicationContext $context = null)
     {
         parent::__construct($data, $context);
@@ -77,9 +79,7 @@ class NotificationRetryJob extends Job
             default => throw new \InvalidArgumentException("Unknown retry type: {$retryType}")
         };
 
-        $logger = $this->context !== null
-            ? container($this->context)->get(LogManager::class)
-            : LogManager::getInstance();
+        $logger = $this->jobLogger();
         $logger->info('Notification retry completed', [
             'retry_type' => $retryType,
             'processed' => $result['processed'] ?? 0,
@@ -100,9 +100,7 @@ class NotificationRetryJob extends Job
         $retryType = $data['retryType'] ?? 'process';
         $options = $data['options'] ?? [];
 
-        $logger = $this->context !== null
-            ? container($this->context)->get(LogManager::class)
-            : LogManager::getInstance();
+        $logger = $this->jobLogger();
         $logger->error('Notification retry job failed', [
             'retry_type' => $retryType,
             'options' => $options,

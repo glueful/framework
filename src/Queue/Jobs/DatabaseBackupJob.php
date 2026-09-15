@@ -47,6 +47,8 @@ use Throwable;
  */
 class DatabaseBackupJob extends Job
 {
+    use ResolvesJobLogger;
+
     public function __construct(array $data = [], ?ApplicationContext $context = null)
     {
         parent::__construct($data, $context);
@@ -75,9 +77,7 @@ class DatabaseBackupJob extends Job
             default => throw new \InvalidArgumentException("Unknown backup type: {$backupType}")
         };
 
-        $logger = $this->context !== null
-            ? container($this->context)->get(LogManager::class)
-            : LogManager::getInstance();
+        $logger = $this->jobLogger();
         $logger->info('Database backup completed', [
             'backup_type' => $backupType,
             'result' => $result
@@ -95,9 +95,7 @@ class DatabaseBackupJob extends Job
         $backupType = $data['backupType'] ?? 'full';
         $options = $data['options'] ?? [];
 
-        $logger = $this->context !== null
-            ? container($this->context)->get(LogManager::class)
-            : LogManager::getInstance();
+        $logger = $this->jobLogger();
         $logger->critical('Database backup job failed', [
             'backup_type' => $backupType,
             'options' => $options,
