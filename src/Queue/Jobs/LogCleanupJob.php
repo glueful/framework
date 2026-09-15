@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Queue\Jobs;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Queue\Job;
 use Glueful\Tasks\LogCleanupTask;
 use Glueful\Logging\LogManager;
@@ -47,9 +48,9 @@ use Throwable;
  */
 class LogCleanupJob extends Job
 {
-    public function __construct(array $data = [])
+    public function __construct(array $data = [], ?ApplicationContext $context = null)
     {
-        parent::__construct($data);
+        parent::__construct($data, $context);
 
         // Set job configuration
         $this->queue = 'maintenance';
