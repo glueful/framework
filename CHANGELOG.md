@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.85.7] - 2026-09-15 — Alphard
+
 ### Fixed
 - **Scheduled framework jobs keep the application context.** `JobHandlerResolver` hands the
   context to a job's constructor, but `NotificationRetryJob`, `SessionCleanupJob`,
