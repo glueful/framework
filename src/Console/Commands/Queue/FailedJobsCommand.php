@@ -4,15 +4,14 @@ declare(strict_types=1);
 
 namespace Glueful\Console\Commands\Queue;
 
-use Glueful\Queue\Drivers\DatabaseQueue;
+use Glueful\Queue\Contracts\FailedJobStore;
 use Glueful\Queue\QueueManager;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 
 /**
- * Shared ground for the failed-job commands. Failed jobs are stored by the database queue
- * connection (queue_failed_jobs); the commands work on the named connection, default the
- * configured one.
+ * Shared ground for the failed-job commands. They work on the named queue connection (default: the
+ * configured one) when its driver keeps failures, which the database and Redis drivers do.
  */
 abstract class FailedJobsCommand extends BaseQueueCommand
 {
@@ -26,14 +25,14 @@ abstract class FailedJobsCommand extends BaseQueueCommand
         );
     }
 
-    protected function failedStore(InputInterface $input): ?DatabaseQueue
+    protected function failedStore(InputInterface $input): ?FailedJobStore
     {
         $name = $input->getOption('connection');
         $driver = $this->getContainer()->get(QueueManager::class)
             ->connection(is_string($name) && $name !== '' ? $name : null);
 
-        if (!$driver instanceof DatabaseQueue) {
-            $this->error('Failed jobs are kept by the database queue connection; this connection is not one.');
+        if (!$driver instanceof FailedJobStore) {
+            $this->error('This queue connection\'s driver does not keep failed jobs.');
             return null;
         }
 

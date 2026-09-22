@@ -7,6 +7,7 @@ use Glueful\Queue\Contracts\JobInterface;
 use Glueful\Queue\Contracts\DriverInfo;
 use Glueful\Queue\Contracts\HealthStatus;
 use Glueful\Queue\Jobs\DatabaseJob;
+use Glueful\Queue\Contracts\FailedJobStore;
 use Glueful\Queue\Failed\FailedJobProvider;
 use Glueful\Queue\QueuePayloadSigner;
 use Glueful\Bootstrap\ApplicationContext;
@@ -37,7 +38,7 @@ use Glueful\Helpers\Utils;
  *
  * @package Glueful\Queue\Drivers
  */
-class DatabaseQueue implements QueueDriverInterface
+class DatabaseQueue implements QueueDriverInterface, FailedJobStore
 {
     /** @var Connection Database connection */
     private Connection $db;
@@ -588,9 +589,9 @@ class DatabaseQueue implements QueueDriverInterface
      *
      * @return list<array{uuid: string, queue: string, job: string, exception: string, failed_at: string}>
      */
-    public function failedJobs(?string $queue = null, int $limit = 50): array
+    public function failedJobs(?string $queue = null, int $limit = 50, int $offset = 0): array
     {
-        $rows = $this->failures()->all($queue !== null ? ['queue' => $queue] : [], $limit);
+        $rows = $this->failures()->all($queue !== null ? ['queue' => $queue] : [], $limit, $offset);
 
         return array_values(array_map(static fn(array $row): array => [
             'uuid' => (string) $row['uuid'],

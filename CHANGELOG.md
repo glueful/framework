@@ -10,11 +10,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - **Failed queue jobs can be listed, retried and removed.** A job that exhausted its attempts went
   to `queue_failed_jobs` with no way back: no command, no screen. `queue:failed` lists them (job
   class, queue, error), `queue:retry <uuid>… | --all [--queue=]` puts them back as new jobs,
-  `queue:forget <uuid>` deletes one and `queue:flush [--queue=]` deletes them all. They work on the
-  database connection, which is the one that stores failures; the methods behind them are
-  `DatabaseQueue::failedJobs()`, `retryFailed()`, `forgetFailed()` and `flushFailed()`. A retry
-  verifies the stored payload's signature first, so a payload altered after it failed is refused,
-  never re-signed.
+  `queue:forget <uuid>` deletes one and `queue:flush [--queue=]` deletes them all. They work on any
+  connection whose driver implements the new `Glueful\Queue\Contracts\FailedJobStore`: the
+  database driver (`queue_failed_jobs`) and the Redis driver (`queue:{name}:failed` lists) both do.
+  A retry verifies the stored payload's signature first, so a payload altered after it failed is
+  refused, never re-signed.
 - **`webhook:cleanup` and a scheduled `webhook_cleanup` job.** `api.webhooks.cleanup`
   (`keep_successful_days`, `keep_failed_days`) was read by nothing, so delivery records, payloads
   included, were kept for ever. `Webhook::cleanup()` deletes delivered records past the first and
