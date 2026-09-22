@@ -12,7 +12,6 @@ use Glueful\Api\Webhooks\Jobs\DeliverWebhookJob;
 use Glueful\Database\Connection;
 use Glueful\Database\Schema\Interfaces\SchemaBuilderInterface;
 use Glueful\Events\EventService;
-use Glueful\Queue\QueueManager;
 
 /**
  * Central webhook dispatcher with auto-migration
@@ -132,15 +131,8 @@ class WebhookDispatcher implements WebhookDispatcherInterface
      */
     private function queueDelivery(WebhookDelivery $delivery, array $config): void
     {
-        $job = new DeliverWebhookJob(['delivery_id' => $delivery->id], $this->context);
-        $job->setQueue($config['queue'] ?? 'webhooks');
-
-        // Use queue manager to dispatch if available
         if ($this->context !== null) {
-            $container = container($this->context);
-            if ($container->has(QueueManager::class)) {
-                $container->get(QueueManager::class)->push($job);
-            }
+            DeliverWebhookJob::enqueue($this->context, $delivery->id, (string) ($config['queue'] ?? 'webhooks'));
         }
     }
 

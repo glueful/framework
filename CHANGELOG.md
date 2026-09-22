@@ -6,6 +6,30 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+- **Webhooks deliver.** `WebhookDispatcher` and `Webhook::retry()` handed `QueueManager::push()` a
+  `DeliverWebhookJob` object where it takes a class name, a `TypeError` under `strict_types`: every
+  delivery row stayed `pending`, the event listener's error was only logged, and Retry answered 500.
+  Both now queue through `DeliverWebhookJob::enqueue()`, which pushes the class and the delivery id;
+  a retry goes to the configured `api.webhooks.queue`. The job scaffold's dispatch examples showed
+  the same object form and now show `push(Job::class, $data, $queue)`.
+- **A test webhook cannot reach private addresses.** `Webhook::test()` posted to any URL; only a
+  queued delivery checked the destination. It now applies the delivery's guard (scheme, localhost,
+  private, reserved, link-local and metadata ranges) and its DNS pinning before any request.
+- **The scheduled database backup backs up.** `DatabaseBackupTask` read flat `driver`, `database`,
+  `username` and `password` keys the stock `config/database.php` does not have, so every stock site
+  took the `mysqldump` path with empty credentials; the `PGPASSWORD` it prepared was never passed to
+  `pg_dump`, and the MySQL password went on the command line. It now reads `engine` and that
+  engine's `host`/`port`/`db`/`user`/`pass`, runs the dump tool without a shell with the password in
+  `PGPASSWORD` or `MYSQL_PWD` (and `PGSSLMODE` from `sslmode`), writes and prunes backups in one
+  directory (`app.paths.backups`, else `storage/backups`), and logs "failed" instead of "completed"
+  when no backup was made. `DatabaseBackupJob` passes its context to the task and fails when no
+  backup was created, so the queue records it and `failed()` logs it.
+- **Two database-queue workers never run the same job.** `DatabaseQueue::pop()` selected the next
+  job and reserved it by uuid alone. The reservation is now a claim that lands only while the row is
+  still unreserved; a worker that loses it tries the next candidate. No row locks are needed, so it
+  holds on SQLite, MySQL and PostgreSQL.
+
 ## [1.85.8] - 2026-09-15 — Alphard
 
 ### Fixed

@@ -268,17 +268,9 @@ class Webhook
 
         $delivery->resetForRetry();
 
-        // Queue the delivery job
-        $job = new Jobs\DeliverWebhookJob(
-            ['delivery_id' => $delivery->id],
-            self::$context
-        );
-
         if (self::$context !== null) {
-            $container = container(self::$context);
-            if ($container->has(\Glueful\Queue\QueueManager::class)) {
-                $container->get(\Glueful\Queue\QueueManager::class)->push($job);
-            }
+            $queue = (string) config(self::$context, 'api.webhooks.queue', 'webhooks');
+            Jobs\DeliverWebhookJob::enqueue(self::$context, $delivery->id, $queue);
         }
 
         return true;
@@ -311,17 +303,29 @@ class Webhook
             ];
         }
 
+        // The same destination guard a queued delivery applies, and the same DNS pinning.
+        $destination = (new Jobs\DeliverWebhookJob([], self::$context))->checkDestination($url);
+        if ($destination['error'] !== null) {
+            return [
+                'success' => false,
+                'error' => $destination['error'],
+            ];
+        }
+
         $timestamp = time();
         $signature = $secret !== null
             ? WebhookSignature::generate($jsonPayload, $secret, $timestamp)
             : '';
 
         try {
-            // Use Symfony HttpClient for the test
-            $httpClient = \Symfony\Component\HttpClient\HttpClient::create([
+            $options = [
                 'timeout' => 30,
                 'max_redirects' => 0,
-            ]);
+            ];
+            if ($destination['resolve'] !== []) {
+                $options['resolve'] = $destination['resolve'];
+            }
+            $httpClient = \Symfony\Component\HttpClient\HttpClient::create($options);
 
             $headers = [
                 'Content-Type' => 'application/json',
