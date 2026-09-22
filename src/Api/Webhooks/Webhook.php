@@ -277,6 +277,36 @@ class Webhook
     }
 
     /**
+     * Delete delivery records past their retention (`api.webhooks.cleanup`): delivered ones older
+     * than `keep_successful_days` (by delivery time), failed ones older than `keep_failed_days`
+     * (by creation time). Pending and retrying deliveries are never removed by age.
+     *
+     * @return array{delivered: int, failed: int} rows removed
+     */
+    public static function cleanup(): array
+    {
+        $context = self::requireContext();
+        $keepDelivered = max(1, (int) config($context, 'api.webhooks.cleanup.keep_successful_days', 7));
+        $keepFailed = max(1, (int) config($context, 'api.webhooks.cleanup.keep_failed_days', 30));
+        $db = WebhookDelivery::query($context)->getModel()->getConnection();
+        if (!$db->getSchemaBuilder()->hasTable('webhook_deliveries')) {
+            return ['delivered' => 0, 'failed' => 0];
+        }
+        $day = 86400;
+
+        return [
+            'delivered' => $db->table('webhook_deliveries')
+                ->where('status', WebhookDelivery::STATUS_DELIVERED)
+                ->where('delivered_at', '<', date('Y-m-d H:i:s', time() - $keepDelivered * $day))
+                ->delete(),
+            'failed' => $db->table('webhook_deliveries')
+                ->where('status', WebhookDelivery::STATUS_FAILED)
+                ->where('created_at', '<', date('Y-m-d H:i:s', time() - $keepFailed * $day))
+                ->delete(),
+        ];
+    }
+
+    /**
      * Send a test webhook to an endpoint
      *
      * @param string $url The URL to test
@@ -387,5 +417,6 @@ class Webhook
     public static function reset(): void
     {
         self::$dispatcher = null;
+        self::$context = null;
     }
 }

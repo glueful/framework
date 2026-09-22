@@ -74,6 +74,14 @@ class WebhookSubscription extends Model
                 $model->secret = self::generateSecret();
             }
         });
+
+        // A subscription's deliveries go with it. There is no foreign key (the tables are created
+        // at first use), and rows left behind are reachable from no endpoint or screen.
+        static::deleted(function (WebhookSubscription $model): void {
+            $model->getConnection()->table('webhook_deliveries')
+                ->where('subscription_id', $model->id)
+                ->delete();
+        });
     }
 
     /**

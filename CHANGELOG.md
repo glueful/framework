@@ -6,7 +6,19 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Added
+- **`webhook:cleanup` and a scheduled `webhook_cleanup` job.** `api.webhooks.cleanup`
+  (`keep_successful_days`, `keep_failed_days`) was read by nothing, so delivery records, payloads
+  included, were kept for ever. `Webhook::cleanup()` deletes delivered records past the first and
+  failed records past the second; pending and retrying ones stay. `WebhookCleanupJob` runs it daily
+  from the default `config/schedule.php` (`WEBHOOK_CLEANUP_ENABLED`). A site whose own schedule
+  replaces the default adds the job itself.
+
 ### Fixed
+- **Deleting a webhook subscription deletes its deliveries.** Nothing linked them (the tables are
+  created at first use, with no foreign key), so the rows stayed, reachable from no endpoint.
+- **`Webhook::reset()` also clears the context**, so state set by one test cannot leak into the
+  next.
 - **A model created through the ORM carries its own id.** `Model::performInsert()` took
   `insert()`'s return value as the new primary key, but `insert()` returns the affected-row count,
   so every auto-increment model came back with id 1: a queued job, child row or later update keyed

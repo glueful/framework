@@ -78,6 +78,16 @@ return [
             'timeout' => 300,
             'retry_attempts' => 2,
         ],
+        [
+            'name' => 'webhook_cleanup',
+            'schedule' => '30 3 * * *',
+            'handler_class' => 'Glueful\\Api\\Webhooks\\Jobs\\WebhookCleanupJob',
+            'description' => 'Delete webhook delivery records past api.webhooks.cleanup retention',
+            'enabled' => env('WEBHOOK_CLEANUP_ENABLED', true),
+            'queue' => $maintenanceQueue,
+            'timeout' => 300,
+            'retry_attempts' => 1,
+        ],
     ],
 
     'settings' => [
