@@ -68,7 +68,7 @@ class DatabaseBackupJob extends Job
         $backupType = $data['backupType'] ?? 'full';
         $options = $data['options'] ?? [];
 
-        $task = new DatabaseBackupTask();
+        $task = new DatabaseBackupTask($this->context);
 
         $result = match ($backupType) {
             'full' => $task->handle(['backup_type' => 'full'] + $options),
@@ -76,6 +76,13 @@ class DatabaseBackupJob extends Job
             'schema' => $task->handle(['backup_type' => 'schema'] + $options),
             default => throw new \InvalidArgumentException("Unknown backup type: {$backupType}")
         };
+
+        // A backup that was not made is a failed job: the queue records it and failed() logs it.
+        if (!$result['backup_created']) {
+            throw new \RuntimeException(
+                'Database backup was not created: ' . implode('; ', $result['errors'])
+            );
+        }
 
         $logger = $this->jobLogger();
         $logger->info('Database backup completed', [
