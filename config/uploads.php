@@ -27,6 +27,10 @@ return [
     // Storage disk (from config/storage.php)
     'disk' => env('UPLOADS_DISK', 'uploads'),
 
+    // A deleted blob keeps its file this many days, then `blobs:purge` (and the scheduled
+    // blob_purge job) removes the file and the row.
+    'purge_deleted_after_days' => (int) env('UPLOADS_PURGE_DELETED_AFTER_DAYS', 30),
+
     // Default visibility for uploaded blobs: 'public' or 'private'
     // Public blobs can be accessed without auth (if access mode allows)
     // Private blobs require auth or a valid signed URL

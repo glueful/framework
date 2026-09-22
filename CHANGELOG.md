@@ -13,6 +13,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - **A PostgreSQL search that relied on matching case now matches any case**, and a `%` or `_` a
   client sends is matched as that character. `WhereClauseInterface` gains the four text-match
   methods; a custom implementation must add them.
+- **List `blob_purge` in your `config/schedule.php`** to purge deleted uploads: an app's schedule
+  replaces the framework's list.
+
+### Added
+- **Deleted uploads are purged.** Deleting a blob only marked it, so its file stayed on the disk
+  for good. `blobs:purge` and the new scheduled `blob_purge` job remove the file, through the disk
+  the blob names, and then the row, once `uploads.purge_deleted_after_days` (30 by default,
+  `UPLOADS_PURGE_DELETED_AFTER_DAYS`) have passed. A blob whose file cannot be removed keeps its row
+  for the next run (`Glueful\Uploader\BlobPurger`).
 
 ### Deprecated
 - `Utils::buildSearchConditions()` writes the search term into raw SQL unescaped. Use
@@ -47,6 +56,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   or replaced under the same uuid the old variant was served, and revalidated as unchanged, for as
   long as the cache lived (seven days by default). The blob's size and last update now version
   both.
+- **A command a framework upgrade adds shows up in production.** The production command manifest
+  was rediscovered only when a listed class disappeared, so a new framework command stayed
+  missing until someone deleted `storage/cache/glueful_commands_manifest.php`. The manifest now
+  records the framework version that wrote it and is rediscovered when that changes.
 
 ## [1.86.2] - 2026-09-22 — Alpherg
 
