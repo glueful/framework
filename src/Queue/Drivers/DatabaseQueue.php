@@ -120,8 +120,8 @@ class DatabaseQueue implements QueueDriverInterface
         $startTime = microtime(true);
 
         try {
-            // Test database connection
-            $this->db->query()->selectRaw("1")->get();
+            // Test the connection itself (the query builder refuses a table-less SELECT)
+            $this->db->getPDO()->query('SELECT 1');
 
             // Check if queue table exists using database-agnostic approach
             try {

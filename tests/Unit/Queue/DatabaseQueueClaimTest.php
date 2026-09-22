@@ -83,7 +83,20 @@ final class DatabaseQueueClaimTest extends TestCase
         $firstRow = $connection->table('queue_jobs')->where('uuid', $first)->first();
         self::assertSame(0, (int) $firstRow['attempts'], 'the rival\'s claim is untouched');
     }
+
+    public function testTheHealthCheckReportsAWorkingQueueAsHealthy(): void
+    {
+        // It probed the connection with a table-less query the builder refuses, so it reported
+        // every database queue unhealthy.
+        $queue = new DatabaseQueue();
+        $queue->initialize(['context' => $this->context]);
+
+        $health = $queue->healthCheck();
+
+        self::assertTrue($health->isHealthy(), $health->message);
+    }
 }
+
 
 final class ClaimTestJob extends \Glueful\Queue\Job
 {
