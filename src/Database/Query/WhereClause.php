@@ -148,6 +148,47 @@ class WhereClause implements WhereClauseInterface
     }
 
     /**
+     * Case-insensitive substring match, with the term matched literally. `LIKE` folds case on
+     * MySQL and SQLite but not on PostgreSQL, and a `%` or `_` in user input is a wildcard; this
+     * lower-cases both sides and escapes the term, so a search behaves the same on every driver.
+     */
+    public function whereContains(string $column, string $text): void
+    {
+        $this->addTextCondition($column, '%' . self::escapeLike($text) . '%', 'AND');
+    }
+
+    public function orWhereContains(string $column, string $text): void
+    {
+        $this->addTextCondition($column, '%' . self::escapeLike($text) . '%', 'OR');
+    }
+
+    /** Case-insensitive prefix match; the term is matched literally. */
+    public function whereStartsWith(string $column, string $text): void
+    {
+        $this->addTextCondition($column, self::escapeLike($text) . '%', 'AND');
+    }
+
+    /** Case-insensitive suffix match; the term is matched literally. */
+    public function whereEndsWith(string $column, string $text): void
+    {
+        $this->addTextCondition($column, '%' . self::escapeLike($text), 'AND');
+    }
+
+    private function addTextCondition(string $column, string $pattern, string $boolean): void
+    {
+        $this->addRawCondition(
+            'LOWER(' . $this->wrapColumn($column) . ") LIKE ? ESCAPE '!'",
+            [mb_strtolower($pattern)],
+            $boolean,
+        );
+    }
+
+    private static function escapeLike(string $text): string
+    {
+        return strtr($text, ['!' => '!!', '%' => '!%', '_' => '!_']);
+    }
+
+    /**
      * Add JSON contains WHERE condition (database-agnostic)
      *
      * Uses the appropriate JSON functions based on the database driver.

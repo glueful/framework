@@ -86,7 +86,12 @@ trait QueryFilterTrait
                 $query->where($field, '<', $value);
                 break;
             case 'like':
-                $query->where($field, 'LIKE', "%{$value}%");
+                // The concrete builder folds case and escapes the term on every driver.
+                if ($query instanceof \Glueful\Database\QueryBuilder) {
+                    $query->whereContains($field, (string) $value);
+                } else {
+                    $query->where($field, 'LIKE', "%{$value}%");
+                }
                 break;
             case 'in':
                 if (is_array($value) && $value !== []) {

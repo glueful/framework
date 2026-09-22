@@ -8,7 +8,7 @@ use Glueful\Api\Filtering\Contracts\FilterOperatorInterface;
 use Glueful\Database\QueryBuilder;
 
 /**
- * Starts With operator (LIKE value%)
+ * Starts With operator (case-insensitive, literal prefix)
  *
  * Filters for values starting with: filter[email][starts]=admin@
  */
@@ -26,6 +26,6 @@ class StartsWithOperator implements FilterOperatorInterface
 
     public function apply(QueryBuilder $query, string $field, mixed $value): void
     {
-        $query->where($field, 'LIKE', "{$value}%");
+        $query->whereStartsWith($field, (string) $value);
     }
 }

@@ -301,6 +301,36 @@ class QueryBuilder implements QueryBuilderInterface
     }
 
     /**
+     * Case-insensitive substring match on every driver; `%` and `_` in the term are literal.
+     */
+    public function whereContains(string $column, string $text): static
+    {
+        $this->whereClause->whereContains($column, $text);
+        return $this;
+    }
+
+    /** OR form of whereContains(). */
+    public function orWhereContains(string $column, string $text): static
+    {
+        $this->whereClause->orWhereContains($column, $text);
+        return $this;
+    }
+
+    /** Case-insensitive prefix match; the term is literal. */
+    public function whereStartsWith(string $column, string $text): static
+    {
+        $this->whereClause->whereStartsWith($column, $text);
+        return $this;
+    }
+
+    /** Case-insensitive suffix match; the term is literal. */
+    public function whereEndsWith(string $column, string $text): static
+    {
+        $this->whereClause->whereEndsWith($column, $text);
+        return $this;
+    }
+
+    /**
      * {@inheritdoc}
      *
      * @param array<mixed> $bindings

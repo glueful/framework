@@ -10,6 +10,13 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - **Set `MAIL_HOST` and `MAIL_FROM` if your app sends mail.** They no longer fall back to
   `smtp.mailtrap.io` and `noreply@glueful.com`; with either unset, the email channel reports
   itself unavailable.
+- **A PostgreSQL search that relied on matching case now matches any case**, and a `%` or `_` a
+  client sends is matched as that character. `WhereClauseInterface` gains the four text-match
+  methods; a custom implementation must add them.
+
+### Deprecated
+- `Utils::buildSearchConditions()` writes the search term into raw SQL unescaped. Use
+  `QueryBuilder::whereContains()`; it is removed in 1.88.
 
 ### Fixed
 - **Every response carries the baseline security headers.** JSON API responses and the API
@@ -30,6 +37,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   `smtp.mailtrap.io` and the sender to `noreply@glueful.com`, so an app that never set up mail
   looked configured: the email channel said it was available, and sends failed later or went out
   under a domain the app does not own. Both default to unset now.
+- **Text search folds case on every database and matches the term literally.** Search and the
+  `contains`, `starts` and `ends` filters wrote `column LIKE '%term%'` from user input:
+  case-sensitive on PostgreSQL while MySQL and SQLite fold case, and a `%` or `_` in the term was
+  a wildcard. They now use the new `whereContains()`, `orWhereContains()`, `whereStartsWith()` and
+  `whereEndsWith()` on the query builder, which lower-case both sides and escape the term.
 
 ## [1.86.2] - 2026-09-22 — Alpherg
 
