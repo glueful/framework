@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.86.2] - 2026-09-22 — Alpherg
+
 ### Fixed
 - **An empty array in config adds nothing again.** 1.86.0 made a list replace the list below it,
   and PHP counts `[]` as a list: a package shipping `'source_roots' => []` wiped the uploads root
