@@ -86,7 +86,7 @@ final class DatabaseQueueFailedJobsTest extends TestCase
         self::assertSame($uuid, $failed[0]['uuid']);
         self::assertSame(FailedTestJob::class, $failed[0]['job']);
         self::assertSame('default', $failed[0]['queue']);
-        self::assertStringStartsWith('boom 1', $failed[0]['exception']);
+        self::assertStringStartsWith('RuntimeException: boom 1', $failed[0]['exception']);
     }
 
     public function testRetryPutsTheJobBackOnItsQueueAndDropsTheFailure(): void

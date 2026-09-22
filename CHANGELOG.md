@@ -23,6 +23,20 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   replaces the default adds the job itself.
 
 ### Fixed
+- **`FailedJobProvider` works against the table the migration creates.** It was written for
+  columns `queue_failed_jobs` never had (`retryable`, `retry_count`, `job_class`,
+  `exception_class`, `last_retry_at`): `log()` failed on insert, `retry()`, `retryAll()` and
+  `getStats()` failed on read, the requeue step was a stub that never put a job back, and the
+  hourly trend used MySQL's `HOUR()`. It now records, lists, requeues (after verifying the stored
+  signature), forgets, flushes, prunes and summarises over the stock columns on every engine, with
+  the job and exception class read from the payload and message. Public signatures are unchanged;
+  it gains `requeue()` (returns the new job's uuid and throws on a refused payload),
+  `flushCount()`, `prune()` and an optional sixth constructor argument, the driver a retry pushes
+  onto. The database driver and the `queue:*` failed-job commands now go through it, so there is
+  one implementation. Filters other than `connection`, `queue`, `from_date` and `to_date` are
+  refused rather than ignored. A stored failure's `exception` now starts with the exception class.
+  `QueueMaintenance` reports the number of failures it pruned, not `1`.
+
 - **Deleting a webhook subscription deletes its deliveries.** Nothing linked them (the tables are
   created at first use, with no foreign key), so the rows stayed, reachable from no endpoint.
 - **`Webhook::reset()` also clears the context**, so state set by one test cannot leak into the
@@ -55,6 +69,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   job and reserved it by uuid alone. The reservation is now a claim that lands only while the row is
   still unreserved; a worker that loses it tries the next candidate. No row locks are needed, so it
   holds on SQLite, MySQL and PostgreSQL.
+
+### Deprecated
+- **`FailedJobProvider::setMaxRetries()` and `getMaxRetries()`.** A retry creates a new job with
+  fresh attempts and the table keeps no retry count, so nothing enforces the value. Removal in the
+  second minor release after this one.
 
 ## [1.85.8] - 2026-09-15 — Alphard
 

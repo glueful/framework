@@ -7,6 +7,7 @@ use Glueful\Queue\Contracts\JobInterface;
 use Glueful\Queue\Contracts\DriverInfo;
 use Glueful\Queue\Contracts\HealthStatus;
 use Glueful\Queue\Jobs\DatabaseJob;
+use Glueful\Queue\Failed\FailedJobProvider;
 use Glueful\Queue\QueuePayloadSigner;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
@@ -576,6 +577,12 @@ class DatabaseQueue implements QueueDriverInterface
         return (new QueuePayloadSigner($this->context))->sign($payload);
     }
 
+    /** Failed-job storage for this connection: the one implementation, over the same table. */
+    public function failures(): FailedJobProvider
+    {
+        return new FailedJobProvider($this->db, $this->failedTable, 5, 30, $this->context, $this);
+    }
+
     /**
      * Failed jobs, newest first, with the job class read from the stored payload.
      *
@@ -583,72 +590,37 @@ class DatabaseQueue implements QueueDriverInterface
      */
     public function failedJobs(?string $queue = null, int $limit = 50): array
     {
-        $query = $this->db->table($this->failedTable)->select(['uuid', 'queue', 'payload', 'exception', 'failed_at']);
-        if ($queue !== null) {
-            $query->where('queue', $queue);
-        }
-        $rows = $query->orderBy('failed_at', 'DESC')->orderBy('id', 'DESC')->limit($limit)->get();
+        $rows = $this->failures()->all($queue !== null ? ['queue' => $queue] : [], $limit);
 
-        return array_values(array_map(static function (array $row): array {
-            $payload = json_decode((string) $row['payload'], true);
-
-            return [
-                'uuid' => (string) $row['uuid'],
-                'queue' => (string) $row['queue'],
-                'job' => is_array($payload) ? (string) ($payload['job'] ?? 'unknown') : 'unknown',
-                'exception' => (string) $row['exception'],
-                'failed_at' => (string) $row['failed_at'],
-            ];
-        }, $rows));
+        return array_values(array_map(static fn(array $row): array => [
+            'uuid' => (string) $row['uuid'],
+            'queue' => (string) $row['queue'],
+            'job' => (string) $row['job'],
+            'exception' => (string) $row['exception'],
+            'failed_at' => (string) $row['failed_at'],
+        ], $rows));
     }
 
     /**
-     * Put a failed job back on the queue it failed on, as a new job with fresh attempts, and drop
-     * the failure. The stored payload's signature is verified first, so a payload altered after it
-     * failed is never re-signed and run. Returns the new job's uuid, or null for an unknown uuid.
+     * Put a failed job back on its queue as a new job (see FailedJobProvider::requeue()).
+     *
+     * @return string|null The new job's uuid, or null for an unknown uuid
      */
     public function retryFailed(string $uuid): ?string
     {
-        $row = $this->db->table($this->failedTable)->where('uuid', $uuid)->first();
-        if ($row === null) {
-            return null;
-        }
-
-        $stored = json_decode((string) $row['payload'], true);
-        if (!is_array($stored)) {
-            throw new \RuntimeException("Failed job {$uuid} has an unreadable payload");
-        }
-        $payload = (new QueuePayloadSigner($this->context))->verify($stored);
-        $job = $payload['job'] ?? null;
-        if (!is_string($job) || $job === '') {
-            throw new \RuntimeException("Failed job {$uuid} names no job class");
-        }
-
-        return $this->db->query()->transaction(function () use ($uuid, $job, $payload, $row): string {
-            $newUuid = $this->pushToDatabase($job, (array) ($payload['data'] ?? []), 0, (string) $row['queue']);
-            $this->db->table($this->failedTable)->where('uuid', $uuid)->delete();
-
-            return $newUuid;
-        });
+        return $this->failures()->requeue($uuid);
     }
 
     /** Delete one failed job. */
     public function forgetFailed(string $uuid): bool
     {
-        return $this->db->table($this->failedTable)->where('uuid', $uuid)->delete() > 0;
+        return $this->failures()->forget($uuid);
     }
 
     /** Delete every failed job, or only one queue's. Returns how many were removed. */
     public function flushFailed(?string $queue = null): int
     {
-        $query = $this->db->table($this->failedTable);
-        if ($queue !== null) {
-            $query->where('queue', $queue);
-        } else {
-            $query->where('id', '>', 0);
-        }
-
-        return $query->delete();
+        return $this->failures()->flushCount($queue !== null ? ['queue' => $queue] : []);
     }
 
     /**
@@ -662,14 +634,12 @@ class DatabaseQueue implements QueueDriverInterface
     {
         $this->db->query()->transaction(function () use ($job, $exception) {
             // Move to failed jobs table
-            $this->db->table($this->failedTable)->insert([
-                'uuid' => Utils::generateNanoID(),
-                'connection' => 'database',
-                'queue' => $job->getQueue(),
-                'payload' => json_encode($job->getPayload()),
-                'exception' => $exception->getMessage() . "\n\n" . $exception->getTraceAsString(),
-                'failed_at' => date('Y-m-d H:i:s')
-            ]);
+            $this->failures()->log(
+                'database',
+                (string) $job->getQueue(),
+                (string) json_encode($job->getPayload()),
+                $exception
+            );
 
             // Remove from main queue
             $this->delete($job);

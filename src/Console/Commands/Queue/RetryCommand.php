@@ -33,7 +33,11 @@ class RetryCommand extends FailedJobsCommand
         $uuids = (array) $input->getArgument('uuid');
         if ((bool) $input->getOption('all')) {
             $queue = $input->getOption('queue');
-            $uuids = array_column($store->failedJobs(is_string($queue) ? $queue : null, PHP_INT_MAX), 'uuid');
+            $filters = is_string($queue) ? ['queue' => $queue] : [];
+            // Collect every uuid first, a page at a time: retrying removes rows as it goes.
+            for ($offset = 0; ($page = $store->failures()->all($filters, 500, $offset)) !== []; $offset += 500) {
+                array_push($uuids, ...array_column($page, 'uuid'));
+            }
         }
         if ($uuids === []) {
             $this->error('Name a failed job uuid, or pass --all.');
