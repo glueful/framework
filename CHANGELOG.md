@@ -110,8 +110,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   the schedule's `settings` block, `queue_mapping`, and each job's `queue`, `timeout` and
   `retry_attempts` (config jobs run inline in the scheduler process; the file now says so);
   `app.force_https`; the `security.headers` block (the `security_headers` middleware is configured
-  per route); the unused `force_https` keys in that middleware's profiles. Delete them from an
-  app's own copies of these files; leaving them changes nothing.
+  per route); the unused `force_https` keys in that middleware's profiles; and from `.env.example`,
+  `HSTS_HEADER`, `FORCE_HTTPS`, `SCHEDULE_QUEUE_*` and `MAIL_BCC`. Delete them from an app's own
+  copies of these files; leaving them changes nothing.
 
 ### Deprecated
 - **`FailedJobProvider::setMaxRetries()` and `getMaxRetries()`.** A retry creates a new job with
