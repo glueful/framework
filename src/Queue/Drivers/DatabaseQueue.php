@@ -577,6 +577,81 @@ class DatabaseQueue implements QueueDriverInterface
     }
 
     /**
+     * Failed jobs, newest first, with the job class read from the stored payload.
+     *
+     * @return list<array{uuid: string, queue: string, job: string, exception: string, failed_at: string}>
+     */
+    public function failedJobs(?string $queue = null, int $limit = 50): array
+    {
+        $query = $this->db->table($this->failedTable)->select(['uuid', 'queue', 'payload', 'exception', 'failed_at']);
+        if ($queue !== null) {
+            $query->where('queue', $queue);
+        }
+        $rows = $query->orderBy('failed_at', 'DESC')->orderBy('id', 'DESC')->limit($limit)->get();
+
+        return array_values(array_map(static function (array $row): array {
+            $payload = json_decode((string) $row['payload'], true);
+
+            return [
+                'uuid' => (string) $row['uuid'],
+                'queue' => (string) $row['queue'],
+                'job' => is_array($payload) ? (string) ($payload['job'] ?? 'unknown') : 'unknown',
+                'exception' => (string) $row['exception'],
+                'failed_at' => (string) $row['failed_at'],
+            ];
+        }, $rows));
+    }
+
+    /**
+     * Put a failed job back on the queue it failed on, as a new job with fresh attempts, and drop
+     * the failure. The stored payload's signature is verified first, so a payload altered after it
+     * failed is never re-signed and run. Returns the new job's uuid, or null for an unknown uuid.
+     */
+    public function retryFailed(string $uuid): ?string
+    {
+        $row = $this->db->table($this->failedTable)->where('uuid', $uuid)->first();
+        if ($row === null) {
+            return null;
+        }
+
+        $stored = json_decode((string) $row['payload'], true);
+        if (!is_array($stored)) {
+            throw new \RuntimeException("Failed job {$uuid} has an unreadable payload");
+        }
+        $payload = (new QueuePayloadSigner($this->context))->verify($stored);
+        $job = $payload['job'] ?? null;
+        if (!is_string($job) || $job === '') {
+            throw new \RuntimeException("Failed job {$uuid} names no job class");
+        }
+
+        return $this->db->query()->transaction(function () use ($uuid, $job, $payload, $row): string {
+            $newUuid = $this->pushToDatabase($job, (array) ($payload['data'] ?? []), 0, (string) $row['queue']);
+            $this->db->table($this->failedTable)->where('uuid', $uuid)->delete();
+
+            return $newUuid;
+        });
+    }
+
+    /** Delete one failed job. */
+    public function forgetFailed(string $uuid): bool
+    {
+        return $this->db->table($this->failedTable)->where('uuid', $uuid)->delete() > 0;
+    }
+
+    /** Delete every failed job, or only one queue's. Returns how many were removed. */
+    public function flushFailed(?string $queue = null): int
+    {
+        $query = $this->db->table($this->failedTable);
+        if ($queue !== null) {
+            $query->where('queue', $queue);
+        } else {
+            $query->where('id', '>', 0);
+        }
+
+        return $query->delete();
+    }
+
+    /**
      * Mark job as failed
      *
      * @param JobInterface $job Failed job
