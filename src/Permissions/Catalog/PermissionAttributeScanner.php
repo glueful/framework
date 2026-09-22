@@ -7,7 +7,10 @@ namespace Glueful\Permissions\Catalog;
 use Glueful\Routing\Router;
 
 /**
- * Computes the set of permissions/roles actually enforced by route attributes.
+ * Computes the set of permissions/roles actually enforced by routes: `#[RequiresPermission]` /
+ * `#[RequiresRole]` attributes on handlers, plus the parameters of any route middleware named in
+ * `$enforcingMiddleware` (config `permissions.enforcing_middleware`), for apps that enforce
+ * permissions as `->middleware('content_permission:content.view,content.edit')`.
  * Used by `permissions:diff` to catch enforce-vs-declare drift. NOT a source of truth.
  *
  * Intentionally not `final`: `DiffCommand` depends on it and tests mock it (PHPUnit cannot
@@ -15,8 +18,13 @@ use Glueful\Routing\Router;
  */
 class PermissionAttributeScanner
 {
-    public function __construct(private readonly Router $router)
-    {
+    /**
+     * @param list<string> $enforcingMiddleware middleware aliases whose parameters are permissions
+     */
+    public function __construct(
+        private readonly Router $router,
+        private readonly array $enforcingMiddleware = [],
+    ) {
     }
 
     /** @return array{permissions: string[], roles: string[]} */
@@ -26,6 +34,9 @@ class PermissionAttributeScanner
         $roles = [];
 
         foreach ($this->router->getAllRoutes() as $route) {
+            foreach ($this->middlewarePermissions((array) ($route['middleware'] ?? [])) as $name) {
+                $permissions[$name] = true;
+            }
             [$class, $method] = $this->resolveHandler($route['handler'] ?? null);
             if ($class === null || !class_exists($class)) {
                 continue;
@@ -39,6 +50,34 @@ class PermissionAttributeScanner
         }
 
         return ['permissions' => array_keys($permissions), 'roles' => array_keys($roles)];
+    }
+
+    /**
+     * Permissions named as parameters of an enforcing middleware: `alias:a,b` yields a and b.
+     *
+     * @param array<mixed> $middleware
+     * @return list<string>
+     */
+    private function middlewarePermissions(array $middleware): array
+    {
+        $names = [];
+        foreach ($middleware as $entry) {
+            if (!is_string($entry) || !str_contains($entry, ':')) {
+                continue;
+            }
+            [$alias, $params] = explode(':', $entry, 2);
+            if (!in_array(trim($alias), $this->enforcingMiddleware, true)) {
+                continue;
+            }
+            foreach (explode(',', $params) as $param) {
+                $param = trim($param);
+                if ($param !== '') {
+                    $names[] = $param;
+                }
+            }
+        }
+
+        return $names;
     }
 
     /**

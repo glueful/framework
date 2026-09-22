@@ -7,6 +7,8 @@ use Glueful\Queue\Contracts\JobInterface;
 use Glueful\Queue\Contracts\DriverInfo;
 use Glueful\Queue\Contracts\HealthStatus;
 use Glueful\Queue\Jobs\DatabaseJob;
+use Glueful\Queue\Contracts\FailedJobStore;
+use Glueful\Queue\Failed\FailedJobProvider;
 use Glueful\Queue\QueuePayloadSigner;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
@@ -36,7 +38,7 @@ use Glueful\Helpers\Utils;
  *
  * @package Glueful\Queue\Drivers
  */
-class DatabaseQueue implements QueueDriverInterface
+class DatabaseQueue implements QueueDriverInterface, FailedJobStore
 {
     /** @var Connection Database connection */
     private Connection $db;
@@ -119,8 +121,8 @@ class DatabaseQueue implements QueueDriverInterface
         $startTime = microtime(true);
 
         try {
-            // Test database connection
-            $this->db->query()->selectRaw("1")->get();
+            // Test the connection itself (the query builder refuses a table-less SELECT)
+            $this->db->getPDO()->query('SELECT 1');
 
             // Check if queue table exists using database-agnostic approach
             try {
@@ -252,35 +254,47 @@ class DatabaseQueue implements QueueDriverInterface
     {
         $queue = $queue ?? 'default';
 
-        // Use transaction for atomic operation
         return $this->db->query()->transaction(function () use ($queue) {
             // Clean up expired reserved jobs
             $this->releaseExpiredJobs($queue);
 
-            // Get next available job using fluent QueryBuilder
-            $jobs = $this->db->table($this->table)
-                ->select(['*'])
-                ->where('queue', $queue)
-                ->whereNull('reserved_at')
-                ->where('available_at', '<=', date('Y-m-d H:i:s'))
-                ->orderBy('priority', 'DESC')
-                ->orderBy('available_at', 'ASC')
-                ->limit(1)
-                ->get();
-
-            $job = $jobs[0] ?? null;
-            if ($job === null) {
-                return null;
+            // Claim, don't just mark: the reservation only lands while the row is still
+            // unreserved. A worker that selected the same row and lost the race gets 0 affected
+            // rows and moves on to the next candidate, so no two workers run one job. This holds
+            // on every engine without row locks.
+            foreach ($this->candidates($queue, 5) as $job) {
+                $claimed = $this->db->table($this->table)
+                    ->where('uuid', $job['uuid'])
+                    ->whereNull('reserved_at')
+                    ->update([
+                        'reserved_at' => date('Y-m-d H:i:s'),
+                        'attempts' => $job['attempts'] + 1,
+                    ]);
+                if ($claimed === 1) {
+                    return new DatabaseJob($this, $job, $queue, $this->context);
+                }
             }
 
-            // Mark job as reserved
-            $this->db->table($this->table)->where('uuid', $job['uuid'])->update([
-                'reserved_at' => date('Y-m-d H:i:s'),
-                'attempts' => $job['attempts'] + 1
-            ]);
-
-            return new DatabaseJob($this, $job, $queue, $this->context);
+            return null;
         });
+    }
+
+    /**
+     * The next jobs a worker may try to claim, best first.
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function candidates(string $queue, int $limit): array
+    {
+        return array_values($this->db->table($this->table)
+            ->select(['*'])
+            ->where('queue', $queue)
+            ->whereNull('reserved_at')
+            ->where('available_at', '<=', date('Y-m-d H:i:s'))
+            ->orderBy('priority', 'DESC')
+            ->orderBy('available_at', 'ASC')
+            ->limit($limit)
+            ->get());
     }
 
     /**
@@ -564,6 +578,52 @@ class DatabaseQueue implements QueueDriverInterface
         return (new QueuePayloadSigner($this->context))->sign($payload);
     }
 
+    /** Failed-job storage for this connection: the one implementation, over the same table. */
+    public function failures(): FailedJobProvider
+    {
+        return new FailedJobProvider($this->db, $this->failedTable, 5, 30, $this->context, $this);
+    }
+
+    /**
+     * Failed jobs, newest first, with the job class read from the stored payload.
+     *
+     * @return list<array{uuid: string, queue: string, job: string, exception: string, failed_at: string}>
+     */
+    public function failedJobs(?string $queue = null, int $limit = 50, int $offset = 0): array
+    {
+        $rows = $this->failures()->all($queue !== null ? ['queue' => $queue] : [], $limit, $offset);
+
+        return array_values(array_map(static fn(array $row): array => [
+            'uuid' => (string) $row['uuid'],
+            'queue' => (string) $row['queue'],
+            'job' => (string) $row['job'],
+            'exception' => (string) $row['exception'],
+            'failed_at' => (string) $row['failed_at'],
+        ], $rows));
+    }
+
+    /**
+     * Put a failed job back on its queue as a new job (see FailedJobProvider::requeue()).
+     *
+     * @return string|null The new job's uuid, or null for an unknown uuid
+     */
+    public function retryFailed(string $uuid): ?string
+    {
+        return $this->failures()->requeue($uuid);
+    }
+
+    /** Delete one failed job. */
+    public function forgetFailed(string $uuid): bool
+    {
+        return $this->failures()->forget($uuid);
+    }
+
+    /** Delete every failed job, or only one queue's. Returns how many were removed. */
+    public function flushFailed(?string $queue = null): int
+    {
+        return $this->failures()->flushCount($queue !== null ? ['queue' => $queue] : []);
+    }
+
     /**
      * Mark job as failed
      *
@@ -575,14 +635,12 @@ class DatabaseQueue implements QueueDriverInterface
     {
         $this->db->query()->transaction(function () use ($job, $exception) {
             // Move to failed jobs table
-            $this->db->table($this->failedTable)->insert([
-                'uuid' => Utils::generateNanoID(),
-                'connection' => 'database',
-                'queue' => $job->getQueue(),
-                'payload' => json_encode($job->getPayload()),
-                'exception' => $exception->getMessage() . "\n\n" . $exception->getTraceAsString(),
-                'failed_at' => date('Y-m-d H:i:s')
-            ]);
+            $this->failures()->log(
+                'database',
+                (string) $job->getQueue(),
+                (string) json_encode($job->getPayload()),
+                $exception
+            );
 
             // Remove from main queue
             $this->delete($job);

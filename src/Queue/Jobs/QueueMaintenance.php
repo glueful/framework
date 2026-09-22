@@ -135,8 +135,8 @@ class QueueMaintenance
     private function cleanupFailedJobs(): void
     {
         try {
-            $daysOld = $this->getConfig('queue.maintenance.failed_jobs_cleanup_days', 30);
-            $cleaned = $this->failedJobProvider->cleanup($daysOld);
+            $daysOld = (int) $this->getConfig('queue.maintenance.failed_jobs_cleanup_days', 30);
+            $cleaned = $this->failedJobProvider->prune($daysOld);
 
             $this->stats['cleaned_failed_jobs'] = $cleaned;
             $this->log("Cleaned up {$cleaned} old failed jobs");

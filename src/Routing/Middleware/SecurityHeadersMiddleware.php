@@ -78,30 +78,26 @@ class SecurityHeadersMiddleware implements RouteMiddleware
             'csp_level' => 'strict',
             'frame_options' => 'DENY',
             'referrer_policy' => 'strict-origin',
-            'permissions_policy_restrictive' => true,
-            'force_https' => true
+            'permissions_policy_restrictive' => true
         ],
         'moderate' => [
             'csp_level' => 'moderate',
             'frame_options' => 'SAMEORIGIN',
             'referrer_policy' => 'strict-origin-when-cross-origin',
-            'permissions_policy_restrictive' => false,
-            'force_https' => true
+            'permissions_policy_restrictive' => false
         ],
         'relaxed' => [
             'csp_level' => 'relaxed',
             'frame_options' => 'SAMEORIGIN',
             'referrer_policy' => 'origin-when-cross-origin',
-            'permissions_policy_restrictive' => false,
-            'force_https' => false
+            'permissions_policy_restrictive' => false
         ],
         'report_only' => [
             'csp_level' => 'moderate',
             'csp_report_only' => true,
             'frame_options' => 'SAMEORIGIN',
             'referrer_policy' => 'strict-origin-when-cross-origin',
-            'permissions_policy_restrictive' => false,
-            'force_https' => false
+            'permissions_policy_restrictive' => false
         ]
     ];
 

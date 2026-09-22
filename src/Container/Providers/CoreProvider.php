@@ -326,11 +326,24 @@ final class CoreProvider extends BaseServiceProvider
                 => new \Glueful\Permissions\Catalog\PermissionRegistry()
         );
 
-        // Route attribute scanner for permissions:diff (enforced-permission discovery).
+        // Route scanner for permissions:diff (enforced-permission discovery): attributes, plus the
+        // parameters of any middleware listed in permissions.enforcing_middleware.
         $defs[\Glueful\Permissions\Catalog\PermissionAttributeScanner::class] = new FactoryDefinition(
             \Glueful\Permissions\Catalog\PermissionAttributeScanner::class,
             fn(\Psr\Container\ContainerInterface $c): \Glueful\Permissions\Catalog\PermissionAttributeScanner
-                => new \Glueful\Permissions\Catalog\PermissionAttributeScanner($c->get(\Glueful\Routing\Router::class))
+                => new \Glueful\Permissions\Catalog\PermissionAttributeScanner(
+                    $c->get(\Glueful\Routing\Router::class),
+                    $c->has(\Glueful\Bootstrap\ApplicationContext::class)
+                        ? array_values(array_filter(
+                            (array) config(
+                                $c->get(\Glueful\Bootstrap\ApplicationContext::class),
+                                'permissions.enforcing_middleware',
+                                []
+                            ),
+                            'is_string'
+                        ))
+                        : []
+                )
         );
 
         // Gate service with voters

@@ -6,6 +6,138 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.86.0] - 2026-09-22 — Alpherg
+
+### Upgrade Notes
+- **Config lists are replaced, not merged by position.** A list your app's config sets (a
+  `config/schedule.php` `jobs` list, above all) now replaces the framework's list whole instead of
+  being merged into it entry by entry. If you relied on framework entries past the end of your own
+  list, add them to it. To get the new `webhook_cleanup` job, add it to your `jobs`.
+- **Delete the config nothing read** from your own copies (listed under Removed). Leaving it
+  changes nothing.
+- **List your permission middleware** in `permissions.enforcing_middleware` if you enforce
+  permissions in route middleware, so `permissions:diff` counts them.
+- **`security:check` can now fail** where it used to pass: its checks run for real. Fix what it
+  reports (a world-readable `.env`, a short signing secret, CORS `*` with credentials …).
+- **A scheduled backup that makes no dump now fails its job** instead of logging "completed", and
+  it takes the stock database config: a PostgreSQL or MySQL site needs `pg_dump` or `mysqldump`
+  on the scheduler host.
+- **"Send test event" refuses local and private addresses**, as queued deliveries already did;
+  test against a public endpoint or a tunnel.
+
+### Added
+- **Failed queue jobs can be listed, retried and removed.** A job that exhausted its attempts went
+  to `queue_failed_jobs` with no way back: no command, no screen. `queue:failed` lists them (job
+  class, queue, error), `queue:retry <uuid>… | --all [--queue=]` puts them back as new jobs,
+  `queue:forget <uuid>` deletes one and `queue:flush [--queue=]` deletes them all. They work on any
+  connection whose driver implements the new `Glueful\Queue\Contracts\FailedJobStore`: the
+  database driver (`queue_failed_jobs`) and the Redis driver (`queue:{name}:failed` lists) both do.
+  A retry verifies the stored payload's signature first, so a payload altered after it failed is
+  refused, never re-signed.
+- **`webhook:cleanup` and a scheduled `webhook_cleanup` job.** `api.webhooks.cleanup`
+  (`keep_successful_days`, `keep_failed_days`) was read by nothing, so delivery records, payloads
+  included, were kept for ever. `Webhook::cleanup()` deletes delivered records past the first and
+  failed records past the second; pending and retrying ones stay. `WebhookCleanupJob` runs it daily
+  from the default `config/schedule.php` (`WEBHOOK_CLEANUP_ENABLED`). A site whose own schedule
+  replaces the default adds the job itself.
+
+### Fixed
+- **An app's config lists replace the framework's instead of merging by position.** Config files
+  were layered with `array_replace_recursive`, which merges lists index by index: an app's third
+  scheduled job took every key it lacked (`enabled`, `parameters`, `queue` …) from the framework's
+  third job, and framework jobs past the end of the app's list ran too. Maps still merge key by key;
+  a list an app sets (or a package default a file overrides) now replaces the list below it.
+- **`permissions:diff` sees permissions enforced by route middleware.** It read only
+  `#[RequiresPermission]` / `#[RequiresRole]` attributes, so an app enforcing permissions as
+  `->middleware('content_permission:content.view')` had every permission reported as declared but
+  unenforced. List such middleware in the new `permissions.enforcing_middleware` config; their
+  parameters (comma-separated) count as enforced.
+- **`security:check` checks what it reports.** Five of its seven steps were hard-coded passes that
+  printed "validated". Now: health checks the database answers; file permissions checks `.env` is
+  private to its owner and `storage/` is writable; configuration checks `APP_KEY`, `JWT_KEY` and
+  `TOKEN_SALT` are set and at least 32 characters; authentication checks access tokens live at most
+  a day and refresh tokens at most 90 days; network checks CORS does not allow every origin with
+  credentials. The security commands also receive the booted container and context instead of
+  building an unbooted one.
+- **The production validation recommends only what does something.** It recommended
+  `FORCE_HTTPS` and `HSTS_HEADER`, which nothing reads, and judged `DB_PASSWORD` whatever the
+  engine, so a PostgreSQL site with an empty password passed. It now judges the active engine's
+  password (`DB_PGSQL_PASSWORD` for pgsql, `DB_PASSWORD` for mysql, none for sqlite).
+- **A working database queue reports healthy.** `DatabaseQueue::healthCheck()` probed the
+  connection with a table-less query the builder refuses, so it always reported the connection
+  failed.
+- **`LOG_RETENTION_DAYS` and the notification retry limit take effect.** The default schedule passed
+  `retentionDays` and `limit` where `LogCleanupJob` and `NotificationRetryJob` read
+  `options.retention_days` and `options.limit`.
+- **Saved values are data, not SQL.** `QueryValidator` refused any value reading like `"; delete …"`
+  or `"; drop …"`: a CMS import failed on the sentence "would be deleted; delete nothing". Values
+  are always bound parameters, so the check protected nothing. It also raised a warning for any
+  value over 64 KB, which the error handler turns into an exception, so a long article could not be
+  saved. Values are no longer inspected; the empty-array check (an invalid `IN ()`) and the refusal
+  of an UPDATE or DELETE without conditions stay.
+- **`FailedJobProvider` works against the table the migration creates.** It was written for
+  columns `queue_failed_jobs` never had (`retryable`, `retry_count`, `job_class`,
+  `exception_class`, `last_retry_at`): `log()` failed on insert, `retry()`, `retryAll()` and
+  `getStats()` failed on read, the requeue step was a stub that never put a job back, and the
+  hourly trend used MySQL's `HOUR()`. It now records, lists, requeues (after verifying the stored
+  signature), forgets, flushes, prunes and summarises over the stock columns on every engine, with
+  the job and exception class read from the payload and message. Public signatures are unchanged;
+  it gains `requeue()` (returns the new job's uuid and throws on a refused payload),
+  `flushCount()`, `prune()` and an optional sixth constructor argument, the driver a retry pushes
+  onto. The database driver and the `queue:*` failed-job commands now go through it, so there is
+  one implementation. Filters other than `connection`, `queue`, `from_date` and `to_date` are
+  refused rather than ignored. A stored failure's `exception` now starts with the exception class.
+  `QueueMaintenance` reports the number of failures it pruned, not `1`.
+
+- **Deleting a webhook subscription deletes its deliveries.** Nothing linked them (the tables are
+  created at first use, with no foreign key), so the rows stayed, reachable from no endpoint.
+- **`Webhook::reset()` also clears the context**, so state set by one test cannot leak into the
+  next.
+- **A model created through the ORM carries its own id.** `Model::performInsert()` took
+  `insert()`'s return value as the new primary key, but `insert()` returns the affected-row count,
+  so every auto-increment model came back with id 1: a queued job, child row or later update keyed
+  on it pointed at the first row in the table. New `QueryBuilder::insertGetId()` (with
+  `InsertBuilder::insertGetId()` and `QueryExecutor::executeInsertGetId()`) reads the generated id
+  from the connection that ran the insert, and the ORM uses it. When an insert generates no id (a key
+  filled by a column default rather than a sequence, where PostgreSQL has no `lastval`), it returns
+  null and the model's key is left as the database set it, instead of failing the insert.
+- **Webhooks deliver.** `WebhookDispatcher` and `Webhook::retry()` handed `QueueManager::push()` a
+  `DeliverWebhookJob` object where it takes a class name, a `TypeError` under `strict_types`: every
+  delivery row stayed `pending`, the event listener's error was only logged, and Retry answered 500.
+  Both now queue through `DeliverWebhookJob::enqueue()`, which pushes the class and the delivery id;
+  a retry goes to the configured `api.webhooks.queue`. The job scaffold's dispatch examples showed
+  the same object form and now show `push(Job::class, $data, $queue)`.
+- **A test webhook cannot reach private addresses.** `Webhook::test()` posted to any URL; only a
+  queued delivery checked the destination. It now applies the delivery's guard (scheme, localhost,
+  private, reserved, link-local and metadata ranges) and its DNS pinning before any request.
+- **The scheduled database backup backs up.** `DatabaseBackupTask` read flat `driver`, `database`,
+  `username` and `password` keys the stock `config/database.php` does not have, so every stock site
+  took the `mysqldump` path with empty credentials; the `PGPASSWORD` it prepared was never passed to
+  `pg_dump`, and the MySQL password went on the command line. It now reads `engine` and that
+  engine's `host`/`port`/`db`/`user`/`pass`, runs the dump tool without a shell with the password in
+  `PGPASSWORD` or `MYSQL_PWD` (and `PGSSLMODE` from `sslmode`), writes and prunes backups in one
+  directory (`app.paths.backups`, else `storage/backups`), and logs "failed" instead of "completed"
+  when no backup was made. `DatabaseBackupJob` passes its context to the task and fails when no
+  backup was created, so the queue records it and `failed()` logs it.
+- **Two database-queue workers never run the same job.** `DatabaseQueue::pop()` selected the next
+  job and reserved it by uuid alone. The reservation is now a claim that lands only while the row is
+  still unreserved; a worker that loses it tries the next candidate. No row locks are needed, so it
+  holds on SQLite, MySQL and PostgreSQL.
+
+### Removed
+- **Config that nothing read.** The `sync` and `null` queue connections (no such drivers exist);
+  the schedule's `settings` block, `queue_mapping`, and each job's `queue`, `timeout` and
+  `retry_attempts` (config jobs run inline in the scheduler process; the file now says so);
+  `app.force_https`; the `security.headers` block (the `security_headers` middleware is configured
+  per route); the unused `force_https` keys in that middleware's profiles; and from `.env.example`,
+  `HSTS_HEADER`, `FORCE_HTTPS`, `SCHEDULE_QUEUE_*` and `MAIL_BCC`. Delete them from an app's own
+  copies of these files; leaving them changes nothing.
+
+### Deprecated
+- **`FailedJobProvider::setMaxRetries()` and `getMaxRetries()`.** A retry creates a new job with
+  fresh attempts and the table keeps no retry count, so nothing enforces the value. Removal in
+  1.88.
+
 ## [1.85.8] - 2026-09-15 — Alphard
 
 ### Fixed

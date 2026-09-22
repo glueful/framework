@@ -172,10 +172,10 @@ class JobCommand extends BaseCommand
         $this->line('3. Dispatch the job using the queue manager');
         $this->line('');
         $this->line('Example dispatch:');
-        $this->line("  \$queue->push(new {$className}(['key' => 'value']));");
+        $this->line("  \$queue->push({$className}::class, ['key' => 'value']);");
         $this->line('');
         $this->line('Example with delay:');
-        $this->line("  \$queue->later(60, new {$className}(\$data));");
+        $this->line("  \$queue->later(60, {$className}::class, \$data);");
 
         return self::SUCCESS;
     }
@@ -467,15 +467,13 @@ Features:
 
 Dispatching jobs:
   // Immediate dispatch
-  \$queue->push(new ProcessPayment(['order_id' => 123]));
+  \$queue->push(ProcessPayment::class, ['order_id' => 123]);
 
   // Delayed dispatch (run in 5 minutes)
-  \$queue->later(300, new ProcessPayment(\$data));
+  \$queue->later(300, ProcessPayment::class, \$data);
 
   // Dispatch to specific queue
-  \$job = new ProcessPayment(\$data);
-  \$job->setQueue('payments');
-  \$queue->push(\$job);
+  \$queue->push(ProcessPayment::class, \$data, 'payments');
 HELP;
     }
 }

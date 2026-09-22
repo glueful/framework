@@ -3,14 +3,12 @@
 /**
  * Scheduler Configuration
  *
- * Defines scheduled jobs and cron tasks for the application.
- * Enhanced with better error handling and monitoring.
+ * Each job runs inline, in the process that runs `php glueful queue:scheduler run`, when its cron
+ * `schedule` is due. A job takes `name`, `schedule`, `handler_class`, optional `parameters`
+ * (handed to the handler), optional `enabled`, optional `persistence` (register it in the
+ * database instead of memory) and a `description`. Nothing else is read: there is no per-job
+ * queue, timeout or retry count on this path.
  */
-
-$criticalQueue = env('SCHEDULE_QUEUE_CRITICAL', 'critical');
-$maintenanceQueue = env('SCHEDULE_QUEUE_MAINTENANCE', 'maintenance');
-$notificationsQueue = env('SCHEDULE_QUEUE_NOTIFICATIONS', 'notifications');
-$systemQueue = env('SCHEDULE_QUEUE_SYSTEM', 'system');
 
 return [
     'jobs' => [
@@ -21,22 +19,16 @@ return [
             'parameters' => ['cleanupType' => 'expired'],
             'description' => 'Clean up expired user sessions',
             'enabled' => env('SESSION_CLEANER_ENABLED', true),
-            'queue' => $maintenanceQueue,
-            'timeout' => 300,
-            'retry_attempts' => 3,
         ],
         [
             'name' => 'log_cleanup',
             'schedule' => '0 1 * * *',
             'handler_class' => 'Glueful\\Queue\\Jobs\\LogCleanupJob',
             'parameters' => [
-                'retentionDays' => env('LOG_RETENTION_DAYS', 30)
+                'options' => ['retention_days' => env('LOG_RETENTION_DAYS', 30)],
             ],
             'description' => 'Clean up old log files',
             'enabled' => env('LOG_CLEANUP_ENABLED', true),
-            'queue' => $maintenanceQueue,
-            'timeout' => 600,
-            'retry_attempts' => 2,
         ],
         [
             'name' => 'database_backup',
@@ -50,9 +42,6 @@ return [
             ],
             'enabled' => env('DB_BACKUP_ENABLED', env('APP_ENV') === 'production'),
             'description' => 'Create automated database backups',
-            'queue' => $criticalQueue,
-            'timeout' => 1800,
-            'retry_attempts' => 1,
         ],
         [
             'name' => 'cache_maintenance',
@@ -63,38 +52,22 @@ return [
             ],
             'description' => 'Perform cache maintenance',
             'enabled' => env('CACHE_MAINTENANCE_ENABLED', true),
-            'queue' => $maintenanceQueue,
-            'timeout' => 600,
-            'retry_attempts' => 2,
         ],
         [
             'name' => 'notification_retry_processor',
             'schedule' => '*/10 * * * *',
             'handler_class' => 'Glueful\\Queue\\Jobs\\NotificationRetryJob',
-            'parameters' => ['limit' => 50],
+            'parameters' => ['options' => ['limit' => 50]],
             'description' => 'Process queued notification retries',
             'enabled' => env('NOTIFICATION_RETRIES_ENABLED', true),
-            'queue' => $notificationsQueue,
-            'timeout' => 300,
-            'retry_attempts' => 2,
+        ],
+        [
+            'name' => 'webhook_cleanup',
+            'schedule' => '30 3 * * *',
+            'handler_class' => 'Glueful\\Api\\Webhooks\\Jobs\\WebhookCleanupJob',
+            'description' => 'Delete webhook delivery records past api.webhooks.cleanup retention',
+            'enabled' => env('WEBHOOK_CLEANUP_ENABLED', true),
         ],
     ],
 
-    'settings' => [
-        'enabled' => env('SCHEDULER_ENABLED', true),
-        'max_concurrent_jobs' => env('MAX_CONCURRENT_JOBS', 5),
-        'default_timeout' => env('DEFAULT_JOB_TIMEOUT', 300),
-        'default_queue' => env('DEFAULT_SCHEDULED_QUEUE', 'scheduled'),
-        'log_execution' => env('LOG_JOB_EXECUTION', true),
-        'notification_on_failure' => env('NOTIFY_ON_JOB_FAILURE', env('APP_ENV') === 'production'),
-        'queue_connection' => env('SCHEDULE_QUEUE_CONNECTION', 'default'),
-        'use_queue_for_all_jobs' => env('USE_QUEUE_FOR_SCHEDULED_JOBS', true),
-    ],
-
-    'queue_mapping' => [
-        $criticalQueue => ['database_backup'],
-        $maintenanceQueue => ['session_cleaner', 'log_cleanup', 'cache_maintenance'],
-        $notificationsQueue => ['notification_retry_processor'],
-        $systemQueue => ['queue_maintenance'],
-    ],
 ];

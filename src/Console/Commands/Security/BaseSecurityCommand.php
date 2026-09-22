@@ -2,7 +2,9 @@
 
 namespace Glueful\Console\Commands\Security;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Console\BaseCommand;
+use Glueful\Database\Connection;
 use Glueful\Security\SecurityManager;
 use Psr\Container\ContainerInterface;
 
@@ -16,9 +18,11 @@ abstract class BaseSecurityCommand extends BaseCommand
 {
     protected ContainerInterface $container;
 
-    public function __construct(?ContainerInterface $container = null)
+    public function __construct(?ContainerInterface $container = null, ?ApplicationContext $context = null)
     {
-        parent::__construct();
+        // Hand BaseCommand the booted container and context: with no arguments it builds a fresh,
+        // never-booted context, and every check would read that instead of the app's config.
+        parent::__construct($container, $context);
         $this->container = $container ?? container($this->getContext());
     }
 
@@ -109,77 +113,113 @@ abstract class BaseSecurityCommand extends BaseCommand
     }
 
     /**
-     * Process health checks
-     */
-    /**
+     * Health: the database answers a query.
+     *
      * @return array<string, mixed>
      */
     protected function processHealthChecks(bool $fix, bool $verbose): array
     {
-        // Health checks would be handled by SecurityManager
-        $passed = true;
-        $message = 'System health checks passed';
+        try {
+            Connection::fromContext($this->getContext())->getPDO()->query('SELECT 1');
+        } catch (\Throwable $e) {
+            return $this->stepResult(['The database did not answer: ' . $e->getMessage()], 'Database reachable');
+        }
 
-        return ['passed' => $passed, 'message' => $message];
+        return $this->stepResult([], 'Database reachable');
     }
 
     /**
-     * Process permission checks
-     */
-    /**
+     * File permissions: .env is readable by its owner only, and storage/ is writable.
+     *
      * @return array<string, mixed>
      */
     protected function processPermissionChecks(bool $fix, bool $verbose): array
     {
-        // Permission checks would be handled by SecurityManager
-        $passed = true;
-        $message = 'File permissions validated';
+        $problems = [];
+        $env = base_path($this->getContext(), '.env');
+        if (is_file($env)) {
+            $mode = fileperms($env) & 0o777;
+            if (($mode & 0o007) !== 0) {
+                $problems[] = sprintf('.env is readable or writable by every user (mode %o); chmod 600 it', $mode);
+            }
+        }
+        $storage = base_path($this->getContext(), 'storage');
+        if (is_dir($storage) && !is_writable($storage)) {
+            $problems[] = 'storage/ is not writable by this process';
+        }
 
-        return ['passed' => $passed, 'message' => $message];
+        return $this->stepResult($problems, '.env is private and storage/ is writable');
     }
 
     /**
-     * Process configuration security
-     */
-    /**
+     * Configuration: the signing and encryption secrets are set and long enough.
+     *
      * @return array<string, mixed>
      */
     protected function processConfigurationSecurity(bool $production, bool $fix, bool $verbose): array
     {
-        // Configuration security would be handled by SecurityManager
-        $passed = true;
-        $message = 'Configuration security validated';
+        $problems = [];
+        $secrets = [
+            'APP_KEY' => config($this->getContext(), 'app.key'),
+            'JWT_KEY' => config($this->getContext(), 'session.jwt_key'),
+            'TOKEN_SALT' => config($this->getContext(), 'session.token_salt'),
+        ];
+        foreach ($secrets as $name => $value) {
+            if (!is_string($value) || $value === '') {
+                $problems[] = "{$name} is not set";
+            } elseif (strlen($value) < 32) {
+                $problems[] = "{$name} is shorter than 32 characters";
+            }
+        }
 
-        return ['passed' => $passed, 'message' => $message];
+        return $this->stepResult($problems, 'Signing and encryption secrets are set');
     }
 
     /**
-     * Process authentication security
-     */
-    /**
+     * Authentication: access tokens live at most a day and refresh tokens at most 90 days.
+     *
      * @return array<string, mixed>
      */
     protected function processAuthenticationSecurity(bool $verbose): array
     {
-        // Authentication security would be handled by SecurityManager
-        $passed = true;
-        $message = 'Authentication security validated';
+        $problems = [];
+        $access = (int) config($this->getContext(), 'session.access_token_lifetime', 3600);
+        $refresh = (int) config($this->getContext(), 'session.refresh_token_lifetime', 604800);
+        if ($access > 86400) {
+            $problems[] = "ACCESS_TOKEN_LIFETIME is {$access}s; keep access tokens to a day or less";
+        }
+        if ($refresh > 90 * 86400) {
+            $problems[] = "REFRESH_TOKEN_LIFETIME is {$refresh}s; keep refresh tokens to 90 days or less";
+        }
 
-        return ['passed' => $passed, 'message' => $message];
+        return $this->stepResult($problems, 'Token lifetimes are bounded');
     }
 
     /**
-     * Process network security
-     */
-    /**
+     * Network: CORS never lets every origin send credentials.
+     *
      * @return array<string, mixed>
      */
     protected function processNetworkSecurity(bool $verbose): array
     {
-        // Network security would be handled by SecurityManager
-        $passed = true;
-        $message = 'Network security validated';
+        $problems = [];
+        $origins = (array) config($this->getContext(), 'cors.allowed_origins', []);
+        $credentials = (bool) config($this->getContext(), 'cors.allow_credentials', false);
+        if ($credentials && in_array('*', $origins, true)) {
+            $problems[] = 'CORS allows every origin (*) with credentials; list the origins instead';
+        }
 
-        return ['passed' => $passed, 'message' => $message];
+        return $this->stepResult($problems, 'CORS does not open credentials to every origin');
+    }
+
+    /**
+     * @param list<string> $problems
+     * @return array{passed: bool, message: string}
+     */
+    private function stepResult(array $problems, string $okMessage): array
+    {
+        return $problems === []
+            ? ['passed' => true, 'message' => $okMessage]
+            : ['passed' => false, 'message' => implode('; ', $problems)];
     }
 }

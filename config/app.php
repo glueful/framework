@@ -25,9 +25,6 @@ return [
     // Warn when app routes don't use api_prefix() (dev only)
     'warn_unprefixed_routes' => env('WARN_UNPREFIXED_ROUTES', false),
 
-    // Smart environment-aware HTTPS enforcement
-    'force_https' => env('FORCE_HTTPS', env('APP_ENV') === 'production'),
-
     // Application Encryption Key
     'key' => env('APP_KEY'),
 

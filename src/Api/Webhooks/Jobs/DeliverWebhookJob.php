@@ -14,6 +14,7 @@ use Glueful\Events\Webhook\WebhookFailedEvent;
 use Glueful\Http\Client;
 use Glueful\Http\Response\Response;
 use Glueful\Queue\Job;
+use Glueful\Queue\QueueManager;
 
 /**
  * Queue job for delivering webhooks with retry logic
@@ -55,6 +56,21 @@ class DeliverWebhookJob extends Job
     {
         parent::__construct($data);
         $this->context = $context;
+    }
+
+    /**
+     * Queue delivery of one webhook delivery row. QueueManager::push() takes the job CLASS and
+     * its data; the worker rebuilds the job from them with the context. Returns the queued job's
+     * id, or null when the container has no queue manager.
+     */
+    public static function enqueue(ApplicationContext $context, int|string $deliveryId, string $queue): ?string
+    {
+        $container = container($context);
+        if (!$container->has(QueueManager::class)) {
+            return null;
+        }
+
+        return $container->get(QueueManager::class)->push(static::class, ['delivery_id' => $deliveryId], $queue);
     }
 
     /**
@@ -300,6 +316,20 @@ class DeliverWebhookJob extends Job
      * Validates the URL scheme, host, and all resolved IP addresses to prevent
      * Server-Side Request Forgery attacks. Stores resolved IPs for DNS rebinding protection.
      */
+    /**
+     * The delivery's destination guard, for callers that post outside the queue (the test send).
+     * Returns the refusal, or null with the pinned address map a request must use.
+     *
+     * @return array{error: ?string, resolve: array<string, string>}
+     */
+    public function checkDestination(string $url): array
+    {
+        $this->resolvedIps = [];
+        $error = $this->validateWebhookUrl($url);
+
+        return ['error' => $error, 'resolve' => $error === null ? $this->resolvedIps : []];
+    }
+
     private function validateWebhookUrl(string $url): ?string
     {
         $parts = parse_url($url);

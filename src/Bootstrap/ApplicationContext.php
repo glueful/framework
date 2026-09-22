@@ -254,7 +254,12 @@ final class ApplicationContext
     {
         $merged = $base;
         foreach ($override as $key => $value) {
-            if (is_array($value) && isset($merged[$key]) && is_array($merged[$key])) {
+            // Maps merge key by key; a list replaces the list below it whole. Merging lists by
+            // position would splice unrelated entries together (a schedule's jobs, for one).
+            if (
+                is_array($value) && !array_is_list($value)
+                && isset($merged[$key]) && is_array($merged[$key]) && !array_is_list($merged[$key])
+            ) {
                 $merged[$key] = self::deepMerge($merged[$key], $value);
             } else {
                 $merged[$key] = $value;

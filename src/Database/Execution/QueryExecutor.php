@@ -204,6 +204,26 @@ class QueryExecutor implements QueryExecutorInterface
     }
 
     /**
+     * Execute an INSERT and return the generated id from this executor's own PDO, the
+     * connection the statement ran on (PostgreSQL answers with lastval()). Null when the insert
+     * generated none, e.g. a key filled by a column default rather than a sequence.
+     */
+    public function executeInsertGetId(string $sql, array $bindings = []): int|string|null
+    {
+        $this->executeStatement($sql, $bindings);
+        try {
+            $id = $this->pdo->lastInsertId();
+        } catch (\PDOException) {
+            return null; // PostgreSQL: "lastval is not yet defined" — no sequence was used
+        }
+        if ($id === false || $id === '' || $id === '0') {
+            return null;
+        }
+
+        return ctype_digit($id) ? (int) $id : $id;
+    }
+
+    /**
      * Execute a COUNT query
      */
     public function executeCount(string $sql, array $bindings = []): int

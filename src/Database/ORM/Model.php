@@ -466,18 +466,17 @@ abstract class Model implements ModelInterface, JsonSerializable
 
         $attributes = $this->getAttributes();
 
-        // Remove null primary key for auto-increment
+        // Insert the record. An auto-increment key the caller did not set is the database's to
+        // generate: read it back (insert() itself returns the affected-row count, not an id).
+        $query = $this->newModelQuery();
         if ($this->incrementing && !isset($attributes[$this->getKeyName()])) {
             unset($attributes[$this->getKeyName()]);
-        }
-
-        // Insert the record
-        $query = $this->newModelQuery();
-        $id = $query->getQuery()->insert($attributes);
-
-        // Set the primary key
-        if ($this->incrementing && $id > 0) {
-            $this->setAttribute($this->getKeyName(), $id);
+            $id = $query->getQuery()->insertGetId($attributes);
+            if ($id !== null) {
+                $this->setAttribute($this->getKeyName(), $id);
+            }
+        } else {
+            $query->getQuery()->insert($attributes);
         }
 
         $this->exists = true;

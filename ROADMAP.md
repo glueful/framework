@@ -21,6 +21,23 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.86.0 — Alpherg (Released 2026-09-22)
+- **Webhooks deliver** — both enqueue paths handed the queue a job object and failed every time;
+  deliveries go with their subscription, `api.webhooks.cleanup` is honoured (`webhook:cleanup`,
+  a daily job), and a test send is refused for private addresses.
+- **Failed queue jobs have a way back** — `queue:failed`, `queue:retry`, `queue:forget` and
+  `queue:flush` over a `FailedJobStore` contract the database and Redis drivers implement;
+  `FailedJobProvider` works against the stock table.
+- **Data you store is what you get back** — an ORM-created model carries its real id (every
+  auto-increment model came back as 1), bound values are never refused as "SQL", the scheduled
+  backup reads the stock config and fails loudly, and two workers never claim one job.
+- **Config says what it does** — app config lists replace the framework's instead of merging by
+  position; dead keys are gone; scheduled jobs get their settings; `security:check` runs the
+  checks it reports; `permissions:diff` counts middleware-enforced permissions.
+- Notes: minor; see the Upgrade Notes — config lists now replace, `security:check` can fail where
+  it passed, and the backup needs `pg_dump`/`mysqldump`. `FailedJobProvider::setMaxRetries()` and
+  `getMaxRetries()` are deprecated (removal in 1.88).
+
 ### 1.85.8 — Alphard (Patch, Released 2026-09-15)
 - **A scheduled framework job never fails its tick on the logger lookup** — with their context
   restored in 1.85.7, the five shipped jobs resolved `LogManager` from the container unguarded,

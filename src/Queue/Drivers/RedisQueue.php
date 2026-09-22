@@ -2,6 +2,7 @@
 
 namespace Glueful\Queue\Drivers;
 
+use Glueful\Queue\Contracts\FailedJobStore;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Queue\Contracts\QueueDriverInterface;
 use Glueful\Queue\Contracts\JobInterface;
@@ -37,7 +38,7 @@ use Glueful\Http\Exceptions\Domain\DatabaseException;
  *
  * @package Glueful\Queue\Drivers
  */
-class RedisQueue implements QueueDriverInterface
+class RedisQueue implements QueueDriverInterface, FailedJobStore
 {
     /** @var \Redis Redis connection */
     private \Redis $redis;
@@ -762,6 +763,118 @@ class RedisQueue implements QueueDriverInterface
         $this->delete($job);
 
         $this->redis->exec();
+    }
+
+    /**
+     * Failed jobs across every `queue:{name}:failed` list (or one queue's), newest first.
+     *
+     * @return list<array{uuid: string, queue: string, job: string, exception: string, failed_at: string}>
+     */
+    public function failedJobs(?string $queue = null, int $limit = 50, int $offset = 0): array
+    {
+        $entries = [];
+        foreach ($this->failedEntries($queue) as [, , $entry]) {
+            $payload = json_decode((string) ($entry['payload'] ?? ''), true);
+            $entries[] = [
+                'uuid' => (string) ($entry['uuid'] ?? ''),
+                'queue' => (string) ($entry['queue'] ?? ''),
+                'job' => is_array($payload) && is_string($payload['job'] ?? null) ? $payload['job'] : 'unknown',
+                'exception' => (string) ($entry['exception'] ?? ''),
+                'failed_at' => date('Y-m-d H:i:s', (int) ($entry['failed_at'] ?? 0)),
+                'sort' => (int) ($entry['failed_at'] ?? 0),
+            ];
+        }
+        usort($entries, static fn(array $a, array $b): int => $b['sort'] <=> $a['sort']);
+
+        return array_values(array_map(static function (array $e): array {
+            unset($e['sort']);
+            return $e;
+        }, array_slice($entries, $offset, $limit)));
+    }
+
+    public function retryFailed(string $uuid): ?string
+    {
+        $found = $this->findFailed($uuid);
+        if ($found === null) {
+            return null;
+        }
+        [$key, $raw, $entry] = $found;
+
+        $stored = json_decode((string) ($entry['payload'] ?? ''), true);
+        if (!is_array($stored)) {
+            throw new \RuntimeException("Failed job {$uuid} has an unreadable payload");
+        }
+        $payload = (new QueuePayloadSigner($this->context))->verify($stored);
+        $job = $payload['job'] ?? null;
+        if (!is_string($job) || $job === '') {
+            throw new \RuntimeException("Failed job {$uuid} names no job class");
+        }
+
+        $newUuid = $this->push($job, (array) ($payload['data'] ?? []), (string) ($entry['queue'] ?? 'default'));
+        $this->redis->lrem($key, $raw, 1);
+
+        return $newUuid;
+    }
+
+    public function forgetFailed(string $uuid): bool
+    {
+        $found = $this->findFailed($uuid);
+        if ($found === null) {
+            return false;
+        }
+
+        return (int) $this->redis->lrem($found[0], $found[1], 1) > 0;
+    }
+
+    public function flushFailed(?string $queue = null): int
+    {
+        $removed = 0;
+        foreach ($this->failedKeys($queue) as $key) {
+            $removed += (int) $this->redis->lLen($key);
+            $this->redis->del($key);
+        }
+
+        return $removed;
+    }
+
+    /** @return list<string> */
+    private function failedKeys(?string $queue): array
+    {
+        if ($queue !== null) {
+            return ["queue:{$queue}:failed"];
+        }
+        $keys = $this->redis->keys('queue:*:failed');
+
+        return is_array($keys) ? array_values(array_map('strval', $keys)) : [];
+    }
+
+    /** @return list<array{0: string, 1: string, 2: array<string, mixed>}> [key, raw entry, decoded] */
+    private function failedEntries(?string $queue): array
+    {
+        $out = [];
+        foreach ($this->failedKeys($queue) as $key) {
+            $items = $this->redis->lrange($key, 0, -1);
+            foreach (is_array($items) ? $items : [] as $raw) {
+                $entry = json_decode((string) $raw, true);
+                if (is_array($entry)) {
+                    $out[] = [$key, (string) $raw, $entry];
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /** @return array{0: string, 1: string, 2: array<string, mixed>}|null */
+    private function findFailed(string $uuid): ?array
+    {
+        foreach ($this->failedEntries(null) as $found) {
+            if (($found[2]['uuid'] ?? null) === $uuid) {
+                return $found;
+            }
+        }
+
+        return null;
     }
 
     /**

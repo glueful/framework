@@ -3,7 +3,6 @@
 namespace Glueful\Tasks;
 
 use Glueful\Bootstrap\ApplicationContext;
-use Glueful\Database\Connection;
 use Glueful\Helpers\ConfigManager;
 
 class DatabaseBackupTask
@@ -17,22 +16,27 @@ class DatabaseBackupTask
         'errors' => []
     ];
 
-    private Connection $connection;
     /** @var array<string, mixed> */
     private array $config;
     private ?ApplicationContext $context;
 
-    public function __construct(?ApplicationContext $context = null)
+    /**
+     * @param array<string, mixed>|null $databaseConfig the `database` config; read from the
+     *        context (or the static config) when null
+     */
+    public function __construct(?ApplicationContext $context = null, ?array $databaseConfig = null)
     {
         $this->context = $context;
-        $this->connection = Connection::fromContext($this->context);
-        $this->config = ConfigManager::get('database');
+        $this->config = $databaseConfig
+            ?? ($context !== null
+                ? (array) config($context, 'database', [])
+                : (array) ConfigManager::get('database', []));
     }
 
     public function createBackup(): void
     {
         try {
-            $backupDir = (string) $this->getConfig('app.paths.backups', './storage/backups');
+            $backupDir = $this->backupDirectory();
 
             if (!is_dir($backupDir)) {
                 mkdir($backupDir, 0755, true);
@@ -42,20 +46,10 @@ class DatabaseBackupTask
             $filename = "backup_{$timestamp}.sql";
             $backupFile = $backupDir . '/' . $filename;
 
-            $driver = $this->config['driver'] ?? 'mysql';
-
-            switch ($driver) {
-                case 'mysql':
-                    $this->createMySQLBackup($backupFile);
-                    break;
-                case 'pgsql':
-                    $this->createPostgreSQLBackup($backupFile);
-                    break;
-                case 'sqlite':
-                    $this->createSQLiteBackup($backupFile);
-                    break;
-                default:
-                    throw new \Exception("Unsupported database driver: {$driver}");
+            if ($this->settings()['engine'] === 'sqlite') {
+                $this->createSQLiteBackup($backupFile);
+            } else {
+                $this->runDump($this->dumpCommand($backupFile));
             }
 
             if (file_exists($backupFile)) {
@@ -69,63 +63,105 @@ class DatabaseBackupTask
         }
     }
 
-    private function createMySQLBackup(string $backupFile): void
+    /**
+     * The active connection's settings, read from the stock shape: `engine` names the block
+     * (`mysql`, `pgsql`, `sqlite`) whose `host`/`port`/`db`/`user`/`pass` describe it. SQLite's
+     * file is its `primary` path.
+     *
+     * @return array{engine: string, host: string, port: int, database: string, username: string,
+     *               password: string, sslmode: string}
+     */
+    private function settings(): array
     {
-        $host = $this->config['host'] ?? 'localhost';
-        $port = $this->config['port'] ?? 3306;
-        $database = $this->config['database'];
-        $username = $this->config['username'];
-        $password = $this->config['password'];
+        $engine = (string) ($this->config['engine'] ?? 'sqlite');
+        $block = (array) ($this->config[$engine] ?? []);
 
-        $command = sprintf(
-            'mysqldump --host=%s --port=%d --user=%s --password=%s ' .
-            '--single-transaction --routines --triggers %s > %s 2>&1',
-            escapeshellarg($host),
-            $port,
-            escapeshellarg($username),
-            escapeshellarg($password),
-            escapeshellarg($database),
-            escapeshellarg($backupFile)
-        );
-
-        exec($command, $output, $returnCode);
-
-        if ($returnCode !== 0) {
-            throw new \Exception("mysqldump failed: " . implode("\n", $output));
-        }
+        return [
+            'engine' => $engine,
+            'host' => (string) ($block['host'] ?? '127.0.0.1'),
+            'port' => (int) ($block['port'] ?? ($engine === 'pgsql' ? 5432 : 3306)),
+            'database' => (string) ($engine === 'sqlite' ? ($block['primary'] ?? '') : ($block['db'] ?? '')),
+            'username' => (string) ($block['user'] ?? ''),
+            'password' => (string) ($block['pass'] ?? ''),
+            'sslmode' => (string) ($block['sslmode'] ?? ''),
+        ];
     }
 
-    private function createPostgreSQLBackup(string $backupFile): void
+    /**
+     * The dump tool's argv and the environment it runs with. The password travels in the tool's
+     * own environment variable (PGPASSWORD, MYSQL_PWD), never on the command line where the
+     * process list would show it, and no shell is involved.
+     *
+     * @return array{command: list<string>, env: array<string, string>}
+     */
+    private function dumpCommand(string $backupFile): array
     {
-        $host = $this->config['host'] ?? 'localhost';
-        $port = $this->config['port'] ?? 5432;
-        $database = $this->config['database'];
-        $username = $this->config['username'];
+        $db = $this->settings();
 
-        // Set PGPASSWORD environment variable
-        $env = ['PGPASSWORD' => $this->config['password']];
+        if ($db['engine'] === 'pgsql') {
+            $env = ['PGPASSWORD' => $db['password']];
+            if ($db['sslmode'] !== '') {
+                $env['PGSSLMODE'] = $db['sslmode'];
+            }
 
-        $command = sprintf(
-            'pg_dump --host=%s --port=%d --username=%s --no-password --format=plain --file=%s %s 2>&1',
-            escapeshellarg($host),
-            $port,
-            escapeshellarg($username),
-            escapeshellarg($backupFile),
-            escapeshellarg($database)
-        );
+            return [
+                'command' => [
+                    'pg_dump',
+                    '--host=' . $db['host'],
+                    '--port=' . $db['port'],
+                    '--username=' . $db['username'],
+                    '--no-password',
+                    '--format=plain',
+                    '--file=' . $backupFile,
+                    $db['database'],
+                ],
+                'env' => $env,
+            ];
+        }
 
-        exec($command, $output, $returnCode);
+        if ($db['engine'] === 'mysql') {
+            return [
+                'command' => [
+                    'mysqldump',
+                    '--host=' . $db['host'],
+                    '--port=' . $db['port'],
+                    '--user=' . $db['username'],
+                    '--single-transaction',
+                    '--routines',
+                    '--triggers',
+                    '--result-file=' . $backupFile,
+                    $db['database'],
+                ],
+                'env' => ['MYSQL_PWD' => $db['password']],
+            ];
+        }
 
-        if ($returnCode !== 0) {
-            throw new \Exception("pg_dump failed: " . implode("\n", $output));
+        throw new \Exception("Unsupported database engine: {$db['engine']}");
+    }
+
+    /** @param array{command: list<string>, env: array<string, string>} $dump */
+    private function runDump(array $dump): void
+    {
+        $env = array_merge(getenv(), $dump['env']);
+        $process = proc_open($dump['command'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, $env);
+        if (!is_resource($process)) {
+            throw new \Exception("Could not start {$dump['command'][0]}");
+        }
+        $output = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $code = proc_close($process);
+
+        if ($code !== 0) {
+            throw new \Exception("{$dump['command'][0]} failed (exit {$code}): " . trim($output));
         }
     }
 
     private function createSQLiteBackup(string $backupFile): void
     {
-        $databaseFile = $this->config['database'];
+        $databaseFile = $this->settings()['database'];
 
-        if (!file_exists($databaseFile)) {
+        if ($databaseFile === '' || !file_exists($databaseFile)) {
             throw new \Exception("SQLite database file not found: {$databaseFile}");
         }
 
@@ -134,10 +170,20 @@ class DatabaseBackupTask
         }
     }
 
+    /** Where backups are written and pruned: `app.paths.backups`, else storage/backups. */
+    private function backupDirectory(): string
+    {
+        $configured = $this->getConfig('app.paths.backups');
+
+        return is_string($configured) && $configured !== ''
+            ? $configured
+            : $this->getBasePath('storage/backups');
+    }
+
     public function cleanOldBackups(int $retentionDays): void
     {
         try {
-            $backupDir = $this->getBasePath('storage/backups');
+            $backupDir = $this->backupDirectory();
 
             if (!is_dir($backupDir)) {
                 return;
@@ -165,12 +211,13 @@ class DatabaseBackupTask
     {
         $timestamp = date('Y-m-d H:i:s');
         $message = sprintf(
-            "[%s] Database backup completed:\n" .
+            "[%s] Database backup %s:\n" .
             "- Backup created: %s\n" .
             "- Backup file: %s\n" .
             "- Backup size: %s\n" .
             "- Old backups deleted: %d\n",
             $timestamp,
+            $this->stats['backup_created'] && $this->stats['errors'] === [] ? 'completed' : 'failed',
             $this->stats['backup_created'] ? 'Yes' : 'No',
             $this->stats['backup_file'],
             $this->formatBytes($this->stats['backup_size']),

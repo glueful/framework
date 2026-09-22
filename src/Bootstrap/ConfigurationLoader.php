@@ -136,9 +136,22 @@ class ConfigurationLoader
      */
     private function mergeConfigs(array $base, array $override): array
     {
-        // Use array_replace_recursive instead of array_merge_recursive
-        // to avoid creating arrays when merging scalar values
-        return array_replace_recursive($base, $override);
+        // Maps merge key by key; a list replaces the list below it whole. (array_replace_recursive
+        // merged lists by position, so an app's Nth scheduled job took the keys it lacked from the
+        // framework's Nth job.)
+        $merged = $base;
+        foreach ($override as $key => $value) {
+            if (
+                is_array($value) && !array_is_list($value)
+                && isset($merged[$key]) && is_array($merged[$key]) && !array_is_list($merged[$key])
+            ) {
+                $merged[$key] = $this->mergeConfigs($merged[$key], $value);
+            } else {
+                $merged[$key] = $value;
+            }
+        }
+
+        return $merged;
     }
 
     /**
