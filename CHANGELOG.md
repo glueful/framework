@@ -13,6 +13,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - **A PostgreSQL search that relied on matching case now matches any case**, and a `%` or `_` a
   client sends is matched as that character. `WhereClauseInterface` gains the four text-match
   methods; a custom implementation must add them.
+- **Uploaded images are now stripped of their metadata** by default. Set
+  `UPLOADS_STRIP_EXIF=false` to keep it.
 - **List `blob_purge` in your `config/schedule.php`** to purge deleted uploads: an app's schedule
   replaces the framework's list.
 
@@ -60,6 +62,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   was rediscovered only when a listed class disappeared, so a new framework command stayed
   missing until someone deleted `storage/cache/glueful_commands_manifest.php`. The manifest now
   records the framework version that wrote it and is rediscovered when that changes.
+- **Uploaded images lose their embedded metadata, as `uploads.security.strip_exif` promised.**
+  The setting was on by default and read by nothing, so a phone photo kept its GPS position,
+  camera and timestamps in the stored original. JPEG, PNG and WebP uploads are now stripped of
+  EXIF, XMP, IPTC and comments before they are stored, without re-encoding; a JPEG keeps its
+  orientation (`Glueful\Uploader\ImageMetadataStripper`). `uploads.security.scan_uploads` is read
+  too; the uploader only looked at `filesystem.security.scan_uploads`, which still applies when
+  the new key is unset. The unread `validate_mime_by_content` and `max_filename_length` are gone:
+  content is always inspected, and stored names are always generated.
 
 ## [1.86.2] - 2026-09-22 — Alpherg
 

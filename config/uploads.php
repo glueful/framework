@@ -104,10 +104,11 @@ return [
 
     // Security (hardened defaults)
     'security' => [
+        // Refuse a file whose first 64 KB contain PHP (<?php, <?=) or a <script> tag.
         'scan_uploads' => true,
-        'validate_mime_by_content' => true, // Inspect file bytes, not client headers
-        'strip_exif' => env('UPLOADS_STRIP_EXIF', true), // Strip by default for privacy
-        'max_filename_length' => 255,
+        // Remove GPS position, camera and other embedded metadata from JPEG, PNG and WebP
+        // images before they are stored. A JPEG keeps its orientation.
+        'strip_exif' => env('UPLOADS_STRIP_EXIF', true),
     ],
 
     // HTTP response settings
