@@ -7,6 +7,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ## [Unreleased]
 
 ### Fixed
+- **A model created through the ORM carries its own id.** `Model::performInsert()` took
+  `insert()`'s return value as the new primary key, but `insert()` returns the affected-row count,
+  so every auto-increment model came back with id 1: a queued job, child row or later update keyed
+  on it pointed at the first row in the table. New `QueryBuilder::insertGetId()` (with
+  `InsertBuilder::insertGetId()` and `QueryExecutor::executeInsertGetId()`) reads the generated id
+  from the connection that ran the insert, and the ORM uses it.
 - **Webhooks deliver.** `WebhookDispatcher` and `Webhook::retry()` handed `QueueManager::push()` a
   `DeliverWebhookJob` object where it takes a class name, a `TypeError` under `strict_types`: every
   delivery row stayed `pending`, the event listener's error was only logged, and Retry answered 500.

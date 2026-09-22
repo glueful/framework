@@ -215,6 +215,14 @@ interface QueryBuilderInterface
     public function insert(array $data): int;
 
     /**
+     * Insert one row and return the id the database generated for it (insert() returns the
+     * affected-row count, not an id)
+     *
+     * @param array<string,mixed> $data
+     */
+    public function insertGetId(array $data): int|string;
+
+    /**
      * Insert multiple rows
      *
      * @param array<array<string,mixed>> $rows

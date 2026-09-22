@@ -42,6 +42,18 @@ class InsertBuilder implements InsertBuilderInterface
     }
 
     /**
+     * Insert a single record and return the id the database generated for it
+     *
+     * @param array<string, mixed> $data
+     */
+    public function insertGetId(string $table, array $data): int|string
+    {
+        $this->validateData($data);
+
+        return $this->executor->executeInsertGetId($this->buildInsertQuery($table, $data), array_values($data));
+    }
+
+    /**
      * Insert multiple records in batch
      * @param string $table
      * @param array<array<string, mixed>> $rows

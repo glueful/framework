@@ -653,6 +653,20 @@ class QueryBuilder implements QueryBuilderInterface
     /**
      * {@inheritdoc}
      *
+     * @param array<string,mixed> $data
+     */
+    public function insertGetId(array $data): int|string
+    {
+        $table = $this->state->getTableOrFail();
+        $data = Connection::applyInsertHooks($table, $data);
+        $this->queryValidator->validateInsert($table, $data);
+
+        return $this->insertBuilder->insertGetId($table, $data);
+    }
+
+    /**
+     * {@inheritdoc}
+     *
      * @param array<array<string,mixed>> $rows
      */
     public function insertBatch(array $rows): int

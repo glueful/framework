@@ -204,6 +204,21 @@ class QueryExecutor implements QueryExecutorInterface
     }
 
     /**
+     * Execute an INSERT and return the generated id from this executor's own PDO, the
+     * connection the statement ran on (PostgreSQL answers with lastval()).
+     */
+    public function executeInsertGetId(string $sql, array $bindings = []): int|string
+    {
+        $this->executeStatement($sql, $bindings);
+        $id = $this->pdo->lastInsertId();
+        if ($id === false || $id === '') {
+            throw new \RuntimeException('The database reported no generated id for this insert');
+        }
+
+        return ctype_digit($id) ? (int) $id : $id;
+    }
+
+    /**
      * Execute a COUNT query
      */
     public function executeCount(string $sql, array $bindings = []): int

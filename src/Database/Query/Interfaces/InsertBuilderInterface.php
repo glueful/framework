@@ -23,6 +23,13 @@ interface InsertBuilderInterface
     public function insert(string $table, array $data): int;
 
     /**
+     * Insert a single record and return the id the database generated for it
+     *
+     * @param array<string, mixed> $data
+     */
+    public function insertGetId(string $table, array $data): int|string;
+
+    /**
      * Insert multiple records in batch
      *
      * @param string $table
