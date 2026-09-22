@@ -6,6 +6,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Upgrade Notes
+- **Set `MAIL_HOST` and `MAIL_FROM` if your app sends mail.** They no longer fall back to
+  `smtp.mailtrap.io` and `noreply@glueful.com`; with either unset, the email channel reports
+  itself unavailable.
+
 ### Fixed
 - **Every response carries the baseline security headers.** JSON API responses and the API
   reference went out with none: the `security_headers` middleware is opt-in per route and only SPA
@@ -21,6 +26,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   `BaseCommand` made itself a fresh, never-booted container and context and worked on different
   state than the app. It now gets the booted ones, as deferred commands already did
   (`Glueful\Console\CommandFactory`).
+- **Unconfigured mail is reported as unconfigured.** `services.mail` defaulted the SMTP host to
+  `smtp.mailtrap.io` and the sender to `noreply@glueful.com`, so an app that never set up mail
+  looked configured: the email channel said it was available, and sends failed later or went out
+  under a domain the app does not own. Both default to unset now.
 
 ## [1.86.2] - 2026-09-22 — Alpherg
 

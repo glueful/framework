@@ -16,7 +16,7 @@ return [
             // Generic SMTP (works with any provider)
             'smtp' => [
                 'transport' => 'smtp',
-                'host' => env('MAIL_HOST', 'smtp.mailtrap.io'),
+                'host' => env('MAIL_HOST'),
                 'port' => env('MAIL_PORT', 2525),
                 'encryption' => env('MAIL_ENCRYPTION', 'tls'),
                 'username' => env('MAIL_USERNAME'),
@@ -83,7 +83,7 @@ return [
         ],
 
         'from' => [
-            'address' => env('MAIL_FROM', 'noreply@glueful.com'),
+            'address' => env('MAIL_FROM'),
             'name' => env('MAIL_FROM_NAME', 'Glueful'),
         ],
 
