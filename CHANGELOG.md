@@ -42,6 +42,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   case-sensitive on PostgreSQL while MySQL and SQLite fold case, and a `%` or `_` in the term was
   a wildcard. They now use the new `whereContains()`, `orWhereContains()`, `whereStartsWith()` and
   `whereEndsWith()` on the query builder, which lower-case both sides and escape the term.
+- **A resized image follows its blob when the file changes in place.** The variant cache and its
+  ETag were keyed on the blob's uuid and the resize parameters, so after an image was optimized
+  or replaced under the same uuid the old variant was served, and revalidated as unchanged, for as
+  long as the cache lived (seven days by default). The blob's size and last update now version
+  both.
 
 ## [1.86.2] - 2026-09-22 — Alpherg
 

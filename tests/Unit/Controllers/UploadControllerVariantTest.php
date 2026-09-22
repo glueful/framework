@@ -227,16 +227,11 @@ final class UploadControllerVariantTest extends TestCase
     public function testVariantNotModifiedResponseIncludesNosniff(): void
     {
         $controller = $this->makeController(new VariantFakeMediaProcessor());
-
-        $resize = [
-            'width' => 100,
-            'height' => null,
-            'quality' => null,
-            'format' => null,
-            'fit' => null,
-        ];
-        $cacheKey = 'blob_variant:' . sha1($this->blobUuid . '|' . json_encode($resize));
-        $etag = '"' . md5($cacheKey) . '"';
+        $first = $controller->show(
+            Request::create('/blobs/' . $this->blobUuid, 'GET', ['width' => 100]),
+            $this->blobUuid,
+        );
+        $etag = (string) $first->headers->get('ETag');
 
         $request = Request::create('/blobs/' . $this->blobUuid, 'GET', ['width' => 100]);
         $request->headers->set('If-None-Match', $etag);
@@ -246,6 +241,33 @@ final class UploadControllerVariantTest extends TestCase
         $this->assertSame(304, $response->getStatusCode());
         $this->assertSame($etag, $response->headers->get('ETag'));
         $this->assertSame('nosniff', $response->headers->get('X-Content-Type-Options'));
+    }
+
+    public function testAVariantIsRebuiltWhenTheBlobChangesInPlace(): void
+    {
+        // An image optimized in place keeps its uuid: the variant cache and its ETag were keyed
+        // on uuid and size parameters alone, so the old variant was served, and revalidated as
+        // unchanged, for as long as the cache lived.
+        $fake = new VariantFakeMediaProcessor();
+        $controller = $this->makeController($fake);
+        $first = $controller->show(
+            Request::create('/blobs/' . $this->blobUuid, 'GET', ['width' => 100]),
+            $this->blobUuid,
+        );
+        $staleEtag = (string) $first->headers->get('ETag');
+        self::assertSame(1, $fake->renderCalls);
+
+        \Glueful\Database\Connection::fromContext($this->context)->table('blobs')
+            ->where('uuid', '=', $this->blobUuid)
+            ->update(['size' => 10, 'updated_at' => '2030-01-01 00:00:00']);
+
+        $request = Request::create('/blobs/' . $this->blobUuid, 'GET', ['width' => 100]);
+        $request->headers->set('If-None-Match', $staleEtag);
+        $response = $controller->show($request, $this->blobUuid);
+
+        self::assertSame(200, $response->getStatusCode(), 'the old ETag no longer matches');
+        self::assertNotSame($staleEtag, $response->headers->get('ETag'));
+        self::assertSame(2, $fake->renderCalls, 'the variant is rendered again, not read from the cache');
     }
 
     public function testVariantRejectsInvalidSourceImageBeforeMediaProcessor(): void
