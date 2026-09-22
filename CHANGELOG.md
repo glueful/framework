@@ -23,6 +23,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   replaces the default adds the job itself.
 
 ### Fixed
+- **An app's config lists replace the framework's instead of merging by position.** Config files
+  were layered with `array_replace_recursive`, which merges lists index by index: an app's third
+  scheduled job took every key it lacked (`enabled`, `parameters`, `queue` …) from the framework's
+  third job, and framework jobs past the end of the app's list ran too. Maps still merge key by key;
+  a list an app sets (or a package default a file overrides) now replaces the list below it.
 - **`permissions:diff` sees permissions enforced by route middleware.** It read only
   `#[RequiresPermission]` / `#[RequiresRole]` attributes, so an app enforcing permissions as
   `->middleware('content_permission:content.view')` had every permission reported as declared but
@@ -110,6 +115,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - **`FailedJobProvider::setMaxRetries()` and `getMaxRetries()`.** A retry creates a new job with
   fresh attempts and the table keeps no retry count, so nothing enforces the value. Removal in the
   second minor release after this one.
+
+### Upgrade Notes
+- **Config lists are replaced, not merged by position.** If your `config/schedule.php` (or any
+  config list) relied on framework entries surviving past the end of your own list, add them to
+  your list. To keep the new `webhook_cleanup` job, add it to your `config/schedule.php` `jobs`.
 
 ## [1.85.8] - 2026-09-15 — Alphard
 
