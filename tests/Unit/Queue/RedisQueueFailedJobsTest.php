@@ -96,11 +96,34 @@ final class RedisQueueFailedJobsTest extends TestCase
         $this->expectExceptionMessage('signature');
         $queue->retryFailed($entry['uuid']);
     }
+
+    public function testAJobThatReleasesItselfIsRequeuedOnRedis(): void
+    {
+        $redis = new InMemoryRedis();
+        $queue = $this->queue($redis);
+        $queue->push(RedisReleasingTestJob::class, [], 'default');
+
+        $job = $queue->pop('default');
+        self::assertNotNull($job);
+        $job->fire();
+
+        $delayed = array_merge(...array_values(array_map('array_keys', $redis->sets)));
+        self::assertNotSame([], $delayed, 'the released job waits in the delayed set, not deleted');
+    }
 }
+
 
 final class RedisFailedTestJob extends \Glueful\Queue\Job
 {
     public function handle(): void
     {
+    }
+}
+
+final class RedisReleasingTestJob extends \Glueful\Queue\Job
+{
+    public function handle(): void
+    {
+        $this->release(60);
     }
 }

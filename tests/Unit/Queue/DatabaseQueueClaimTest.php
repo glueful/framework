@@ -95,6 +95,25 @@ final class DatabaseQueueClaimTest extends TestCase
 
         self::assertTrue($health->isHealthy(), $health->message);
     }
+
+    public function testAJobThatReleasesItselfIsRequeuedWithItsDelay(): void
+    {
+        // The worker runs a fresh instance of the job class, with no driver: its release() only
+        // set a flag, the queue wrapper saw nothing and deleted the row. A webhook delivery that
+        // scheduled a retry this way never ran again.
+        $queue = new DatabaseQueue();
+        $queue->initialize(['context' => $this->context]);
+        $uuid = $queue->push(ReleasingTestJob::class, [], 'default');
+
+        $job = $queue->pop('default');
+        self::assertNotNull($job);
+        $job->fire();
+
+        $row = Connection::fromContext($this->context)->table('queue_jobs')->where('uuid', $uuid)->first();
+        self::assertNotNull($row, 'the released job is still on the queue');
+        self::assertNull($row['reserved_at']);
+        self::assertGreaterThanOrEqual(time() + 55, strtotime((string) $row['available_at']));
+    }
 }
 
 
@@ -102,5 +121,13 @@ final class ClaimTestJob extends \Glueful\Queue\Job
 {
     public function handle(): void
     {
+    }
+}
+
+final class ReleasingTestJob extends \Glueful\Queue\Job
+{
+    public function handle(): void
+    {
+        $this->release(60);
     }
 }
