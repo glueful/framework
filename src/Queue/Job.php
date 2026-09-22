@@ -47,6 +47,9 @@ abstract class Job implements JobInterface
     /** @var int Number of attempts */
     protected int $attempts = 0;
 
+    /** @var int Delay the last release() asked for */
+    private int $releaseDelay = 0;
+
     /** @var string|null Queue name */
     protected ?string $queue = null;
 
@@ -218,6 +221,16 @@ abstract class Job implements JobInterface
             $this->driver->release($this, $delay);
         }
         $this->released = true;
+        $this->releaseDelay = $delay;
+    }
+
+    /**
+     * The delay a driverless release asked for: the queue wrapper that ran this job reads it and
+     * releases the queued job itself. Null when the job was not released.
+     */
+    public function requestedReleaseDelay(): ?int
+    {
+        return $this->released ? $this->releaseDelay : null;
     }
 
     /**

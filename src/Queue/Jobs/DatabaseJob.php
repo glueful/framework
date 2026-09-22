@@ -146,6 +146,15 @@ class DatabaseJob implements JobInterface
             throw new \RuntimeException("Job class '{$jobClass}' must have a 'handle' method");
         }
 
+        // A job that released itself (a scheduled retry) runs here without a driver, so its
+        // release() reached no queue: carry it out on the queued job, with the delay it asked for.
+        if (!$this->deleted && !$this->released && $job instanceof \Glueful\Queue\Job) {
+            $delay = $job->requestedReleaseDelay();
+            if ($delay !== null) {
+                $this->release($delay);
+            }
+        }
+
         // Delete job after successful execution
         if (!$this->deleted && !$this->released) {
             $this->delete();

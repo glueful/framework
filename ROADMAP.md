@@ -21,6 +21,13 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.86.1 — Alpherg (Patch, Released 2026-09-22)
+- **A job that releases itself is retried** — the worker runs a driverless copy of the job class,
+  so a job's own `release($delay)` requeued nothing and the queue deleted the row; a failed
+  webhook delivery sat at "retrying" for ever. `DatabaseJob` and `RedisJob` carry out the release
+  with the delay the job asked for.
+- Notes: patch; no migration. Jobs that scheduled their own retry now run again.
+
 ### 1.86.0 — Alpherg (Released 2026-09-22)
 - **Webhooks deliver** — both enqueue paths handed the queue a job object and failed every time;
   deliveries go with their subscription, `api.webhooks.cleanup` is honoured (`webhook:cleanup`,
