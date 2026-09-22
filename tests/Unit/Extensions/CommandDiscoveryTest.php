@@ -83,6 +83,58 @@ PHP;
     }
 
     #[Test]
+    public function aDiscoveredBaseCommandGetsTheAppsContainerAndContext(): void
+    {
+        // Bare instantiation built BaseCommand a fresh, never-booted container and context: a
+        // command discovered after the console existed ran against different state than the app.
+        $commandCode = <<<'PHP'
+<?php
+namespace TestExtensionCtx\Console;
+
+use Glueful\Console\BaseCommand;
+use Symfony\Component\Console\Attribute\AsCommand;
+
+#[AsCommand(name: 'test:context')]
+class ContextCommand extends BaseCommand
+{
+    public function context(): \Glueful\Bootstrap\ApplicationContext
+    {
+        return $this->getContext();
+    }
+
+    public function container(): \Psr\Container\ContainerInterface
+    {
+        return $this->getContainer();
+    }
+}
+PHP;
+        file_put_contents($this->tempDir . '/Console/ContextCommand.php', $commandCode);
+        require_once $this->tempDir . '/Console/ContextCommand.php';
+
+        $console = new ConsoleApplication();
+        $context = new \Glueful\Bootstrap\ApplicationContext($this->tempDir);
+        $container = $this->createMock(ContainerInterface::class);
+        $container->method('has')->willReturnCallback(
+            static fn ($id) => in_array($id, ['console.application', \Glueful\Bootstrap\ApplicationContext::class], true)
+        );
+        $container->method('get')->willReturnCallback(
+            static fn ($id) => $id === 'console.application' ? $console : $context
+        );
+        $provider = new class($container) extends \Glueful\Extensions\ServiceProvider {
+            public function testDiscoverCommands(string $namespace, string $directory): void
+            {
+                $this->discoverCommands($namespace, $directory);
+            }
+        };
+
+        $provider->testDiscoverCommands('TestExtensionCtx\\Console', $this->tempDir . '/Console');
+
+        $command = $console->find('test:context');
+        $this->assertSame($context, $command->context());
+        $this->assertSame($container, $command->container());
+    }
+
+    #[Test]
     public function discoverCommandsIgnoresAbstractClasses(): void
     {
         // Create an abstract command file

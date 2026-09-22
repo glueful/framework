@@ -13,6 +13,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   `X-Content-Type-Options: nosniff` and `Referrer-Policy: strict-origin-when-cross-origin`, only
   where a response has not set them (`Glueful\Http\BaselineSecurityHeaders`). Framing and HSTS
   stay per route and with whatever terminates TLS.
+- **Two commands with the same name are reported.** Symfony keeps the last command added under a
+  name, so two packages declaring one name shadowed each other in silence. The last one still
+  wins, and the console now logs which class a name was taken from.
+- **A command an extension discovers after the console exists gets the app's container.**
+  `ServiceProvider::discoverCommands()` built such a command with no arguments, so a
+  `BaseCommand` made itself a fresh, never-booted container and context and worked on different
+  state than the app. It now gets the booted ones, as deferred commands already did
+  (`Glueful\Console\CommandFactory`).
 
 ## [1.86.2] - 2026-09-22 — Alpherg
 
