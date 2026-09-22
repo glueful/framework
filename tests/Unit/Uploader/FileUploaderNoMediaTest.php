@@ -166,6 +166,33 @@ final class FileUploaderNoMediaTest extends TestCase
         $this->assertSame('image/png', $row['mime_type']);
     }
 
+    public function testAnUploadedImageIsStoredWithoutItsMetadata(): void
+    {
+        // uploads.security.strip_exif was on by default and read by nothing.
+        /** @var FileUploader $uploader */
+        $uploader = $this->context->getContainer()->get(FileUploader::class);
+        $image = imagecreatetruecolor(2, 2);
+        ob_start();
+        imagepng($image);
+        $png = (string) ob_get_clean();
+        $text = 'Comment' . "\0" . 'GPS-51.5007N';
+        $chunk = pack('N', strlen($text)) . 'tEXt' . $text . pack('N', crc32('tEXt' . $text));
+        $tmp = $this->appPath . '/tagged.png';
+        file_put_contents($tmp, substr($png, 0, 33) . $chunk . substr($png, 33));
+
+        $result = $uploader->uploadMedia(
+            ['name' => 'tagged.png', 'type' => 'image/png', 'tmp_name' => $tmp, 'error' => UPLOAD_ERR_OK,
+             'size' => filesize($tmp)],
+            'posts/uuid123',
+            ['save_to_blobs' => true]
+        );
+
+        $stored = (string) file_get_contents($this->uploadsRoot . '/' . $result['path']);
+        $this->assertStringNotContainsString('GPS-51.5007N', $stored);
+        $row = (new Connection())->table('blobs')->where('uuid', $result['blob_uuid'])->first();
+        $this->assertSame(strlen($stored), (int) $row['size'], 'the recorded size is the stored file\'s');
+    }
+
     public function testSvgUploadsPassWhenTheConfiguredAllowlistPermitsImages(): void
     {
         // Regression: the detected-mime content check must honor the SAME

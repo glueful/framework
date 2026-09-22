@@ -21,6 +21,23 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.87.0 — Alrakis (Released 2026-09-22)
+- **Every response carries baseline security headers** — `nosniff` and a referrer policy are
+  added at the response chokepoint wherever a response set none, JSON APIs and `/api-docs`
+  included.
+- **Uploads keep their promises** — images are stripped of EXIF, XMP, IPTC and comments as
+  `uploads.security.strip_exif` said; deleted blobs are purged after a grace period
+  (`blobs:purge`, the `blob_purge` job); a resized image follows its blob when the file changes.
+- **Text search folds case everywhere and matches literally** — `whereContains()`,
+  `orWhereContains()`, `whereStartsWith()`, `whereEndsWith()` lower-case both sides and escape the
+  term; search and the text filters use them.
+- **Unconfigured mail reads as unconfigured** — no default SMTP host or sender.
+- **Console honesty** — a name two commands claim is logged, a discovered command gets the booted
+  container, and a command a framework upgrade adds appears in production.
+- Notes: minor; see the Upgrade Notes — set `MAIL_HOST`/`MAIL_FROM`, list `blob_purge` in an app's
+  schedule, image metadata is stripped by default, `WhereClauseInterface` gains four methods.
+  `Utils::buildSearchConditions()` is deprecated (removal in 1.88).
+
 ### 1.86.2 — Alpherg (Patch, Released 2026-09-22)
 - **An empty array in config adds nothing again** — 1.86.0 let a list replace the list below it,
   and `[]` counts as a list: a package's `'source_roots' => []` wiped the uploads root another

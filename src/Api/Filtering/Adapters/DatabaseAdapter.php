@@ -10,9 +10,9 @@ use Glueful\Api\Filtering\SearchResult;
 use Glueful\Database\Connection;
 
 /**
- * Database search adapter using LIKE queries
+ * Database search adapter using case-insensitive substring matches
  *
- * Provides full-text search functionality using database LIKE queries.
+ * Provides search across fields with case-insensitive, literal substring matches.
  * This is the default adapter when no external search engine is configured.
  *
  * While not as powerful as dedicated search engines, it works out of the box
@@ -65,10 +65,10 @@ class DatabaseAdapter extends SearchAdapter
             $first = true;
             foreach ($fields as $field) {
                 if ($first) {
-                    $q->where($field, 'LIKE', "%{$query}%");
+                    $q->whereContains($field, $query);
                     $first = false;
                 } else {
-                    $q->orWhere($field, 'LIKE', "%{$query}%");
+                    $q->orWhereContains($field, $query);
                 }
             }
         });
@@ -217,9 +217,9 @@ class DatabaseAdapter extends SearchAdapter
                 'nin', 'not_in' => $queryBuilder->whereNotIn($filter->field, $filter->getValueAsArray()),
                 'null', 'is_null' => $queryBuilder->whereNull($filter->field),
                 'not_null' => $queryBuilder->whereNotNull($filter->field),
-                'contains', 'like' => $queryBuilder->where($filter->field, 'LIKE', "%{$filter->value}%"),
-                'starts' => $queryBuilder->where($filter->field, 'LIKE', "{$filter->value}%"),
-                'ends' => $queryBuilder->where($filter->field, 'LIKE', "%{$filter->value}"),
+                'contains', 'like' => $queryBuilder->whereContains($filter->field, (string) $filter->value),
+                'starts' => $queryBuilder->whereStartsWith($filter->field, (string) $filter->value),
+                'ends' => $queryBuilder->whereEndsWith($filter->field, (string) $filter->value),
                 'between' => $this->applyBetweenFilter($queryBuilder, $filter),
                 default => $queryBuilder->where($filter->field, $filter->value),
             };

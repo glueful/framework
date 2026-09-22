@@ -319,7 +319,10 @@ class UploadController extends BaseController
             && $this->media !== null
             && (bool) $this->getConfig('uploads.image_processing.enabled', true)
         ) {
-            return $this->serveResizedImage($request, $uuid, $disk, $path, $resize, $mime);
+            // The blob's size and last update version the variant: an image changed in place
+            // keeps its uuid, and must not be answered from the old variant or its ETag.
+            $version = (string) ($blob['updated_at'] ?? '') . '|' . (string) ($blob['size'] ?? '');
+            return $this->serveResizedImage($request, $uuid, $disk, $path, $resize, $mime, $version);
         }
 
         // No media processor bound: width/height/quality fall through to serving
@@ -468,11 +471,12 @@ class UploadController extends BaseController
         string $disk,
         string $path,
         array $resize,
-        string $sourceMime
+        string $sourceMime,
+        string $version = '',
     ): Response|\Symfony\Component\HttpFoundation\Response {
         $cacheEnabled = (bool) $this->getConfig('uploads.image_processing.cache_enabled', true);
         $cacheTtl = (int) $this->getConfig('uploads.image_processing.cache_ttl', 604800);
-        $cacheKey = $this->buildCacheKey($uuid, $resize);
+        $cacheKey = $this->buildCacheKey($uuid, $resize, $version);
         $allowedFormats = (array) $this->getConfig('uploads.image_processing.allowed_formats', []);
         $etagEnabled = (bool) $this->getConfig('uploads.response.enable_etag', true);
         $maxVariantBytes = (int) $this->getConfig('uploads.image_processing.max_variant_bytes', 5 * 1024 * 1024);
@@ -807,9 +811,9 @@ class UploadController extends BaseController
     /**
      * @param array<string, mixed> $resize
      */
-    private function buildCacheKey(string $uuid, array $resize): string
+    private function buildCacheKey(string $uuid, array $resize, string $version): string
     {
-        return 'blob_variant:' . sha1($uuid . '|' . json_encode($resize));
+        return 'blob_variant:' . sha1($uuid . '|' . $version . '|' . json_encode($resize));
     }
 
     /**

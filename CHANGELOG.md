@@ -6,6 +6,73 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.87.0] - 2026-09-22 — Alrakis
+
+### Upgrade Notes
+- **Set `MAIL_HOST` and `MAIL_FROM` if your app sends mail.** They no longer fall back to
+  `smtp.mailtrap.io` and `noreply@glueful.com`; with either unset, the email channel reports
+  itself unavailable.
+- **A PostgreSQL search that relied on matching case now matches any case**, and a `%` or `_` a
+  client sends is matched as that character. `WhereClauseInterface` gains the four text-match
+  methods; a custom implementation must add them.
+- **Uploaded images are now stripped of their metadata** by default. Set
+  `UPLOADS_STRIP_EXIF=false` to keep it.
+- **List `blob_purge` in your `config/schedule.php`** to purge deleted uploads: an app's schedule
+  replaces the framework's list.
+
+### Added
+- **Deleted uploads are purged.** Deleting a blob only marked it, so its file stayed on the disk
+  for good. `blobs:purge` and the new scheduled `blob_purge` job remove the file, through the disk
+  the blob names, and then the row, once `uploads.purge_deleted_after_days` (30 by default,
+  `UPLOADS_PURGE_DELETED_AFTER_DAYS`) have passed. A blob whose file cannot be removed keeps its row
+  for the next run (`Glueful\Uploader\BlobPurger`).
+
+### Deprecated
+- `Utils::buildSearchConditions()` writes the search term into raw SQL unescaped. Use
+  `QueryBuilder::whereContains()`; it is removed in 1.88.
+
+### Fixed
+- **Every response carries the baseline security headers.** JSON API responses and the API
+  reference went out with none: the `security_headers` middleware is opt-in per route and only SPA
+  documents set their own. The response chokepoint that applies CORS and the CSP now adds
+  `X-Content-Type-Options: nosniff` and `Referrer-Policy: strict-origin-when-cross-origin`, only
+  where a response has not set them (`Glueful\Http\BaselineSecurityHeaders`). Framing and HSTS
+  stay per route and with whatever terminates TLS.
+- **Two commands with the same name are reported.** Symfony keeps the last command added under a
+  name, so two packages declaring one name shadowed each other in silence. The last one still
+  wins, and the console now logs which class a name was taken from.
+- **A command an extension discovers after the console exists gets the app's container.**
+  `ServiceProvider::discoverCommands()` built such a command with no arguments, so a
+  `BaseCommand` made itself a fresh, never-booted container and context and worked on different
+  state than the app. It now gets the booted ones, as deferred commands already did
+  (`Glueful\Console\CommandFactory`).
+- **Unconfigured mail is reported as unconfigured.** `services.mail` defaulted the SMTP host to
+  `smtp.mailtrap.io` and the sender to `noreply@glueful.com`, so an app that never set up mail
+  looked configured: the email channel said it was available, and sends failed later or went out
+  under a domain the app does not own. Both default to unset now.
+- **Text search folds case on every database and matches the term literally.** Search and the
+  `contains`, `starts` and `ends` filters wrote `column LIKE '%term%'` from user input:
+  case-sensitive on PostgreSQL while MySQL and SQLite fold case, and a `%` or `_` in the term was
+  a wildcard. They now use the new `whereContains()`, `orWhereContains()`, `whereStartsWith()` and
+  `whereEndsWith()` on the query builder, which lower-case both sides and escape the term.
+- **A resized image follows its blob when the file changes in place.** The variant cache and its
+  ETag were keyed on the blob's uuid and the resize parameters, so after an image was optimized
+  or replaced under the same uuid the old variant was served, and revalidated as unchanged, for as
+  long as the cache lived (seven days by default). The blob's size and last update now version
+  both.
+- **A command a framework upgrade adds shows up in production.** The production command manifest
+  was rediscovered only when a listed class disappeared, so a new framework command stayed
+  missing until someone deleted `storage/cache/glueful_commands_manifest.php`. The manifest now
+  records the framework version that wrote it and is rediscovered when that changes.
+- **Uploaded images lose their embedded metadata, as `uploads.security.strip_exif` promised.**
+  The setting was on by default and read by nothing, so a phone photo kept its GPS position,
+  camera and timestamps in the stored original. JPEG, PNG and WebP uploads are now stripped of
+  EXIF, XMP, IPTC and comments before they are stored, without re-encoding; a JPEG keeps its
+  orientation (`Glueful\Uploader\ImageMetadataStripper`). `uploads.security.scan_uploads` is read
+  too; the uploader only looked at `filesystem.security.scan_uploads`, which still applies when
+  the new key is unset. The unread `validate_mime_by_content` and `max_filename_length` are gone:
+  content is always inspected, and stored names are always generated.
+
 ## [1.86.2] - 2026-09-22 — Alpherg
 
 ### Fixed

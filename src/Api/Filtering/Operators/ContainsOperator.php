@@ -8,7 +8,7 @@ use Glueful\Api\Filtering\Contracts\FilterOperatorInterface;
 use Glueful\Database\QueryBuilder;
 
 /**
- * Contains operator (LIKE %value%)
+ * Contains operator (case-insensitive, literal substring)
  *
  * Filters for values containing substring: filter[name][contains]=john
  */
@@ -26,6 +26,6 @@ class ContainsOperator implements FilterOperatorInterface
 
     public function apply(QueryBuilder $query, string $field, mixed $value): void
     {
-        $query->where($field, 'LIKE', "%{$value}%");
+        $query->whereContains($field, (string) $value);
     }
 }

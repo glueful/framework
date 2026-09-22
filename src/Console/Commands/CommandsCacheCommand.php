@@ -121,8 +121,10 @@ HELP);
         if ($location !== null) {
             $mtime = filemtime($location);
             $size = filesize($location);
-            $commands = require $location;
-            $count = is_array($commands) ? count($commands) : 0;
+            $manifest = require $location;
+            $count = is_array($manifest) && is_array($manifest['commands'] ?? null)
+                ? count($manifest['commands'])
+                : 0;
 
             $output->writeln('');
             $output->writeln('  <info>Cache file:</info>');

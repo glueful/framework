@@ -415,12 +415,8 @@ abstract class ServiceProvider
 
             foreach ($commands as $class) {
                 try {
-                    if ($this->app->has($class)) {
-                        $command = $this->app->get($class);
-                    } else {
-                        $command = new $class();
-                    }
-                    $console->add($command);
+                    $command = \Glueful\Console\CommandFactory::make($this->app, $class);
+                    $console->addCommand($command);
                 } catch (\Throwable $e) {
                     error_log("[Extensions] Failed to register command {$class}: " . $e->getMessage());
                 }

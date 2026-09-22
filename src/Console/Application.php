@@ -2,7 +2,6 @@
 
 namespace Glueful\Console;
 
-use Glueful\Bootstrap\ApplicationContext;
 use Symfony\Component\Console\Application as BaseApplication;
 use Symfony\Component\Console\Command\Command;
 use Psr\Container\ContainerInterface;
@@ -88,23 +87,7 @@ class Application extends BaseApplication
     {
         foreach (ServiceProvider::flushDeferredCommands() as $class) {
             try {
-                if ($this->container->has($class)) {
-                    $command = $this->container->get($class);
-                } else {
-                    // Bare instantiation MUST still hand BaseCommand the REAL booted
-                    // container/context: with no args, BaseCommand builds a fresh context and a
-                    // fresh, never-booted container — a parallel world where extension boot()
-                    // never ran (no capabilities, no boot-registered contributors/listeners), so
-                    // discovered commands silently operate on different state than the app.
-                    $command = is_subclass_of($class, BaseCommand::class)
-                        ? new $class(
-                            $this->container,
-                            $this->container->has(ApplicationContext::class)
-                                ? $this->container->get(ApplicationContext::class)
-                                : null,
-                        )
-                        : new $class();
-                }
+                $command = CommandFactory::make($this->container, $class);
                 if ($command instanceof Command) {
                     $this->addCommand($command);
                 }
@@ -150,6 +133,36 @@ class Application extends BaseApplication
     public function getContainer(): ContainerInterface
     {
         return $this->container;
+    }
+
+    /** @var array<string, class-string> the class each registered command name resolves to */
+    private array $registeredBy = [];
+
+    /**
+     * Symfony keeps the last command added under a name and says nothing, so two packages
+     * declaring the same name shadowed one another in silence. The last one still wins; the
+     * console now reports which class a name was taken from.
+     */
+    public function addCommand(callable|Command $command): ?Command
+    {
+        $added = parent::addCommand($command);
+        if ($added === null) {
+            return null;
+        }
+        $name = $added->getName();
+        if ($name !== null) {
+            $previous = $this->registeredBy[$name] ?? null;
+            if ($previous !== null && $previous !== $added::class) {
+                error_log(sprintf(
+                    "[Console] Command '%s' from %s replaces the one from %s. Rename one of them.",
+                    $name,
+                    $added::class,
+                    $previous,
+                ));
+            }
+            $this->registeredBy[$name] = $added::class;
+        }
+        return $added;
     }
 
     /**

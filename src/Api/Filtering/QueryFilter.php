@@ -177,10 +177,10 @@ abstract class QueryFilter
             $first = true;
             foreach ($fields as $field) {
                 if ($first) {
-                    $query->where($field, 'LIKE', "%{$search}%");
+                    $query->whereContains($field, $search);
                     $first = false;
                 } else {
-                    $query->orWhere($field, 'LIKE', "%{$search}%");
+                    $query->orWhereContains($field, $search);
                 }
             }
         });

@@ -85,6 +85,7 @@ final class FileUploader
             $filename = $this->generateSecureFilename($file['name'], $mime);
 
             $this->validateFileContent($file, $mime);
+            $file = $this->stripMetadata($file, $mime);
             $this->storage->store($file['tmp_name'], $filename);
 
             return $this->saveFileRecord($token, $getParams, $file, $filename);
@@ -130,6 +131,7 @@ final class FileUploader
             ?? $this->minimalMetadata($mime);
 
         // Store file
+        $file = $this->stripMetadata($file, $mime);
         $filename = $this->generateSecureFilename($file['name'] ?? 'upload', $mime);
         $fullPath = $this->buildPath($storagePath, $filename);
         $this->storage->store($file['tmp_name'], $fullPath);
@@ -556,11 +558,33 @@ final class FileUploader
             throw ValidationException::forField('file', 'Invalid file type');
         }
 
-        // Security scan
-        $scanEnabled = (bool) $this->getConfig('filesystem.security.scan_uploads', true);
+        // Security scan (uploads.security is the documented switch; filesystem.security the older one)
+        $scanEnabled = (bool) ($this->getConfig('uploads.security.scan_uploads')
+            ?? $this->getConfig('filesystem.security.scan_uploads', true));
         if ($scanEnabled && $this->isFileHazardous($file['tmp_name'])) {
             throw ValidationException::forField('file', 'File content not allowed');
         }
+    }
+
+    /**
+     * Removes embedded image metadata — GPS position, camera, timestamps — before the file is
+     * stored, when `uploads.security.strip_exif` is on (the default). Metadata is read first, so
+     * dimensions are unaffected; the recorded size is the stripped file's.
+     *
+     * @param array<string, mixed> $file
+     * @return array<string, mixed>
+     */
+    private function stripMetadata(array $file, string $mime): array
+    {
+        if (!(bool) $this->getConfig('uploads.security.strip_exif', true)) {
+            return $file;
+        }
+        $path = (string) $file['tmp_name'];
+        if (ImageMetadataStripper::strip($path, $mime)) {
+            clearstatcache(true, $path);
+            $file['size'] = (int) filesize($path);
+        }
+        return $file;
     }
 
     private function isFileHazardous(string $filepath): bool

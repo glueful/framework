@@ -513,6 +513,8 @@ class Utils
      * @param array<string> $searchFields Fields to search in
      * @param string $operator SQL operator (LIKE, ILIKE, etc.)
      * @return array{raw: string, fields: array<string>, term: string}|array{} Search conditions
+     * @deprecated since 1.86.3 — it writes the search term into raw SQL unescaped, which is
+     *             injectable. Use QueryBuilder::whereContains() / orWhereContains(); remove in 1.88.
      */
     public static function buildSearchConditions(
         string $searchTerm,

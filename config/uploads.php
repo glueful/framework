@@ -27,6 +27,10 @@ return [
     // Storage disk (from config/storage.php)
     'disk' => env('UPLOADS_DISK', 'uploads'),
 
+    // A deleted blob keeps its file this many days, then `blobs:purge` (and the scheduled
+    // blob_purge job) removes the file and the row.
+    'purge_deleted_after_days' => (int) env('UPLOADS_PURGE_DELETED_AFTER_DAYS', 30),
+
     // Default visibility for uploaded blobs: 'public' or 'private'
     // Public blobs can be accessed without auth (if access mode allows)
     // Private blobs require auth or a valid signed URL
@@ -100,10 +104,11 @@ return [
 
     // Security (hardened defaults)
     'security' => [
+        // Refuse a file whose first 64 KB contain PHP (<?php, <?=) or a <script> tag.
         'scan_uploads' => true,
-        'validate_mime_by_content' => true, // Inspect file bytes, not client headers
-        'strip_exif' => env('UPLOADS_STRIP_EXIF', true), // Strip by default for privacy
-        'max_filename_length' => 255,
+        // Remove GPS position, camera and other embedded metadata from JPEG, PNG and WebP
+        // images before they are stored. A JPEG keeps its orientation.
+        'strip_exif' => env('UPLOADS_STRIP_EXIF', true),
     ],
 
     // HTTP response settings

@@ -84,6 +84,18 @@ interface WhereClauseInterface
      */
     public function whereLike(string $column, string $pattern): void;
 
+    /** Case-insensitive substring match on every driver; `%` and `_` in the term are literal. */
+    public function whereContains(string $column, string $text): void;
+
+    /** OR form of whereContains(). */
+    public function orWhereContains(string $column, string $text): void;
+
+    /** Case-insensitive prefix match; the term is literal. */
+    public function whereStartsWith(string $column, string $text): void;
+
+    /** Case-insensitive suffix match; the term is literal. */
+    public function whereEndsWith(string $column, string $text): void;
+
     /**
      * Add raw WHERE condition
      *

@@ -68,6 +68,13 @@ return [
             'description' => 'Delete webhook delivery records past api.webhooks.cleanup retention',
             'enabled' => env('WEBHOOK_CLEANUP_ENABLED', true),
         ],
+        [
+            'name' => 'blob_purge',
+            'schedule' => '45 3 * * *',
+            'handler_class' => 'Glueful\\Uploader\\Jobs\\BlobPurgeJob',
+            'description' => 'Remove deleted uploads past uploads.purge_deleted_after_days',
+            'enabled' => env('BLOB_PURGE_ENABLED', true),
+        ],
     ],
 
 ];

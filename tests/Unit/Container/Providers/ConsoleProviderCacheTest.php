@@ -59,7 +59,7 @@ final class ConsoleProviderCacheTest extends TestCase
         self::assertArrayNotHasKey(self::PHANTOM, $defs, 'a cached class that no longer exists must not be registered');
         self::assertArrayHasKey(VersionCommand::class, $defs, 'real commands are still registered');
 
-        $rewritten = require $this->manifest();
+        $rewritten = (require $this->manifest())['commands'];
         self::assertNotContains(self::PHANTOM, $rewritten, 'the manifest is rewritten without the phantom');
         self::assertContains(VersionCommand::class, $rewritten);
     }
@@ -71,6 +71,37 @@ final class ConsoleProviderCacheTest extends TestCase
         $this->provider()->defs();
 
         self::assertFileExists($this->manifest(), 'production writes the manifest under the app base path, not a shared temp file');
+    }
+
+    public function testAManifestFromAnotherFrameworkVersionIsRediscovered(): void
+    {
+        // Every entry still exists, so the stale-entry check passes: before the version stamp, a
+        // command a framework upgrade added never appeared until someone deleted the manifest.
+        file_put_contents(
+            $this->manifest(),
+            "<?php\nreturn " . var_export(['framework' => '0.0.1', 'commands' => [VersionCommand::class]], true) . ";\n",
+        );
+
+        $defs = $this->provider()->defs();
+
+        self::assertArrayHasKey(\Glueful\Console\Commands\Storage\BlobPurgeCommand::class, $defs);
+        self::assertSame(\Glueful\Support\Version::getVersion(), (require $this->manifest())['framework']);
+    }
+
+    public function testAManifestFromThisVersionIsTrusted(): void
+    {
+        file_put_contents(
+            $this->manifest(),
+            "<?php\nreturn " . var_export(
+                ['framework' => \Glueful\Support\Version::getVersion(), 'commands' => [VersionCommand::class]],
+                true,
+            ) . ";\n",
+        );
+
+        $defs = $this->provider()->defs();
+
+        self::assertArrayHasKey(VersionCommand::class, $defs);
+        self::assertArrayNotHasKey(\Glueful\Console\Commands\Storage\BlobPurgeCommand::class, $defs);
     }
 
     private function provider(): ConsoleProvider

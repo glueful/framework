@@ -8,7 +8,7 @@ use Glueful\Api\Filtering\Contracts\FilterOperatorInterface;
 use Glueful\Database\QueryBuilder;
 
 /**
- * Ends With operator (LIKE %value)
+ * Ends With operator (case-insensitive, literal suffix)
  *
  * Filters for values ending with: filter[email][ends]=.com
  */
@@ -26,6 +26,6 @@ class EndsWithOperator implements FilterOperatorInterface
 
     public function apply(QueryBuilder $query, string $field, mixed $value): void
     {
-        $query->where($field, 'LIKE', "%{$value}");
+        $query->whereEndsWith($field, (string) $value);
     }
 }
