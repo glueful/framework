@@ -13,11 +13,11 @@ namespace Glueful\Support;
 final class Version
 {
     /** Current framework version */
-    public const VERSION = '1.86.2';
+    public const VERSION = '1.87.0';
 
 
     /** Release code name */
-    public const NAME = 'Alpherg';
+    public const NAME = 'Alrakis';
 
 
     /** Release date */

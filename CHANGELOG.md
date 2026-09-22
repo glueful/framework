@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.87.0] - 2026-09-22 — Alrakis
+
 ### Upgrade Notes
 - **Set `MAIL_HOST` and `MAIL_FROM` if your app sends mail.** They no longer fall back to
   `smtp.mailtrap.io` and `noreply@glueful.com`; with either unset, the email channel reports
