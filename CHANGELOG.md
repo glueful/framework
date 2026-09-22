@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.86.1] - 2026-09-22 — Alpherg
+
 ### Fixed
 - **A job that releases itself is retried.** The worker runs a fresh instance of the job class,
   with no driver, so a job's own `release($delay)` (a scheduled retry) only set a flag: the queue
