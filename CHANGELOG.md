@@ -6,6 +6,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+- **Every response carries the baseline security headers.** JSON API responses and the API
+  reference went out with none: the `security_headers` middleware is opt-in per route and only SPA
+  documents set their own. The response chokepoint that applies CORS and the CSP now adds
+  `X-Content-Type-Options: nosniff` and `Referrer-Policy: strict-origin-when-cross-origin`, only
+  where a response has not set them (`Glueful\Http\BaselineSecurityHeaders`). Framing and HSTS
+  stay per route and with whatever terminates TLS.
+
 ## [1.86.2] - 2026-09-22 — Alpherg
 
 ### Fixed
