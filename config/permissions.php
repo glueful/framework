@@ -17,6 +17,11 @@ return [
         // 'user'   => ['post.create'],
     ],
 
+    // Route middleware whose parameters name the permissions a route enforces, e.g.
+    // ['content_permission'] for ->middleware('content_permission:content.view,content.edit').
+    // permissions:diff counts them as enforced alongside #[RequiresPermission] attributes.
+    'enforcing_middleware' => [],
+
     // Resource slug => Policy class (optional)
     'policies' => [
         // 'posts' => App\Auth\Policies\PostPolicy::class,

@@ -23,6 +23,28 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   replaces the default adds the job itself.
 
 ### Fixed
+- **`permissions:diff` sees permissions enforced by route middleware.** It read only
+  `#[RequiresPermission]` / `#[RequiresRole]` attributes, so an app enforcing permissions as
+  `->middleware('content_permission:content.view')` had every permission reported as declared but
+  unenforced. List such middleware in the new `permissions.enforcing_middleware` config; their
+  parameters (comma-separated) count as enforced.
+- **`security:check` checks what it reports.** Five of its seven steps were hard-coded passes that
+  printed "validated". Now: health checks the database answers; file permissions checks `.env` is
+  private to its owner and `storage/` is writable; configuration checks `APP_KEY`, `JWT_KEY` and
+  `TOKEN_SALT` are set and at least 32 characters; authentication checks access tokens live at most
+  a day and refresh tokens at most 90 days; network checks CORS does not allow every origin with
+  credentials. The security commands also receive the booted container and context instead of
+  building an unbooted one.
+- **The production validation recommends only what does something.** It recommended
+  `FORCE_HTTPS` and `HSTS_HEADER`, which nothing reads, and judged `DB_PASSWORD` whatever the
+  engine, so a PostgreSQL site with an empty password passed. It now judges the active engine's
+  password (`DB_PGSQL_PASSWORD` for pgsql, `DB_PASSWORD` for mysql, none for sqlite).
+- **A working database queue reports healthy.** `DatabaseQueue::healthCheck()` probed the
+  connection with a table-less query the builder refuses, so it always reported the connection
+  failed.
+- **`LOG_RETENTION_DAYS` and the notification retry limit take effect.** The default schedule passed
+  `retentionDays` and `limit` where `LogCleanupJob` and `NotificationRetryJob` read
+  `options.retention_days` and `options.limit`.
 - **Saved values are data, not SQL.** `QueryValidator` refused any value reading like `"; delete …"`
   or `"; drop …"`: a CMS import failed on the sentence "would be deleted; delete nothing". Values
   are always bound parameters, so the check protected nothing. It also raised a warning for any
@@ -75,6 +97,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   job and reserved it by uuid alone. The reservation is now a claim that lands only while the row is
   still unreserved; a worker that loses it tries the next candidate. No row locks are needed, so it
   holds on SQLite, MySQL and PostgreSQL.
+
+### Removed
+- **Config that nothing read.** The `sync` and `null` queue connections (no such drivers exist);
+  the schedule's `settings` block, `queue_mapping`, and each job's `queue`, `timeout` and
+  `retry_attempts` (config jobs run inline in the scheduler process; the file now says so);
+  `app.force_https`; the `security.headers` block (the `security_headers` middleware is configured
+  per route); the unused `force_https` keys in that middleware's profiles. Delete them from an
+  app's own copies of these files; leaving them changes nothing.
 
 ### Deprecated
 - **`FailedJobProvider::setMaxRetries()` and `getMaxRetries()`.** A retry creates a new job with
