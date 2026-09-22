@@ -357,31 +357,12 @@ class QueryValidator implements QueryValidatorInterface
     }
 
     /**
-     * Validate a value for SQL safety
+     * Validate a value's shape. Values are always bound parameters, never SQL text, so their
+     * content is not inspected: prose that reads like "; delete …" and long bodies are data. The
+     * one check left is structural: an empty array would render an invalid `IN ()`.
      */
     private function validateValue(string $column, mixed $value): void
     {
-        // Allow null values
-        if ($value === null) {
-            return;
-        }
-
-        // Check for potentially dangerous values
-        if (is_string($value)) {
-            // Check for SQL injection patterns
-            if (preg_match('/;\s*(DROP|DELETE|UPDATE|INSERT|CREATE|ALTER)\s/i', $value) === 1) {
-                throw new \InvalidArgumentException(
-                    "Potentially dangerous SQL detected in value for column '$column'"
-                );
-            }
-
-            // Warn about extremely long strings
-            if (strlen($value) > 65535) {
-                trigger_error("Very long string value for column '$column'", E_USER_WARNING);
-            }
-        }
-
-        // Validate array values (for IN clauses, etc.)
         if (is_array($value)) {
             if (count($value) === 0) {
                 throw new \InvalidArgumentException("Empty array value for column '$column'");

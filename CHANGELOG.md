@@ -23,6 +23,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   replaces the default adds the job itself.
 
 ### Fixed
+- **Saved values are data, not SQL.** `QueryValidator` refused any value reading like `"; delete …"`
+  or `"; drop …"`: a CMS import failed on the sentence "would be deleted; delete nothing". Values
+  are always bound parameters, so the check protected nothing. It also raised a warning for any
+  value over 64 KB, which the error handler turns into an exception, so a long article could not be
+  saved. Values are no longer inspected; the empty-array check (an invalid `IN ()`) and the refusal
+  of an UPDATE or DELETE without conditions stay.
 - **`FailedJobProvider` works against the table the migration creates.** It was written for
   columns `queue_failed_jobs` never had (`retryable`, `retry_count`, `job_class`,
   `exception_class`, `last_retry_at`): `log()` failed on insert, `retry()`, `retryAll()` and
