@@ -252,35 +252,47 @@ class DatabaseQueue implements QueueDriverInterface
     {
         $queue = $queue ?? 'default';
 
-        // Use transaction for atomic operation
         return $this->db->query()->transaction(function () use ($queue) {
             // Clean up expired reserved jobs
             $this->releaseExpiredJobs($queue);
 
-            // Get next available job using fluent QueryBuilder
-            $jobs = $this->db->table($this->table)
-                ->select(['*'])
-                ->where('queue', $queue)
-                ->whereNull('reserved_at')
-                ->where('available_at', '<=', date('Y-m-d H:i:s'))
-                ->orderBy('priority', 'DESC')
-                ->orderBy('available_at', 'ASC')
-                ->limit(1)
-                ->get();
-
-            $job = $jobs[0] ?? null;
-            if ($job === null) {
-                return null;
+            // Claim, don't just mark: the reservation only lands while the row is still
+            // unreserved. A worker that selected the same row and lost the race gets 0 affected
+            // rows and moves on to the next candidate, so no two workers run one job. This holds
+            // on every engine without row locks.
+            foreach ($this->candidates($queue, 5) as $job) {
+                $claimed = $this->db->table($this->table)
+                    ->where('uuid', $job['uuid'])
+                    ->whereNull('reserved_at')
+                    ->update([
+                        'reserved_at' => date('Y-m-d H:i:s'),
+                        'attempts' => $job['attempts'] + 1,
+                    ]);
+                if ($claimed === 1) {
+                    return new DatabaseJob($this, $job, $queue, $this->context);
+                }
             }
 
-            // Mark job as reserved
-            $this->db->table($this->table)->where('uuid', $job['uuid'])->update([
-                'reserved_at' => date('Y-m-d H:i:s'),
-                'attempts' => $job['attempts'] + 1
-            ]);
-
-            return new DatabaseJob($this, $job, $queue, $this->context);
+            return null;
         });
+    }
+
+    /**
+     * The next jobs a worker may try to claim, best first.
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function candidates(string $queue, int $limit): array
+    {
+        return array_values($this->db->table($this->table)
+            ->select(['*'])
+            ->where('queue', $queue)
+            ->whereNull('reserved_at')
+            ->where('available_at', '<=', date('Y-m-d H:i:s'))
+            ->orderBy('priority', 'DESC')
+            ->orderBy('available_at', 'ASC')
+            ->limit($limit)
+            ->get());
     }
 
     /**
