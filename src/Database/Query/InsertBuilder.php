@@ -42,11 +42,11 @@ class InsertBuilder implements InsertBuilderInterface
     }
 
     /**
-     * Insert a single record and return the id the database generated for it
+     * Insert a single record and return the id the database generated for it (null if none)
      *
      * @param array<string, mixed> $data
      */
-    public function insertGetId(string $table, array $data): int|string
+    public function insertGetId(string $table, array $data): int|string|null
     {
         $this->validateData($data);
 

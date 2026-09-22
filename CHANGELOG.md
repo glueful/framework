@@ -79,7 +79,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   so every auto-increment model came back with id 1: a queued job, child row or later update keyed
   on it pointed at the first row in the table. New `QueryBuilder::insertGetId()` (with
   `InsertBuilder::insertGetId()` and `QueryExecutor::executeInsertGetId()`) reads the generated id
-  from the connection that ran the insert, and the ORM uses it.
+  from the connection that ran the insert, and the ORM uses it. When an insert generates no id (a key
+  filled by a column default rather than a sequence, where PostgreSQL has no `lastval`), it returns
+  null and the model's key is left as the database set it, instead of failing the insert.
 - **Webhooks deliver.** `WebhookDispatcher` and `Webhook::retry()` handed `QueueManager::push()` a
   `DeliverWebhookJob` object where it takes a class name, a `TypeError` under `strict_types`: every
   delivery row stayed `pending`, the event listener's error was only logged, and Retry answered 500.

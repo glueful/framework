@@ -220,7 +220,7 @@ interface QueryBuilderInterface
      *
      * @param array<string,mixed> $data
      */
-    public function insertGetId(array $data): int|string;
+    public function insertGetId(array $data): int|string|null;
 
     /**
      * Insert multiple rows

@@ -471,7 +471,10 @@ abstract class Model implements ModelInterface, JsonSerializable
         $query = $this->newModelQuery();
         if ($this->incrementing && !isset($attributes[$this->getKeyName()])) {
             unset($attributes[$this->getKeyName()]);
-            $this->setAttribute($this->getKeyName(), $query->getQuery()->insertGetId($attributes));
+            $id = $query->getQuery()->insertGetId($attributes);
+            if ($id !== null) {
+                $this->setAttribute($this->getKeyName(), $id);
+            }
         } else {
             $query->getQuery()->insert($attributes);
         }

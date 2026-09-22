@@ -49,11 +49,11 @@ interface QueryExecutorInterface
 
     /**
      * Execute an INSERT and return the id the database generated for it, read from the same
-     * connection that ran the statement
+     * connection that ran the statement; null when it generated none
      *
      * @param array<int|string, mixed> $bindings
      */
-    public function executeInsertGetId(string $sql, array $bindings = []): int|string;
+    public function executeInsertGetId(string $sql, array $bindings = []): int|string|null;
 
     /**
      * Execute a COUNT query

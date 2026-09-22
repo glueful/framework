@@ -655,7 +655,7 @@ class QueryBuilder implements QueryBuilderInterface
      *
      * @param array<string,mixed> $data
      */
-    public function insertGetId(array $data): int|string
+    public function insertGetId(array $data): int|string|null
     {
         $table = $this->state->getTableOrFail();
         $data = Connection::applyInsertHooks($table, $data);
