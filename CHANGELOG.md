@@ -6,6 +6,25 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.86.0] - 2026-09-22 — Alpherg
+
+### Upgrade Notes
+- **Config lists are replaced, not merged by position.** A list your app's config sets (a
+  `config/schedule.php` `jobs` list, above all) now replaces the framework's list whole instead of
+  being merged into it entry by entry. If you relied on framework entries past the end of your own
+  list, add them to it. To get the new `webhook_cleanup` job, add it to your `jobs`.
+- **Delete the config nothing read** from your own copies (listed under Removed). Leaving it
+  changes nothing.
+- **List your permission middleware** in `permissions.enforcing_middleware` if you enforce
+  permissions in route middleware, so `permissions:diff` counts them.
+- **`security:check` can now fail** where it used to pass: its checks run for real. Fix what it
+  reports (a world-readable `.env`, a short signing secret, CORS `*` with credentials …).
+- **A scheduled backup that makes no dump now fails its job** instead of logging "completed", and
+  it takes the stock database config: a PostgreSQL or MySQL site needs `pg_dump` or `mysqldump`
+  on the scheduler host.
+- **"Send test event" refuses local and private addresses**, as queued deliveries already did;
+  test against a public endpoint or a tunnel.
+
 ### Added
 - **Failed queue jobs can be listed, retried and removed.** A job that exhausted its attempts went
   to `queue_failed_jobs` with no way back: no command, no screen. `queue:failed` lists them (job
@@ -116,13 +135,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ### Deprecated
 - **`FailedJobProvider::setMaxRetries()` and `getMaxRetries()`.** A retry creates a new job with
-  fresh attempts and the table keeps no retry count, so nothing enforces the value. Removal in the
-  second minor release after this one.
-
-### Upgrade Notes
-- **Config lists are replaced, not merged by position.** If your `config/schedule.php` (or any
-  config list) relied on framework entries surviving past the end of your own list, add them to
-  your list. To keep the new `webhook_cleanup` job, add it to your `config/schedule.php` `jobs`.
+  fresh attempts and the table keeps no retry count, so nothing enforces the value. Removal in
+  1.88.
 
 ## [1.85.8] - 2026-09-15 — Alphard
 
