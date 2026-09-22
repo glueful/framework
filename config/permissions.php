@@ -17,10 +17,11 @@ return [
         // 'user'   => ['post.create'],
     ],
 
-    // Route middleware whose parameters name the permissions a route enforces, e.g.
-    // ['content_permission'] for ->middleware('content_permission:content.view,content.edit').
-    // permissions:diff counts them as enforced alongside #[RequiresPermission] attributes.
-    'enforcing_middleware' => [],
+    // 'enforcing_middleware': route middleware whose parameters name the permissions a route
+    // enforces, e.g. ['content_permission'] for ->middleware('content_permission:content.view').
+    // permissions:diff counts them as enforced alongside #[RequiresPermission] attributes. Left
+    // unset here on purpose: this file outranks package defaults, so an empty list would hide the
+    // middleware a package declares. Set it in the app's config/permissions.php to add your own.
 
     // Resource slug => Policy class (optional)
     'policies' => [
