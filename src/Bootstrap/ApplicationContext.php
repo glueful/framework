@@ -254,6 +254,10 @@ final class ApplicationContext
     {
         $merged = $base;
         foreach ($override as $key => $value) {
+            // An empty array adds nothing: it never wipes the value below it.
+            if ($value === [] && isset($merged[$key]) && is_array($merged[$key])) {
+                continue;
+            }
             // Maps merge key by key; a list replaces the list below it whole. Merging lists by
             // position would splice unrelated entries together (a schedule's jobs, for one).
             if (

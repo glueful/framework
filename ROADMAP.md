@@ -21,6 +21,12 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.86.2 — Alpherg (Patch, Released 2026-09-22)
+- **An empty array in config adds nothing again** — 1.86.0 let a list replace the list below it,
+  and `[]` counts as a list: a package's `'source_roots' => []` wiped the uploads root another
+  package contributed. `[]` leaves the value below alone; non-empty lists still replace.
+- Notes: patch; no migration. Fixes a 1.86.0 regression.
+
 ### 1.86.1 — Alpherg (Patch, Released 2026-09-22)
 - **A job that releases itself is retried** — the worker runs a driverless copy of the job class,
   so a job's own `release($delay)` requeued nothing and the queue deleted the row; a failed
