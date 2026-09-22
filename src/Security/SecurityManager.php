@@ -125,27 +125,22 @@ class SecurityManager
                                      'consider restricting to specific domains';
             }
 
-            // Unset means ENABLED in production (config/app.php defaults force_https to
-            // APP_ENV === 'production'); only an explicit opt-out is worth a recommendation.
-            $forceHttps = env('FORCE_HTTPS', true);
-            if ($forceHttps === false || $forceHttps === 'false' || $forceHttps === '0' || $forceHttps === 0) {
-                $recommendations[] = 'FORCE_HTTPS explicitly disabled - consider enabling HTTPS enforcement';
-            }
-
             // Logging recommendations
             if (env('LOG_LEVEL') === 'debug') {
                 $recommendations[] = 'LOG_LEVEL set to debug - consider using "error" or "warning" for production';
             }
 
-            // Database security
-            $dbPassword = env('DB_PASSWORD');
-            if ($dbPassword === '' || $dbPassword === 'password' || $dbPassword === 'root') {
-                $warnings[] = 'Database password appears weak or default - use a strong password';
-            }
-
-            // Security headers
-            if (env('HSTS_HEADER') === '' || env('HSTS_HEADER') === null) {
-                $recommendations[] = 'HSTS_HEADER not configured - consider adding HSTS for HTTPS security';
+            // Database security: judge the active engine's password (SQLite has none).
+            $passwordVar = match ((string) env('DB_DRIVER', 'sqlite')) {
+                'pgsql' => 'DB_PGSQL_PASSWORD',
+                'mysql' => 'DB_PASSWORD',
+                default => null,
+            };
+            if ($passwordVar !== null) {
+                $dbPassword = (string) env($passwordVar, '');
+                if (in_array($dbPassword, ['', 'password', 'root', 'postgres', 'secret'], true)) {
+                    $warnings[] = "{$passwordVar} is empty or a default value - use a strong database password";
+                }
             }
 
             if (env('CSP_HEADER') === '' || env('CSP_HEADER') === null) {

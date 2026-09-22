@@ -8,23 +8,27 @@ use Glueful\Security\SecurityManager;
 use PHPUnit\Framework\TestCase;
 
 /**
- * In production `config('app.force_https')` defaults to TRUE when FORCE_HTTPS is unset, so the
- * boot-time recommendation "FORCE_HTTPS not enabled" fired on every correctly configured
- * production host. It must read the effective value, not the raw variable.
+ * The production validation recommended FORCE_HTTPS and HSTS_HEADER, two settings nothing in the
+ * framework reads: following the advice changed nothing. It also judged only DB_PASSWORD, the MySQL
+ * variable, so a PostgreSQL site with an empty password passed and a strong one was flagged.
  */
 final class ProductionValidationHttpsTest extends TestCase
 {
+    private const KEYS = [
+        'APP_ENV', 'APP_DEBUG', 'FORCE_HTTPS', 'HSTS_HEADER', 'DB_DRIVER', 'DB_PASSWORD', 'DB_PGSQL_PASSWORD',
+    ];
+
     /** @var array<string, string|null> */
     private array $saved = [];
 
     protected function setUp(): void
     {
-        foreach (['APP_ENV', 'FORCE_HTTPS', 'APP_DEBUG'] as $k) {
+        foreach (self::KEYS as $k) {
             $this->saved[$k] = $_ENV[$k] ?? null;
+            unset($_ENV[$k]);
         }
         $_ENV['APP_ENV'] = 'production';
         $_ENV['APP_DEBUG'] = 'false';
-        unset($_ENV['FORCE_HTTPS']);
     }
 
     protected function tearDown(): void
@@ -38,25 +42,39 @@ final class ProductionValidationHttpsTest extends TestCase
         }
     }
 
-    public function testUnsetForceHttpsIsNotRecommendedAgainstInProduction(): void
+    /** @return list<string> */
+    private function mentions(string $needle): array
     {
-        $recommendations = SecurityManager::validateProductionEnvironment()['recommendations'] ?? [];
+        $v = SecurityManager::validateProductionEnvironment();
 
-        self::assertSame([], array_values(array_filter(
-            $recommendations,
-            static fn (string $r): bool => str_contains($r, 'FORCE_HTTPS'),
-        )), 'unset FORCE_HTTPS means enabled in production');
+        return array_values(array_filter(
+            array_merge($v['warnings'], $v['recommendations']),
+            static fn (string $r): bool => str_contains($r, $needle),
+        ));
     }
 
-    public function testExplicitlyDisabledForceHttpsIsStillRecommendedAgainst(): void
+    public function testSettingsNothingReadsAreNeverRecommended(): void
     {
         $_ENV['FORCE_HTTPS'] = 'false';
 
-        $recommendations = SecurityManager::validateProductionEnvironment()['recommendations'] ?? [];
+        self::assertSame([], $this->mentions('FORCE_HTTPS'));
+        self::assertSame([], $this->mentions('HSTS_HEADER'));
+    }
 
-        self::assertNotEmpty(array_filter(
-            $recommendations,
-            static fn (string $r): bool => str_contains($r, 'FORCE_HTTPS'),
-        ));
+    public function testTheActiveEnginesPasswordIsTheOneJudged(): void
+    {
+        $_ENV['DB_DRIVER'] = 'pgsql';
+        $_ENV['DB_PGSQL_PASSWORD'] = '';
+        self::assertNotSame([], $this->mentions('DB_PGSQL_PASSWORD'), 'an empty PostgreSQL password is weak');
+
+        $_ENV['DB_PGSQL_PASSWORD'] = 'a-long-and-random-password-9f2c';
+        self::assertSame([], $this->mentions('password'), 'a strong one passes, whatever DB_PASSWORD holds');
+    }
+
+    public function testSqliteHasNoPasswordToJudge(): void
+    {
+        $_ENV['DB_DRIVER'] = 'sqlite';
+
+        self::assertSame([], $this->mentions('password'));
     }
 }
