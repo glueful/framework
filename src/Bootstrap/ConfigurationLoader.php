@@ -141,6 +141,10 @@ class ConfigurationLoader
         // framework's Nth job.)
         $merged = $base;
         foreach ($override as $key => $value) {
+            // An empty array adds nothing: it never wipes the value below it.
+            if ($value === [] && isset($merged[$key]) && is_array($merged[$key])) {
+                continue;
+            }
             if (
                 is_array($value) && !array_is_list($value)
                 && isset($merged[$key]) && is_array($merged[$key]) && !array_is_list($merged[$key])

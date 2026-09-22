@@ -70,4 +70,30 @@ final class ConfigListMergeTest extends TestCase
 
         self::assertSame(['items' => ['z'], 'map' => ['k' => 9, 'j' => 2]], $merged);
     }
+
+    public function testAnEmptyArrayAddsNothingInsteadOfWipingTheValueBelow(): void
+    {
+        // 1.86.0 treated [] as a list and let it replace: a package shipping `'source_roots' => []`
+        // wiped the uploads root another package contributed. [] means "nothing to add", as it
+        // did under array_replace_recursive.
+        $merge = new \ReflectionMethod(ApplicationContext::class, 'deepMerge');
+
+        self::assertSame(
+            ['roots' => ['uploads' => '/site/storage/uploads'], 'items' => ['a', 'b']],
+            $merge->invoke(null, ['roots' => ['uploads' => '/site/storage/uploads'], 'items' => ['a', 'b']], [
+                'roots' => [],
+                'items' => [],
+            ])
+        );
+
+        $loader = new ConfigurationLoader($this->root, 'testing', $this->root . '/app');
+        $mergeConfigs = new \ReflectionMethod(ConfigurationLoader::class, 'mergeConfigs');
+        self::assertSame(
+            ['roots' => ['uploads' => '/x'], 'items' => ['a']],
+            $mergeConfigs->invoke($loader, ['roots' => ['uploads' => '/x'], 'items' => ['a']], [
+                'roots' => [],
+                'items' => [],
+            ])
+        );
+    }
 }
