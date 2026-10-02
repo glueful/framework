@@ -173,6 +173,29 @@ final class ApplicationContext
         return $config;
     }
 
+    /** @var array<string, string> application state folded into the compiled route table's signature */
+    private array $routeSignatureInputs = [];
+
+    /**
+     * Adds application state to the compiled route table's signature (RouteCache). Set it before
+     * routes are registered, from the same state the routes are registered by: a table compiled under
+     * one value is then rejected by a context that has another, including a table first built on a
+     * cold cache. A value, not a resolver, so a late save() still uses the state the context booted
+     * with. Scoped to this context; another context in the same process keeps its own.
+     */
+    public function setRouteSignatureInput(string $name, string $value): void
+    {
+        $this->routeSignatureInputs[$name] = $value;
+    }
+
+    /** @return array<string, string> sorted by name */
+    public function routeSignatureInputs(): array
+    {
+        $inputs = $this->routeSignatureInputs;
+        ksort($inputs);
+        return $inputs;
+    }
+
     /**
      * Register extension-provided config defaults for a config name.
      *

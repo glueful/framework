@@ -6,6 +6,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Added
+- **Route-table signature inputs.** `ApplicationContext::setRouteSignatureInput($name, $value)` adds
+  application state to the compiled route table's signature. A table compiled under one state is
+  rejected by a context booted under another, including a table first built on a cold cache. Set it
+  before routes are registered, from the state the routes are registered by.
+
 ## [1.87.0] - 2026-09-22 — Alrakis
 
 ### Upgrade Notes

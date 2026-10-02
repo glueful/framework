@@ -244,6 +244,11 @@ class RouteCache
             hash_update($ctx, (string) ($stat['mtime'] ?? 0));
             hash_update($ctx, (string) ($stat['size'] ?? 0));
         }
+        // Application state the routes were registered under (ApplicationContext::setRouteSignatureInput).
+        // Nothing is added when there is none, so the signature is unchanged for applications that set none.
+        foreach ($this->context->routeSignatureInputs() as $name => $value) {
+            hash_update($ctx, 'input:' . $name . '=' . $value);
+        }
 
         return hash_final($ctx);
     }
