@@ -52,6 +52,37 @@ final class ExtensionManager
         return $providers;
     }
 
+    /**
+     * Rebuilds bootstrap/cache/extensions.php from the current configuration, under the
+     * extension-state lock: the lock is taken first, the context's cached config is dropped, and
+     * only then are providers resolved — so a change that landed while this waited is in the cache.
+     * On resolver errors nothing is written.
+     *
+     * @return array{providers: list<class-string>, errors: list<ResolverError>}
+     */
+    public function rebuildCache(): array
+    {
+        $context = $this->getContext();
+        $db = $this->container->has(\Glueful\Database\Connection::class)
+            ? $this->container->get(\Glueful\Database\Connection::class)
+            : null;
+        return ExtensionStateMutex::within($context, function () use ($context): array {
+            $context->clearConfigCache();
+            $classes = $this->resolveProviderClasses();
+            $errors = $this->getResolverErrors();
+            if ($errors !== []) {
+                return ['providers' => $classes, 'errors' => $errors];
+            }
+            $cacheFile = base_path($context, 'bootstrap/cache/extensions.php');
+            if (file_exists($cacheFile)) {
+                @unlink($cacheFile);
+            }
+            /** @var list<class-string<ServiceProvider>> $classes */
+            $this->writeCacheNow($classes);
+            return ['providers' => $classes, 'errors' => []];
+        }, $db instanceof \Glueful\Database\Connection ? $db : null);
+    }
+
     /** @return list<ResolverError> */
     public function getResolverErrors(): array
     {
