@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+- **Turning an extension on over HTTP takes effect under OPcache.** `config/extensions.php` and
+  `bootstrap/cache/extensions.php` are PHP files the framework writes and then requires. A
+  PHP-FPM worker with OPcache kept reading its compiled old copy, so an extension enabled in a web
+  request could rebuild the cache from the old list, and the next request booted without it.
+  `ExtensionStateWriter` and the extension cache writer now invalidate the file they wrote. A
+  change made from the CLI still reaches PHP-FPM only when OPcache next checks the file's
+  timestamp (or after a reload, with `opcache.validate_timestamps=0`).
+
 ## [1.88.2] - 2026-10-03 — Alrescha
 
 ### Fixed

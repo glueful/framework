@@ -115,5 +115,10 @@ final class ExtensionStateWriter
             copy($configPath, $configPath . '.bak');
         }
         file_put_contents($configPath, $updated);
+        // The list is required as PHP: a process with OPcache on (a PHP-FPM worker turning an
+        // extension on) would otherwise keep reading the compiled old list.
+        if (function_exists('opcache_invalidate')) {
+            @opcache_invalidate($configPath, true);
+        }
     }
 }
