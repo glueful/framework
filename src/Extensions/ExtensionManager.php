@@ -63,9 +63,15 @@ final class ExtensionManager
     public function rebuildCache(): array
     {
         $context = $this->getContext();
-        $db = $this->container->has(\Glueful\Database\Connection::class)
-            ? $this->container->get(\Glueful\Database\Connection::class)
-            : null;
+        // A connection that can't be opened (a fresh project still holding placeholder credentials:
+        // composer create-project runs extensions:cache) leaves the file lock to serialize the rebuild.
+        try {
+            $db = $this->container->has(\Glueful\Database\Connection::class)
+                ? $this->container->get(\Glueful\Database\Connection::class)
+                : null;
+        } catch (\PDOException) {
+            $db = null;
+        }
         return ExtensionStateMutex::within($context, function () use ($context): array {
             $context->clearConfigCache();
             $classes = $this->resolveProviderClasses();

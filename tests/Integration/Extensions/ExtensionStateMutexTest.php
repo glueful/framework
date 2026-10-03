@@ -6,6 +6,7 @@ namespace Glueful\Tests\Integration\Extensions;
 
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Bootstrap\ConfigurationLoader;
+use Glueful\Database\Connection;
 use Glueful\Extensions\ExtensionManager;
 use Glueful\Extensions\ExtensionStateMutex;
 use Glueful\Extensions\ExtensionStateWriter;
@@ -81,6 +82,40 @@ final class ExtensionStateMutexTest extends TestCase
         self::assertContains($provider, $cached);
     }
 
+    public function testRebuildingTheCacheWithNoReachableDatabaseStillWritesIt(): void
+    {
+        // A fresh project (composer create-project runs extensions:cache) has no database yet: the
+        // connection can't be opened, so the rebuild takes the file lock instead of failing.
+        $provider = RebuildCacheAlphaProvider::class;
+        file_put_contents($this->base . '/vendor/composer/installed.json', json_encode(['packages' => [[
+            'name' => 'acme/alpha',
+            'type' => 'glueful-extension',
+            'install-path' => '../acme/alpha',
+            'extra' => ['glueful' => ['provider' => $provider, 'migrations' => 'none']],
+        ]]], JSON_UNESCAPED_SLASHES));
+        (new ExtensionStateWriter())->enable($this->base . '/config/extensions.php', $provider);
+        $context = $this->context();
+        $manager = new ExtensionManager($this->containerFor($context, unreachableDatabase: true));
+
+        $result = $manager->rebuildCache();
+
+        self::assertSame([], $result['errors']);
+        self::assertContains($provider, (require $this->base . '/bootstrap/cache/extensions.php')['providers']);
+        self::assertFileExists($this->base . '/storage/framework/locks/extension-state.lock', 'the file lock was used');
+    }
+
+    public function testAPostgresConnectionThatCantConnectFallsBackToTheFileLock(): void
+    {
+        $db = $this->createMock(Connection::class);
+        $db->method('getDriverName')->willReturn('pgsql');
+        $db->method('getPDO')->willThrowException(new \PDOException('SQLSTATE[08006] [7] connection refused'));
+
+        $ran = ExtensionStateMutex::within($this->context(), static fn (): string => 'ran', $db);
+
+        self::assertSame('ran', $ran);
+        self::assertFileExists($this->base . '/storage/framework/locks/extension-state.lock');
+    }
+
     private function context(): ApplicationContext
     {
         $context = new ApplicationContext($this->base, 'testing', [
@@ -91,11 +126,13 @@ final class ExtensionStateMutexTest extends TestCase
         return $context;
     }
 
-    private function containerFor(ApplicationContext $context): ContainerInterface
+    private function containerFor(ApplicationContext $context, bool $unreachableDatabase = false): ContainerInterface
     {
-        $container = new class ($context) implements ContainerInterface {
-            public function __construct(private readonly ApplicationContext $context)
-            {
+        $container = new class ($context, $unreachableDatabase) implements ContainerInterface {
+            public function __construct(
+                private readonly ApplicationContext $context,
+                private readonly bool $unreachableDatabase,
+            ) {
             }
 
             public function get(string $id): mixed
@@ -103,12 +140,16 @@ final class ExtensionStateMutexTest extends TestCase
                 if ($id === ApplicationContext::class) {
                     return $this->context;
                 }
+                if ($id === Connection::class && $this->unreachableDatabase) {
+                    // What resolving the connection does when its credentials are still placeholders.
+                    throw new \PDOException('SQLSTATE[08006] [7] password authentication failed');
+                }
                 throw new \RuntimeException("Unexpected service: {$id}");
             }
 
             public function has(string $id): bool
             {
-                return $id === ApplicationContext::class;
+                return $id === ApplicationContext::class || ($id === Connection::class && $this->unreachableDatabase);
             }
         };
         $context->setContainer($container);

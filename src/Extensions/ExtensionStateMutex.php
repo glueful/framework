@@ -38,18 +38,24 @@ final class ExtensionStateMutex
     {
         $wait = max(1, (int) $context->getConfig('extensions.state_lock_wait', 30));
         if ($db !== null && $db->getDriverName() === 'pgsql') {
-            return self::withinAdvisoryLock($context, $db, $wait, $fn);
+            try {
+                $pdo = $db->getPDO();
+            } catch (\PDOException) {
+                // The database can't be reached (no credentials yet, or down): nothing here can take
+                // its advisory lock, so the file lock serializes this process's writers instead.
+                return self::withinFileLock($context, $wait, $fn);
+            }
+            return self::withinAdvisoryLock($context, $pdo, $wait, $fn);
         }
         return self::withinFileLock($context, $wait, $fn);
     }
 
     private static function withinAdvisoryLock(
         ApplicationContext $context,
-        Connection $db,
+        \PDO $pdo,
         int $wait,
         callable $fn,
     ): mixed {
-        $pdo = $db->getPDO();
         $try = $pdo->prepare('SELECT pg_try_advisory_lock(hashtext(?))');
         $deadline = microtime(true) + $wait;
         while (true) {

@@ -6,6 +6,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+- **`extensions:cache` works before the database is set up.** Since 1.88 the rebuild took the
+  extension-state lock through the database, so `composer create-project` failed at its
+  `extensions:cache` step while `.env` still held placeholder credentials. When the database
+  can't be reached, `ExtensionStateMutex` now uses its file lock instead.
+
 ## [1.88.1] - 2026-10-03 — Alrescha
 
 ### Fixed
