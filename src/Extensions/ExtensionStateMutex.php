@@ -6,6 +6,7 @@ namespace Glueful\Extensions;
 
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
+use Glueful\Database\Exceptions\LockContentionException;
 
 /**
  * The one lock every change to the enabled extension list holds, from reading the list (or
@@ -105,8 +106,9 @@ final class ExtensionStateMutex
         }
     }
 
-    private static function timedOut(int $wait): \RuntimeException
+    /** Contention, like a migration lock held elsewhere: a caller can tell it apart and retry later. */
+    private static function timedOut(int $wait): LockContentionException
     {
-        return new \RuntimeException("Another change to the extension list is still running (waited {$wait}s).");
+        return new LockContentionException("Another change to the extension list is still running (waited {$wait}s).");
     }
 }

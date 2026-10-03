@@ -317,6 +317,64 @@ final class ExtensionSchemaExecutorTest extends TestCase
         }
     }
 
+    /**
+     * Holds the extension-state lock (the file lock: these tests run on SQLite) from another handle,
+     * with a one-second wait configured, and runs $operation while it is held.
+     *
+     * @param list<string> $enabled
+     */
+    private function whileTheStateLockIsHeld(array $enabled, callable $operation): void
+    {
+        $exported = var_export($enabled, true);
+        file_put_contents(
+            $this->base . '/config/extensions.php',
+            "<?php\nreturn ['enabled' => {$exported}, 'state_lock_wait' => 1];\n"
+        );
+        $this->context->clearConfigCache();
+        $dir = $this->base . '/storage/framework/locks';
+        @mkdir($dir, 0775, true);
+        $holder = fopen($dir . '/extension-state.lock', 'c');
+        self::assertIsResource($holder);
+        self::assertTrue(flock($holder, LOCK_EX | LOCK_NB));
+        try {
+            $operation();
+        } finally {
+            flock($holder, LOCK_UN);
+            fclose($holder);
+        }
+    }
+
+    public function testAnEnableThatCantTakeTheStateLockContendsAndRecordsTheFailure(): void
+    {
+        $this->bootstrap();
+        $this->whileTheStateLockIsHeld([], function (): void {
+            try {
+                $this->executor()->enable('acme/widgets', 'tester');
+                self::fail('expected LockContentionException');
+            } catch (LockContentionException $e) {
+                self::assertStringContainsString('still running', $e->getMessage());
+            }
+        });
+        $row = $this->lastOperationRow();
+        self::assertSame('failed', $row['status'], 'the operation is finished, not left running');
+        self::assertStringContainsString('still running', (string) $row['error']);
+        self::assertNotContains(WidgetsExecProvider::class, $this->enabledList());
+    }
+
+    public function testADisableThatCantTakeTheStateLockContendsAndRecordsTheFailure(): void
+    {
+        $this->bootstrap();
+        $this->whileTheStateLockIsHeld([WidgetsExecProvider::class], function (): void {
+            try {
+                $this->executor()->disable('acme/widgets', 'tester');
+                self::fail('expected LockContentionException');
+            } catch (LockContentionException) {
+            }
+        });
+        self::assertSame('failed', $this->lastOperationRow()['status']);
+        self::assertContains(WidgetsExecProvider::class, $this->enabledList(), 'nothing was written');
+    }
+
     public function testRecompileFailureIsEnabledCacheStale(): void
     {
         $this->bootstrap();

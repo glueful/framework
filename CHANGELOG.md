@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.88.1] - 2026-10-03 — Alrescha
+
+### Fixed
+- **A change to the extension list that can't get the lock says so, and records it.** When
+  `ExtensionStateMutex` times out because another change is still running, it throws
+  `LockContentionException` (a `RuntimeException`, as before), so a caller can answer "busy, try
+  again". The schema executor's `enable()` and `disable()` record that operation as failed, with the
+  reason, instead of leaving it running.
+
 ## [1.88.0] - 2026-10-03 — Alrescha
 
 ### Added
@@ -2705,7 +2714,6 @@ composer update glueful/framework
 ```bash
 composer update glueful/framework
 php glueful migrate:run
-```
 
 ---
 
