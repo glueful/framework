@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.88.0] - 2026-10-03 — Alrescha
+
 ### Added
 - **Route-table signature inputs.** `ApplicationContext::setRouteSignatureInput($name, $value)` adds
   application state to the compiled route table's signature. A table compiled under one state is
