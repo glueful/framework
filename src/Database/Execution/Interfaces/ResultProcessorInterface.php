@@ -53,7 +53,8 @@ interface ResultProcessorInterface
      *
      * @param  PDOStatement $statement   The executed statement
      * @param  string|int   $groupColumn The column to group by
-     * @return array<string|int, array<int, array<string, mixed>>> Grouped results
+     * @return array<string|int, list<array<int|string, mixed>>> Grouped results; each row is fetched
+     *         with both column names and positions as keys, so a group column can be either
      */
     public function fetchGrouped(PDOStatement $statement, string|int $groupColumn): array;
 
