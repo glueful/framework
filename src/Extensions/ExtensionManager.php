@@ -521,6 +521,11 @@ final class ExtensionManager
 
         file_put_contents($cacheFile . '.tmp', $content, LOCK_EX);
         rename($cacheFile . '.tmp', $cacheFile);
+        // Required as PHP at boot: drop this process's compiled copy (a PHP-FPM worker rebuilding
+        // the cache), or it keeps loading the old provider list.
+        if (function_exists('opcache_invalidate')) {
+            @opcache_invalidate($cacheFile, true);
+        }
         // Paranoid integrity check
         if (!is_file($cacheFile)) {
             throw new \RuntimeException('Failed to write extensions cache.');
