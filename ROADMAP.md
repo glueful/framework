@@ -21,6 +21,18 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.88.0 — Alrescha (Released 2026-10-03)
+- **Route tables keyed by application state** — `ApplicationContext::setRouteSignatureInput()`
+  adds state to the compiled route table's signature, so a table compiled under one state is
+  rejected by a context booted under another, cold cache included.
+- **One lock for every enabled-list change** — `extensions:enable`, `extensions:disable`,
+  `extensions:cache` and the schema executor hold `ExtensionStateMutex` from reading the list
+  through rebuilding the cache; applications that write the list take it with
+  `ExtensionStateMutex::within()`.
+- **A locked cache rebuild** — `ExtensionManager::rebuildCache()`, which `extensions:cache` uses.
+- Notes: minor; additive, no configuration or default changes. The lock is a PostgreSQL advisory
+  lock on `glueful:extension-state`, or a file lock on other drivers.
+
 ### 1.87.0 — Alrakis (Released 2026-09-22)
 - **Every response carries baseline security headers** — `nosniff` and a referrer policy are
   added at the response chokepoint wherever a response set none, JSON APIs and `/api-docs`

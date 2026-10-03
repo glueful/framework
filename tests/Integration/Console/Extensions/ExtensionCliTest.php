@@ -19,14 +19,20 @@ use Glueful\Installer\DatabaseConfig;
 use Glueful\Services\FileFinder;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
+use Glueful\Extensions\ExtensionStateMutex;
+use Glueful\Extensions\ExtensionStateWriter;
 use Symfony\Component\Console\Tester\CommandTester;
 
 /** Real executor, stubbed recompile (no booted app container in this harness). */
 final class CliTestExecutor extends ExtensionSchemaExecutor
 {
+    /** @var list<string> what happened, in order, for the lock-order test */
+    public static array $log = [];
+
     protected function recompileProviderCache(): void
     {
         // Best-effort in production; a no-op here — the config write is what this test asserts.
+        self::$log[] = 'recompile';
     }
 }
 
@@ -246,6 +252,31 @@ final class ExtensionCliTest extends TestCase
         self::assertSame(1, $tester->getStatusCode());
         self::assertStringContainsString('Managed by the widgets lifecycle flow.', $tester->getDisplay());
         self::assertSame([], $this->enabled());
+    }
+
+    public function testEnableTakesTheStateMutexAfterItsMigrationLocksAndReadsTheListInsideIt(): void
+    {
+        // A writer that finished just before this enable took the mutex: its provider must survive,
+        // because the enabled list is read inside the mutex; and the mutex comes after the
+        // migration locks, with the cache recompiled before it is released.
+        CliTestExecutor::$log = [];
+        ExtensionSchemaExecutor::$afterMigrationLocks = static function (): void {
+            CliTestExecutor::$log[] = 'migration-locks';
+        };
+        ExtensionStateMutex::$afterAcquire = function (): void {
+            CliTestExecutor::$log[] = 'mutex';
+            (new ExtensionStateWriter())->enable($this->base . '/config/extensions.php', 'Vendor\\Base\\Provider');
+        };
+        try {
+            $tester = $this->runEnable(['extension' => 'widgets']);
+        } finally {
+            ExtensionSchemaExecutor::$afterMigrationLocks = null;
+            ExtensionStateMutex::$afterAcquire = null;
+        }
+
+        self::assertSame(0, $tester->getStatusCode(), $tester->getDisplay());
+        self::assertEqualsCanonicalizing(['Vendor\\Base\\Provider', 'Vendor\\Widgets\\Provider'], $this->enabled());
+        self::assertSame(['migration-locks', 'mutex', 'recompile'], CliTestExecutor::$log);
     }
 
     public function testEnableAddsProviderToConfig(): void

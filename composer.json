@@ -53,7 +53,7 @@
         "elasticsearch/elasticsearch": "^8.0",
         "league/flysystem-memory": "^3.29",
         "meilisearch/meilisearch-php": "^1.0",
-        "phpstan/phpstan": "^2.0",
+        "phpstan/phpstan": "^2.2.16",
         "phpstan/phpstan-deprecation-rules": "^2.0",
         "phpstan/phpstan-phpunit": "^2.0",
         "phpstan/phpstan-strict-rules": "^2.0",

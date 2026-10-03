@@ -55,41 +55,27 @@ final class CacheCommand extends BaseCommand
         }
         $output->writeln('   ✓ Configuration is valid');
 
-        // Step 2: Resolve providers (strict — fail on any resolver error).
-        $output->writeln('2. <info>Resolving providers...</info>');
-        $classes = $this->extensions->resolveProviderClasses();
-        $errors = $this->extensions->getResolverErrors();
-        if ($errors !== []) {
-            foreach ($errors as $e) {
+        // Steps 2-4, under the extension-state lock (ExtensionStateMutex): the lock is taken
+        // first and providers are resolved inside it, so a change that landed while this waited is
+        // in the cache it writes — never a list resolved before the wait.
+        $output->writeln('2. <info>Resolving providers and building the cache (extension-state lock)...</info>');
+        try {
+            $result = $this->extensions->rebuildCache();
+        } catch (\Throwable $e) {
+            $output->writeln("   <error>✗ Cache build failed: {$e->getMessage()}</error>");
+            return self::FAILURE;
+        }
+        if ($result['errors'] !== []) {
+            foreach ($result['errors'] as $e) {
                 $output->writeln("   <error>✗ [{$e->kind}] {$e->message}</error>");
             }
             $output->writeln('<error>Refusing to write extension cache with unresolved errors.</error>');
             return self::FAILURE;
         }
-        $providerCount = count($classes);
+        $providerCount = count($result['providers']);
         $output->writeln("   ✓ Resolved {$providerCount} providers");
-
-        // Step 3: Clear existing cache.
-        $output->writeln('3. <info>Clearing existing cache...</info>');
+        $output->writeln('   ✓ Cache built successfully');
         $cacheFile = base_path($this->getContext(), 'bootstrap/cache/extensions.php');
-        if (file_exists($cacheFile)) {
-            @unlink($cacheFile);
-            $output->writeln('   ✓ Existing cache cleared');
-        } else {
-            $output->writeln('   - No existing cache found');
-        }
-
-        // Step 4: Build cache from the resolved list.
-        $output->writeln('4. <info>Building cache...</info>');
-        try {
-            /** @var list<class-string<\Glueful\Extensions\ServiceProvider>> $providerClasses */
-            $providerClasses = $classes;
-            $this->extensions->writeCacheNow($providerClasses);
-            $output->writeln('   ✓ Cache built successfully');
-        } catch (\Throwable $e) {
-            $output->writeln("   <error>✗ Cache build failed: {$e->getMessage()}</error>");
-            return self::FAILURE;
-        }
 
         // Step 5: Verify cache integrity.
         $output->writeln('5. <info>Verifying cache...</info>');

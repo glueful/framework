@@ -10,6 +10,7 @@ use Glueful\Database\Migrations\MigrationManager;
 use Glueful\Extensions\EnabledProviders;
 use Glueful\Extensions\ExtensionManager;
 use Glueful\Extensions\ExtensionResolver;
+use Glueful\Extensions\ExtensionStateMutex;
 use Glueful\Extensions\ExtensionStateWriter;
 use Glueful\Extensions\PackageManifest;
 use Glueful\Extensions\ProtectedProviders;
@@ -28,6 +29,13 @@ use Glueful\Support\Version;
  */
 class ExtensionSchemaExecutor
 {
+    /**
+     * @internal test seam: called with the context right after enable() acquires its migration
+     * locks, before the extension-state mutex is taken.
+     * @var (\Closure(ApplicationContext): void)|null
+     */
+    public static ?\Closure $afterMigrationLocks = null;
+
     private const OPERATIONS = 'extension_operations';
     private const BOOTSTRAP_SOURCE = 'glueful/framework:extensions';
 
@@ -79,6 +87,9 @@ class ExtensionSchemaExecutor
 
         $handle = $this->lock->acquireAll([...$coreSources, ...$packageSources], $this->lockWaitSeconds);
         try {
+            if (self::$afterMigrationLocks !== null) {
+                (self::$afterMigrationLocks)($this->context);
+            }
             $operation = $this->record($package, 'enable', 'migrating', $actor);
 
             $failed = $this->migrateGroups($operation, [$coreSources, $packageSources])
@@ -87,8 +98,12 @@ class ExtensionSchemaExecutor
                 return $failed;
             }
 
-            $this->writer->enable($this->configPath(), $provider, dryRun: false, backup: $backup);
-            return $this->finishWithCacheRecompile($operation, 'enabled');
+            // The list is read and rewritten, and the cache rebuilt from it, under the one
+            // extension-state lock: after the migration locks, never before them.
+            return ExtensionStateMutex::within($this->context, function () use ($provider, $backup, $operation) {
+                $this->writer->enable($this->configPath(), $provider, dryRun: false, backup: $backup);
+                return $this->finishWithCacheRecompile($operation, 'enabled');
+            }, $this->db);
         } finally {
             $handle->release();
         }
@@ -216,8 +231,10 @@ class ExtensionSchemaExecutor
         try {
             $operation = $this->record($package, 'disable', 'disabling', $actor);
             // Never any schema change: disabling preserves all tables and data.
-            $this->writer->disable($this->configPath(), $provider, dryRun: false, backup: $backup);
-            return $this->finishWithCacheRecompile($operation, 'disabled');
+            return ExtensionStateMutex::within($this->context, function () use ($provider, $backup, $operation) {
+                $this->writer->disable($this->configPath(), $provider, dryRun: false, backup: $backup);
+                return $this->finishWithCacheRecompile($operation, 'disabled');
+            }, $this->db);
         } finally {
             $handle->release();
         }

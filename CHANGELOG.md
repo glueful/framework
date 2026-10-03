@@ -6,6 +6,21 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.88.0] - 2026-10-03 — Alrescha
+
+### Added
+- **Route-table signature inputs.** `ApplicationContext::setRouteSignatureInput($name, $value)` adds
+  application state to the compiled route table's signature. A table compiled under one state is
+  rejected by a context booted under another, including a table first built on a cold cache. Set it
+  before routes are registered, from the state the routes are registered by.
+- **One lock for every enabled-list change.** `extensions:enable`, `extensions:disable`,
+  `extensions:cache` and the schema executor hold `ExtensionStateMutex`, from reading the list (or
+  resolving providers) through rebuilding the extension cache, so two changes can't overwrite each
+  other's edits to `config/extensions.php` or the cache. It's a PostgreSQL advisory lock on
+  `glueful:extension-state`, or a file lock on other drivers. Applications that write the list
+  themselves take the same lock (`ExtensionStateMutex::within()`). `ExtensionManager::rebuildCache()`
+  is the locked rebuild `extensions:cache` now uses.
+
 ## [1.87.0] - 2026-09-22 — Alrakis
 
 ### Upgrade Notes
