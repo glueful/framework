@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.88.3] - 2026-10-03 — Alrescha
+
 ### Fixed
 - **Turning an extension on over HTTP takes effect under OPcache.** `config/extensions.php` and
   `bootstrap/cache/extensions.php` are PHP files the framework writes and then requires. A

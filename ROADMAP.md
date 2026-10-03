@@ -21,6 +21,13 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.88.3 — Alrescha (Released 2026-10-03)
+- **Extension changes made over HTTP take effect under OPcache** — the extension list and cache
+  writers invalidate the files they write, so a PHP-FPM worker that enables an extension rebuilds
+  the cache from the new list, and the next request boots with it.
+- Notes: patch; no configuration or default changes. A change made from the CLI still reaches
+  PHP-FPM when OPcache next checks the file (or after a reload, with `validate_timestamps=0`).
+
 ### 1.88.2 — Alrescha (Released 2026-10-03)
 - **The extension-state lock is a file lock on every driver** — it guards files, so it needs no
   database: `extensions:cache` works in a fresh project (`composer create-project`) before `.env`
