@@ -6,6 +6,7 @@ namespace Glueful\Extensions\Schema;
 
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
+use Glueful\Database\Exceptions\LockContentionException;
 use Glueful\Database\Migrations\MigrationManager;
 use Glueful\Extensions\EnabledProviders;
 use Glueful\Extensions\ExtensionManager;
@@ -100,10 +101,10 @@ class ExtensionSchemaExecutor
 
             // The list is read and rewritten, and the cache rebuilt from it, under the one
             // extension-state lock: after the migration locks, never before them.
-            return ExtensionStateMutex::within($this->context, function () use ($provider, $backup, $operation) {
+            return $this->withinStateLock($operation, 'enabling', function () use ($provider, $backup, $operation) {
                 $this->writer->enable($this->configPath(), $provider, dryRun: false, backup: $backup);
                 return $this->finishWithCacheRecompile($operation, 'enabled');
-            }, $this->db);
+            });
         } finally {
             $handle->release();
         }
@@ -231,12 +232,33 @@ class ExtensionSchemaExecutor
         try {
             $operation = $this->record($package, 'disable', 'disabling', $actor);
             // Never any schema change: disabling preserves all tables and data.
-            return ExtensionStateMutex::within($this->context, function () use ($provider, $backup, $operation) {
+            return $this->withinStateLock($operation, 'disabling', function () use ($provider, $backup, $operation) {
                 $this->writer->disable($this->configPath(), $provider, dryRun: false, backup: $backup);
                 return $this->finishWithCacheRecompile($operation, 'disabled');
-            }, $this->db);
+            });
         } finally {
             $handle->release();
+        }
+    }
+
+    /**
+     * Runs the list write under the extension-state lock. When the lock can't be taken (another
+     * change is still running) the operation is recorded as failed before the contention is
+     * rethrown, so its record is never left running.
+     *
+     * @param callable(): ExtensionOperation $sequence
+     * @throws LockContentionException
+     */
+    private function withinStateLock(
+        ExtensionOperation $operation,
+        string $step,
+        callable $sequence,
+    ): ExtensionOperation {
+        try {
+            return ExtensionStateMutex::within($this->context, $sequence, $this->db);
+        } catch (LockContentionException $e) {
+            $this->update($operation->with($step, ExtensionOperation::STATUS_FAILED, null, $e->getMessage()));
+            throw $e;
         }
     }
 
