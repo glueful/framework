@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.88.1] - 2026-10-03 — Alrescha
+
 ### Fixed
 - **A change to the extension list that can't get the lock says so, and records it.** When
   `ExtensionStateMutex` times out because another change is still running, it throws

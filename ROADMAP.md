@@ -21,6 +21,12 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.88.1 — Alrescha (Released 2026-10-03)
+- **A state-lock timeout is lock contention** — `ExtensionStateMutex` throws
+  `LockContentionException` when another change to the extension list is still running, and the
+  schema executor records that `enable()` or `disable()` as failed instead of leaving it running.
+- Notes: patch; no configuration or default changes. The exception is still a `RuntimeException`.
+
 ### 1.88.0 — Alrescha (Released 2026-10-03)
 - **Route tables keyed by application state** — `ApplicationContext::setRouteSignatureInput()`
   adds state to the compiled route table's signature, so a table compiled under one state is
