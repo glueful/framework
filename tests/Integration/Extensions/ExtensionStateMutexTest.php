@@ -82,10 +82,10 @@ final class ExtensionStateMutexTest extends TestCase
         self::assertContains($provider, $cached);
     }
 
-    public function testRebuildingTheCacheWithNoReachableDatabaseStillWritesIt(): void
+    public function testRebuildingTheCacheNeedsNoDatabase(): void
     {
-        // A fresh project (composer create-project runs extensions:cache) has no database yet: the
-        // connection can't be opened, so the rebuild takes the file lock instead of failing.
+        // A fresh project (composer create-project runs extensions:cache) has no database yet; the
+        // lock guards files, so the rebuild never asks for a connection.
         $provider = RebuildCacheAlphaProvider::class;
         file_put_contents($this->base . '/vendor/composer/installed.json', json_encode(['packages' => [[
             'name' => 'acme/alpha',
@@ -95,25 +95,41 @@ final class ExtensionStateMutexTest extends TestCase
         ]]], JSON_UNESCAPED_SLASHES));
         (new ExtensionStateWriter())->enable($this->base . '/config/extensions.php', $provider);
         $context = $this->context();
-        $manager = new ExtensionManager($this->containerFor($context, unreachableDatabase: true));
+        $container = $this->containerFor($context, unreachableDatabase: true);
+        $manager = new ExtensionManager($container);
 
         $result = $manager->rebuildCache();
 
         self::assertSame([], $result['errors']);
         self::assertContains($provider, (require $this->base . '/bootstrap/cache/extensions.php')['providers']);
-        self::assertFileExists($this->base . '/storage/framework/locks/extension-state.lock', 'the file lock was used');
+        self::assertSame(0, $container->connectionRequests, 'no connection was asked for');
     }
 
-    public function testAPostgresConnectionThatCantConnectFallsBackToTheFileLock(): void
+    public function testTheLockIsAFileLockWhateverTheDatabase(): void
     {
         $db = $this->createMock(Connection::class);
         $db->method('getDriverName')->willReturn('pgsql');
-        $db->method('getPDO')->willThrowException(new \PDOException('SQLSTATE[08006] [7] connection refused'));
+        $db->expects(self::never())->method('getPDO');
 
         $ran = ExtensionStateMutex::within($this->context(), static fn (): string => 'ran', $db);
 
         self::assertSame('ran', $ran);
         self::assertFileExists($this->base . '/storage/framework/locks/extension-state.lock');
+    }
+
+    public function testANestedHolderInTheSameProcessDoesntWaitOnItself(): void
+    {
+        file_put_contents($this->base . '/config/extensions.php', "<?php\nreturn ['enabled' => [], 'state_lock_wait' => 1];\n");
+        $context = $this->context();
+        $started = microtime(true);
+
+        $inner = ExtensionStateMutex::within(
+            $context,
+            static fn (): string => ExtensionStateMutex::within($context, static fn (): string => 'inner ran'),
+        );
+
+        self::assertSame('inner ran', $inner);
+        self::assertLessThan(1.0, microtime(true) - $started, 'the inner holder did not wait out the lock');
     }
 
     private function context(): ApplicationContext
@@ -126,6 +142,7 @@ final class ExtensionStateMutexTest extends TestCase
         return $context;
     }
 
+    /** @return ContainerInterface&object{connectionRequests: int} */
     private function containerFor(ApplicationContext $context, bool $unreachableDatabase = false): ContainerInterface
     {
         $container = new class ($context, $unreachableDatabase) implements ContainerInterface {
@@ -135,12 +152,15 @@ final class ExtensionStateMutexTest extends TestCase
             ) {
             }
 
+            public int $connectionRequests = 0;
+
             public function get(string $id): mixed
             {
                 if ($id === ApplicationContext::class) {
                     return $this->context;
                 }
                 if ($id === Connection::class && $this->unreachableDatabase) {
+                    $this->connectionRequests++;
                     // What resolving the connection does when its credentials are still placeholders.
                     throw new \PDOException('SQLSTATE[08006] [7] password authentication failed');
                 }

@@ -255,7 +255,7 @@ class ExtensionSchemaExecutor
         callable $sequence,
     ): ExtensionOperation {
         try {
-            return ExtensionStateMutex::within($this->context, $sequence, $this->db);
+            return ExtensionStateMutex::within($this->context, $sequence);
         } catch (LockContentionException $e) {
             $this->update($operation->with($step, ExtensionOperation::STATUS_FAILED, null, $e->getMessage()));
             throw $e;
