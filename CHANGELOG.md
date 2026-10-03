@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.88.2] - 2026-10-03 — Alrescha
+
 ### Fixed
 - **`extensions:cache` works before the database is set up.** Since 1.88 the extension-state lock
   was a PostgreSQL advisory lock on PostgreSQL, so `composer create-project` failed at its
