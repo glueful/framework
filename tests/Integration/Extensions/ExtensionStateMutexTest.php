@@ -118,7 +118,7 @@ final class ExtensionStateMutexTest extends TestCase
     /** @return array{proc: resource, pipes: array<int, resource>} */
     private function child(string $provider, bool $pause = false): array
     {
-        $cmd = [PHP_BINARY, dirname(__DIR__, 2) . '/fixtures/extension_state_child.php', $this->base, $provider];
+        $cmd = [PHP_BINARY, dirname(__DIR__, 2) . '/Fixtures/extension_state_child.php', $this->base, $provider];
         if ($pause) {
             $cmd[] = '--pause';
         }
