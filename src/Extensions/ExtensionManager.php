@@ -63,9 +63,6 @@ final class ExtensionManager
     public function rebuildCache(): array
     {
         $context = $this->getContext();
-        $db = $this->container->has(\Glueful\Database\Connection::class)
-            ? $this->container->get(\Glueful\Database\Connection::class)
-            : null;
         return ExtensionStateMutex::within($context, function () use ($context): array {
             $context->clearConfigCache();
             $classes = $this->resolveProviderClasses();
@@ -80,7 +77,7 @@ final class ExtensionManager
             /** @var list<class-string<ServiceProvider>> $classes */
             $this->writeCacheNow($classes);
             return ['providers' => $classes, 'errors' => []];
-        }, $db instanceof \Glueful\Database\Connection ? $db : null);
+        });
     }
 
     /** @return list<ResolverError> */

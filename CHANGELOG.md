@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.88.2] - 2026-10-03 — Alrescha
+
+### Fixed
+- **`extensions:cache` works before the database is set up.** Since 1.88 the extension-state lock
+  was a PostgreSQL advisory lock on PostgreSQL, so `composer create-project` failed at its
+  `extensions:cache` step while `.env` still held placeholder credentials. `ExtensionStateMutex`
+  guards files, so it is now a file lock on every driver and needs no database. It is re-entrant
+  within a process. Its `$db` parameter is accepted and ignored.
+
 ## [1.88.1] - 2026-10-03 — Alrescha
 
 ### Fixed

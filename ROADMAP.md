@@ -21,6 +21,13 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.88.2 — Alrescha (Released 2026-10-03)
+- **The extension-state lock is a file lock on every driver** — it guards files, so it needs no
+  database: `extensions:cache` works in a fresh project (`composer create-project`) before `.env`
+  is filled in. Re-entrant within a process.
+- Notes: patch; no configuration or default changes. `ExtensionStateMutex::within()` still accepts
+  its `$db` argument and ignores it.
+
 ### 1.88.1 — Alrescha (Released 2026-10-03)
 - **A state-lock timeout is lock contention** — `ExtensionStateMutex` throws
   `LockContentionException` when another change to the extension list is still running, and the
