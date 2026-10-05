@@ -21,6 +21,14 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.88.4 — Alrescha (Released 2026-10-05)
+- **A resized image over 1MB is served after its first request** — the image route's variant
+  cache no longer stores what the Redis driver cannot read back; an unreadable entry is a miss.
+- **The serializer enforces its size limit when writing**, not only when reading, and the Redis
+  driver answers `false` from `set()` for a value it cannot store, as the file driver did.
+- Notes: patch; no configuration or default changes. A variant over the cache limit is served
+  uncached (rendered on each request).
+
 ### 1.88.3 — Alrescha (Released 2026-10-03)
 - **Extension changes made over HTTP take effect under OPcache** — the extension list and cache
   writers invalidate the files they write, so a PHP-FPM worker that enables an extension rebuilds

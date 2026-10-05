@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.88.4] - 2026-10-05 — Alrescha
+
 ### Fixed
 - **A resized image over 1MB no longer answers 500 after its first request.** The image route
   caches each variant; the Redis driver's serializer wrote values of any size but refused anything
