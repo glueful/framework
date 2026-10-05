@@ -508,7 +508,17 @@ class UploadController extends BaseController
         // Check server-side cache. The variant bytes are stored base64-encoded (see the set below),
         // so decode before serving; a decode failure (legacy/corrupt entry) falls through to re-render.
         if ($cacheEnabled && $this->cache !== null) {
-            $cached = $this->cache->get($cacheKey);
+            try {
+                $cached = $this->cache->get($cacheKey);
+            } catch (\Throwable $e) {
+                // An entry the store cannot read back (a serializer size limit, a corrupt value) is a
+                // miss: render the variant again rather than fail every request after the first.
+                $this->logger->warning('Image variant cache read failed; rendering again', [
+                    'key' => $cacheKey,
+                    'error' => $e->getMessage(),
+                ]);
+                $cached = null;
+            }
             if (is_array($cached) && isset($cached['data'], $cached['mime']) && is_string($cached['data'])) {
                 $decoded = base64_decode($cached['data'], true);
                 if ($decoded !== false) {
@@ -551,8 +561,16 @@ class UploadController extends BaseController
 
             if ($cacheEnabled && $this->cache !== null) {
                 // Store base64-encoded: raw image bytes aren't valid UTF-8 and break JSON-based cache
-                // serializers (e.g. the Redis driver's SecureSerializer -> json_encode).
-                $this->cache->set($cacheKey, ['data' => base64_encode($data), 'mime' => $mime], $cacheTtl);
+                // serializers (e.g. the Redis driver's SecureSerializer -> json_encode). A variant the
+                // store cannot hold is served uncached.
+                try {
+                    $this->cache->set($cacheKey, ['data' => base64_encode($data), 'mime' => $mime], $cacheTtl);
+                } catch (\Throwable $e) {
+                    $this->logger->warning('Image variant not cached', [
+                        'key' => $cacheKey,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
 
             return $this->binaryResponse($data, $mime, $cacheTtl, $etagEnabled ? $etag : null);

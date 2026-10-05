@@ -70,19 +70,19 @@ class SecureSerializer
         try {
             // Use JSON by default for better security
             if ($this->useJsonDefault && !$forcePhp && $this->isJsonSerializable($data)) {
-                $serialized = json_encode($data, JSON_THROW_ON_ERROR);
-                return 'json:' . $serialized;
+                $serialized = 'json:' . json_encode($data, JSON_THROW_ON_ERROR);
+            } else {
+                // Fall back to PHP serialization for complex objects
+                $serialized = 'php:' . serialize($data);
             }
 
-            // Fall back to PHP serialization for complex objects
-            $serialized = serialize($data);
-
-            // Validate size
+            // The limit unserialize() enforces, on the whole stored string: what is written here can
+            // always be read back.
             if (strlen($serialized) > self::MAX_SIZE) {
                 throw new \InvalidArgumentException('Serialized data exceeds maximum size limit');
             }
 
-            return 'php:' . $serialized;
+            return $serialized;
         } catch (\Throwable $e) {
             throw new \RuntimeException('Serialization failed: ' . $e->getMessage(), 0, $e);
         }
