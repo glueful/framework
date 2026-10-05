@@ -6,6 +6,17 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.88.4] - 2026-10-05 — Alrescha
+
+### Fixed
+- **A resized image over 1MB no longer answers 500 after its first request.** The image route
+  caches each variant; the Redis driver's serializer wrote values of any size but refused anything
+  over its 1MB limit on the way back, so every later request for that variant failed. The
+  serializer now enforces the limit when writing too. The Redis driver answers `false` from `set()`
+  for a value it cannot store and treats an entry it cannot read as a miss, as the file driver
+  already did. The image route renders a variant again when the cache cannot answer, and serves one
+  it cannot store uncached. Variants already cached over the limit are rendered again instead.
+
 ## [1.88.3] - 2026-10-03 — Alrescha
 
 ### Fixed

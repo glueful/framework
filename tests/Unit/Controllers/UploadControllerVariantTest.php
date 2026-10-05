@@ -270,6 +270,48 @@ final class UploadControllerVariantTest extends TestCase
         self::assertSame(2, $fake->renderCalls, 'the variant is rendered again, not read from the cache');
     }
 
+    /**
+     * A cached variant the cache cannot read back — the Redis driver's serializer refuses an entry
+     * over its size limit on the way out though it wrote it — is a miss: the variant is rendered
+     * again and served, never a 500 on every request after the first.
+     */
+    public function testAVariantTheCacheCannotReadBackIsRenderedAgain(): void
+    {
+        $this->useCache(new VariantUnreadableCache());
+        $fake = new VariantFakeMediaProcessor();
+        $controller = $this->makeController($fake);
+        $request = fn () => Request::create('/blobs/' . $this->blobUuid, 'GET', ['width' => 100]);
+
+        $first = $controller->show($request(), $this->blobUuid);
+        $second = $controller->show($request(), $this->blobUuid);
+
+        self::assertSame(200, $first->getStatusCode());
+        self::assertSame(200, $second->getStatusCode());
+        self::assertSame(VariantFakeMediaProcessor::DATA, $this->bodyOf($second));
+        self::assertSame(2, $fake->renderCalls, 'rendered again, not answered from the unreadable entry');
+    }
+
+    /** A variant the cache cannot store is still served. */
+    public function testAVariantTheCacheCannotStoreIsStillServed(): void
+    {
+        $this->useCache(new VariantUnwritableCache());
+        $response = $this->makeController(new VariantFakeMediaProcessor())->show(
+            Request::create('/blobs/' . $this->blobUuid, 'GET', ['width' => 100]),
+            $this->blobUuid,
+        );
+        self::assertSame(200, $response->getStatusCode());
+        self::assertSame(VariantFakeMediaProcessor::DATA, $this->bodyOf($response));
+    }
+
+    private function useCache(\Glueful\Cache\CacheStore $cache): void
+    {
+        /** @var \Glueful\Container\Container $container */
+        $container = $this->context->getContainer();
+        $container->load([
+            \Glueful\Cache\CacheStore::class => new ValueDefinition(\Glueful\Cache\CacheStore::class, $cache),
+        ]);
+    }
+
     public function testVariantRejectsInvalidSourceImageBeforeMediaProcessor(): void
     {
         $uuid = 'blob00000003';
@@ -552,5 +594,35 @@ final class VariantFakeMediaProcessor implements MediaProcessorInterface
         $this->renderCalls++;
 
         return ['data' => self::DATA, 'mime' => self::MIME];
+    }
+}
+
+/**
+ * A cache that stores what it is given and cannot read a variant back, as the Redis driver did for
+ * any entry over its serializer's 1MB read limit.
+ *
+ * @extends \Glueful\Cache\Drivers\ArrayCacheDriver<mixed>
+ */
+class VariantUnreadableCache extends \Glueful\Cache\Drivers\ArrayCacheDriver
+{
+    public function get(string $key, mixed $default = null): mixed
+    {
+        if (parent::get($key) !== null) {
+            throw new \InvalidArgumentException('Serialized data exceeds maximum size limit');
+        }
+        return $default;
+    }
+}
+
+/**
+ * A cache that refuses to store anything.
+ *
+ * @extends \Glueful\Cache\Drivers\ArrayCacheDriver<mixed>
+ */
+class VariantUnwritableCache extends \Glueful\Cache\Drivers\ArrayCacheDriver
+{
+    public function set(string $key, mixed $value, null|int|\DateInterval $ttl = null): bool
+    {
+        throw new \RuntimeException('Serialization failed: Serialized data exceeds maximum size limit');
     }
 }

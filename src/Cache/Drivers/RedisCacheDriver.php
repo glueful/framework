@@ -140,7 +140,7 @@ class RedisCacheDriver implements CacheStore
     {
         $this->validateKey($key);
         $value = $this->redis->get($key);
-        return $value === false ? $default : $this->serializer->unserialize($value);
+        return $value === false ? $default : $this->decode($value, $default);
     }
 
     /**
@@ -158,12 +158,16 @@ class RedisCacheDriver implements CacheStore
     {
         $this->validateKey($key);
         $seconds = $this->normalizeTtl($ttl);
-
-        if ($seconds === null) {
-            return $this->redis->set($key, $this->serializer->serialize($value));
+        $encoded = $this->encode($value);
+        if ($encoded === null) {
+            return false;
         }
 
-        return $this->redis->setex($key, $seconds, $this->serializer->serialize($value));
+        if ($seconds === null) {
+            return (bool) $this->redis->set($key, $encoded);
+        }
+
+        return (bool) $this->redis->setex($key, $seconds, $encoded);
     }
 
     /**
@@ -179,7 +183,11 @@ class RedisCacheDriver implements CacheStore
     public function setNx(string $key, mixed $value, int $ttl = 3600): bool
     {
         // Use Redis SET command with NX (only set if not exists) and EX (set expiry)
-        $result = $this->redis->set($key, $this->serializer->serialize($value), ['nx', 'ex' => $ttl]);
+        $encoded = $this->encode($value);
+        if ($encoded === null) {
+            return false;
+        }
+        $result = $this->redis->set($key, $encoded, ['nx', 'ex' => $ttl]);
         return $result === true;
     }
 
@@ -201,7 +209,7 @@ class RedisCacheDriver implements CacheStore
         for ($i = 0; $i < count($keys); $i++) {
             $key = $keys[$i];
             if ($values[$i] !== false) {
-                $result[$key] = $this->serializer->unserialize($values[$i]);
+                $result[$key] = $this->decode($values[$i], null);
             } else {
                 $result[$key] = null;
             }
@@ -226,11 +234,19 @@ class RedisCacheDriver implements CacheStore
             return true;
         }
 
+        $encoded = [];
+        foreach ($values as $key => $value) {
+            $encoded[$key] = $this->encode($value);
+            if ($encoded[$key] === null) {
+                return false; // nothing is stored that could not be read back
+            }
+        }
+
         // Redis MSET doesn't support TTL, so we use a pipeline for efficiency
         $pipe = $this->redis->multi(\Redis::PIPELINE);
 
-        foreach ($values as $key => $value) {
-            $pipe->setex($key, $ttl, $this->serializer->serialize($value));
+        foreach ($encoded as $key => $value) {
+            $pipe->setex($key, $ttl, $value);
         }
 
         $results = $pipe->exec();
@@ -737,5 +753,31 @@ class RedisCacheDriver implements CacheStore
         }
 
         return max(1, $ttl);
+    }
+
+    /**
+     * The stored form of a value, or null when the serializer refuses it — over its size limit, or not
+     * serializable — so the value is not stored: what is written can always be read back.
+     */
+    private function encode(mixed $value): ?string
+    {
+        try {
+            return $this->serializer->serialize($value);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * A stored value, or `$default` when it cannot be read back (written by a release that did not
+     * check the size on the way in, or corrupt): a miss, as the file driver answers.
+     */
+    private function decode(string $stored, mixed $default): mixed
+    {
+        try {
+            return $this->serializer->unserialize($stored);
+        } catch (\Throwable) {
+            return $default;
+        }
     }
 }
