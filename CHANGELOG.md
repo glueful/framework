@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.88.5] - 2026-10-07 — Alrescha
+
 ### Fixed
 - **An after-commit callback that writes in a transaction of its own no longer loops.** The
   outermost commit ran its after-commit callbacks before taking them off the queue, so a callback

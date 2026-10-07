@@ -21,6 +21,15 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.88.5 — Alrescha (Released 2026-10-07)
+- **An after-commit callback that commits a transaction of its own no longer loops** — commit and
+  rollback take a level's callbacks off the queue before running them, so the inner commit cannot
+  find and re-run them (the request used to run until it was out of memory, after its data had
+  committed).
+- **A rollback callback's own transaction no longer runs the rolled-back work's after-commit
+  callbacks.**
+- Notes: patch; no configuration or default changes.
+
 ### 1.88.4 — Alrescha (Released 2026-10-05)
 - **A resized image over 1MB is served after its first request** — the image route's variant
   cache no longer stores what the Redis driver cannot read back; an unreadable entry is a miss.
