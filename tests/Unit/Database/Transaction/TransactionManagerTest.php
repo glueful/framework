@@ -165,6 +165,58 @@ class TransactionManagerTest extends TestCase
     }
 
     #[Test]
+    public function aCallbackThatCommitsItsOwnTransactionDoesNotRunTheOuterCallbacksAgain(): void
+    {
+        // An after-commit callback that writes in a transaction of its own (a listener recording
+        // something) must not see the outer commit's callbacks run again when its transaction
+        // commits — that re-ran them without end. The guard stops the loop if it comes back.
+        $outerRuns = 0;
+        $innerRuns = 0;
+
+        $this->manager->begin();
+        $this->manager->afterCommit(function () use (&$outerRuns, &$innerRuns) {
+            if (++$outerRuns > 5) {
+                return;
+            }
+            $this->manager->transaction(function () use (&$innerRuns) {
+                $this->manager->afterCommit(function () use (&$innerRuns) {
+                    $innerRuns++;
+                });
+            });
+        });
+        $this->manager->commit();
+
+        $this->assertSame(1, $outerRuns);
+        $this->assertSame(1, $innerRuns);
+        $this->assertSame(0, $this->manager->getPendingCommitCallbackCount());
+    }
+
+    #[Test]
+    public function aRollbackCallbackThatCommitsItsOwnTransactionNeverRunsTheRolledBackCommitCallbacks(): void
+    {
+        // The rolled-back transaction's after-commit callbacks are discarded: a rollback callback
+        // that commits a transaction of its own must not run them — nor the rollback callbacks again.
+        $committedWork = 0;
+        $rollbackRuns = 0;
+
+        $this->manager->begin();
+        $this->manager->afterCommit(function () use (&$committedWork) {
+            $committedWork++;
+        });
+        $this->manager->afterRollback(function () use (&$rollbackRuns) {
+            if (++$rollbackRuns > 5) {
+                return;
+            }
+            $this->manager->transaction(fn () => null);
+        });
+        $this->manager->rollback();
+
+        $this->assertSame(0, $committedWork);
+        $this->assertSame(1, $rollbackRuns);
+        $this->assertSame(0, $this->manager->getPendingCommitCallbackCount());
+    }
+
+    #[Test]
     public function nestedTransactionCallbacksPromotedToParent(): void
     {
         $executed = false;

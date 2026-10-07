@@ -344,9 +344,12 @@ class TransactionManager implements TransactionManagerInterface
             $this->logger->logEvent("Transaction committed", ['level' => 1], 'debug');
             $this->transactionLevel = 0;
 
-            // Execute after-commit callbacks
-            $this->executeCallbacks($this->commitCallbacks[$level] ?? []);
+            // Take the callbacks off the stack BEFORE running them: a callback that commits a
+            // transaction of its own would otherwise find them still queued at level 1 and run
+            // them again, without end.
+            $callbacks = $this->commitCallbacks[$level] ?? [];
             $this->clearCallbacks($level);
+            $this->executeCallbacks($callbacks);
         } else {
             // Nested transaction (savepoint) - promote callbacks to parent level
             // They are automatically released when the parent transaction commits
@@ -378,9 +381,11 @@ class TransactionManager implements TransactionManagerInterface
             $this->logger->logEvent("Transaction rolled back", ['level' => 1], 'debug');
             $this->transactionLevel = 0;
 
-            // Execute after-rollback callbacks
-            $this->executeCallbacks($this->rollbackCallbacks[$level] ?? []);
+            // As on commit: clear first, so a callback's own transaction neither runs this one's
+            // discarded after-commit callbacks nor these again.
+            $callbacks = $this->rollbackCallbacks[$level] ?? [];
             $this->clearCallbacks($level);
+            $this->executeCallbacks($callbacks);
         } else {
             // Nested transaction (savepoint) - rollback to previous savepoint
             try {

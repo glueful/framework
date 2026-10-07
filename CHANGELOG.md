@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+- **An after-commit callback that writes in a transaction of its own no longer loops.** The
+  outermost commit ran its after-commit callbacks before taking them off the queue, so a callback
+  that opened and committed a transaction (an event listener recording something, say) found them
+  still queued and ran them again — without end, until the request ran out of memory, long after
+  the data had committed. Commit and rollback now clear a level's callbacks before running them; a
+  rollback callback's own transaction no longer runs the rolled-back work's after-commit callbacks
+  either.
+
 ## [1.88.4] - 2026-10-05 — Alrescha
 
 ### Fixed
