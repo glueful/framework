@@ -350,8 +350,8 @@ class NotificationMetricsService
             $totalAttempts = 0;
             $weightedDeliveryTime = 0;
 
-            foreach ($channels as $channel) {
-                $channelMetrics = $allMetrics['channels'][$channel];
+            foreach ($channels as $aggregated) {
+                $channelMetrics = $allMetrics['channels'][$aggregated];
                 $sent = $channelMetrics['total_sent'];
                 $failed = $channelMetrics['total_failed'];
 

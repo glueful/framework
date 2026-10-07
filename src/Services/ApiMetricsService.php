@@ -165,8 +165,8 @@ class ApiMetricsService
             error_log("Error flushing API metrics: " . $e->getMessage());
 
             // If an error occurs, put the metrics back in the queue to try again later
-            $currentPending = $this->cache->get($this->cacheKeyPrefix . 'pending') ?? [];
-            $this->cache->set($this->cacheKeyPrefix . 'pending', array_merge($currentPending, $pendingMetrics));
+            $currentPending = $this->cache?->get($this->cacheKeyPrefix . 'pending') ?? [];
+            $this->cache?->set($this->cacheKeyPrefix . 'pending', array_merge($currentPending, $pendingMetrics));
         }
     }
 

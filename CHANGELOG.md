@@ -16,6 +16,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   the data had committed. Commit and rollback now clear a level's callbacks before running them; a
   rollback callback's own transaction no longer runs the rolled-back work's after-commit callbacks
   either.
+- **API metrics that fail to flush are re-queued without a fatal error when no cache is
+  configured.** The re-queue called the cache directly where every other call guards for a missing
+  one. PHPStan 2.3.0 flagged it, along with four loops that reused a variable already in use; those
+  are renamed, with no behaviour change.
 
 ## [1.88.4] - 2026-10-05 — Alrescha
 
