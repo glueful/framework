@@ -35,8 +35,8 @@ class ValidationHelper
 
         if (count($missing) > 0) {
             $errors = [];
-            foreach ($missing as $field) {
-                $errors[$field] = "The {$field} field is required";
+            foreach ($missing as $missingField) {
+                $errors[$missingField] = "The {$missingField} field is required";
             }
             throw ValidationException::withErrors($errors);
         }

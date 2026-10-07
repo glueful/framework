@@ -424,8 +424,8 @@ class MemcachedCacheDriver implements CacheStore
     {
         $keyArray = is_array($keys) ? $keys : iterator_to_array($keys);
 
-        foreach ($keyArray as $key) {
-            $this->validateKey($key);
+        foreach ($keyArray as $candidate) {
+            $this->validateKey($candidate);
         }
 
         if ($keyArray === []) {

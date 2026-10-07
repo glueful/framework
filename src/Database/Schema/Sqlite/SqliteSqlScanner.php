@@ -329,31 +329,31 @@ final class SqliteSqlScanner
         $start = 0;
         $depth = 0;
         $bodyLength = strlen($body);
-        for ($i = 0; $i < $bodyLength;) {
-            $char = $body[$i];
+        for ($pos = 0; $pos < $bodyLength;) {
+            $char = $body[$pos];
             if ($char === "'" || $char === '"' || $char === '`') {
-                $i = $this->consumeQuoted($body, $i, $char);
+                $pos = $this->consumeQuoted($body, $pos, $char);
                 continue;
             }
             if ($char === '[') {
-                $end = strpos($body, ']', $i + 1);
+                $end = strpos($body, ']', $pos + 1);
                 if ($end === false) {
                     throw new \RuntimeException('Unterminated bracket identifier in table clause');
                 }
-                $i = $end + 1;
+                $pos = $end + 1;
                 continue;
             }
-            if ($char === '-' && ($body[$i + 1] ?? '') === '-') {
-                $newline = strpos($body, "\n", $i + 2);
-                $i = $newline === false ? $bodyLength : $newline + 1;
+            if ($char === '-' && ($body[$pos + 1] ?? '') === '-') {
+                $newline = strpos($body, "\n", $pos + 2);
+                $pos = $newline === false ? $bodyLength : $newline + 1;
                 continue;
             }
-            if ($char === '/' && ($body[$i + 1] ?? '') === '*') {
-                $end = strpos($body, '*/', $i + 2);
+            if ($char === '/' && ($body[$pos + 1] ?? '') === '*') {
+                $end = strpos($body, '*/', $pos + 2);
                 if ($end === false) {
                     throw new \RuntimeException('Unterminated block comment in table clause');
                 }
-                $i = $end + 2;
+                $pos = $end + 2;
                 continue;
             }
             if ($char === '(') {
@@ -364,10 +364,10 @@ final class SqliteSqlScanner
                     throw new \RuntimeException('Unbalanced table-clause parentheses');
                 }
             } elseif ($char === ',' && $depth === 0) {
-                $clauses[] = trim(substr($body, $start, $i - $start));
-                $start = $i + 1;
+                $clauses[] = trim(substr($body, $start, $pos - $start));
+                $start = $pos + 1;
             }
-            $i++;
+            $pos++;
         }
         if ($depth !== 0) {
             throw new \RuntimeException('Unbalanced table-clause parentheses');

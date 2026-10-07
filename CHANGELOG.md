@@ -6,6 +6,21 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.88.5] - 2026-10-07 — Alrescha
+
+### Fixed
+- **An after-commit callback that writes in a transaction of its own no longer loops.** The
+  outermost commit ran its after-commit callbacks before taking them off the queue, so a callback
+  that opened and committed a transaction (an event listener recording something, say) found them
+  still queued and ran them again — without end, until the request ran out of memory, long after
+  the data had committed. Commit and rollback now clear a level's callbacks before running them; a
+  rollback callback's own transaction no longer runs the rolled-back work's after-commit callbacks
+  either.
+- **API metrics that fail to flush are re-queued without a fatal error when no cache is
+  configured.** The re-queue called the cache directly where every other call guards for a missing
+  one. PHPStan 2.3.0 flagged it, along with four loops that reused a variable already in use; those
+  are renamed, with no behaviour change.
+
 ## [1.88.4] - 2026-10-05 — Alrescha
 
 ### Fixed
