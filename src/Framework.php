@@ -354,6 +354,10 @@ class Framework
         Model::setDefaultContext($context);
         Utils::setContext($context);
         CacheHelper::setContext($context);
+        // Services that create a cache or a logger without a context use the app's paths, never
+        // the framework's own folder (vendor/, often not writable by the web server).
+        \Glueful\Cache\CacheFactory::setDefaultContext($context);
+        \Glueful\Logging\LogManager::setDefaultContext($context);
         SecureErrorResponse::setContext($context);
         RoutesManager::setContext($context);
 

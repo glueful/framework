@@ -125,6 +125,14 @@ class LogManager implements LoggerInterface, LogManagerInterface
     private array $logStatistics = [];
     private ?ApplicationContext $context = null;
 
+    /** The application's context, set at boot, for loggers created without one. */
+    private static ?ApplicationContext $defaultContext = null;
+
+    public static function setDefaultContext(?ApplicationContext $context): void
+    {
+        self::$defaultContext = $context;
+    }
+
     /**
      * Initialize the application logger
      *
@@ -140,7 +148,7 @@ class LogManager implements LoggerInterface, LogManagerInterface
         string $defaultChannel = 'app',
         ?ApplicationContext $context = null
     ) {
-        $this->context = $context;
+        $this->context = $context ?? self::$defaultContext;
         $this->defaultChannel = $defaultChannel;
         $this->maxFiles = $maxFiles;
         $this->minimumLevel = Level::Debug;

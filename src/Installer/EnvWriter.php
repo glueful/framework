@@ -53,7 +53,11 @@ final class EnvWriter
             }
         }
 
-        $this->atomicWrite(implode("\n", $lines) . "\n");
+        $updated = implode("\n", $lines) . "\n";
+        if ($updated === $content) {
+            return; // nothing changed: leave the file (and whoever can read it) alone
+        }
+        $this->atomicWrite($updated);
     }
 
     private function quote(string $value): string
@@ -84,6 +88,15 @@ final class EnvWriter
             throw new \RuntimeException("Cannot create temp file in {$dir}");
         }
         file_put_contents($tmp, $content);
+        // tempnam() makes a 0600 file in the writer's own group. Keep what the replaced file had, so a
+        // web server that reads .env through its group can still read it.
+        $old = @stat($this->envPath);
+        if ($old !== false) {
+            @chmod($tmp, $old['mode'] & 07777);
+            if (function_exists('posix_getegid') && $old['gid'] !== posix_getegid()) {
+                @chgrp($tmp, $old['gid']);
+            }
+        }
         if (!rename($tmp, $this->envPath)) {
             @unlink($tmp);
             throw new \RuntimeException("Cannot write {$this->envPath}");

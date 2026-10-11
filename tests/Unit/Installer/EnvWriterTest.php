@@ -21,6 +21,29 @@ final class EnvWriterTest extends TestCase
         @unlink($this->path);
     }
 
+    public function testAReplacedFileKeepsTheModeAndGroupOfTheOneItReplaces(): void
+    {
+        // The web server often reads .env through its group while the deploy user writes it: a fresh
+        // temp file (0600, the writer's own group) would lock the web server out.
+        file_put_contents($this->path, "APP_ENV=local\n");
+        chmod($this->path, 0640);
+        $group = filegroup($this->path);
+        (new EnvWriter($this->path))->set('APP_ENV', 'production');
+        clearstatcache();
+        self::assertSame(0640, fileperms($this->path) & 0777);
+        self::assertSame($group, filegroup($this->path));
+        self::assertSame("APP_ENV=production\n", file_get_contents($this->path));
+    }
+
+    public function testWritingTheSameValuesLeavesTheFileUntouched(): void
+    {
+        file_put_contents($this->path, "APP_ENV=local\nDB_DRIVER=pgsql\n");
+        $inode = fileinode($this->path);
+        (new EnvWriter($this->path))->setMany(['APP_ENV' => 'local', 'DB_DRIVER' => 'pgsql']);
+        clearstatcache();
+        self::assertSame($inode, fileinode($this->path), 'nothing changed, nothing replaced');
+    }
+
     public function testAppendsMissingKeyAndReadsItBack(): void
     {
         file_put_contents($this->path, "# comment\nAPP_ENV=local\n");
