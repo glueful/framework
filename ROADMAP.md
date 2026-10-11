@@ -21,6 +21,14 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.89.0 — Alsafi (Released 2026-10-11)
+- **`queue:restart`** — every running worker exits after its current job, so its supervisor
+  starts it on the code installed now. The signal is a timestamp in the cache, compared with each
+  worker's own start: a worker started after it keeps running.
+- **`QueueWorker` takes an optional `RestartSignal`** (registered by `QueueProvider`); without a
+  cache store nothing is signalled and workers run as before.
+- Notes: minor; additive, no configuration or default changes.
+
 ### 1.88.5 — Alrescha (Released 2026-10-07)
 - **An after-commit callback that commits a transaction of its own no longer loops** — commit and
   rollback take a level's callbacks off the queue before running them, so the inner commit cannot
