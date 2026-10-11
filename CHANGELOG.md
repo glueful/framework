@@ -6,6 +6,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Added
+- **`queue:restart`**: running workers exit after their current job once it is run, so a supervisor
+  restarts them on newly installed code. The signal is a timestamp in the cache; a worker started
+  after it keeps running, and without a cache store nothing is signalled.
+
 ## [1.88.5] - 2026-10-07 — Alrescha
 
 ### Fixed

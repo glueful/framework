@@ -37,6 +37,7 @@ final class QueueWorker
         private WorkerMonitorInterface $monitor,
         private LoggerInterface $logger,
         private ?ApplicationContext $context = null,
+        private ?RestartSignal $restart = null,
     ) {
     }
 
@@ -102,9 +103,19 @@ final class QueueWorker
                     $this->process($job, $queue, $options);
                     $processedJobs++;
 
+                    // queue:restart: the job in progress has finished; exit so a supervisor restarts
+                    // the worker on whatever code is installed now.
+                    if ($this->restart?->requestedAfter($startedAt) === true) {
+                        return self::SUCCESS;
+                    }
+
                     if ($options->maxJobs > 0 && $processedJobs >= $options->maxJobs) {
                         return self::SUCCESS;
                     }
+                }
+
+                if ($this->restart?->requestedAfter($startedAt) === true) {
+                    return self::SUCCESS;
                 }
 
                 if ($options->maxRuntime > 0 && (time() - $startedAt) >= $options->maxRuntime) {

@@ -25,7 +25,18 @@ final class QueueProvider extends BaseServiceProvider
         // Manager and helpers
         $defs[\Glueful\Queue\QueueManager::class] =
             $this->autowire(\Glueful\Queue\QueueManager::class);
-        // Lean job-draining worker (the only worker loop in core).
+        // queue:restart's signal, kept in the cache. Without a cache store nothing is signalled.
+        $defs[\Glueful\Queue\RestartSignal::class] = new \Glueful\Container\Definition\FactoryDefinition(
+            \Glueful\Queue\RestartSignal::class,
+            static function (\Psr\Container\ContainerInterface $c): \Glueful\Queue\RestartSignal {
+                try {
+                    return new \Glueful\Queue\RestartSignal($c->get(\Glueful\Cache\CacheStore::class));
+                } catch (\Throwable) {
+                    return new \Glueful\Queue\RestartSignal(null);
+                }
+            }
+        );
+                // Lean job-draining worker (the only worker loop in core).
         $defs[\Glueful\Queue\QueueWorker::class] =
             $this->autowire(\Glueful\Queue\QueueWorker::class);
         // Interface seam → no-op NullWorkerMonitor by default. Real persistence

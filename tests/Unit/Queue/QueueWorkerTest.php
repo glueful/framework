@@ -352,6 +352,24 @@ final class QueueWorkerTest extends TestCase
         self::assertFalse($worker->runOnce('reporting', ['default'], $this->options()));
     }
 
+    public function testARestartSignalStopsTheDaemonAfterTheCurrentJob(): void
+    {
+        TestRestartingJob::$ran = 0;
+        $cache = new \Glueful\Cache\Drivers\ArrayCacheDriver();
+        TestRestartingJob::$signal = new \Glueful\Queue\RestartSignal($cache);
+        $manager = $this->manager();
+        $manager->push(TestRestartingJob::class, ['n' => 1], 'default');
+        $manager->push(TestRestartingJob::class, ['n' => 2], 'default');
+        $manager->push(TestRestartingJob::class, ['n' => 3], 'default');
+
+        $worker = new QueueWorker($manager, new SpyWorkerMonitor(), new NullLogger(), $this->context, TestRestartingJob::$signal);
+        $code = $worker->daemon('database', ['default'], $this->options(['sleep' => 0, 'stopWhenEmpty' => true]));
+
+        self::assertSame(0, $code);
+        self::assertSame(1, TestRestartingJob::$ran, 'the job in progress finished, and no other started');
+        self::assertSame(2, $this->queueSize('default'), 'the rest wait for the restarted worker');
+    }
+
     // ---------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------
@@ -453,6 +471,21 @@ final class TestSuccessJob extends Job
     public function handle(): void
     {
         self::$ran++;
+    }
+}
+
+/**
+ * Job that asks every running worker to restart (as queue:restart does), then counts itself.
+ */
+final class TestRestartingJob extends Job
+{
+    public static int $ran = 0;
+    public static ?\Glueful\Queue\RestartSignal $signal = null;
+
+    public function handle(): void
+    {
+        self::$ran++;
+        self::$signal?->signal(time());
     }
 }
 
