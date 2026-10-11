@@ -6,6 +6,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.90.0] - 2026-10-11 — Alsciaukat
+
+### Upgrade Notes
+- **An app without its own file-cache path now caches in `<app>/storage/cache`.** The framework
+  config's `cache.stores.file.path` defaulted to the framework's own folder (under vendor/); it is
+  now unset, and the file driver resolves the app's storage. Set `CACHE_FILE_PATH` to keep a
+  different location. An app whose `config/cache.php` sets the path is unaffected.
+
 ### Fixed
 - **The file cache lives in the app's `storage/cache`, never in vendor/.** The cache service was
   built without the application context, and the file driver looked up a config key no app
