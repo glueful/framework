@@ -6,6 +6,25 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.90.0] - 2026-10-11 — Alsciaukat
+
+### Upgrade Notes
+- **An app without its own file-cache path now caches in `<app>/storage/cache`.** The framework
+  config's `cache.stores.file.path` defaulted to the framework's own folder (under vendor/); it is
+  now unset, and the file driver resolves the app's storage. Set `CACHE_FILE_PATH` to keep a
+  different location. An app whose `config/cache.php` sets the path is unaffected.
+
+### Fixed
+- **The file cache lives in the app's `storage/cache`, never in vendor/.** The cache service was
+  built without the application context, and the file driver looked up a config key no app
+  defines, so file-cache entries landed in `vendor/glueful/framework/storage/cache` — unwritable
+  wherever the web server cannot write the code, which left the site without a cache. The driver
+  now uses `cache.stores.file.path` (`CACHE_FILE_PATH`), else `<app>/storage/cache`; services that
+  create a cache or a logger without a context use the one set at boot.
+- **Writing `.env` keeps its mode and group, and leaves an unchanged file alone.** Every write
+  replaced it with a fresh temp file — mode 0600, in the writer's own group — so a web server that
+  reads `.env` through its group lost access after the deploy user ran an install or provision.
+
 ## [1.89.0] - 2026-10-11 — Alsafi
 
 ### Added

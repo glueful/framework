@@ -190,7 +190,8 @@ final class CoreProvider extends BaseServiceProvider
             'cache.store',
             /** @return \Glueful\Cache\CacheStore */
             function () {
-                return \Glueful\Cache\CacheFactory::create();
+                // With the context: the app's cache settings and paths, not the framework's own folder.
+                return \Glueful\Cache\CacheFactory::create('', $this->context);
             }
         );
 

@@ -21,6 +21,16 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.90.0 — Alsciaukat (Released 2026-10-11)
+- **The file cache lives in the app's `storage/cache`, never under vendor/** — the cache service is
+  built with the application context, the file driver reads `cache.stores.file.path`
+  (`CACHE_FILE_PATH`) or falls back to `<app>/storage/cache`, and services that create a cache or a
+  logger without a context use the one set at boot.
+- **Writing `.env` keeps its mode and group** and leaves an unchanged file alone, so a web server
+  that reads it through its group keeps access after an install or provision.
+- Notes: minor; the framework config's default file-cache path changed (see Upgrade Notes). Both
+  fixes matter where the web server and the deploy user are different users.
+
 ### 1.89.0 — Alsafi (Released 2026-10-11)
 - **`queue:restart`** — every running worker exits after its current job, so its supervisor
   starts it on the code installed now. The signal is a timestamp in the cache, compared with each

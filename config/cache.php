@@ -47,7 +47,9 @@ return [
         // File cache configuration
         'file' => [
             'driver' => 'file',
-            'path' => env('CACHE_FILE_PATH', dirname(__DIR__) . '/storage/cache/'),
+            // Unset: <app base>/storage/cache/ (CacheFactory). Never this file's folder, which is
+            // vendor/glueful/framework in an app — often not writable by the web server.
+            'path' => env('CACHE_FILE_PATH'),
         ],
 
         // In-memory array cache (for testing)

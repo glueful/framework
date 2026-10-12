@@ -20,6 +20,14 @@ use Glueful\Http\Exceptions\Domain\DatabaseException;
  */
 class CacheFactory
 {
+    /** The application's context, set at boot, for callers that create a cache without one. */
+    private static ?ApplicationContext $defaultContext = null;
+
+    public static function setDefaultContext(?ApplicationContext $context): void
+    {
+        self::$defaultContext = $context;
+    }
+
     /**
      * Create cache driver instance
      *
@@ -29,11 +37,12 @@ class CacheFactory
      * @param string $driverOverride Optional driver override
      * @param ApplicationContext|null $context Application context for config/container access
      * @return CacheStore<mixed> Configured cache driver
-     * @throws \Glueful\Http\Exceptions\Domain\DatabaseException If connection fails
-     * @throws \Glueful\Http\Exceptions\Domain\BusinessLogicException If cache type is not supported
+     * @throws DatabaseException If connection fails
+     * @throws BusinessLogicException If cache type is not supported
      */
     public static function create(string $driverOverride = '', ?ApplicationContext $context = null): CacheStore
     {
+        $context ??= self::$defaultContext;
         // Resolution order: explicit override → config (when context available)
         // → CACHE_DRIVER env var → 'redis' default. The env-var fallback is
         // what lets phpunit.xml's `CACHE_DRIVER=array` take effect for tests
@@ -167,7 +176,7 @@ class CacheFactory
             );
         }
 
-        $path = self::getConfig($context, 'app.paths.storage_path', __DIR__ . '/../../storage') . '/cache/';
+        $path = self::fileCachePath($context);
         if (!is_dir($path)) {
             mkdir($path, 0755, true);
         }
@@ -184,13 +193,31 @@ class CacheFactory
             ],
         ];
 
-        $fileFinder = $context !== null
+        $fileFinder = $context !== null && $context->hasContainer()
             ? container($context)->get(FileFinder::class)
             : new FileFinder();
 
         $storage = new \Glueful\Storage\StorageManager($storageConfig, new \Glueful\Storage\PathGuard());
 
         return new \Glueful\Cache\Drivers\FileCacheDriver($path, $storage, $fileFinder, 'cache');
+    }
+
+    /**
+     * Where the file cache lives: the app's `cache.stores.file.path` (CACHE_FILE_PATH), else
+     * `<base>/storage/cache`. Only without an application context does it fall back to the
+     * framework's own folder — under vendor/, which the web server often cannot write.
+     */
+    private static function fileCachePath(?ApplicationContext $context): string
+    {
+        $configured = self::getConfig($context, 'cache.stores.file.path');
+        if (is_string($configured) && $configured !== '') {
+            return rtrim($configured, '/') . '/';
+        }
+        if ($context !== null) {
+            return rtrim($context->getBasePath(), '/') . '/storage/cache/';
+        }
+
+        return __DIR__ . '/../../storage/cache/';
     }
 
     private static function getConfig(?ApplicationContext $context, string $key, mixed $default = null): mixed
