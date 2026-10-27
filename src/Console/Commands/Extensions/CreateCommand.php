@@ -56,7 +56,10 @@ final class CreateCommand extends BaseCommand
         @mkdir($extensionDir . '/src', 0755, true);
         @mkdir($extensionDir . '/routes', 0755, true);
         @mkdir($extensionDir . '/config', 0755, true);
-        @mkdir($extensionDir . '/database/migrations', 0755, true);
+        // Flat migrations/ lane (first-party pack convention). The .gitkeep keeps the declared
+        // path present in a fresh checkout — a missing path fails descriptor resolution.
+        @mkdir($extensionDir . '/migrations', 0755, true);
+        file_put_contents($extensionDir . '/migrations/.gitkeep', '');
 
         // composer.json (a real glueful-extension package)
         $composerJson = [
@@ -78,6 +81,16 @@ final class CreateCommand extends BaseCommand
                         'glueful' => '>=' . Version::VERSION,
                         'extensions' => [],
                     ],
+                    // Since 1.80 an installed package must declare its schema; enabling an
+                    // undeclared one throws UndeclaredSchemaException. "none" is the empty form.
+                    'migrations' => [
+                        [
+                            'id' => 'default',
+                            'path' => 'migrations',
+                            'priority' => 'default',
+                            'mode' => 'on_enable',
+                        ],
+                    ],
                 ],
             ],
         ];
@@ -88,7 +101,7 @@ final class CreateCommand extends BaseCommand
 
         file_put_contents(
             $extensionDir . "/src/{$studly}ServiceProvider.php",
-            $this->generateServiceProvider($namespace, $studly, $name)
+            $this->generateServiceProvider($namespace, $studly, $name, $slug)
         );
         file_put_contents($extensionDir . '/routes/routes.php', $this->generateRoutes($studly, $slug));
         file_put_contents($extensionDir . "/config/{$slug}.php", $this->generateConfig($slug));
@@ -159,7 +172,7 @@ final class CreateCommand extends BaseCommand
         ));
     }
 
-    private function generateServiceProvider(string $namespace, string $studly, string $name): string
+    private function generateServiceProvider(string $namespace, string $studly, string $name, string $slug): string
     {
         return <<<PHP
         <?php
@@ -177,13 +190,14 @@ final class CreateCommand extends BaseCommand
             public function register(ApplicationContext \$context): void
             {
                 // Merge this extension's config (optional):
-                // \$this->mergeConfig('{$studly}', require __DIR__ . '/../config/{$studly}.php');
+                // \$this->mergeConfig('{$slug}', require __DIR__ . '/../config/{$slug}.php');
             }
 
             public function boot(ApplicationContext \$context): void
             {
                 \$this->loadRoutesFrom(__DIR__ . '/../routes/routes.php');
-                \$this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
+                // Migrations in migrations/ are registered from the composer.json declaration
+                // (extra.glueful.migrations) and run by `extensions:enable` — no call needed here.
 
                 \$this->app->get(ExtensionManager::class)->registerMeta(self::class, [
                     'slug' => '{$studly}',

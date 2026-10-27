@@ -35,6 +35,14 @@ final class SessionCookieConfig
         /** @var array<string,mixed> $raw */
         $raw = is_array($configured) ? $configured : [];
 
+        // The session routes (routes/auth.php) are registered under api_prefix(), so the refresh
+        // cookie's default Path must carry that prefix too — a bare `/auth/session` is never sent
+        // to `/api/v1/auth/session/refresh`. An explicitly configured path still wins.
+        $refreshPath = $raw['refresh_path'] ?? null;
+        $refreshPath = is_string($refreshPath) && $refreshPath !== ''
+            ? $refreshPath
+            : rtrim(api_prefix($context), '/') . '/auth/session';
+
         $domain = $raw['domain'] ?? null;
         $domain = is_string($domain) && $domain !== '' ? $domain : null;
 
@@ -44,7 +52,7 @@ final class SessionCookieConfig
             refreshName: (string) ($raw['refresh_name'] ?? 'gf_refresh'),
             refreshTtl: (int) ($raw['refresh_ttl'] ?? 2592000),
             path: (string) ($raw['path'] ?? '/'),
-            refreshPath: (string) ($raw['refresh_path'] ?? '/auth/session'),
+            refreshPath: $refreshPath,
             domain: $domain,
             secure: (bool) ($raw['secure'] ?? true),
             sameSite: (string) ($raw['same_site'] ?? Cookie::SAMESITE_LAX),

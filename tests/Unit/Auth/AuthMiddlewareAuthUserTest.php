@@ -51,6 +51,29 @@ final class AuthMiddlewareAuthUserTest extends TestCase
         self::assertSame(['read', 'write'], $identity->scopes());
     }
 
+    /**
+     * OAuth-style tokens carry `scope` as one space-delimited string (RFC 6749 §3.3). Only arrays
+     * were read, so such a token's scopes were dropped and every #[RequireScope] route denied it.
+     */
+    public function test_space_delimited_scope_string_becomes_a_scope_list(): void
+    {
+        $identity = $this->build([
+            'uuid' => 'u-1',
+            'claims' => ['scope' => 'read:posts  write:posts write:posts'],
+        ]);
+
+        self::assertNotNull($identity);
+        self::assertSame(['read:posts', 'write:posts'], $identity->scopes());
+    }
+
+    public function test_blank_scope_string_yields_no_scopes(): void
+    {
+        $identity = $this->build(['uuid' => 'u-1', 'claims' => ['scope' => '   ']]);
+
+        self::assertNotNull($identity);
+        self::assertSame([], $identity->scopes());
+    }
+
     public function test_returns_null_without_a_uuid(): void
     {
         self::assertNull($this->build(['email' => 'no@uuid.test']));

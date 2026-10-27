@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Validation\Middleware;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Routing\RouteMiddleware;
 use Glueful\Validation\Attributes\Validate;
 use Glueful\Validation\FormRequest;
@@ -39,9 +40,9 @@ class ValidationMiddleware implements RouteMiddleware
 {
     private RuleParser $ruleParser;
 
-    public function __construct()
+    public function __construct(private readonly ?ApplicationContext $context = null)
     {
-        $this->ruleParser = new RuleParser();
+        $this->ruleParser = new RuleParser($context);
     }
 
     public function handle(Request $request, callable $next, mixed ...$params): mixed
@@ -104,7 +105,7 @@ class ValidationMiddleware implements RouteMiddleware
             $className = $type->getName();
 
             if (is_subclass_of($className, FormRequest::class)) {
-                return new $className($request);
+                return (new $className($request))->setContext($this->context);
             }
         }
 
@@ -136,7 +137,7 @@ class ValidationMiddleware implements RouteMiddleware
     protected function validateWithAttribute(Request $request, Validate $attribute): void
     {
         $rules = $this->ruleParser->parse($attribute->rules);
-        $validator = new Validator($rules);
+        $validator = new Validator($rules, $this->context);
 
         // Merge query and request data
         $data = array_merge(

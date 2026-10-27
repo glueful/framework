@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Validation;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Http\Exceptions\Client\ForbiddenException;
 use Glueful\Validation\Contracts\Rule;
 use Glueful\Validation\Support\RuleParser;
@@ -58,11 +59,25 @@ abstract class FormRequest
     protected ?RuleParser $ruleParser = null;
 
     /**
+     * Application context; lets DB-backed rules (unique/exists) reach the Connection.
+     */
+    protected ?ApplicationContext $context = null;
+
+    /**
      * Create a new FormRequest instance
      */
     public function __construct(Request $request)
     {
         $this->request = $request;
+    }
+
+    /**
+     * Supply the application context (done by ValidationMiddleware).
+     */
+    public function setContext(?ApplicationContext $context): static
+    {
+        $this->context = $context;
+        return $this;
     }
 
     /**
@@ -164,7 +179,7 @@ abstract class FormRequest
 
         // Build and run validator
         $rules = $this->parseRules($this->rules());
-        $validator = new Validator($rules);
+        $validator = new Validator($rules, $this->context);
         $this->validator = $validator;
 
         $errors = $validator->validate($this->all());
@@ -186,7 +201,7 @@ abstract class FormRequest
     protected function parseRules(array $rules): array
     {
         if ($this->ruleParser === null) {
-            $this->ruleParser = new RuleParser();
+            $this->ruleParser = new RuleParser($this->context);
         }
 
         return $this->ruleParser->parse($rules);

@@ -18,9 +18,22 @@ final class ValidationMiddleware implements RouteMiddleware
         } catch (ValidationException $e) {
             return new JsonResponse([
                 'status' => 422,
-                'message' => 'Validation failed',
+                'message' => self::messageFor($e),
                 'errors' => $e->errors(),
             ], 422);
         }
+    }
+
+    /**
+     * The exception's own message when one was explicitly given; the generic default otherwise
+     * (the exception's constructor default is a placeholder, not an app-chosen message).
+     */
+    private static function messageFor(ValidationException $e): string
+    {
+        $message = $e->getMessage();
+        $default = (new \ReflectionParameter([ValidationException::class, '__construct'], 'message'))
+            ->getDefaultValue();
+
+        return $message === '' || $message === $default ? 'Validation failed' : $message;
     }
 }

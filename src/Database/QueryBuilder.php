@@ -37,7 +37,6 @@ class QueryBuilder implements QueryBuilderInterface
     private ?int $cacheTtl = null;
     /** @var array<int, string> */
     private array $cacheTags = [];
-    private bool $optimizeEnabled = false;
     private bool $debugEnabled = false;
 
     /**
@@ -897,11 +896,14 @@ class QueryBuilder implements QueryBuilderInterface
     }
 
     /**
-     * {@inheritdoc}
+     * No-op: nothing ever consumed the optimize flag, and no automatic query
+     * rewriting is applied. Returns the builder unchanged.
+     *
+     * @deprecated Has never had any effect. Remove the call; for SQL analysis use
+     *             Glueful\Database\QueryOptimizer::optimizeQuery() explicitly.
      */
     public function optimize(): static
     {
-        $this->optimizeEnabled = true;
         return $this;
     }
 
@@ -1109,13 +1111,11 @@ class QueryBuilder implements QueryBuilderInterface
         $cacheEnabledProp = $cloneReflection->getProperty('cacheEnabled');
         $cacheTtlProp = $cloneReflection->getProperty('cacheTtl');
         $cacheTagsProp = $cloneReflection->getProperty('cacheTags');
-        $optimizeEnabledProp = $cloneReflection->getProperty('optimizeEnabled');
         $debugEnabledProp = $cloneReflection->getProperty('debugEnabled');
 
         $cacheEnabledProp->setValue($clone, $this->cacheEnabled);
         $cacheTtlProp->setValue($clone, $this->cacheTtl);
         $cacheTagsProp->setValue($clone, $this->cacheTags);
-        $optimizeEnabledProp->setValue($clone, $this->optimizeEnabled);
         $debugEnabledProp->setValue($clone, $this->debugEnabled);
 
         return $clone;

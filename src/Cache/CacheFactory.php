@@ -53,58 +53,7 @@ class CacheFactory
             : (string) (self::getConfig($context, 'cache.default', null) ?? env('CACHE_DRIVER', 'redis'));
 
         if ($cacheType === 'redis') {
-            $redis = new Redis();
-            $host = self::getConfig($context, 'cache.stores.redis.host', null) ?? env('REDIS_HOST', '127.0.0.1');
-            $port = (int) (self::getConfig($context, 'cache.stores.redis.port', null) ?? env('REDIS_PORT', 6379));
-            $timeout = (float) (
-                self::getConfig($context, 'cache.stores.redis.timeout', null) ?? env('REDIS_TIMEOUT', 2.5)
-            );
-            $password = self::getConfig($context, 'cache.stores.redis.password', null) ?? env('REDIS_PASSWORD');
-
-            try {
-                // Set connection timeout to prevent long hangs - use shorter timeout
-                $actualTimeout = min($timeout, 1.0); // Max 1 second for local connections
-                $connected = $redis->connect($host, $port, $actualTimeout);
-
-                if (!$connected) {
-                    throw DatabaseException::connectionFailed(
-                        "Failed to connect to Redis at {$host}:{$port}"
-                    );
-                }
-
-                // Authenticate if password is set
-                if (is_string($password) && $password !== '') {
-                    $authenticated = $redis->auth($password);
-                    if (!$authenticated) {
-                        throw DatabaseException::connectionFailed(
-                            'Redis authentication failed'
-                        );
-                    }
-                }
-
-                // Select database if specified
-                $database = (int) (
-                    self::getConfig($context, 'cache.stores.redis.database', null) ?? env('REDIS_DB', 0)
-                );
-                if ($database > 0) {
-                    $redis->select($database);
-                }
-
-                // Test connection with a ping
-                $ping = $redis->ping();
-                if ($ping !== "+PONG" && $ping !== true) {
-                    throw DatabaseException::connectionFailed(
-                        "Redis ping failed: " . var_export($ping, true)
-                    );
-                }
-
-                return new RedisCacheDriver($redis);
-            } catch (\RedisException $e) {
-                throw DatabaseException::connectionFailed(
-                    "Redis connection error: " . $e->getMessage(),
-                    $e
-                );
-            }
+            return new RedisCacheDriver(self::createRedisConnection($context));
         }
 
         if ($cacheType === 'memcached') {
@@ -160,6 +109,72 @@ class CacheFactory
             'cache_creation',
             "Unsupported cache type: {$cacheType}"
         );
+    }
+
+    /**
+     * Open the framework's Redis connection from a `cache.stores.<store>` block.
+     *
+     * The single place a raw phpredis client is built from config, shared by the Redis cache
+     * driver and the Redis lock store. Each key falls back to its REDIS_* env var (host, port,
+     * password, database, timeout), so a store with no explicit block still connects.
+     *
+     * @param ApplicationContext|null $context Application context for config access
+     * @param string $store Name of the store under `cache.stores` (default: 'redis')
+     * @throws DatabaseException If the connection, authentication or ping fails
+     */
+    public static function createRedisConnection(?ApplicationContext $context = null, string $store = 'redis'): Redis
+    {
+        $context ??= self::$defaultContext;
+        $prefix = 'cache.stores.' . $store . '.';
+
+        $redis = new Redis();
+        $host = self::getConfig($context, $prefix . 'host', null) ?? env('REDIS_HOST', '127.0.0.1');
+        $port = (int) (self::getConfig($context, $prefix . 'port', null) ?? env('REDIS_PORT', 6379));
+        $timeout = (float) (self::getConfig($context, $prefix . 'timeout', null) ?? env('REDIS_TIMEOUT', 2.5));
+        $password = self::getConfig($context, $prefix . 'password', null) ?? env('REDIS_PASSWORD');
+
+        try {
+            // Set connection timeout to prevent long hangs - use shorter timeout
+            $actualTimeout = min($timeout, 1.0); // Max 1 second for local connections
+            $connected = $redis->connect($host, $port, $actualTimeout);
+
+            if (!$connected) {
+                throw DatabaseException::connectionFailed(
+                    "Failed to connect to Redis at {$host}:{$port}"
+                );
+            }
+
+            // Authenticate if password is set
+            if (is_string($password) && $password !== '') {
+                $authenticated = $redis->auth($password);
+                if (!$authenticated) {
+                    throw DatabaseException::connectionFailed(
+                        'Redis authentication failed'
+                    );
+                }
+            }
+
+            // Select database if specified
+            $database = (int) (self::getConfig($context, $prefix . 'database', null) ?? env('REDIS_DB', 0));
+            if ($database > 0) {
+                $redis->select($database);
+            }
+
+            // Test connection with a ping
+            $ping = $redis->ping();
+            if ($ping !== "+PONG" && $ping !== true) {
+                throw DatabaseException::connectionFailed(
+                    "Redis ping failed: " . var_export($ping, true)
+                );
+            }
+
+            return $redis;
+        } catch (\RedisException $e) {
+            throw DatabaseException::connectionFailed(
+                "Redis connection error: " . $e->getMessage(),
+                $e
+            );
+        }
     }
 
     /**

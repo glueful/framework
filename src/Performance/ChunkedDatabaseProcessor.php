@@ -2,23 +2,26 @@
 
 namespace Glueful\Performance;
 
+use Glueful\Database\Connection;
+
 /**
  * A utility class for processing database results in a memory-efficient way
  *
- * Supports PDO and mysqli connection types for chunked processing of large datasets.
+ * Supports Glueful Connection, PDO and mysqli connection types for chunked
+ * processing of large datasets.
  */
 class ChunkedDatabaseProcessor
 {
-    private mixed $connection;
+    private Connection|\PDO|\mysqli $connection;
     private int $defaultChunkSize;
 
     /**
      * Create a new chunked database processor
      *
-     * @param mixed $connection The database connection (PDO or mysqli)
+     * @param Connection|\PDO|\mysqli $connection The database connection
      * @param int $defaultChunkSize Default chunk size for operations
      */
-    public function __construct($connection, int $defaultChunkSize = 1000)
+    public function __construct(Connection|\PDO|\mysqli $connection, int $defaultChunkSize = 1000)
     {
         $this->connection = $connection;
         $this->defaultChunkSize = $defaultChunkSize;
@@ -42,27 +45,33 @@ class ChunkedDatabaseProcessor
         $chunkSize = $chunkSize ?? $this->defaultChunkSize;
 
         // Adapt based on the connection type
-        if ($this->connection instanceof \PDO) {
-            return $this->processPdoQuery($query, $processor, $params, $chunkSize);
-        } elseif ($this->connection instanceof \mysqli) {
-            return $this->processMysqliQuery($query, $processor, $params, $chunkSize);
-        } else {
-            throw new \InvalidArgumentException('Unsupported connection type. Only PDO and mysqli are supported.');
+        if ($this->connection instanceof \mysqli) {
+            return $this->processMysqliQuery($this->connection, $query, $processor, $params, $chunkSize);
         }
+
+        $pdo = $this->connection instanceof Connection ? $this->connection->getPDO() : $this->connection;
+
+        return $this->processPdoQuery($pdo, $query, $processor, $params, $chunkSize);
     }
 
     /**
      * Process a PDO query in chunks
      *
+     * @param \PDO $pdo The PDO handle
      * @param string $query The SQL query to execute
      * @param callable $processor Function to process each chunk
      * @param array<int|string, mixed> $params Parameters for the prepared statement
      * @param int $chunkSize Size of each chunk
      * @return array<mixed> Results from the processor for each chunk
      */
-    private function processPdoQuery(string $query, callable $processor, array $params, int $chunkSize): array
-    {
-        $stmt = $this->connection->prepare($query);
+    private function processPdoQuery(
+        \PDO $pdo,
+        string $query,
+        callable $processor,
+        array $params,
+        int $chunkSize
+    ): array {
+        $stmt = $pdo->prepare($query);
         $stmt->execute($params);
 
         return MemoryEfficientIterators::processInChunks(
@@ -75,15 +84,24 @@ class ChunkedDatabaseProcessor
     /**
      * Process a mysqli query in chunks
      *
+     * @param \mysqli $mysqli The mysqli handle
      * @param string $query The SQL query to execute
      * @param callable $processor Function to process each chunk
      * @param array<int|string, mixed> $params Parameters for the prepared statement
      * @param int $chunkSize Size of each chunk
      * @return array<mixed> Results from the processor for each chunk
      */
-    private function processMysqliQuery(string $query, callable $processor, array $params, int $chunkSize): array
-    {
-        $stmt = $this->connection->prepare($query);
+    private function processMysqliQuery(
+        \mysqli $mysqli,
+        string $query,
+        callable $processor,
+        array $params,
+        int $chunkSize
+    ): array {
+        $stmt = $mysqli->prepare($query);
+        if ($stmt === false) {
+            throw new \RuntimeException('Failed to prepare statement: ' . $mysqli->error);
+        }
 
         if ($params !== []) {
             $types = '';
@@ -135,19 +153,8 @@ class ChunkedDatabaseProcessor
         $chunkSize = $chunkSize ?? $this->defaultChunkSize;
         $results = [];
 
-        // For Laravel connections, use the chunkById method
-        if (method_exists($this->connection, 'table')) {
-            $query = $this->connection->table($table);
-
-            foreach ($conditions as $column => $value) {
-                $query->where($column, $value);
-            }
-
-            $query->chunkById($chunkSize, function ($chunk) use ($processor, &$results) {
-                $results[] = $processor($chunk->toArray());
-            }, $idColumn);
-
-            return $results;
+        if ($this->connection instanceof Connection) {
+            return $this->processConnectionTableInChunks($table, $processor, $idColumn, $conditions, $chunkSize);
         }
 
         // For other connections, implement manual chunking
@@ -212,6 +219,49 @@ class ChunkedDatabaseProcessor
                 $done = true;
             }
         }
+
+        return $results;
+    }
+
+    /**
+     * Keyset-paginated chunking through the Glueful query builder (table hooks,
+     * identifier validation and typed exceptions all apply).
+     *
+     * @param array<string, mixed> $conditions
+     * @return array<mixed>
+     */
+    private function processConnectionTableInChunks(
+        string $table,
+        callable $processor,
+        string $idColumn,
+        array $conditions,
+        int $chunkSize
+    ): array {
+        /** @var Connection $connection */
+        $connection = $this->connection;
+        $results = [];
+        $lastId = null;
+
+        do {
+            $query = $connection->table($table);
+            foreach ($conditions as $column => $value) {
+                $query->where($column, $value);
+            }
+            if ($lastId !== null) {
+                $query->where($idColumn, '>', $lastId);
+            }
+            $rows = $query->orderBy($idColumn, 'ASC')->limit($chunkSize)->get();
+
+            if ($rows !== []) {
+                $results[] = $processor($rows);
+                $lastId = $rows[count($rows) - 1][$idColumn] ?? null;
+                if ($lastId === null) {
+                    throw new \InvalidArgumentException(
+                        "Chunking column '{$idColumn}' is missing from the rows of '{$table}'."
+                    );
+                }
+            }
+        } while (count($rows) === $chunkSize);
 
         return $results;
     }

@@ -12,6 +12,7 @@ use Glueful\Queue\Jobs\DatabaseBackupJob;
 use Glueful\Queue\Jobs\DispatchNotificationChannels;
 use Glueful\Queue\Jobs\LogCleanupJob;
 use Glueful\Queue\Jobs\NotificationRetryJob;
+use Glueful\Queue\Jobs\ScheduledNotificationsJob;
 use Glueful\Queue\Jobs\SendNotification;
 use Glueful\Queue\Jobs\SessionCleanupJob;
 use PHPUnit\Framework\TestCase;
@@ -58,6 +59,7 @@ final class NotificationJobsContextTest extends TestCase
         yield 'log cleanup' => [LogCleanupJob::class];
         yield 'cache maintenance' => [CacheMaintenanceJob::class];
         yield 'database backup' => [DatabaseBackupJob::class];
+        yield 'scheduled notifications' => [ScheduledNotificationsJob::class];
     }
 
     /**

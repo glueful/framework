@@ -91,7 +91,20 @@ trait ResponseCachingTrait
             $tags[] = 'user:' . $this->currentUser->uuid();
         }
 
-        return $this->getCacheStore()->remember($cacheKey, $callback, $ttl);
+        $store = $this->getCacheStore();
+        $computed = false;
+        $value = $store->remember($cacheKey, function () use ($callback, &$computed) {
+            $computed = true;
+            return $callback();
+        }, $ttl);
+
+        // Associate the tags with the entry it just wrote, so invalidateCache()/invalidateTags()
+        // can evict it. A cache hit already carries its tags from the write that stored it.
+        if ($computed && $tags !== []) {
+            $store->addTags($cacheKey, array_values(array_unique(array_map('strval', $tags))));
+        }
+
+        return $value;
     }
 
     /**

@@ -507,7 +507,9 @@ class Connection implements DatabaseInterface
      */
     private function prepareSQLiteDSN(string $dbPath): string
     {
-        @mkdir(dirname($dbPath), 0755, true); // Ensure directory exists
+        if ($dbPath !== ':memory:' && !str_starts_with($dbPath, 'file:')) {
+            @mkdir(dirname($dbPath), 0755, true); // Ensure directory exists
+        }
         return "sqlite:{$dbPath}";
     }
 
@@ -524,8 +526,11 @@ class Connection implements DatabaseInterface
             $path = 'storage/database/glueful.sqlite';
         }
 
-        // If absolute, use as-is
+        // In-memory (`:memory:`) and `file:` URI databases are not filesystem paths — never
+        // prefix them with the project root (that created a file literally named `:memory:`).
+        // If absolute, use as-is.
         if (
+            $path === ':memory:' || str_starts_with($path, 'file:') ||
             str_starts_with($path, '/') || str_starts_with($path, DIRECTORY_SEPARATOR) ||
             (PHP_OS_FAMILY === 'Windows' && preg_match('/^[a-zA-Z]:/', $path) === 1)
         ) {

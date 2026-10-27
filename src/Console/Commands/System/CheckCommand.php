@@ -214,9 +214,10 @@ class CheckCommand extends BaseCommand
                 $issues[] = 'APP_DEBUG should be false in production';
             }
 
-            $jwtSecret = getenv('JWT_SECRET');
-            if ($jwtSecret === false || strlen($jwtSecret) < 32) {
-                $issues[] = 'JWT_SECRET must be set and at least 32 characters';
+            // JWT_KEY is the signing key config/session.php reads (JWT_SECRET was never used).
+            $jwtKey = getenv('JWT_KEY');
+            if ($jwtKey === false || strlen($jwtKey) < 32) {
+                $issues[] = 'JWT_KEY must be set and at least 32 characters';
             }
 
             $logToFile = $this->envBool('LOG_TO_FILE', true);

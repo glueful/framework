@@ -58,7 +58,7 @@ class SQLiteSqlGenerator implements SqlGeneratorInterface
 
         // Add columns
         foreach ($table->columns as $column) {
-            $parts[] = '  ' . $this->buildColumnDefinition($column);
+            $parts[] = '  ' . $this->buildColumnDefinition($column, $table->name);
         }
 
         // Add primary key (if not already defined by column)
@@ -151,7 +151,7 @@ class SQLiteSqlGenerator implements SqlGeneratorInterface
         // Add columns (supported in SQLite)
         if (isset($changes['add_columns']) && $changes['add_columns'] !== []) {
             foreach ($changes['add_columns'] as $column) {
-                $columnDef = $this->buildColumnDefinition($column);
+                $columnDef = $this->buildColumnDefinition($column, $table->name);
                 $statements[] = "ALTER TABLE {$tableName} ADD COLUMN {$columnDef};";
             }
         }
@@ -231,7 +231,7 @@ class SQLiteSqlGenerator implements SqlGeneratorInterface
     public function addColumn(string $table, ColumnDefinition $column): string
     {
         $tableName = $this->quoteIdentifier($table);
-        $columnDef = $this->buildColumnDefinition($column);
+        $columnDef = $this->buildColumnDefinition($column, $table);
 
         return "ALTER TABLE {$tableName} ADD COLUMN {$columnDef};";
     }
@@ -595,13 +595,38 @@ class SQLiteSqlGenerator implements SqlGeneratorInterface
     }
 
     /**
+     * SQLite has no column-level ON UPDATE clause, so useCurrentOnUpdate() cannot
+     * be honoured — fail closed instead of silently creating a column that never
+     * auto-updates. Use a trigger or set the timestamp in application code.
+     *
+     * @throws UnsupportedSchemaOperationException
+     */
+    private function rejectOnUpdateTimestamp(ColumnDefinition $column, string $table): void
+    {
+        if (($column->options['onUpdate'] ?? null) === null) {
+            return;
+        }
+
+        throw UnsupportedSchemaOperationException::forFeature(
+            $table,
+            'column_on_update',
+            "useCurrentOnUpdate() on column \"{$column->name}\"",
+            'SQLite has no ON UPDATE CURRENT_TIMESTAMP column clause; maintain the value with '
+            . 'a trigger or in application code'
+        );
+    }
+
+    /**
      * Build column definition string
      *
      * @param  ColumnDefinition $column Column definition
+     * @param  string           $table  Owning table (for error reporting)
      * @return string Column definition SQL
      */
-    private function buildColumnDefinition(ColumnDefinition $column): string
+    private function buildColumnDefinition(ColumnDefinition $column, string $table): string
     {
+        $this->rejectOnUpdateTimestamp($column, $table);
+
         $parts = [];
 
         // Column name and type

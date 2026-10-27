@@ -4,26 +4,28 @@ declare(strict_types=1);
 
 namespace Glueful\Validation\Rules;
 
-use Glueful\Bootstrap\ApplicationContext;
-use Glueful\Validation\Contracts\Rule;
+use Glueful\Validation\Contracts\DatabaseAwareRule;
+use Glueful\Validation\Support\ResolvesRuleConnection;
 use PDO;
 
 /**
  * DbUnique rule - validates that a value is unique in a database table
  *
- * Supports both direct PDO injection and container-resolved PDO.
+ * Supports direct PDO/Connection injection; otherwise the Validator supplies its
+ * connection. Fails closed (LogicException) when no connection is available.
  *
  * @example
  * // Direct PDO injection
  * new DbUnique($pdo, 'users', 'email')
  *
- * // String syntax (PDO resolved from container)
+ * // String syntax (connection supplied by the Validator)
  * 'unique:users,email'
  * 'unique:users,email,123'  // Exclude ID 123
  */
-final class DbUnique implements Rule
+final class DbUnique implements DatabaseAwareRule
 {
-    private ?PDO $pdo;
+    use ResolvesRuleConnection;
+
     private string $table;
     private ?string $column;
     private string|int|null $exceptId;
@@ -59,20 +61,10 @@ final class DbUnique implements Rule
             $this->exceptId = $exceptId;
         } else {
             // String syntax without PDO
-            $this->pdo = null;
             $this->table = $pdoOrTable;
             $this->column = $tableOrColumn;
             $this->exceptId = $columnOrExceptId;
         }
-    }
-
-    /**
-     * Set PDO instance for database connection
-     */
-    public function setPdo(PDO $pdo): self
-    {
-        $this->pdo = $pdo;
-        return $this;
     }
 
     /**
@@ -87,25 +79,7 @@ final class DbUnique implements Rule
         $field = $context['field'] ?? 'field';
         $column = $this->column ?? $field;
 
-        // Get PDO from context or container
-        $pdo = $this->pdo;
-
-        if ($pdo === null && isset($context['pdo'])) {
-            $pdo = $context['pdo'];
-        }
-
-        if ($pdo === null && ($context['context'] ?? null) instanceof ApplicationContext) {
-            try {
-                $pdo = container($context['context'])->get(PDO::class);
-            } catch (\Throwable) {
-                // PDO not available in container
-            }
-        }
-
-        if ($pdo === null) {
-            // If we can't access the database, skip the check
-            return null;
-        }
+        $pdo = $this->resolvePdo($context, 'unique', (string) $field);
 
         // Validate table and column names to prevent SQL injection
         if (preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $this->table) !== 1) {
@@ -135,7 +109,7 @@ final class DbUnique implements Rule
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
 
-        if ($stmt->fetchColumn()) {
+        if ($stmt->fetchColumn() !== false) {
             return "The {$field} has already been taken.";
         }
 

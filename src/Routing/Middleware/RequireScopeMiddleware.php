@@ -6,6 +6,7 @@ namespace Glueful\Routing\Middleware;
 
 use Glueful\Auth\ApiKey\ApiKeyService;
 use Glueful\Auth\ApiKey\Exceptions\InsufficientScopeException;
+use Glueful\Auth\UserIdentity;
 use Glueful\Routing\RouteMiddleware;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -14,8 +15,9 @@ use Symfony\Component\HttpFoundation\Response;
  * Enforces #[RequireScope] declarations on routes.
  *
  * Reads the route's scope config (set by AttributeRouteLoader) and the
- * authenticated key's scopes (set by ApiKeyAuthenticationProvider into
- * the 'api_key_scopes' request attribute). For each attribute entry, at
+ * request's granted scopes: an API key's (the 'api_key_scopes' attribute set by
+ * ApiKeyAuthenticationProvider) or, for JWT/identity auth, the scopes() of the
+ * 'auth.user' UserIdentity set by AuthMiddleware. For each attribute entry, at
  * least one of its scopes must satisfy a granted scope (OR within). Every
  * attribute entry must independently pass (AND across attributes).
  */
@@ -49,22 +51,12 @@ final class RequireScopeMiddleware implements RouteMiddleware
             return $next($request);
         }
 
-        // A #[RequireScope] route requires scope-bearing (API-key) authentication. If the
-        // request carries no api_key_scopes attribute at all, it was not authenticated via
-        // a path that grants scopes (e.g. a JWT request) -- deny, rather than letting the
-        // "empty scopes = unrestricted key" rule treat the absence as full access.
-        if (!$request->attributes->has('api_key_scopes')) {
+        $grantedScopes = $this->grantedScopes($request);
+        if ($grantedScopes === null) {
             throw new InsufficientScopeException(
-                'Insufficient scope: this route requires a scoped API key'
+                'Insufficient scope: this route requires a scoped credential'
             );
         }
-
-        $granted = $request->attributes->get('api_key_scopes', []);
-        if (!is_array($granted)) {
-            $granted = [];
-        }
-        /** @var array<int, string> $grantedScopes */
-        $grantedScopes = array_values(array_filter($granted, 'is_string'));
 
         foreach ($config as $requiredAnyOf) {
             $satisfied = false;
@@ -83,5 +75,35 @@ final class RequireScopeMiddleware implements RouteMiddleware
         }
 
         return $next($request);
+    }
+
+    /**
+     * The scopes the request was granted, or null when it carries no scope-bearing credential.
+     *
+     * - API key: the `api_key_scopes` attribute is authoritative whenever present (API-key
+     *   requests also carry a synthesised `auth.user`, which must not widen the key). An empty
+     *   set is an unrestricted key and stays [], which ApiKeyService::scopeSatisfies() accepts.
+     * - JWT / identity: the `auth.user` UserIdentity's scopes(). Unlike a key, an EMPTY identity
+     *   scope set grants nothing, so it maps to null (denied) rather than [] (unrestricted).
+     * - Neither (unauthenticated): null, denied — absence is never treated as full access.
+     *
+     * @return array<int, string>|null
+     */
+    private function grantedScopes(Request $request): ?array
+    {
+        if ($request->attributes->has('api_key_scopes')) {
+            $granted = $request->attributes->get('api_key_scopes', []);
+
+            return array_values(array_filter(is_array($granted) ? $granted : [], 'is_string'));
+        }
+
+        $identity = $request->attributes->get('auth.user');
+        if ($identity instanceof UserIdentity) {
+            $scopes = array_values(array_filter($identity->scopes(), 'is_string'));
+
+            return $scopes === [] ? null : $scopes;
+        }
+
+        return null;
     }
 }

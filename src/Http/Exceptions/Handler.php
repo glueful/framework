@@ -142,6 +142,14 @@ class Handler implements ExceptionHandlerInterface
     ];
 
     /**
+     * Channel mappings registered through mapChannel() — an explicit app decision, consulted
+     * before every built-in rule (including the framework-origin heuristic).
+     *
+     * @var array<string, string>
+     */
+    protected array $appChannelMap = [];
+
+    /**
      * Custom exception renderers
      *
      * @var array<class-string<Throwable>, callable(Throwable, ?Request): Response>
@@ -340,6 +348,11 @@ class Handler implements ExceptionHandlerInterface
      */
     protected function resolveLogChannel(Throwable $e): string
     {
+        $appChannel = $this->resolveAppChannel($e);
+        if ($appChannel !== null) {
+            return $appChannel;
+        }
+
         // Typed database failures route to the database channel. This check
         // must precede isFrameworkException(): these exceptions are
         // constructed inside framework src/, so the origin check would
@@ -359,6 +372,25 @@ class Handler implements ExceptionHandlerInterface
         }
 
         return 'error';
+    }
+
+    /**
+     * The channel of the most specific mapChannel() entry matching the exception, so a mapping for
+     * a subclass beats one for its parent whatever order they were registered in.
+     */
+    private function resolveAppChannel(Throwable $e): ?string
+    {
+        $matchedClass = null;
+        foreach ($this->appChannelMap as $exceptionClass => $channel) {
+            if (!$e instanceof $exceptionClass) {
+                continue;
+            }
+            if ($matchedClass === null || is_a($exceptionClass, $matchedClass, true)) {
+                $matchedClass = $exceptionClass;
+            }
+        }
+
+        return $matchedClass === null ? null : $this->appChannelMap[$matchedClass];
     }
 
     /**
@@ -804,6 +836,9 @@ class Handler implements ExceptionHandlerInterface
     /**
      * Register a custom channel mapping for an exception class
      *
+     * App mappings take precedence over the built-in rules (database routing, the
+     * framework-origin heuristic, default mappings); the most specific matching class wins.
+     *
      * @param class-string<Throwable> $exceptionClass
      * @param string $channel Log channel name
      * @return static
@@ -811,6 +846,7 @@ class Handler implements ExceptionHandlerInterface
     public function mapChannel(string $exceptionClass, string $channel): static
     {
         $this->channelMap[$exceptionClass] = $channel;
+        $this->appChannelMap[$exceptionClass] = $channel;
 
         return $this;
     }

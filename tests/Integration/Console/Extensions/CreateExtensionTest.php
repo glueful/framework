@@ -6,6 +6,9 @@ namespace Glueful\Tests\Integration\Console\Extensions;
 
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Console\Commands\Extensions\CreateCommand;
+use Glueful\Database\Migrations\MigrationPriority;
+use Glueful\Extensions\Schema\DescriptorMode;
+use Glueful\Extensions\Schema\MigrationDescriptor;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -70,7 +73,33 @@ final class CreateExtensionTest extends TestCase
         $this->assertFileExists($extDir . '/src/WidgetsServiceProvider.php');
         $this->assertFileExists($extDir . '/routes/routes.php');
         $this->assertFileExists($extDir . '/config/widgets.php');
-        $this->assertDirectoryExists($extDir . '/database/migrations');
+        $this->assertDirectoryExists($extDir . '/migrations');
+        // An empty dir is not committed by git; a missing declared path fails descriptor resolution.
+        $this->assertFileExists($extDir . '/migrations/.gitkeep');
+        $this->assertDirectoryDoesNotExist($extDir . '/database/migrations');
+
+        // Since 1.80 an installed package must declare its schema or enabling throws
+        // UndeclaredSchemaException; the scaffold declares the flat migrations/ lane.
+        $this->assertSame(
+            [['id' => 'default', 'path' => 'migrations', 'priority' => 'default', 'mode' => 'on_enable']],
+            $composer['extra']['glueful']['migrations']
+        );
+        foreach ($composer['extra']['glueful']['migrations'] as $row) {
+            new MigrationDescriptor(
+                id: $row['id'],
+                package: $composer['name'],
+                packageType: $composer['type'],
+                relativePath: $row['path'],
+                priority: MigrationPriority::DEFAULT,
+                mode: DescriptorMode::from($row['mode']),
+            );
+        }
+
+        // The declaration registers the lane; a provider call for a described path is redundant.
+        $provider = (string) file_get_contents($extDir . '/src/WidgetsServiceProvider.php');
+        $this->assertStringNotContainsString('loadMigrationsFrom', $provider);
+        // The commented mergeConfig hint must point at the config file the scaffold writes.
+        $this->assertStringContainsString("/../config/widgets.php", $provider);
 
         // Generated provider stub must be syntactically valid PHP.
         $lint = shell_exec('php -l ' . escapeshellarg($extDir . '/src/WidgetsServiceProvider.php') . ' 2>&1');

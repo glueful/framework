@@ -223,9 +223,10 @@ class CSRFMiddleware implements RouteMiddleware
     public function handle(Request $request, callable $next, mixed ...$params): mixed
     {
         // Extract parameters if provided via route configuration
-        $tokenLifetime = isset($params[0]) && is_int($params[0]) ? $params[0] : $this->tokenLifetime;
-        $useDoubleSubmit = isset($params[1]) && is_bool($params[1]) ? $params[1] : $this->useDoubleSubmit;
-        $validateOrigin = isset($params[2]) && is_bool($params[2]) ? $params[2] : $this->validateOrigin;
+        // Route definitions ("csrf:3600,false") deliver strings; MiddlewareParams accepts both.
+        $tokenLifetime = MiddlewareParams::int($params[0] ?? null) ?? $this->tokenLifetime;
+        $useDoubleSubmit = MiddlewareParams::bool($params[1] ?? null) ?? $this->useDoubleSubmit;
+        $validateOrigin = MiddlewareParams::bool($params[2] ?? null) ?? $this->validateOrigin;
 
         // Skip if CSRF protection is disabled globally
         if (!$this->enabled) {
@@ -1059,6 +1060,35 @@ class CSRFMiddleware implements RouteMiddleware
         }
 
         return config($this->context, $key, $default);
+    }
+
+    /**
+     * Build the middleware from config/security.php's `csrf` block.
+     *
+     * Maps `enabled`, `tokenLifetime`, `useDoubleSubmit` and `exemptRoutes` onto the
+     * constructor; an absent or unparseable key falls back to the constructor default.
+     * (`allow_missing_origin`, `skip_for_bearer_auth` and `rate_limit_fail_closed` are
+     * read lazily from config at request time via the context.)
+     */
+    public static function fromConfig(
+        ApplicationContext $context,
+        ?ContainerInterface $container = null
+    ): self {
+        $csrf = config($context, 'security.csrf', []);
+        $csrf = is_array($csrf) ? $csrf : [];
+
+        $exemptRoutes = is_array($csrf['exemptRoutes'] ?? null)
+            ? array_values(array_filter($csrf['exemptRoutes'], 'is_string'))
+            : [];
+
+        return new self(
+            exemptRoutes: $exemptRoutes,
+            tokenLifetime: MiddlewareParams::int($csrf['tokenLifetime'] ?? null) ?? self::DEFAULT_TOKEN_LIFETIME,
+            useDoubleSubmit: MiddlewareParams::bool($csrf['useDoubleSubmit'] ?? null) ?? false,
+            enabled: MiddlewareParams::bool($csrf['enabled'] ?? null) ?? true,
+            container: $container,
+            context: $context
+        );
     }
 
     /**

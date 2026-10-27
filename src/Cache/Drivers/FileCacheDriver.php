@@ -47,6 +47,12 @@ class FileCacheDriver implements CacheStore
     /** @var string Extension for sorted set files */
     private const ZSET_EXT = '.zset';
 
+    /** @var string Extension for tag index files (key list per tag) */
+    private const TAG_EXT = '.tag';
+
+    /** @var string Namespace hashed in front of a tag name, so a tag never maps to a key's file */
+    private const TAG_NAMESPACE = '_gf_tag:';
+
     /** @var bool Shard files into subdirectories based on hash */
     private bool $shardDirectories = false;
 
@@ -170,9 +176,24 @@ class FileCacheDriver implements CacheStore
     /** Execute a callback with an exclusive per-key file lock */
     private function withLock(string $key, callable $fn): mixed
     {
-        $filePath = $this->getFilePath($key);
-        $lockPath = $filePath . '.lock';
-        $lockFile = fopen($lockPath, 'c');
+        return $this->withLockFile($this->getFilePath($key) . '.lock', $fn, true);
+    }
+
+    /**
+     * Execute a callback while holding an exclusive flock on $lockPath.
+     *
+     * @param bool $unlinkAfter Remove the lock file afterwards. Unlinking lets a waiter that opened
+     *                          the old inode and a newcomer that created a fresh one both "hold" the
+     *                          lock, so read-modify-write paths that must not lose updates (the tag
+     *                          indexes) keep their lock file in place; clear() sweeps it.
+     */
+    private function withLockFile(string $lockPath, callable $fn, bool $unlinkAfter): mixed
+    {
+        $dir = dirname($lockPath);
+        if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) {
+            return null;
+        }
+        $lockFile = @fopen($lockPath, 'c');
         if ($lockFile === false) {
             return null;
         }
@@ -184,7 +205,9 @@ class FileCacheDriver implements CacheStore
         } finally {
             flock($lockFile, LOCK_UN);
             fclose($lockFile);
-            @unlink($lockPath);
+            if ($unlinkAfter) {
+                @unlink($lockPath);
+            }
         }
     }
 
@@ -1014,7 +1037,7 @@ class FileCacheDriver implements CacheStore
                 'counters' => true,
                 'expiration' => true,
                 'bulk_operations' => true,
-                'tags' => false,             // Not supported; use Redis driver for tag invalidation
+                'tags' => true,              // Per-tag index files, flock-guarded
                 'key_enumeration' => true,
             ],
             'data_types' => ['string', 'integer', 'float', 'boolean', 'array', 'object'],
@@ -1025,36 +1048,108 @@ class FileCacheDriver implements CacheStore
         ];
     }
 
-    /**
-     * Tag-based invalidation is not supported by this driver.
-     *
-     * Implementing tag indexes on the filesystem would require maintaining
-     * separate index files and is intentionally out of scope for the local
-     * file driver. Callers should branch on
-     * `getCapabilities()['features']['tags']` and fall back to direct key
-     * deletion, or switch to the Redis driver when tag-based invalidation
-     * is required.
-     *
-     * @param string $key Cache key
-     * @param list<string> $tags Array of tags
-     * @return bool Always false
-     */
-    public function addTags(string $key, array $tags): bool
+    /** Index file holding the keys tagged with $tag (hashed under a tag-only namespace + extension). */
+    private function getTagIndexPath(string $tag): string
     {
-        return false;
+        return $this->getFilePath(self::TAG_NAMESPACE . $tag, self::TAG_EXT);
     }
 
     /**
-     * Tag-based invalidation is not supported by this driver.
+     * Read a tag index as a key set. A missing or unreadable index is an empty set.
      *
-     * See {@see addTags()} for the rationale and recommended alternatives.
+     * @return array<string, true>
+     */
+    private function loadTagIndex(string $indexPath): array
+    {
+        $index = $this->loadFromFile($indexPath);
+        if (!is_array($index)) {
+            return [];
+        }
+        $keys = [];
+        foreach (array_keys($index) as $key) {
+            $keys[(string) $key] = true;
+        }
+        return $keys;
+    }
+
+    /**
+     * Associate a cache key with one or more tags for grouped invalidation.
+     *
+     * Each tag owns an index file (`md5('_gf_tag:' . $tag) . '.tag'`) listing its keys; the
+     * namespace and the extension keep it from ever sharing a path with an entry's .cache/.meta
+     * files. The read-modify-write of each index runs under an exclusive flock on a per-tag lock
+     * file, so concurrent requests tagging the same tag don't drop each other's keys. Like the Redis
+     * driver, tagging does not require the key to exist and re-tagging a pair is idempotent.
+     *
+     * @param string $key Cache key
+     * @param list<string> $tags Array of tags
+     * @return bool True if every tag index was updated
+     */
+    public function addTags(string $key, array $tags): bool
+    {
+        if ($tags === []) {
+            return true;
+        }
+
+        $this->validateKey($key);
+
+        $success = true;
+        foreach (array_unique(array_map('strval', $tags)) as $tag) {
+            $indexPath = $this->getTagIndexPath($tag);
+            $result = $this->withLockFile($indexPath . '.lock', function () use ($indexPath, $key): bool {
+                $index = $this->loadTagIndex($indexPath);
+                if (isset($index[$key])) {
+                    return true;
+                }
+                $index[$key] = true;
+                return $this->saveToFile($indexPath, $index);
+            }, false);
+            $success = $success && $result === true;
+        }
+
+        return $success;
+    }
+
+    /**
+     * Invalidate all cache entries associated with the given tags.
+     *
+     * For each tag, under its index lock: delete every indexed key, then the index itself. Index
+     * entries whose key was already deleted, expired or never written are harmless (deleting a
+     * missing key is a no-op), and an unknown tag is a no-op. An overwritten key stays tagged until
+     * the tag is invalidated, matching the Redis driver.
      *
      * @param list<string> $tags Array of tags
-     * @return bool Always false
+     * @return bool True if invalidation completed without error
      */
     public function invalidateTags(array $tags): bool
     {
-        return false;
+        if ($tags === []) {
+            return true;
+        }
+
+        $success = true;
+        foreach (array_unique(array_map('strval', $tags)) as $tag) {
+            $indexPath = $this->getTagIndexPath($tag);
+            $result = $this->withLockFile($indexPath . '.lock', function () use ($indexPath): bool {
+                $ok = true;
+                foreach (array_keys($this->loadTagIndex($indexPath)) as $key) {
+                    $ok = $this->del((string) $key) && $ok;
+                }
+                $relative = $this->toRelative($indexPath);
+                $disk = $this->storage->disk($this->disk);
+                try {
+                    if ($disk->fileExists($relative)) {
+                        $disk->delete($relative);
+                    }
+                } catch (\Throwable) {
+                    $ok = false;
+                }
+                return $ok;
+            }, false);
+            $success = $success && $result === true;
+        }
+
+        return $success;
     }
 
     /**

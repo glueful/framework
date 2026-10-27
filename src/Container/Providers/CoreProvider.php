@@ -189,9 +189,15 @@ final class CoreProvider extends BaseServiceProvider
         $defs['cache.store'] = new FactoryDefinition(
             'cache.store',
             /** @return \Glueful\Cache\CacheStore */
-            function () {
+            function (\Psr\Container\ContainerInterface $c) {
                 // With the context: the app's cache settings and paths, not the framework's own folder.
-                return \Glueful\Cache\CacheFactory::create('', $this->context);
+                // Wrapped so hit/miss events dispatch from one place for every driver (no-op unobserved).
+                return new \Glueful\Cache\EventDispatchingCacheStore(
+                    \Glueful\Cache\CacheFactory::create('', $this->context),
+                    static fn(): ?\Glueful\Events\EventService => $c->has(\Glueful\Events\EventService::class)
+                        ? $c->get(\Glueful\Events\EventService::class)
+                        : null
+                );
             }
         );
 
@@ -432,8 +438,10 @@ final class CoreProvider extends BaseServiceProvider
             }
         );
 
-        $defs['permission.manager'] = new FactoryDefinition(
-            'permission.manager',
+        // Canonical id is the class (constructor injection / autowiring resolve by type);
+        // 'permission.manager' is a string alias to the SAME shared instance.
+        $defs[\Glueful\Permissions\PermissionManager::class] = new FactoryDefinition(
+            \Glueful\Permissions\PermissionManager::class,
             function (\Psr\Container\ContainerInterface $c) {
                 $manager = \Glueful\Permissions\PermissionManager::getInstance(
                     $c->get(\Glueful\Auth\SessionCacheManager::class)
@@ -450,6 +458,10 @@ final class CoreProvider extends BaseServiceProvider
 
                 return $manager;
             }
+        );
+        $defs['permission.manager'] = new AliasDefinition(
+            'permission.manager',
+            \Glueful\Permissions\PermissionManager::class
         );
         $defs[\Glueful\Permissions\PermissionCache::class] =
             $this->autowire(\Glueful\Permissions\PermissionCache::class);
@@ -630,8 +642,14 @@ final class CoreProvider extends BaseServiceProvider
         // Middleware registrations (autowire with sensible defaults)
         $defs[\Glueful\Routing\Middleware\AuthMiddleware::class] =
             $this->autowire(\Glueful\Routing\Middleware\AuthMiddleware::class);
-        $defs[\Glueful\Routing\Middleware\CSRFMiddleware::class] =
-            $this->autowire(\Glueful\Routing\Middleware\CSRFMiddleware::class);
+        // Built from config/security.php's csrf block (autowiring would use constructor defaults)
+        $defs[\Glueful\Routing\Middleware\CSRFMiddleware::class] = new FactoryDefinition(
+            \Glueful\Routing\Middleware\CSRFMiddleware::class,
+            fn(\Psr\Container\ContainerInterface $c) => \Glueful\Routing\Middleware\CSRFMiddleware::fromConfig(
+                $this->context,
+                $c
+            )
+        );
         $defs[\Glueful\Routing\Middleware\SecurityHeadersMiddleware::class] =
             $this->autowire(\Glueful\Routing\Middleware\SecurityHeadersMiddleware::class);
         $defs[\Glueful\Routing\Middleware\AllowIpMiddleware::class] =
@@ -640,8 +658,17 @@ final class CoreProvider extends BaseServiceProvider
             $this->autowire(\Glueful\Routing\Middleware\AdminPermissionMiddleware::class);
         $defs[\Glueful\Routing\Middleware\RequestResponseLoggingMiddleware::class] =
             $this->autowire(\Glueful\Routing\Middleware\RequestResponseLoggingMiddleware::class);
-        $defs[\Glueful\Routing\Middleware\TracingMiddleware::class] =
-            $this->autowire(\Glueful\Routing\Middleware\TracingMiddleware::class);
+        // Gated by observability.tracing.enabled (TRACING_ENABLED): disabled = pass-through
+        $defs[\Glueful\Routing\Middleware\TracingMiddleware::class] = new FactoryDefinition(
+            \Glueful\Routing\Middleware\TracingMiddleware::class,
+            fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Routing\Middleware\TracingMiddleware(
+                $c->get(\Glueful\Observability\Tracing\TracerInterface::class),
+                filter_var(
+                    config($this->context, 'observability.tracing.enabled', false),
+                    FILTER_VALIDATE_BOOLEAN
+                )
+            )
+        );
         $defs[\Glueful\Routing\Middleware\ConditionalCacheMiddleware::class] =
             $this->autowire(\Glueful\Routing\Middleware\ConditionalCacheMiddleware::class);
         $defs[\Glueful\Routing\Middleware\MetricsMiddleware::class] =
@@ -657,7 +684,7 @@ final class CoreProvider extends BaseServiceProvider
         $defs[\Glueful\Permissions\Middleware\GateAttributeMiddleware::class] = new FactoryDefinition(
             \Glueful\Permissions\Middleware\GateAttributeMiddleware::class,
             fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Permissions\Middleware\GateAttributeMiddleware(
-                $c->get('permission.manager')
+                $c->get(\Glueful\Permissions\PermissionManager::class)
             )
         );
 
@@ -827,10 +854,14 @@ final class CoreProvider extends BaseServiceProvider
             \Glueful\Api\RateLimiting\Middleware\EnhancedRateLimiterMiddleware::class,
             function (\Psr\Container\ContainerInterface $c) {
                 $config = function_exists('config') ? (array) config($this->context, 'api.rate_limiting', []) : [];
+                $events = $c->has(\Glueful\Events\EventService::class)
+                    ? $c->get(\Glueful\Events\EventService::class)
+                    : null;
                 return new \Glueful\Api\RateLimiting\Middleware\EnhancedRateLimiterMiddleware(
                     $c->get(\Glueful\Api\RateLimiting\RateLimitManager::class),
                     $c->get(\Glueful\Api\RateLimiting\RateLimitHeaders::class),
-                    $config
+                    $config,
+                    $events instanceof \Glueful\Events\EventService ? $events : null
                 );
             }
         );

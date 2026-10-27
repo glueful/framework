@@ -10,6 +10,10 @@ use Glueful\Api\RateLimiting\Middleware\EnhancedRateLimiterMiddleware;
 use Glueful\Api\RateLimiting\RateLimitHeaders;
 use Glueful\Api\RateLimiting\RateLimitManager;
 use Glueful\Api\RateLimiting\TierManager;
+use Glueful\Events\Auth\RateLimitExceededEvent;
+use Glueful\Events\EventDispatcher;
+use Glueful\Events\EventService;
+use Glueful\Events\ListenerProvider;
 use Glueful\Routing\Route;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
@@ -79,7 +83,96 @@ final class EnhancedRateLimiterMiddlewareParamsTest extends TestCase
         $this->assertSame([], $parse(['-5', '60']));
     }
 
-    private function middleware(): EnhancedRateLimiterMiddleware
+    public function testThirdParamParsesByWithSameValuesAsBuilder(): void
+    {
+        $parse = function (array $params): array {
+            $method = new ReflectionMethod(EnhancedRateLimiterMiddleware::class, 'getLimitsFromParams');
+            $method->setAccessible(true);
+            return $method->invoke($this->middleware(), $params);
+        };
+
+        $this->assertSame([['attempts' => 5, 'decaySeconds' => 60, 'by' => 'user']], $parse(['5', '60', 'user']));
+        $this->assertSame(
+            [['attempts' => 5, 'decaySeconds' => 60, 'by' => 'endpoint']],
+            $parse(['5', '60', 'endpoint'])
+        );
+        $this->assertSame([['attempts' => 5, 'decaySeconds' => 60, 'by' => 'ip']], $parse(['5', '60', 'ip']));
+        // Unknown values keep the default (ip)
+        $this->assertSame([['attempts' => 5, 'decaySeconds' => 60, 'by' => 'ip']], $parse(['5', '60', 'bogus']));
+    }
+
+    public function testByUserParamKeysByUserAcrossIps(): void
+    {
+        $middleware = $this->middleware();
+        $next = static fn(Request $req): Response => new Response('ok');
+        $user = ['id' => 'user-42'];
+
+        $first = $middleware->handle($this->request(null, '198.51.100.1', $user), $next, '1', '60', 'user');
+        $second = $middleware->handle($this->request(null, '198.51.100.2', $user), $next, '1', '60', 'user');
+
+        $this->assertSame(200, $first->getStatusCode());
+        // Same user from a different IP shares the bucket — previously keyed by IP (200)
+        $this->assertSame(429, $second->getStatusCode());
+    }
+
+    public function testDefaultParamKeysByIp(): void
+    {
+        $middleware = $this->middleware();
+        $next = static fn(Request $req): Response => new Response('ok');
+        $user = ['id' => 'user-42'];
+
+        $first = $middleware->handle($this->request(null, '198.51.100.1', $user), $next, '1', '60');
+        $second = $middleware->handle($this->request(null, '198.51.100.2', $user), $next, '1', '60');
+
+        $this->assertSame(200, $first->getStatusCode());
+        $this->assertSame(200, $second->getStatusCode());
+    }
+
+    public function testLimitedRequestDispatchesRateLimitExceededEvent(): void
+    {
+        $provider = new ListenerProvider();
+        $events = new EventService(new EventDispatcher($provider), $provider);
+        /** @var list<RateLimitExceededEvent> $seen */
+        $seen = [];
+        $events->addListener(RateLimitExceededEvent::class, function (RateLimitExceededEvent $e) use (&$seen): void {
+            $seen[] = $e;
+        });
+
+        $middleware = $this->middleware($events);
+        $next = static fn(Request $req): Response => new Response('ok');
+
+        $middleware->handle($this->request(), $next, '1', '60');
+        $this->assertSame([], $seen, 'Allowed requests must not dispatch the event');
+
+        $limited = $middleware->handle($this->request(), $next, '1', '60');
+
+        $this->assertSame(429, $limited->getStatusCode());
+        $this->assertCount(1, $seen);
+        $this->assertSame('203.0.113.10', $seen[0]->getClientIp());
+        $this->assertSame(1, $seen[0]->getLimit());
+        $this->assertSame(60, $seen[0]->getWindowSeconds());
+        $this->assertSame(2, $seen[0]->getCurrentCount());
+        $this->assertSame('/notiva/devices', $seen[0]->getMetadata('path'));
+    }
+
+    public function testLimitedRequestStillReturns429WhenEventListenerThrows(): void
+    {
+        $provider = new ListenerProvider();
+        $events = new EventService(new EventDispatcher($provider), $provider);
+        $events->addListener(RateLimitExceededEvent::class, static function (): void {
+            throw new \RuntimeException('listener failure');
+        });
+
+        $middleware = $this->middleware($events);
+        $next = static fn(Request $req): Response => new Response('ok');
+
+        $middleware->handle($this->request(), $next, '1', '60');
+        $limited = $middleware->handle($this->request(), $next, '1', '60');
+
+        $this->assertSame(429, $limited->getStatusCode());
+    }
+
+    private function middleware(?EventService $events = null): EnhancedRateLimiterMiddleware
     {
         $manager = new RateLimitManager(
             $this->storage(),
@@ -87,12 +180,18 @@ final class EnhancedRateLimiterMiddlewareParamsTest extends TestCase
             new TierManager(['tiers' => ['anonymous' => ['requests_per_minute' => 1000]]])
         );
 
-        return new EnhancedRateLimiterMiddleware($manager, new RateLimitHeaders());
+        return new EnhancedRateLimiterMiddleware($manager, new RateLimitHeaders(), [], $events);
     }
 
-    private function request(?Route $route = null): Request
+    /**
+     * @param array<string, mixed>|null $user
+     */
+    private function request(?Route $route = null, string $ip = '203.0.113.10', ?array $user = null): Request
     {
-        $request = Request::create('/notiva/devices', 'POST', server: ['REMOTE_ADDR' => '203.0.113.10']);
+        $request = Request::create('/notiva/devices', 'POST', server: ['REMOTE_ADDR' => $ip]);
+        if ($user !== null) {
+            $request->attributes->set('user', $user);
+        }
         if ($route !== null) {
             $request->attributes->set('_route', $route);
         }

@@ -62,6 +62,14 @@ return [
             'enabled' => env('NOTIFICATION_RETRIES_ENABLED', true),
         ],
         [
+            'name' => 'scheduled_notifications',
+            'schedule' => '* * * * *',
+            'handler_class' => 'Glueful\\Queue\\Jobs\\ScheduledNotificationsJob',
+            'parameters' => ['options' => ['limit' => 50]],
+            'description' => 'Deliver scheduled notifications that are due (no-op without notification persistence)',
+            'enabled' => env('SCHEDULED_NOTIFICATIONS_ENABLED', true),
+        ],
+        [
             'name' => 'webhook_cleanup',
             'schedule' => '30 3 * * *',
             'handler_class' => 'Glueful\\Api\\Webhooks\\Jobs\\WebhookCleanupJob',

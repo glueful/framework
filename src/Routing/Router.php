@@ -9,6 +9,7 @@ use Symfony\Component\HttpFoundation\{Request, Response, JsonResponse, StreamedR
 use Glueful\Auth\Attributes\{RequiresPermission, RequiresRole};
 use Glueful\Routing\Internal\Psr15MiddlewareResolverTrait;
 use Psr\Http\Server\MiddlewareInterface as Psr15Middleware;
+use Glueful\Http\Cors;
 use Glueful\Http\Response as ApiResponse;
 use Glueful\Bootstrap\ApplicationContext;
 
@@ -499,7 +500,8 @@ class Router
         }
 
         // Handle Credentials
-        if ((bool) $config['allow_credentials'] && !(bool) $config['allow_all_origins']) {
+        $wildcardListed = is_array($config['allowed_origins']) && in_array('*', $config['allowed_origins'], true);
+        if ((bool) $config['allow_credentials'] && !(bool) $config['allow_all_origins'] && !$wildcardListed) {
             $headers['Access-Control-Allow-Credentials'] = 'true';
         }
 
@@ -570,24 +572,14 @@ class Router
      */
     private function isOriginAllowed(string $origin, array $config): bool
     {
-        // Development mode: allow all if configured
-        if ((bool) $config['development_allow_all']) {
-            return true;
-        }
-
-        // Check exact matches
-        if (in_array($origin, $config['allowed_origins'], true)) {
-            return true;
-        }
-
-        // Check pattern matches
-        foreach ($config['allowed_origin_patterns'] as $pattern) {
-            if (preg_match($pattern, $origin) === 1) {
-                return true;
-            }
-        }
-
-        return false;
+        // Same rule as the actual-response path (Application -> Cors::applyToResponse), so a
+        // preflight-approved origin is never refused on the real request (or vice versa).
+        return Cors::originMatches(
+            $origin,
+            is_array($config['allowed_origins'] ?? null) ? $config['allowed_origins'] : [],
+            is_array($config['allowed_origin_patterns'] ?? null) ? $config['allowed_origin_patterns'] : [],
+            (bool) ($config['development_allow_all'] ?? false)
+        );
     }
 
     public function dispatch(Request $request): Response
@@ -966,6 +958,32 @@ class Router
         }
 
         $middleware = $route->getMiddleware();
+
+        // A route-level rate limit (->rateLimit() builder or #[RateLimit]) is only enforced by
+        // the rate limiter middleware; attach it once unless the route already carries it under
+        // any of its names (incl. "rate_limit:..." string params, which the stored config overrides).
+        if (
+            $route->getRateLimitConfig() !== []
+            && !$this->pipelineHasMiddleware($middleware, [
+                'rate_limit',
+                'enhanced_rate_limit',
+                \Glueful\Api\RateLimiting\Middleware\EnhancedRateLimiterMiddleware::class,
+            ])
+        ) {
+            $middleware[] = 'rate_limit';
+        }
+
+        // #[Fields] (route fields config) is only applied by the field selection middleware.
+        if (
+            $route->getFieldsConfig() !== null
+            && !$this->pipelineHasMiddleware($middleware, [
+                'field_selection',
+                \Glueful\Routing\Middleware\FieldSelectionMiddleware::class,
+            ])
+        ) {
+            $middleware[] = 'field_selection';
+        }
+
         if (!in_array('gate_permissions', $middleware, true) && $this->handlerHasGateAttributes($route->getHandler())) {
             $middleware[] = 'gate_permissions';
         }
@@ -973,6 +991,24 @@ class Router
         $this->pipelineCache[$routeId] = $middleware;
 
         return $middleware;
+    }
+
+    /**
+     * True when the pipeline already contains one of $names (compared on the bare name, so
+     * "rate_limit:100,60" matches "rate_limit").
+     *
+     * @param array<mixed> $middleware
+     * @param array<string> $names
+     */
+    private function pipelineHasMiddleware(array $middleware, array $names): bool
+    {
+        foreach ($middleware as $entry) {
+            if (is_string($entry) && in_array(explode(':', $entry, 2)[0], $names, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function handlerHasGateAttributes(mixed $handler): bool
@@ -1250,8 +1286,8 @@ class Router
     /**
      * Whether the route table was reconstructed from the compiled route cache.
      *
-     * Routes hydrated from cache lose closure handlers and some per-route
-     * metadata (where/name/rateLimit/requireScope/fields), which is why add()
+     * Routes hydrated from cache lose closure handlers and their route name
+     * (per-route rate limit / fields / scope / version config is restored), which is why add()
      * lets a later registration of the same method+path overwrite the hydrated
      * entry instead of rejecting it as a duplicate.
      */
@@ -1372,11 +1408,39 @@ class Router
                     $route->middleware($routeData['middleware']);
                 }
 
+                $this->applyCachedRouteConfig($route, $routeData);
+
                 $reconstructed[$method][] = $route;
             }
         }
 
         return $reconstructed;
+    }
+
+    /**
+     * Restore the per-route config the middleware pipeline reads off the Route object
+     * (see RouteCompiler::compileRouteConfig) onto a cache-hydrated route.
+     *
+     * @param array<string, mixed> $data
+     */
+    private function applyCachedRouteConfig(Route $route, array $data): void
+    {
+        if (isset($data['rate_limit']) && is_array($data['rate_limit']) && $data['rate_limit'] !== []) {
+            $route->setRateLimitConfig($data['rate_limit']);
+        }
+        if (isset($data['rate_limit_cost']) && is_int($data['rate_limit_cost'])) {
+            $route->setRateLimitCost($data['rate_limit_cost']);
+        }
+        // An empty array is meaningful here (bare #[Fields]); only null means "no policy".
+        if (isset($data['fields']) && is_array($data['fields'])) {
+            $route->setFieldsConfig($data['fields']);
+        }
+        if (isset($data['require_scope']) && is_array($data['require_scope']) && $data['require_scope'] !== []) {
+            $route->setRequireScopeConfig($data['require_scope']);
+        }
+        if (isset($data['version']) && is_array($data['version'])) {
+            $route->setVersionConfig($data['version']);
+        }
     }
 
     /**
@@ -1472,6 +1536,8 @@ class Router
             if (isset($data['middleware']) && is_array($data['middleware']) && count($data['middleware']) > 0) {
                 $route->middleware($data['middleware']);
             }
+
+            $this->applyCachedRouteConfig($route, $data);
 
             $reconstructed[$key] = $route;
         }

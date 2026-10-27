@@ -10,6 +10,9 @@ use Glueful\Http\BaselineSecurityHeaders;
 use Glueful\Http\ContentSecurityPolicy;
 use Glueful\Http\Cors;
 use Glueful\Http\Exceptions\Contracts\ExceptionHandlerInterface;
+use Glueful\Events\EventService;
+use Glueful\Events\Http\RequestEvent;
+use Glueful\Events\Http\ResponseEvent;
 use Glueful\Support\SensitiveParamRedactor;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -42,6 +45,7 @@ class Application
         $startTime = microtime(true);
         $requestId = $this->getRequestId();
         $this->beginRequestLifecycle();
+        $this->dispatchHttpEvent(RequestEvent::class, static fn() => new RequestEvent($request));
 
         try {
             // Dispatch via Next-Gen Router
@@ -66,6 +70,8 @@ class Application
 
         // And the baseline safe on every response (nosniff, a referrer policy), where not set.
         (new BaselineSecurityHeaders())->applyToResponse($response);
+
+        $this->dispatchHttpEvent(ResponseEvent::class, static fn() => new ResponseEvent($request, $response));
 
         $totalTime = round((microtime(true) - $startTime) * 1000, 2);
         $this->logger->info(
@@ -124,6 +130,32 @@ class Application
 
         // Fallback request ID generation
         return uniqid('req_', true);
+    }
+
+    /**
+     * Dispatch an HTTP lifecycle event only when something listens for it, so the request path
+     * pays nothing when unused. A missing event service or a failing listener never breaks the
+     * request (EventService::dispatch() isolates listener exceptions; resolution is guarded here).
+     *
+     * @param class-string $eventClass
+     * @param callable(): object $makeEvent
+     */
+    private function dispatchHttpEvent(string $eventClass, callable $makeEvent): void
+    {
+        try {
+            if (!$this->container->has(EventService::class)) {
+                return;
+            }
+            $events = $this->container->get(EventService::class);
+            if ($events instanceof EventService && $events->hasListeners($eventClass)) {
+                $events->dispatch($makeEvent());
+            }
+        } catch (Throwable $e) {
+            $this->logger->warning('HTTP event dispatch failed', [
+                'event' => $eventClass,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function beginRequestLifecycle(): void

@@ -18,10 +18,18 @@ class LockManager implements LockManagerInterface
     private LoggerInterface $logger;
     private string $prefix;
 
+    /**
+     * @param float $defaultTtl Lifetime (seconds) of a lock created without an explicit TTL (config lock.ttl)
+     * @param int $retryDelayMs Pause between attempts in waitAndExecute() (config lock.retry.delay)
+     * @param float $defaultMaxWait waitAndExecute() budget when no $maxWait is passed (config lock.retry.max_wait)
+     */
     public function __construct(
         PersistingStoreInterface $store,
         ?LoggerInterface $logger = null,
-        string $prefix = 'glueful_lock_'
+        string $prefix = 'glueful_lock_',
+        private readonly float $defaultTtl = 300.0,
+        private readonly int $retryDelayMs = 100,
+        private readonly float $defaultMaxWait = 10.0
     ) {
         $this->factory = new LockFactory($store);
         $this->logger = $logger ?? new NullLogger();
@@ -31,6 +39,7 @@ class LockManager implements LockManagerInterface
     public function createLock(string $resource, ?float $ttl = null, ?bool $autoRelease = true): LockInterface
     {
         $key = $this->prefix . $resource;
+        $ttl ??= $this->defaultTtl;
         $symfonyLock = $this->factory->createLock($key, $ttl, $autoRelease ?? true);
 
         $lock = new Lock($symfonyLock, $resource, $ttl);
@@ -143,6 +152,11 @@ class LockManager implements LockManagerInterface
         float $maxWait = 10.0,
         ?float $ttl = null
     ): mixed {
+        // The interface default (10.0) cannot be told apart from an explicit 10.0, so an
+        // omitted argument is detected by arity and replaced with the configured budget.
+        if (func_num_args() < 3) {
+            $maxWait = $this->defaultMaxWait;
+        }
         $lock = $this->createLock($resource, $ttl);
         $startTime = microtime(true);
 
@@ -155,7 +169,7 @@ class LockManager implements LockManagerInterface
                 ));
             }
 
-            usleep(100000); // Sleep for 100ms
+            usleep(max(0, $this->retryDelayMs) * 1000);
         }
 
         try {

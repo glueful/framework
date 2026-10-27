@@ -15,14 +15,11 @@ use Symfony\Component\Console\Output\OutputInterface;
 
 /**
  * Job Scheduler Command
- * - Advanced job scheduling with cron expression validation
- * - Real-time scheduler monitoring and management
- * - Job execution history and performance tracking
- * - Dynamic job registration and configuration
- * - Scheduler health monitoring and alerting
- * - Job dependency management and chaining
- * - Parallel job execution and resource management
- * - Comprehensive logging and debugging capabilities
+ *
+ * Runs and inspects the jobs declared in config/schedule.php (and persisted scheduled_jobs rows):
+ * `run` (due jobs once, `--force` for all), `work` (loop every `--interval` seconds), `list`,
+ * `status` and `health`. Jobs are added, removed or switched off in config/schedule.php.
+ *
  * @package Glueful\Console\Commands\Queue
  */
 #[AsCommand(
@@ -33,20 +30,15 @@ class SchedulerCommand extends BaseCommand
 {
     private JobScheduler $scheduler;
 
-    public function __construct()
-    {
-        parent::__construct();
-    }
-
     protected function configure(): void
     {
         $this->setDescription('Advanced job scheduling and management system')
-             ->setHelp('This command provides comprehensive job scheduling capabilities ' .
-                      'including execution, monitoring, and management of scheduled tasks.')
+             ->setHelp('Runs and inspects scheduled jobs. Jobs are declared (and enabled or ' .
+                      'disabled) in config/schedule.php.')
              ->addArgument(
                  'action',
                  InputArgument::OPTIONAL,
-                 'Action to perform (run, work, list, status, add, remove, enable, disable)',
+                 'Action to perform (run, work, list, status, health)',
                  'run'
              )
              ->addOption(
@@ -62,37 +54,6 @@ class SchedulerCommand extends BaseCommand
                  InputOption::VALUE_REQUIRED,
                  'Maximum number of scheduler runs (0 = unlimited)',
                  '0'
-             )
-             ->addOption(
-                 'job-name',
-                 'j',
-                 InputOption::VALUE_REQUIRED,
-                 'Specific job name for operations'
-             )
-             ->addOption(
-                 'cron',
-                 'c',
-                 InputOption::VALUE_REQUIRED,
-                 'Cron expression for job scheduling'
-             )
-             ->addOption(
-                 'command',
-                 null,
-                 InputOption::VALUE_REQUIRED,
-                 'Command to execute for new jobs'
-             )
-             ->addOption(
-                 'description',
-                 'd',
-                 InputOption::VALUE_REQUIRED,
-                 'Job description'
-             )
-             ->addOption(
-                 'timeout',
-                 't',
-                 InputOption::VALUE_REQUIRED,
-                 'Job execution timeout in seconds',
-                 '300'
              )
              ->addOption(
                  'dry-run',
@@ -127,13 +88,6 @@ class SchedulerCommand extends BaseCommand
                  'Watch mode with real-time updates'
              )
              ->addOption(
-                 'history',
-                 null,
-                 InputOption::VALUE_REQUIRED,
-                 'Show job execution history (last N executions)',
-                 '10'
-             )
-             ->addOption(
                  'filter',
                  null,
                  InputOption::VALUE_REQUIRED,
@@ -153,11 +107,6 @@ class SchedulerCommand extends BaseCommand
                 'work' => $this->executeWork($input),
                 'list' => $this->executeList($input),
                 'status' => $this->executeStatus($input),
-                'add' => $this->executeAdd($input),
-                'remove' => $this->executeRemove($input),
-                'enable' => $this->executeEnable($input),
-                'disable' => $this->executeDisable($input),
-                'history' => $this->executeHistory($input),
                 'health' => $this->executeHealth($input),
                 default => $this->handleUnknownAction($action)
             };
@@ -325,113 +274,6 @@ class SchedulerCommand extends BaseCommand
             $this->io->section('⏳ Next Upcoming Jobs');
             $this->displayUpcomingJobs($upcomingJobs);
         }
-
-        return self::SUCCESS;
-    }
-
-    private function executeAdd(InputInterface $input): int
-    {
-        $jobName = $input->getOption('job-name');
-        $cron = $input->getOption('cron');
-        $command = $input->getOption('command');
-        $description = $input->getOption('description');
-        $timeout = (int) $input->getOption('timeout');
-
-        if (
-            $jobName === false || $jobName === null ||
-            $cron === false || $cron === null ||
-            $command === false || $command === null
-        ) {
-            $this->io->error('Missing required options: --job-name, --cron, and --command are required');
-            return self::FAILURE;
-        }
-
-        $jobName = (string) $jobName;
-        $cron = (string) $cron;
-        $command = (string) $command;
-        $description = $description !== false && $description !== null ? (string) $description : null;
-
-        $this->io->title("➕ Adding New Job: {$jobName}");
-
-        // Validate cron expression
-        if (!$this->validateCronExpression($cron)) {
-            $this->io->error('Invalid cron expression');
-            return self::FAILURE;
-        }
-
-        try {
-            // Note: addJob method would need to be implemented in JobScheduler
-            $this->io->text('Job registration functionality not yet implemented');
-
-            $this->io->success("Job '{$jobName}' added successfully");
-
-            // Show job details
-            $this->displayJobDetails($jobName, $cron, $command, $description, $timeout);
-        } catch (\Exception $e) {
-            $this->io->error("Failed to add job: " . $e->getMessage());
-            return self::FAILURE;
-        }
-
-        return self::SUCCESS;
-    }
-
-    private function executeRemove(InputInterface $input): int
-    {
-        $jobName = $input->getOption('job-name');
-
-        if ($jobName === false || $jobName === null) {
-            $this->io->error('Job name is required: --job-name');
-            return self::FAILURE;
-        }
-
-        $jobName = (string) $jobName;
-
-        $this->io->title("🗑️ Removing Job: {$jobName}");
-
-        if (!$this->io->confirm("Are you sure you want to remove job '{$jobName}'?", false)) {
-            $this->io->text('Operation cancelled');
-            return self::SUCCESS;
-        }
-
-        try {
-            // Note: removeJob method would need to be implemented in JobScheduler
-            $this->io->text('Job removal functionality not yet implemented');
-            $this->io->success("Job '{$jobName}' removed successfully");
-        } catch (\Exception $e) {
-            $this->io->error("Failed to remove job: " . $e->getMessage());
-            return self::FAILURE;
-        }
-
-        return self::SUCCESS;
-    }
-
-    private function executeEnable(InputInterface $input): int
-    {
-        return $this->toggleJobStatus($input, true);
-    }
-
-    private function executeDisable(InputInterface $input): int
-    {
-        return $this->toggleJobStatus($input, false);
-    }
-
-    private function executeHistory(InputInterface $input): int
-    {
-        $jobName = $input->getOption('job-name');
-        $limit = (int) $input->getOption('history');
-
-        $this->io->title('📜 Job Execution History');
-
-        if ($jobName !== false && $jobName !== null) {
-            $jobName = (string) $jobName;
-            $this->io->text("Showing history for job: {$jobName}");
-        } else {
-            $jobName = null;
-        }
-
-        // This would require the scheduler to maintain execution history
-        $this->io->text("History functionality would be implemented here");
-        $this->io->text("Would show last {$limit} executions" . ($jobName !== null ? " for {$jobName}" : ''));
 
         return self::SUCCESS;
     }
@@ -633,32 +475,6 @@ class SchedulerCommand extends BaseCommand
         $this->io->table($rows[0], array_slice($rows, 1));
     }
 
-    private function toggleJobStatus(InputInterface $input, bool $enable): int
-    {
-        $jobName = $input->getOption('job-name');
-        $action = $enable ? 'enable' : 'disable';
-
-        if ($jobName === false || $jobName === null) {
-            $this->io->error("Job name is required: --job-name");
-            return self::FAILURE;
-        }
-
-        $jobName = (string) $jobName;
-
-        $this->io->title(($enable ? '✅ Enabling' : '❌ Disabling') . " Job: {$jobName}");
-
-        try {
-            // Note: toggleJob method would need to be implemented in JobScheduler
-            $this->io->text('Job toggle functionality not yet implemented');
-            $this->io->success("Job '{$jobName}' " . ($enable ? 'enabled' : 'disabled') . " successfully");
-        } catch (\Exception $e) {
-            $this->io->error("Failed to {$action} job: " . $e->getMessage());
-            return self::FAILURE;
-        }
-
-        return self::SUCCESS;
-    }
-
     /**
      * @return array<string, mixed>
      */
@@ -739,28 +555,6 @@ class SchedulerCommand extends BaseCommand
         return count($parts) === 5;
     }
 
-    private function displayJobDetails(
-        string $name,
-        string $cron,
-        string $command,
-        ?string $description,
-        int $timeout
-    ): void {
-        $this->io->section('Job Details');
-
-        $details = [
-            ['Property', 'Value'],
-            ['Name', $name],
-            ['Schedule', $cron],
-            ['Command', $command],
-            ['Description', $description ?? 'No description'],
-            ['Timeout', $timeout . ' seconds'],
-            ['Status', 'Enabled']
-        ];
-
-        $this->io->table($details[0], array_slice($details, 1));
-    }
-
     private function clearScreen(): void
     {
         $this->io->write("\033[2J\033[;H");
@@ -782,7 +576,7 @@ class SchedulerCommand extends BaseCommand
     private function handleUnknownAction(string $action): int
     {
         $this->io->error("Unknown action: {$action}");
-        $this->io->text('Available actions: run, work, list, status, add, remove, enable, disable, history, health');
+        $this->io->text('Available actions: run, work, list, status, health');
         return self::FAILURE;
     }
 }

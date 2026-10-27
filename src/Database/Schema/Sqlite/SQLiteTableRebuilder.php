@@ -618,6 +618,18 @@ final class SQLiteTableRebuilder
      */
     private function compileTarget(SqliteAlterationPlan $plan, SqliteTableSnapshot $snapshot): array
     {
+        foreach ([...$plan->modifyColumns(), ...$plan->addColumns()] as $column) {
+            if (($column->options['onUpdate'] ?? null) !== null) {
+                $this->reject(
+                    $plan->table(),
+                    'column_on_update',
+                    "useCurrentOnUpdate() on column \"{$column->name}\"",
+                    'SQLite has no ON UPDATE CURRENT_TIMESTAMP column clause; maintain the value with '
+                    . 'a trigger or in application code'
+                );
+            }
+        }
+
         $dropped = $this->lowered($plan->dropColumns());
         $renames = $this->renameMap($plan);
         $modifications = [];

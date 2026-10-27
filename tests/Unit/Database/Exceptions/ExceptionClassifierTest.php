@@ -139,9 +139,30 @@ final class ExceptionClassifierTest extends TestCase
             'expected' => ConnectionLostException::class,
         ];
 
-        // SQLite — default config is ambiguous; extended codes honored when supplied.
-        yield 'sqlite default constraint code is ambiguous (23000+19)' => [
+        // SQLite — bare code 19 is disambiguated by SQLite's fixed (non-localized)
+        // message prefix; extended codes honored when supplied.
+        yield 'sqlite bare constraint code + UNIQUE message (23000+19)' => [
             'driver' => 'sqlite', 'errorInfo' => ['23000', 19, 'UNIQUE constraint failed: t.email'],
+            'expected' => UniqueConstraintViolationException::class,
+        ];
+        yield 'sqlite bare constraint code + PRIMARY KEY message (23000+19)' => [
+            'driver' => 'sqlite', 'errorInfo' => ['23000', 19, 'PRIMARY KEY must be unique'],
+            'expected' => UniqueConstraintViolationException::class,
+        ];
+        yield 'sqlite bare constraint code + FOREIGN KEY message (23000+19)' => [
+            'driver' => 'sqlite', 'errorInfo' => ['23000', 19, 'FOREIGN KEY constraint failed'],
+            'expected' => ForeignKeyConstraintViolationException::class,
+        ];
+        yield 'sqlite bare constraint code + NOT NULL message (23000+19)' => [
+            'driver' => 'sqlite', 'errorInfo' => ['23000', 19, 'NOT NULL constraint failed: t.name'],
+            'expected' => NotNullConstraintViolationException::class,
+        ];
+        yield 'sqlite bare constraint code + CHECK message stays generic (23000+19)' => [
+            'driver' => 'sqlite', 'errorInfo' => ['23000', 19, 'CHECK constraint failed: positive'],
+            'expected' => ConstraintViolationException::class,
+        ];
+        yield 'mysql message wording is never consulted' => [
+            'driver' => 'mysql', 'errorInfo' => ['23000', 9999, 'UNIQUE constraint failed: t.email'],
             'expected' => ConstraintViolationException::class,
         ];
         yield 'sqlite busy (5)' => [
@@ -234,5 +255,20 @@ final class ExceptionClassifierTest extends TestCase
         $raw = $this->pdoException('driver exploded', null);
 
         $this->assertSame(DatabaseException::class, get_class($this->classifier->classify($raw, 'mysql')));
+    }
+
+    #[Test]
+    public function realSqliteDuplicateInsertSurfacesAsUniqueViolation(): void
+    {
+        $connection = new \Glueful\Database\Connection([
+            'engine' => 'sqlite',
+            'sqlite' => ['primary' => ':memory:'],
+            'pooling' => ['enabled' => false],
+        ]);
+        $connection->getPDO()->exec('CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL UNIQUE)');
+        $connection->table('users')->insert(['email' => 'a@example.com']);
+
+        $this->expectException(UniqueConstraintViolationException::class);
+        $connection->table('users')->insert(['email' => 'a@example.com']);
     }
 }

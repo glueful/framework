@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Validation;
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Validation\Attributes\ArrayOf;
 use Glueful\Validation\Attributes\FromQuery;
 use Glueful\Validation\Attributes\FromRoute;
@@ -24,8 +25,14 @@ final class RequestDataHydrator
 {
     private const MAX_DEPTH = 5;
 
-    public function __construct(private readonly ?RuleRegistry $ruleRegistry = null)
-    {
+    /**
+     * @param ApplicationContext|null $context Lets DB-backed rules (unique/exists) reach the Connection
+     *                                         and context-registered custom rules resolve.
+     */
+    public function __construct(
+        private readonly ?RuleRegistry $ruleRegistry = null,
+        private readonly ?ApplicationContext $context = null,
+    ) {
     }
 
     /**
@@ -100,7 +107,10 @@ final class RequestDataHydrator
         $errors    = [];
         $validated = $raw;
         if ($rules !== []) {
-            $validator = new Validator((new RuleParser(null, $this->ruleRegistry))->parse($rules));
+            $validator = new Validator(
+                (new RuleParser($this->context, $this->ruleRegistry))->parse($rules),
+                $this->context
+            );
             $errors    = $validator->validate($raw);
             $filtered  = array_intersect_key($validator->filtered(), $raw);
             $validated = $filtered + $raw;

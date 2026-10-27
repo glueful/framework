@@ -32,6 +32,8 @@ class ControllerCommand extends BaseCommand
 {
     private FileFinder $fileFinder;
     private StorageManager $storage;
+    /** Namespace of the generated controller (App\Controllers in an app, else legacy). */
+    private string $namespace = 'Glueful\\Controllers';
 
     protected function configure(): void
     {
@@ -99,7 +101,7 @@ class ControllerCommand extends BaseCommand
                 ['Methods Generated', $this->getMethodsDescription($resource, $api)]
             ]);
 
-            $this->displayNextSteps();
+            $this->displayNextSteps($controllerName);
 
             return self::SUCCESS;
         } catch (\Exception $e) {
@@ -144,7 +146,11 @@ class ControllerCommand extends BaseCommand
         bool $api,
         bool $force
     ): string {
-        $controllersDir = base_path($this->getContext(), 'api/Controllers');
+        // An app (the api-skeleton) autoloads App\\ from app/ — write there so the controller is
+        // loadable. Without app/, keep the legacy api/Controllers + Glueful\\Controllers layout.
+        $hasAppDir = is_dir(base_path($this->getContext(), 'app'));
+        $controllersDir = base_path($this->getContext(), $hasAppDir ? 'app/Controllers' : 'api/Controllers');
+        $this->namespace = $hasAppDir ? 'App\\Controllers' : 'Glueful\\Controllers';
         $fileName = $controllerName . '.php';
         $filePath = $controllersDir . '/' . $fileName;
 
@@ -217,7 +223,7 @@ class ControllerCommand extends BaseCommand
         return <<<PHP
 <?php
 
-namespace Glueful\Controllers;
+namespace {$this->namespace};
 
 use Glueful\Controllers\BaseController;
 use Glueful\Http\Response;
@@ -328,7 +334,7 @@ PHP;
         return <<<PHP
 <?php
 
-namespace Glueful\Controllers;
+namespace {$this->namespace};
 
 use Glueful\Controllers\BaseController;
 use Glueful\Http\Response;
@@ -697,15 +703,20 @@ PHP;
         return 'index, show (basic methods)';
     }
 
-    private function displayNextSteps(): void
+    private function displayNextSteps(string $controllerName): void
     {
+        $fqcn = $this->namespace . '\\' . $controllerName;
         $this->line('');
         $this->info('Next steps:');
         $this->line('1. Add routes for your controller in routes/ directory');
         $this->line('2. Uncomment and implement repository logic');
         $this->line('3. Define validation rules in the TODO sections');
         $this->line('4. Set up authentication and permissions if required');
-        $this->line('5. Register controller in DI container (ControllerServiceProvider)');
+        $this->line(
+            '5. Register the controller in your app provider\'s services() so the router can resolve '
+            . 'it (App\\Providers\\AppServiceProvider, listed in config/serviceproviders.php):'
+        );
+        $this->line("     \\{$fqcn}::class => ['autowire' => true, 'shared' => true],");
         $this->line('6. Test your endpoints');
         $this->line('');
         $this->info('Scaffolded controller follows Glueful patterns:');

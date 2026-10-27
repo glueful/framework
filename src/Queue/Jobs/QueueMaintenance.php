@@ -52,7 +52,13 @@ class QueueMaintenance
         $this->workerMonitor = $this->context !== null
             ? container($this->context)->get(WorkerMonitorInterface::class)
             : new NullWorkerMonitor();
-        $this->failedJobProvider = new FailedJobProvider(null, 'queue_failed_jobs', 5, 30, $this->context);
+        $this->failedJobProvider = new FailedJobProvider(
+            null,
+            'queue_failed_jobs',
+            (int) $this->getConfig('queue.failed.max_retries', 5),
+            (int) $this->getConfig('queue.failed.retention_days', 30),
+            $this->context
+        );
         $this->stats = [
             'start_time' => time(),
             'cleaned_workers' => 0,
@@ -135,7 +141,10 @@ class QueueMaintenance
     private function cleanupFailedJobs(): void
     {
         try {
-            $daysOld = (int) $this->getConfig('queue.maintenance.failed_jobs_cleanup_days', 30);
+            $daysOld = (int) $this->getConfig(
+                'queue.maintenance.failed_jobs_cleanup_days',
+                $this->failedJobProvider->getRetentionDays()
+            );
             $cleaned = $this->failedJobProvider->prune($daysOld);
 
             $this->stats['cleaned_failed_jobs'] = $cleaned;

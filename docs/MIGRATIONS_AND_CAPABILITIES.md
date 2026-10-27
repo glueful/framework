@@ -1,6 +1,6 @@
 # Migrations & Core Capability Schema
 
-Glueful runs **one ordered migration stream** assembled from several owners — the framework core, enabled extensions, and your app — each tracked separately so they never collide. The framework owns the schema for the subsystems whose code it ships (auth, queue, scheduler, notifications, metrics, …), and installs each capability's tables **only when that capability is enabled**. This page explains how that works and how to control it.
+Glueful runs **one ordered migration stream** assembled from several owners — the framework core, enabled extensions, and your app — each tracked separately so they never collide. The framework owns the schema for the subsystems whose code it ships (auth, queue, scheduler, notifications, metrics, …) and always installs it. This page explains how the stream is assembled and how extensions declare their own schema.
 
 ## Ownership model
 
@@ -24,10 +24,11 @@ Priorities (`Glueful\Database\Migrations\MigrationPriority`):
 |---|---|---|
 | `FOUNDATION` | `-200` | framework core schema (auth + capabilities) |
 | `IDENTITY` | `-100` | the user store (`glueful/users`) |
+| `PLATFORM` | `-50` | platform layers that build on identity but precede app schema (e.g. `glueful/tenancy`) |
 | `DEFAULT` | `0` | your app / skeleton |
 | `DEPENDENT` | `100` | things that build on identity (`glueful/aegis` roles/permissions) |
 
-So on a typical stack the order is: **core → users → app → aegis**.
+So on a typical stack the order is: **core → users → platform → app → aegis**.
 
 ## No runtime table creation
 
@@ -41,76 +42,67 @@ If a table is missing you'll get a normal "no such table" error telling you to m
 
 ## Core capability schema
 
-The framework ships its capability migrations under `framework/migrations/<capability>/`, each registered automatically **only when its gate is on**, under source `glueful/framework:<capability>`. Auth is always installed.
+The framework ships its migrations under `framework/migrations/<leaf>/`. Since 1.79 **every leaf is
+registered unconditionally** at `FOUNDATION`, under source `glueful/framework` (auth) or
+`glueful/framework:<leaf>`; they are declared in `Glueful\Extensions\Schema\FrameworkDescriptors`.
 
-| Capability | Tables | Gate | Default |
-|---|---|---|---|
-| **auth** | `auth_sessions`, `auth_refresh_tokens`, `api_keys` | always on | on |
-| **uploads** | `blobs` | `uploads.enabled` | **on** |
-| **queue** | `queue_jobs`, `queue_failed_jobs`, `queue_batches` | `queue.default === 'database'` | on (db driver) |
-| **scheduler** | `scheduled_jobs`, `job_executions` | `capabilities.scheduler` | **on** |
-| **notifications** | `notifications`, `notification_deliveries`, `notification_preferences`, `notification_templates`, `notification_retry_queue` | `capabilities.notifications` | **on** |
-| **metrics** | `api_metrics`, `api_metrics_daily`, `api_rate_limits` | `capabilities.metrics` | **on** |
-| **locks** | `locks` | `lock.default === 'database'` | off (file driver) |
+| Leaf | Tables |
+|---|---|
+| **auth** | `auth_sessions`, `auth_refresh_tokens`, `api_keys` |
+| **extensions** | `extension_operations` (schema-on-enable ledger) |
+| **uploads** | `blobs` |
+| **queue** | `queue_jobs`, `queue_failed_jobs`, `queue_batches` |
+| **scheduler** | `scheduled_jobs`, `job_executions` |
+| **notifications** | `notifications`, `notification_deliveries`, `notification_preferences`, `notification_templates`, `notification_retry_queue` |
+| **metrics** | `api_metrics`, `api_metrics_daily`, `api_rate_limits` |
+| **locks** | `locks` |
 
 > **Archive** is no longer a core capability — it was extracted to the **`glueful/archive` extension**, which owns its own `archive_registry`/`archive_search_index`/`archive_table_stats` schema. Install it with `composer require glueful/archive`.
 
-A capability that's off registers nothing — its tables are never created, and `migrate:status` won't list them.
+Installing a table does not mean the subsystem uses it: the queue uses `queue_jobs` only with
+`QUEUE_CONNECTION=database`, locks use `locks` only with `LOCK_DRIVER=database`, and so on.
 
-## Controlling which capabilities install
+## Runtime persistence switch — `config/capabilities.php`
 
-Two kinds of gates:
-
-**1. Driver/enable config (locks, queue, uploads).** These already have a config signal, so the schema follows it — no separate switch:
-
-```env
-QUEUE_CONNECTION=database   # queue tables install; redis/sync → they don't
-LOCK_DRIVER=database        # locks table installs; file (default) → it doesn't
-UPLOADS_ENABLED=true        # blobs installs
-```
-
-**2. The capability switchboard — `config/capabilities.php`.** Capabilities without a natural driver signal are toggled here:
+`config/capabilities.php` no longer gates migrations. Its one remaining switch decides whether
+notifications **persist** at runtime:
 
 ```php
 // config/capabilities.php
 return [
-    'scheduler'     => env('SCHEDULE_DATABASE_STORE', true),
     'notifications' => env('NOTIFICATIONS_DATABASE_STORE', true),
-    'metrics'       => env('METRICS_DATABASE_STORE', true),
 ];
 ```
 
-Toggle via env (no file edit needed):
-
-```env
-SCHEDULE_DATABASE_STORE=false      # don't install scheduler tables
-NOTIFICATIONS_DATABASE_STORE=false
-METRICS_DATABASE_STORE=false
-```
-
-…or override `config/capabilities.php` in your app for full control. After changing a gate, run `php glueful migrate:run` to apply (or `migrate:rollback` if you turned one off and want to drop its tables).
-
-> **Note:** turning a capability **on** later simply makes its migration *pending* until the next `migrate:run`. Turning it **off** stops it from being registered, but does not drop already-created tables — roll them back explicitly if you want them gone.
+With `NOTIFICATIONS_DATABASE_STORE=false` there is no `database` notification channel and
+scheduling a notification throws. (The former `scheduler` and `metrics` switches were removed:
+nothing read them.)
 
 ## For extension authors
 
-Register your extension's migrations from your service provider with an explicit priority and source:
+Since 1.80 an installed Glueful package **must declare its schema** in `composer.json`; enabling an
+undeclared one throws `UndeclaredSchemaException`. Declare a lane per migrations folder:
 
-```php
-use Glueful\Database\Migrations\MigrationPriority;
-
-public function register(ApplicationContext $context): void
-{
-    $this->loadMigrationsFrom(
-        __DIR__ . '/../migrations',
-        MigrationPriority::IDENTITY,   // or DEFAULT / DEPENDENT
-        'vendor/your-extension'        // your composer package name = the source label
-    );
+```json
+"extra": {
+  "glueful": {
+    "provider": "Vendor\\Ext\\ExtServiceProvider",
+    "migrations": [
+      { "id": "default", "path": "migrations", "priority": "dependent", "mode": "on_enable" }
+    ]
+  }
 }
 ```
 
-- Pick a **priority** that places your tables correctly relative to others (e.g. something that decorates identities runs at `DEPENDENT`, after the user store).
-- Use your **package name** as the source so your applied state is tracked separately.
+- `priority` is one of `foundation | identity | platform | default | dependent` — pick the tier that
+  places your tables correctly (something that decorates identities runs at `dependent`, after the
+  user store).
+- `mode` is `on_enable` for extensions (migrations run when `extensions:enable` runs) or `core`.
+- An optional `verifier` names a schema-verifier class used by `migrate:verify --adopt`.
+- A package with no schema declares `"migrations": "none"`.
+- The declaration registers the lane; the provider does **not** call `loadMigrationsFrom()` for a
+  declared path (a call that contradicts the manifest throws `DescriptorValidationException`).
+  App-local providers that belong to no package can still use `loadMigrationsFrom()`.
 - Reference a user/principal as an **indexed UUID with no cross-package FK** — validate existence in service logic, not via SQL (keeps packages decoupled).
 - Migration filenames must start with three digits (`001_…`); cross-source ordering comes from the priority, not the prefix.
 
@@ -126,7 +118,7 @@ key; after one run on an existing install it is inert.
 In the manifest (`extra.glueful.migrations`):
 
 ```json
-{ "id": "default", "path": "database/migrations", "priority": "default", "mode": "core",
+{ "id": "default", "path": "migrations", "priority": "default", "mode": "core",
   "previous_sources": ["app"] }
 ```
 
@@ -140,7 +132,8 @@ its own (the skeleton's `app`) keeps every other row.
 ```bash
 php glueful migrate:run        # apply all pending (core + extensions + app), in order
 php glueful migrate:status     # show pending/applied with their source
-php glueful migrate:rollback   # roll back the last batch (by source + basename)
+php glueful migrate:rollback   # roll back the last migration (--steps=N for more; by source + basename)
+php glueful migrate:verify     # check applied schema against declarations (--adopt to adopt)
 ```
 
 To see exactly what's installed and from where:

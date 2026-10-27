@@ -7,6 +7,9 @@ use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Glueful\Http\Client;
 use Glueful\Http\Exceptions\HttpClientException;
+use Glueful\Notifications\Contracts\Notifiable;
+use Glueful\Notifications\Contracts\NotificationChannel;
+use Glueful\Notifications\Services\ChannelManager;
 
 /**
  * Service for monitoring memory usage and triggering alerts
@@ -38,6 +41,9 @@ class MemoryAlertingService
      * @var int
      */
     private $alertCount = 0;
+
+    /** Whether the "no email channel registered" warning has been logged (once per instance). */
+    private bool $emailChannelWarned = false;
 
     /**
      * Initialize the Memory Alerting Service
@@ -317,16 +323,125 @@ class MemoryAlertingService
      */
     private function sendEmailAlert(string $level, string $message, array $data): void
     {
-        // Implementation depends on how email notifications are configured in the system
         $emailConfig = $this->getConfig('notifications.email', null);
+        $recipients = is_array($emailConfig) ? ($emailConfig['to'] ?? '') : '';
+        $recipients = array_values(array_filter(
+            array_map('strval', is_array($recipients) ? $recipients : [$recipients]),
+            static fn(string $to): bool => trim($to) !== ''
+        ));
 
-        if ($emailConfig === null || ($emailConfig['to'] ?? '') === '') {
+        if ($recipients === []) {
             $this->logger->warning('Email configuration missing, could not send memory alert');
             return;
         }
 
-        // In a real system, this would use the application's email service
-        $this->logger->info('Would send email alert: ' . $message);
+        // Delivery goes through the notification system's `email` channel (provided by an
+        // extension such as glueful/email-notification). Core ships no mailer of its own.
+        $channel = $this->resolveEmailChannel();
+        if ($channel === null) {
+            if (!$this->emailChannelWarned) {
+                $this->emailChannelWarned = true;
+                $this->logger->warning(
+                    'Memory alert email channel is configured but no "email" notification channel is '
+                    . 'registered; email alerting requires one (e.g. composer require '
+                    . 'glueful/email-notification). Email memory alerts are skipped.'
+                );
+            }
+            return;
+        }
+
+        $subject = sprintf('[%s] %s', strtoupper($level), $message);
+        $payload = [
+            'type' => 'memory_alert',
+            'subject' => $subject,
+            'text_content' => $message . "\n\n"
+                . 'Context: ' . $data['context'] . "\n"
+                . 'Host: ' . (string) $data['hostname'] . "\n"
+                . 'PID: ' . (string) $data['process_id'] . "\n"
+                . 'Time: ' . $data['timestamp'],
+            'html_content' => '<p>' . htmlspecialchars($message, ENT_QUOTES) . '</p>'
+                . '<p>Context: ' . htmlspecialchars((string) $data['context'], ENT_QUOTES)
+                . '<br>Host: ' . htmlspecialchars((string) $data['hostname'], ENT_QUOTES)
+                . '<br>PID: ' . htmlspecialchars((string) $data['process_id'], ENT_QUOTES)
+                . '<br>Time: ' . htmlspecialchars((string) $data['timestamp'], ENT_QUOTES) . '</p>',
+            'priority' => $level === 'critical' ? 'high' : 'normal',
+        ];
+
+        foreach ($recipients as $to) {
+            try {
+                if (!$channel->send($this->alertRecipient($to), $payload)) {
+                    $this->logger->error('Failed to send memory alert email', ['to' => $to]);
+                }
+            } catch (\Throwable $e) {
+                $this->logger->error('Failed to send memory alert email', [
+                    'to' => $to,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * The registered `email` notification channel, or null when none is available.
+     */
+    private function resolveEmailChannel(): ?NotificationChannel
+    {
+        if ($this->context === null || !$this->context->hasContainer()) {
+            return null;
+        }
+
+        try {
+            $container = $this->context->getContainer();
+            if (!$container->has(ChannelManager::class)) {
+                return null;
+            }
+            $manager = $container->get(ChannelManager::class);
+            if (!$manager instanceof ChannelManager || !$manager->hasChannel('email')) {
+                return null;
+            }
+            $channel = $manager->getChannel('email');
+            return $channel->isAvailable() ? $channel : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * An ad-hoc notifiable addressed to one alert recipient.
+     */
+    private function alertRecipient(string $email): Notifiable
+    {
+        return new class ($email) implements Notifiable {
+            public function __construct(private readonly string $email)
+            {
+            }
+
+            public function routeNotificationFor(string $channel)
+            {
+                return $channel === 'email' ? $this->email : null;
+            }
+
+            public function getNotifiableId(): string
+            {
+                return 'memory-alert:' . $this->email;
+            }
+
+            public function getNotifiableType(): string
+            {
+                return 'memory_alert_recipient';
+            }
+
+            public function shouldReceiveNotification(string $notificationType, string $channel): bool
+            {
+                return true;
+            }
+
+            /** @return array<string, mixed> */
+            public function getNotificationPreferences(): array
+            {
+                return [];
+            }
+        };
     }
 
     /**
