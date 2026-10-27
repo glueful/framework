@@ -556,6 +556,7 @@ final class SpyWorkerMonitor implements WorkerMonitorInterface
 final class FakeJob implements JobInterface
 {
     public ?\Throwable $fireThrows = null;
+    public int $fireSleeps = 0;
     public int $releasedWith = 0;
     public int $releaseDelay = 0;
     public ?\Exception $failedWith = null;
@@ -589,6 +590,9 @@ final class FakeJob implements JobInterface
 
     public function fire(): void
     {
+        if ($this->fireSleeps > 0) {
+            sleep($this->fireSleeps);
+        }
         if ($this->fireThrows !== null) {
             throw $this->fireThrows;
         }

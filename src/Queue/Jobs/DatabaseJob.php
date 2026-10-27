@@ -239,6 +239,22 @@ class DatabaseJob implements JobInterface
             return 1;
         }
 
+        // A maxAttempts pushed with the data wins. Otherwise the handler's getMaxAttempts()
+        // decides: the payload's default of 3 was written at push time without asking it.
+        $data = $payload['data'] ?? null;
+        if (is_array($data) && isset($data['maxAttempts']) && is_numeric($data['maxAttempts'])) {
+            return (int) $data['maxAttempts'];
+        }
+
+        $jobClass = $payload['job'] ?? null;
+        if (is_string($jobClass)) {
+            try {
+                return $this->resolve($jobClass)->getMaxAttempts();
+            } catch (\Throwable) {
+                // An unresolvable handler fails in fire(); fall back to the stored value.
+            }
+        }
+
         return (int) ($payload['maxAttempts'] ?? 3);
     }
 

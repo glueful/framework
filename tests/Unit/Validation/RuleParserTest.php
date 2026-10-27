@@ -8,7 +8,7 @@ use PHPUnit\Framework\TestCase;
 use Glueful\Validation\Support\RuleParser;
 use Glueful\Validation\Rules\Required;
 use Glueful\Validation\Rules\Email;
-use Glueful\Validation\Rules\Length;
+use Glueful\Validation\Rules\Size;
 use Glueful\Validation\Rules\Type;
 use Glueful\Validation\Rules\InArray;
 use Glueful\Validation\Rules\Confirmed;
@@ -59,7 +59,7 @@ class RuleParserTest extends TestCase
         $rules = $this->parser->parse(['password' => 'min:8']);
 
         $this->assertCount(1, $rules['password']);
-        $this->assertInstanceOf(Length::class, $rules['password'][0]);
+        $this->assertInstanceOf(Size::class, $rules['password'][0]);
     }
 
     public function testParsesMaxRule(): void
@@ -67,7 +67,26 @@ class RuleParserTest extends TestCase
         $rules = $this->parser->parse(['name' => 'max:255']);
 
         $this->assertCount(1, $rules['name']);
-        $this->assertInstanceOf(Length::class, $rules['name'][0]);
+        $this->assertInstanceOf(Size::class, $rules['name'][0]);
+    }
+
+    public function testMinAndMaxMeasureByTheValuesType(): void
+    {
+        $min = $this->parser->parse(['f' => 'min:3'])['f'][0];
+        $max = $this->parser->parse(['f' => 'max:2.5'])['f'][0];
+
+        // Strings: length.
+        $this->assertNull($min->validate('abc'));
+        $this->assertNotNull($min->validate('ab'));
+        // Numbers: value (integer|min:1 used to fail every int with "Expected string.").
+        $this->assertNull($min->validate(3));
+        $this->assertNotNull($min->validate(2));
+        $this->assertNull($max->validate(2.5));
+        $this->assertNotNull($max->validate(3));
+        // Arrays: item count.
+        $this->assertNull($min->validate([1, 2, 3]));
+        $this->assertNotNull($min->validate([1]));
+        $this->assertNull($min->validate(null));
     }
 
     public function testParsesStringTypeRule(): void

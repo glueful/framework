@@ -738,8 +738,7 @@ class MigrationManager
         }
 
         $apply = function () use ($migration, $filename, $batch, $checksum, $extensionName, $source): void {
-            // Run the migration schema operations - these will execute immediately
-            $migration->up($this->schema());
+            $this->runSchemaStep(fn(SchemaBuilderInterface $schema) => $migration->up($schema));
 
             // The receipt is part of the same unit of work as the DDL.
             $this->db()
@@ -935,8 +934,7 @@ class MigrationManager
         }
 
         try {
-            // Run migration rollback - operations will execute immediately
-            $migration->down($this->schema());
+            $this->runSchemaStep(fn(SchemaBuilderInterface $schema) => $migration->down($schema));
 
             // Delete the version row by (source, migration) — basename alone is not unique.
             // The migrations table has no deleted_at, so delete() now hard-deletes it (the
@@ -961,8 +959,7 @@ class MigrationManager
      */
     public function executeMigration(MigrationInterface $migration): void
     {
-        // Run migration - operations execute immediately
-        $migration->up($this->schema());
+        $this->runSchemaStep(fn(SchemaBuilderInterface $schema) => $migration->up($schema));
     }
 
     /**
@@ -972,7 +969,26 @@ class MigrationManager
      */
     public function executeRollback(MigrationInterface $migration): void
     {
-        // Run migration rollback - operations execute immediately
-        $migration->down($this->schema());
+        $this->runSchemaStep(fn(SchemaBuilderInterface $schema) => $migration->down($schema));
+    }
+
+    /**
+     * Run a migration's up() or down(), then flush the operations it queued. Some builder calls
+     * only queue their SQL (dropTable(), and on MySQL/PostgreSQL the addColumn()/dropColumn()/
+     * index and foreign-key helpers); without the flush they never ran. A failed step clears
+     * its queue so it can't leak into the next migration.
+     *
+     * @param callable(SchemaBuilderInterface): void $step
+     */
+    private function runSchemaStep(callable $step): void
+    {
+        $schema = $this->schema();
+        try {
+            $step($schema);
+            $schema->execute();
+        } catch (\Throwable $e) {
+            $schema->reset();
+            throw $e;
+        }
     }
 }

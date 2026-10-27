@@ -631,9 +631,12 @@ class SchemaBuilder implements SchemaBuilderInterface
             }
 
             $tableBuilder->execute();
+            // On MySQL/PostgreSQL the ALTER is only queued; run it before reporting success.
+            $this->execute();
 
             return ['success' => true];
         } catch (\Exception $e) {
+            $this->reset();
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
@@ -649,8 +652,10 @@ class SchemaBuilder implements SchemaBuilderInterface
     {
         try {
             $this->alterTableBuilder($table)->dropColumn($column)->execute();
+            $this->execute();
             return ['success' => true];
         } catch (\Exception $e) {
+            $this->reset();
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
@@ -678,8 +683,10 @@ class SchemaBuilder implements SchemaBuilderInterface
                 }
 
                 $tableBuilder->execute();
+                $this->execute();
             }
         } catch (\Exception $e) {
+            $this->reset();
             error_log("Failed to add index: " . $e->getMessage());
         }
 
@@ -730,8 +737,10 @@ class SchemaBuilder implements SchemaBuilderInterface
                     ->references($references)
                     ->on($on)
                     ->execute();
+                $this->execute();
             }
         } catch (\Exception $e) {
+            $this->reset();
             error_log("Failed to add foreign key: " . $e->getMessage());
         }
 
@@ -749,8 +758,10 @@ class SchemaBuilder implements SchemaBuilderInterface
     {
         try {
             $this->alterTableBuilder($table)->dropForeign($constraint)->execute();
+            $this->execute();
             return true;
         } catch (\Exception $e) {
+            $this->reset();
             error_log("Failed to drop foreign key: " . $e->getMessage());
             return false;
         }

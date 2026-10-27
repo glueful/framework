@@ -259,7 +259,7 @@ php glueful scaffold:filter UserFilter
 
 # Queue job scaffolding
 php glueful scaffold:job ProcessPayment
-php glueful scaffold:job SendNewsletter --queue=emails --tries=5 --backoff=120
+php glueful scaffold:job SendNewsletter --queue=emails --tries=5
 
 # Event scaffolding
 php glueful event:create UserRegistered
