@@ -21,6 +21,12 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.91.1 — Alshain (Released 2026-10-27)
+- **`migrate:run` works in development again** — the development query monitor writes its query
+  log under `<app>/storage/logs` (it was never given the app's context and resolved the framework's
+  own folder under vendor/), creates the folder, and a failed log write never breaks the command.
+- Notes: patch; no configuration or default changes.
+
 ### 1.91.0 — Alshain (Released 2026-10-27)
 - **Security settings that were ignored now apply** — the `csrf` middleware is built from
   `config/security.php` (exempt routes match under the API prefix, tokens from login and

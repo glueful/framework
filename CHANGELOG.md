@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.91.1] - 2026-10-27 — Alshain
+
 ### Fixed
 - **`migrate:run` no longer fails in development on the query log's path.** With
   `APP_ENV=development` the development query monitor logs each query to a file, but it was never
