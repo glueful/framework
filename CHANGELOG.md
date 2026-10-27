@@ -6,6 +6,58 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.91.3] - 2026-10-27 — Alshain
+
+### Fixed
+- **A job's `getMaxAttempts()` takes effect.** Jobs are pushed by class name, so the payload's
+  `maxAttempts` (default 3) was written without asking the handler, and the worker never saw an
+  override. The database and Redis queued jobs now ask the handler unless a `maxAttempts` was
+  pushed with the data (which still wins; `queue:work --tries` still caps both). Built-in jobs
+  that override it now get their intended attempts too: `DeliverWebhookJob` (when delivery throws; the
+  `api.webhooks.retry.max_attempts` config, default 5), `QueueMaintenance` (2) and `SendNotification`.
+- **`queue:work --timeout` is enforced.** The option (default 60s) was stored and never used. With
+  the pcntl extension, a job that runs past it is released for another attempt (or failed when it
+  has none left) and the worker exits so its process manager starts a fresh one. Without pcntl,
+  jobs are still not timed out.
+- **Jobs from `scaffold:job` keep their context.** The template's constructor took only `$data`,
+  so `$this->context` was null in every scaffolded job; it now takes and forwards
+  `(array $data = [], ?ApplicationContext $context = null)`.
+- **`$schema->dropTable()` in a migration runs.** It only queues its SQL (as do `addColumn()`,
+  `dropColumn()`, `addIndex()`, `addForeignKey()` and `dropForeignKey()` on MySQL/PostgreSQL), and
+  the runner never flushed after `up()`/`down()`: a rollback deleted the ledger row and left the
+  table. The runner now flushes after each step and clears the queue when a step fails, and those
+  helpers flush before reporting success.
+- **Route and query values work with typed `RequestData` fields.** They arrive as strings, so
+  `#[FromQuery, Rule('integer')] public int $page` rejected `?page=2`, and `?page=abc` reached the
+  constructor as a TypeError (500). A route/query string is now converted to the declared
+  `int`/`float`/`bool` before the rules run (`true/false/1/0/yes/no/on/off` for booleans), and one
+  that doesn't convert is a 422 ("The page field must be an integer.").
+- **`min:N` / `max:N` rule strings compare numbers and arrays.** They were string-length checks,
+  so `integer|min:1` failed every integer with "Expected string." They now check a string's
+  length, a number's value or an array's item count (the new `Rules\Size`), as the OpenAPI
+  generator already assumed. `new Rules\Length(...)` is unchanged.
+
+### Removed
+- **`scaffold:job --backoff`, `--timeout` and `--unique`.** The generated `getBackoff()` and
+  `getTimeout()` were never read (retry delays come from `queue.workers.performance.backoff_*`,
+  the timeout from `queue:work --timeout`), and `--unique` emitted `use ShouldBeUnique;`, a trait
+  that doesn't exist, so the class was fatal. The generated job no longer declares a `$queue`
+  property either (the queue is chosen at push time); `--queue` now only sets the printed
+  dispatch example.
+
+### Upgrade Notes
+- **Retry counts can change.** A job class that overrides `getMaxAttempts()` now gets that many
+  attempts (still capped by `queue:work --tries`); before, every such job got 3. Built-in webhook
+  delivery (5 when it throws), queue maintenance (2) and notifications are affected the same way.
+- **Long jobs are now stopped.** With pcntl, a job running past `queue:work --timeout` (default 60s)
+  is released or failed and the worker exits. Run workers under a process manager that restarts
+  them (Supervisor, systemd), and raise `--timeout` (and `queue.connections.*.retry_after`, which
+  must stay above it) for jobs that legitimately run longer.
+- **`scaffold:job --backoff`, `--timeout` and `--unique` are gone**; scripts that pass them get an
+  unknown-option error. Already-generated jobs keep working; their `getBackoff()`/`getTimeout()`
+  were never read, and a constructor taking only `$data` should forward the context:
+  `__construct(array $data = [], ?ApplicationContext $context = null)`.
+
 ## [1.91.2] - 2026-10-27 — Alshain
 
 ### Fixed
