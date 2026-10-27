@@ -209,25 +209,23 @@ class CastsTest extends TestCase
 
     // ==================== AsEncryptedString Tests ====================
 
-    public function testAsEncryptedStringEncryptsAndDecrypts(): void
+    public function testAsEncryptedStringDecryptsLegacyCbcValues(): void
     {
-        // Set encryption key
-        AsEncryptedString::setKey('test-encryption-key-32-chars!!');
+        // New writes go through EncryptionService (see EncryptedStringCastTest); values written
+        // by the legacy AES-256-CBC implementation must still decrypt with the legacy key.
+        $legacyKey = 'test-encryption-key-32-chars!!';
+        AsEncryptedString::setKey($legacyKey);
 
         $cast = new AsEncryptedString();
         $model = $this->createMockModel();
         $plaintext = 'secret-password-123';
 
-        // Encrypt
-        $encrypted = $cast->set($model, 'password', $plaintext, []);
+        $iv = random_bytes(16);
+        $encrypted = base64_encode(
+            $iv . openssl_encrypt($plaintext, 'aes-256-cbc', $legacyKey, OPENSSL_RAW_DATA, $iv)
+        );
 
-        $this->assertIsString($encrypted);
-        $this->assertNotEquals($plaintext, $encrypted);
-
-        // Decrypt
-        $decrypted = $cast->get($model, 'password', $encrypted, []);
-
-        $this->assertEquals($plaintext, $decrypted);
+        $this->assertEquals($plaintext, $cast->get($model, 'password', $encrypted, []));
     }
 
     public function testAsEncryptedStringReturnsNullForNullValues(): void

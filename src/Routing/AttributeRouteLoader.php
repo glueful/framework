@@ -175,7 +175,7 @@ class AttributeRouteLoader
                 $this->processFieldsAttribute($method, $registered);
 
                 // Process RateLimit attributes for this route
-                $this->processRateLimitAttributes($method, $registered);
+                $this->processRateLimitAttributes($className, $method, $registered);
 
                 // Process RequireScope attributes for this route
                 $this->processRequireScopeAttributes($method, $registered);
@@ -240,7 +240,7 @@ class AttributeRouteLoader
                 $this->processFieldsAttribute($method, $route);
 
                 // Process RateLimit attributes for this route
-                $this->processRateLimitAttributes($method, $route);
+                $this->processRateLimitAttributes($className, $method, $route);
 
                 // Process RequireScope attributes for this route
                 $this->processRequireScopeAttributes($method, $route);
@@ -314,7 +314,8 @@ class AttributeRouteLoader
     }
 
     /**
-     * Process Fields attribute and set configuration on route
+     * Process Fields attribute and set configuration on route.
+     * The router attaches the 'field_selection' middleware for any route carrying fields config.
      */
     private function processFieldsAttribute(\ReflectionMethod $method, \Glueful\Routing\Route $route): void
     {
@@ -349,19 +350,34 @@ class AttributeRouteLoader
                 $config['maxItems'] = $fieldsAttr->maxItems;
             }
 
-            if (count($config) > 0) {
-                $route->setFieldsConfig($config);
+            if ($fieldsAttr->useAdvancedPatterns !== null) {
+                $config['useAdvancedPatterns'] = $fieldsAttr->useAdvancedPatterns;
             }
+
+            // Always record the config (even empty) so the router attaches field_selection
+            // for a bare #[Fields]; the middleware then falls back to api.field_selection defaults.
+            $route->setFieldsConfig($config);
         }
     }
 
     /**
-     * Process RateLimit and RateLimitCost attributes and set configuration on route
+     * Process RateLimit and RateLimitCost attributes and set configuration on route.
+     * The router attaches the 'rate_limit' middleware for any route carrying rate limit config.
+     *
+     * #[RateLimit] may also sit on the controller class: method-level attributes win, and the
+     * class-level set (on the handler class) applies only to methods that declare none of their
+     * own — the method-first / class-fallback precedence used for the versioning attributes.
      */
-    private function processRateLimitAttributes(\ReflectionMethod $method, \Glueful\Routing\Route $route): void
-    {
+    private function processRateLimitAttributes(
+        string $className,
+        \ReflectionMethod $method,
+        \Glueful\Routing\Route $route
+    ): void {
         // Process RateLimit attributes (can be multiple for multi-window limiting)
         $rateLimitAttributes = $method->getAttributes(RateLimit::class);
+        if (count($rateLimitAttributes) === 0 && class_exists($className)) {
+            $rateLimitAttributes = (new \ReflectionClass($className))->getAttributes(RateLimit::class);
+        }
 
         if (count($rateLimitAttributes) > 0) {
             $rateLimitConfigs = [];

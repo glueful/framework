@@ -32,6 +32,7 @@ final class FrameworkDescriptors
             'queue' => 'migrations/queue',
             'scheduler' => 'migrations/scheduler',
             'uploads' => 'migrations/uploads',
+            'webhooks' => 'migrations/webhooks',
         ];
         $out = [];
         foreach ($leaves as $id => $path) {

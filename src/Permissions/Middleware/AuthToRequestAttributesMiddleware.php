@@ -78,7 +78,8 @@ final class AuthToRequestAttributesMiddleware implements RouteMiddleware
                 $userIdentity = new UserIdentity(
                     uuid: $uuid,
                     roles: $roles,
-                    scopes: $claims['scope'] ?? $claims['scopes'] ?? [],
+                    // `scope` is often one space-delimited string (RFC 6749 §3.3).
+                    scopes: UserIdentity::normalizeScopes($claims['scope'] ?? $claims['scopes'] ?? []),
                     attributes: [
                         'permissions' => $this->userCtx->getUserPermissions(),
                         // Accessors, not property reads: the props are private, so

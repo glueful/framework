@@ -6,6 +6,373 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.91.0] - 2026-10-27 — Alshain
+
+**Theme: features that do what they say** — a framework-wide correctness sweep driven by a full
+audit of the documentation against the code. Security settings that were silently ignored now
+apply (the CSRF config block, CORS origin patterns, route-cache scope checks), route attributes
+attach their middleware, the ORM's soft deletes, relations, counts, pagination and model events
+work as named, webhooks are wired end to end, and config keys nothing read are removed. Many
+fixes change behaviour an app may have worked around: **read the Upgrade Notes before
+upgrading** (also at docs → Upgrading).
+
+### Upgrade Notes
+- **Stacked `#[RequiresRole]` attributes now mean "any one of these roles".** They were enforced as
+  "all of them", contrary to the attribute's own documentation, so a user holding one listed role
+  was refused. Roles from the method, its class and parent classes form one set — a method-level
+  role widens a class-level one. A route that relied on requiring several roles at once should use
+  `#[RequiresPermission]` (still all required) or a single combined role.
+- **`csrf:` and `request_logging:` route params now take effect.** Values written in a route
+  definition (`csrf:3600,false,false`, `request_logging:both,true,true`) were ignored and the
+  middleware ran on its defaults. Review routes that pass them: the values you wrote now apply.
+- **`create:extension` scaffolds an enable-able package.** It writes `extra.glueful.migrations`
+  (a default `on_enable` lane at the flat `migrations/` folder) and no longer creates
+  `database/migrations` or calls `loadMigrationsFrom()`. Extensions scaffolded earlier need that
+  declaration added by hand (or `"migrations": "none"`) before `extensions:enable` will run them.
+
+- **CSRF config is now applied.** The container built the `csrf` middleware from constructor
+  defaults, so `config/security.php`'s `csrf` block was ignored. With the shipped config, tokens now
+  expire after 3600s instead of 7200s, the listed `exemptRoutes` (`auth/login`, `webhooks/*`,
+  `public/*`, …) skip CSRF, and `CSRF_PROTECTION_ENABLED` / `CSRF_DOUBLE_SUBMIT` take effect. Review
+  your app's `security.csrf` block before upgrading.
+- **Origins matching `CORS_ALLOWED_ORIGIN_PATTERNS` now get CORS headers on real responses** (and every
+  origin when `development_allow_all` is on in development). Make sure your patterns are anchored
+  (`^…$`) before deploying.
+- **JWT requests can now pass `#[RequireScope]` routes.** Scopes come from the token's `scopes` claim
+  (or a `scope` array), the user record's `scopes`, or an `identity.claims_provider`. A JWT with no
+  scopes is still denied — unlike an API key, empty does not mean unrestricted.
+- **Clear `SESSION_COOKIE_REFRESH_PATH=/auth/session` from existing `.env` files** so the derived path
+  (`api_prefix() . '/auth/session'`) applies, unless your session routes really are served there.
+- **Gate-only apps: `requirePermission()` now consults the Gate.** Endpoints that call it (metrics,
+  health, config, …) refused everyone with "Permission system unavailable" when no permission
+  provider was installed; they now admit users whose Gate roles or voters allow it. Check your
+  `config/permissions.php` voters before upgrading.
+- **`LOG_LEVEL` now filters.** `LogManager` logged every level regardless of config; the environment
+  profile default (e.g. `info`/`warning`) now drops lower-level messages that used to be written. Set
+  `LOG_LEVEL=debug` to keep everything.
+- **App `Handler::mapChannel()` mappings win** over the framework-origin heuristic and the built-in
+  defaults, so mapped exceptions move to the app's channel.
+- **The container's `CacheStore` / `cache.store` is an `EventDispatchingCacheStore` wrapper** (it fires
+  cache hit/miss events). `instanceof <Driver>` checks against it fail; use `getInnerStore()`.
+  Driver-only methods are forwarded.
+- **`unique:` / `exists:` rules are enforced.** Requests that passed before may now get 422s. The rules
+  fail closed: with no connection or context they throw `LogicException`. A `Validator` built by hand
+  needs `new Validator($rules, $context)` (or `connection:`), or call `setConnection()` on the rule.
+- **`nullable` / `sometimes` take effect.** Absent `sometimes` fields no longer appear in `filtered()`
+  / `validated()`.
+- **`useCurrentOnUpdate()` throws on PostgreSQL and SQLite** (no native clause) instead of being
+  silently ignored. Use a trigger or set the value in application code.
+- **`ChunkedDatabaseProcessor`'s constructor is typed `Connection|PDO|mysqli`.**
+- **Apps with their own `config/schedule.php` must add the `scheduled_notifications` job** — an app's
+  `schedule.jobs` list replaces the framework's (since 1.86), so without it scheduled notifications
+  still won't send.
+- **`queue:scheduler add|remove|enable|disable|history` are gone**, with their options. Manage jobs in
+  `config/schedule.php`.
+- **Signed blob URLs issued earlier point at an unrouted path**; generate new ones.
+- **Locks created without a TTL now expire after `lock.ttl` (300s)** instead of never.
+- **The container-built `tracing` middleware follows `TRACING_ENABLED` (default false).** Set it to
+  true if you bind a real tracer.
+- **Remove the deleted cache/capabilities keys** (below) from published config copies; they had no
+  effect.
+- **Routes using `->rateLimit()` or `#[RateLimit]` are now actually limited** — the `rate_limit`
+  middleware is attached automatically, so they can return 429 with rate-limit headers.
+- **`#[Fields]` routes project responses** by `?fields=` / `?expand=` (the `field_selection`
+  middleware is attached automatically) and return 400 for strict whitelist violations.
+- **`rate_limit:N,W,user|endpoint` strings key by user or endpoint** instead of IP.
+- **Run `php glueful route:cache:clear` on deploy.** The route cache format moved to v3 (old files are
+  also invalidated automatically on the next boot). Cached routes had been losing their rate limits,
+  `#[Fields]` and `#[RequireScope]` config — scoped routes served from the cache let requests through.
+- **Controllers with a class-level `#[RateLimit]` are now rate limited** on every route that has no
+  method-level `#[RateLimit]` of its own. Check these limits before upgrading.
+- **ORM `forceDelete()` (instance and builder) now permanently deletes** rows it used to only
+  soft-delete; builder `restore()` updates only trashed rows; after a soft `delete()` the instance
+  keeps `exists = true` so it can be restored or force-deleted.
+- **Model event callbacks that return `false` now cancel** `save()` / `delete()` / `restore()` /
+  `forceDelete()` (which return `false`). Check no such callback returns `false` by accident.
+- **`AsEncryptedString` writes with `EncryptionService` (AES-256-GCM, `APP_KEY`).** Set `APP_KEY` and
+  keep `ENCRYPTION_KEY` until every legacy CBC value has been re-saved; models using the cast must be
+  constructed with an `ApplicationContext`.
+- **`HasTimestamps::fromDateTime()` accepts `mixed`** — a subclass override with a narrower parameter
+  type must widen it.
+- **ORM `paginate()['data']` is a `Glueful\Database\ORM\Collection` of models**, not a list of
+  arrays (other keys unchanged): change `$row['name']` to `$row->name`, or call `->toArray()`.
+  `JsonResource` / `ModelResource::collection()` accept it as-is.
+- **`whereHas()` / `has()` closures receive the related model's ORM `Builder`** (unknown methods still
+  pass through to the QueryBuilder); `withCount()` closures receive the relation, like `with()`.
+  Self-referencing relations and unsupported relation types now throw instead of returning wrong rows.
+- **Listener classes that can't be built now fail at `subscribe()`** instead of being skipped silently.
+- **Apps with their own `config/schedule.php` must add the `queue_maintenance` job** to get automatic
+  failed-job pruning.
+- **Shipped CSRF `exemptRoutes` now apply under `/api/v1`.** Check no route you meant to protect matches.
+- **Put inbound third-party webhook receivers under `/webhooks/inbound/<provider>`.** The shipped
+  exemption is now `webhooks/inbound/*` (it was `webhooks/*`, which never took effect before 1.91);
+  receivers elsewhere need their own `exemptRoutes` entry or no `csrf` middleware.
+- **Cookie-transport writes with no Origin/Referer now get `403 CSRF_ORIGIN_MISMATCH`.**
+- **A split-subdomain SPA needs `CORS_ALLOWED_ORIGINS=<exact origin>` and
+  `CORS_SUPPORTS_CREDENTIALS=true`** for session refresh/logout to accept `Sec-Fetch-Site: same-site`.
+- **`Utils::buildSearchConditions()` and `FailedJobProvider::setMaxRetries()` / `getMaxRetries()` are
+  removed** — use `QueryBuilder::whereContains()` / `orWhereContains()`; delete the max-retries calls.
+- **Remove `TRACING_DRIVER`** and the `driver` / `drivers` keys from any app copy of
+  `config/observability.php`.
+- **`QueryExecutedEvent` listeners now run outside debug mode too.**
+- **MySQL apps with SSL enabled and certificate paths set now connect over TLS with verification on**
+  (set `DB_SSL_VERIFY_CERT=false` if needed).
+- **OpenAPI tag names change** under the API prefix (e.g. "Api" → "Users"), which affects generated
+  SDKs and grouping.
+- **Run `php glueful migrate:run`** for the new `webhooks` migration leaf. Databases whose webhook
+  tables the old lazy path created migrate cleanly.
+- **`WebhookDeliveryService` deliveries changed signature format.** `X-Glueful-Signature: sha256=…` /
+  `X-Glueful-Timestamp` are now `X-Webhook-Signature: t=…,v1=…` (HMAC of `"<ts>.<body>"`) and
+  `X-Webhook-Timestamp` — the same scheme as subscription deliveries. Verify with `Webhook::verify()`.
+- **New routes under `/api/v1/webhooks/...`** need `auth` plus `system.config.view` (reads) or
+  `system.config.edit` (writes). Remove app routes that mounted `WebhookController` on the same paths.
+- **Events marked `#[Webhookable]` or using `DispatchesWebhooks` now send webhooks.** If you registered
+  `WebhookEventListener` yourself, remove that or each event dispatches twice.
+- **`new WebhookDispatcher($connection, …)` drops its first argument.**
+- **`API_RATE_LIMITING_ENABLED=false` / `api.field_selection.enabled = false` now switch those features
+  off** — they were ignored. Check apps that set them.
+- **`queue:scheduler --parallel` (`-p`) is gone**; remove it from scripts. Remove `TRACING_SERVICE_NAME`
+  / `TRACING_SERVICE_VERSION` from `.env` (and the keys from app copies of `config/observability.php`).
+
+### Added
+- **`#[AsListener]` registers listeners.** The attribute existed but nothing read it, so annotated
+  listeners never ran. `EventService::subscribe(Listener::class)` now registers `#[AsListener]` on
+  public methods, and on the class (handler named by `method`, default `__invoke`), with priority —
+  alongside or instead of `EventSubscriberInterface`. A class with neither is refused, as is an
+  attribute naming a missing method.
+- **Scheduled notifications are delivered.** A notification sent with `schedule` was stored and
+  never sent: nothing processed due scheduled notifications. The new `scheduled_notifications` job
+  (`ScheduledNotificationsJob`, every minute, `SCHEDULED_NOTIFICATIONS_ENABLED`) sends them; it is a
+  no-op when `NOTIFICATIONS_DATABASE_STORE=false`.
+- **`RequestEvent`, `ResponseEvent`, `CacheHitEvent` and `CacheMissEvent` are dispatched.** The HTTP
+  kernel fires the request and response events; the container cache store fires hit/miss from
+  `get()`/`remember()`. Each fires only when a listener exists, and a listener failure never breaks a
+  request or a cache read.
+- **`Glueful\Validation\Contracts\DatabaseAwareRule`**: the contract the Validator uses to hand its
+  connection to database-backed rules.
+- **Cookie sessions from the core login.** With `SESSION_COOKIE_ENABLED=true`, `POST /auth/login`
+  with `"auth_transport": "cookie"` sets the session cookies (and a session-bound `csrf_token`) and
+  returns no tokens in the body. Login responses now include `session_uuid`.
+- **Same-site session refresh/logout.** `/auth/session/refresh|logout` accept `Sec-Fetch-Site:
+  same-site` when the Origin is an explicitly allowed CORS origin with credentials enabled.
+- **Built-in `queue_maintenance` scheduled job.** `QueueMaintenanceJob` runs queue maintenance daily
+  (04:15), pruning failed jobs past `queue.failed.retention_days`; disable with
+  `QUEUE_MAINTENANCE_ENABLED=false`.
+- **`CSRFMiddleware::forContext()`** returns the instance sharing the `csrf` route middleware's token
+  store; `Glueful\Notifications\UserNotifiable` is the rebuilt user recipient for scheduled sends and
+  retries; `UserIdentity::normalizeScopes()` normalises array or space-delimited scope claims.
+- **Webhook management routes.** `routes/webhooks.php` mounts all `WebhookController` actions under
+  the API prefix, behind `auth`; reads require `system.config.view`, changes `system.config.edit`.
+- **Webhook migration leaf.** `migrations/webhooks` (`glueful/framework:webhooks`) ships the
+  `webhook_subscriptions` / `webhook_deliveries` schema.
+
+### Deprecated
+- **`QueryBuilder::optimize()`.** It never had any effect and is now a no-op returning the builder;
+  use `QueryOptimizer::optimizeQuery()` directly.
+- **`Glueful\Routing\Middleware\ValidationMiddleware`.** An unaliased subset of the `validate`
+  middleware; use `->middleware(['validate'])`.
+- **`#[Webhookable]`'s `only` / `except` arguments.** They never had an effect and never defined
+  what a pattern matches.
+
+### Removed
+- **`queue:scheduler` stub actions.** `add`, `remove`, `enable`, `disable` and `history` printed "not
+  yet implemented" yet exited 0. They and their options (`--job-name`, `--cron`, `--command`,
+  `--description`, `--timeout`, `--history`) are gone; unknown actions fail and list `run, work,
+  list, status, health`.
+- **Unread config keys**: `cache.lock_ttl`, `cache.enable_tags`, `cache.distributed`,
+  `cache.tags_store`, `lock.retry.times` (`LOCK_RETRY_TIMES` — `retry.max_wait` bounds the wait),
+  `capabilities.metrics` (`METRICS_DATABASE_STORE`) and `capabilities.scheduler`
+  (`SCHEDULE_DATABASE_STORE`). No code read them; core migrations install unconditionally since
+  1.79, so the capability switches gated nothing.
+- **`Utils::buildSearchConditions()`** (deprecated in 1.86.3). Use `whereContains()`.
+- **`FailedJobProvider::setMaxRetries()` / `getMaxRetries()`** (deprecated in 1.86; never enforced).
+- **`observability.tracing.driver` / `TRACING_DRIVER`** and the empty `drivers` block; only the no-op
+  tracer exists.
+- **`WebhookDispatcher::getSchema()`, `areTablesEnsured()`, `resetTablesEnsured()`** (runtime DDL)
+  and the constructor's unused `$connection` argument.
+- **`queue:scheduler --parallel`.** It was accepted and ignored.
+- **`observability.tracing.service_name` / `service_version`** (`TRACING_SERVICE_NAME` /
+  `TRACING_SERVICE_VERSION`). Nothing read them.
+
+### Fixed
+- **Route-definition params reach the CSRF and request-logging middleware.** The router passes
+  params as strings and both middleware accepted only native ints/bools. A shared
+  `MiddlewareParams` helper now reads `"300"`, `"true"`/`"false"`/`"1"`/`"0"` as well as native
+  values; anything else keeps the configured default.
+- **`system:check --production` validates `JWT_KEY`.** It checked `JWT_SECRET`, a variable nothing
+  reads, so a correctly configured app was told to set the wrong one and a missing signing key went
+  unreported.
+- **The `create:extension` scaffold no longer throws when enabled.** Since 1.80 an installed package
+  without a migrations declaration fails with `UndeclaredSchemaException`; the scaffold now declares
+  its lane. Its commented `mergeConfig()` hint also points at the config file it actually writes.
+- **The `csrf` middleware honours `config/security.php`'s `csrf` block.** The container autowired it
+  with constructor defaults, so `enabled`, `tokenLifetime`, `useDoubleSubmit` and `exemptRoutes` were
+  ignored (tokens lived 7200s and no route was exempt). It is now built via
+  `CSRFMiddleware::fromConfig()`, falling back to the old defaults for any absent key.
+- **CORS origin patterns and `development_allow_all` apply to actual responses, not just preflight.**
+  Responses only got `Access-Control-Allow-Origin` for exact-list or `*` origins, so origins allowed
+  by `CORS_ALLOWED_ORIGIN_PATTERNS` passed preflight and were then blocked by the browser. Preflight
+  and actual responses now share one matcher (`Cors::originMatches()`); credentials still echo the
+  specific origin with `Vary: Origin` and never go out with a wildcard.
+- **The browser-session refresh cookie reaches the refresh and logout endpoints.** Its default Path
+  was a bare `/auth/session`, but those routes live under the API prefix (`/api/v1/auth/session/*`),
+  so browsers never sent it. With `SESSION_COOKIE_REFRESH_PATH` unset, the path is now
+  `api_prefix() . '/auth/session'`; an explicit value still wins, and issuing and clearing share it.
+- **`#[RequireScope]` no longer rejects every JWT request.** A JWT request passes when its `auth.user`
+  identity carries the required scope(s) — any-of within one attribute, all-of across stacked ones,
+  the same wildcard matcher as API keys. API-key behaviour is unchanged.
+- **`PermissionManager` resolves by class name.** It was registered only as `'permission.manager'`, so
+  resolving `PermissionManager::class` threw NotFound or fell back to an unconfigured singleton. The
+  class is now the canonical id and `'permission.manager'` an alias to the same shared instance.
+- **`requirePermission()` works in Gate-only apps.** With no permission provider installed it refused
+  every call with "Permission system unavailable" (with its arguments swapped in the message), which
+  broke `MetricsController`, `HealthController`, `ConfigController` and others. It now falls back to
+  `PermissionManager::can()` so the Gate decides; unauthenticated calls are still refused and Gate
+  denials still throw `UnauthorizedException`.
+- **Custom `ValidationException` messages reach the response from the routing `ValidationMiddleware`.**
+  It rendered a fixed "Validation failed"; an explicit message is now the envelope `message`.
+- **`Handler::mapChannel()` mappings take effect.** Any exception with a `Glueful\` frame in its trace
+  was logged to `framework` before app mappings were checked; app mappings are now checked first and
+  the most specific class wins.
+- **`LOG_LEVEL` sets `LogManager`'s minimum level.** `logging.application.level` was never read;
+  unknown names fall back to `debug`.
+- **`unique:` and `exists:` rules query the database.** The Validator passes its connection to them
+  on every path (string rules, `#[Rule]` DTOs, `FormRequest`, `#[Validate]`); they silently passed.
+- **`nullable` and `sometimes` work.** A null or empty value stops the rules after `nullable`; an
+  absent field with `sometimes` skips all its rules.
+- **SQLite unique violations return 409, not 500.** Bare `SQLITE_CONSTRAINT` errors are classified by
+  SQLite's fixed message prefixes into the unique, foreign-key and not-null exceptions.
+- **`useCurrentOnUpdate()` has an effect.** MySQL emits `ON UPDATE CURRENT_TIMESTAMP`; PostgreSQL and
+  SQLite throw `UnsupportedSchemaOperationException` instead of ignoring it.
+- **`ChunkedDatabaseProcessor` accepts a Glueful `Connection`.** Table chunking uses the real query
+  builder (it called a nonexistent `chunkById()`); PDO and mysqli still work.
+- **Persistent scheduled jobs no longer duplicate.** A `persistence => true` config job inserted a new
+  `scheduled_jobs` row on every scheduler load, and each duplicate ran. Registration now updates the
+  row by name and removes earlier duplicates.
+- **`queue.failed.max_retries` / `retention_days` are read.** The database driver and
+  `QueueMaintenance` hardcoded 5 and 30; pruning now uses `retention_days` unless
+  `queue.maintenance.failed_jobs_cleanup_days` is set. `max_retries` is stored, not enforced.
+- **`FileUploader::handleUpload()` accepts `$request->files->all()`.** With no `key` it always failed
+  with a 500; a single file is now used, and several files return a 400 naming the keys.
+- **Blob signed URLs include the API prefix.** They pointed at `/blobs/{uuid}`, which no route serves.
+- **The `redis` and `database` lock stores work on a stock install.** LockProvider resolved `\Redis` /
+  `DatabaseInterface`, which nothing binds; it now builds Redis via the new
+  `CacheFactory::createRedisConnection()` and the DB store from the framework Connection, honouring
+  `lock.ttl`, `stores.*.connection`, `retry.delay` and `retry.max_wait`.
+- **`TRACING_ENABLED` gates the `tracing` middleware.** When disabled it passes requests through.
+- **`cacheResponse()` stores its tags**, so `invalidateCache()` / `invalidateTags()` evict cached
+  responses.
+- **The file cache driver supports cache tags.** `addTags()` / `invalidateTags()` returned `false` on
+  the default `file` store, so tag-based invalidation silently did nothing. Each tag now keeps a
+  flock-guarded index file of its keys under the cache directory; invalidation deletes the indexed
+  keys and the index, stale entries are harmless, `clear()` removes indexes, and `getCapabilities()`
+  reports `tags => true`.
+- **Memory alert emails are sent.** `MemoryAlertingService` only logged that it would send; it now
+  delivers through a registered `email` notification channel, and with none logs one warning
+  pointing to glueful/email-notification.
+- **`scaffold:controller` writes to `app/Controllers` (`App\Controllers`) and prints the real
+  registration step.** It wrote `api/Controllers` under a namespace the skeleton doesn't autoload and
+  pointed at a nonexistent `ControllerServiceProvider`.
+- **`DB_SQLITE_DATABASE=:memory:` is in-memory.** It was resolved to a file named `:memory:`.
+- **`UPGRADE.md` and the `MigrationPriority::FOUNDATION` docblock are current** (the command manifest
+  self-heals; core migrations run at FOUNDATION).
+- **`#[RateLimit]` and `->rateLimit()` enforce their limit.** The limit was stored on the route but the
+  `rate_limit` middleware was never attached unless added by hand. The router now attaches it once; an
+  existing `rate_limit` / `rate_limit:…` / `enhanced_rate_limit` entry is not duplicated.
+- **`#[Fields]` attaches `field_selection`, and `useAdvancedPatterns` works.** The flag makes `allowed`
+  act as advanced whitelist patterns (`posts.*`, `-password`, `email:if(owner)`); strict mode rejects
+  fields those patterns block.
+- **`rate_limit:100,60,user` honours its third parameter** (`ip|user|endpoint`, as `->rateLimit(by:)`).
+  Unknown values fall back to `ip`; before, every request was keyed by IP.
+- **The rate limiter dispatches `RateLimitExceededEvent` on every 429.** Listener failures never block
+  the 429.
+- **A JWT's space-delimited `scope` claim is read.** OAuth-style tokens carry `scope` as one string
+  (`"read:posts write:posts"`, RFC 6749 §3.3); only arrays were read, so those scopes were dropped and
+  `#[RequireScope]` denied the token. The string is now split into the identity's scopes.
+- **`docs/MIGRATIONS_AND_CAPABILITIES.md` is current.** It described capability-gated core migrations
+  (unconditional since 1.79), a `capabilities.php` that gated schema, provider `loadMigrationsFrom()`
+  for packages (manifest declaration since 1.80) and batch rollback; it now matches the code.
+- **Routes loaded from the route cache keep their rate limits, `#[Fields]` and `#[RequireScope]`.**
+  The compiled cache wrote only handler, middleware, path and constraints, so a cache-hydrated route
+  lost its limits and cost (no `rate_limit`), its field projection (no `field_selection`), its version
+  config, and its scope groups — `require_scope` then saw no requirement and **let requests through**.
+  The cache now persists and restores that config (format v3).
+- **`#[RateLimit]` on a controller class applies to every route in it.** Only method attributes were
+  read; a method-level `#[RateLimit]` now replaces the class-level set for that method.
+- **`fields:analyze` and `fields:validate` recognise `#[Fields]` routes.** They checked only explicit
+  middleware and missed the auto-attached `field_selection`. New helper: `Route::hasFieldSelection()`.
+- **Timestamped models save without datetime casts.** `created_at` / `updated_at` (and any
+  `DateTimeInterface` attribute) are formatted with the model's date format before the write instead
+  of binding a `DateTimeImmutable` to PDO; assigning a string to a `datetime`-cast attribute no longer
+  throws.
+- **`scaffold:model` output loads.** The template declared `protected bool $timestamps`, a fatal
+  visibility mismatch with the public property on `Model`.
+- **ORM soft deletes do what their names say.** `withTrashed()` includes trashed rows, `onlyTrashed()`
+  returns them, `delete()` marks the instance `trashed()`, `restore()` clears `deleted_at`, and
+  instance and builder `forceDelete()` issue a real `DELETE`.
+- **All model events reach their callbacks, and `false` cancels.** `trashed`, `restoring`, `restored`,
+  `forceDeleting` and `forceDeleted` callbacks were dropped; a `false` return from
+  `saving`/`creating`/`updating`/`deleting`/`restoring`/`forceDeleting` now cancels the write.
+- **`AsEncryptedString` uses the framework `EncryptionService`** (AES-256-GCM under `APP_KEY`,
+  rotation-aware, AAD `<table>.<column>`); legacy AES-256-CBC values still decrypt and are
+  re-encrypted the next time they are saved.
+- **`belongsToMany` eager loading works, and `detach()` / `sync()` / `toggle()` change pivot rows.**
+  `with('roles')` failed with "no such column" (the eager query skipped the pivot join), and
+  `detach($ids)` matched no rows. `sync()` also reports `updated` for kept ids whose pivot changed.
+- **Nested and through-relation eager loads load every parent.** With `with('posts.comments')` only the
+  first post got its comments; `hasManyThrough` / `hasOneThrough` eager loads failed.
+- **`withCount()` adds `{relation}_count` to results.** It was accepted and ignored; counts run as one
+  grouped query per relation and honour a constraint closure.
+- **`whereHas()` and related methods apply their constraint closure.** The closure was dropped, and
+  belongsTo / belongsToMany / through relations were correlated on the wrong columns. Nested relations
+  (`posts.comments`) are supported.
+- **`loadCount()` counts are no longer saved.** A later `save()` tried to write the nonexistent
+  `{relation}_count` column.
+- **ORM `paginate()` returns models with eager loads.** It returned raw rows and ignored `with()` /
+  `withCount()`.
+- **Listeners that are not container services run.** `subscribe()` autowires unregistered listener
+  classes instead of wiring a lazy reference that failed at dispatch and was silently skipped.
+- **Scheduled notifications deliver on their requested channels.** The channels and failure policy are
+  kept with the notification and used when it falls due, and the rebuilt user recipient routes
+  `email` to the user's address (it was `no_recipient`). Email **retries** had the same gap and route
+  through the same recipient.
+- **The container's `FailedJobProvider` honours `queue.failed.*` config.** It always used 30 days.
+- **CSRF exempt routes match under the API prefix.** `exemptRoutes` entries such as `auth/login` and
+  `webhooks/*` now match `/api/v1/...`; full-path entries keep working.
+- **Cookie-authenticated writes no longer skip the CSRF origin check.** `skip_for_bearer_auth` ignored
+  that the `Authorization` header was injected by `session_cookie`.
+- **Login CSRF tokens validate on the first authenticated write.** The token is bound to the new
+  session and stored in the shared CSRF cache instead of nowhere.
+- **`GET /csrf-token` tokens validate.** The endpoint issued tokens from a context-less middleware with
+  no token store, so the `csrf` route middleware rejected them.
+- **String `scope` claims no longer drop `auth.user`** in `AuthToRequestAttributesMiddleware`.
+- **`security.api_keys.allow_query_param` is in the shipped config** (`API_KEY_ALLOW_QUERY_PARAM`,
+  default `false`).
+- **`withPurpose()` reaches query logs and `QueryExecutedEvent`.** The purpose never left the builder
+  and the builder's logger had no context, so the event never fired. It now fires (debug or not) only
+  when a listener exists. A purpose set on a `clone()` no longer tags the original's queries.
+- **MySQL `ssl.*` config is applied.** CA / cert / key / `verify_cert` map to `PDO::MYSQL_ATTR_SSL_*`
+  when SSL is enabled and at least one certificate path is set.
+- **`uuid` accepts RFC 9562 v6/v7/v8 UUIDs.**
+- **OpenAPI tags skip the API prefix.** Under `/api/v1` every operation was tagged "Api".
+- **`generate:openapi --clean` keeps hand-authored fragments.** Only the generated `routes/` and
+  `extensions/` folders are removed.
+- **`#[Webhookable]` / `DispatchesWebhooks` dispatch webhooks.** `WebhookEventListener` was never
+  registered; it now is at boot (when `events.enabled` and `api.webhooks.enabled` are on), and the
+  dispatch options `queue`, `connection` and `delay` are honoured.
+- **`Webhook::subscribe()` works on a fresh database.** Tables come from the migration; the runtime
+  DDL in `WebhookDispatcher` is gone.
+- **Webhook config is read.** `signature_header`, `signature_algorithm`, `retry.backoff` and the
+  queue `connection` apply to deliveries, and the OpenAPI webhooks block documents the configured
+  signature header.
+- **One webhook signing scheme.** `WebhookDeliveryService` signs like subscription deliveries.
+- **`api.rate_limiting.enabled` (`API_RATE_LIMITING_ENABLED`) switches rate limiting off.** It was
+  never read, so limits always applied.
+- **`api.field_selection.enabled` switches field selection off.** It was never read.
+- **The shipped CSRF exemption no longer covers the webhook management API.** `webhooks/*` was meant
+  for inbound receivers, but matching under the API prefix it also exempted the authenticated
+  `/api/v1/webhooks/{subscriptions,deliveries}` routes. It is narrowed to `webhooks/inbound/*`.
+
 ## [1.90.0] - 2026-10-11 — Alsciaukat
 
 ### Upgrade Notes

@@ -6,7 +6,6 @@ namespace Glueful\Tests\Unit\Api\Webhooks;
 
 use Glueful\Api\Webhooks\Webhook;
 use Glueful\Api\Webhooks\WebhookDelivery;
-use Glueful\Api\Webhooks\WebhookDispatcher;
 use Glueful\Api\Webhooks\WebhookSubscription;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
@@ -48,8 +47,8 @@ final class WebhookStorageTest extends TestCase
         $this->db = Connection::fromContext($this->context);
         Webhook::reset();
         Webhook::setContext($this->context);
-        $dispatcher = new WebhookDispatcher($this->db, null, $this->context);
-        (new \ReflectionMethod($dispatcher, 'ensureTables'))->invoke($dispatcher);
+        require_once dirname(__DIR__, 4) . '/migrations/webhooks/001_CreateWebhookTables.php';
+        (new \Glueful\Migrations\Webhooks\CreateWebhookTables())->up($this->db->getSchemaBuilder());
     }
 
     protected function tearDown(): void

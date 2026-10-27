@@ -586,6 +586,9 @@ class TokenManager
             'token_type' => 'Bearer',
             'expires_in' => $accessTokenLifetime,
             'refresh_token' => $tokens['refresh_token'],
+            // The auth_sessions row just created (also the JWT `sid` claim). Login shaping binds
+            // the CSRF token to it, so that token validates on later session-authenticated writes.
+            'session_uuid' => $sessionId,
             'user' => $oidcUser
         ];
     }

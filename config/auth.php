@@ -58,7 +58,9 @@ return [
         'path' => env('SESSION_COOKIE_PATH', '/'),
 
         // The refresh credential is sent ONLY to the session routes, never on ordinary requests.
-        'refresh_path' => env('SESSION_COOKIE_REFRESH_PATH', '/auth/session'),
+        // Unset/empty derives it from where those routes live: api_prefix() . '/auth/session'
+        // (e.g. /api/v1/auth/session). Set it only if you serve the session routes elsewhere.
+        'refresh_path' => env('SESSION_COOKIE_REFRESH_PATH', null),
 
         // Null means a host-only cookie, which is the safe default.
         'domain' => env('SESSION_COOKIE_DOMAIN', null),

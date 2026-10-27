@@ -29,7 +29,35 @@ final class SessionCookieConfigDefaultsTest extends TestCase
         self::assertTrue($config->secure);
         self::assertSame(Cookie::SAMESITE_LAX, $config->sameSite);
         self::assertNull($config->domain, 'host-only by default');
-        self::assertSame('/auth/session', $config->refreshPath, 'refresh must stay path-scoped');
+        self::assertSame('/api/v1/auth/session', $config->refreshPath, 'refresh must stay path-scoped');
+    }
+
+    public function testDefaultRefreshPathFollowsTheApiPrefixTheSessionRoutesLiveUnder(): void
+    {
+        // The session routes are registered under api_prefix() (routes/auth.php is an api_routes
+        // file), so a bare `/auth/session` cookie path is never sent to `/api/v1/auth/session/*`.
+        $context = ApplicationContext::forTesting(dirname(__DIR__, 4));
+        $context->overrideConfig('api.versioning.prefix', '/svc');
+        $context->overrideConfig('api.versioning.default', '2');
+
+        self::assertSame('/svc/v2/auth/session', SessionCookieConfig::fromContext($context)->refreshPath);
+    }
+
+    public function testDefaultRefreshPathWithoutAnyApiPrefix(): void
+    {
+        $context = ApplicationContext::forTesting(dirname(__DIR__, 4));
+        $context->overrideConfig('api.versioning.apply_prefix_to_routes', false);
+        $context->overrideConfig('api.versioning.version_in_path', false);
+
+        self::assertSame('/auth/session', SessionCookieConfig::fromContext($context)->refreshPath);
+    }
+
+    public function testAnExplicitlyConfiguredRefreshPathWins(): void
+    {
+        $context = ApplicationContext::forTesting(dirname(__DIR__, 4));
+        $context->overrideConfig('auth.session_cookie.refresh_path', '/custom/session');
+
+        self::assertSame('/custom/session', SessionCookieConfig::fromContext($context)->refreshPath);
     }
 
     public function testEveryDocumentedEnvVarAppearsInTheEnvExample(): void

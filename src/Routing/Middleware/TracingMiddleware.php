@@ -12,12 +12,25 @@ use Glueful\Support\SensitiveParamRedactor;
 
 final class TracingMiddleware implements RouteMiddleware
 {
-    public function __construct(private TracerInterface $tracer)
+    /**
+     * @param bool $enabled observability.tracing.enabled (TRACING_ENABLED): when false the
+     *                      middleware passes requests through without opening a span
+     */
+    public function __construct(private TracerInterface $tracer, private bool $enabled = true)
     {
+    }
+
+    public function isEnabled(): bool
+    {
+        return $this->enabled;
     }
 
     public function handle(Request $request, callable $next, ...$params): mixed
     {
+        if (!$this->enabled) {
+            return $next($request);
+        }
+
         // The matched route template is already placeholder-shaped; the raw path
         // fallback is not, so it goes through sensitive-path redaction.
         $route = $request->attributes->get('_route')

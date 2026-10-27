@@ -157,8 +157,24 @@ class Cors
             $exposedHeaders = [];
         }
 
+        $patterns = $corsConfig['allowed_origin_patterns'] ?? [];
+        if (is_string($patterns)) {
+            $patterns = array_map('trim', explode(',', $patterns));
+        } elseif (!is_array($patterns)) {
+            $patterns = [];
+        }
+        $patterns = array_values(array_filter(
+            $patterns,
+            static fn (mixed $p): bool => is_string($p) && $p !== ''
+        ));
+
         return [
             'allowedOrigins' => $allowedOrigins,
+            // Regex patterns (config/cors.php allowed_origin_patterns) and the development
+            // allow-all override: the router's preflight responder honours both, so the actual
+            // response must too — otherwise preflight passes and the browser blocks the real call.
+            'allowedOriginPatterns' => $patterns,
+            'developmentAllowAll' => (bool) ($corsConfig['development_allow_all'] ?? false),
             'allowedMethods' => $corsConfig['allowed_methods'] ?? $this->getConfig('security.cors.allowed_methods', [
                 'GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'
             ]),
@@ -379,6 +395,26 @@ class Cors
             && !in_array('*', $this->config['allowedOrigins'], true);
     }
 
+    /**
+     * Whether a credentialed (cookie-bearing) request from this origin is explicitly allowed:
+     * credentials are enabled, the list is not a wildcard, and the origin is allowed by an
+     * exact entry or pattern. The development allow-all override does NOT count — it is a
+     * convenience for local preflights, not an explicit trust decision.
+     */
+    public function allowsCredentialedOrigin(string $origin): bool
+    {
+        if (!$this->credentialsAllowed()) {
+            return false;
+        }
+
+        $origins = is_array($this->config['allowedOrigins'] ?? null) ? $this->config['allowedOrigins'] : [];
+        $patterns = is_array($this->config['allowedOriginPatterns'] ?? null)
+            ? $this->config['allowedOriginPatterns']
+            : [];
+
+        return self::originMatches($origin, $origins, $patterns, false);
+    }
+
     private function getConfig(string $key, mixed $default = null): mixed
     {
         if ($this->context === null) {
@@ -389,34 +425,65 @@ class Cors
     }
 
     /**
-     * Check if the requesting origin is allowed
+     * Check if the requesting origin is allowed by this handler's configuration.
      *
-     * Validates the requesting origin against the configured allowed origins:
-     * - Returns false for empty/missing origins
-     * - Returns true if wildcard (*) is in allowed origins
-     * - Returns true if origin exactly matches an allowed origin
-     * - Returns false otherwise
-     *
-     * Note: This method performs exact string matching. For more complex
-     * domain matching (subdomains, etc.), extend this method.
+     * Delegates to {@see originMatches()} — the single origin rule shared with the router's
+     * preflight responder — so preflight and actual responses always agree.
      *
      * @param string $origin The Origin header value from the request
      * @return bool True if origin is allowed, false otherwise
      */
     private function isOriginAllowed(string $origin): bool
     {
+        $origins = is_array($this->config['allowedOrigins'] ?? null) ? $this->config['allowedOrigins'] : [];
+        $patterns = is_array($this->config['allowedOriginPatterns'] ?? null)
+            ? $this->config['allowedOriginPatterns']
+            : [];
+
+        return self::originMatches(
+            $origin,
+            $origins,
+            $patterns,
+            (bool) ($this->config['developmentAllowAll'] ?? false)
+        );
+    }
+
+    /**
+     * The one origin-matching rule for every CORS response (preflight and actual).
+     *
+     * An origin is allowed when it is non-empty and any of these hold:
+     * - the development allow-all override is on;
+     * - the exact list contains '*' or the origin itself;
+     * - it matches one of the regex patterns (an invalid pattern never matches).
+     *
+     * With nothing configured, nothing matches (fail closed). Credentials/wildcard echo rules
+     * are the caller's concern; this only decides whether the origin is allowed.
+     *
+     * @param array<mixed> $allowedOrigins Exact origins, or ['*'] for all
+     * @param array<mixed> $patterns PCRE patterns matched against the full Origin value
+     */
+    public static function originMatches(
+        string $origin,
+        array $allowedOrigins,
+        array $patterns,
+        bool $developmentAllowAll
+    ): bool {
         if ($origin === '') {
             return false;
         }
 
-        // Check for wildcard - allows all origins
-        if (in_array('*', $this->config['allowedOrigins'], true)) {
+        if ($developmentAllowAll) {
             return true;
         }
 
-        // Check against exact matches
-        if (in_array($origin, $this->config['allowedOrigins'], true)) {
+        if (in_array('*', $allowedOrigins, true) || in_array($origin, $allowedOrigins, true)) {
             return true;
+        }
+
+        foreach ($patterns as $pattern) {
+            if (is_string($pattern) && $pattern !== '' && @preg_match($pattern, $origin) === 1) {
+                return true;
+            }
         }
 
         return false;

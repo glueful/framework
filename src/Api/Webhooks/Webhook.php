@@ -270,7 +270,12 @@ class Webhook
 
         if (self::$context !== null) {
             $queue = (string) config(self::$context, 'api.webhooks.queue', 'webhooks');
-            Jobs\DeliverWebhookJob::enqueue(self::$context, $delivery->id, $queue);
+            Jobs\DeliverWebhookJob::enqueue(
+                self::$context,
+                $delivery->id,
+                $queue,
+                Jobs\DeliverWebhookJob::configuredConnection(self::$context)
+            );
         }
 
         return true;
@@ -343,9 +348,6 @@ class Webhook
         }
 
         $timestamp = time();
-        $signature = $secret !== null
-            ? WebhookSignature::generate($jsonPayload, $secret, $timestamp)
-            : '';
 
         try {
             $options = [
@@ -360,12 +362,12 @@ class Webhook
             $headers = [
                 'Content-Type' => 'application/json',
                 'X-Webhook-Event' => $event,
-                'X-Webhook-Timestamp' => (string) $timestamp,
+                WebhookSignature::TIMESTAMP_HEADER => (string) $timestamp,
                 'User-Agent' => 'Glueful-Webhooks/1.0',
             ];
 
-            if ($signature !== '') {
-                $headers['X-Webhook-Signature'] = $signature;
+            if ($secret !== null && $secret !== '') {
+                $headers = WebhookSignature::headers($jsonPayload, $secret, self::$context, $timestamp) + $headers;
             }
 
             $response = $httpClient->request('POST', $url, [
@@ -399,7 +401,13 @@ class Webhook
      */
     public static function verify(string $payload, string $signature, string $secret, ?int $tolerance = 300): bool
     {
-        return WebhookSignature::verify($payload, $signature, $secret, $tolerance);
+        return WebhookSignature::verify(
+            $payload,
+            $signature,
+            $secret,
+            $tolerance,
+            WebhookSignature::getAlgorithm(self::$context)
+        );
     }
 
     private static function requireContext(): ApplicationContext

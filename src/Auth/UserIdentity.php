@@ -37,6 +37,28 @@ final class UserIdentity
         $this->claims['scopes'] = array_values($scopes);
     }
 
+    /**
+     * Normalise a raw scope claim into a de-duplicated list of strings. OAuth tokens carry
+     * `scope` as ONE space-delimited string (RFC 6749 §3.3); other providers use an array.
+     * Anything else (null, ints, nested values) contributes nothing.
+     *
+     * @return array<int,string>
+     */
+    public static function normalizeScopes(mixed $raw): array
+    {
+        if (is_string($raw)) {
+            $raw = preg_split('/\s+/', trim($raw), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        }
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        return array_values(array_unique(array_filter(
+            $raw,
+            static fn (mixed $scope): bool => is_string($scope) && $scope !== ''
+        )));
+    }
+
     public function uuid(): string
     {
         return $this->uuid;

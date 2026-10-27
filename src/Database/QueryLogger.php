@@ -3,6 +3,8 @@
 namespace Glueful\Database;
 
 use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Events\Database\QueryExecutedEvent;
+use Glueful\Events\EventService;
 use Monolog\Level;
 use Psr\Log\LoggerInterface;
 
@@ -78,6 +80,9 @@ class QueryLogger
      */
     protected array $config;
     private ?ApplicationContext $context;
+
+    /** @var EventService|false|null resolved lazily; false once known to be unavailable */
+    private EventService|false|null $eventService = null;
 
 
     /**
@@ -211,7 +216,24 @@ class QueryLogger
         ?\Throwable $error = null,
         ?string $purpose = null
     ): ?float {
+        // QueryExecutedEvent is built only when something listens, so an unobserved query
+        // outside debug mode costs a single listener check.
+        $events = $this->queryEventService();
+
         if (!$this->debugMode) {
+            if ($events !== null) {
+                $elapsed = is_float($startTime) ? round((microtime(true) - $startTime) * 1000, 2) : null;
+                $this->dispatchQueryEvent(
+                    $events,
+                    $sql,
+                    $params,
+                    $elapsed,
+                    $error,
+                    $purpose,
+                    $this->extractTableNames($sql),
+                    $this->analyzeQueryComplexity($sql)
+                );
+            }
             return null;
         }
 
@@ -220,7 +242,7 @@ class QueryLogger
 
         // Calculate execution time
         $executionTime = null;
-        if ($startTime !== null && $this->enableTiming) {
+        if ($startTime !== null && ($this->enableTiming || $events !== null)) {
             if (is_float($startTime)) {
                 // Using simple microtime
                 $executionTime = (microtime(true) - $startTime) * 1000; // Convert to ms
@@ -305,43 +327,82 @@ class QueryLogger
             $this->logSlowQuery($sql, $executionTime);
         }
 
-        // Emit QueryExecutedEvent for application-level logging
-        // Applications can listen to this event for business-specific query logging
-        if ($this->context !== null) {
-            $metadata = [];
-            if ($error !== null) {
-                $metadata['error'] = [
-                    'message' => $error->getMessage(),
-                    'code' => $error->getCode(),
-                    'file' => $error->getFile(),
-                    'line' => $error->getLine()
-                ];
-            }
-            if ($purpose !== null) {
-                $metadata['purpose'] = $purpose;
-            }
-            if ($complexity > 0) {
-                $metadata['complexity'] = $complexity;
-            }
-            if ($tables !== []) {
-                $metadata['tables'] = $tables;
-            }
-
-            app($this->context, \Glueful\Events\EventService::class)->dispatch(
-                new \Glueful\Events\Database\QueryExecutedEvent(
-                    $sql,
-                    $params,
-                    $executionTime !== null ? $executionTime / 1000 : 0.0, // Convert ms to seconds
-                    'default', // connection name
-                    $metadata
-                )
-            );
+        // Emit QueryExecutedEvent for application-level logging (only when listened to)
+        if ($events !== null) {
+            $this->dispatchQueryEvent($events, $sql, $params, $executionTime, $error, $purpose, $tables, $complexity);
         }
 
         // Check for N+1 query patterns after logging
         $this->detectN1Patterns();
 
         return $executionTime;
+    }
+
+    /**
+     * The event service, when QueryExecutedEvent has at least one listener; null otherwise.
+     */
+    private function queryEventService(): ?EventService
+    {
+        if ($this->context === null || !$this->context->hasContainer()) {
+            return null;
+        }
+
+        if ($this->eventService === false) {
+            return null;
+        }
+
+        if ($this->eventService === null) {
+            $container = $this->context->getContainer();
+            $resolved = $container->has(EventService::class) ? $container->get(EventService::class) : null;
+            $this->eventService = $resolved instanceof EventService ? $resolved : false;
+            if ($this->eventService === false) {
+                return null;
+            }
+        }
+
+        return $this->eventService->hasListeners(QueryExecutedEvent::class) ? $this->eventService : null;
+    }
+
+    /**
+     * @param array<mixed> $params
+     * @param array<int, string> $tables
+     */
+    private function dispatchQueryEvent(
+        EventService $events,
+        string $sql,
+        array $params,
+        ?float $executionTimeMs,
+        ?\Throwable $error,
+        ?string $purpose,
+        array $tables,
+        int $complexity
+    ): void {
+        $metadata = [];
+        if ($error !== null) {
+            $metadata['error'] = [
+                'message' => $error->getMessage(),
+                'code' => $error->getCode(),
+                'file' => $error->getFile(),
+                'line' => $error->getLine()
+            ];
+        }
+        if ($purpose !== null) {
+            $metadata['purpose'] = $purpose;
+        }
+        if ($complexity > 0) {
+            $metadata['complexity'] = $complexity;
+        }
+        if ($tables !== []) {
+            $metadata['tables'] = $tables;
+        }
+
+        $events->dispatch(new QueryExecutedEvent(
+            $sql,
+            $params,
+            $executionTimeMs !== null ? $executionTimeMs / 1000 : 0.0, // event carries seconds
+            'default',
+            $metadata
+        ));
     }
 
     /**

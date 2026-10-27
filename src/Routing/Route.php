@@ -256,6 +256,27 @@ class Route
     }
 
     /**
+     * Whether this route runs field selection: it carries #[Fields] / setFieldsConfig() config
+     * (the router auto-attaches `field_selection` at pipeline build) or lists the middleware
+     * explicitly (alias, "field_selection:..." with params, or the middleware class).
+     */
+    public function hasFieldSelection(): bool
+    {
+        if ($this->fieldsConfig !== null) {
+            return true;
+        }
+
+        foreach ($this->middleware as $entry) {
+            $name = explode(':', $entry, 2)[0];
+            if ($name === 'field_selection' || $name === \Glueful\Routing\Middleware\FieldSelectionMiddleware::class) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Set API version constraint for this route (fluent)
      *
      * @param string|array<string> $version Single version or array of versions

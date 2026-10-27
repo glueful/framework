@@ -11,9 +11,10 @@ class RouteCache
     /**
      * Bumped when the compiled cache schema changes, so upgrading the framework
      * invalidates any cache written by an older format. v2 added per-route
-     * 'path' + 'where' for lossless dynamic-route reconstruction.
+     * 'path' + 'where' for lossless dynamic-route reconstruction; v3 added per-route
+     * rate_limit / rate_limit_cost / fields / require_scope / version config.
      */
-    private const CACHE_FORMAT = 2;
+    private const CACHE_FORMAT = 3;
 
     private string $cacheDir;
     private ApplicationContext $context;

@@ -7,6 +7,7 @@ namespace Glueful\Tests\Unit\Auth\Session;
 use Glueful\Auth\Session\AuthenticatedSession;
 use Glueful\Auth\Session\SessionCookieConfig;
 use Glueful\Auth\Session\SessionCookieIssuer;
+use Glueful\Bootstrap\ApplicationContext;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Cookie;
 use Symfony\Component\HttpFoundation\Response;
@@ -137,5 +138,19 @@ final class SessionCookieIssuerTest extends TestCase
         $parameter = (new \ReflectionMethod(SessionCookieIssuer::class, 'issue'))->getParameters()[1];
 
         self::assertSame(AuthenticatedSession::class, (string) $parameter->getType());
+    }
+
+    public function testIssueAndClearUseTheSameDerivedRefreshPathAsTheRoutedSessionEndpoints(): void
+    {
+        // Default config: the refresh cookie must reach /api/v1/auth/session/{refresh,logout},
+        // and clearing must target the identical path or the browser keeps the old cookie.
+        $config = SessionCookieConfig::fromContext(ApplicationContext::forTesting(dirname(__DIR__, 4)));
+        $issuer = new SessionCookieIssuer($config);
+
+        $issued = $this->cookies($issuer->issue(new Response(), $this->session()))['gf_refresh'];
+        $cleared = $this->cookies($issuer->clear(new Response()))['gf_refresh'];
+
+        self::assertSame('/api/v1/auth/session', $issued->getPath());
+        self::assertSame($issued->getPath(), $cleared->getPath());
     }
 }

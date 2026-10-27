@@ -464,7 +464,7 @@ abstract class Model implements ModelInterface, JsonSerializable
             $this->updateTimestamps();
         }
 
-        $attributes = $this->getAttributes();
+        $attributes = $this->prepareAttributesForStorage($this->getAttributes());
 
         // Insert the record. An auto-increment key the caller did not set is the database's to
         // generate: read it back (insert() itself returns the affected-row count, not an id).
@@ -513,15 +513,37 @@ abstract class Model implements ModelInterface, JsonSerializable
             $dirty = $this->getDirty();
         }
 
-        // Update the record
-        $query = $this->newModelQuery();
+        // Update the record. The soft-delete scope is bypassed: this write targets one row by
+        // key, and a trashed model (being restored or edited) must still reach its row.
+        $query = $this->newModelQuery()->withoutGlobalScope('softDeletes');
         $query->where($this->getKeyName(), '=', $this->getKey());
-        $query->update($dirty);
+        $query->update($this->prepareAttributesForStorage($dirty));
 
         // Fire updated event
         $this->fireUpdatedEvent();
 
         return true;
+    }
+
+    /**
+     * Convert attribute values into what the connection can bind
+     *
+     * DateTimeInterface values (the automatic timestamps, or any date assigned to an attribute
+     * without a datetime cast) are formatted with the model's date format, so a DateTime
+     * object never reaches PDO.
+     *
+     * @param array<string, mixed> $attributes
+     * @return array<string, mixed>
+     */
+    protected function prepareAttributesForStorage(array $attributes): array
+    {
+        foreach ($attributes as $key => $value) {
+            if ($value instanceof \DateTimeInterface) {
+                $attributes[$key] = $this->fromDateTime($value);
+            }
+        }
+
+        return $attributes;
     }
 
     /**
@@ -540,17 +562,27 @@ abstract class Model implements ModelInterface, JsonSerializable
             return false;
         }
 
-        // Delete the record
-        $query = $this->newModelQuery();
-        $query->where($this->getKeyName(), '=', $this->getKey());
-        $query->delete();
-
-        $this->exists = false;
+        // Delete the record (SoftDeletes overrides this to soft- or force-delete)
+        $this->performDeleteOnModel();
 
         // Fire deleted event
         $this->fireDeletedEvent();
 
         return true;
+    }
+
+    /**
+     * Perform the actual delete query on this model instance
+     *
+     * @return void
+     */
+    protected function performDeleteOnModel(): void
+    {
+        $query = $this->newModelQuery();
+        $query->where($this->getKeyName(), '=', $this->getKey());
+        $query->delete();
+
+        $this->exists = false;
     }
 
     /**
@@ -833,6 +865,24 @@ abstract class Model implements ModelInterface, JsonSerializable
     }
 
     /**
+     * Set a computed (non-column) attribute, such as a relation count
+     *
+     * The value is readable like any attribute and serializes with the model, but it is
+     * recorded as original too, so it is never dirty and save() never writes it.
+     *
+     * @param string $key
+     * @param mixed $value
+     * @return static
+     */
+    public function setComputedAttribute(string $key, mixed $value): static
+    {
+        $this->attributes[$key] = $value;
+        $this->original[$key] = $value;
+
+        return $this;
+    }
+
+    /**
      * Load a relationship count if it is not already loaded
      *
      * @param array<string>|string $relations
@@ -861,7 +911,8 @@ abstract class Model implements ModelInterface, JsonSerializable
                     }
 
                     $count = $query->count();
-                    $this->setAttribute("{$relation}_count", $count);
+                    // A count is computed, not a column: store it synced so save() never writes it.
+                    $this->setComputedAttribute("{$relation}_count", $count);
                 }
             }
         }

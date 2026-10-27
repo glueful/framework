@@ -21,6 +21,31 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.91.0 — Alshain (Released 2026-10-27)
+- **Security settings that were ignored now apply** — the `csrf` middleware is built from
+  `config/security.php` (exempt routes match under the API prefix, tokens from login and
+  `/csrf-token` validate), CORS origin patterns apply to real responses, and routes served from the
+  route cache keep their `#[RequireScope]`, rate-limit and `#[Fields]` config (cache format v3).
+- **Route attributes and auth do what they say** — `#[RateLimit]` / `->rateLimit()` and `#[Fields]`
+  attach their middleware, stacked `#[RequiresRole]` is any-of, JWTs pass `#[RequireScope]` by their
+  scopes, `requirePermission()` works Gate-only, and the core login can issue browser-session
+  cookies.
+- **The ORM works as named** — timestamps without casts, soft deletes, model events (with
+  cancellation), `belongsToMany` eager loading and `sync()`, `withCount()`, `whereHas()` closures,
+  and `paginate()` returning models; `AsEncryptedString` moves to `EncryptionService`.
+- **Subsystems wired end to end** — webhooks (migration, event bridge, management routes, one
+  signing scheme), `#[AsListener]`, scheduled notifications on their channels, failed-job pruning
+  (`queue_maintenance`), the redis/database lock stores, file-cache tags, request/cache/query events.
+- **Config that did nothing is removed or honoured** — unread keys removed (cache, lock, capabilities,
+  tracing), `API_RATE_LIMITING_ENABLED` / `field_selection.enabled` / `LOG_LEVEL` / `TRACING_ENABLED`
+  now take effect.
+- Notes: minor with **breaking changes called out** (pre-public policy) — removed APIs
+  (`Utils::buildSearchConditions()`, `FailedJobProvider` max-retries methods, `queue:scheduler`
+  stub actions), ORM `paginate()['data']` is a model Collection, `forceDelete()` is permanent,
+  `unique:`/`exists:` are enforced. Run `migrate:run` and `route:cache:clear`; apps with their own
+  `config/schedule.php` must add `scheduled_notifications` and `queue_maintenance`. See the
+  CHANGELOG Upgrade Notes and docs → Upgrading.
+
 ### 1.90.0 — Alsciaukat (Released 2026-10-11)
 - **The file cache lives in the app's `storage/cache`, never under vendor/** — the cache service is
   built with the application context, the file driver reads `cache.stores.file.path`

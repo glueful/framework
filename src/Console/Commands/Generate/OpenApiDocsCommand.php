@@ -58,7 +58,7 @@ class OpenApiDocsCommand extends BaseCommand
                  'clean',
                  'c',
                  InputOption::VALUE_NONE,
-                 'Clean all existing JSON definitions before generating new ones'
+                 'Remove generated JSON definitions before generating (hand-authored fragments are kept)'
              )
              ->addOption(
                  'ui',
@@ -222,9 +222,11 @@ class OpenApiDocsCommand extends BaseCommand
     }
 
     /**
-     * Clean all JSON definition directories
+     * Clean generated JSON definitions
      *
-     * Removes all JSON files from json-definitions directories.
+     * Removes the generator-owned `routes/` and `extensions/` subdirectories of
+     * json-definitions. Hand-authored fragments (top-level `*.json` and any other
+     * subdirectory) are merged into the spec and are never removed.
      *
      * @return void
      */
@@ -234,7 +236,7 @@ class OpenApiDocsCommand extends BaseCommand
 
         $apiDocDefinitionsPath = config($this->getContext(), 'documentation.paths.output') . '/json-definitions';
 
-        // Clean json-definitions directory recursively (including subdirectories)
+        // Clean only generated output; hand-authored fragments stay.
         if (!is_dir($apiDocDefinitionsPath)) {
             $this->success('Definition directories cleaned successfully!');
             return;
@@ -242,10 +244,45 @@ class OpenApiDocsCommand extends BaseCommand
 
         $this->info("Cleaning API doc definitions from: {$apiDocDefinitionsPath}");
 
-        [$dirCount, $fileCount] = self::cleanDirectoryRecursively($apiDocDefinitionsPath, $fileFinder);
+        [$dirCount, $fileCount] = self::cleanGeneratedDefinitions($apiDocDefinitionsPath, $fileFinder);
 
         $this->line("Removed {$dirCount} directories and {$fileCount} files from {$apiDocDefinitionsPath}");
         $this->success('Definition directories cleaned successfully!');
+    }
+
+    /**
+     * Subdirectories of json-definitions that hold generated output (the legacy
+     * comment generator's per-file fragments). Everything else there is hand-authored.
+     */
+    private const GENERATED_DEFINITION_DIRS = ['routes', 'extensions'];
+
+    /**
+     * Remove the generated subdirectories of a json-definitions directory, keeping
+     * hand-authored fragments (top-level `*.json` and any other subdirectory).
+     *
+     * @return array{0: int, 1: int} [directoriesRemoved, filesRemoved]
+     */
+    public static function cleanGeneratedDefinitions(string $path, FileFinder $fileFinder): array
+    {
+        $dirCount = 0;
+        $fileCount = 0;
+
+        foreach (self::GENERATED_DEFINITION_DIRS as $generated) {
+            $dir = rtrim($path, '/') . '/' . $generated;
+            if (!is_dir($dir)) {
+                continue;
+            }
+
+            [$dirs, $files] = self::cleanDirectoryRecursively($dir, $fileFinder);
+            $dirCount += $dirs;
+            $fileCount += $files;
+
+            if (@rmdir($dir)) {
+                $dirCount++;
+            }
+        }
+
+        return [$dirCount, $fileCount];
     }
 
     /**

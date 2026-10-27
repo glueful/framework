@@ -32,6 +32,13 @@ use Glueful\Events\EventService;
  * - saved: After any save operation
  * - deleting: Before a model is deleted
  * - deleted: After a model is deleted
+ *
+ * Models using SoftDeletes also fire: trashed (after a soft delete), restoring/restored,
+ * and forceDeleting/forceDeleted.
+ *
+ * A callback returning false from a cancellable event (saving, creating, updating, deleting,
+ * restoring, forceDeleting) cancels the operation: save()/delete()/restore()/forceDelete()
+ * return false and nothing is written.
  */
 trait HasEvents
 {
@@ -57,42 +64,46 @@ trait HasEvents
     /**
      * Fire a model event
      *
-     * @param string $event The event name (creating, created, etc.)
-     * @return bool Returns false if propagation was stopped
+     * Dispatches the event's class (when it has one) through the framework EventService, then
+     * runs the callbacks registered for it. When $halt is true (the cancellable "-ing" events),
+     * a callback returning false — or a listener stopping propagation — cancels the operation.
+     *
+     * @param string $event The event name (creating, created, restoring, trashed, etc.)
+     * @param bool $halt Whether a false return from a callback cancels the operation
+     * @return bool Returns false if the operation should be cancelled
      */
-    protected function fireModelEvent(string $event): bool
+    protected function fireModelEvent(string $event, bool $halt = true): bool
     {
         if (!$this->dispatchesEvents) {
             return true;
         }
 
-        // Get the event class for this event type
+        // Get the event class for this event type (restoring/trashed/... have none)
         $eventClass = $this->getEventClass($event);
 
-        if ($eventClass === null) {
-            return true;
-        }
+        if ($eventClass !== null) {
+            $eventInstance = new $eventClass($this);
 
-        // Create and dispatch the event
-        $eventInstance = new $eventClass($this);
+            $context = $this->getContext();
 
-        $context = $this->getContext();
-
-        if ($context !== null) {
-            try {
-                app($context, EventService::class)->dispatch($eventInstance);
-            } catch (\Throwable) {
-                // best-effort only
+            if ($context !== null) {
+                try {
+                    app($context, EventService::class)->dispatch($eventInstance);
+                } catch (\Throwable) {
+                    // best-effort only
+                }
             }
-        }
 
-        if ($eventInstance->isPropagationStopped()) {
-            return false;
+            if ($halt && $eventInstance->isPropagationStopped()) {
+                return false;
+            }
         }
 
         $classCallbacks = static::$modelEventCallbacks[static::class][$event] ?? [];
         foreach ($classCallbacks as $callback) {
-            $callback($this);
+            if ($callback($this) === false && $halt) {
+                return false;
+            }
         }
 
         return true;
@@ -133,7 +144,7 @@ trait HasEvents
      */
     protected function fireRetrievedEvent(): void
     {
-        $this->fireModelEvent('retrieved');
+        $this->fireModelEvent('retrieved', false);
     }
 
     /**
@@ -153,7 +164,7 @@ trait HasEvents
      */
     protected function fireSavedEvent(): void
     {
-        $this->fireModelEvent('saved');
+        $this->fireModelEvent('saved', false);
     }
 
     /**
@@ -173,7 +184,7 @@ trait HasEvents
      */
     protected function fireCreatedEvent(): void
     {
-        $this->fireModelEvent('created');
+        $this->fireModelEvent('created', false);
     }
 
     /**
@@ -193,7 +204,7 @@ trait HasEvents
      */
     protected function fireUpdatedEvent(): void
     {
-        $this->fireModelEvent('updated');
+        $this->fireModelEvent('updated', false);
     }
 
     /**
@@ -213,7 +224,7 @@ trait HasEvents
      */
     protected function fireDeletedEvent(): void
     {
-        $this->fireModelEvent('deleted');
+        $this->fireModelEvent('deleted', false);
     }
 
     /**
@@ -327,6 +338,7 @@ trait HasEvents
         $validEvents = [
             'retrieved', 'creating', 'created', 'updating', 'updated',
             'saving', 'saved', 'deleting', 'deleted',
+            'trashed', 'restoring', 'restored', 'forceDeleting', 'forceDeleted',
         ];
 
         if (!in_array($event, $validEvents, true)) {

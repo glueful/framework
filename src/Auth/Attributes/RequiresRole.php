@@ -11,8 +11,10 @@ namespace Glueful\Auth\Attributes;
  * - Controller classes: Requires role for all methods in the class
  * - Controller methods: Requires role for that specific method
  *
- * Multiple attributes can be stacked to require one of multiple roles (OR logic).
- * Use with RequiresPermission for more granular permission checks.
+ * Multiple attributes can be stacked to require one of multiple roles (OR logic). Roles on the
+ * method, its class and parent classes all join that one set — a method-level role widens the
+ * class-level one, it does not narrow it. Combine with RequiresPermission (always ANDed) for
+ * checks that must all hold.
  *
  * @example
  * ```php

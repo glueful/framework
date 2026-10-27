@@ -9,8 +9,8 @@ use Glueful\Services\FileFinder;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Covers Phase-0 Fix 3: --clean recursively removes nested fragment files
- * (routes/*.json and extensions/<ext>/*.json) and their now-empty subdirs.
+ * --clean removes the generated fragment directories (routes/*.json and
+ * extensions/<ext>/*.json) and never the hand-authored fragments beside them.
  */
 final class OpenApiDocsCleanTest extends TestCase
 {
@@ -59,6 +59,44 @@ final class OpenApiDocsCleanTest extends TestCase
         self::assertSame(3, $fileCount);
         // routes, extensions/bar, extensions => 3 directories.
         self::assertSame(3, $dirCount);
+    }
+
+    public function testCleanDefinitionsRemovesGeneratedOutputButKeepsHandAuthoredFragments(): void
+    {
+        $routeFragment = $this->root . '/routes/foo.json';
+        $extFragment = $this->root . '/extensions/bar/bar.json';
+        $handAuthored = $this->root . '/custom.json';
+        mkdir($this->root . '/shared', 0755, true);
+        $handAuthoredNested = $this->root . '/shared/schemas.json';
+
+        file_put_contents($routeFragment, '{}');
+        file_put_contents($extFragment, '{}');
+        file_put_contents($handAuthored, '{}');
+        file_put_contents($handAuthoredNested, '{}');
+
+        [$dirCount, $fileCount] = OpenApiDocsCommand::cleanGeneratedDefinitions(
+            $this->root,
+            new FileFinder()
+        );
+
+        // The (legacy) generator output under routes/ and extensions/ is gone ...
+        self::assertDirectoryDoesNotExist($this->root . '/routes');
+        self::assertDirectoryDoesNotExist($this->root . '/extensions');
+        // ... while hand-authored fragments the generator merges are kept.
+        self::assertFileExists($handAuthored);
+        self::assertFileExists($handAuthoredNested);
+
+        self::assertSame(2, $fileCount);
+        // routes, extensions/bar, extensions
+        self::assertSame(3, $dirCount);
+    }
+
+    public function testCleanDefinitionsIsNoOpWhenPathMissing(): void
+    {
+        self::assertSame([0, 0], OpenApiDocsCommand::cleanGeneratedDefinitions(
+            $this->root . '/missing',
+            new FileFinder()
+        ));
     }
 
     public function testCleanIsNoOpWhenPathMissing(): void

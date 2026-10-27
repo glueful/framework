@@ -837,7 +837,9 @@ class DocGenerator
         $webhooks = [];
         $webhooksConfig = $this->getConfig('documentation.webhooks', []);
         if (is_array($webhooksConfig) && $webhooksConfig !== [] && $this->isOpenApi31()) {
-            $webhooks = (new WebhookDocsBuilder())->build($webhooksConfig);
+            // Document the header deliveries are actually signed with (api.webhooks.signature_header).
+            $header = \Glueful\Api\Webhooks\WebhookSignature::getHeaderName($this->context);
+            $webhooks = (new WebhookDocsBuilder($header))->build($webhooksConfig);
         }
 
         // Default component schemas are unioned for convenience. When opted in, drop the

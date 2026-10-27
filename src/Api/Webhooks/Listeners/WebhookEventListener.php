@@ -6,6 +6,9 @@ namespace Glueful\Api\Webhooks\Listeners;
 
 use Glueful\Api\Webhooks\Attributes\Webhookable;
 use Glueful\Api\Webhooks\Contracts\WebhookDispatcherInterface;
+use Glueful\Events\Contracts\BaseEvent;
+use Glueful\Events\EventService;
+use Psr\Container\ContainerInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
 /**
@@ -16,21 +19,63 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
  * and automatically dispatches them as webhooks to all matching
  * subscriptions.
  *
+ * The framework registers it at boot ({@see register()}) when both `events.enabled` and
+ * `api.webhooks.enabled` are on, so any event with #[Webhookable] or DispatchesWebhooks
+ * dispatched through EventService triggers webhooks:
+ *
  * @example
  * ```php
- * // Register in a service provider
- * $dispatcher = $container->get(EventDispatcherInterface::class);
- * $dispatcher->addSubscriber(new WebhookEventListener($webhookDispatcher));
- *
- * // Now any event with #[Webhookable] or DispatchesWebhooks will trigger webhooks
  * app($context, \Glueful\Events\EventService::class)->dispatch(new UserCreatedEvent($userData));
  * ```
  */
 class WebhookEventListener implements EventSubscriberInterface
 {
+    /**
+     * Priority of the bridge listener: below the default (0) so application listeners for the
+     * same event run first, and a listener that stops propagation also stops the webhook.
+     */
+    public const PRIORITY = -100;
+
+    /** @var array<class-string, bool> Per-class cache of {@see isMarked()} */
+    private static array $markedClasses = [];
+
     public function __construct(
         private WebhookDispatcherInterface $dispatcher
     ) {
+    }
+
+    /**
+     * Bridge every BaseEvent dispatched through EventService to webhooks. The callback is cheap
+     * for unmarked events (a cached per-class check); the listener — and with it the webhook
+     * dispatcher and its database connection — is only resolved for a marked event.
+     */
+    public static function register(EventService $events, ContainerInterface $container): void
+    {
+        $events->addListener(
+            BaseEvent::class,
+            static function (object $event) use ($container): void {
+                if (!self::isMarked($event)) {
+                    return;
+                }
+                /** @var self $listener */
+                $listener = $container->get(self::class);
+                $listener->handleEvent($event);
+            },
+            self::PRIORITY
+        );
+    }
+
+    /**
+     * Whether the event's class uses DispatchesWebhooks or carries #[Webhookable]. Per-instance
+     * conditions (shouldDispatchWebhook(), the attribute's condition) are checked later by
+     * {@see handleEvent()}.
+     */
+    public static function isMarked(object $event): bool
+    {
+        $class = $event::class;
+
+        return self::$markedClasses[$class] ??= method_exists($event, 'dispatchesWebhooks')
+            || Webhookable::has($class);
     }
 
     /**

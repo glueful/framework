@@ -188,6 +188,35 @@ final class RouteReflectionDocGeneratorTest extends TestCase
         self::assertSame(['Content'], $paths['/v1/content/{type}']['get']['tags']);
     }
 
+    public function testTagSkipsTheDefaultApiPrefixAndVersion(): void
+    {
+        $router = $this->makeRouter();
+        $router->get('/api/v1/users/{id}', [SampleAppController::class, 'show']);
+        $router->get('/api/v1/blog-posts', [SampleAppController::class, 'show']);
+
+        $paths = (new RouteReflectionDocGenerator($this->registry()))->generate($router);
+
+        // Not "Api" for every operation: the tag is the first segment after prefix + version.
+        self::assertSame(['Users'], $paths['/api/v1/users/{id}']['get']['tags']);
+        self::assertSame(['Blog Posts'], $paths['/api/v1/blog-posts']['get']['tags']);
+    }
+
+    public function testTagSkipsAConfiguredApiPrefix(): void
+    {
+        $context = new ApplicationContext(sys_get_temp_dir() . '/reflectdoc_prefix_' . uniqid());
+        $context->mergeConfigDefaults('api', ['versioning' => ['prefix' => '/services/rest']]);
+
+        $router = $this->makeRouter($context);
+        $router->get('/services/rest/v2/orders', [SampleAppController::class, 'show']);
+        $router->get('/services/status', [SampleAppController::class, 'show']);
+
+        $paths = (new RouteReflectionDocGenerator($this->registry(), $context))->generate($router);
+
+        self::assertSame(['Orders'], $paths['/services/rest/v2/orders']['get']['tags']);
+        // A path that only shares the prefix's first segment is not stripped.
+        self::assertSame(['Services'], $paths['/services/status']['get']['tags']);
+    }
+
     public function testFrameworkRoutesExcludedWhenFlagDisabled(): void
     {
         $context = new ApplicationContext(sys_get_temp_dir() . '/reflectdoc_fw_' . uniqid());

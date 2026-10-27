@@ -134,13 +134,18 @@ class JobScheduler
     }
 
     /**
-     * Register a job in the database for persistence
+     * Register a job in the database for persistence.
+     *
+     * Idempotent by job name: a config job declared `persistence => true` is registered on every
+     * scheduler load, so an existing row is updated in place (schedule, handler, parameters)
+     * rather than duplicated, keeping its uuid, run history and `is_enabled` flag. Duplicate rows
+     * an earlier release inserted for the same name are removed.
      *
      * @param string $name Job name
      * @param string $schedule Cron expression for job scheduling
      * @param string $handlerClass Class that will handle job execution
      * @param array<string, mixed> $parameters Optional parameters for the job
-     * @return string UUID of created job
+     * @return string UUID of the job row
      */
     public function registerInDatabase(
         string $name,
@@ -148,38 +153,121 @@ class JobScheduler
         string $handlerClass,
         array $parameters = []
     ): string {
-        // Generate UUID for job
-        $uuid = Utils::generateNanoID();
+        $now = date('Y-m-d H:i:s');
+        $nextRunTime = (new CronExpression($schedule))->getNextRunDate()->format('Y-m-d H:i:s');
+        $encoded = (new QueuePayloadSigner($this->context))
+            ->encodeScheduledParameters($handlerClass, $parameters, $name, $schedule);
 
-        // Calculate next run time
-        $cronExpression = new CronExpression($schedule);
-        $nextRunTime = $cronExpression->getNextRunDate()->format('Y-m-d H:i:s');
+        $existing = $this->db->table('scheduled_jobs')
+            ->select(['uuid', 'schedule', 'next_run', 'is_enabled'])
+            ->where('name', $name)
+            ->orderBy('id', 'ASC')
+            ->get();
 
-        // Insert job into database
-        $this->db->table('scheduled_jobs')->insert([
-            'uuid' => $uuid,
-            'name' => $name,
-            'schedule' => $schedule,
-            'handler_class' => $handlerClass,
-            'parameters' => (new QueuePayloadSigner($this->context))
-                ->encodeScheduledParameters($handlerClass, $parameters, $name, $schedule),
-            'is_enabled' => 1,
-            'next_run' => $nextRunTime,
-            'created_at' => date('Y-m-d H:i:s'),
-            'updated_at' => date('Y-m-d H:i:s')
-        ]);
+        if ($existing !== []) {
+            $row = $existing[0];
+            $uuid = (string) $row['uuid'];
+            $enabled = (bool) $row['is_enabled'];
+            $update = [
+                'schedule' => $schedule,
+                'handler_class' => $handlerClass,
+                'parameters' => $encoded,
+                'updated_at' => $now,
+            ];
+            if ((string) $row['schedule'] !== $schedule || $row['next_run'] === null) {
+                $update['next_run'] = $nextRunTime;
+            } else {
+                $nextRunTime = (string) $row['next_run'];
+            }
+            $this->db->table('scheduled_jobs')->where('uuid', $uuid)->update($update);
 
-        // Also register in memory for current process
-        $this->jobs[] = [
-            'uuid' => $uuid,
-            'name' => $name,
-            'schedule' => $schedule,
-            'handler_class' => $handlerClass,
-            'parameters' => $parameters,
-            'next_run' => $nextRunTime
-        ];
+            if (count($existing) > 1) {
+                $this->db->table('scheduled_jobs')
+                    ->where('name', $name)
+                    ->where('uuid', '!=', $uuid)
+                    ->delete();
+            }
+        } else {
+            $uuid = Utils::generateNanoID();
+            $enabled = true;
+            $this->db->table('scheduled_jobs')->insert([
+                'uuid' => $uuid,
+                'name' => $name,
+                'schedule' => $schedule,
+                'handler_class' => $handlerClass,
+                'parameters' => $encoded,
+                'is_enabled' => 1,
+                'next_run' => $nextRunTime,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+
+        // Replace whatever loadJobsFromDatabase() put in memory for this name (the row and any
+        // duplicates) with the one current registration.
+        $this->jobs = array_values(array_filter(
+            $this->jobs,
+            static fn (array $job): bool => ($job['name'] ?? null) !== $name
+        ));
+        if ($enabled) {
+            $this->jobs[] = [
+                'uuid' => $uuid,
+                'name' => $name,
+                'schedule' => $schedule,
+                'callback' => $this->databaseJobCallback([
+                    'name' => $name,
+                    'schedule' => $schedule,
+                    'handler_class' => $handlerClass,
+                    'parameters' => $encoded,
+                ]),
+                'next_run' => $nextRunTime,
+                'from_database' => true,
+            ];
+        }
 
         return $uuid;
+    }
+
+    /**
+     * The callback that runs a stored job row: verify its signed parameters, resolve the handler
+     * through JobHandlerResolver and call handle().
+     *
+     * @param array<string, mixed> $job A scheduled_jobs row (handler_class, parameters, name, schedule)
+     */
+    private function databaseJobCallback(array $job): \Closure
+    {
+        return function () use ($job) {
+            $handlerClass = (string) $job['handler_class'];
+
+            try {
+                $parameters = (new QueuePayloadSigner($this->context))
+                    ->decodeScheduledParameters(
+                        $handlerClass,
+                        $job['parameters'] ?? null,
+                        isset($job['name']) ? (string) $job['name'] : null,
+                        isset($job['schedule']) ? (string) $job['schedule'] : null
+                    );
+            } catch (\Throwable $e) {
+                error_log("Refusing to run scheduled job handler '{$handlerClass}': " . $e->getMessage());
+                return false;
+            }
+
+            // The handler class name comes from a stored row — gate it through the resolver
+            // (JobInterface required) instead of instantiating whatever the table names.
+            try {
+                $handler = JobHandlerResolver::resolve($handlerClass, $parameters, $this->context);
+            } catch (\Throwable $e) {
+                error_log("Refusing to run scheduled job handler '{$handlerClass}': " . $e->getMessage());
+                return false;
+            }
+
+            if (method_exists($handler, 'handle')) {
+                return $handler->handle($parameters);
+            }
+
+            error_log("Job handler '{$handlerClass}' has no handle() method");
+            return false;
+        };
     }
 
     /**
@@ -195,47 +283,11 @@ class JobScheduler
                 ->get();
 
             foreach ($dbJobs as $job) {
-                // Create a callback for database jobs that uses the handler_class
-                $callback = function () use ($job) {
-                    $handlerClass = $job['handler_class'];
-
-                    try {
-                        $parameters = (new QueuePayloadSigner($this->context))
-                            ->decodeScheduledParameters(
-                                $handlerClass,
-                                $job['parameters'] ?? null,
-                                isset($job['name']) ? (string) $job['name'] : null,
-                                isset($job['schedule']) ? (string) $job['schedule'] : null
-                            );
-                    } catch (\Throwable $e) {
-                        error_log("Refusing to run scheduled job handler '{$handlerClass}': " . $e->getMessage());
-                        return false;
-                    }
-
-                    // The handler class name comes from a stored row — gate it
-                    // through the resolver (JobInterface required) instead of
-                    // instantiating whatever the table names.
-                    try {
-                        $handler = JobHandlerResolver::resolve($handlerClass, $parameters, $this->context);
-                    } catch (\Throwable $e) {
-                        error_log("Refusing to run scheduled job handler '{$handlerClass}': " . $e->getMessage());
-                        return false;
-                    }
-
-                    if (method_exists($handler, 'handle')) {
-                        return $handler->handle($parameters);
-                    }
-
-                    error_log("Job handler '{$handlerClass}' has no handle() method");
-                    return false;
-                };
-
-                // Register job in memory
                 $this->jobs[] = [
                     'uuid' => $job['uuid'],
                     'name' => $job['name'],
                     'schedule' => $job['schedule'],
-                    'callback' => $callback,
+                    'callback' => $this->databaseJobCallback($job),
                     'next_run' => $job['next_run'],
                     'from_database' => true
                 ];

@@ -44,23 +44,26 @@ final class GateAttributeMiddleware implements RouteMiddleware
             'jwt_claims' => (array) $request->attributes->get('jwt.claims'),
         ];
 
-        $required = [];
-        // Permission attributes carry an optional resource; default to 'system'.
+        // Permission attributes are ALL required; each carries an optional resource ('system').
         $permissionAttr = 'Glueful\\Auth\\Attributes\\RequiresPermission';
         foreach ($this->collectAttributePairs($meta, $permissionAttr) as [$name, $resource]) {
-            $required[] = [$name, $resource ?? 'system'];
-        }
-        // Role attributes: canonicalize via the SHARED RoleKey contract (dotted values pass
-        // through unchanged; non-dotted map to "role.{name}"). The same RoleKey is used by the
-        // permissions:diff scanner so enforcement and drift detection never diverge.
-        foreach ($this->collectAttributeValues($meta, 'Glueful\\Auth\\Attributes\\RequiresRole', 'name') as $roleName) {
-            $required[] = [RoleKey::canonical($roleName), 'system'];
-        }
-
-        foreach ($required as [$perm, $resource]) {
-            if (!$this->permissions->can($user->id(), $perm, $resource, $context)) {
+            if (!$this->permissions->can($user->id(), $name, $resource ?? 'system', $context)) {
                 return $this->forbidden();
             }
+        }
+
+        // Role attributes are alternatives: holding ANY one listed role (method, class or parent)
+        // satisfies them. Canonicalize via the SHARED RoleKey contract (dotted values pass through
+        // unchanged; non-dotted map to "role.{name}") — the same RoleKey the permissions:diff
+        // scanner uses, so enforcement and drift detection never diverge.
+        $roles = $this->collectAttributeValues($meta, 'Glueful\\Auth\\Attributes\\RequiresRole', 'name');
+        if ($roles !== []) {
+            foreach (array_unique($roles) as $roleName) {
+                if ($this->permissions->can($user->id(), RoleKey::canonical($roleName), 'system', $context)) {
+                    return $next($request);
+                }
+            }
+            return $this->forbidden();
         }
 
         return $next($request);

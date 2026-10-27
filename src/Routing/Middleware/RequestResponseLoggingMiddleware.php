@@ -242,21 +242,15 @@ class RequestResponseLoggingMiddleware implements RouteMiddleware
             $config['log_mode'] = $params[0];
         }
 
-        if (isset($params[1]) && is_bool($params[1])) {
-            $config['log_headers'] = $params[1];
-        }
+        // Route definitions ("request_logging:both,true") deliver strings; MiddlewareParams accepts both.
+        $config['log_headers'] = MiddlewareParams::bool($params[1] ?? null) ?? $config['log_headers'];
+        $config['log_bodies'] = MiddlewareParams::bool($params[2] ?? null) ?? $config['log_bodies'];
 
-        if (isset($params[2]) && is_bool($params[2])) {
-            $config['log_bodies'] = $params[2];
-        }
-
-        if (isset($params[3]) && is_string($params[3])) {
+        if (isset($params[3]) && is_string($params[3]) && $params[3] !== '') {
             $config['log_level'] = $params[3];
         }
 
-        if (isset($params[4]) && is_int($params[4])) {
-            $config['slow_threshold'] = $params[4];
-        }
+        $config['slow_threshold'] = MiddlewareParams::int($params[4] ?? null) ?? $config['slow_threshold'];
 
         return $config;
     }

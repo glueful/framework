@@ -30,7 +30,8 @@ class RouteCompiler
             $middleware = var_export($route->getMiddleware(), true);
             $code .= "        '{$key}' => [\n";
             $code .= "            'handler' => " . var_export($handlerMeta, true) . ",\n";
-            $code .= "            'middleware' => {$middleware}\n";
+            $code .= "            'middleware' => {$middleware},\n";
+            $code .= $this->compileRouteConfig($route, '            ');
             $code .= "        ],\n";
         }
         $code .= "    ],\n";
@@ -56,13 +57,37 @@ class RouteCompiler
                 $code .= "                'handler' => " . var_export($handlerMeta, true) . ",\n";
                 $code .= "                'params' => {$params},\n";
                 $code .= "                'where' => {$where},\n";
-                $code .= "                'middleware' => {$middleware}\n";
+                $code .= "                'middleware' => {$middleware},\n";
+                $code .= $this->compileRouteConfig($route, '                ');
                 $code .= "            ],\n";
             }
             $code .= "        ],\n";
         }
         $code .= "    ]\n";
         $code .= "];\n";
+
+        return $code;
+    }
+
+    /**
+     * Export the per-route config that request-time middleware reads off the Route object
+     * (rate limits + cost, #[Fields] policy, #[RequireScope] groups, version constraint).
+     * Without these a cache-hydrated route silently loses its limits, projection and scopes.
+     */
+    private function compileRouteConfig(Route $route, string $indent): string
+    {
+        $config = [
+            'rate_limit' => $route->getRateLimitConfig(),
+            'rate_limit_cost' => $route->getRateLimitCost(),
+            'fields' => $route->getFieldsConfig(),
+            'require_scope' => $route->getRequireScopeConfig(),
+            'version' => $route->getVersionConfig(),
+        ];
+
+        $code = '';
+        foreach ($config as $key => $value) {
+            $code .= $indent . "'{$key}' => " . var_export($value, true) . ",\n";
+        }
 
         return $code;
     }

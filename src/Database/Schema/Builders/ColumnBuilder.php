@@ -292,6 +292,10 @@ class ColumnBuilder implements ColumnBuilderInterface
     /**
      * Update timestamp on row update
      *
+     * MySQL/MariaDB only (emits ON UPDATE CURRENT_TIMESTAMP). PostgreSQL and SQLite
+     * have no such column clause; their generators throw
+     * UnsupportedSchemaOperationException rather than silently ignore it.
+     *
      * @return self For method chaining
      */
     public function useCurrentOnUpdate(): self

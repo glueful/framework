@@ -11,7 +11,13 @@ namespace Glueful\Database\Exceptions;
  * Precedence is specificity-first: driver vendor codes are consulted BEFORE
  * the exact-SQLSTATE map because MySQL reports deadlock 1213 with SQLSTATE
  * 40001 — SQLSTATE-first would misclassify it as a serialization failure.
- * No message matching: driver wording varies by version and locale.
+ * No message matching, with ONE narrow exception: SQLite's bare
+ * SQLITE_CONSTRAINT (19) — the default, since the framework does not enable
+ * extended result codes — is disambiguated by SQLite's fixed, non-localized
+ * message prefixes ("UNIQUE constraint failed", "FOREIGN KEY constraint
+ * failed", "NOT NULL constraint failed"). Unrecognized wording (e.g. CHECK)
+ * stays the generic ConstraintViolationException. Other drivers' wording
+ * varies by version and locale and is never consulted.
  */
 final class ExceptionClassifier
 {
@@ -54,12 +60,26 @@ final class ExceptionClassifier
             1555 => UniqueConstraintViolationException::class,
             1299 => NotNullConstraintViolationException::class,
             787 => ForeignKeyConstraintViolationException::class,
-            // Bare SQLITE_CONSTRAINT: kind is unknowable without messages.
+            // Bare SQLITE_CONSTRAINT: refined by SQLITE_CONSTRAINT_MESSAGES below.
             19 => ConstraintViolationException::class,
         ],
         // PostgreSQL SQLSTATEs are specific; the exact-SQLSTATE map suffices.
         'pgsql' => [],
     ];
+
+    /**
+     * SQLite's fixed (non-localized) constraint message prefixes, consulted only
+     * for the bare SQLITE_CONSTRAINT code (19). Case-sensitive, matched at the
+     * start of the driver message.
+     */
+    private const SQLITE_CONSTRAINT_MESSAGES = [
+        'UNIQUE constraint failed' => UniqueConstraintViolationException::class,
+        'PRIMARY KEY must be unique' => UniqueConstraintViolationException::class,
+        'FOREIGN KEY constraint failed' => ForeignKeyConstraintViolationException::class,
+        'NOT NULL constraint failed' => NotNullConstraintViolationException::class,
+    ];
+
+    private const SQLITE_CONSTRAINT = 19;
 
     /**
      * Keyed by two-character SQLSTATE class for fallback family matching.
@@ -82,6 +102,9 @@ final class ExceptionClassifier
         if ($vendorCode !== null) {
             $class = self::VENDOR_MAP[$driver][$vendorCode] ?? null;
         }
+        if ($driver === 'sqlite' && $vendorCode === self::SQLITE_CONSTRAINT) {
+            $class = $this->classifySqliteConstraint($exception) ?? $class;
+        }
         if ($class === null && $sqlState !== null) {
             $class = self::SQLSTATE_MAP[$sqlState] ?? null;
         }
@@ -90,6 +113,27 @@ final class ExceptionClassifier
         }
 
         return ($class ?? DatabaseException::class)::fromPdo($exception, $driver);
+    }
+
+    /**
+     * @return class-string<DatabaseException>|null
+     */
+    private function classifySqliteConstraint(\PDOException $exception): ?string
+    {
+        $driverMessage = $exception->errorInfo[2] ?? null;
+        $candidates = is_string($driverMessage) ? [$driverMessage] : [];
+        // PDO's own message embeds the driver text after "...: 19 ".
+        $candidates[] = $exception->getMessage();
+
+        foreach ($candidates as $message) {
+            foreach (self::SQLITE_CONSTRAINT_MESSAGES as $prefix => $class) {
+                if (str_starts_with($message, $prefix) || str_contains($message, ' 19 ' . $prefix)) {
+                    return $class;
+                }
+            }
+        }
+
+        return null;
     }
 
     private function normalizeVendorCode(int|string|null $code): ?int

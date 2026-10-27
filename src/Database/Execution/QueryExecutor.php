@@ -258,9 +258,9 @@ class QueryExecutor implements QueryExecutorInterface
         // Start timing the query
         $timerId = $this->logger->startTiming($this->debugMode ? 'query_with_debug' : 'query');
 
-        // Capture current purpose and reset it
+        // The purpose applies to every statement this executor runs (one executor per builder),
+        // so a builder that runs several statements (e.g. count + select) tags them all.
         $purpose = $this->queryPurpose;
-        $this->queryPurpose = null;
 
         // Flatten bindings to prevent array to string conversion warnings
         $flattenedParams = $this->binder->flattenBindings($bindings);
@@ -339,7 +339,7 @@ class QueryExecutor implements QueryExecutorInterface
     }
 
     /**
-     * Set business purpose for queries
+     * Set business purpose for the queries this executor runs
      */
     public function withPurpose(string $purpose): void
     {

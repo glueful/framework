@@ -128,6 +128,10 @@ class HasOneThrough extends Relation
      */
     public function addEagerConstraints(array $models): void
     {
+        // Eager relations are built with constraints disabled, which also skips the
+        // through-table join addConstraints() performs -- the first key lives there.
+        $this->performJoin();
+
         $keys = $this->getKeys($models, $this->localKey);
 
         $this->query->whereIn($this->getQualifiedFirstKeyName(), $keys);

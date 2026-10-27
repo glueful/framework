@@ -145,12 +145,59 @@ class Builder
         // Hydrate results into models
         $models = $this->hydrate($results);
 
-        // Eager load relationships
-        if (count($this->eagerLoad) > 0 && count($models) > 0) {
+        return new Collection($this->loadRequestedRelations($models));
+    }
+
+    /**
+     * Paginate the query, returning hydrated models
+     *
+     * The page is hydrated into models with the requested eager loads (with()) and
+     * relation counts (withCount()) applied. The metadata keys are those of
+     * QueryBuilder::paginate(); only `data` differs (a Collection of models).
+     *
+     * @return array{
+     *   data: Collection<Model>,
+     *   current_page: int,
+     *   per_page: int,
+     *   total: int,
+     *   last_page: int,
+     *   has_more: bool,
+     *   from: int,
+     *   to: int,
+     *   execution_time_ms: int
+     * }
+     */
+    public function paginate(int $page = 1, int $perPage = 10): array
+    {
+        $this->applyScopes();
+
+        $result = $this->query->paginate($page, $perPage);
+        $result['data'] = new Collection($this->loadRequestedRelations($this->hydrate($result['data'])));
+
+        return $result;
+    }
+
+    /**
+     * Apply the requested eager loads and relation counts to hydrated models
+     *
+     * @param array<Model> $models
+     * @return array<Model>
+     */
+    protected function loadRequestedRelations(array $models): array
+    {
+        if ($models === []) {
+            return $models;
+        }
+
+        if ($this->eagerLoad !== []) {
             $models = $this->eagerLoadRelations($models);
         }
 
-        return new Collection($models);
+        if ($this->withCount !== []) {
+            $this->loadCountsOnModels($models, $this->withCount);
+        }
+
+        return $models;
     }
 
     /**
@@ -531,7 +578,12 @@ class Builder
             $relationName = $parts[0];
 
             if (method_exists($firstNested, $relationName)) {
-                $relation = $firstNested->$relationName();
+                // Build the relation without the single-model constraint, exactly like the
+                // top-level path -- otherwise every nested model is filtered to the first
+                // one's key and the rest silently get empty relations.
+                $relation = Relations\Relation::noConstraints(
+                    static fn (): Relations\Relation => $firstNested->$relationName()
+                );
 
                 // Initialize and load the relation
                 $relation->initRelation($nestedModels, $relationName);
@@ -684,13 +736,115 @@ class Builder
     }
 
     /**
+     * Load relation counts onto already-hydrated models as `{relation}_count`
+     *
+     * Runs one grouped COUNT query per relation (keyed by the relation's foreign key over
+     * all the parents at once). Counts are stored as synced attributes, so they are never
+     * dirty and a later save() does not try to write them.
+     *
+     * @param array<Model> $models
+     * @param array<string|int, string|Closure|null> $relations
+     * @return void
+     */
+    public function loadCountsOnModels(array $models, array $relations): void
+    {
+        if ($models === []) {
+            return;
+        }
+
+        foreach ($relations as $key => $value) {
+            $name = is_int($key) ? $value : $key;
+            if (!is_string($name)) {
+                continue;
+            }
+            $constraints = $value instanceof Closure ? $value : null;
+
+            $counts = $this->relationCounts($models, $name, $constraints);
+
+            foreach ($models as $model) {
+                $parentKey = $model->{$counts['parentKey']};
+                $count = $parentKey === null ? 0 : ($counts['counts'][(string) $parentKey] ?? 0);
+                $model->setComputedAttribute("{$name}_count", $count);
+            }
+        }
+    }
+
+    /**
+     * Count a relation for many parents with one grouped query
+     *
+     * @param array<Model> $models
+     * @param string $name
+     * @param Closure|null $constraints Receives the relation (like with() closures)
+     * @return array{parentKey: string, counts: array<string, int>}
+     */
+    protected function relationCounts(array $models, string $name, ?Closure $constraints): array
+    {
+        $relation = $this->getRelation($name);
+        $relatedTable = $relation->getRelated()->getTable();
+
+        if ($relation instanceof Relations\HasMany || $relation instanceof Relations\HasOne) {
+            $groupColumn = $this->qualifyColumn($relatedTable, $relation->getForeignKeyName());
+            $parentKey = $relation->getLocalKeyName();
+        } elseif ($relation instanceof Relations\BelongsTo) {
+            $groupColumn = $this->qualifyColumn($relatedTable, $relation->getOwnerKeyName());
+            $parentKey = $relation->getForeignKeyName();
+        } elseif ($relation instanceof Relations\BelongsToMany) {
+            $groupColumn = $relation->getQualifiedForeignPivotKeyName();
+            $parentKey = $relation->getParentKeyName();
+        } elseif ($relation instanceof Relations\HasManyThrough || $relation instanceof Relations\HasOneThrough) {
+            $groupColumn = $relation->getQualifiedFirstKeyName();
+            $parentKey = $relation->getLocalKeyName();
+        } else {
+            throw new \InvalidArgumentException(sprintf(
+                'Cannot count relation [%s]: unsupported relation type %s.',
+                $name,
+                $relation::class
+            ));
+        }
+
+        // Constrains to all parents' keys (and adds the pivot / through join).
+        $relation->addEagerConstraints($models);
+
+        if ($constraints !== null) {
+            $constraints($relation);
+        }
+
+        $query = $relation->getQuery();
+        $query->applyScopes();
+
+        $rows = $query->getQuery()
+            ->select(["{$groupColumn} as glueful_count_key"])
+            ->selectRaw('COUNT(*) as glueful_count')
+            ->groupBy($groupColumn)
+            ->get();
+
+        $counts = [];
+        foreach ($rows as $row) {
+            $counts[(string) $row['glueful_count_key']] = (int) $row['glueful_count'];
+        }
+
+        return ['parentKey' => $parentKey, 'counts' => $counts];
+    }
+
+    /**
+     * Qualify a column with a table unless it already is
+     */
+    private function qualifyColumn(string $table, string $column): string
+    {
+        return str_contains($column, '.') ? $column : "{$table}.{$column}";
+    }
+
+    /**
      * Add a relationship count / exists condition to the query
+     *
+     * Nested relations (`posts.comments`) are supported: the operator, count and
+     * callback apply to the deepest relation.
      *
      * @param string $relation
      * @param string $operator
      * @param int $count
      * @param string $boolean
-     * @param Closure|null $callback
+     * @param Closure|null $callback Receives the related model's query builder
      * @return static
      */
     public function has(
@@ -823,42 +977,107 @@ class Builder
         // must come from a fixed allow-list -- never arbitrary request input.
         $operator = \Glueful\Database\Query\SqlOperators::assertOperator($operator);
 
-        // Get the base relation
         $parts = explode('.', $relation);
         $baseName = array_shift($parts);
 
-        $relationInstance = $this->model->$baseName();
+        // A clean relation query (no single-model constraint) to correlate against the parent.
+        $relationInstance = $this->getRelation($baseName);
+        $subQuery = $relationInstance->getQuery();
 
-        // Get the relationship table and keys
-        $relatedTable = $relationInstance->getRelated()->getTable();
-        $parentTable = $this->model->getTable();
+        [$relatedColumn, $parentColumn] = $this->relationExistenceColumns($relationInstance, $subQuery);
+        $subQuery->getQuery()->whereRaw("{$relatedColumn} = {$parentColumn}");
 
-        // Build the subquery for existence check
-        $subQuery = $relationInstance->getQuery()->getQuery();
-
-        // Add the join condition
-        if (method_exists($relationInstance, 'getQualifiedForeignKeyName')) {
-            $foreignKey = $relationInstance->getQualifiedForeignKeyName();
-            $localKey = $relationInstance->getQualifiedParentKeyName();
-            $subQuery->whereRaw("{$foreignKey} = {$localKey}");
-        }
-
-        // Apply user constraints
-        if ($callback !== null) {
+        if ($parts !== []) {
+            // Nested: the deepest relation carries the operator/count/callback; each outer
+            // level is a plain existence check ("doesn't have" stays negated at the top).
+            $doesntHave = $operator === '<' && $count === 1;
+            $subQuery->has(
+                implode('.', $parts),
+                $doesntHave ? '>=' : $operator,
+                $doesntHave ? 1 : $count,
+                'and',
+                $callback
+            );
+            $operator = $doesntHave ? '<' : '>=';
+            $count = 1;
+        } elseif ($callback !== null) {
             $callback($subQuery);
         }
 
-        // Build the raw SQL for the subquery count
-        $sql = "({$subQuery->toSql()})";
+        $subQuery->applyScopes();
+        $base = $subQuery->getQuery()->selectRaw('COUNT(*)');
 
-        // Add the where clause
         $method = $boolean === 'or' ? 'orWhereRaw' : 'whereRaw';
-        $foreignKey = $this->getRelationForeignKey($relationInstance);
-        $primaryKey = $this->model->getKeyName();
-        $sql = "(SELECT COUNT(*) FROM {$relatedTable} "
-            . "WHERE {$relatedTable}.{$foreignKey} = {$parentTable}.{$primaryKey}) "
-            . "{$operator} {$count}";
-        $this->query->$method($sql);
+        $this->query->$method("({$base->toSql()}) {$operator} {$count}", $base->getBindings());
+    }
+
+    /**
+     * Resolve the related-side and parent-side columns that correlate a relation
+     * existence subquery with the outer query, joining any pivot / through table
+     *
+     * @param Relations\Relation $relation
+     * @param Builder $subQuery
+     * @return array{0: string, 1: string}
+     */
+    protected function relationExistenceColumns(Relations\Relation $relation, Builder $subQuery): array
+    {
+        $parentTable = $this->model->getTable();
+        $relatedTable = $relation->getRelated()->getTable();
+
+        if ($relatedTable === $parentTable) {
+            throw new \LogicException(sprintf(
+                'has()/whereHas() on the self-referencing relation to [%s] is not supported.',
+                $relatedTable
+            ));
+        }
+
+        if ($relation instanceof Relations\HasMany || $relation instanceof Relations\HasOne) {
+            return [
+                $this->qualifyColumn($relatedTable, $relation->getForeignKeyName()),
+                $this->qualifyColumn($parentTable, $relation->getLocalKeyName()),
+            ];
+        }
+
+        if ($relation instanceof Relations\BelongsTo) {
+            return [
+                $this->qualifyColumn($relatedTable, $relation->getOwnerKeyName()),
+                $this->qualifyColumn($parentTable, $relation->getForeignKeyName()),
+            ];
+        }
+
+        if ($relation instanceof Relations\BelongsToMany) {
+            $subQuery->join(
+                $relation->getTable(),
+                "{$relatedTable}.{$relation->getRelatedKeyName()}",
+                '=',
+                $relation->getQualifiedRelatedPivotKeyName()
+            );
+
+            return [
+                $relation->getQualifiedForeignPivotKeyName(),
+                $this->qualifyColumn($parentTable, $relation->getParentKeyName()),
+            ];
+        }
+
+        if ($relation instanceof Relations\HasManyThrough) {
+            $throughTable = $relation->getThroughParent()->getTable();
+            $subQuery->join(
+                $throughTable,
+                "{$throughTable}.{$relation->getSecondLocalKeyName()}",
+                '=',
+                "{$relatedTable}.{$relation->getSecondKeyName()}"
+            );
+
+            return [
+                $relation->getQualifiedFirstKeyName(),
+                $this->qualifyColumn($parentTable, $relation->getLocalKeyName()),
+            ];
+        }
+
+        throw new \InvalidArgumentException(sprintf(
+            'has()/whereHas() does not support relation type %s.',
+            $relation::class
+        ));
     }
 
     /**
@@ -1004,7 +1223,9 @@ class Builder
     {
         $this->applyScopes();
 
-        return $this->query->delete();
+        // QueryBuilder::delete() soft-deletes any table with a deleted_at column; a force
+        // delete must issue a real DELETE.
+        return $this->query->forceDelete();
     }
 
     /**
@@ -1351,7 +1572,6 @@ class Builder
     private function isTerminalQueryBuilderMethod(string $method): bool
     {
         return in_array($method, [
-            'paginate',
             'max',
             'pluck',
         ], true);

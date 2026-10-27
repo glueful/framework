@@ -581,7 +581,14 @@ class DatabaseQueue implements QueueDriverInterface, FailedJobStore
     /** Failed-job storage for this connection: the one implementation, over the same table. */
     public function failures(): FailedJobProvider
     {
-        return new FailedJobProvider($this->db, $this->failedTable, 5, 30, $this->context, $this);
+        return new FailedJobProvider(
+            $this->db,
+            $this->failedTable,
+            (int) $this->getConfig('queue.failed.max_retries', 5),
+            (int) $this->getConfig('queue.failed.retention_days', 30),
+            $this->context,
+            $this
+        );
     }
 
     /**

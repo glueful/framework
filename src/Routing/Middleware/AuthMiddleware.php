@@ -722,8 +722,8 @@ class AuthMiddleware implements RouteMiddleware
             : [];
 
         $claims = (isset($user['claims']) && is_array($user['claims'])) ? $user['claims'] : [];
-        $scopesRaw = $claims['scope'] ?? $claims['scopes'] ?? ($user['scopes'] ?? []);
-        $scopes = is_array($scopesRaw) ? array_values(array_filter($scopesRaw, 'is_string')) : [];
+        // OAuth tokens carry `scope` as one space-delimited string (RFC 6749 §3.3).
+        $scopes = UserIdentity::normalizeScopes($claims['scope'] ?? $claims['scopes'] ?? ($user['scopes'] ?? []));
 
         $attributes = [];
         if (array_key_exists('permissions', $user)) {

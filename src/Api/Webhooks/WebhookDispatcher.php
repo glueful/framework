@@ -9,51 +9,44 @@ use Glueful\Api\Webhooks\Contracts\WebhookDispatcherInterface;
 use Glueful\Api\Webhooks\Contracts\WebhookPayloadInterface;
 use Glueful\Api\Webhooks\Events\WebhookDispatchedEvent;
 use Glueful\Api\Webhooks\Jobs\DeliverWebhookJob;
-use Glueful\Database\Connection;
-use Glueful\Database\Schema\Interfaces\SchemaBuilderInterface;
 use Glueful\Events\EventService;
 
 /**
- * Central webhook dispatcher with auto-migration
+ * Central webhook dispatcher
  *
  * Orchestrates webhook dispatching by:
- * - Auto-creating required database tables on first use
  * - Finding matching subscriptions for events
  * - Creating delivery records
  * - Queueing delivery jobs
  */
 class WebhookDispatcher implements WebhookDispatcherInterface
 {
-    private SchemaBuilderInterface $schema;
-    private Connection $db;
-    private bool $tablesEnsured = false;
     private WebhookPayloadInterface $payloadBuilder;
     private ?ApplicationContext $context;
 
     public function __construct(
-        ?Connection $connection = null,
         ?WebhookPayloadInterface $payloadBuilder = null,
         ?ApplicationContext $context = null
     ) {
         $this->context = $context;
-        $this->db = $connection ?? Connection::fromContext($context);
-        $this->schema = $this->db->getSchemaBuilder();
         $this->payloadBuilder = $payloadBuilder ?? new WebhookPayload();
     }
 
     /**
      * Dispatch a webhook event to all matching subscribers
      *
+     * Options (all optional) apply to the queued delivery jobs:
+     * - `queue` (string): queue name, overriding `api.webhooks.queue`
+     * - `connection` (string): queue connection, overriding `api.webhooks.connection`
+     * - `delay` (int): seconds before the first delivery attempt
+     *
      * @param string $event Event name (e.g., 'user.created')
      * @param array<string, mixed> $data Event data
-     * @param array<string, mixed> $options Additional options
+     * @param array<string, mixed> $options Additional options (see above)
      * @return array<WebhookDelivery> Created delivery records
      */
     public function dispatch(string $event, array $data, array $options = []): array
     {
-        // Ensure tables exist on first use
-        $this->ensureTables();
-
         $deliveries = [];
         $config = $this->getConfig();
 
@@ -79,7 +72,7 @@ class WebhookDispatcher implements WebhookDispatcherInterface
             $deliveries[] = $delivery;
 
             // Queue the delivery job
-            $this->queueDelivery($delivery, $config);
+            $this->queueDelivery($delivery, $config, $options);
         }
 
         // Dispatch internal event if any deliveries were created
@@ -128,14 +121,28 @@ class WebhookDispatcher implements WebhookDispatcherInterface
      * Queue a delivery job
      *
      * @param array<string, mixed> $config
+     * @param array<string, mixed> $options Per-dispatch `queue`, `connection`, `delay`
      */
-    private function queueDelivery(WebhookDelivery $delivery, array $config): void
+    private function queueDelivery(WebhookDelivery $delivery, array $config, array $options = []): void
     {
-        if ($this->context !== null) {
-            DeliverWebhookJob::enqueue($this->context, $delivery->id, (string) ($config['queue'] ?? 'webhooks'));
+        if ($this->context === null) {
+            return;
         }
+
+        $queue = self::nonEmptyString($options['queue'] ?? null)
+            ?? self::nonEmptyString($config['queue'] ?? null)
+            ?? 'webhooks';
+        $connection = self::nonEmptyString($options['connection'] ?? null)
+            ?? self::nonEmptyString($config['connection'] ?? null);
+        $delay = is_numeric($options['delay'] ?? null) ? max(0, (int) $options['delay']) : 0;
+
+        DeliverWebhookJob::enqueue($this->context, $delivery->id, $queue, $connection, $delay);
     }
 
+    private static function nonEmptyString(mixed $value): ?string
+    {
+        return is_string($value) && $value !== '' ? $value : null;
+    }
 
     /**
      * Get webhook configuration
@@ -149,112 +156,5 @@ class WebhookDispatcher implements WebhookDispatcherInterface
         }
 
         return [];
-    }
-
-    /**
-     * Ensure webhook tables exist
-     *
-     * Following the pattern from DatabaseLogHandler, tables are created
-     * automatically at runtime if they don't exist.
-     */
-    private function ensureTables(): void
-    {
-        if ($this->tablesEnsured) {
-            return;
-        }
-
-        $this->ensureSubscriptionsTable();
-        $this->ensureDeliveriesTable();
-
-        $this->tablesEnsured = true;
-    }
-
-    /**
-     * Ensure webhook_subscriptions table exists
-     */
-    private function ensureSubscriptionsTable(): void
-    {
-        if ($this->schema->hasTable('webhook_subscriptions')) {
-            return;
-        }
-
-        $table = $this->schema->table('webhook_subscriptions');
-
-        // Define columns
-        $table->bigInteger('id')->unsigned()->primary()->autoIncrement();
-        $table->string('uuid', 32)->unique();
-        $table->string('url', 2048);
-        $table->json('events');
-        $table->string('secret', 255);
-        $table->boolean('is_active')->default(true);
-        $table->json('metadata')->nullable();
-        $table->timestamp('created_at')->default('CURRENT_TIMESTAMP');
-        $table->timestamp('updated_at')->default('CURRENT_TIMESTAMP');
-
-        // Add indexes
-        $table->index('is_active');
-
-        // Create the table
-        $table->create();
-        $this->schema->execute();
-    }
-
-    /**
-     * Ensure webhook_deliveries table exists
-     */
-    private function ensureDeliveriesTable(): void
-    {
-        if ($this->schema->hasTable('webhook_deliveries')) {
-            return;
-        }
-
-        $table = $this->schema->table('webhook_deliveries');
-
-        // Define columns
-        $table->bigInteger('id')->unsigned()->primary()->autoIncrement();
-        $table->string('uuid', 32)->unique();
-        $table->bigInteger('subscription_id')->unsigned();
-        $table->string('event', 255);
-        $table->json('payload');
-        $table->string('status', 20)->default('pending');
-        $table->integer('attempts')->unsigned()->default(0);
-        $table->integer('response_code')->unsigned()->nullable();
-        $table->text('response_body')->nullable();
-        $table->timestamp('delivered_at')->nullable();
-        $table->timestamp('next_retry_at')->nullable();
-        $table->timestamp('created_at')->default('CURRENT_TIMESTAMP');
-
-        // Add indexes
-        $table->index('subscription_id');
-        $table->index('status');
-        $table->index('next_retry_at');
-
-        // Create the table
-        $table->create();
-        $this->schema->execute();
-    }
-
-    /**
-     * Get the schema builder (for testing)
-     */
-    public function getSchema(): SchemaBuilderInterface
-    {
-        return $this->schema;
-    }
-
-    /**
-     * Check if tables have been ensured
-     */
-    public function areTablesEnsured(): bool
-    {
-        return $this->tablesEnsured;
-    }
-
-    /**
-     * Force table check on next dispatch
-     */
-    public function resetTablesEnsured(): void
-    {
-        $this->tablesEnsured = false;
     }
 }

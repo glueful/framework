@@ -386,7 +386,7 @@ class UploadController extends BaseController
         }
 
         $base = $this->publicUrlProvider?->publicBaseUrl($blob) ?? $request->getSchemeAndHttpHost();
-        $baseUrl = rtrim($base, '/') . '/blobs/' . $uuid;
+        $baseUrl = self::blobUrl($this->getContext(), $base, $uuid);
         $signedUrl = SignedUrl::make($this->getContext())->generate($baseUrl, $ttl);
 
         $rawPath = (string) ($blob['url'] ?? '');
@@ -856,6 +856,15 @@ class UploadController extends BaseController
         $disk = $this->resolveDisk($blob);
 
         return $path !== '' ? $this->urls->url($path, $disk) : '';
+    }
+
+    /**
+     * The URL of a blob's `GET /blobs/{uuid}` route on the given origin. routes/blobs.php is
+     * mounted under the API prefix (RouteManifest), so the path carries api_prefix().
+     */
+    public static function blobUrl(ApplicationContext $context, string $origin, string $uuid): string
+    {
+        return rtrim($origin, '/') . api_prefix($context) . '/blobs/' . rawurlencode($uuid);
     }
 
     /**

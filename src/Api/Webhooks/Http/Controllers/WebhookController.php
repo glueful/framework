@@ -27,16 +27,21 @@ use Symfony\Component\HttpFoundation\Request;
 /**
  * REST API Controller for webhook management
  *
- * Provides endpoints for managing webhook subscriptions and deliveries:
+ * Routed by core's routes/webhooks.php under the API prefix (e.g. /api/v1), every route behind
+ * `auth`. Reads require `system.config.view`; anything that changes state (or reveals/rotates a
+ * secret, or sends a test request) requires `system.config.edit`.
  *
- * - POST   /api/webhooks/subscriptions           Create subscription
- * - GET    /api/webhooks/subscriptions           List subscriptions
- * - GET    /api/webhooks/subscriptions/{id}      Get subscription
- * - PATCH  /api/webhooks/subscriptions/{id}      Update subscription
- * - DELETE /api/webhooks/subscriptions/{id}      Delete subscription
- * - POST   /api/webhooks/subscriptions/{id}/test Send test webhook
- * - GET    /api/webhooks/deliveries              List deliveries
- * - POST   /api/webhooks/deliveries/{id}/retry   Retry delivery
+ * - GET    /webhooks/subscriptions                    List subscriptions          (view)
+ * - POST   /webhooks/subscriptions                    Create subscription         (edit)
+ * - GET    /webhooks/subscriptions/{id}               Get subscription            (view)
+ * - PATCH  /webhooks/subscriptions/{id}               Update subscription         (edit)
+ * - DELETE /webhooks/subscriptions/{id}               Delete subscription         (edit)
+ * - POST   /webhooks/subscriptions/{id}/rotate-secret Rotate signing secret       (edit)
+ * - POST   /webhooks/subscriptions/{id}/test          Send test webhook           (edit)
+ * - GET    /webhooks/subscriptions/{id}/stats         Delivery statistics         (view)
+ * - GET    /webhooks/deliveries                       List deliveries             (view)
+ * - GET    /webhooks/deliveries/{id}                  Get delivery                (view)
+ * - POST   /webhooks/deliveries/{id}/retry            Retry delivery              (edit)
  */
 class WebhookController extends BaseController
 {
@@ -73,6 +78,8 @@ class WebhookController extends BaseController
     #[ApiResponse(200, schema: WebhookSubscriptionListData::class, description: 'Subscriptions page.')]
     public function listSubscriptions(Request $request): \Symfony\Component\HttpFoundation\Response
     {
+        $this->requirePermission('system.config.view');
+
         $page = max(1, (int) $request->query->get('page', 1));
         $perPage = min((int) $request->query->get('per_page', 25), 100);
         $activeOnly = $request->query->get('active') === 'true';
@@ -134,6 +141,8 @@ class WebhookController extends BaseController
     #[ApiResponse(400, description: 'Invalid URL or events.')]
     public function createSubscription(Request $request): \Symfony\Component\HttpFoundation\Response
     {
+        $this->requirePermission('system.config.edit');
+
         $data = $this->getJsonBody($request);
 
         // Validate required fields
@@ -175,6 +184,8 @@ class WebhookController extends BaseController
     #[ApiResponse(404, description: 'No such subscription.')]
     public function getSubscription(string $id): \Symfony\Component\HttpFoundation\Response
     {
+        $this->requirePermission('system.config.view');
+
         $subscription = Webhook::findSubscription($id);
 
         if ($subscription === null) {
@@ -208,6 +219,8 @@ class WebhookController extends BaseController
     #[ApiResponse(404, description: 'No such subscription.')]
     public function updateSubscription(Request $request, string $id): \Symfony\Component\HttpFoundation\Response
     {
+        $this->requirePermission('system.config.edit');
+
         $subscription = Webhook::findSubscription($id);
 
         if ($subscription === null) {
@@ -265,6 +278,8 @@ class WebhookController extends BaseController
     #[ApiResponse(404, description: 'No such subscription.')]
     public function deleteSubscription(string $id): \Symfony\Component\HttpFoundation\Response
     {
+        $this->requirePermission('system.config.edit');
+
         $subscription = Webhook::findSubscription($id);
 
         if ($subscription === null) {
@@ -294,6 +309,8 @@ class WebhookController extends BaseController
     #[ApiResponse(404, description: 'No such subscription.')]
     public function rotateSecret(string $id): \Symfony\Component\HttpFoundation\Response
     {
+        $this->requirePermission('system.config.edit');
+
         $subscription = Webhook::findSubscription($id);
 
         if ($subscription === null) {
@@ -327,6 +344,8 @@ class WebhookController extends BaseController
     #[ApiResponse(502, description: 'Endpoint rejected or failed the test.')]
     public function testSubscription(string $id): \Symfony\Component\HttpFoundation\Response
     {
+        $this->requirePermission('system.config.edit');
+
         $subscription = Webhook::findSubscription($id);
 
         if ($subscription === null) {
@@ -371,6 +390,8 @@ class WebhookController extends BaseController
     #[ApiResponse(404, description: 'No such subscription.')]
     public function getSubscriptionStats(Request $request, string $id): \Symfony\Component\HttpFoundation\Response
     {
+        $this->requirePermission('system.config.view');
+
         $subscription = Webhook::findSubscription($id);
 
         if ($subscription === null) {
@@ -413,6 +434,8 @@ class WebhookController extends BaseController
     #[ApiResponse(200, schema: WebhookDeliveryListData::class, description: 'Deliveries page.')]
     public function listDeliveries(Request $request): \Symfony\Component\HttpFoundation\Response
     {
+        $this->requirePermission('system.config.view');
+
         $page = max(1, (int) $request->query->get('page', 1));
         $perPage = min((int) $request->query->get('per_page', 25), 100);
         $status = $request->query->get('status');
@@ -477,6 +500,8 @@ class WebhookController extends BaseController
     #[ApiResponse(404, description: 'No such delivery.')]
     public function getDelivery(string $id): \Symfony\Component\HttpFoundation\Response
     {
+        $this->requirePermission('system.config.view');
+
         $delivery = Webhook::findDelivery($id);
 
         if ($delivery === null) {
@@ -507,6 +532,8 @@ class WebhookController extends BaseController
     #[ApiResponse(404, description: 'No such delivery.')]
     public function retryDelivery(string $id): \Symfony\Component\HttpFoundation\Response
     {
+        $this->requirePermission('system.config.edit');
+
         $delivery = Webhook::findDelivery($id);
 
         if ($delivery === null) {

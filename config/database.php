@@ -60,8 +60,10 @@ return [
         'driver' => 'sqlite',
         'primary' => (function () {
             $path = env('DB_SQLITE_DATABASE', 'storage/database/glueful.sqlite');
-            // If path is absolute, use as-is. Otherwise, resolve from project root
+            // In-memory (`:memory:`) and `file:` URI databases, and absolute paths, are used
+            // as-is. Otherwise, resolve from project root.
             if (
+                $path === ':memory:' || str_starts_with($path, 'file:') ||
                 str_starts_with($path, '/') || str_starts_with($path, DIRECTORY_SEPARATOR) ||
                 (PHP_OS_FAMILY === 'Windows' && preg_match('/^[a-zA-Z]:/', $path) === 1)
             ) {

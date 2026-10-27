@@ -23,6 +23,13 @@ return [
         'allow_query_param' => env('TOKEN_ALLOW_QUERY_PARAM', false),
     ],
 
+    // API key handling
+    'api_keys' => [
+        // Accept ?api_key= as a key source (discouraged: query strings leak into logs,
+        // proxies, browser history and Referer). X-API-Key / "Authorization: ApiKey" always work.
+        'allow_query_param' => env('API_KEY_ALLOW_QUERY_PARAM', false),
+    ],
+
     // Comma-separated trusted reverse proxies/load balancers. Leave empty unless
     // the app is deployed behind infrastructure that owns X-Forwarded-* headers.
     'trusted_proxies' => array_filter(
@@ -97,7 +104,9 @@ return [
             'auth/reset-password',
             'auth/verify-email',
             'auth/verify-otp',
-            'webhooks/*',
+            // Inbound third-party receivers only — not the authenticated management API that the
+            // framework mounts at <api prefix>/webhooks/{subscriptions,deliveries}.
+            'webhooks/inbound/*',
             'public/*',
             'csrf-token',
         ],

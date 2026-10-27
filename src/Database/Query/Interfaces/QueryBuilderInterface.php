@@ -267,7 +267,10 @@ interface QueryBuilderInterface
     public function cache(?int $ttl = null, array $tags = []): static;
 
     /**
-     * Enable query optimization
+     * No-op retained for backward compatibility; returns the builder unchanged.
+     *
+     * @deprecated Has never had any effect. Remove the call; for SQL analysis use
+     *             Glueful\Database\QueryOptimizer::optimizeQuery() explicitly.
      */
     public function optimize(): static;
 

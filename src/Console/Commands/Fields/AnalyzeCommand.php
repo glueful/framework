@@ -277,10 +277,8 @@ class AnalyzeCommand extends BaseCommand
 
     private function routeHasFieldSelection(\Glueful\Routing\Route $route): bool
     {
-        // Check if route has field selection middleware
-        $middleware = $route->getMiddleware();
-        return in_array('field_selection', $middleware, true) ||
-               in_array('Glueful\Routing\Middleware\FieldSelectionMiddleware', $middleware, true);
+        // Explicit middleware OR #[Fields] config (field_selection is auto-attached for the latter).
+        return $route->hasFieldSelection();
     }
 
     /**

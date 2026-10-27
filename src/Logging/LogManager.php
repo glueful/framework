@@ -152,6 +152,15 @@ class LogManager implements LoggerInterface, LogManagerInterface
         $this->defaultChannel = $defaultChannel;
         $this->maxFiles = $maxFiles;
         $this->minimumLevel = Level::Debug;
+        // LOG_LEVEL (logging.application.level) sets the floor; an unknown name keeps the default.
+        $configuredLevel = $this->getConfig('logging.application.level');
+        if (is_string($configuredLevel) && $configuredLevel !== '') {
+            try {
+                $this->setMinimumLevelByName($configuredLevel);
+            } catch (\InvalidArgumentException) {
+                $this->minimumLevel = Level::Debug;
+            }
+        }
         $logToFile = (bool) $this->getConfig('logging.application.log_to_file', true);
 
         // Get max files setting from config

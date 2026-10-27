@@ -673,6 +673,11 @@ class MySQLSqlGenerator implements SqlGeneratorInterface
             $parts[] = 'DEFAULT ' . $this->formatDefaultValue($column->getDefaultValue(), $column->type);
         }
 
+        // ON UPDATE CURRENT_TIMESTAMP (ColumnBuilder::useCurrentOnUpdate())
+        if (($column->options['onUpdate'] ?? null) === 'CURRENT_TIMESTAMP') {
+            $parts[] = 'ON UPDATE CURRENT_TIMESTAMP';
+        }
+
         // Auto increment
         if ($column->autoIncrement) {
             $parts[] = 'AUTO_INCREMENT';

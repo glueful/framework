@@ -934,15 +934,19 @@ final class RouteReflectionDocGenerator
     /**
      * Derive an OpenAPI tag from the path's first meaningful segment.
      *
-     * Strips a leading version segment (e.g. `v1`) and any path parameters,
-     * title-casing the result. Falls back to "Default" when nothing remains.
+     * Skips the configured API prefix (`api.versioning.prefix`, default `/api`) when the path
+     * starts with it, then a version segment (e.g. `v1`) and any path parameters, title-casing
+     * the result. Without the prefix skip every route under the default `/api/v1` would be
+     * tagged "Api". Falls back to "Default" when nothing remains.
      */
     private function deriveTag(string $path): string
     {
-        $segments = array_values(array_filter(
-            explode('/', $path),
-            static fn (string $s): bool => $s !== '',
-        ));
+        $segments = self::pathSegments($path);
+
+        $prefix = $this->apiPrefixSegments();
+        if ($prefix !== [] && array_slice($segments, 0, count($prefix)) === $prefix) {
+            $segments = array_slice($segments, count($prefix));
+        }
 
         foreach ($segments as $segment) {
             // Skip path parameters like {id}.
@@ -957,6 +961,27 @@ final class RouteReflectionDocGenerator
         }
 
         return 'Default';
+    }
+
+    /** @return list<string> */
+    private function apiPrefixSegments(): array
+    {
+        $prefix = '/api';
+        if ($this->context !== null) {
+            $configured = config($this->context, 'api.versioning.prefix', '/api');
+            $prefix = is_string($configured) ? $configured : '/api';
+        }
+
+        return self::pathSegments($prefix);
+    }
+
+    /** @return list<string> */
+    private static function pathSegments(string $path): array
+    {
+        return array_values(array_filter(
+            explode('/', $path),
+            static fn (string $s): bool => $s !== '',
+        ));
     }
 
     /**

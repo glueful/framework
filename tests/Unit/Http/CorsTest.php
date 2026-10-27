@@ -183,6 +183,106 @@ final class CorsTest extends TestCase
         );
     }
 
+    /**
+     * Regression: origin patterns and development_allow_all were honoured only by the router's
+     * preflight responder. Actual responses go through applyToResponse(), which matched the exact
+     * list / '*' only — so a pattern-allowed origin passed preflight and then had its real
+     * response blocked by the browser.
+     */
+    public function test_applyToResponse_honours_configured_origin_patterns(): void
+    {
+        $cors = $this->fromCorsConfig([
+            'allowed_origins' => ['https://app.example'],
+            'allowed_origin_patterns' => ['/^https:\/\/[a-z0-9-]+\.tenant\.example$/'],
+        ]);
+        $request = Request::create('/x', 'GET');
+        $request->headers->set('Origin', 'https://acme.tenant.example');
+        $response = new Response('', 200);
+
+        $cors->applyToResponse($request, $response);
+
+        self::assertSame(
+            'https://acme.tenant.example',
+            $response->headers->get('Access-Control-Allow-Origin'),
+            'a pattern-allowed origin must get Access-Control-Allow-Origin on the actual response'
+        );
+        self::assertSame('Origin', $response->headers->get('Vary'));
+    }
+
+    public function test_applyToResponse_rejects_origin_not_matching_any_pattern(): void
+    {
+        $cors = $this->fromCorsConfig([
+            'allowed_origins' => [],
+            'allowed_origin_patterns' => ['/^https:\/\/[a-z0-9-]+\.tenant\.example$/'],
+        ]);
+        $request = Request::create('/x', 'GET');
+        $request->headers->set('Origin', 'https://tenant.example.evil.test');
+        $response = new Response('', 200);
+
+        $cors->applyToResponse($request, $response);
+
+        self::assertFalse($response->headers->has('Access-Control-Allow-Origin'));
+    }
+
+    public function test_applyToResponse_honours_development_allow_all(): void
+    {
+        $cors = $this->fromCorsConfig([
+            'allowed_origins' => [],
+            'development_allow_all' => true,
+        ]);
+        $request = Request::create('/x', 'GET');
+        $request->headers->set('Origin', 'http://localhost:5173');
+        $response = new Response('', 200);
+
+        $cors->applyToResponse($request, $response);
+
+        self::assertSame('http://localhost:5173', $response->headers->get('Access-Control-Allow-Origin'));
+        self::assertSame('Origin', $response->headers->get('Vary'));
+    }
+
+    public function test_pattern_matched_origin_with_credentials_echoes_specific_origin(): void
+    {
+        $cors = $this->fromCorsConfig([
+            'allowed_origins' => [],
+            'allowed_origin_patterns' => ['/^https:\/\/[a-z0-9-]+\.tenant\.example$/'],
+            'allow_credentials' => true,
+        ]);
+        $request = Request::create('/x', 'GET');
+        $request->headers->set('Origin', 'https://acme.tenant.example');
+        $response = new Response('', 200);
+
+        $cors->applyToResponse($request, $response);
+
+        self::assertSame('https://acme.tenant.example', $response->headers->get('Access-Control-Allow-Origin'));
+        self::assertSame('true', $response->headers->get('Access-Control-Allow-Credentials'));
+        self::assertSame('Origin', $response->headers->get('Vary'));
+    }
+
+    public function test_shared_matcher_applies_one_rule_for_every_source(): void
+    {
+        $patterns = ['/^https:\/\/[a-z0-9-]+\.tenant\.example$/'];
+
+        self::assertTrue(Cors::originMatches('https://app.example', ['https://app.example'], [], false));
+        self::assertTrue(Cors::originMatches('https://any.example', ['*'], [], false));
+        self::assertTrue(Cors::originMatches('https://acme.tenant.example', [], $patterns, false));
+        self::assertTrue(Cors::originMatches('https://any.example', [], [], true));
+        self::assertFalse(Cors::originMatches('https://evil.example', ['https://app.example'], $patterns, false));
+        self::assertFalse(Cors::originMatches('', ['*'], $patterns, true), 'a missing Origin never matches');
+    }
+
+    /**
+     * Build a handler from a raw config/cors.php-shaped array (as the constructor does from config()).
+     *
+     * @param array<string, mixed> $corsConfig
+     */
+    private function fromCorsConfig(array $corsConfig): Cors
+    {
+        /** @var array<string, mixed> $resolved */
+        $resolved = $this->invoke(new Cors(), 'resolveConfig', [$corsConfig]);
+
+        return new Cors($resolved);
+    }
+
     private function configValue(Cors $cors, string $key): mixed
     {
         $ref = new \ReflectionProperty($cors, 'config');

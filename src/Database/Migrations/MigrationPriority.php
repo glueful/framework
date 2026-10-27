@@ -13,7 +13,10 @@ namespace Glueful\Database\Migrations;
  */
 final class MigrationPriority
 {
-    /** Reserved for framework foundation migrations (core ships none today). */
+    /**
+     * Framework foundation migrations: every core leaf (auth, extensions, locks, metrics,
+     * notifications, queue, scheduler, uploads — see FrameworkDescriptors) runs at this tier.
+     */
     public const FOUNDATION = -200;
 
     /** Identity/auth schema (glueful/users). */

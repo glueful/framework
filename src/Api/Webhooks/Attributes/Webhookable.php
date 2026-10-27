@@ -38,8 +38,9 @@ class Webhookable
      * @param string|null $event Custom event name (default: derived from class name)
      * @param string|null $condition Method name to check before dispatching
      * @param bool $enabled Whether webhooks are enabled for this event
-     * @param array<string> $only Only dispatch to subscriptions matching these patterns
-     * @param array<string> $except Exclude subscriptions matching these patterns
+     * @param array<string> $only Deprecated, no effect: never defined what a pattern matches
+     *                            (subscription URL, uuid or event). Filter subscriptions by event.
+     * @param array<string> $except Deprecated, no effect (see $only).
      */
     public function __construct(
         public readonly ?string $event = null,

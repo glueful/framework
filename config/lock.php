@@ -88,7 +88,6 @@ return [
     */
 
     'retry' => [
-        'times' => env('LOCK_RETRY_TIMES', 10),
         'delay' => env('LOCK_RETRY_DELAY', 100), // milliseconds
         'max_wait' => env('LOCK_MAX_WAIT', 10), // seconds
     ],

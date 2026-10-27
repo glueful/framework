@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Glueful\Auth;
 
+use Glueful\Auth\Session\AuthenticatedSession;
+use Glueful\Auth\Session\SessionCookieIssuer;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Events\Auth\LoginResponseBuildingEvent;
 use Glueful\Events\Auth\LoginResponseBuiltEvent;
@@ -33,10 +35,68 @@ final class LoginResponseShaper
      */
     public function shape(Request $request, array $session): Response
     {
+        $session = $this->withCsrfToken($request, $session);
+
+        // Login events — same logic previously in AuthController::login.
+        $tokens = [
+            'access_token' => $session['access_token'] ?? null,
+            'refresh_token' => $session['refresh_token'] ?? null,
+            'expires_in' => $session['expires_in'] ?? null,
+            'token_type' => $session['token_type'] ?? 'Bearer',
+        ];
+        /** @var array<string, mixed> $user */
+        $user = $session['user'] ?? [];
+        try {
+            $events = app($this->context, EventService::class);
+            $building = new LoginResponseBuildingEvent($tokens, $user, $session);
+            $events->dispatch($building);
+            // Read back any fields listeners added/merged into the response map
+            // (setResponse()/mergeResponse()); otherwise their changes are discarded.
+            $session = $building->getResponse();
+            $events->dispatch(new LoginResponseBuiltEvent($session));
+        } catch (\Throwable $e) {
+            error_log('Login response events failed: ' . $e->getMessage());
+        }
+
+        return Response::success($session, 'Login successful');
+    }
+
+    /**
+     * Cookie-transport login (`auth_transport: "cookie"`): sets the session cookies via the
+     * issuer and returns a body WITHOUT the access/refresh tokens — only the user, expiry,
+     * session id and a session-bound CSRF token. Accepts only an {@see AuthenticatedSession},
+     * so a login still awaiting its second factor cannot reach it.
+     *
+     * Deliberately dispatches no LoginResponseBuilding/Built events: those shape the bearer
+     * token body, and a listener there must not be able to put tokens back into this one.
+     */
+    public function shapeForCookies(
+        Request $request,
+        AuthenticatedSession $session,
+        SessionCookieIssuer $issuer
+    ): Response {
+        $body = $session->toSessionArray();
+        unset($body['access_token'], $body['refresh_token'], $body['token_type']);
+        $body = $this->withCsrfToken($request, $body);
+
+        $response = Response::success($body, 'Login successful');
+        $issuer->issue($response, $session);
+
+        return $response;
+    }
+
+    /**
+     * Adds a `csrf_token` block (when CSRF protection is enabled) bound to the issued session.
+     *
+     * @param array<string, mixed> $session
+     * @return array<string, mixed>
+     */
+    private function withCsrfToken(Request $request, array $session): array
+    {
         // CSRF — same logic previously in AuthController::login.
         if (env('CSRF_PROTECTION_ENABLED', true) === true) {
             try {
-                $csrf = new CSRFMiddleware();
+                $csrf = $this->csrf();
 
                 // Bind the token to the session just issued. Login runs before any
                 // authenticated identity is attached to the request, so without an explicit
@@ -69,27 +129,12 @@ final class LoginResponseShaper
             }
         }
 
-        // Login events — same logic previously in AuthController::login.
-        $tokens = [
-            'access_token' => $session['access_token'] ?? null,
-            'refresh_token' => $session['refresh_token'] ?? null,
-            'expires_in' => $session['expires_in'] ?? null,
-            'token_type' => $session['token_type'] ?? 'Bearer',
-        ];
-        /** @var array<string, mixed> $user */
-        $user = $session['user'] ?? [];
-        try {
-            $events = app($this->context, EventService::class);
-            $building = new LoginResponseBuildingEvent($tokens, $user, $session);
-            $events->dispatch($building);
-            // Read back any fields listeners added/merged into the response map
-            // (setResponse()/mergeResponse()); otherwise their changes are discarded.
-            $session = $building->getResponse();
-            $events->dispatch(new LoginResponseBuiltEvent($session));
-        } catch (\Throwable $e) {
-            error_log('Login response events failed: ' . $e->getMessage());
-        }
+        return $session;
+    }
 
-        return Response::success($session, 'Login successful');
+    /** The CSRF middleware sharing the route middleware's token store. */
+    private function csrf(): CSRFMiddleware
+    {
+        return CSRFMiddleware::forContext($this->context);
     }
 }

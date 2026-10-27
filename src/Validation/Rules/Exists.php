@@ -4,34 +4,27 @@ declare(strict_types=1);
 
 namespace Glueful\Validation\Rules;
 
-use Glueful\Bootstrap\ApplicationContext;
-use Glueful\Validation\Contracts\Rule;
-use PDO;
+use Glueful\Validation\Contracts\DatabaseAwareRule;
+use Glueful\Validation\Support\ResolvesRuleConnection;
 
 /**
  * Exists rule - validates that a value exists in a database table
+ *
+ * The Validator supplies its connection; fails closed (LogicException) when no
+ * connection is available.
  *
  * @example
  * new Exists('users', 'id')           // Check if ID exists in users table
  * new Exists('categories', 'slug')    // Check if slug exists in categories
  */
-final class Exists implements Rule
+final class Exists implements DatabaseAwareRule
 {
-    private ?PDO $pdo = null;
+    use ResolvesRuleConnection;
 
     public function __construct(
         private string $table,
         private string $column = 'id'
     ) {
-    }
-
-    /**
-     * Set PDO instance for database connection
-     */
-    public function setPdo(PDO $pdo): self
-    {
-        $this->pdo = $pdo;
-        return $this;
     }
 
     /**
@@ -45,26 +38,7 @@ final class Exists implements Rule
 
         $field = $context['field'] ?? 'field';
 
-        // Get PDO from context or container
-        $pdo = $this->pdo;
-
-        if ($pdo === null && isset($context['pdo'])) {
-            $pdo = $context['pdo'];
-        }
-
-        if ($pdo === null && ($context['context'] ?? null) instanceof ApplicationContext) {
-            try {
-                $pdo = container($context['context'])->get(PDO::class);
-            } catch (\Throwable) {
-                // PDO not available in container
-            }
-        }
-
-        if ($pdo === null) {
-            // If we can't access the database, skip the check
-            // This allows the rule to be used without a database connection in tests
-            return null;
-        }
+        $pdo = $this->resolvePdo($context, 'exists', (string) $field);
 
         // Validate table and column names to prevent SQL injection
         if (preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $this->table) !== 1) {
@@ -80,7 +54,7 @@ final class Exists implements Rule
         );
         $stmt->execute(['value' => $value]);
 
-        if (!$stmt->fetchColumn()) {
+        if ($stmt->fetchColumn() === false) {
             return "The selected {$field} is invalid.";
         }
 

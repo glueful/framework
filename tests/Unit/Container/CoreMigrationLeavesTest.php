@@ -69,6 +69,7 @@ final class CoreMigrationLeavesTest extends TestCase
             'glueful/framework:queue',
             'glueful/framework:scheduler',
             'glueful/framework:uploads',
+            'glueful/framework:webhooks',
             ] as $source
         ) {
             self::assertTrue($manager->hasSource($source), "core leaf {$source} must register with gates off");

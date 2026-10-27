@@ -386,6 +386,9 @@ class Connection implements DatabaseInterface
         if ($engine === 'mysql' && ($dbConfig['strict'] ?? true) === true) {
             $options[PDO::MYSQL_ATTR_INIT_COMMAND] = "SET sql_mode='STRICT_ALL_TABLES'";
         }
+        if ($engine === 'mysql' && is_array($dbConfig['ssl'] ?? null)) {
+            $options = MySQLDriver::sslOptions($dbConfig['ssl']) + $options;
+        }
 
         // Optional connect timeout. The installer's ConnectionTester sets a short one so an
         // unreachable host fails fast instead of hanging on the OS default (~75s). MySQL honors
@@ -507,7 +510,9 @@ class Connection implements DatabaseInterface
      */
     private function prepareSQLiteDSN(string $dbPath): string
     {
-        @mkdir(dirname($dbPath), 0755, true); // Ensure directory exists
+        if ($dbPath !== ':memory:' && !str_starts_with($dbPath, 'file:')) {
+            @mkdir(dirname($dbPath), 0755, true); // Ensure directory exists
+        }
         return "sqlite:{$dbPath}";
     }
 
@@ -524,8 +529,11 @@ class Connection implements DatabaseInterface
             $path = 'storage/database/glueful.sqlite';
         }
 
-        // If absolute, use as-is
+        // In-memory (`:memory:`) and `file:` URI databases are not filesystem paths — never
+        // prefix them with the project root (that created a file literally named `:memory:`).
+        // If absolute, use as-is.
         if (
+            $path === ':memory:' || str_starts_with($path, 'file:') ||
             str_starts_with($path, '/') || str_starts_with($path, DIRECTORY_SEPARATOR) ||
             (PHP_OS_FAMILY === 'Windows' && preg_match('/^[a-zA-Z]:/', $path) === 1)
         ) {
@@ -798,7 +806,8 @@ class Connection implements DatabaseInterface
     {
         // Create shared dependencies
         $parameterBinder = new \Glueful\Database\Execution\ParameterBinder();
-        $queryLogger = new \Glueful\Database\QueryLogger();
+        // The connection's context lets the logger read app.debug and dispatch QueryExecutedEvent.
+        $queryLogger = new \Glueful\Database\QueryLogger(null, $this->context);
 
         // Create all the component dependencies with proper constructors
         $state = new \Glueful\Database\Query\QueryState();

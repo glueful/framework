@@ -315,7 +315,7 @@ class {$modelName} extends Model
      *
      * @var bool
      */
-    protected bool \$timestamps = true;
+    public bool \$timestamps = true;
 {$fillableBlock}{$castsBlock}
     // TODO: Define your model relationships
     //

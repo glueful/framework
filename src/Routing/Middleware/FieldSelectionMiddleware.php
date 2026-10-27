@@ -30,6 +30,7 @@ final class FieldSelectionMiddleware implements RouteMiddleware
      * - strict (bool)
      * - whitelistKey (string) or allowed (string[])
      * - maxDepth, maxFields, maxItems (ints)
+     * - useAdvancedPatterns (bool): treat `allowed` as AdvancedWhitelistMatcher patterns
      */
     public function handle(Request $request, callable $next, mixed ...$params): mixed
     {
@@ -38,6 +39,11 @@ final class FieldSelectionMiddleware implements RouteMiddleware
             $fields = $request->query->get('fields');
             $expand = $request->query->get('expand');
             if ($fields === null && $expand === null) {
+                return $next($request);
+            }
+
+            // Global switch: api.field_selection.enabled = false leaves responses unprojected.
+            if (MiddlewareParams::bool($this->getConfig('api.field_selection.enabled', true)) === false) {
                 return $next($request);
             }
 
@@ -97,6 +103,14 @@ final class FieldSelectionMiddleware implements RouteMiddleware
             // Build comprehensive context for expanders
             $context = $this->buildContext($request, $payload);
 
+            if ($allowed !== null && (bool)($opts['useAdvancedPatterns'] ?? false)) {
+                // Advanced patterns (wildcards, "-exclusions", "field:if(cond)") are not literal
+                // field names: filter the tree with the matcher, then project without a literal list.
+                $selector = $this->applyAdvancedPatterns($selector, $allowed, $context, $payload);
+                $allowed = null;
+                $key = null;
+            }
+
             $projected = $this->projector->project($payload, $selector, $allowed, $key, $context);
             $response->setContent((string)json_encode($projected));
 
@@ -111,6 +125,56 @@ final class FieldSelectionMiddleware implements RouteMiddleware
         } catch (InvalidFieldSelectionException $e) {
             return $e->toResponse();
         }
+    }
+
+    /**
+     * Filter the requested tree through AdvancedWhitelistMatcher patterns. Comma-joined entries
+     * (e.g. '*,-password') are split into individual patterns. In strict mode a requested root
+     * that the patterns reject is an error, mirroring the literal-whitelist strict check.
+     *
+     * @param array<mixed> $patterns
+     * @param array<string,mixed> $context
+     */
+    private function applyAdvancedPatterns(
+        FieldSelector $selector,
+        array $patterns,
+        array $context,
+        mixed $payload
+    ): FieldSelector {
+        $whitelist = [];
+        foreach ($patterns as $entry) {
+            if (!\is_string($entry)) {
+                continue;
+            }
+            foreach (explode(',', $entry) as $pattern) {
+                $pattern = trim($pattern);
+                if ($pattern !== '') {
+                    $whitelist[] = $pattern;
+                }
+            }
+        }
+
+        // Conditions such as if(owner)/if(public) evaluate against a single record's data.
+        $data = \is_array($payload) && !array_is_list($payload) ? $payload : [];
+        $filtered = $selector->tree->applyAdvancedWhitelist($whitelist, $context, $data);
+
+        if ($selector->strict) {
+            $rejected = array_values(array_filter(
+                array_diff(array_keys($selector->tree->roots()), array_keys($filtered->roots())),
+                static fn($name): bool => $name !== '*'
+            ));
+            if ($rejected !== []) {
+                throw InvalidFieldSelectionException::unknownFields($rejected, $whitelist);
+            }
+        }
+
+        return new FieldSelector(
+            tree: $filtered,
+            strict: $selector->strict,
+            maxDepth: $selector->maxDepth,
+            maxFields: $selector->maxFields,
+            maxItems: $selector->maxItems,
+        );
     }
 
     private function parseCombined(?string $fields, ?string $expand): FieldTree

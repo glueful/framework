@@ -58,7 +58,7 @@ final class BuilderTerminalScopeTest extends TestCase
 
         self::assertSame(1, $page['total']);
         self::assertCount(1, $page['data']);
-        self::assertSame('Alice', $page['data'][0]['name']);
+        self::assertSame('Alice', $page['data'][0]->name);
     }
 
     public function testMaxAppliesGlobalScopesBeforeProxyingToQueryBuilder(): void

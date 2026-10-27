@@ -92,7 +92,7 @@ class SoftDeletingScope implements Scope, ExtendsBuilder
     {
         $builder->macro('restore', function (Builder $builder) {
             /** @phpstan-ignore-next-line Dynamic macro method */
-            $builder->withTrashed();
+            $builder->onlyTrashed();
 
             /** @var Model&SoftDeletable $model */
             $model = $builder->getModel();
@@ -141,6 +141,10 @@ class SoftDeletingScope implements Scope, ExtendsBuilder
                 return $builder->withoutTrashed();
             }
 
+            // Also lift the QueryBuilder's own deleted_at filter (it hides trashed rows on any
+            // table with a deleted_at column), or trashed rows would stay hidden.
+            $builder->getQuery()->withTrashed();
+
             return $builder->withoutGlobalScope('softDeletes');
         });
     }
@@ -175,6 +179,10 @@ class SoftDeletingScope implements Scope, ExtendsBuilder
         $builder->macro('onlyTrashed', function (Builder $builder) {
             /** @var Model&SoftDeletable $model */
             $model = $builder->getModel();
+
+            // Lift the QueryBuilder's default "deleted_at IS NULL" filter, which would
+            // otherwise contradict this one and return nothing.
+            $builder->getQuery()->withTrashed();
 
             $builder->withoutGlobalScope('softDeletes')
                 ->whereNotNull($model->getQualifiedDeletedAtColumn());

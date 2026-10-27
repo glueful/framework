@@ -45,31 +45,37 @@ trait SoftDeletes
     }
 
     /**
-     * Initialize the soft deleting trait for an instance
-     *
-     * @return void
-     */
-    public function initializeSoftDeletes(): void
-    {
-        // Ensure deleted_at is in the dates array for proper casting
-        if (!in_array($this->getDeletedAtColumn(), $this->getDates(), true)) {
-            $this->dates[] = $this->getDeletedAtColumn();
-        }
-    }
-
-    /**
      * Force a hard delete on a soft deleted model
+     *
+     * Fires "forceDeleting" (a false return cancels), then the regular "deleting"/"deleted"
+     * pair, then "forceDeleted". The row is physically removed, trashed or not.
      *
      * @return bool
      */
     public function forceDelete(): bool
     {
+        if (!$this->exists) {
+            return false;
+        }
+
+        if ($this->fireModelEvent('forceDeleting') === false) {
+            return false;
+        }
+
         $this->forceDeleting = true;
 
-        return tap($this->delete(), function () {
+        try {
+            $deleted = $this->delete();
+        } finally {
             $this->forceDeleting = false;
+        }
+
+        if ($deleted) {
             $this->exists = false;
-        });
+            $this->fireModelEvent('forceDeleted', false);
+        }
+
+        return $deleted;
     }
 
     /**
@@ -80,8 +86,11 @@ trait SoftDeletes
     protected function performDeleteOnModel(): void
     {
         if ($this->forceDeleting) {
+            // Bypass the soft-delete scope (the row may already be trashed) and issue a real
+            // DELETE — Builder::forceDelete() skips the QueryBuilder's soft-delete default.
             $this->newModelQuery()
-                ->where($this->getKeyName(), $this->getKey())
+                ->withoutGlobalScope('softDeletes')
+                ->where($this->getKeyName(), '=', $this->getKey())
                 ->forceDelete();
 
             $this->exists = false;
@@ -95,52 +104,59 @@ trait SoftDeletes
     /**
      * Perform the actual soft delete
      *
+     * The instance keeps existing (its row is still there), so it can be restored or
+     * force-deleted afterwards.
+     *
      * @return void
      */
     protected function runSoftDelete(): void
     {
         $query = $this->newModelQuery()
-            ->where($this->getKeyName(), $this->getKey());
+            ->withoutGlobalScope('softDeletes')
+            ->where($this->getKeyName(), '=', $this->getKey());
 
-        $time = $this->freshTimestamp();
+        $time = $this->fromDateTime($this->freshTimestamp());
 
-        $columns = [$this->getDeletedAtColumn() => $this->fromDateTime($time)];
+        $columns = [$this->getDeletedAtColumn() => $time];
 
-        $this->{$this->getDeletedAtColumn()} = $time;
-
-        if ($this->usesTimestamps() && $this->getUpdatedAtColumn() !== null) {
-            $this->{$this->getUpdatedAtColumn()} = $time;
-            $columns[$this->getUpdatedAtColumn()] = $this->fromDateTime($time);
+        $updatedAtColumn = $this->usesTimestamps() ? $this->getUpdatedAtColumn() : null;
+        if ($updatedAtColumn !== null) {
+            $columns[$updatedAtColumn] = $time;
         }
 
         $query->update($columns);
 
-        $this->syncOriginalAttribute($this->getDeletedAtColumn());
+        // Mirror the write on the instance and mark those columns clean.
+        foreach ($columns as $column => $value) {
+            $this->setAttribute($column, $value);
+            $this->original[$column] = $this->attributes[$column];
+        }
 
-        // Fire the trashed event
         $this->fireModelEvent('trashed', false);
     }
 
     /**
      * Restore a soft-deleted model instance
      *
+     * Fires "restoring" (a false return cancels) and, once saved, "restored".
+     *
      * @return bool
      */
     public function restore(): bool
     {
-        // Fire restoring event
         if ($this->fireModelEvent('restoring') === false) {
             return false;
         }
 
-        $this->{$this->getDeletedAtColumn()} = null;
+        $this->setAttribute($this->getDeletedAtColumn(), null);
 
         $this->exists = true;
 
         $result = $this->save();
 
-        // Fire restored event
-        $this->fireModelEvent('restored', false);
+        if ($result) {
+            $this->fireModelEvent('restored', false);
+        }
 
         return $result;
     }
@@ -189,6 +205,28 @@ trait SoftDeletes
     }
 
     /**
+     * Register a "forceDeleting" model event callback (return false to cancel)
+     *
+     * @param callable $callback
+     * @return void
+     */
+    public static function forceDeleting(callable $callback): void
+    {
+        static::registerModelEvent('forceDeleting', $callback);
+    }
+
+    /**
+     * Register a "forceDeleted" model event callback
+     *
+     * @param callable $callback
+     * @return void
+     */
+    public static function forceDeleted(callable $callback): void
+    {
+        static::registerModelEvent('forceDeleted', $callback);
+    }
+
+    /**
      * Determine if the model is currently force deleting
      *
      * @return bool
@@ -223,19 +261,4 @@ trait SoftDeletes
     {
         return $this->getTable() . '.' . $this->getDeletedAtColumn();
     }
-}
-
-/**
- * Helper function for tap pattern
- *
- * @template T
- * @param T $value
- * @param callable(T): void $callback
- * @return T
- */
-function tap(mixed $value, callable $callback): mixed
-{
-    $callback($value);
-
-    return $value;
 }

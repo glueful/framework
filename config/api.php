@@ -319,7 +319,8 @@ return [
     |--------------------------------------------------------------------------
     |
     | Configure webhook delivery, retry logic, and security settings.
-    | Tables are auto-created on first use (webhook_subscriptions, webhook_deliveries).
+    | Tables (webhook_subscriptions, webhook_deliveries) ship as the core `webhooks`
+    | migration leaf: run `php glueful migrate:run`.
     |
     */
     'webhooks' => [
@@ -338,7 +339,10 @@ return [
         | Queue Configuration
         |--------------------------------------------------------------------------
         |
-        | Queue settings for webhook delivery jobs.
+        | Queue settings for webhook delivery jobs. `connection` is the queue
+        | connection (config/queue.php) the jobs are pushed to; null uses the
+        | default connection. A dispatch can override both via its options
+        | (`queue`, `connection`, plus `delay` in seconds).
         |
         */
         'queue' => env('WEBHOOKS_QUEUE', 'webhooks'),
@@ -349,7 +353,9 @@ return [
         | Signature Settings
         |--------------------------------------------------------------------------
         |
-        | Settings for HMAC signature generation and verification.
+        | Every outbound delivery is signed `t=<unix ts>,v1=<hex HMAC of
+        | "<ts>.<raw body>">` with the subscription secret, in this header, using
+        | this hash_hmac() algorithm. Receivers verify with Webhook::verify().
         |
         */
         'signature_header' => 'X-Webhook-Signature',
@@ -371,7 +377,8 @@ return [
         | Retry Configuration
         |--------------------------------------------------------------------------
         |
-        | Exponential backoff retry settings for failed deliveries.
+        | Exponential backoff retry settings for failed deliveries. `backoff` is
+        | the delay in seconds after each failed attempt (the last value repeats).
         | Default backoff: 1m, 5m, 30m, 2h, 12h
         |
         */

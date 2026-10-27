@@ -71,8 +71,9 @@ final class FileUploader
      * Handle standard file upload with validation and storage
      *
      * @param string $token Upload token
-     * @param array<string, mixed> $getParams Request parameters (must include user_id)
-     * @param mixed $fileParams $_FILES-like array or Symfony UploadedFile
+     * @param array<string, mixed> $getParams Request parameters (must include user_id; an optional
+     *        `key` names the file field, required when several files are present)
+     * @param mixed $fileParams $_FILES-like array, Symfony UploadedFile, or a keyed set of files
      * @return array<string, mixed> Upload result with uuid and url, or error
      */
     public function handleUpload(string $token, array $getParams, mixed $fileParams): array
@@ -429,7 +430,7 @@ final class FileUploader
      */
     private function processUploadedFile(mixed $fileParams, ?string $key): array
     {
-        $raw = isset($key) ? ($fileParams[$key] ?? null) : $fileParams;
+        $raw = isset($key) ? ($fileParams[$key] ?? null) : $this->soleFile($fileParams);
         $file = $this->normalizeFileInput($raw);
 
         if (
@@ -445,6 +446,26 @@ final class FileUploader
         $this->validateFileSize($file['size'] ?? 0);
 
         return $file;
+    }
+
+    /**
+     * The file to use when no `key` names one. A single file (an UploadedFile or one $_FILES
+     * entry) is used as is; a keyed set such as `$request->files->all()` must hold exactly one
+     * file, since there is no way to tell which of several was meant.
+     */
+    private function soleFile(mixed $fileParams): mixed
+    {
+        if (!is_array($fileParams) || $this->normalizeFileInput($fileParams) !== null) {
+            return $fileParams;
+        }
+
+        if (count($fileParams) === 1) {
+            return reset($fileParams);
+        }
+
+        $keys = implode(', ', array_map('strval', array_keys($fileParams)));
+        $message = "Several files were uploaded ({$keys}); pass 'key' to choose one";
+        throw new ValidationException(['key' => [$message]], [], $message);
     }
 
     /**

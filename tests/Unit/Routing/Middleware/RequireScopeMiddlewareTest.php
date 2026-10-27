@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Glueful\Tests\Unit\Routing\Middleware;
 
 use Glueful\Auth\ApiKey\Exceptions\InsufficientScopeException;
+use Glueful\Auth\UserIdentity;
 use Glueful\Routing\Middleware\RequireScopeMiddleware;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
@@ -118,5 +119,98 @@ final class RequireScopeMiddlewareTest extends TestCase
     {
         $this->expectException(InsufficientScopeException::class);
         $this->dispatchWithParams(['read:other'], 'read:content');
+    }
+
+    /**
+     * Dispatch a JWT-authenticated request: AuthMiddleware sets `auth.user` (a UserIdentity) but
+     * never `api_key_scopes`.
+     *
+     * @param array<int, array<int, string>> $scopeConfig
+     * @param array<int, string> $identityScopes
+     */
+    private function dispatchJwt(array $scopeConfig, array $identityScopes, string ...$params): Response
+    {
+        $request = Request::create('/x');
+        $route = new class ($scopeConfig) {
+            /** @param array<int, array<int, string>> $cfg */
+            public function __construct(private array $cfg)
+            {
+            }
+            /** @return array<int, array<int, string>> */
+            public function getRequireScopeConfig(): array
+            {
+                return $this->cfg;
+            }
+        };
+        $request->attributes->set('_route', $route);
+        $request->attributes->set('auth.user', new UserIdentity('user00000001', [], $identityScopes));
+
+        return (new RequireScopeMiddleware())
+            ->handle($request, static fn(Request $r): Response => new Response('OK'), ...$params);
+    }
+
+    public function test_jwt_identity_with_required_scope_passes(): void
+    {
+        $response = $this->dispatchJwt([['write:posts']], ['read:posts', 'write:posts']);
+        self::assertSame('OK', $response->getContent());
+    }
+
+    public function test_jwt_identity_any_of_within_one_attribute(): void
+    {
+        $response = $this->dispatchJwt([['admin:posts', 'write:posts']], ['write:posts']);
+        self::assertSame('OK', $response->getContent());
+    }
+
+    public function test_jwt_identity_all_of_across_stacked_attributes_denies_when_one_missing(): void
+    {
+        $this->expectException(InsufficientScopeException::class);
+        $this->dispatchJwt([['read:posts'], ['write:posts']], ['read:posts']);
+    }
+
+    public function test_jwt_identity_all_of_across_stacked_attributes_passes_when_all_held(): void
+    {
+        $response = $this->dispatchJwt([['read:posts'], ['write:posts']], ['read:posts', 'write:posts']);
+        self::assertSame('OK', $response->getContent());
+    }
+
+    public function test_jwt_identity_wildcard_scope_uses_the_api_key_matcher(): void
+    {
+        $response = $this->dispatchJwt([['write:posts']], ['write:*']);
+        self::assertSame('OK', $response->getContent());
+    }
+
+    public function test_jwt_identity_with_insufficient_scope_is_denied(): void
+    {
+        $this->expectException(InsufficientScopeException::class);
+        $this->dispatchJwt([['write:posts']], ['read:posts']);
+    }
+
+    /**
+     * Unlike an API key, an empty JWT scope set is NOT "unrestricted": it grants nothing.
+     */
+    public function test_jwt_identity_without_scopes_is_denied(): void
+    {
+        $this->expectException(InsufficientScopeException::class);
+        $this->dispatchJwt([['write:posts']], []);
+    }
+
+    public function test_jwt_identity_param_scope_passes_with_matching_grant(): void
+    {
+        $response = $this->dispatchJwt([], ['read:content'], 'read:content');
+        self::assertSame('OK', $response->getContent());
+    }
+
+    /**
+     * API-key requests also carry a synthesised auth.user; api_key_scopes stays authoritative.
+     */
+    public function test_api_key_scopes_take_precedence_over_identity_scopes(): void
+    {
+        $request = Request::create('/x');
+        $request->attributes->set('auth.user', new UserIdentity('user00000001', [], ['write:posts']));
+        $request->attributes->set('api_key_scopes', ['read:posts']);
+
+        $this->expectException(InsufficientScopeException::class);
+        (new RequireScopeMiddleware())
+            ->handle($request, static fn(Request $r): Response => new Response('OK'), 'write:posts');
     }
 }

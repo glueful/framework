@@ -15,6 +15,54 @@ namespace Glueful\Database\Driver;
 class MySQLDriver implements DatabaseDriver
 {
     /**
+     * PDO attributes for the `mysql.ssl` block of config/database.php.
+     *
+     * Nothing is added unless `enabled` is true AND at least one of `ca_cert`, `client_cert`
+     * or `client_key` is set — PDO MySQL only negotiates TLS from those, and forcing
+     * verification on its own would change how an existing connection behaves. `verify_cert`
+     * (default true) maps to PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT.
+     *
+     * @param array<string, mixed> $ssl
+     * @return array<int, mixed>
+     */
+    public static function sslOptions(array $ssl): array
+    {
+        if (!self::truthy($ssl['enabled'] ?? false) || !defined('PDO::MYSQL_ATTR_SSL_CA')) {
+            return [];
+        }
+
+        $options = [];
+        $map = [
+            'ca_cert' => \PDO::MYSQL_ATTR_SSL_CA,
+            'client_cert' => \PDO::MYSQL_ATTR_SSL_CERT,
+            'client_key' => \PDO::MYSQL_ATTR_SSL_KEY,
+        ];
+        foreach ($map as $key => $attribute) {
+            $value = $ssl[$key] ?? null;
+            if (is_string($value) && $value !== '') {
+                $options[$attribute] = $value;
+            }
+        }
+
+        if ($options === []) {
+            return [];
+        }
+
+        $options[\PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = self::truthy($ssl['verify_cert'] ?? true);
+
+        return $options;
+    }
+
+    private static function truthy(mixed $value): bool
+    {
+        if (is_string($value)) {
+            return filter_var($value, FILTER_VALIDATE_BOOLEAN);
+        }
+
+        return (bool) $value;
+    }
+
+    /**
      * Wrap MySQL identifier with backticks
      *
      * Ensures proper escaping of column and table names:

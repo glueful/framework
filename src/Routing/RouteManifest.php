@@ -45,6 +45,7 @@ class RouteManifest
                 '/routes/blobs.php',
                 '/routes/resource.php',
                 '/routes/extensions.php',
+                '/routes/webhooks.php',
             ],
             // Framework routes that don't get the API prefix (public endpoints)
             'public_routes' => [
