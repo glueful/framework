@@ -52,4 +52,17 @@ final class ApiKeyQueryParamGateTest extends TestCase
 
         self::assertSame('url-key', $this->extract($provider, $request));
     }
+
+    public function test_shipped_security_config_declares_the_gate_off(): void
+    {
+        putenv('API_KEY_ALLOW_QUERY_PARAM');
+        unset($_ENV['API_KEY_ALLOW_QUERY_PARAM'], $_SERVER['API_KEY_ALLOW_QUERY_PARAM']);
+
+        /** @var array<string, mixed> $security */
+        $security = require dirname(__DIR__, 3) . '/config/security.php';
+
+        self::assertIsArray($security['api_keys'] ?? null, 'security.api_keys must be shipped');
+        self::assertArrayHasKey('allow_query_param', $security['api_keys']);
+        self::assertFalse((bool) $security['api_keys']['allow_query_param']);
+    }
 }

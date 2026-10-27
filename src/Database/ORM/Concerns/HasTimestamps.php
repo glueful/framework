@@ -69,7 +69,9 @@ trait HasTimestamps
      */
     protected function updateTimestamps(): void
     {
-        $time = $this->freshTimestamp();
+        // Stored as the formatted string (what a row loaded from the database holds); a datetime
+        // cast still reads it back as a DateTimeImmutable.
+        $time = $this->fromDateTime($this->freshTimestamp());
 
         $updatedAtColumn = $this->getUpdatedAtColumn();
         if ($updatedAtColumn !== null && !$this->isDirty($updatedAtColumn)) {
@@ -180,13 +182,20 @@ trait HasTimestamps
     }
 
     /**
-     * Convert a DateTimeInterface to a storable string
+     * Convert a date value to a storable string
      *
-     * @param DateTimeInterface $date
+     * A DateTimeInterface is formatted with the model's date format; any other value (an
+     * already-formatted string assigned to a datetime-cast attribute) is stored as given.
+     *
+     * @param mixed $date
      * @return string
      */
-    public function fromDateTime(DateTimeInterface $date): string
+    public function fromDateTime(mixed $date): string
     {
-        return $date->format($this->getDateFormat());
+        if ($date instanceof DateTimeInterface) {
+            return $date->format($this->getDateFormat());
+        }
+
+        return is_scalar($date) || $date instanceof \Stringable ? (string) $date : '';
     }
 }

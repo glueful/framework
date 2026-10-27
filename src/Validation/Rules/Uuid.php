@@ -9,7 +9,8 @@ use Glueful\Validation\Contracts\Rule;
 /**
  * Uuid rule - validates UUID format
  *
- * Supports UUID v1-v5 formats.
+ * Accepts RFC 9562 UUIDs of versions 1-8 (including the time-ordered v6/v7) with the
+ * RFC variant. The nil UUID is accepted only when `allowNil` is set.
  *
  * @example
  * new Uuid()  // Any valid UUID
@@ -17,9 +18,9 @@ use Glueful\Validation\Contracts\Rule;
 final class Uuid implements Rule
 {
     /**
-     * Standard UUID pattern (v1-v5)
+     * RFC 9562 UUID pattern: versions 1-8, variant 10xx
      */
-    private const UUID_PATTERN = '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i';
+    private const UUID_PATTERN = '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i';
 
     /**
      * Nil UUID pattern

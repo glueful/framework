@@ -66,7 +66,8 @@ final class HttpClientProvider extends BaseServiceProvider
             fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Http\Services\WebhookDeliveryService(
                 $c->get(\Glueful\Http\Client::class),
                 $c->get('logger'),
-                $c->get(\Glueful\Events\EventService::class)
+                $c->get(\Glueful\Events\EventService::class),
+                $this->context
             )
         );
 

@@ -330,40 +330,19 @@ class NotificationRetryService
         // Simple implementation for common entity types
         switch (strtolower($type)) {
             case 'user':
-                // For users, create a basic Notifiable implementation
-                return new class ($id) implements \Glueful\Notifications\Contracts\Notifiable {
-                    private string $id;
+                // Without a context there is no identity provider: keep the uuid-only recipient.
+                if ($this->context === null) {
+                    return new \Glueful\Notifications\UserNotifiable($id);
+                }
+                // Look the user up so 'email' has a recipient; a user that no longer exists has none
+                // (the caller then drops the retry).
+                $identity = container($this->context)
+                    ->get(\Glueful\Auth\Contracts\UserProviderInterface::class)
+                    ->findByUuid($id);
 
-                    public function __construct(string $id)
-                    {
-                        $this->id = $id;
-                    }
-
-                    public function routeNotificationFor(string $channel)
-                    {
-                        return null; // Would need to fetch user data to get actual routing info
-                    }
-
-                    public function getNotifiableId(): string
-                    {
-                        return $this->id;
-                    }
-
-                    public function getNotifiableType(): string
-                    {
-                        return 'user';
-                    }
-
-                    public function shouldReceiveNotification(string $notificationType, string $channel): bool
-                    {
-                        return true; // Default to allowing notifications for retries
-                    }
-
-                    public function getNotificationPreferences(): array
-                    {
-                        return []; // Empty preferences for retries
-                    }
-                };
+                return $identity === null
+                    ? null
+                    : new \Glueful\Notifications\UserNotifiable($id, $identity->email());
 
             // Add more cases for other entity types as needed
 

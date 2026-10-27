@@ -78,6 +78,7 @@ final class DescriptorInventoryTest extends TestCase
             'glueful/framework:queue',
             'glueful/framework:scheduler',
             'glueful/framework:uploads',
+            'glueful/framework:webhooks',
             ] as $expected
         ) {
             self::assertContains($expected, $sources);

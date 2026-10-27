@@ -4,15 +4,26 @@ declare(strict_types=1);
 
 namespace Glueful\Support\Documentation;
 
+use Glueful\Api\Webhooks\WebhookSignature;
+
 /**
  * Builds the OpenAPI 3.1 webhooks section from configured events.
  *
- * Outbound HTTP webhooks dispatched by `WebhookDeliveryService` are
+ * Outbound HTTP webhooks (subscription deliveries and `WebhookDeliveryService`) are
  * surfaced here so SDK generators (e.g. openapi-typescript) can
  * scaffold handler types automatically.
  */
 final class WebhookDocsBuilder
 {
+    /**
+     * @param string $signatureHeader The signature header deliveries carry
+     *                                (`api.webhooks.signature_header`)
+     */
+    public function __construct(
+        private readonly string $signatureHeader = WebhookSignature::DEFAULT_HEADER
+    ) {
+    }
+
     /**
      * @param  array<string, array{summary?: string, payload_schema?: string}> $config
      * @return array<string, mixed>
@@ -64,7 +75,7 @@ final class WebhookDocsBuilder
 
     /**
      * Build the standard webhook authentication headers documented for every
-     * webhook delivery sent by WebhookDeliveryService.
+     * outbound webhook delivery (one signing scheme: {@see WebhookSignature}).
      *
      * @return list<array<string, mixed>>
      */
@@ -72,20 +83,21 @@ final class WebhookDocsBuilder
     {
         return [
             [
-                'name' => 'X-Glueful-Signature',
+                'name' => $this->signatureHeader,
                 'in' => 'header',
                 'required' => true,
-                'description' => 'HMAC-SHA256 signature of the request body in '
+                'description' => 'HMAC signature (SHA-256 by default) of "{timestamp}.{raw body}" in '
                     . 'Stripe-compatible format `t={timestamp},v1={hex_signature}`. '
                     . 'Verify with the subscription secret before processing.',
                 'schema' => ['type' => 'string'],
             ],
             [
-                'name' => 'X-Glueful-Timestamp',
+                'name' => WebhookSignature::TIMESTAMP_HEADER,
                 'in' => 'header',
                 'required' => true,
                 'description' => 'Unix timestamp (seconds) when the delivery was sent. '
-                    . 'Match against the timestamp embedded in X-Glueful-Signature to detect replays.',
+                    . 'Match against the timestamp embedded in ' . $this->signatureHeader
+                    . ' to detect replays.',
                 'schema' => ['type' => 'integer'],
             ],
         ];

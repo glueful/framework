@@ -9,6 +9,7 @@ use Glueful\Api\RateLimiting\RateLimitManager;
 use Glueful\Api\RateLimiting\RateLimitResult;
 use Glueful\Events\Auth\RateLimitExceededEvent;
 use Glueful\Events\EventService;
+use Glueful\Routing\Middleware\MiddlewareParams;
 use Glueful\Routing\Route;
 use Glueful\Routing\RouteMiddleware;
 use Glueful\Support\SensitiveParamRedactor;
@@ -48,6 +49,8 @@ class EnhancedRateLimiterMiddleware implements RouteMiddleware
      */
     private array $bypassIps = [];
 
+    private bool $enabled;
+
     /**
      * @param RateLimitManager $manager Rate limit manager
      * @param RateLimitHeaders $headers Header generator
@@ -60,6 +63,9 @@ class EnhancedRateLimiterMiddleware implements RouteMiddleware
         array $config = [],
         private readonly ?EventService $events = null
     ) {
+        // api.rate_limiting.enabled (API_RATE_LIMITING_ENABLED): off passes every request through.
+        $this->enabled = MiddlewareParams::bool($config['enabled'] ?? null) ?? true;
+
         // Parse bypass IPs from config
         $bypassIpsConfig = $config['bypass_ips'] ?? '';
         if (is_string($bypassIpsConfig) && $bypassIpsConfig !== '') {
@@ -79,6 +85,10 @@ class EnhancedRateLimiterMiddleware implements RouteMiddleware
      */
     public function handle(Request $request, callable $next, mixed ...$params): mixed
     {
+        if (!$this->enabled) {
+            return $next($request);
+        }
+
         // Check for bypass IPs
         $clientIp = $request->getClientIp() ?? '';
         if ($this->shouldBypass($clientIp)) {

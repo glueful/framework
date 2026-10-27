@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Glueful\Events;
 
+use Glueful\Container\Autowire\ReflectionResolver;
 use Glueful\Events\Attributes\AsListener;
 use Psr\Container\ContainerInterface;
 
@@ -40,8 +41,14 @@ final class SubscriberRegistrar
             );
         }
 
+        // Resolve every listener before registering any, so a failure leaves nothing half-subscribed.
+        $instance = null;
+        $listeners = [];
         foreach ($specs as [$event, $method, $priority]) {
-            $this->provider->addListener($event, $this->listenerFor($subscriberClass, $method), $priority);
+            $listeners[] = [$event, $this->listenerFor($subscriberClass, $method, $instance), $priority];
+        }
+        foreach ($listeners as [$event, $listener, $priority]) {
+            $this->provider->addListener($event, $listener, $priority);
         }
     }
 
@@ -75,14 +82,17 @@ final class SubscriberRegistrar
         return $specs;
     }
 
-    private function listenerFor(string $subscriberClass, string $method): callable
+    private function listenerFor(string $subscriberClass, string $method, ?object &$instance): callable
     {
-        if ($this->container !== null) {
+        // Registered services stay lazy: resolved through the container on first dispatch.
+        if ($this->container !== null && $this->container->has($subscriberClass)) {
             return new ContainerListener('@' . $subscriberClass . ':' . $method, $this->container);
         }
 
-        // fallback: direct instantiation (useful in tests without a container)
-        $candidate = [new $subscriberClass(), $method];
+        // Unregistered class: construct it now (autowired from the container when there is one),
+        // so an unresolvable listener fails here instead of being silently skipped at dispatch.
+        $instance ??= $this->construct($subscriberClass);
+        $candidate = [$instance, $method];
         if (!is_callable($candidate)) {
             throw new \InvalidArgumentException(
                 "Subscriber {$subscriberClass} has no callable method: {$method}"
@@ -90,5 +100,23 @@ final class SubscriberRegistrar
         }
 
         return $candidate;
+    }
+
+    private function construct(string $subscriberClass): object
+    {
+        try {
+            if ($this->container !== null) {
+                return ReflectionResolver::shared()->resolve($subscriberClass, $this->container);
+            }
+
+            return new $subscriberClass();
+        } catch (\Throwable $e) {
+            throw new \InvalidArgumentException(
+                "Listener {$subscriberClass} is not a registered service and could not be constructed: "
+                . $e->getMessage(),
+                0,
+                $e
+            );
+        }
     }
 }

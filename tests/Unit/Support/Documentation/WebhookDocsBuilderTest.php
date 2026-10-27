@@ -32,8 +32,8 @@ final class WebhookDocsBuilderTest extends TestCase
         self::assertSame('onUserCreated', $userCreated['post']['operationId']);
 
         $params = $userCreated['post']['parameters'];
-        $sigHeader = array_values(array_filter($params, static fn ($p) => $p['name'] === 'X-Glueful-Signature'));
-        $tsHeader = array_values(array_filter($params, static fn ($p) => $p['name'] === 'X-Glueful-Timestamp'));
+        $sigHeader = array_values(array_filter($params, static fn ($p) => $p['name'] === 'X-Webhook-Signature'));
+        $tsHeader = array_values(array_filter($params, static fn ($p) => $p['name'] === 'X-Webhook-Timestamp'));
 
         self::assertCount(1, $sigHeader);
         self::assertSame('header', $sigHeader[0]['in']);
@@ -43,6 +43,14 @@ final class WebhookDocsBuilderTest extends TestCase
 
         self::assertCount(1, $tsHeader);
         self::assertSame('integer', $tsHeader[0]['schema']['type']);
+    }
+
+    public function testDocumentsAConfiguredSignatureHeaderName(): void
+    {
+        $webhooks = (new WebhookDocsBuilder('X-Acme-Signature'))->build(['user.created' => []]);
+
+        $names = array_column($webhooks['user.created']['post']['parameters'], 'name');
+        self::assertSame(['X-Acme-Signature', 'X-Webhook-Timestamp'], $names);
     }
 
     public function testReturnsEmptyArrayWhenConfigEmpty(): void

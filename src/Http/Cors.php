@@ -395,6 +395,26 @@ class Cors
             && !in_array('*', $this->config['allowedOrigins'], true);
     }
 
+    /**
+     * Whether a credentialed (cookie-bearing) request from this origin is explicitly allowed:
+     * credentials are enabled, the list is not a wildcard, and the origin is allowed by an
+     * exact entry or pattern. The development allow-all override does NOT count — it is a
+     * convenience for local preflights, not an explicit trust decision.
+     */
+    public function allowsCredentialedOrigin(string $origin): bool
+    {
+        if (!$this->credentialsAllowed()) {
+            return false;
+        }
+
+        $origins = is_array($this->config['allowedOrigins'] ?? null) ? $this->config['allowedOrigins'] : [];
+        $patterns = is_array($this->config['allowedOriginPatterns'] ?? null)
+            ? $this->config['allowedOriginPatterns']
+            : [];
+
+        return self::originMatches($origin, $origins, $patterns, false);
+    }
+
     private function getConfig(string $key, mixed $default = null): mixed
     {
         if ($this->context === null) {

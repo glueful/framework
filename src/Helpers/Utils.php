@@ -507,39 +507,6 @@ class Utils
     }
 
     /**
-     * Build search conditions for database queries
-     *
-     * @param string $searchTerm Search term
-     * @param array<string> $searchFields Fields to search in
-     * @param string $operator SQL operator (LIKE, ILIKE, etc.)
-     * @return array{raw: string, fields: array<string>, term: string}|array{} Search conditions
-     * @deprecated since 1.86.3 — it writes the search term into raw SQL unescaped, which is
-     *             injectable. Use QueryBuilder::whereContains() / orWhereContains(); remove in 1.88.
-     */
-    public static function buildSearchConditions(
-        string $searchTerm,
-        array $searchFields,
-        string $operator = 'LIKE'
-    ): array {
-        if ($searchTerm === '' || count($searchFields) === 0) {
-            return [];
-        }
-
-        $conditions = [];
-        $searchValue = "%{$searchTerm}%";
-
-        foreach ($searchFields as $field) {
-            $conditions[] = "{$field} {$operator} '{$searchValue}'";
-        }
-
-        return [
-            'raw' => '(' . implode(' OR ', $conditions) . ')',
-            'fields' => $searchFields,
-            'term' => $searchTerm
-        ];
-    }
-
-    /**
      * Parse date range from request parameters
      *
      * @param array<string, mixed> $params Request parameters
@@ -821,11 +788,18 @@ class Utils
      * Get CSRF token data for JavaScript usage
      *
      * @param \Symfony\Component\HttpFoundation\Request $request Request instance
+     * @param \Glueful\Bootstrap\ApplicationContext|null $context Context whose `csrf` token store to use
      * @return array<string, mixed> Token data for JSON response
      */
-    public static function csrfTokenData(\Symfony\Component\HttpFoundation\Request $request): array
-    {
-        $middleware = new \Glueful\Routing\Middleware\CSRFMiddleware();
+    public static function csrfTokenData(
+        \Symfony\Component\HttpFoundation\Request $request,
+        ?\Glueful\Bootstrap\ApplicationContext $context = null
+    ): array {
+        // Issue through the instance whose token store the `csrf` route middleware reads; a
+        // context-less instance has no cache and its token would never validate.
+        $middleware = $context !== null
+            ? \Glueful\Routing\Middleware\CSRFMiddleware::forContext($context)
+            : new \Glueful\Routing\Middleware\CSRFMiddleware();
         return $middleware->getTokenData($request);
     }
 

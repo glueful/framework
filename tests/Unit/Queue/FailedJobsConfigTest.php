@@ -67,9 +67,17 @@ final class FailedJobsConfigTest extends TestCase
         $queue->initialize(['context' => $context]);
 
         self::assertSame(9, $queue->failures()->getRetentionDays());
-        self::assertSame(2, @$queue->failures()->getMaxRetries());
         self::assertSame(9, $this->maintenanceProvider($context)->getRetentionDays());
-        self::assertSame(2, @$this->maintenanceProvider($context)->getMaxRetries());
+    }
+
+    public function testTheContainerBuiltProviderUsesTheConfiguredValues(): void
+    {
+        $context = $this->boot("['max_retries' => 2, 'retention_days' => 9]");
+
+        $provider = container($context)->get(FailedJobProvider::class);
+
+        self::assertInstanceOf(FailedJobProvider::class, $provider);
+        self::assertSame(9, $provider->getRetentionDays());
     }
 
     public function testWithoutTheKeysTheDefaultsAreFiveAndThirty(): void
@@ -79,7 +87,6 @@ final class FailedJobsConfigTest extends TestCase
         $queue->initialize(['context' => $context]);
 
         self::assertSame(30, $queue->failures()->getRetentionDays());
-        self::assertSame(5, @$queue->failures()->getMaxRetries());
         self::assertSame(30, $this->maintenanceProvider($context)->getRetentionDays());
     }
 }

@@ -161,13 +161,17 @@ class NotificationService implements ConfigurableInterface
             throw NotificationPersistenceDisabledException::forOperation('scheduleNotification');
         }
 
-        $enrichedData = $this->withNotificationMeta($data, $idempotencyKey);
-        $notification = $this->create($type, $notifiable, $subject, $enrichedData, $options);
-        $this->repository->save($notification);
-
         $syncChannels = $this->resolveSyncChannels($options);
         $asyncChannels = $this->resolveAsyncChannels($options, $syncChannels);
         $trackedChannels = array_values(array_unique(array_merge($syncChannels, $asyncChannels)));
+
+        $enrichedData = $this->withNotificationMeta($data, $idempotencyKey);
+        if (isset($options['schedule']) && $options['schedule'] instanceof DateTime) {
+            $enrichedData = $this->withDeliveryPlan($enrichedData, $trackedChannels, $options);
+        }
+        $notification = $this->create($type, $notifiable, $subject, $enrichedData, $options);
+        $this->repository->save($notification);
+
         $notificationUuid = ($notification->getUuid() ?? '');
         if ($notificationUuid !== '' && $trackedChannels !== []) {
             $this->repository->ensureDeliveryRecords($notificationUuid, $trackedChannels);
@@ -395,9 +399,31 @@ class NotificationService implements ConfigurableInterface
             return ['status' => 'failed', 'reason' => 'notifiable_not_found'];
         }
 
+        return $this->dispatchToNotifiable($notification, $notifiable, $channels, $options);
+    }
+
+    /**
+     * Dispatch a persisted notification to an already-resolved recipient: skips channels that
+     * were already delivered, records each attempt, and marks the notification sent per policy.
+     *
+     * @param array<string> $channels Channels to dispatch on (empty = default channels)
+     * @param array<string, mixed> $options Dispatch policy options
+     * @return array<string, mixed>
+     */
+    private function dispatchToNotifiable(
+        Notification $notification,
+        Notifiable $notifiable,
+        array $channels,
+        array $options
+    ): array {
+        $notificationUuid = (string) $notification->getUuid();
         $requestedChannels = $channels !== [] ? $channels : $this->getDefaultChannels();
         $channelsToUse = $this->repository->getChannelsNeedingDispatch($notificationUuid, $requestedChannels);
         if ($channelsToUse === []) {
+            if (!$notification->isSent()) {
+                $notification->markAsSent();
+                $this->repository->save($notification);
+            }
             return [
                 'status' => 'success',
                 'notification_uuid' => $notificationUuid,
@@ -671,11 +697,12 @@ class NotificationService implements ConfigurableInterface
                 continue;
             }
 
-            $sendResult = $this->dispatcher->send($notification, $notifiable);
+            // Deliver on the channels/policy captured when the notification was scheduled
+            // (notifications scheduled before the plan was persisted fall back to defaults).
+            $plan = $this->deliveryPlanOf($notification);
+            $this->dispatchToNotifiable($notification, $notifiable, $plan['channels'], $plan['options']);
 
-            if ($sendResult['status'] === 'success') {
-                $notification->markAsSent();
-                $this->repository->save($notification);
+            if ($notification->isSent()) {
                 $results['successful']++;
             } else {
                 $results['failed']++;
@@ -815,44 +842,13 @@ class NotificationService implements ConfigurableInterface
                 $provider = $this->context !== null
                     ? container($this->context)->get(\Glueful\Auth\Contracts\UserProviderInterface::class)
                     : new \Glueful\Auth\NullUserProvider();
-                if ($provider->findByUuid($id) === null) {
+                $identity = $provider->findByUuid($id);
+                if ($identity === null) {
                     return null;
                 }
 
-                // Create and return a notifiable object that implements the Notifiable interface
-                return new class ($id) implements \Glueful\Notifications\Contracts\Notifiable {
-                    private string $uuid;
-
-                    public function __construct(string $uuid)
-                    {
-                        $this->uuid = $uuid;
-                    }
-
-                    public function routeNotificationFor(string $channel)
-                    {
-                        return null; // Can be extended to return specific routing info based on channel
-                    }
-
-                    public function getNotifiableId(): string
-                    {
-                        return $this->uuid;
-                    }
-
-                    public function getNotifiableType(): string
-                    {
-                        return 'user';
-                    }
-
-                    public function shouldReceiveNotification(string $notificationType, string $channel): bool
-                    {
-                        return true; // Default to allowing notifications
-                    }
-
-                    public function getNotificationPreferences(): array
-                    {
-                        return []; // Can be extended to fetch actual preferences
-                    }
-                };
+                // Routes 'email' to the user's current address so email delivery has a recipient.
+                return new \Glueful\Notifications\UserNotifiable($id, $identity->email());
 
             // Add more cases for other entity types as needed
             // case 'customer':
@@ -993,6 +989,48 @@ class NotificationService implements ConfigurableInterface
         $meta['created_at_unix'] = time();
         $data['_meta'] = $meta;
         return $data;
+    }
+
+    /**
+     * Persist the delivery options a scheduled send was given, so the scheduler delivers on the
+     * requested channels/policy instead of the defaults.
+     *
+     * @param array<string, mixed> $data
+     * @param array<string> $channels
+     * @param array<string, mixed> $options
+     * @return array<string, mixed>
+     */
+    protected function withDeliveryPlan(array $data, array $channels, array $options): array
+    {
+        $plan = ['channels' => $channels];
+        if (isset($options['channel_failure_policy']) && is_string($options['channel_failure_policy'])) {
+            $plan['channel_failure_policy'] = $options['channel_failure_policy'];
+        }
+        if (isset($options['critical_channels']) && is_array($options['critical_channels'])) {
+            $plan['critical_channels'] = array_values($options['critical_channels']);
+        }
+
+        $meta = is_array($data['_meta'] ?? null) ? $data['_meta'] : [];
+        $meta['delivery'] = $plan;
+        $data['_meta'] = $meta;
+        return $data;
+    }
+
+    /**
+     * @return array{channels: array<string>, options: array<string, mixed>}
+     */
+    protected function deliveryPlanOf(Notification $notification): array
+    {
+        $data = $notification->getData() ?? [];
+        $meta = is_array($data['_meta'] ?? null) ? $data['_meta'] : [];
+        $plan = is_array($meta['delivery'] ?? null) ? $meta['delivery'] : [];
+
+        $channels = is_array($plan['channels'] ?? null)
+            ? array_values(array_filter($plan['channels'], static fn($v) => is_string($v) && $v !== ''))
+            : [];
+        unset($plan['channels']);
+
+        return ['channels' => $channels, 'options' => $plan];
     }
 
     /**

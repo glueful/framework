@@ -43,8 +43,24 @@ final class QueueProvider extends BaseServiceProvider
         // lives in the queue-ops capability, which overrides this binding.
         $defs[\Glueful\Queue\Contracts\WorkerMonitorInterface::class] =
             $this->autowire(\Glueful\Queue\Monitoring\NullWorkerMonitor::class);
-        $defs[\Glueful\Queue\Failed\FailedJobProvider::class] =
-            $this->autowire(\Glueful\Queue\Failed\FailedJobProvider::class);
+        // Built from config/queue.php `failed.*` (autowiring always took the 5/30 defaults).
+        $defs[\Glueful\Queue\Failed\FailedJobProvider::class] = new \Glueful\Container\Definition\FactoryDefinition(
+            \Glueful\Queue\Failed\FailedJobProvider::class,
+            static function (\Psr\Container\ContainerInterface $c): \Glueful\Queue\Failed\FailedJobProvider {
+                $context = $c->has(\Glueful\Bootstrap\ApplicationContext::class)
+                    ? $c->get(\Glueful\Bootstrap\ApplicationContext::class)
+                    : null;
+                $failed = $context !== null ? (array) config($context, 'queue.failed', []) : [];
+
+                return new \Glueful\Queue\Failed\FailedJobProvider(
+                    $c->has(\Glueful\Database\Connection::class) ? $c->get(\Glueful\Database\Connection::class) : null,
+                    (string) ($failed['table'] ?? 'queue_failed_jobs'),
+                    (int) ($failed['max_retries'] ?? 5),
+                    (int) ($failed['retention_days'] ?? 30),
+                    $context
+                );
+            }
+        );
         $defs[\Glueful\Scheduler\JobScheduler::class] =
             $this->autowire(\Glueful\Scheduler\JobScheduler::class);
 

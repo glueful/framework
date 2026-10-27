@@ -386,6 +386,9 @@ class Connection implements DatabaseInterface
         if ($engine === 'mysql' && ($dbConfig['strict'] ?? true) === true) {
             $options[PDO::MYSQL_ATTR_INIT_COMMAND] = "SET sql_mode='STRICT_ALL_TABLES'";
         }
+        if ($engine === 'mysql' && is_array($dbConfig['ssl'] ?? null)) {
+            $options = MySQLDriver::sslOptions($dbConfig['ssl']) + $options;
+        }
 
         // Optional connect timeout. The installer's ConnectionTester sets a short one so an
         // unreachable host fails fast instead of hanging on the OS default (~75s). MySQL honors
@@ -803,7 +806,8 @@ class Connection implements DatabaseInterface
     {
         // Create shared dependencies
         $parameterBinder = new \Glueful\Database\Execution\ParameterBinder();
-        $queryLogger = new \Glueful\Database\QueryLogger();
+        // The connection's context lets the logger read app.debug and dispatch QueryExecutedEvent.
+        $queryLogger = new \Glueful\Database\QueryLogger(null, $this->context);
 
         // Create all the component dependencies with proper constructors
         $state = new \Glueful\Database\Query\QueryState();

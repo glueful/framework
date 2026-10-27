@@ -250,6 +250,9 @@ class ConnectionPoolManager
         if ($engine === 'mysql' && ($config['strict'] ?? true) === true) {
             $options[\PDO::MYSQL_ATTR_INIT_COMMAND] = "SET sql_mode='STRICT_ALL_TABLES'";
         }
+        if ($engine === 'mysql' && is_array($config['ssl'] ?? null)) {
+            $options = MySQLDriver::sslOptions($config['ssl']) + $options;
+        }
 
         // Add user/password for non-SQLite engines
         if ($engine !== 'sqlite') {

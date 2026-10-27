@@ -74,6 +74,56 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   `#[Fields]` and `#[RequireScope]` config — scoped routes served from the cache let requests through.
 - **Controllers with a class-level `#[RateLimit]` are now rate limited** on every route that has no
   method-level `#[RateLimit]` of its own. Check these limits before upgrading.
+- **ORM `forceDelete()` (instance and builder) now permanently deletes** rows it used to only
+  soft-delete; builder `restore()` updates only trashed rows; after a soft `delete()` the instance
+  keeps `exists = true` so it can be restored or force-deleted.
+- **Model event callbacks that return `false` now cancel** `save()` / `delete()` / `restore()` /
+  `forceDelete()` (which return `false`). Check no such callback returns `false` by accident.
+- **`AsEncryptedString` writes with `EncryptionService` (AES-256-GCM, `APP_KEY`).** Set `APP_KEY` and
+  keep `ENCRYPTION_KEY` until every legacy CBC value has been re-saved; models using the cast must be
+  constructed with an `ApplicationContext`.
+- **`HasTimestamps::fromDateTime()` accepts `mixed`** — a subclass override with a narrower parameter
+  type must widen it.
+- **ORM `paginate()['data']` is a `Glueful\Database\ORM\Collection` of models**, not a list of
+  arrays (other keys unchanged): change `$row['name']` to `$row->name`, or call `->toArray()`.
+  `JsonResource` / `ModelResource::collection()` accept it as-is.
+- **`whereHas()` / `has()` closures receive the related model's ORM `Builder`** (unknown methods still
+  pass through to the QueryBuilder); `withCount()` closures receive the relation, like `with()`.
+  Self-referencing relations and unsupported relation types now throw instead of returning wrong rows.
+- **Listener classes that can't be built now fail at `subscribe()`** instead of being skipped silently.
+- **Apps with their own `config/schedule.php` must add the `queue_maintenance` job** to get automatic
+  failed-job pruning.
+- **Shipped CSRF `exemptRoutes` now apply under `/api/v1`.** Check no route you meant to protect matches.
+- **Put inbound third-party webhook receivers under `/webhooks/inbound/<provider>`.** The shipped
+  exemption is now `webhooks/inbound/*` (it was `webhooks/*`, which never took effect before 1.91);
+  receivers elsewhere need their own `exemptRoutes` entry or no `csrf` middleware.
+- **Cookie-transport writes with no Origin/Referer now get `403 CSRF_ORIGIN_MISMATCH`.**
+- **A split-subdomain SPA needs `CORS_ALLOWED_ORIGINS=<exact origin>` and
+  `CORS_SUPPORTS_CREDENTIALS=true`** for session refresh/logout to accept `Sec-Fetch-Site: same-site`.
+- **`Utils::buildSearchConditions()` and `FailedJobProvider::setMaxRetries()` / `getMaxRetries()` are
+  removed** — use `QueryBuilder::whereContains()` / `orWhereContains()`; delete the max-retries calls.
+- **Remove `TRACING_DRIVER`** and the `driver` / `drivers` keys from any app copy of
+  `config/observability.php`.
+- **`QueryExecutedEvent` listeners now run outside debug mode too.**
+- **MySQL apps with SSL enabled and certificate paths set now connect over TLS with verification on**
+  (set `DB_SSL_VERIFY_CERT=false` if needed).
+- **OpenAPI tag names change** under the API prefix (e.g. "Api" → "Users"), which affects generated
+  SDKs and grouping.
+- **Run `php glueful migrate:run`** for the new `webhooks` migration leaf. Databases whose webhook
+  tables the old lazy path created migrate cleanly.
+- **`WebhookDeliveryService` deliveries changed signature format.** `X-Glueful-Signature: sha256=…` /
+  `X-Glueful-Timestamp` are now `X-Webhook-Signature: t=…,v1=…` (HMAC of `"<ts>.<body>"`) and
+  `X-Webhook-Timestamp` — the same scheme as subscription deliveries. Verify with `Webhook::verify()`.
+- **New routes under `/api/v1/webhooks/...`** need `auth` plus `system.config.view` (reads) or
+  `system.config.edit` (writes). Remove app routes that mounted `WebhookController` on the same paths.
+- **Events marked `#[Webhookable]` or using `DispatchesWebhooks` now send webhooks.** If you registered
+  `WebhookEventListener` yourself, remove that or each event dispatches twice.
+- **`new WebhookDispatcher($connection, …)` drops its first argument.**
+- **`API_RATE_LIMITING_ENABLED=false` / `api.field_selection.enabled = false` now switch those features
+  off** — they were ignored. Check apps that set them.
+- **`queue:scheduler --parallel` (`-p`) is gone**; remove it from scripts. Remove `TRACING_SERVICE_NAME`
+  / `TRACING_SERVICE_VERSION` from `.env` (and the keys from app copies of `config/observability.php`).
+
 ### Added
 - **`#[AsListener]` registers listeners.** The attribute existed but nothing read it, so annotated
   listeners never ran. `EventService::subscribe(Listener::class)` now registers `#[AsListener]` on
@@ -90,10 +140,29 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   request or a cache read.
 - **`Glueful\Validation\Contracts\DatabaseAwareRule`**: the contract the Validator uses to hand its
   connection to database-backed rules.
+- **Cookie sessions from the core login.** With `SESSION_COOKIE_ENABLED=true`, `POST /auth/login`
+  with `"auth_transport": "cookie"` sets the session cookies (and a session-bound `csrf_token`) and
+  returns no tokens in the body. Login responses now include `session_uuid`.
+- **Same-site session refresh/logout.** `/auth/session/refresh|logout` accept `Sec-Fetch-Site:
+  same-site` when the Origin is an explicitly allowed CORS origin with credentials enabled.
+- **Built-in `queue_maintenance` scheduled job.** `QueueMaintenanceJob` runs queue maintenance daily
+  (04:15), pruning failed jobs past `queue.failed.retention_days`; disable with
+  `QUEUE_MAINTENANCE_ENABLED=false`.
+- **`CSRFMiddleware::forContext()`** returns the instance sharing the `csrf` route middleware's token
+  store; `Glueful\Notifications\UserNotifiable` is the rebuilt user recipient for scheduled sends and
+  retries; `UserIdentity::normalizeScopes()` normalises array or space-delimited scope claims.
+- **Webhook management routes.** `routes/webhooks.php` mounts all `WebhookController` actions under
+  the API prefix, behind `auth`; reads require `system.config.view`, changes `system.config.edit`.
+- **Webhook migration leaf.** `migrations/webhooks` (`glueful/framework:webhooks`) ships the
+  `webhook_subscriptions` / `webhook_deliveries` schema.
 
 ### Deprecated
 - **`QueryBuilder::optimize()`.** It never had any effect and is now a no-op returning the builder;
   use `QueryOptimizer::optimizeQuery()` directly.
+- **`Glueful\Routing\Middleware\ValidationMiddleware`.** An unaliased subset of the `validate`
+  middleware; use `->middleware(['validate'])`.
+- **`#[Webhookable]`'s `only` / `except` arguments.** They never had an effect and never defined
+  what a pattern matches.
 
 ### Removed
 - **`queue:scheduler` stub actions.** `add`, `remove`, `enable`, `disable` and `history` printed "not
@@ -105,6 +174,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   `capabilities.metrics` (`METRICS_DATABASE_STORE`) and `capabilities.scheduler`
   (`SCHEDULE_DATABASE_STORE`). No code read them; core migrations install unconditionally since
   1.79, so the capability switches gated nothing.
+- **`Utils::buildSearchConditions()`** (deprecated in 1.86.3). Use `whereContains()`.
+- **`FailedJobProvider::setMaxRetries()` / `getMaxRetries()`** (deprecated in 1.86; never enforced).
+- **`observability.tracing.driver` / `TRACING_DRIVER`** and the empty `drivers` block; only the no-op
+  tracer exists.
+- **`WebhookDispatcher::getSchema()`, `areTablesEnsured()`, `resetTablesEnsured()`** (runtime DDL)
+  and the constructor's unused `$connection` argument.
+- **`queue:scheduler --parallel`.** It was accepted and ignored.
+- **`observability.tracing.service_name` / `service_version`** (`TRACING_SERVICE_NAME` /
+  `TRACING_SERVICE_VERSION`). Nothing read them.
 
 ### Fixed
 - **Route-definition params reach the CSRF and request-logging middleware.** The router passes
@@ -213,6 +291,77 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   read; a method-level `#[RateLimit]` now replaces the class-level set for that method.
 - **`fields:analyze` and `fields:validate` recognise `#[Fields]` routes.** They checked only explicit
   middleware and missed the auto-attached `field_selection`. New helper: `Route::hasFieldSelection()`.
+- **Timestamped models save without datetime casts.** `created_at` / `updated_at` (and any
+  `DateTimeInterface` attribute) are formatted with the model's date format before the write instead
+  of binding a `DateTimeImmutable` to PDO; assigning a string to a `datetime`-cast attribute no longer
+  throws.
+- **`scaffold:model` output loads.** The template declared `protected bool $timestamps`, a fatal
+  visibility mismatch with the public property on `Model`.
+- **ORM soft deletes do what their names say.** `withTrashed()` includes trashed rows, `onlyTrashed()`
+  returns them, `delete()` marks the instance `trashed()`, `restore()` clears `deleted_at`, and
+  instance and builder `forceDelete()` issue a real `DELETE`.
+- **All model events reach their callbacks, and `false` cancels.** `trashed`, `restoring`, `restored`,
+  `forceDeleting` and `forceDeleted` callbacks were dropped; a `false` return from
+  `saving`/`creating`/`updating`/`deleting`/`restoring`/`forceDeleting` now cancels the write.
+- **`AsEncryptedString` uses the framework `EncryptionService`** (AES-256-GCM under `APP_KEY`,
+  rotation-aware, AAD `<table>.<column>`); legacy AES-256-CBC values still decrypt and are
+  re-encrypted the next time they are saved.
+- **`belongsToMany` eager loading works, and `detach()` / `sync()` / `toggle()` change pivot rows.**
+  `with('roles')` failed with "no such column" (the eager query skipped the pivot join), and
+  `detach($ids)` matched no rows. `sync()` also reports `updated` for kept ids whose pivot changed.
+- **Nested and through-relation eager loads load every parent.** With `with('posts.comments')` only the
+  first post got its comments; `hasManyThrough` / `hasOneThrough` eager loads failed.
+- **`withCount()` adds `{relation}_count` to results.** It was accepted and ignored; counts run as one
+  grouped query per relation and honour a constraint closure.
+- **`whereHas()` and related methods apply their constraint closure.** The closure was dropped, and
+  belongsTo / belongsToMany / through relations were correlated on the wrong columns. Nested relations
+  (`posts.comments`) are supported.
+- **`loadCount()` counts are no longer saved.** A later `save()` tried to write the nonexistent
+  `{relation}_count` column.
+- **ORM `paginate()` returns models with eager loads.** It returned raw rows and ignored `with()` /
+  `withCount()`.
+- **Listeners that are not container services run.** `subscribe()` autowires unregistered listener
+  classes instead of wiring a lazy reference that failed at dispatch and was silently skipped.
+- **Scheduled notifications deliver on their requested channels.** The channels and failure policy are
+  kept with the notification and used when it falls due, and the rebuilt user recipient routes
+  `email` to the user's address (it was `no_recipient`). Email **retries** had the same gap and route
+  through the same recipient.
+- **The container's `FailedJobProvider` honours `queue.failed.*` config.** It always used 30 days.
+- **CSRF exempt routes match under the API prefix.** `exemptRoutes` entries such as `auth/login` and
+  `webhooks/*` now match `/api/v1/...`; full-path entries keep working.
+- **Cookie-authenticated writes no longer skip the CSRF origin check.** `skip_for_bearer_auth` ignored
+  that the `Authorization` header was injected by `session_cookie`.
+- **Login CSRF tokens validate on the first authenticated write.** The token is bound to the new
+  session and stored in the shared CSRF cache instead of nowhere.
+- **`GET /csrf-token` tokens validate.** The endpoint issued tokens from a context-less middleware with
+  no token store, so the `csrf` route middleware rejected them.
+- **String `scope` claims no longer drop `auth.user`** in `AuthToRequestAttributesMiddleware`.
+- **`security.api_keys.allow_query_param` is in the shipped config** (`API_KEY_ALLOW_QUERY_PARAM`,
+  default `false`).
+- **`withPurpose()` reaches query logs and `QueryExecutedEvent`.** The purpose never left the builder
+  and the builder's logger had no context, so the event never fired. It now fires (debug or not) only
+  when a listener exists. A purpose set on a `clone()` no longer tags the original's queries.
+- **MySQL `ssl.*` config is applied.** CA / cert / key / `verify_cert` map to `PDO::MYSQL_ATTR_SSL_*`
+  when SSL is enabled and at least one certificate path is set.
+- **`uuid` accepts RFC 9562 v6/v7/v8 UUIDs.**
+- **OpenAPI tags skip the API prefix.** Under `/api/v1` every operation was tagged "Api".
+- **`generate:openapi --clean` keeps hand-authored fragments.** Only the generated `routes/` and
+  `extensions/` folders are removed.
+- **`#[Webhookable]` / `DispatchesWebhooks` dispatch webhooks.** `WebhookEventListener` was never
+  registered; it now is at boot (when `events.enabled` and `api.webhooks.enabled` are on), and the
+  dispatch options `queue`, `connection` and `delay` are honoured.
+- **`Webhook::subscribe()` works on a fresh database.** Tables come from the migration; the runtime
+  DDL in `WebhookDispatcher` is gone.
+- **Webhook config is read.** `signature_header`, `signature_algorithm`, `retry.backoff` and the
+  queue `connection` apply to deliveries, and the OpenAPI webhooks block documents the configured
+  signature header.
+- **One webhook signing scheme.** `WebhookDeliveryService` signs like subscription deliveries.
+- **`api.rate_limiting.enabled` (`API_RATE_LIMITING_ENABLED`) switches rate limiting off.** It was
+  never read, so limits always applied.
+- **`api.field_selection.enabled` switches field selection off.** It was never read.
+- **The shipped CSRF exemption no longer covers the webhook management API.** `webhooks/*` was meant
+  for inbound receivers, but matching under the API prefix it also exempted the authenticated
+  `/api/v1/webhooks/{subscriptions,deliveries}` routes. It is narrowed to `webhooks/inbound/*`.
 
 ## [1.90.0] - 2026-10-11 — Alsciaukat
 

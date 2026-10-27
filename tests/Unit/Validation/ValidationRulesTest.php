@@ -149,6 +149,31 @@ class ValidationRulesTest extends TestCase
         $this->assertNull($result);
     }
 
+    public function testUuidRulePassesRfc9562Versions(): void
+    {
+        $rule = new Uuid();
+        // v6 (reordered time), v7 (Unix-epoch time, the common modern primary key), v8 (custom)
+        foreach (
+            [
+                '1ec9414c-232a-6b00-b3c8-9e6bdeced846',
+                '018f3d2c-7b1a-7cc2-9f4e-5a1b2c3d4e5f',
+                '320c3d4d-cc00-875b-8ec9-32d5f69181c0',
+            ] as $uuid
+        ) {
+            $this->assertNull($rule->validate($uuid, ['field' => 'id']), $uuid);
+        }
+    }
+
+    public function testUuidRuleRejectsUnknownVersionsAndVariants(): void
+    {
+        $rule = new Uuid();
+        // version nibble 9 / 0 do not exist; variant nibble c is not RFC 9562
+        $this->assertNotNull($rule->validate('018f3d2c-7b1a-9cc2-9f4e-5a1b2c3d4e5f', ['field' => 'id']));
+        $this->assertNotNull($rule->validate('018f3d2c-7b1a-0cc2-9f4e-5a1b2c3d4e5f', ['field' => 'id']));
+        $this->assertNotNull($rule->validate('018f3d2c-7b1a-7cc2-cf4e-5a1b2c3d4e5f', ['field' => 'id']));
+        $this->assertNotNull($rule->validate('018f3d2c7b1a7cc29f4e5a1b2c3d4e5f', ['field' => 'id']));
+    }
+
     public function testUuidRuleFailsInvalidUuid(): void
     {
         $rule = new Uuid();

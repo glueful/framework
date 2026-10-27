@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Glueful\Http\Services;
 
+use Glueful\Api\Webhooks\WebhookSignature;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Http\Client;
 use Glueful\Events\Webhook\WebhookDeliveredEvent;
 use Glueful\Events\Webhook\WebhookFailedEvent;
@@ -15,13 +17,18 @@ use Psr\Log\LoggerInterface;
  *
  * Handles reliable webhook delivery with retry mechanisms, signature generation,
  * batch processing, and comprehensive event logging for integration monitoring.
+ *
+ * With a `secret` option, requests are signed with the same scheme as subscription deliveries
+ * ({@see WebhookSignature}): `<api.webhooks.signature_header>: t=<ts>,v1=<hmac of "<ts>.<body>">`
+ * plus `X-Webhook-Timestamp`, using `api.webhooks.signature_algorithm` when a context is given.
  */
 class WebhookDeliveryService
 {
     public function __construct(
         private Client $httpClient,
         private LoggerInterface $logger,
-        private ?EventService $events = null
+        private ?EventService $events = null,
+        private ?ApplicationContext $context = null
     ) {
     }
 
@@ -262,52 +269,45 @@ class WebhookDeliveryService
     }
 
     /**
-     * Build request options including signature
+     * Build request options including signature. The payload is encoded once and that exact
+     * body is what gets signed and sent.
      * @param array<string, mixed> $payload
      * @param array<string, mixed> $options
      * @return array<string, mixed>
      */
     private function buildRequestOptions(array $payload, array $options): array
     {
-        $requestOptions = ['json' => $payload];
+        $body = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        $timestamp = time();
 
-        // Add HMAC signature if secret is provided
-        if (isset($options['secret'])) {
-            $signature = $this->generateSignature($payload, $options['secret']);
-            $requestOptions['headers']['X-Glueful-Signature'] = $signature;
+        $headers = ['Content-Type' => 'application/json'];
+        if (isset($options['secret']) && is_string($options['secret']) && $options['secret'] !== '') {
+            $headers += WebhookSignature::headers($body, $options['secret'], $this->context, $timestamp);
+        } else {
+            $headers[WebhookSignature::TIMESTAMP_HEADER] = (string) $timestamp;
         }
-
-        // Add timestamp header
-        $requestOptions['headers']['X-Glueful-Timestamp'] = time();
 
         // Add custom headers
-        if (isset($options['headers'])) {
-            $requestOptions['headers'] = array_merge(
-                $requestOptions['headers'],
-                $options['headers']
-            );
+        if (isset($options['headers']) && is_array($options['headers'])) {
+            $headers = array_merge($headers, $options['headers']);
         }
 
-        return $requestOptions;
+        return ['body' => $body, 'headers' => $headers];
     }
 
     /**
-     * Generate HMAC signature for webhook security
-     * @param array<string, mixed> $payload
-     */
-    private function generateSignature(array $payload, string $secret): string
-    {
-        $jsonPayload = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
-        return 'sha256=' . hash_hmac('sha256', $jsonPayload, $secret);
-    }
-
-    /**
-     * Verify webhook signature
+     * Verify a webhook signature header (`t=<ts>,v1=<hmac>`) produced by this service or a
+     * subscription delivery, with the configured algorithm and a 300-second replay tolerance.
      */
     public function verifySignature(string $payload, string $signature, string $secret): bool
     {
-        $expectedSignature = 'sha256=' . hash_hmac('sha256', $payload, $secret);
-        return hash_equals($expectedSignature, $signature);
+        return WebhookSignature::verify(
+            $payload,
+            $signature,
+            $secret,
+            300,
+            WebhookSignature::getAlgorithm($this->context)
+        );
     }
 
     /**

@@ -732,12 +732,13 @@ final class CoreProvider extends BaseServiceProvider
         );
         $defs[\Glueful\Controllers\SessionController::class] = new FactoryDefinition(
             \Glueful\Controllers\SessionController::class,
-            static fn(\Psr\Container\ContainerInterface $c) =>
+            fn(\Psr\Container\ContainerInterface $c) =>
                 new \Glueful\Controllers\SessionController(
                     $c->get(\Glueful\Auth\AuthenticationService::class),
                     $c->get(\Glueful\Auth\Session\SessionCookieIssuer::class),
                     $c->get(\Glueful\Auth\Session\SessionCookieConfig::class),
-                    new \Glueful\Auth\Session\SameOriginGuard(),
+                    // Same-site siblings pass only for an explicitly credentialed CORS origin.
+                    new \Glueful\Auth\Session\SameOriginGuard(new \Glueful\Http\Cors([], $this->context)),
                     $c->get(\Glueful\Auth\Session\SessionLogout::class),
                 )
         );
@@ -883,11 +884,10 @@ final class CoreProvider extends BaseServiceProvider
             \Glueful\Api\Webhooks\WebhookPayload::class
         );
 
-        // Webhook dispatcher (with auto-migration)
+        // Webhook dispatcher (tables come from the `webhooks` core migration leaf)
         $defs[\Glueful\Api\Webhooks\WebhookDispatcher::class] = new FactoryDefinition(
             \Glueful\Api\Webhooks\WebhookDispatcher::class,
             fn(\Psr\Container\ContainerInterface $c) => new \Glueful\Api\Webhooks\WebhookDispatcher(
-                $c->get('database'),
                 $c->get(\Glueful\Api\Webhooks\Contracts\WebhookPayloadInterface::class),
                 $this->context
             )

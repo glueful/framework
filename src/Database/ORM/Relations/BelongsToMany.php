@@ -163,6 +163,11 @@ class BelongsToMany extends Relation
      */
     public function addEagerConstraints(array $models): void
     {
+        // Eager relations are built with constraints disabled, which also skips the
+        // pivot join addConstraints() performs -- add it here so the pivot columns
+        // (and the foreign pivot key filter below) resolve.
+        $this->performJoin();
+
         $keys = $this->getKeys($models, $this->parentKey);
 
         $this->query->whereIn($this->getQualifiedForeignPivotKeyName(), $keys);
@@ -256,8 +261,6 @@ class BelongsToMany extends Relation
     #[\Override]
     public function get(array $columns = ['*']): Collection
     {
-        // Get the base table columns
-        $baseTable = $this->related->getTable();
         $columns = $this->shouldSelect($columns);
 
         // Get results from query builder
@@ -266,8 +269,10 @@ class BelongsToMany extends Relation
         // Hydrate models with pivot data
         $models = [];
         foreach ($results as $result) {
-            $model = $this->related->newFromBuilder((array) $result);
-            $this->hydratePivotRelation($model, (array) $result);
+            $row = (array) $result;
+            $pivotAttributes = $this->extractPivotAttributes($row);
+            $model = $this->related->newFromBuilder($row);
+            $model->setRelation('pivot', new Pivot($pivotAttributes, $this->table));
             $models[] = $model;
         }
 
@@ -331,15 +336,36 @@ class BelongsToMany extends Relation
      */
     protected function hydratePivotRelation(Model $model, array $attributes): void
     {
-        $pivotAttributes = [];
+        $model->setRelation('pivot', new Pivot($this->extractPivotAttributes($attributes), $this->table));
+    }
 
-        foreach ($attributes as $key => $value) {
-            if (str_starts_with($key, 'pivot_')) {
-                $pivotAttributes[substr($key, 6)] = $value;
+    /**
+     * Pull the aliased pivot_* columns this relation selected out of a result row
+     *
+     * Removes them from the row so they do not leak into the related model's own
+     * attributes (where they would serialize and look like real columns).
+     *
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    protected function extractPivotAttributes(array &$row): array
+    {
+        $pivotColumns = [$this->foreignPivotKey, $this->relatedPivotKey, ...$this->pivotColumns];
+        if ($this->withTimestamps) {
+            $pivotColumns[] = $this->pivotCreatedAt;
+            $pivotColumns[] = $this->pivotUpdatedAt;
+        }
+
+        $pivotAttributes = [];
+        foreach ($pivotColumns as $column) {
+            $alias = 'pivot_' . $column;
+            if (array_key_exists($alias, $row)) {
+                $pivotAttributes[$column] = $row[$alias];
+                unset($row[$alias]);
             }
         }
 
-        $model->setRelation('pivot', new Pivot($pivotAttributes, $this->table));
+        return $pivotAttributes;
     }
 
     /**
@@ -516,11 +542,11 @@ class BelongsToMany extends Relation
             ->where($this->foreignPivotKey, '=', $this->parent->{$this->parentKey});
 
         if ($ids !== null) {
-            $ids = $this->parseIds($ids);
-            $relatedIds = array_values(array_map(
-                fn ($v) => is_array($v) ? key($v) : $v,
-                $ids
-            ));
+            // parseIds() keys the result by related id; the values are pivot attributes.
+            $relatedIds = array_keys($this->parseIds($ids));
+            if ($relatedIds === []) {
+                return 0;
+            }
             $query->whereIn($this->relatedPivotKey, $relatedIds);
         }
 
@@ -542,32 +568,33 @@ class BelongsToMany extends Relation
             'updated' => [],
         ];
 
-        // Get current related IDs
-        $current = $this->parent->getConnection()->table($this->table)
-            ->where($this->foreignPivotKey, '=', $this->parent->{$this->parentKey})
-            ->get();
-
-        $currentIds = array_column($current, $this->relatedPivotKey);
+        $currentIds = $this->currentRelatedIds();
 
         // Parse the ids to sync
         $parsed = $this->parseIds($ids);
         $syncIds = array_keys($parsed);
 
-        // Detach
+        // Detach rows not in the given set
         if ($detaching) {
-            $detach = array_diff($currentIds, $syncIds);
+            $detach = array_values(array_diff($currentIds, $syncIds));
             if (count($detach) > 0) {
                 $this->detach($detach);
-                $changes['detached'] = array_values($detach);
+                $changes['detached'] = $detach;
             }
         }
 
-        // Attach new
-        $attach = array_diff($syncIds, $currentIds);
-        foreach ($attach as $id) {
-            $attributes = $parsed[$id] ?? [];
-            $this->attach([$id => $attributes]);
-            $changes['attached'][] = $id;
+        $currentKeys = array_map('strval', $currentIds);
+        foreach ($parsed as $id => $attributes) {
+            if (!in_array((string) $id, $currentKeys, true)) {
+                // Attach new
+                $this->attach([$id => $attributes]);
+                $changes['attached'][] = $id;
+            } elseif (is_array($attributes) && $attributes !== []) {
+                // Update pivot attributes of rows that stay attached
+                if ($this->updateExistingPivot($id, $attributes) > 0) {
+                    $changes['updated'][] = $id;
+                }
+            }
         }
 
         return $changes;
@@ -586,18 +613,13 @@ class BelongsToMany extends Relation
             'detached' => [],
         ];
 
-        // Get current related IDs
-        $current = $this->parent->getConnection()->table($this->table)
-            ->where($this->foreignPivotKey, '=', $this->parent->{$this->parentKey})
-            ->get();
-
-        $currentIds = array_column($current, $this->relatedPivotKey);
+        $currentIds = array_map('strval', $this->currentRelatedIds());
 
         // Parse the ids to toggle
         $parsed = $this->parseIds($ids);
 
         foreach ($parsed as $id => $attributes) {
-            if (in_array($id, $currentIds, true)) {
+            if (in_array((string) $id, $currentIds, true)) {
                 $this->detach($id);
                 $changes['detached'][] = $id;
             } else {
@@ -607,6 +629,21 @@ class BelongsToMany extends Relation
         }
 
         return $changes;
+    }
+
+    /**
+     * Get the related ids currently attached to the parent
+     *
+     * @return array<int, int|string>
+     */
+    protected function currentRelatedIds(): array
+    {
+        $current = $this->parent->getConnection()->table($this->table)
+            ->select([$this->relatedPivotKey])
+            ->where($this->foreignPivotKey, '=', $this->parent->{$this->parentKey})
+            ->get();
+
+        return array_values(array_column($current, $this->relatedPivotKey));
     }
 
     /**

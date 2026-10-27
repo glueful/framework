@@ -548,7 +548,11 @@ class CSRFMiddleware implements RouteMiddleware
 
         // If neither header is present, decide based on configuration
         if ($origin === null && $referer === null) {
-            if ((bool) $this->getConfig('security.csrf.skip_for_bearer_auth', true)) {
+            // A cookie-transport request carries an Authorization header too — session_cookie
+            // injects it — but the browser attached that credential automatically, so it is
+            // exactly the request CSRF exists for and never earns the bearer relaxation.
+            $cookieTransport = $request->attributes->get('auth_transport') === 'cookie';
+            if (!$cookieTransport && (bool) $this->getConfig('security.csrf.skip_for_bearer_auth', true)) {
                 $authorization = $request->headers->get('Authorization', '') ?? '';
                 if (str_starts_with($authorization, 'Bearer ')) {
                     return true;
@@ -828,18 +832,48 @@ class CSRFMiddleware implements RouteMiddleware
     private function isExemptRoute(Request $request): bool
     {
         $path = $request->getPathInfo();
-        $cleanPath = $this->getCleanPath($path);
+        $candidates = array_unique(array_filter([
+            ltrim($path, '/'),
+            $this->getCleanPath($path),
+            $this->getApiRelativePath($path),
+        ], static fn (?string $candidate): bool => $candidate !== null));
 
         foreach ($this->exemptRoutes as $exemptRoute) {
-            if (
-                $this->matchesPattern($path, $exemptRoute) ||
-                $this->matchesPattern($cleanPath, $exemptRoute)
-            ) {
+            if ($this->matchesPattern($path, $exemptRoute)) {
                 return true;
+            }
+            foreach ($candidates as $candidate) {
+                if ($this->matchesPattern($candidate, $exemptRoute)) {
+                    return true;
+                }
             }
         }
 
         return false;
+    }
+
+    /**
+     * The request path relative to the configured API prefix (`api_prefix()`, e.g. `/api/v1`),
+     * which is how the shipped `exemptRoutes` entries (`auth/login`, `webhooks/*`) are written.
+     * Null when there is no context, no prefix, or the path is not under it.
+     */
+    private function getApiRelativePath(string $path): ?string
+    {
+        if ($this->context === null) {
+            return null;
+        }
+
+        $prefix = trim(api_prefix($this->context), '/');
+        if ($prefix === '') {
+            return null;
+        }
+
+        $trimmed = ltrim($path, '/');
+        if ($trimmed === $prefix) {
+            return '';
+        }
+
+        return str_starts_with($trimmed, $prefix . '/') ? substr($trimmed, strlen($prefix) + 1) : null;
     }
 
     /**
@@ -1060,6 +1094,28 @@ class CSRFMiddleware implements RouteMiddleware
         }
 
         return config($this->context, $key, $default);
+    }
+
+    /**
+     * The middleware instance whose token store the `csrf` route middleware uses: the container's
+     * service when there is one, else one built from config. A bare `new CSRFMiddleware()` has no
+     * context and therefore no cache, so tokens it issues are stored nowhere.
+     */
+    public static function forContext(ApplicationContext $context): self
+    {
+        try {
+            $container = container($context);
+            if ($container->has(self::class)) {
+                $csrf = $container->get(self::class);
+                if ($csrf instanceof self) {
+                    return $csrf;
+                }
+            }
+        } catch (\Throwable) {
+            // No container: fall through to a context-aware instance.
+        }
+
+        return self::fromConfig($context);
     }
 
     /**

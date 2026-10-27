@@ -42,6 +42,28 @@ final class EnhancedRateLimiterMiddlewareParamsTest extends TestCase
         $this->assertSame(429, $third->getStatusCode());
     }
 
+    /** `api.rate_limiting.enabled` (API_RATE_LIMITING_ENABLED) was never read: limits always applied. */
+    public function testDisabledRateLimitingPassesEveryRequestThrough(): void
+    {
+        $middleware = $this->middleware(null, ['enabled' => false]);
+        $next = static fn(Request $req): Response => new Response('ok');
+
+        foreach (range(1, 3) as $_) {
+            $response = $middleware->handle($this->request(), $next, '1', '60');
+            $this->assertSame(200, $response->getStatusCode());
+            $this->assertFalse($response->headers->has('X-RateLimit-Limit'));
+        }
+    }
+
+    public function testEnabledFromEnvStringStillEnforces(): void
+    {
+        $middleware = $this->middleware(null, ['enabled' => 'true']);
+        $next = static fn(Request $req): Response => new Response('ok');
+
+        $middleware->handle($this->request(), $next, '1', '60');
+        $this->assertSame(429, $middleware->handle($this->request(), $next, '1', '60')->getStatusCode());
+    }
+
     public function testRouteConfigTakesPrecedenceOverParams(): void
     {
         $middleware = $this->middleware();
@@ -172,7 +194,8 @@ final class EnhancedRateLimiterMiddlewareParamsTest extends TestCase
         $this->assertSame(429, $limited->getStatusCode());
     }
 
-    private function middleware(?EventService $events = null): EnhancedRateLimiterMiddleware
+    /** @param array<string, mixed> $config */
+    private function middleware(?EventService $events = null, array $config = []): EnhancedRateLimiterMiddleware
     {
         $manager = new RateLimitManager(
             $this->storage(),
@@ -180,7 +203,7 @@ final class EnhancedRateLimiterMiddlewareParamsTest extends TestCase
             new TierManager(['tiers' => ['anonymous' => ['requests_per_minute' => 1000]]])
         );
 
-        return new EnhancedRateLimiterMiddleware($manager, new RateLimitHeaders(), [], $events);
+        return new EnhancedRateLimiterMiddleware($manager, new RateLimitHeaders(), $config, $events);
     }
 
     /**

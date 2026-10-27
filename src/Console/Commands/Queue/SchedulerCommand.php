@@ -68,13 +68,6 @@ class SchedulerCommand extends BaseCommand
                  'Force job execution even if not due'
              )
              ->addOption(
-                 'parallel',
-                 'p',
-                 InputOption::VALUE_REQUIRED,
-                 'Maximum parallel job executions',
-                 '1'
-             )
-             ->addOption(
                  'output-format',
                  'o',
                  InputOption::VALUE_REQUIRED,

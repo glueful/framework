@@ -56,6 +56,7 @@ registered unconditionally** at `FOUNDATION`, under source `glueful/framework` (
 | **notifications** | `notifications`, `notification_deliveries`, `notification_preferences`, `notification_templates`, `notification_retry_queue` |
 | **metrics** | `api_metrics`, `api_metrics_daily`, `api_rate_limits` |
 | **locks** | `locks` |
+| **webhooks** | `webhook_subscriptions`, `webhook_deliveries` |
 
 > **Archive** is no longer a core capability — it was extracted to the **`glueful/archive` extension**, which owns its own `archive_registry`/`archive_search_index`/`archive_table_stats` schema. Install it with `composer require glueful/archive`.
 

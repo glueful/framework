@@ -44,7 +44,7 @@ final class CapabilityMigrationsTest extends MigrationTestCase
         $mm = $this->app()->getContainer()->get(MigrationManager::class);
         $bySource = $this->registeredSources($mm);
 
-        foreach (['locks', 'metrics', 'notifications', 'queue', 'scheduler', 'uploads'] as $leaf) {
+        foreach (['locks', 'metrics', 'notifications', 'queue', 'scheduler', 'uploads', 'webhooks'] as $leaf) {
             self::assertArrayHasKey(
                 'glueful/framework:' . $leaf,
                 $bySource,
@@ -60,7 +60,7 @@ final class CapabilityMigrationsTest extends MigrationTestCase
         $mm->migrate();
 
         $schema = \Glueful\Database\Connection::fromContext($this->context())->getSchemaBuilder();
-        foreach (['locks', 'queue_jobs'] as $table) {
+        foreach (['locks', 'queue_jobs', 'webhook_subscriptions', 'webhook_deliveries'] as $table) {
             self::assertTrue($schema->hasTable($table), "{$table} must exist after a full migrate");
         }
     }

@@ -15,6 +15,8 @@ use Glueful\DTOs\RefreshedTokenData;
 use Glueful\Http\Response;
 use Glueful\Helpers\RequestHelper;
 use Glueful\Auth\AuthenticationService;
+use Glueful\Auth\Session\SessionCookieConfig;
+use Glueful\Auth\Session\SessionCookieIssuer;
 use Glueful\Http\Exceptions\Domain\AuthenticationException;
 use Glueful\Routing\Attributes\ApiOperation;
 use Glueful\Routing\Attributes\ApiRequestBody;
@@ -170,6 +172,14 @@ class AuthController
             return $this->loginResponseShaper->shape($request, $result);
         }
 
+        // Transport negotiation: `auth_transport: "cookie"` asks for the browser-session cookies
+        // instead of tokens in the body (same vocabulary as the `auth_transport` attribute the
+        // session_cookie middleware sets). Honoured only while that transport is enabled; any
+        // other value, or a disabled transport, is the bearer path exactly as before.
+        $wantsCookies = ($credentials['auth_transport'] ?? null) === 'cookie';
+        unset($credentials['auth_transport']);
+        $cookieIssuer = $wantsCookies ? $this->sessionCookieIssuer() : null;
+
         // Route 2 — username/password login, through the shared orchestrator and its 2FA gate.
         $outcome = $this->loginOrchestrator->login($credentials, $providerName);
 
@@ -186,7 +196,27 @@ class AuthController
             ], 'Two-factor verification required');
         }
 
+        if ($cookieIssuer !== null) {
+            return $this->loginResponseShaper->shapeForCookies($request, $outcome->session(), $cookieIssuer);
+        }
+
         return $this->loginResponseShaper->shape($request, $outcome->session()->toSessionArray());
+    }
+
+    /** The cookie issuer when the browser-session transport is enabled, otherwise null. */
+    private function sessionCookieIssuer(): ?SessionCookieIssuer
+    {
+        $c = container($this->context);
+        $config = $c->has(SessionCookieConfig::class)
+            ? $c->get(SessionCookieConfig::class)
+            : SessionCookieConfig::fromContext($this->context);
+        if (!$config instanceof SessionCookieConfig || !$config->enabled) {
+            return null;
+        }
+
+        $issuer = $c->has(SessionCookieIssuer::class) ? $c->get(SessionCookieIssuer::class) : null;
+
+        return $issuer instanceof SessionCookieIssuer ? $issuer : new SessionCookieIssuer($config);
     }
 
     /**
@@ -258,7 +288,7 @@ class AuthController
     public function csrfToken(SymfonyRequest $request)
     {
         try {
-            $tokenData = \Glueful\Helpers\Utils::csrfTokenData($request);
+            $tokenData = \Glueful\Helpers\Utils::csrfTokenData($request, $this->context);
             return Response::success($tokenData, 'CSRF token retrieved successfully');
         } catch (\Exception $e) {
             return Response::error('Failed to generate CSRF token: ' . $e->getMessage(), 500);

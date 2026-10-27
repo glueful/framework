@@ -913,6 +913,8 @@ class QueryBuilder implements QueryBuilderInterface
     public function withPurpose(string $purpose): static
     {
         $this->queryPurpose->setPurpose($purpose);
+        // The executor is what logs each statement; without this the purpose never reached it.
+        $this->queryExecutor->withPurpose($purpose);
         return $this;
     }
 
@@ -1098,7 +1100,9 @@ class QueryBuilder implements QueryBuilderInterface
             clone $this->joinClause,
             clone $this->queryModifiers,
             $this->transactionManager,
-            $this->queryExecutor,
+            // The executor carries the query purpose; a shared one let a clone's withPurpose() tag
+            // the original's queries. It holds the connection by reference, so this is cheap.
+            clone $this->queryExecutor,
             $this->resultProcessor,
             $this->paginationBuilder,
             $this->softDeleteHandler,

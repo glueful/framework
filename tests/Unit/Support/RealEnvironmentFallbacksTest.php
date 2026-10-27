@@ -30,11 +30,15 @@ final class RealEnvironmentFallbacksTest extends TestCase
         unset($_ENV['ENCRYPTION_KEY'], $_SERVER['ENCRYPTION_KEY']);
         putenv('ENCRYPTION_KEY=' . str_repeat('k', 32));
 
+        // The env key now only decrypts legacy AES-256-CBC values (new writes use EncryptionService).
+        $iv = random_bytes(16);
+        $stored = base64_encode(
+            $iv . openssl_encrypt('plain', 'aes-256-cbc', str_repeat('k', 32), OPENSSL_RAW_DATA, $iv)
+        );
+
         $cast = new AsEncryptedString();
         $model = $this->createMock(\Glueful\Database\ORM\Model::class);
-        $stored = $cast->set($model, 'secret', 'plain', []);
 
-        self::assertNotSame('plain', $stored);
         self::assertSame('plain', $cast->get($model, 'secret', $stored, []));
     }
 

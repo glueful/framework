@@ -9,6 +9,15 @@ use Glueful\Routing\RouteMiddleware;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\JsonResponse;
 
+/**
+ * Renders a ValidationException thrown further down the pipeline as a 422.
+ *
+ * @deprecated since 1.91 — never registered under an alias, and a strict subset of the
+ *             `validate` middleware ({@see \Glueful\Validation\Middleware\ValidationMiddleware}),
+ *             which also catches downstream ValidationExceptions and additionally runs
+ *             #[Validate]/FormRequest validation; the exception handler renders a 422 for an
+ *             uncaught one as well. Use `->middleware(['validate'])`. Removal in a later release.
+ */
 final class ValidationMiddleware implements RouteMiddleware
 {
     public function handle(Request $request, callable $next, mixed ...$params): mixed

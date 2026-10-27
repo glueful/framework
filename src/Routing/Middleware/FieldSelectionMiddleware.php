@@ -42,6 +42,11 @@ final class FieldSelectionMiddleware implements RouteMiddleware
                 return $next($request);
             }
 
+            // Global switch: api.field_selection.enabled = false leaves responses unprojected.
+            if (MiddlewareParams::bool($this->getConfig('api.field_selection.enabled', true)) === false) {
+                return $next($request);
+            }
+
             // Parse both syntaxes:
             $tree = $this->parseCombined((string)$fields, (string)$expand);
 

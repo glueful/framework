@@ -531,12 +531,22 @@ class Framework
         $eventsEnabled = (bool) config($this->context, 'events.enabled', true);
         $auditLoggingEnabled = (bool) config($this->context, 'events.listeners.audit_logging', true);
 
-        if (!$eventsEnabled || !$auditLoggingEnabled) {
+        if (!$eventsEnabled) {
             return;
         }
 
         /** @var \Glueful\Events\EventService $events */
         $events = $this->container->get(\Glueful\Events\EventService::class);
+
+        // Bridge #[Webhookable] / DispatchesWebhooks events to outbound webhooks
+        if ((bool) config($this->context, 'api.webhooks.enabled', true)) {
+            \Glueful\Api\Webhooks\Listeners\WebhookEventListener::register($events, $this->container);
+        }
+
+        if (!$auditLoggingEnabled) {
+            return;
+        }
+
         $events->subscribe(\Glueful\Events\Listeners\ActivityLoggingSubscriber::class);
     }
 

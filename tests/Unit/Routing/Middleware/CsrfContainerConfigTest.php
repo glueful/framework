@@ -52,7 +52,7 @@ final class CsrfContainerConfigTest extends TestCase
         self::assertFalse($this->prop($middleware, 'useDoubleSubmit'));
         self::assertTrue($this->prop($middleware, 'enabled'));
         self::assertContains('auth/login', $this->prop($middleware, 'exemptRoutes'));
-        self::assertContains('webhooks/*', $this->prop($middleware, 'exemptRoutes'));
+        self::assertContains('webhooks/inbound/*', $this->prop($middleware, 'exemptRoutes'));
     }
 
     public function test_container_instance_applies_overridden_values(): void

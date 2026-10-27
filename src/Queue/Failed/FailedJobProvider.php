@@ -30,7 +30,7 @@ class FailedJobProvider
     /** @var string Failed jobs table name */
     private string $table;
 
-    /** @var int Kept for the constructor contract; see getMaxRetries() */
+    /** @var int Kept for the constructor contract; not enforced (a retry is a new job) */
     private int $maxRetries;
 
     /** @var int Days to keep failed jobs */
@@ -41,7 +41,7 @@ class FailedJobProvider
     /**
      * @param Connection|null $connection Database connection (optional)
      * @param string $table Table name for failed jobs
-     * @param int $maxRetries Kept for compatibility; not enforced (see getMaxRetries())
+     * @param int $maxRetries Kept for compatibility; not enforced (a retry is a new job)
      * @param int $retentionDays Days to keep failed jobs
      * @param QueueDriverInterface|null $requeueDriver Driver a retry pushes onto; defaults to the
      *        failure's own connection from the container's QueueManager
@@ -341,23 +341,6 @@ class FailedJobProvider
     public function getTable(): string
     {
         return $this->table;
-    }
-
-    /**
-     * @deprecated since 1.86 — a retry creates a new job with fresh attempts and the stock table
-     *             keeps no retry count, so nothing enforces this value; remove in 1.88.
-     */
-    public function setMaxRetries(int $maxRetries): void
-    {
-        $this->maxRetries = $maxRetries;
-    }
-
-    /**
-     * @deprecated since 1.86 — not enforced (see setMaxRetries()); remove in 1.88.
-     */
-    public function getMaxRetries(): int
-    {
-        return $this->maxRetries;
     }
 
     public function setRetentionDays(int $retentionDays): void

@@ -29,4 +29,10 @@ final class LoginInputData
 
     /** Remember-me preference for an extended session. */
     public ?bool $remember = null;
+
+    /**
+     * "cookie" to receive HttpOnly session cookies instead of tokens in the body (password
+     * login only; honoured when auth.session_cookie.enabled is on). Omit for bearer tokens.
+     */
+    public ?string $auth_transport = null;
 }

@@ -43,8 +43,8 @@ class DeliverWebhookJob extends Job
     /** @var string|null Queue name for webhook deliveries */
     protected ?string $queue = 'webhooks';
 
-    /** @var array<int> Backoff delays in seconds: 1m, 5m, 30m, 2h, 12h */
-    private array $backoff = [60, 300, 1800, 7200, 43200];
+    /** @var list<int> Default backoff delays in seconds (1m, 5m, 30m, 2h, 12h); `api.webhooks.retry.backoff` overrides */
+    private const BACKOFF = [60, 300, 1800, 7200, 43200];
 
     /** @var int Request timeout in seconds */
     private const TIMEOUT = 30;
@@ -60,17 +60,40 @@ class DeliverWebhookJob extends Job
 
     /**
      * Queue delivery of one webhook delivery row. QueueManager::push() takes the job CLASS and
-     * its data; the worker rebuilds the job from them with the context. Returns the queued job's
-     * id, or null when the container has no queue manager.
+     * its data; the worker rebuilds the job from them with the context. `$connection` is the
+     * queue connection (null = the default one); a positive `$delay` (seconds) defers the job.
+     * Returns the queued job's id, or null when the container has no queue manager.
      */
-    public static function enqueue(ApplicationContext $context, int|string $deliveryId, string $queue): ?string
-    {
+    public static function enqueue(
+        ApplicationContext $context,
+        int|string $deliveryId,
+        string $queue,
+        ?string $connection = null,
+        int $delay = 0
+    ): ?string {
         $container = container($context);
         if (!$container->has(QueueManager::class)) {
             return null;
         }
 
-        return $container->get(QueueManager::class)->push(static::class, ['delivery_id' => $deliveryId], $queue);
+        /** @var QueueManager $manager */
+        $manager = $container->get(QueueManager::class);
+        $data = ['delivery_id' => $deliveryId];
+
+        return $delay > 0
+            ? $manager->later($delay, static::class, $data, $queue, $connection)
+            : $manager->push(static::class, $data, $queue, $connection);
+    }
+
+    /**
+     * The configured queue connection for webhook jobs (`api.webhooks.connection`), or null for
+     * the default connection.
+     */
+    public static function configuredConnection(ApplicationContext $context): ?string
+    {
+        $connection = config($context, 'api.webhooks.connection');
+
+        return is_string($connection) && $connection !== '' ? $connection : null;
     }
 
     /**
@@ -162,9 +185,6 @@ class DeliverWebhookJob extends Job
             throw new \RuntimeException('Failed to encode webhook payload');
         }
 
-        $timestamp = time();
-        $signature = WebhookSignature::generate($payload, $subscription->secret, $timestamp);
-
         $client = $this->createClient();
 
         return $client->post($subscription->url, [
@@ -172,10 +192,8 @@ class DeliverWebhookJob extends Job
                 'Content-Type' => 'application/json',
                 'X-Webhook-ID' => $delivery->uuid,
                 'X-Webhook-Event' => $delivery->event,
-                'X-Webhook-Timestamp' => (string) $timestamp,
-                'X-Webhook-Signature' => $signature,
                 'User-Agent' => $this->getUserAgent(),
-            ],
+            ] + WebhookSignature::headers($payload, $subscription->secret, $this->context),
             'body' => $payload,
         ]);
     }
@@ -185,7 +203,7 @@ class DeliverWebhookJob extends Job
      *
      * Uses resolved IPs from validation to prevent DNS rebinding attacks.
      */
-    private function createClient(): Client
+    protected function createClient(): Client
     {
         $timeout = $this->getConfigTimeout();
 
@@ -253,8 +271,9 @@ class DeliverWebhookJob extends Job
             ));
         } else {
             // Schedule retry with exponential backoff
-            $delayIndex = min($delivery->attempts - 1, count($this->backoff) - 1);
-            $delay = $this->backoff[$delayIndex];
+            $backoff = $this->getBackoff();
+            $delayIndex = max(0, min($delivery->attempts - 1, count($backoff) - 1));
+            $delay = $backoff[$delayIndex];
             $nextRetry = new \DateTime();
             $nextRetry->modify("+{$delay} seconds");
             $delivery->scheduleRetry($nextRetry);
@@ -294,6 +313,34 @@ class DeliverWebhookJob extends Job
         } catch (\Throwable) {
             // best-effort only
         }
+    }
+
+    /**
+     * Retry delays in seconds, one per failed attempt (the last repeats): `api.webhooks.retry.backoff`
+     * when it is a non-empty list of non-negative integers, else the default schedule.
+     *
+     * @return non-empty-list<int>
+     */
+    private function getBackoff(): array
+    {
+        if (!function_exists('config') || $this->context === null) {
+            return self::BACKOFF;
+        }
+
+        $configured = config($this->context, 'api.webhooks.retry.backoff');
+        if (!is_array($configured) || $configured === []) {
+            return self::BACKOFF;
+        }
+
+        $delays = [];
+        foreach ($configured as $delay) {
+            if (!is_numeric($delay) || (int) $delay < 0) {
+                return self::BACKOFF;
+            }
+            $delays[] = (int) $delay;
+        }
+
+        return $delays;
     }
 
     /**
