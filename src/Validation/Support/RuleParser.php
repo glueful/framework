@@ -58,8 +58,8 @@ class RuleParser
         'bool' => Rules\Type::class,
         'array' => Rules\Type::class,
         'numeric' => Rules\Numeric::class,
-        'min' => Rules\Length::class,
-        'max' => Rules\Length::class,
+        'min' => Rules\Size::class,
+        'max' => Rules\Size::class,
         'in' => Rules\InArray::class,
         'regex' => Rules\Regex::class,
         'unique' => Rules\DbUnique::class,
@@ -266,8 +266,8 @@ class RuleParser
             'boolean', 'bool' => new Rules\Type('boolean'),
             'array' => new Rules\Type('array'),
             'numeric' => new Rules\Numeric(),
-            'min' => new Rules\Length(min: (int) ($parameters[0] ?? 0)),
-            'max' => new Rules\Length(max: (int) ($parameters[0] ?? PHP_INT_MAX)),
+            'min' => new Rules\Size(min: $this->sizeBound($parameters[0] ?? null) ?? 0),
+            'max' => new Rules\Size(max: $this->sizeBound($parameters[0] ?? null)),
             'in' => new Rules\InArray($parameters),
             'regex' => new Rules\Regex($parameters[0] ?? '/.*/'),
             'unique' => $this->createUniqueRule($parameters),
@@ -286,6 +286,18 @@ class RuleParser
             'dimensions' => new Rules\Dimensions($this->parseDimensions($parameters)),
             default => throw new InvalidArgumentException("Unknown rule: {$name}"),
         };
+    }
+
+    /**
+     * A min/max bound: an int or float, or null when it isn't numeric.
+     */
+    private function sizeBound(?string $parameter): int|float|null
+    {
+        if ($parameter === null || !is_numeric($parameter)) {
+            return null;
+        }
+
+        return str_contains($parameter, '.') ? (float) $parameter : (int) $parameter;
     }
 
     /**

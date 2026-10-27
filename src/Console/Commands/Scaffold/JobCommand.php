@@ -38,7 +38,7 @@ class JobCommand extends BaseCommand
                 'queue',
                 null,
                 InputOption::VALUE_OPTIONAL,
-                'The queue name for this job',
+                'The queue to push this job to (used in the dispatch example)',
                 'default'
             )
             ->addOption(
@@ -47,26 +47,6 @@ class JobCommand extends BaseCommand
                 InputOption::VALUE_OPTIONAL,
                 'Number of retry attempts',
                 '3'
-            )
-            ->addOption(
-                'backoff',
-                null,
-                InputOption::VALUE_OPTIONAL,
-                'Seconds to wait before retry',
-                '60'
-            )
-            ->addOption(
-                'timeout',
-                null,
-                InputOption::VALUE_OPTIONAL,
-                'Job timeout in seconds',
-                '60'
-            )
-            ->addOption(
-                'unique',
-                'u',
-                InputOption::VALUE_NONE,
-                'Make the job unique (prevent duplicate jobs)'
             )
             ->addOption(
                 'force',
@@ -98,12 +78,6 @@ class JobCommand extends BaseCommand
         $queue = $input->getOption('queue') ?? 'default';
         /** @var string $tries */
         $tries = $input->getOption('tries') ?? '3';
-        /** @var string $backoff */
-        $backoff = $input->getOption('backoff') ?? '60';
-        /** @var string $timeout */
-        $timeout = $input->getOption('timeout') ?? '60';
-        /** @var bool $unique */
-        $unique = (bool) $input->getOption('unique');
 
         // Normalize the name
         $name = $this->normalizeJobName($name);
@@ -136,14 +110,7 @@ class JobCommand extends BaseCommand
         }
 
         // Generate the class content
-        $content = $this->generateJobClass(
-            $name,
-            $queue,
-            (int) $tries,
-            (int) $backoff,
-            (int) $timeout,
-            $unique
-        );
+        $content = $this->generateJobClass($name, (int) $tries);
 
         // Write the file
         if (file_put_contents($filePath, $content) === false) {
@@ -160,9 +127,6 @@ class JobCommand extends BaseCommand
         $this->table(['Property', 'Value'], [
             ['Queue', $queue],
             ['Max Attempts', $tries],
-            ['Backoff', "{$backoff}s"],
-            ['Timeout', "{$timeout}s"],
-            ['Unique', $unique ? 'Yes' : 'No'],
         ]);
 
         $this->line('');
@@ -172,10 +136,10 @@ class JobCommand extends BaseCommand
         $this->line('3. Dispatch the job using the queue manager');
         $this->line('');
         $this->line('Example dispatch:');
-        $this->line("  \$queue->push({$className}::class, ['key' => 'value']);");
+        $this->line("  \$queue->push({$className}::class, ['key' => 'value'], '{$queue}');");
         $this->line('');
         $this->line('Example with delay:');
-        $this->line("  \$queue->later(60, {$className}::class, \$data);");
+        $this->line("  \$queue->later(60, {$className}::class, \$data, '{$queue}');");
 
         return self::SUCCESS;
     }
@@ -253,20 +217,10 @@ class JobCommand extends BaseCommand
     /**
      * Generate the job class content
      */
-    private function generateJobClass(
-        string $name,
-        string $queue,
-        int $tries,
-        int $backoff,
-        int $timeout,
-        bool $unique
-    ): string {
+    private function generateJobClass(string $name, int $tries): string
+    {
         $className = $this->extractClassName($name);
         $namespace = $this->buildNamespace($name);
-
-        $uniqueTrait = $unique ? $this->generateUniqueTrait() : '';
-        $uniqueUse = $unique ? "\n    use ShouldBeUnique;" : '';
-        $uniqueImport = $unique ? "use Glueful\\Queue\\Contracts\\ShouldBeUnique;\n" : '';
 
         return <<<PHP
 <?php
@@ -275,60 +229,39 @@ declare(strict_types=1);
 
 namespace {$namespace};
 
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Queue\Job;
-{$uniqueImport}
+
 /**
  * {$className} Job
  *
- * Queue job for processing asynchronous tasks.
+ * Queue job for processing asynchronous tasks. Push it by class name:
+ *   \$queue->push({$className}::class, ['key' => 'value'], 'queue-name');
  *
  * @package {$namespace}
  */
-class {$className} extends Job{$uniqueUse}
+class {$className} extends Job
 {
     /**
-     * The queue this job should run on
-     */
-    protected ?string \$queue = '{$queue}';
-
-    /**
-     * Create a new job instance
+     * The worker builds the job with its pushed data and the app context; a custom
+     * constructor must keep this signature and pass both on.
      *
      * @param array<string, mixed> \$data Job data
      */
-    public function __construct(array \$data = [])
+    public function __construct(array \$data = [], ?ApplicationContext \$context = null)
     {
-        parent::__construct(\$data);
+        parent::__construct(\$data, \$context);
     }
 
     /**
-     * Get the maximum number of attempts
+     * The maximum number of attempts (a maxAttempts pushed with the data overrides it;
+     * queue:work --tries caps it)
      *
      * @return int Max attempts
      */
     public function getMaxAttempts(): int
     {
         return {$tries};
-    }
-
-    /**
-     * Get the job timeout in seconds
-     *
-     * @return int Timeout in seconds
-     */
-    public function getTimeout(): int
-    {
-        return {$timeout};
-    }
-
-    /**
-     * Get the number of seconds to wait before retrying
-     *
-     * @return int Backoff in seconds
-     */
-    public function getBackoff(): int
-    {
-        return {$backoff};
     }
 
     /**
@@ -341,11 +274,11 @@ class {$className} extends Job{$uniqueUse}
         // Get job data
         \$data = \$this->getData();
 
-        // Implement your job logic here
+        // Implement your job logic here; \$this->context is the app context.
         // Example:
         // \$userId = \$data['user_id'] ?? null;
-        // if (\$userId) {
-        //     \$this->processUser(\$userId);
+        // if (\$userId !== null) {
+        //     db(\$this->context)->table('users')->where('uuid', '=', \$userId)->update(['synced' => true]);
         // }
     }
 
@@ -360,51 +293,11 @@ class {$className} extends Job{$uniqueUse}
     public function failed(\Exception \$exception): void
     {
         // Log the failure or notify administrators
-        // Example:
-        // Log::error("Job {$className} failed", [
-        //     'uuid' => \$this->getUuid(),
-        //     'data' => \$this->getData(),
-        //     'exception' => \$exception->getMessage(),
-        // ]);
 
         parent::failed(\$exception);
-    }{$uniqueTrait}
+    }
 }
 
-PHP;
-    }
-
-    /**
-     * Generate unique trait implementation
-     */
-    private function generateUniqueTrait(): string
-    {
-        return <<<'PHP'
-
-
-    /**
-     * Get the unique ID for this job
-     *
-     * Override this method to define how job uniqueness is determined.
-     *
-     * @return string|null Unique identifier
-     */
-    public function uniqueId(): ?string
-    {
-        // Return a unique identifier based on job data
-        // Example: return $this->getData()['user_id'] ?? null;
-        return null;
-    }
-
-    /**
-     * Get the number of seconds until the unique lock is released
-     *
-     * @return int Lock duration in seconds
-     */
-    public function uniqueFor(): int
-    {
-        return 3600; // 1 hour
-    }
 PHP;
     }
 
@@ -445,22 +338,21 @@ asynchronously, improving application responsiveness.
 Examples:
   php glueful scaffold:job ProcessPayment
   php glueful scaffold:job SendNewsletter --queue=emails
-  php glueful scaffold:job ImportData --tries=5 --backoff=120
-  php glueful scaffold:job GenerateReport --unique
+  php glueful scaffold:job ImportData --tries=5
 
 The generated class will be placed in app/Jobs/ (or src/Jobs/
 for framework development).
 
 Options:
-  --queue     Queue name (default: 'default')
-  --tries     Number of retry attempts (default: 3)
-  --backoff   Seconds between retries (default: 60)
-  --timeout   Job timeout in seconds (default: 60)
-  --unique    Make the job unique to prevent duplicates
+  --queue     Queue used in the printed dispatch example (default: 'default');
+              the queue is chosen when the job is pushed
+  --tries     Max attempts, from getMaxAttempts() (default: 3)
+
+Retry delays come from queue.workers.performance.backoff_* config.
 
 Features:
   - Automatic UUID generation
-  - Configurable retry behavior
+  - Per-job max attempts
   - Failure handling hooks
   - Serialization support
   - Batch job support

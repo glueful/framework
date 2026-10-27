@@ -185,6 +185,7 @@ final class QueueWorker
 
         $start = microtime(true);
 
+        $this->armTimeout($job, $queue, $options);
         try {
             $job->fire();
             $seconds = microtime(true) - $start;
@@ -211,6 +212,50 @@ final class QueueWorker
                 'attempts' => $job->getAttempts(),
                 'error' => $wrapped->getMessage(),
             ]);
+        } finally {
+            $this->disarmTimeout();
+        }
+    }
+
+    /**
+     * Enforce --timeout: SIGALRM interrupts a job that runs too long. The job is released for
+     * another attempt (or failed when it has none left) and the worker exits, so its process
+     * manager starts a fresh one; the stuck code can't be unwound safely in-process. Needs the
+     * pcntl extension; without it jobs are not timed out.
+     */
+    private function armTimeout(JobInterface $job, string $queue, WorkerOptions $options): void
+    {
+        if (!function_exists('pcntl_alarm') || !function_exists('pcntl_async_signals')) {
+            return;
+        }
+
+        pcntl_async_signals(true);
+        pcntl_signal(SIGALRM, function () use ($job, $queue, $options): void {
+            $timeout = new \RuntimeException("Job exceeded the worker timeout of {$options->timeout}s");
+            try {
+                if ($job->getAttempts() < min($job->getMaxAttempts(), $options->maxAttempts)) {
+                    $job->release($this->computeBackoff($job->getAttempts(), $options));
+                } else {
+                    $job->failed($timeout);
+                }
+                $this->monitor->recordJobFailure($job, $timeout, (float) $options->timeout);
+            } finally {
+                $this->logger->error('Queue job timed out; stopping the worker', [
+                    'queue' => $queue,
+                    'uuid' => $job->getUuid(),
+                    'timeout' => $options->timeout,
+                ]);
+                exit(1);
+            }
+        });
+        pcntl_alarm($options->timeout);
+    }
+
+    private function disarmTimeout(): void
+    {
+        if (function_exists('pcntl_alarm')) {
+            pcntl_alarm(0);
+            pcntl_signal(SIGALRM, SIG_DFL);
         }
     }
 

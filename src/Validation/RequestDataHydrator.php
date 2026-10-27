@@ -74,6 +74,7 @@ final class RequestDataHydrator
         // 1. Resolve raw values by source + collect per-field #[Rule] strings.
         $raw   = [];
         $rules = [];
+        $typeErrors = [];
         foreach ($ctor->getParameters() as $param) {
             $name = $param->getName();
             $hasRoute = $param->getAttributes(FromRoute::class) !== [];
@@ -97,6 +98,17 @@ final class RequestDataHydrator
             }
             if (array_key_exists($name, $source)) {
                 $raw[$name] = $source[$name];
+                // Route and query values are always strings: convert one to the declared
+                // int/float/bool before the rules run (they check real types), or report it.
+                if (($hasRoute || $hasQuery) && is_string($raw[$name])) {
+                    $converted = $this->fromString($raw[$name], $param);
+                    if ($converted['error'] === null) {
+                        $raw[$name] = $converted['value'];
+                    } else {
+                        $typeErrors[$name] = [$converted['error']];
+                        unset($raw[$name]);
+                    }
+                }
             }
             foreach ($param->getAttributes(Rule::class) as $attr) {
                 $rules[$name] = $attr->newInstance()->rules;
@@ -115,6 +127,9 @@ final class RequestDataHydrator
             $filtered  = array_intersect_key($validator->filtered(), $raw);
             $validated = $filtered + $raw;
         }
+
+        // A route/query value that isn't its declared type reports only that (not "required").
+        $errors = $typeErrors + $errors;
 
         // 3. Array element handling for #[ArrayOf] fields (scalar in this task).
         foreach ($ctor->getParameters() as $param) {
@@ -230,6 +245,38 @@ final class RequestDataHydrator
             'string' => is_scalar($value) ? (string) $value : $value,
             default  => $value,
         };
+    }
+
+    /**
+     * Convert a route/query string to the parameter's declared scalar type.
+     *
+     * @return array{value: mixed, error: string|null}
+     */
+    private function fromString(string $value, \ReflectionParameter $param): array
+    {
+        $type = $param->getType();
+        if (!$type instanceof \ReflectionNamedType || !$type->isBuiltin()) {
+            return ['value' => $value, 'error' => null];
+        }
+
+        $name = $param->getName();
+        switch ($type->getName()) {
+            case 'int':
+                return preg_match('/^-?\d+$/', $value) === 1
+                    ? ['value' => (int) $value, 'error' => null]
+                    : ['value' => null, 'error' => "The {$name} field must be an integer."];
+            case 'float':
+                return is_numeric($value)
+                    ? ['value' => (float) $value, 'error' => null]
+                    : ['value' => null, 'error' => "The {$name} field must be a number."];
+            case 'bool':
+                $bool = filter_var($value, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE);
+                return $bool !== null
+                    ? ['value' => $bool, 'error' => null]
+                    : ['value' => null, 'error' => "The {$name} field must be true or false."];
+            default:
+                return ['value' => $value, 'error' => null];
+        }
     }
 
     /** @return array{ok: bool, value: mixed} */

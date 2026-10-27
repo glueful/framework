@@ -14,6 +14,8 @@ use Glueful\Tests\Support\Fixtures\RequestData\RecursiveFixture;
 use Glueful\Tests\Support\Fixtures\RequestData\RequiredNoRuleFixture;
 use Glueful\Tests\Support\Fixtures\RequestData\ScalarArrayFixture;
 use Glueful\Tests\Support\Fixtures\RequestData\SourcedFixture;
+use Glueful\Validation\Attributes\FromQuery;
+use Glueful\Validation\Attributes\FromRoute;
 use Glueful\Validation\Attributes\Rule;
 use Glueful\Validation\Contracts\RequestData;
 use Glueful\Validation\RequestDataHydrator;
@@ -34,6 +36,17 @@ final class SanitizedFixture implements RequestData
 {
     public function __construct(
         #[Rule('sanitize:trim|required|string')] public string $title,
+    ) {
+    }
+}
+
+final class TypedSourcesFixture implements RequestData
+{
+    public function __construct(
+        #[FromRoute, Rule('required|integer|min:1')] public int $id,
+        #[FromQuery, Rule('integer|min:1')] public int $page = 1,
+        #[FromQuery, Rule('boolean')] public bool $archived = false,
+        #[FromQuery] public float $ratio = 1.0,
     ) {
     }
 }
@@ -88,6 +101,40 @@ final class RequestDataHydratorTest extends TestCase
         self::assertSame('abc123', $dto->uuid);
         self::assertSame('published', $dto->status);
         self::assertSame('Hello', $dto->title);
+    }
+
+    public function testRouteAndQueryStringsBecomeTheDeclaredTypesBeforeTheRulesRun(): void
+    {
+        $dto = $this->hydrator->hydrate(
+            TypedSourcesFixture::class,
+            [],
+            ['id' => '42'],
+            ['page' => '3', 'archived' => 'true', 'ratio' => '0.5'],
+        );
+
+        self::assertSame(42, $dto->id);
+        self::assertSame(3, $dto->page);
+        self::assertTrue($dto->archived);
+        self::assertSame(0.5, $dto->ratio);
+    }
+
+    public function testUnconvertibleRouteAndQueryStringsAre422NotTypeError(): void
+    {
+        try {
+            $this->hydrator->hydrate(
+                TypedSourcesFixture::class,
+                [],
+                ['id' => 'abc'],
+                ['page' => '2.5', 'archived' => 'maybe', 'ratio' => 'half'],
+            );
+            self::fail('expected ValidationException');
+        } catch (ValidationException $e) {
+            $errors = $e->errors();
+            self::assertSame(['The id field must be an integer.'], $errors['id']);
+            self::assertSame(['The page field must be an integer.'], $errors['page']);
+            self::assertSame(['The archived field must be true or false.'], $errors['archived']);
+            self::assertSame(['The ratio field must be a number.'], $errors['ratio']);
+        }
     }
 
     public function testFlatV1DtoUnchanged(): void
