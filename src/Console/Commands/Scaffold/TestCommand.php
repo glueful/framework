@@ -338,6 +338,9 @@ PHP;
         $namespace = $this->buildNamespace($name, 'feature');
 
         $testMethods = $this->generateTestMethods($methods, 'feature');
+        // Feature tests need a booted application: extend the app's own base (the skeleton's
+        // tests/TestCase.php, App\\Tests\\TestCase) when there is one.
+        $baseTestCase = $this->appTestCaseClass() ?? 'PHPUnit\\Framework\\TestCase';
 
         return <<<PHP
 <?php
@@ -346,7 +349,7 @@ declare(strict_types=1);
 
 namespace {$namespace};
 
-use PHPUnit\Framework\TestCase;
+use {$baseTestCase};
 
 /**
  * {$className}
@@ -381,6 +384,23 @@ class {$className} extends TestCase
 {$testMethods}}
 
 PHP;
+    }
+
+    /**
+     * The app's base test case (declared in tests/TestCase.php), if the project has one.
+     */
+    private function appTestCaseClass(): ?string
+    {
+        $file = base_path($this->getContext(), 'tests/TestCase.php');
+        $source = is_file($file) ? file_get_contents($file) : false;
+        if ($source === false || preg_match('/\\bclass\\s+TestCase\\b/', $source) !== 1) {
+            return null;
+        }
+        if (preg_match('/^namespace\\s+([^;\\s]+)\\s*;/m', $source, $m) === 1) {
+            return $m[1] . '\\TestCase';
+        }
+
+        return null;
     }
 
     /**
@@ -480,8 +500,10 @@ PHP;
         // $this->seedDatabase();
         // $this->authenticateUser();
 
-        // Act - perform the workflow
-        // $response = $this->get('/api/endpoint');
+        // Act - perform the workflow through the app kernel
+        // $response = $this->app()->handle(
+        //     \Symfony\Component\HttpFoundation\Request::create('/endpoint', 'GET')
+        // );
 
         // Assert - verify the outcome
         // $this->assertEquals(200, $response->getStatusCode());

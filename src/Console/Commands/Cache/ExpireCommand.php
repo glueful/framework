@@ -30,11 +30,6 @@ class ExpireCommand extends BaseCommand
     /** @var CacheStore<mixed> */
     private CacheStore $cacheStore;
 
-    public function __construct()
-    {
-        parent::__construct();
-    }
-
     protected function configure(): void
     {
         $this->setDescription('Set new TTL/expiration for cached items')

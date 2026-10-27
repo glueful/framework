@@ -3,6 +3,7 @@
 namespace Glueful\Console\Commands;
 
 use Glueful\Console\BaseCommand;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Installer\DatabaseConfig;
 use Glueful\Installer\Installer;
 use Glueful\Installer\InstallOptions;
@@ -31,9 +32,9 @@ class InstallCommand extends BaseCommand
 {
     protected ContainerInterface $installContainer;
 
-    public function __construct()
+    public function __construct(?ContainerInterface $container = null, ?ApplicationContext $context = null)
     {
-        parent::__construct();
+        parent::__construct($container, $context);
         $this->installContainer = container($this->getContext());
     }
 

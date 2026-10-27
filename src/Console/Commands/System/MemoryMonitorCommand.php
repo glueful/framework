@@ -40,11 +40,6 @@ class MemoryMonitorCommand extends BaseCommand
      */
     private array $memoryHistory = [];
 
-    public function __construct()
-    {
-        parent::__construct();
-    }
-
     protected function configure(): void
     {
         $this->setDescription('Advanced memory monitoring and analysis tools')

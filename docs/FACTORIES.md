@@ -57,7 +57,7 @@ php glueful scaffold:factory PostFactory --model=Post
 php glueful scaffold:factory UserFactory --force
 ```
 
-The factory will be created in `database/factories/`.
+In an app (a project with `app/`) the factory is created in `app/Database/Factories/` under `App\Database\Factories`; without `app/` it goes to `database/factories/` under `Database\Factories`.
 
 ### Factory Definition
 
@@ -68,7 +68,7 @@ A factory defines the default attributes for your model:
 
 declare(strict_types=1);
 
-namespace Database\Factories;
+namespace App\Database\Factories;
 
 use App\Models\User;
 use Glueful\Database\Factory\Factory;
@@ -299,7 +299,7 @@ php glueful scaffold:seeder RoleSeeder --model=Role
 php glueful scaffold:seeder DatabaseSeeder
 ```
 
-Seeders are created in `database/seeders/`.
+In an app, seeders are created in `app/Database/Seeders/` under `App\Database\Seeders`; without `app/` they go to `database/seeders/` under `Database\Seeders`. `db:seed UserSeeder` finds a short name in either namespace (app first).
 
 ### Seeder Structure
 
@@ -308,7 +308,7 @@ Seeders are created in `database/seeders/`.
 
 declare(strict_types=1);
 
-namespace Database\Seeders;
+namespace App\Database\Seeders;
 
 use App\Models\User;
 use Glueful\Database\Seeders\Seeder;
@@ -345,7 +345,7 @@ The `DatabaseSeeder` orchestrates all other seeders:
 
 declare(strict_types=1);
 
-namespace Database\Seeders;
+namespace App\Database\Seeders;
 
 use Glueful\Database\Seeders\Seeder;
 

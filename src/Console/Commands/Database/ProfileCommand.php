@@ -37,11 +37,6 @@ class ProfileCommand extends BaseCommand
     private ExecutionPlanAnalyzer $planAnalyzer;
     private QueryPatternRecognizer $patternRecognizer;
 
-    public function __construct()
-    {
-        parent::__construct();
-    }
-
     protected function configure(): void
     {
         $this->setDescription('Profile and analyze database queries for performance optimization')

@@ -28,11 +28,6 @@ class ResetCommand extends BaseCommand
 {
     private Connection $connection;
 
-    public function __construct()
-    {
-        parent::__construct();
-    }
-
     protected function configure(): void
     {
         $this->setDescription('Reset database to clean state (drops all tables)')

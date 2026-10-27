@@ -30,11 +30,6 @@ class CreateCommand extends BaseCommand
     private FileFinder $fileFinder;
     private StorageManager $storage;
 
-    public function __construct()
-    {
-        parent::__construct();
-    }
-
     protected function configure(): void
     {
         $this->setDescription('Create a new database migration file')
@@ -95,8 +90,10 @@ class CreateCommand extends BaseCommand
 
         // Get next migration number
         $nextNumber = $this->getNextMigrationNumber($migrationsDir);
-        $fileName = sprintf('%03d_%s.php', $nextNumber, $migrationName);
         $className = $this->formatClassName($migrationName);
+        // MigrationManager takes the class name from the filename (minus the NNN_ prefix), so the
+        // file must carry the class name: 001_CreateTasksTable.php declares CreateTasksTable.
+        $fileName = sprintf('%03d_%s.php', $nextNumber, $className);
         $filePath = $migrationsDir . '/' . $fileName;
 
         // Ensure directory exists for local disk root

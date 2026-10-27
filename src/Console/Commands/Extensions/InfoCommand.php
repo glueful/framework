@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Glueful\Console\Commands\Extensions;
 
 use Glueful\Console\BaseCommand;
+use Psr\Container\ContainerInterface;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Console\Commands\Extensions\Concerns\ResolvesExtensionNeedle;
 use Glueful\Extensions\EnabledProviders;
 use Glueful\Extensions\ExtensionManager;
@@ -31,9 +33,9 @@ final class InfoCommand extends BaseCommand
 
     private ExtensionManager $extensions;
 
-    public function __construct()
+    public function __construct(?ContainerInterface $container = null, ?ApplicationContext $context = null)
     {
-        parent::__construct();
+        parent::__construct($container, $context);
         $this->extensions = $this->getService(ExtensionManager::class);
     }
 

@@ -30,11 +30,6 @@ use Symfony\Component\Console\Output\OutputInterface;
 )]
 class ProductionCommand extends BaseCommand
 {
-    public function __construct()
-    {
-        parent::__construct();
-    }
-
     protected function configure(): void
     {
         $this->setDescription('Comprehensive production environment configuration and validation')
