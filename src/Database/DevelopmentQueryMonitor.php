@@ -406,7 +406,17 @@ class DevelopmentQueryMonitor
      */
     private static function logToFile(array $logEntry): void
     {
-        $logPath = self::getBasePath('storage/logs/queries-' . date('Y-m-d') . '.log');
+        // Without the app's context the only fallback is the framework's own folder (vendor/ in an
+        // app): never write there. Framework::boot() sets the context.
+        if (self::$context === null) {
+            return;
+        }
+
+        $logDir = base_path(self::$context, 'storage/logs');
+        if (!is_dir($logDir) && !@mkdir($logDir, 0775, true) && !is_dir($logDir)) {
+            return; // A dev diagnostic must never break the command or request it observes.
+        }
+        $logPath = $logDir . '/queries-' . date('Y-m-d') . '.log';
 
         $logLine = sprintf(
             "[%s] %.3fs - %s %s\n",
@@ -416,17 +426,7 @@ class DevelopmentQueryMonitor
             $logEntry['sql']
         );
 
-        file_put_contents($logPath, $logLine, FILE_APPEND | LOCK_EX);
-    }
-
-    private static function getBasePath(string $suffix = ''): string
-    {
-        if (self::$context !== null) {
-            return base_path(self::$context, $suffix);
-        }
-
-        return rtrim(dirname(__DIR__, 3), DIRECTORY_SEPARATOR)
-            . ($suffix !== '' ? DIRECTORY_SEPARATOR . ltrim($suffix, DIRECTORY_SEPARATOR) : '');
+        @file_put_contents($logPath, $logLine, FILE_APPEND | LOCK_EX);
     }
 
     /**

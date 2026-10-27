@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+- **`migrate:run` no longer fails in development on the query log's path.** With
+  `APP_ENV=development` the development query monitor logs each query to a file, but it was never
+  given the application context, so it resolved the path from the framework's own folder —
+  `vendor/glueful/storage/logs` in an app — and a fresh app's `migrate:run` died on
+  `file_put_contents()`. The monitor now receives the context at boot, writes to
+  `<app>/storage/logs` (creating it), skips the file without a context, and never lets a failed log
+  write break the command or request it observes.
+
 ## [1.91.0] - 2026-10-27 — Alshain
 
 **Theme: features that do what they say** — a framework-wide correctness sweep driven by a full

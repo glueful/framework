@@ -358,6 +358,7 @@ class Framework
         // the framework's own folder (vendor/, often not writable by the web server).
         \Glueful\Cache\CacheFactory::setDefaultContext($context);
         \Glueful\Logging\LogManager::setDefaultContext($context);
+        \Glueful\Database\DevelopmentQueryMonitor::setContext($context);
         SecureErrorResponse::setContext($context);
         RoutesManager::setContext($context);
 
