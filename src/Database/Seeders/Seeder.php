@@ -80,6 +80,23 @@ abstract class Seeder
     }
 
     /**
+     * Build a seeder: the container's definition when one is registered, otherwise a direct
+     * instance. App seeders are plain classes no provider registers, and the container only
+     * builds registered services, so asking it alone failed with "Service '…' not found".
+     *
+     * @param class-string<Seeder> $class
+     */
+    public static function make(ContainerInterface $container, string $class): Seeder
+    {
+        $seeder = $container->has($class) ? $container->get($class) : new $class($container);
+        if (!$seeder instanceof Seeder) {
+            throw new \RuntimeException("{$class} must extend " . self::class);
+        }
+
+        return $seeder;
+    }
+
+    /**
      * Call another seeder
      *
      * Use this method to run other seeders from within your seeder.
@@ -93,9 +110,7 @@ abstract class Seeder
         $classes = is_array($class) ? $class : [$class];
 
         foreach ($classes as $seederClass) {
-            /** @var Seeder $seeder */
-            $seeder = $this->container->get($seederClass);
-            $seeder->run();
+            self::make($this->container, $seederClass)->run();
         }
     }
 

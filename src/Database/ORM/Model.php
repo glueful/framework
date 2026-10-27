@@ -192,6 +192,14 @@ abstract class Model implements ModelInterface, JsonSerializable
         self::$defaultContext = $context;
     }
 
+    /**
+     * The default application context for static model calls (set at boot), if any
+     */
+    public static function getDefaultContext(): ?ApplicationContext
+    {
+        return self::$defaultContext;
+    }
+
     public function setContext(ApplicationContext $context): void
     {
         $this->context = $context;
