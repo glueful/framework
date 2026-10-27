@@ -116,17 +116,24 @@ class SeedCommand extends BaseCommand
     private function resolveSeederClass(?string $class): ?string
     {
         if ($class !== null) {
-            // If it doesn't have a namespace, assume it's in Database\Seeders
-            if (!str_contains($class, '\\')) {
-                $class = 'Database\\Seeders\\' . $class;
+            if (str_contains($class, '\\')) {
+                return $class;
             }
-            return $class;
+            // A short name: scaffold:seeder generates App\Database\Seeders in an app, Database\Seeders
+            // elsewhere. Use whichever exists (app first); otherwise report the legacy name.
+            foreach (['App\\Database\\Seeders\\', 'Database\\Seeders\\'] as $namespace) {
+                // @phpstan-ignore function.impossibleType (app seeders exist only in consuming applications)
+                if (class_exists($namespace . $class)) {
+                    return $namespace . $class;
+                }
+            }
+            return 'Database\\Seeders\\' . $class;
         }
 
         // Try to find DatabaseSeeder
         $candidates = [
-            'Database\\Seeders\\DatabaseSeeder',
             'App\\Database\\Seeders\\DatabaseSeeder',
+            'Database\\Seeders\\DatabaseSeeder',
         ];
 
         foreach ($candidates as $candidate) {
@@ -205,15 +212,15 @@ Seeders are useful for:
 Examples:
   php glueful db:seed                           # Run DatabaseSeeder
   php glueful db:seed UserSeeder                # Run specific seeder
-  php glueful db:seed Database\\Seeders\\RoleSeeder  # Full class name
+  php glueful db:seed App\\Database\\Seeders\\RoleSeeder  # Full class name
   php glueful db:seed --force                   # Run in production
 
 Creating Seeders:
   php glueful scaffold:seeder UserSeeder
   php glueful scaffold:seeder DatabaseSeeder
 
-Seeder Structure:
-  database/seeders/
+Seeder Structure (in an app; App\\Database\\Seeders):
+  app/Database/Seeders/
   ├── DatabaseSeeder.php   # Main seeder (calls others)
   ├── RoleSeeder.php       # Seeds roles
   └── UserSeeder.php       # Seeds users

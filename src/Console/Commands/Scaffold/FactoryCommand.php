@@ -183,7 +183,19 @@ class FactoryCommand extends BaseCommand
      */
     private function getDefaultFactoryPath(): string
     {
-        return base_path($this->getContext(), 'database/factories');
+        // The api-skeleton autoloads only App\\ => app/, so an app gets App\\Database\\Factories
+        // (which HasFactory resolves). Without app/, keep the legacy database/factories layout.
+        return base_path($this->getContext(), $this->hasAppDir() ? 'app/Database/Factories' : 'database/factories');
+    }
+
+    private function hasAppDir(): bool
+    {
+        return is_dir(base_path($this->getContext(), 'app'));
+    }
+
+    private function getFactoryNamespace(): string
+    {
+        return $this->hasAppDir() ? 'App\\Database\\Factories' : 'Database\\Factories';
     }
 
     /**
@@ -228,13 +240,14 @@ class FactoryCommand extends BaseCommand
         $className = $name;
         $modelClass = str_contains($model, '\\') ? $model : "App\\Models\\{$model}";
         $modelShort = $this->getShortClassName($model);
+        $namespace = $this->getFactoryNamespace();
 
         return <<<PHP
 <?php
 
 declare(strict_types=1);
 
-namespace Database\Factories;
+namespace {$namespace};
 
 use {$modelClass};
 use Glueful\Database\Factory\Factory;
@@ -245,7 +258,7 @@ use Glueful\Database\Factory\Factory;
  * Requires: composer require --dev fakerphp/faker
  *
  * @extends Factory<{$modelShort}>
- * @package Database\Factories
+ * @package {$namespace}
  */
 class {$className} extends Factory
 {
@@ -323,7 +336,8 @@ Examples:
   php glueful scaffold:factory PostFactory --model=Post
   php glueful scaffold:factory CommentFactory --force
 
-The generated class will be placed in database/factories/.
+The generated class is placed in app/Database/Factories/ (App\\Database\\Factories),
+or database/factories/ (Database\\Factories) when the project has no app/ directory.
 
 Prerequisites:
   Faker must be installed as a dev dependency:

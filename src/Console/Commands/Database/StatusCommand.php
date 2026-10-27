@@ -31,11 +31,6 @@ class StatusCommand extends BaseCommand
     private SchemaBuilderInterface $schema;
     private Connection $connection;
 
-    public function __construct()
-    {
-        parent::__construct();
-    }
-
     protected function configure(): void
     {
         $this->setDescription('Show database connection status and statistics')

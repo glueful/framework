@@ -29,11 +29,6 @@ class TtlCommand extends BaseCommand
     /** @var CacheStore<mixed> */
     private CacheStore $cacheStore;
 
-    public function __construct()
-    {
-        parent::__construct();
-    }
-
     protected function configure(): void
     {
         $this->setDescription('Get TTL (Time To Live) for cached items')

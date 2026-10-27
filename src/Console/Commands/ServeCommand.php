@@ -56,11 +56,6 @@ class ServeCommand extends BaseCommand
      */
     private bool $shutdownRequested = false;
 
-    public function __construct()
-    {
-        parent::__construct();
-    }
-
     protected function configure(): void
     {
         $this->setDescription('Start the Glueful development server')

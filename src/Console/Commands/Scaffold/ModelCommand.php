@@ -142,7 +142,7 @@ class ModelCommand extends BaseCommand
 
             // Create migration if requested
             if ($migration) {
-                $this->createMigration($modelName, $softDeletes);
+                $this->createMigration($modelName, $softDeletes, $table);
             }
 
             $this->displayNextSteps($modelName);
@@ -196,7 +196,10 @@ class ModelCommand extends BaseCommand
         ?string $table,
         bool $force
     ): string {
-        $modelsDir = base_path($this->getContext(), 'api/Models');
+        // An app (the api-skeleton) autoloads App\\ from app/ — write there so the model is
+        // loadable. Without app/, keep the legacy api/Models location.
+        $hasAppDir = is_dir(base_path($this->getContext(), 'app'));
+        $modelsDir = base_path($this->getContext(), $hasAppDir ? 'app/Models' : 'api/Models');
         $fileName = $modelName . '.php';
         $filePath = $modelsDir . '/' . $fileName;
 
@@ -429,14 +432,14 @@ PHP;
         return strtolower($words);
     }
 
-    private function createMigration(string $modelName, bool $softDeletes): void
+    private function createMigration(string $modelName, bool $softDeletes, ?string $table): void
     {
-        $tableName = $this->getTableName($modelName, null);
-        $timestamp = date('Y_m_d_His');
-        $migrationName = "create_{$tableName}_table";
-        $fileName = "{$timestamp}_{$migrationName}.php";
-
-        $migrationsDir = base_path($this->getContext(), 'migrations');
+        $tableName = $this->getTableName($modelName, $table);
+        // MigrationManager derives the class from the filename (NNN_ prefix stripped), so the
+        // file must be NNN_<ClassName>.php in the directory migrate:run reads.
+        $className = 'Create' . str_replace(' ', '', ucwords(str_replace('_', ' ', $tableName))) . 'Table';
+        $migrationsDir = $this->getMigrationsDir();
+        $fileName = sprintf('%03d_%s.php', $this->getNextMigrationNumber($migrationsDir), $className);
 
         // Ensure directory exists
         if (!is_dir($migrationsDir)) {
@@ -447,36 +450,62 @@ PHP;
 
         $this->info("Creating migration: {$fileName}");
 
-        $content = $this->generateMigrationContent($tableName, $softDeletes);
+        $content = $this->generateMigrationContent($className, $tableName, $softDeletes);
         $disk->write($fileName, $content);
 
-        $this->success("Migration created: migrations/{$fileName}");
+        $this->success("Migration created: {$migrationsDir}/{$fileName}");
     }
 
-    private function generateMigrationContent(string $tableName, bool $softDeletes): string
+    private function getMigrationsDir(): string
     {
-        $softDeleteColumn = $softDeletes ? "\n            \$table->timestamp('deleted_at')->nullable();" : '';
+        $default = base_path($this->getContext(), 'database/migrations');
+        try {
+            $configured = config($this->getContext(), 'app.paths.migrations', $default);
+        } catch (\Throwable) {
+            $configured = $default;
+        }
+
+        return is_string($configured) && $configured !== '' ? $configured : $default;
+    }
+
+    private function getNextMigrationNumber(string $migrationsDir): int
+    {
+        $max = 0;
+        foreach (glob($migrationsDir . '/*.php') ?: [] as $file) {
+            if (preg_match('/^(\d{3})_/', basename($file), $matches) === 1) {
+                $max = max($max, (int) $matches[1]);
+            }
+        }
+
+        return $max + 1;
+    }
+
+    private function generateMigrationContent(string $className, string $tableName, bool $softDeletes): string
+    {
+        $softDeleteColumn = $softDeletes ? "\n            \$table->softDeletes();" : '';
 
         return <<<PHP
 <?php
 
 declare(strict_types=1);
 
-use Glueful\Database\\Migrations\\Migration;
-use Glueful\\Database\\Schema\\Blueprint;
-use Glueful\\Database\\Schema\\SchemaBuilder;
+namespace Glueful\\Database\\Migrations;
 
-return new class extends Migration
+use Glueful\\Database\\Migrations\\MigrationInterface;
+use Glueful\\Database\\Schema\\Interfaces\\SchemaBuilderInterface;
+
+/**
+ * Creates the {$tableName} table.
+ */
+class {$className} implements MigrationInterface
 {
-    /**
-     * Run the migrations
-     *
-     * @param SchemaBuilder \$schema
-     * @return void
-     */
-    public function up(SchemaBuilder \$schema): void
+    public function up(SchemaBuilderInterface \$schema): void
     {
-        \$schema->create('{$tableName}', function (Blueprint \$table) {
+        if (\$schema->hasTable('{$tableName}')) {
+            return;
+        }
+
+        \$schema->createTable('{$tableName}', function (\$table) {
             \$table->id();
             // TODO: Add your columns here
             // \$table->string('name');
@@ -486,17 +515,17 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Reverse the migrations
-     *
-     * @param SchemaBuilder \$schema
-     * @return void
-     */
-    public function down(SchemaBuilder \$schema): void
+    public function down(SchemaBuilderInterface \$schema): void
     {
-        \$schema->dropIfExists('{$tableName}');
+        \$schema->dropTableIfExists('{$tableName}');
     }
-};
+
+    public function getDescription(): string
+    {
+        return 'Create {$tableName} table';
+    }
+}
+
 PHP;
     }
 
@@ -512,10 +541,10 @@ PHP;
         $this->line('');
         $this->info('Example usage:');
         $this->line("  // Find by ID");
-        $this->line("  \${$this->camelCase($modelName)} = {$modelName}::find(\$this->getContext(), 1);");
+        $this->line("  \${$this->camelCase($modelName)} = {$modelName}::find(\$ctx, 1);");
         $this->line('');
         $this->line("  // Query builder");
-        $this->line("  \$items = {$modelName}::where('status', 'active')->get();");
+        $this->line("  \$items = {$modelName}::query(\$ctx)->where('status', 'active')->get();");
         $this->line('');
         $this->line("  // Create new record");
         $varName = $this->camelCase($modelName);
@@ -611,7 +640,8 @@ Examples:
   # Non-interactive mode (for CI/CD)
   php glueful scaffold:model User --migration --no-interaction
 
-The generated model will be placed in api/Models/.
+The generated model is placed in app/Models/ (App\\Models), or api/Models/ when the
+project has no app/ directory. --migration writes database/migrations/NNN_Create<Table>Table.php.
 HELP;
     }
 

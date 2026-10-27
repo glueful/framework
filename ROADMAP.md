@@ -25,6 +25,11 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 - **`migrate:run` works in development again** — the development query monitor writes its query
   log under `<app>/storage/logs` (it was never given the app's context and resolved the framework's
   own folder under vendor/), creates the folder, and a failed log write never breaks the command.
+- **Generators produce loadable code** — `scaffold:model` (app/Models, a real `--migration`),
+  `migrate:create` (files named after their class), `App\Database\` factories/seeders and
+  `db:seed` short names, `scaffold:test --feature`, `event:listener`.
+- **Console commands keep the app's container** — 19 commands (`cache:*`, `extensions:*`, `install`,
+  `serve`, `db:status`/`reset`/`profile`, `system:*`) no longer build a never-booted container.
 - Notes: patch; no configuration or default changes.
 
 ### 1.91.0 — Alshain (Released 2026-10-27)

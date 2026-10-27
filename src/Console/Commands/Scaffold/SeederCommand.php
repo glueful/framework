@@ -115,7 +115,11 @@ class SeederCommand extends BaseCommand
         $this->info('Next steps:');
         $this->line('1. Implement your seeding logic in the run() method');
         $this->line('2. Add any dependencies to the $dependencies array');
-        $this->line('3. Run the seeder with: php glueful db:seed ' . $this->extractClassName($name));
+        // db:seed prefixes only Database\\Seeders\\ onto a short name; give app seeders their FQCN.
+        $seedArg = $this->hasAppDir()
+            ? '"' . $this->getSeederNamespace() . '\\' . $this->extractClassName($name) . '"'
+            : $this->extractClassName($name);
+        $this->line('3. Run the seeder with: php glueful db:seed ' . $seedArg);
         $this->line('');
 
         if ($name === 'DatabaseSeeder') {
@@ -158,7 +162,19 @@ class SeederCommand extends BaseCommand
      */
     private function getDefaultSeederPath(): string
     {
-        return base_path($this->getContext(), 'database/seeders');
+        // The api-skeleton autoloads only App\\ => app/, so an app gets App\\Database\\Seeders
+        // (db:seed's default candidate). Without app/, keep the legacy database/seeders layout.
+        return base_path($this->getContext(), $this->hasAppDir() ? 'app/Database/Seeders' : 'database/seeders');
+    }
+
+    private function hasAppDir(): bool
+    {
+        return is_dir(base_path($this->getContext(), 'app'));
+    }
+
+    private function getSeederNamespace(): string
+    {
+        return $this->hasAppDir() ? 'App\\Database\\Seeders' : 'Database\\Seeders';
     }
 
     /**
@@ -206,13 +222,14 @@ class SeederCommand extends BaseCommand
             $modelImport = "use {$modelClass};\n";
             $modelUsage = $this->generateModelUsage($modelShort);
         }
+        $namespace = $this->getSeederNamespace();
 
         return <<<PHP
 <?php
 
 declare(strict_types=1);
 
-namespace Database\Seeders;
+namespace {$namespace};
 
 use Glueful\Database\Seeders\Seeder;
 {$modelImport}
@@ -221,7 +238,7 @@ use Glueful\Database\Seeders\Seeder;
  *
  * Database seeder for populating initial data.
  *
- * @package Database\Seeders
+ * @package {$namespace}
  */
 class {$className} extends Seeder
 {
@@ -250,12 +267,12 @@ PHP;
      */
     private function generateDatabaseSeeder(): string
     {
-        return <<<'PHP'
+        return str_replace('{{namespace}}', $this->getSeederNamespace(), <<<'PHP'
 <?php
 
 declare(strict_types=1);
 
-namespace Database\Seeders;
+namespace {{namespace}};
 
 use Glueful\Database\Seeders\Seeder;
 
@@ -264,7 +281,7 @@ use Glueful\Database\Seeders\Seeder;
  *
  * Main database seeder that orchestrates other seeders.
  *
- * @package Database\Seeders
+ * @package {{namespace}}
  */
 class DatabaseSeeder extends Seeder
 {
@@ -284,7 +301,7 @@ class DatabaseSeeder extends Seeder
     }
 }
 
-PHP;
+PHP);
     }
 
     /**
@@ -294,7 +311,7 @@ PHP;
     {
         return <<<PHP
         // Create records using the model
-        // {$modelName}::create(\$this->getContext(), [
+        // {$modelName}::create(\$this->container->get(\\Glueful\\Bootstrap\\ApplicationContext::class), [
         //     'name' => 'Example',
         // ]);
 
@@ -320,7 +337,8 @@ Examples:
   php glueful scaffold:seeder RoleSeeder --model=Role
   php glueful scaffold:seeder DatabaseSeeder
 
-The generated class will be placed in database/seeders/.
+The generated class is placed in app/Database/Seeders/ (App\\Database\\Seeders),
+or database/seeders/ (Database\\Seeders) when the project has no app/ directory.
 
 Seeder Organization:
   DatabaseSeeder should be your main entry point, calling other seeders:

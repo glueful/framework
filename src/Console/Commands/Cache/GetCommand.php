@@ -3,6 +3,8 @@
 namespace Glueful\Console\Commands\Cache;
 
 use Glueful\Console\BaseCommand;
+use Psr\Container\ContainerInterface;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Cache\CacheStore;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Input\InputInterface;
@@ -27,9 +29,9 @@ class GetCommand extends BaseCommand
     /** @var CacheStore<mixed> */
     private CacheStore $cacheStore;
 
-    public function __construct()
+    public function __construct(?ContainerInterface $container = null, ?ApplicationContext $context = null)
     {
-        parent::__construct();
+        parent::__construct($container, $context);
         $this->cacheStore = $this->getService(CacheStore::class);
     }
 

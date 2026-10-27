@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Glueful\Console\Commands\Extensions;
 
 use Glueful\Console\BaseCommand;
+use Psr\Container\ContainerInterface;
+use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Extensions\ExtensionManager;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -26,9 +28,9 @@ final class CacheCommand extends BaseCommand
 {
     private ExtensionManager $extensions;
 
-    public function __construct()
+    public function __construct(?ContainerInterface $container = null, ?ApplicationContext $context = null)
     {
-        parent::__construct();
+        parent::__construct($container, $context);
         $this->extensions = $this->getService(ExtensionManager::class);
     }
 
