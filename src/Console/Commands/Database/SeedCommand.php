@@ -73,7 +73,8 @@ class SeedCommand extends BaseCommand
         if (!class_exists($seederClass)) {
             $this->error("Seeder class not found: {$seederClass}");
             $this->line('');
-            $this->line('Available seeders should be in the database/seeders/ directory.');
+            $this->line('Seeders live in app/Database/Seeders/ (App\\Database\\Seeders).');
+            $this->line('Create one with: php glueful scaffold:seeder');
             return self::FAILURE;
         }
 
@@ -89,8 +90,7 @@ class SeedCommand extends BaseCommand
         try {
             $startTime = microtime(true);
 
-            /** @var Seeder $seeder */
-            $seeder = $this->container->get($seederClass);
+            $seeder = Seeder::make($this->container, $seederClass);
 
             // Run dependencies first
             $this->runDependencies($seeder, []);
@@ -166,8 +166,7 @@ class SeedCommand extends BaseCommand
                 continue;
             }
 
-            /** @var Seeder $dependency */
-            $dependency = $this->container->get($dependencyClass);
+            $dependency = Seeder::make($this->container, $dependencyClass);
 
             // Run the dependency's dependencies first
             $this->runDependencies($dependency, $ran);
@@ -188,9 +187,7 @@ class SeedCommand extends BaseCommand
         $shortName = class_basename($seederClass);
         $this->line("  Running {$shortName}...");
 
-        /** @var Seeder $seeder */
-        $seeder = $this->container->get($seederClass);
-        $seeder->run();
+        Seeder::make($this->container, $seederClass)->run();
 
         $this->line("  <fg=green>✓</> {$shortName}");
     }

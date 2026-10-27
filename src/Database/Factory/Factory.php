@@ -142,6 +142,16 @@ abstract class Factory
     }
 
     /**
+     * Use this application context to create models (defaults to the app's model context)
+     */
+    public function withContext(ApplicationContext $context): static
+    {
+        $clone = clone $this;
+        $clone->context = $context;
+        return $clone;
+    }
+
+    /**
      * Set the number of models to create
      *
      * @param int $count Number of models
@@ -213,7 +223,7 @@ abstract class Factory
             $modelAttributes = $this->resolveAttributes($attributes);
 
             /** @var TModel $model */
-            $model = new $this->model($modelAttributes);
+            $model = new $this->model($modelAttributes, $this->resolveContext());
 
             // Run afterMaking callbacks
             foreach ($this->afterMaking as $callback) {
@@ -273,13 +283,26 @@ abstract class Factory
         return $models;
     }
 
+    /**
+     * The context models are created with: the factory's own, else the app's default model
+     * context (set at boot, so `User::factory()->create()` works inside a booted app).
+     */
+    private function resolveContext(): ?ApplicationContext
+    {
+        return $this->context ?? Model::getDefaultContext();
+    }
+
     private function requireContext(): ApplicationContext
     {
-        if ($this->context === null) {
-            throw new \RuntimeException('ApplicationContext is required to create models.');
+        $context = $this->resolveContext();
+        if ($context === null) {
+            throw new \RuntimeException(
+                'ApplicationContext is required to create models: boot the app, or pass one with '
+                . 'Model::factory($count, $context) or ->withContext($context).'
+            );
         }
 
-        return $this->context;
+        return $context;
     }
 
     /**

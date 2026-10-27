@@ -134,6 +134,14 @@ $user = User::factory()->make();
 $users = User::factory()->count(5)->make();
 ```
 
+Inside a booted app (seeders, `db:seed`, tests that boot the app) factories create models with the
+app's context. Elsewhere, pass one explicitly:
+
+```php
+$users = User::factory(10, $context)->create();
+$user = User::factory()->withContext($context)->create();
+```
+
 ### Factory States
 
 States allow you to define variations of your model:
