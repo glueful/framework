@@ -6,6 +6,16 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.91.0] - 2026-10-27 — Alshain
+
+**Theme: features that do what they say** — a framework-wide correctness sweep driven by a full
+audit of the documentation against the code. Security settings that were silently ignored now
+apply (the CSRF config block, CORS origin patterns, route-cache scope checks), route attributes
+attach their middleware, the ORM's soft deletes, relations, counts, pagination and model events
+work as named, webhooks are wired end to end, and config keys nothing read are removed. Many
+fixes change behaviour an app may have worked around: **read the Upgrade Notes before
+upgrading** (also at docs → Upgrading).
+
 ### Upgrade Notes
 - **Stacked `#[RequiresRole]` attributes now mean "any one of these roles".** They were enforced as
   "all of them", contrary to the attribute's own documentation, so a user holding one listed role
