@@ -4,7 +4,7 @@ use Glueful\Routing\Router;
 use Glueful\Api\Webhooks\Http\Controllers\WebhookController;
 
 /**
- * @var \Glueful\Routing\Router $router Router instance injected by RouteManifest::load()
+ * @var Router $router Router instance injected by RouteManifest::load()
  *
  * Outbound-webhook management (subscriptions + delivery records). Mounted under the API prefix
  * (e.g. /api/v1/webhooks). `auth` guarantees an authenticated principal; the controller then

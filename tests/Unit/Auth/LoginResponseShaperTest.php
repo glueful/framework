@@ -81,6 +81,52 @@ final class LoginResponseShaperTest extends TestCase
         self::assertSame(['id' => 'u-2'], $body['data']['user']);
     }
 
+    public function test_flat_provider_result_still_gives_listeners_the_user_id(): void
+    {
+        $provider = new ListenerProvider();
+        $events = new EventService(new EventDispatcher($provider), $provider);
+        $seen = null;
+        $events->addListener(
+            LoginResponseBuildingEvent::class,
+            static function (LoginResponseBuildingEvent $e) use (&$seen): void {
+                $seen = $e->getUser();
+            }
+        );
+
+        $shaper = new LoginResponseShaper($this->contextWithEvents($events));
+
+        // What the JWT and API-key providers return: the identity flat, no nested `user`.
+        $session = ['uuid' => 'u-3', 'sub' => 'u-3', 'email' => 'u3@example.com', 'provider' => 'api_key'];
+        $response = $shaper->shape(new Request(), $session);
+        /** @var array<string, mixed> $body */
+        $body = json_decode((string) $response->getContent(), true);
+
+        self::assertSame('u-3', $seen['id'] ?? null);
+        self::assertSame('u-3', $seen['uuid'] ?? null);
+        self::assertSame('u3@example.com', $seen['email'] ?? null);
+        // The body is untouched: no `user` block is invented on the wire.
+        self::assertArrayNotHasKey('user', $body['data']);
+        self::assertSame('u-3', $body['data']['uuid']);
+    }
+
+    public function test_listener_sees_an_empty_user_when_no_principal_is_known(): void
+    {
+        $provider = new ListenerProvider();
+        $events = new EventService(new EventDispatcher($provider), $provider);
+        $seen = null;
+        $events->addListener(
+            LoginResponseBuildingEvent::class,
+            static function (LoginResponseBuildingEvent $e) use (&$seen): void {
+                $seen = $e->getUser();
+            }
+        );
+
+        $shaper = new LoginResponseShaper($this->contextWithEvents($events));
+        $shaper->shape(new Request(), ['access_token' => 'a']);
+
+        self::assertSame([], $seen);
+    }
+
     private function contextWithEvents(EventService $events): ApplicationContext
     {
         $context = ApplicationContext::forTesting(sys_get_temp_dir());

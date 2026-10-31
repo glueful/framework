@@ -1,14 +1,14 @@
 <?php
 
-/**
- * Auth routes - loaded via RouteManifest::requireRouteFile()
- *
- * @var \Glueful\Routing\Router $router
- */
-
 use Glueful\Routing\Router;
 use Glueful\Controllers\AuthController;
 use Glueful\Controllers\SessionController;
+
+/**
+ * Auth routes - loaded via RouteManifest::requireRouteFile()
+ *
+ * @var $router
+ */
 
 // Auth routes
 $router->group(['prefix' => '/auth'], function (Router $router) {
