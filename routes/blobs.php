@@ -1,5 +1,11 @@
 <?php
 
+use Glueful\Routing\Router;
+use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Controllers\UploadController;
+use Glueful\Uploader\Contracts\BlobRouteAction;
+use Glueful\Uploader\Contracts\BlobRouteMiddlewareProvider;
+
 /**
  * Blob routes - loaded via RouteManifest::requireRouteFile()
  *
@@ -7,15 +13,10 @@
  * Supports multipart uploads, base64 encoding, on-demand image resizing,
  * per-blob visibility controls, and signed URLs for temporary access.
  *
- * @var \Glueful\Routing\Router $router
- * @var \Glueful\Bootstrap\ApplicationContext $context
+ * @var Router $router
+ * @var ApplicationContext $context
  */
 
-use Glueful\Routing\Router;
-use Glueful\Bootstrap\ApplicationContext;
-use Glueful\Controllers\UploadController;
-use Glueful\Uploader\Contracts\BlobRouteAction;
-use Glueful\Uploader\Contracts\BlobRouteMiddlewareProvider;
 
 /** @var ApplicationContext|null $context */
 $context = (isset($context) && $context instanceof ApplicationContext)

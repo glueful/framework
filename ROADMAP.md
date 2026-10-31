@@ -21,6 +21,12 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.91.4 — Alshain (Released 2026-10-31)
+- **Login events see the user on every login route** — `LoginResponseBuildingEvent::getUser()` is
+  derived from the flat identity when a token or API-key provider login has no nested `user` object,
+  so listeners that enrich the login response can always tell who signed in.
+- Notes: patch; the login response body is unchanged, no configuration or default changes.
+
 ### 1.91.3 — Alshain (Released 2026-10-27)
 - **Job retries and timeouts work** — a job's `getMaxAttempts()` is honoured (pushed `maxAttempts`
   still wins, `--tries` caps both); `queue:work --timeout` is enforced with pcntl (the job is released

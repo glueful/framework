@@ -5,7 +5,7 @@ use Glueful\Controllers\DocsController;
 use Glueful\Support\Documentation\ApiDocsPath;
 
 /**
- * @var \Glueful\Routing\Router $router Router instance injected by RouteManifest::load()
+ * @var Router $router Router instance injected by RouteManifest::load()
  */
 
 // Documentation routes - the OpenAPI spec and its interactive UI, mounted at the configured

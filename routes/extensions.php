@@ -4,7 +4,7 @@ use Glueful\Routing\Router;
 use Glueful\Controllers\ExtensionsController;
 
 /**
- * @var \Glueful\Routing\Router $router Router instance injected by RouteManifest::load()
+ * @var Router $router Router instance injected by RouteManifest::load()
  *
  * In-admin extensions manager. Mounted under the API prefix (e.g. /api/v1/extensions).
  * Authorization is enforced in the controller (system.config.view / .edit); `auth`

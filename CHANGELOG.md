@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.91.4] - 2026-10-31 — Alshain
+
+### Fixed
+- **Login events see the user on provider logins too.** `LoginResponseBuildingEvent::getUser()`
+  was built from the nested `user` object that only the username/password route produces; a
+  token or API-key provider login returns the identity flat, so listeners got an empty array and
+  could not tell who signed in. The shaper now derives the event's user (`id`, `uuid`, `email`,
+  `username`) from the flat result when there is no `user` object. The response body is unchanged.
+
 ## [1.91.3] - 2026-10-27 — Alshain
 
 ### Fixed

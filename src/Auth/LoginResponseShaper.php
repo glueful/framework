@@ -44,8 +44,7 @@ final class LoginResponseShaper
             'expires_in' => $session['expires_in'] ?? null,
             'token_type' => $session['token_type'] ?? 'Bearer',
         ];
-        /** @var array<string, mixed> $user */
-        $user = $session['user'] ?? [];
+        $user = $this->eventUser($session);
         try {
             $events = app($this->context, EventService::class);
             $building = new LoginResponseBuildingEvent($tokens, $user, $session);
@@ -83,6 +82,38 @@ final class LoginResponseShaper
         $issuer->issue($response, $session);
 
         return $response;
+    }
+
+    /**
+     * The user map handed to the login events.
+     *
+     * The username/password route nests an OIDC user object under `user`. Token and API-key
+     * provider logins return the identity flat (`uuid`, `sub`, `email`, ...), so without this a
+     * listener saw an empty user and could not tell who signed in. The response body is not
+     * changed; only the event's view of the user is normalised so `id` is always present when a
+     * principal is known.
+     *
+     * @param array<string, mixed> $session
+     * @return array<string, mixed>
+     */
+    private function eventUser(array $session): array
+    {
+        $user = $session['user'] ?? null;
+        if (is_array($user)) {
+            return $user;
+        }
+
+        $uuid = $session['uuid'] ?? $session['sub'] ?? $session['id'] ?? null;
+        if (!is_string($uuid) || $uuid === '') {
+            return [];
+        }
+
+        return [
+            'id' => $uuid,
+            'uuid' => $uuid,
+            'email' => $session['email'] ?? null,
+            'username' => $session['username'] ?? null,
+        ];
     }
 
     /**
