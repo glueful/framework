@@ -1113,7 +1113,13 @@ class UploadController extends BaseController
         $segment = preg_replace('/[^a-zA-Z0-9_\\/-]+/', '', $override) ?? '';
         $segment = trim($segment, '/');
 
-        return $segment !== '' ? $base . '/' . $segment : $base;
+        if ($segment === '') {
+            return $base;
+        }
+
+        // With no base prefix the override is the whole path; a leading slash
+        // would otherwise become an empty top-level "folder" in the bucket.
+        return $base === '' ? $segment : $base . '/' . $segment;
     }
 
     private function detectMime(string $path): string

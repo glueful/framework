@@ -21,6 +21,12 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.91.5 — Alshain (Released 2026-11-02)
+- **Upload folders start at the bucket root** — a per-upload `path_prefix` on `POST /blobs` with an
+  empty `uploads.path_prefix` no longer produces a key with a leading slash (an empty top-level
+  "folder" in S3-style stores); with a base prefix the two are joined as before.
+- Notes: patch; no configuration or default changes, uploads without a `path_prefix` are unaffected.
+
 ### 1.91.4 — Alshain (Released 2026-10-31)
 - **Login events see the user on every login route** — `LoginResponseBuildingEvent::getUser()` is
   derived from the flat identity when a token or API-key provider login has no nested `user` object,
