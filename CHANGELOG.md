@@ -6,6 +6,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.91.5] - 2026-11-02 — Alshain
+
+### Fixed
+- **A per-upload `path_prefix` no longer starts the key with a slash.** When `uploads.path_prefix`
+  is empty, `POST /blobs` with a `path_prefix` built `/avatars/...`, which object stores show as an
+  empty top-level folder. The override is now the whole path when there is no base prefix; with a
+  base prefix the two are joined as before.
+
 ## [1.91.4] - 2026-10-31 — Alshain
 
 ### Fixed
