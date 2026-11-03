@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.91.6] - 2026-11-03 — Alshain
+
+### Fixed
+- **Login reports a confirmed email as verified.** The session user is now built with
+  `email_verified_at` from the identity's claims, so the login response's OIDC `email_verified` is
+  true once the address is confirmed. The core rebuilt the user from identity facts alone, which
+  dropped the stamp, and every login reported `false` even for a verified account; a provider sets
+  the claim (glueful/users 2.5.6 does) and the two-factor challenge already read it.
+
 ## [1.91.5] - 2026-11-02 — Alshain
 
 ### Fixed
