@@ -251,6 +251,9 @@ class AuthenticationService
             'email' => $identity->email(),
             'username' => $identity->username(),
             'status' => $identity->status(),
+            // Carried so the login response's OIDC `email_verified` reflects the account; a
+            // provider that knows it puts it in the identity's claims.
+            'email_verified_at' => $identity->claim('email_verified_at'),
             'roles' => $identity->roles(),
             'permissions' => $identity->claim('permissions', []),
             'last_login' => date('Y-m-d H:i:s'),

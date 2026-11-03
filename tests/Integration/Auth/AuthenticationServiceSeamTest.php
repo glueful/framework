@@ -68,8 +68,33 @@ final class AuthenticationServiceSeamTest extends TestCase
         $userData = $svc->verifyCredentials(['email' => 'amy@x.test', 'password' => 'secret-123']);
         self::assertNotNull($userData);
         self::assertSame('amy@x.test', $userData['email'] ?? null);
+        self::assertArrayHasKey('email_verified_at', $userData);
+        self::assertNull($userData['email_verified_at'], 'no stamp in the identity, none in the session');
 
         self::assertNull($svc->verifyCredentials(['email' => 'amy@x.test', 'password' => 'wrong']));
+    }
+
+    public function test_verified_stamp_in_the_identity_reaches_the_session_user(): void
+    {
+        $provider = (new InMemoryUserProvider())->add(
+            new UserIdentity(
+                'u-amy00000001',
+                attributes: ['email_verified_at' => '2026-11-03 12:15:12'],
+                email: 'amy@x.test',
+                username: 'amy',
+                status: 'active',
+            ),
+            'secret-123',
+            'amy@x.test',
+        );
+        $svc = new AuthenticationService(
+            context: $this->context,
+            userProvider: $provider,
+            identityResolver: new IdentityResolver([]),
+        );
+
+        $userData = $svc->verifyCredentials(['email' => 'amy@x.test', 'password' => 'secret-123']);
+        self::assertSame('2026-11-03 12:15:12', $userData['email_verified_at'] ?? null);
     }
 
     public function test_failed_login_dispatches_authentication_failed_event(): void

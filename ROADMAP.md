@@ -21,6 +21,12 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.91.6 — Alshain (Released 2026-11-03)
+- **Login reports a confirmed email as verified** — the session user carries `email_verified_at`
+  from the identity's claims, so the response's OIDC `email_verified` no longer reads `false` on
+  every login; glueful/users 2.5.6 supplies the claim from the account row.
+- Notes: patch; no configuration or default changes, the login response gains no new fields.
+
 ### 1.91.5 — Alshain (Released 2026-11-02)
 - **Upload folders start at the bucket root** — a per-upload `path_prefix` on `POST /blobs` with an
   empty `uploads.path_prefix` no longer produces a key with a leading slash (an empty top-level
