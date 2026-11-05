@@ -24,6 +24,43 @@ final class ImageSecurityValidatorTest extends TestCase
         parent::tearDown();
     }
 
+    public function testResizeSourceMayExceedTheOutputLimit(): void
+    {
+        $path = $this->pngOf(2731, 20);
+
+        self::assertTrue((new ImageSecurityValidator())->validateResizeSource($path, 25000000, 'png'));
+    }
+
+    public function testResizeSourceOverThePixelLimitIsRejected(): void
+    {
+        $path = $this->pngOf(20, 20);
+
+        $this->expectException(BusinessLogicException::class);
+        $this->expectExceptionMessage('memory limit protection');
+
+        (new ImageSecurityValidator())->validateResizeSource($path, 399, 'png');
+    }
+
+    public function testResizeSourceMustBeARealImage(): void
+    {
+        $path = (string) tempnam(sys_get_temp_dir(), 'notimage');
+        $this->cleanup[] = $path;
+        file_put_contents($path, '<script>alert(1)</script>');
+
+        $this->expectException(BusinessLogicException::class);
+
+        (new ImageSecurityValidator())->validateResizeSource($path, 25000000, 'png');
+    }
+
+    private function pngOf(int $width, int $height): string
+    {
+        $path = (string) tempnam(sys_get_temp_dir(), 'imgsrc');
+        $this->cleanup[] = $path;
+        imagepng(imagecreatetruecolor($width, $height), $path);
+
+        return $path;
+    }
+
     public function testValidateUrlRejectsLinkLocalMetadataIp(): void
     {
         // Open the external-URL gate so the suspicious-URL check itself is what's under test:

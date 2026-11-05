@@ -535,7 +535,7 @@ class UploadController extends BaseController
         $temp = $this->readToTempFile($disk, $path);
         try {
             try {
-                $this->imageSecurity?->validateImageFile($temp, $this->formatFromMime($sourceMime));
+                $this->validateVariantSource($temp, $sourceMime, $resize);
             } catch (BusinessLogicException $e) {
                 return Response::error($e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
             }
@@ -687,7 +687,10 @@ class UploadController extends BaseController
                 }
 
                 $length = $end - $start + 1;
-                fseek($stream, $start);
+                if (!$this->advanceStream($stream, $start)) {
+                    fclose($stream);
+                    return Response::error('Failed to read blob', Response::HTTP_INTERNAL_SERVER_ERROR);
+                }
 
                 $response = new StreamedResponse(function () use ($stream, $length) {
                     $remaining = $length;
@@ -721,6 +724,53 @@ class UploadController extends BaseController
         }
 
         return $response;
+    }
+
+    /**
+     * Move a read stream forward to $offset.
+     *
+     * Remote disks (S3, R2) hand back streams that cannot seek, so those read
+     * forward and discard instead.
+     *
+     * @param resource $stream
+     */
+    private function advanceStream($stream, int $offset): bool
+    {
+        if (stream_get_meta_data($stream)['seekable']) {
+            return fseek($stream, $offset) === 0;
+        }
+
+        $remaining = $offset;
+        while ($remaining > 0) {
+            $chunk = fread($stream, min(8192, $remaining));
+            if ($chunk === false || $chunk === '') {
+                return false;
+            }
+            $remaining -= strlen($chunk);
+        }
+
+        return true;
+    }
+
+    /**
+     * Check a variant's source before decoding it.
+     *
+     * The requested size is capped by buildVariantOptions(), so a resize of a large source
+     * only has to be safe to decode. With no target size the variant keeps the source's
+     * dimensions, so the source itself must fit the limits.
+     *
+     * @param array<string, int|string|null> $resize
+     */
+    private function validateVariantSource(string $path, string $sourceMime, array $resize): void
+    {
+        $format = $this->formatFromMime($sourceMime);
+        if (($resize['width'] ?? null) === null && ($resize['height'] ?? null) === null) {
+            $this->imageSecurity?->validateImageFile($path, $format);
+            return;
+        }
+
+        $maxPixels = (int) $this->getConfig('uploads.image_processing.max_pixels', 25000000);
+        $this->imageSecurity?->validateResizeSource($path, $maxPixels, $format);
     }
 
     /**

@@ -6,6 +6,21 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.91.7] - 2026-11-05 — Alshain
+
+### Fixed
+- **Range requests work on blobs from remote disks.** `GET /blobs/{uuid}` with a `Range` header
+  answered 500 ("fseek(): Stream does not support seeking") on S3 and R2, whose read streams cannot
+  seek. The stream now reads forward to the start of the range instead. Players that open media
+  with a range request, such as AVPlayer on iOS, could not play private audio or video before.
+- **Thumbnails of large images render.** `GET /blobs/{uuid}?width=...` rejected any source wider or
+  taller than the image limits (2048px by default) with a 422, even when asking for a much smaller
+  image. A resize is now limited by the size requested, which was already capped, and the source
+  only has to fit `uploads.image_processing.max_pixels` (25MP by default), a setting that was
+  defined but never read. A variant with no target size, such as `?format=webp`, keeps the source's
+  dimensions and so still has to fit the image limits. glueful/media 1.2.1 makes the same change to
+  the resize itself; both are needed.
+
 ## [1.91.6] - 2026-11-03 — Alshain
 
 ### Fixed

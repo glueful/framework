@@ -312,6 +312,34 @@ final class UploadControllerVariantTest extends TestCase
         ]);
     }
 
+    public function testVariantResizesASourceLargerThanTheOutputLimit(): void
+    {
+        $uuid = $this->insertWidePng();
+        $fake = new VariantFakeMediaProcessor();
+
+        $response = $this->makeController($fake)->show(
+            Request::create('/blobs/' . $uuid, 'GET', ['width' => 400, 'height' => 400, 'format' => 'webp']),
+            $uuid
+        );
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame(1, $fake->renderCalls);
+    }
+
+    public function testVariantWithNoTargetSizeKeepsTheOutputLimit(): void
+    {
+        $uuid = $this->insertWidePng();
+        $fake = new VariantFakeMediaProcessor();
+
+        $response = $this->makeController($fake)->show(
+            Request::create('/blobs/' . $uuid, 'GET', ['format' => 'webp']),
+            $uuid
+        );
+
+        $this->assertSame(422, $response->getStatusCode());
+        $this->assertSame(0, $fake->renderCalls);
+    }
+
     public function testVariantRejectsInvalidSourceImageBeforeMediaProcessor(): void
     {
         $uuid = 'blob00000003';
@@ -471,6 +499,31 @@ final class UploadControllerVariantTest extends TestCase
             $blobExtension ?? new NullBlobAccessPolicy(),
             new \Psr\Log\NullLogger(),
         );
+    }
+
+    /** A real PNG wider than the 2048px output limit; returns its blob uuid. */
+    private function insertWidePng(): string
+    {
+        $uuid = 'blob00000009';
+        $relPath = 'posts/wide.png';
+        $image = imagecreatetruecolor(2731, 20);
+        imagepng($image, $this->uploadsRoot . '/' . $relPath);
+
+        \Glueful\Database\Connection::fromContext($this->context)
+            ->table('blobs')
+            ->insert([
+                'uuid' => $uuid,
+                'name' => 'wide.png',
+                'mime_type' => 'image/png',
+                'size' => filesize($this->uploadsRoot . '/' . $relPath),
+                'url' => $relPath,
+                'storage_type' => 'uploads',
+                'visibility' => 'public',
+                'status' => 'active',
+                'created_by' => 'usr123456789',
+            ]);
+
+        return $uuid;
     }
 
     private function bodyOf(\Symfony\Component\HttpFoundation\Response $response): string

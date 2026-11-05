@@ -21,6 +21,17 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.91.7 — Alshain (Released 2026-11-05)
+- **Range requests work on blobs from remote disks** — `GET /blobs/{uuid}` with a `Range` header no
+  longer answers 500 on S3 and R2, whose read streams cannot seek; the stream reads forward to the
+  start of the range instead. Players that open media with a range request, such as AVPlayer on iOS,
+  can now play private audio and video.
+- **Thumbnails of large images render** — resizing a source over the 2048px image limits no longer
+  answers 422; the source only has to fit `uploads.image_processing.max_pixels`, which was defined
+  but never read, and the requested size stays capped as before. Needs glueful/media 1.2.1.
+- Notes: patch; no configuration or default changes. Sources up to 25MP can now be resized, and
+  full downloads are unaffected.
+
 ### 1.91.6 — Alshain (Released 2026-11-03)
 - **Login reports a confirmed email as verified** — the session user carries `email_verified_at`
   from the identity's claims, so the response's OIDC `email_verified` no longer reads `false` on

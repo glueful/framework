@@ -113,6 +113,42 @@ class ImageSecurityValidator
      */
     public function validateImageFile(string $path, ?string $format = null): bool
     {
+        [$width, $height] = $this->inspectImageFile($path, $format);
+
+        return $this->validateDimensions($width, $height);
+    }
+
+    /**
+     * Validate an image file that is about to be resized.
+     *
+     * A resize is limited by the size requested, not the size of the source, so the
+     * source only has to be a real image small enough to decode safely.
+     *
+     * @param int $maxPixels Largest source to decode, in total pixels; 0 for no limit
+     * @throws BusinessLogicException If the file is not an allowed image or is too large to decode
+     */
+    public function validateResizeSource(string $path, int $maxPixels, ?string $format = null): bool
+    {
+        [$width, $height] = $this->inspectImageFile($path, $format);
+
+        if ($maxPixels > 0 && $width * $height > $maxPixels) {
+            throw BusinessLogicException::operationNotAllowed(
+                'image_processing',
+                'Image dimensions too large (memory limit protection)'
+            );
+        }
+
+        return true;
+    }
+
+    /**
+     * Check a file's format and MIME type and read its dimensions without decoding it.
+     *
+     * @return array{0: int, 1: int} Width and height
+     * @throws BusinessLogicException If the file is not an allowed image
+     */
+    private function inspectImageFile(string $path, ?string $format): array
+    {
         if (!is_file($path)) {
             throw BusinessLogicException::operationNotAllowed(
                 'image_processing',
@@ -133,7 +169,7 @@ class ImageSecurityValidator
             );
         }
 
-        return $this->validateDimensions($dimensions[0], $dimensions[1]);
+        return [$dimensions[0], $dimensions[1]];
     }
 
     /**
