@@ -736,7 +736,7 @@ class UploadController extends BaseController
      */
     private function advanceStream($stream, int $offset): bool
     {
-        if ((bool) (stream_get_meta_data($stream)['seekable'] ?? false)) {
+        if (stream_get_meta_data($stream)['seekable']) {
             return fseek($stream, $offset) === 0;
         }
 
