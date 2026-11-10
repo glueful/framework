@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.92.0] - 2026-11-10 — Alshat
+
 ### Added
 - **Images can be cached for a year, by browsers and CDNs.** `GET /blobs/{uuid}?v=<version>` naming
   a public blob's current version answers `public, max-age=31536000, immutable`
@@ -22,6 +24,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   `private, no-cache` (`uploads.response.private_cache_control`): the browser keeps the file but
   checks with the app each time, so a lost permission applies on the next view. This includes a
   public blob your `BlobAccessPolicy` shows only to signed-in users.
+
+### Upgrade Notes
+- No configuration changes are needed. Private, signed and signed-in-only blob responses now carry
+  `private, no-cache` where they carried `public, max-age=86400`; browsers revalidate them with
+  their ETag (a 304) instead of reusing them for a day. Set `UPLOADS_PRIVATE_CACHE_CONTROL` to
+  change that, e.g. `private, max-age=3600`.
+- To have a CDN cache public blobs, link them at their version (`UploadController::blobUrl()` with
+  the blob row, or `?v=` from `BlobVersion::of()`) and, behind Cloudflare, add the cache rule in the
+  file uploads guide.
 
 ## [1.91.7] - 2026-11-05 — Alshain
 

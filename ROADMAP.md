@@ -21,6 +21,17 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.92.0 — Alshat (Released 2026-11-10)
+- **Public blobs can be cached for a year** — `GET /blobs/{uuid}?v=<version>` at a public blob's
+  current version answers `public, max-age=31536000, immutable`; `BlobVersion::of()` gives the
+  version, `UploadController::blobUrl()` adds it given the blob row, and the upload and info
+  responses report it as `version`.
+- **Private blobs stay out of shared caches** — a blob served because the request was signed in or
+  signed answers `private, no-cache` instead of `public, max-age=86400`, so a CDN or proxy cannot
+  hand it to anyone else.
+- Notes: minor; two new optional settings (`UPLOADS_IMMUTABLE_CACHE_CONTROL`,
+  `UPLOADS_PRIVATE_CACHE_CONTROL`). URLs without `v` keep the one-day cache.
+
 ### 1.91.7 — Alshain (Released 2026-11-05)
 - **Range requests work on blobs from remote disks** — `GET /blobs/{uuid}` with a `Range` header no
   longer answers 500 on S3 and R2, whose read streams cannot seek; the stream reads forward to the
