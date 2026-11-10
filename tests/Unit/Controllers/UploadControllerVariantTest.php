@@ -21,6 +21,7 @@ use Glueful\Uploader\Contracts\BlobCreatedHook;
 use Glueful\Uploader\Contracts\MediaProcessorInterface;
 use Glueful\Uploader\Contracts\NullBlobAccessPolicy;
 use Glueful\Uploader\Contracts\NullBlobCreatedHook;
+use Glueful\Uploader\BlobVersion;
 use Glueful\Uploader\FileUploader;
 use Glueful\Uploader\MediaMetadata;
 use Glueful\Uploader\Storage\StorageInterface;
@@ -478,6 +479,181 @@ final class UploadControllerVariantTest extends TestCase
 
         self::assertSame(500, $response->getStatusCode());
         self::assertSame($before, $connection->table('blobs')->count());
+    }
+
+    public function testAPublicBlobKeepsTheConfiguredCacheControl(): void
+    {
+        $this->asAnonymous();
+        $response = $this->makeController(null)->show(Request::create('/blobs/' . $this->blobUuid), $this->blobUuid);
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertTrue($response->headers->hasCacheControlDirective('public'));
+        self::assertSame('86400', $response->headers->getCacheControlDirective('max-age'));
+        self::assertFalse($response->headers->hasCacheControlDirective('immutable'));
+    }
+
+    public function testTheCurrentVersionMakesAPublicBlobImmutableForAYear(): void
+    {
+        // A URL naming the blob's current version can never answer different bytes: a changed
+        // blob has a new version, so a shared cache may keep this answer for a year.
+        $this->asAnonymous();
+        $v = BlobVersion::of($this->blobRow());
+
+        $original = $this->makeController(null)->show(
+            Request::create('/blobs/' . $this->blobUuid, 'GET', ['v' => $v]),
+            $this->blobUuid,
+        );
+        $variant = $this->makeController(new VariantFakeMediaProcessor())->show(
+            Request::create('/blobs/' . $this->blobUuid, 'GET', ['v' => $v, 'width' => 100]),
+            $this->blobUuid,
+        );
+
+        foreach (['original' => $original, 'variant' => $variant] as $what => $response) {
+            self::assertSame(200, $response->getStatusCode(), $what);
+            self::assertTrue($response->headers->hasCacheControlDirective('public'), $what);
+            self::assertTrue($response->headers->hasCacheControlDirective('immutable'), $what);
+            self::assertSame('31536000', $response->headers->getCacheControlDirective('max-age'), $what);
+        }
+    }
+
+    public function testAVariantRevalidatedAtTheCurrentVersionStaysImmutable(): void
+    {
+        $this->asAnonymous();
+        $controller = $this->makeController(new VariantFakeMediaProcessor());
+        $query = ['v' => BlobVersion::of($this->blobRow()), 'width' => 100];
+        $etag = (string) $controller->show(Request::create('/blobs/' . $this->blobUuid, 'GET', $query), $this->blobUuid)
+            ->headers->get('ETag');
+
+        $request = Request::create('/blobs/' . $this->blobUuid, 'GET', $query);
+        $request->headers->set('If-None-Match', $etag);
+        $response = $controller->show($request, $this->blobUuid);
+
+        self::assertSame(304, $response->getStatusCode());
+        self::assertTrue($response->headers->hasCacheControlDirective('immutable'));
+    }
+
+    public function testAnOutdatedVersionGetsTheOrdinaryCache(): void
+    {
+        // An old page still links the old version: it is answered with the current bytes, which
+        // a cache must not keep for a year under that URL.
+        $this->asAnonymous();
+        $stale = BlobVersion::of($this->blobRow());
+        \Glueful\Database\Connection::fromContext($this->context)->table('blobs')
+            ->where('uuid', '=', $this->blobUuid)
+            ->update(['updated_at' => '2030-01-01 00:00:00']);
+
+        $response = $this->makeController(null)->show(
+            Request::create('/blobs/' . $this->blobUuid, 'GET', ['v' => $stale]),
+            $this->blobUuid,
+        );
+
+        self::assertNotSame($stale, BlobVersion::of($this->blobRow()));
+        self::assertSame(200, $response->getStatusCode());
+        self::assertFalse($response->headers->hasCacheControlDirective('immutable'));
+        self::assertSame('86400', $response->headers->getCacheControlDirective('max-age'));
+    }
+
+    public function testAPrivateBlobIsNeverStoredByASharedCache(): void
+    {
+        // Served because the request is signed in: a shared cache that kept it would hand it
+        // to anyone. The browser may keep it, and revalidates every time, so a lost permission
+        // takes effect on the next view.
+        \Glueful\Database\Connection::fromContext($this->context)->table('blobs')
+            ->where('uuid', '=', $this->blobUuid)
+            ->update(['visibility' => 'private']);
+        $v = BlobVersion::of($this->blobRow());
+
+        foreach ([[], ['v' => $v], ['v' => $v, 'width' => 100]] as $query) {
+            $response = $this->makeController(new VariantFakeMediaProcessor())->show(
+                Request::create('/blobs/' . $this->blobUuid, 'GET', $query),
+                $this->blobUuid,
+            );
+
+            $label = json_encode($query);
+            self::assertSame(200, $response->getStatusCode(), $label);
+            self::assertTrue($response->headers->hasCacheControlDirective('private'), $label);
+            self::assertTrue($response->headers->hasCacheControlDirective('no-cache'), $label);
+            self::assertFalse($response->headers->hasCacheControlDirective('public'), $label);
+            self::assertFalse($response->headers->hasCacheControlDirective('immutable'), $label);
+        }
+    }
+
+    public function testAPublicBlobAnAccessPolicyHidesFromVisitorsIsPrivate(): void
+    {
+        // Public by its column, but a tenancy policy shows it only to signed-in members: a shared
+        // cache must not hand the member's copy to a visitor.
+        $policy = new class implements BlobCreatedHook, BlobAccessPolicy {
+            public function onBlobCreated(string $blobUuid, ?string $uploaderUserUuid): void
+            {
+            }
+
+            public function authorizeAccess(array $blob, BlobAccessContext $context): bool
+            {
+                return $context->authenticatedUserUuid !== null;
+            }
+        };
+
+        $response = $this->makeController(null, $policy)->show(
+            Request::create('/blobs/' . $this->blobUuid, 'GET', ['v' => BlobVersion::of($this->blobRow())]),
+            $this->blobUuid,
+        );
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertTrue($response->headers->hasCacheControlDirective('private'));
+        self::assertFalse($response->headers->hasCacheControlDirective('immutable'));
+    }
+
+    public function testBlobUrlNamesTheVersionWhenGivenTheBlob(): void
+    {
+        $row = $this->blobRow();
+        $base = 'https://x.test' . api_prefix($this->context) . '/blobs/' . $this->blobUuid;
+
+        self::assertSame(
+            $base,
+            UploadController::blobUrl($this->context, 'https://x.test', $this->blobUuid),
+        );
+        self::assertSame(
+            $base . '?v=' . BlobVersion::of($row),
+            UploadController::blobUrl($this->context, 'https://x.test', $this->blobUuid, $row),
+        );
+    }
+
+    public function testInfoAndUploadReportTheVersion(): void
+    {
+        $info = $this->makeController(null)->info(Request::create('/blobs/' . $this->blobUuid . '/info'), $this->blobUuid);
+        self::assertInstanceOf(\Glueful\Controllers\DTOs\BlobInfoData::class, $info);
+        self::assertSame(BlobVersion::of($this->blobRow()), $info->toArray()['version'] ?? null);
+
+        $response = $this->makeController(null)->upload($this->uploadRequest());
+        $body = json_decode((string) $response->getContent(), true, flags: JSON_THROW_ON_ERROR);
+        self::assertSame(201, $response->getStatusCode());
+        self::assertSame(BlobVersion::of($this->blobRow($body['data']['blob_uuid'])), $body['data']['version'] ?? null);
+    }
+
+    public function testTheVersionChangesWithTheBlob(): void
+    {
+        $row = ['updated_at' => '2026-01-01 00:00:00', 'size' => 10];
+
+        self::assertSame(BlobVersion::of($row), BlobVersion::of($row));
+        self::assertNotSame(BlobVersion::of($row), BlobVersion::of(['updated_at' => '2026-01-02 00:00:00'] + $row));
+        self::assertNotSame(BlobVersion::of($row), BlobVersion::of(['size' => 11] + $row));
+        self::assertMatchesRegularExpression('/^[a-f0-9]{12}$/', BlobVersion::of($row));
+    }
+
+    private function asAnonymous(): void
+    {
+        $this->context->getContainer()->get('request')->attributes->remove('user');
+    }
+
+    /** @return array<string, mixed> */
+    private function blobRow(?string $uuid = null): array
+    {
+        $row = \Glueful\Database\Connection::fromContext($this->context)->table('blobs')
+            ->where('uuid', '=', $uuid ?? $this->blobUuid)
+            ->first();
+        self::assertIsArray($row);
+
+        return $row;
     }
 
     private function makeController(

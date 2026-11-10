@@ -6,6 +6,23 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Added
+- **Images can be cached for a year, by browsers and CDNs.** `GET /blobs/{uuid}?v=<version>` naming
+  a public blob's current version answers `public, max-age=31536000, immutable`
+  (`uploads.response.immutable_cache_control`). `Glueful\Uploader\BlobVersion::of($blob)` gives the
+  version, a short code that changes when the blob is replaced in place.
+  `UploadController::blobUrl()` adds it when given the blob row, and the upload and
+  `GET /blobs/{uuid}/info` responses report it as `version`. A missing or outdated `v` gets the
+  ordinary cache, so existing links keep working.
+
+### Fixed
+- **A private blob is never stored by a shared cache.** A blob served because the request was
+  signed in, or carried a signed URL, was sent `public, max-age=86400`, so a CDN or proxy caching
+  blob URLs could keep one person's private file and hand it to anyone. Such responses now carry
+  `private, no-cache` (`uploads.response.private_cache_control`): the browser keeps the file but
+  checks with the app each time, so a lost permission applies on the next view. This includes a
+  public blob your `BlobAccessPolicy` shows only to signed-in users.
+
 ## [1.91.7] - 2026-11-05 — Alshain
 
 ### Fixed

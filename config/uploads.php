@@ -116,5 +116,11 @@ return [
         'enable_range_requests' => env('UPLOADS_ENABLE_RANGE', true), // HTTP Range for video/audio
         'enable_etag' => env('UPLOADS_ENABLE_ETAG', true), // ETag headers for caching
         'cache_control' => env('UPLOADS_CACHE_CONTROL', 'public, max-age=86400'), // 1 day browser cache
+        // A public blob asked for at its current version (?v=, see Glueful\Uploader\BlobVersion):
+        // that URL never answers different bytes, so browsers and CDNs may keep it for a year.
+        'immutable_cache_control' => env('UPLOADS_IMMUTABLE_CACHE_CONTROL', 'public, max-age=31536000, immutable'),
+        // A blob served because the request is signed in or signed: never stored by a shared
+        // cache, and revalidated by the browser so a lost permission applies on the next view.
+        'private_cache_control' => env('UPLOADS_PRIVATE_CACHE_CONTROL', 'private, no-cache'),
     ],
 ];
