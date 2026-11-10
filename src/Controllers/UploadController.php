@@ -32,6 +32,7 @@ use Glueful\Uploader\Contracts\BlobCreatedHook;
 use Glueful\Uploader\Contracts\BlobPublicUrlProvider;
 use Glueful\Uploader\Contracts\NullBlobAccessPolicy;
 use Glueful\Uploader\Contracts\NullBlobCreatedHook;
+use Glueful\Uploader\BlobVersion;
 use Glueful\Uploader\FileUploader;
 use Glueful\Uploader\UploadException;
 use Glueful\Validation\ValidationException;
@@ -204,8 +205,13 @@ class UploadController extends BaseController
                 }
             }
 
-            // Add visibility to response
+            // Add visibility to response, and the version a `?v=` URL names (see BlobVersion),
+            // read back as the route will read it: the database may fill timestamps itself.
             $result['visibility'] = $visibility;
+            $stored = $blobUuid !== '' ? $this->blobs->findByUuidWithDeleteFilter($blobUuid) : null;
+            if ($stored !== null) {
+                $result['version'] = BlobVersion::of($stored);
+            }
 
             return Response::created($result, 'Upload successful');
         } catch (ValidationException $e) {
@@ -248,6 +254,7 @@ class UploadController extends BaseController
 
         $rawPath = (string) ($blob['url'] ?? '');
         $blob['url'] = $this->resolveBlobUrl($blob);
+        $blob['version'] = BlobVersion::of($blob);
 
         $native = $this->maybeNativeUrl($blob, $rawPath);
         if ($native !== null) {
@@ -300,6 +307,7 @@ class UploadController extends BaseController
         if (!$allowed) {
             return Response::notFound('Blob not found');
         }
+        $cacheControl = $this->cacheControlFor($request, $blob, $signatureValid, $allowed);
 
         $disk = $this->resolveDisk($blob);
         $path = (string) ($blob['url'] ?? '');
@@ -322,7 +330,7 @@ class UploadController extends BaseController
             // The blob's size and last update version the variant: an image changed in place
             // keeps its uuid, and must not be answered from the old variant or its ETag.
             $version = (string) ($blob['updated_at'] ?? '') . '|' . (string) ($blob['size'] ?? '');
-            return $this->serveResizedImage($request, $uuid, $disk, $path, $resize, $mime, $version);
+            return $this->serveResizedImage($request, $uuid, $disk, $path, $resize, $mime, $version, $cacheControl);
         }
 
         // No media processor bound: width/height/quality fall through to serving
@@ -335,7 +343,7 @@ class UploadController extends BaseController
 
         $size = isset($blob['size']) ? (int) $blob['size'] : null;
 
-        return $this->serveFile($request, $disk, $path, $mime, $size);
+        return $this->serveFile($request, $disk, $path, $mime, $size, $cacheControl);
     }
 
     /**
@@ -473,6 +481,7 @@ class UploadController extends BaseController
         array $resize,
         string $sourceMime,
         string $version = '',
+        ?string $cacheControl = null,
     ): Response|\Symfony\Component\HttpFoundation\Response {
         $cacheEnabled = (bool) $this->getConfig('uploads.image_processing.cache_enabled', true);
         $cacheTtl = (int) $this->getConfig('uploads.image_processing.cache_ttl', 604800);
@@ -480,6 +489,7 @@ class UploadController extends BaseController
         $allowedFormats = (array) $this->getConfig('uploads.image_processing.allowed_formats', []);
         $etagEnabled = (bool) $this->getConfig('uploads.response.enable_etag', true);
         $maxVariantBytes = (int) $this->getConfig('uploads.image_processing.max_variant_bytes', 5 * 1024 * 1024);
+        $cacheControl ??= $this->getCacheControl($cacheTtl);
 
         $format = $resize['format'] ?? null;
         if (
@@ -499,7 +509,7 @@ class UploadController extends BaseController
             if ($ifNoneMatch !== null && $ifNoneMatch === $etag) {
                 return new \Symfony\Component\HttpFoundation\Response('', 304, [
                     'ETag' => $etag,
-                    'Cache-Control' => $this->getCacheControl($cacheTtl),
+                    'Cache-Control' => $cacheControl,
                     'X-Content-Type-Options' => 'nosniff',
                 ]);
             }
@@ -525,7 +535,7 @@ class UploadController extends BaseController
                     return $this->binaryResponse(
                         $decoded,
                         (string) $cached['mime'],
-                        $cacheTtl,
+                        $cacheControl,
                         $etagEnabled ? $etag : null
                     );
                 }
@@ -573,7 +583,7 @@ class UploadController extends BaseController
                 }
             }
 
-            return $this->binaryResponse($data, $mime, $cacheTtl, $etagEnabled ? $etag : null);
+            return $this->binaryResponse($data, $mime, $cacheControl, $etagEnabled ? $etag : null);
         } finally {
             if (is_file($temp)) {
                 @unlink($temp);
@@ -589,11 +599,12 @@ class UploadController extends BaseController
         string $disk,
         string $path,
         string $mime,
-        ?int $fileSize = null
+        ?int $fileSize = null,
+        ?string $cacheControl = null,
     ): Response|BinaryFileResponse|StreamedResponse|\Symfony\Component\HttpFoundation\Response {
         $rangeEnabled = (bool) $this->getConfig('uploads.response.enable_range_requests', true);
         $etagEnabled = (bool) $this->getConfig('uploads.response.enable_etag', true);
-        $cacheControl = $this->getCacheControl();
+        $cacheControl ??= $this->getCacheControl();
 
         $diskCfg = (array) $this->getConfig("storage.disks.{$disk}", []);
 
@@ -817,12 +828,12 @@ class UploadController extends BaseController
     private function binaryResponse(
         string $data,
         string $mime,
-        int $cacheTtl,
+        string $cacheControl,
         ?string $etag = null
     ): \Symfony\Component\HttpFoundation\Response {
         $headers = [
             'Content-Type' => $mime,
-            'Cache-Control' => $this->getCacheControl($cacheTtl),
+            'Cache-Control' => $cacheControl,
             'Content-Length' => (string) strlen($data),
             'X-Content-Type-Options' => 'nosniff',
             'Content-Disposition' => $this->contentDispositionFor($mime, 'variant'),
@@ -860,6 +871,39 @@ class UploadController extends BaseController
         $normalized = strtolower(trim(explode(';', $mime, 2)[0]));
 
         return in_array($normalized, ['image/jpeg', 'image/png', 'image/gif', 'image/webp'], true);
+    }
+
+    /**
+     * The Cache-Control a blob's answer may carry, or null for the configured one. Only an answer
+     * an anonymous, unsigned visitor would also get may sit in a shared cache (a CDN or proxy):
+     * anything served because the request is signed in or signed is `private`, and the browser
+     * revalidates it, so a lost permission applies on the next view. A public answer at the
+     * blob's current version (`?v=`, see BlobVersion) is immutable: that URL never changes bytes.
+     *
+     * @param array<string, mixed> $blob
+     */
+    private function cacheControlFor(Request $request, array $blob, bool $signatureValid, bool $allowed): ?string
+    {
+        $anonymous = $this->authenticatedUserUuid() === null && !$signatureValid;
+        $shareable = (string) ($blob['visibility'] ?? 'private') === 'public'
+            && !$this->requiresAuthFor('retrieve')
+            && ($anonymous ? $allowed : $this->accessPolicy->authorizeAccess(
+                $blob,
+                new BlobAccessContext(BlobAction::VIEW, null, false),
+            ));
+
+        if (!$shareable) {
+            $private = $this->getConfig('uploads.response.private_cache_control');
+            return is_string($private) && $private !== '' ? $private : 'private, no-cache';
+        }
+
+        $version = $request->query->get('v');
+        if (is_string($version) && $version !== '' && hash_equals(BlobVersion::of($blob), $version)) {
+            $immutable = $this->getConfig('uploads.response.immutable_cache_control');
+            return is_string($immutable) && $immutable !== '' ? $immutable : 'public, max-age=31536000, immutable';
+        }
+
+        return null;
     }
 
     /**
@@ -910,11 +954,21 @@ class UploadController extends BaseController
 
     /**
      * The URL of a blob's `GET /blobs/{uuid}` route on the given origin. routes/blobs.php is
-     * mounted under the API prefix (RouteManifest), so the path carries api_prefix().
+     * mounted under the API prefix (RouteManifest), so the path carries api_prefix(). Given the
+     * blob row, the URL names its current version (`?v=`), which a public blob answers with a
+     * year-long immutable cache.
+     *
+     * @param array<string, mixed>|null $blob
      */
-    public static function blobUrl(ApplicationContext $context, string $origin, string $uuid): string
-    {
-        return rtrim($origin, '/') . api_prefix($context) . '/blobs/' . rawurlencode($uuid);
+    public static function blobUrl(
+        ApplicationContext $context,
+        string $origin,
+        string $uuid,
+        ?array $blob = null,
+    ): string {
+        $url = rtrim($origin, '/') . api_prefix($context) . '/blobs/' . rawurlencode($uuid);
+
+        return $blob === null ? $url : $url . '?v=' . BlobVersion::of($blob);
     }
 
     /**

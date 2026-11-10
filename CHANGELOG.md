@@ -6,6 +6,34 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.92.0] - 2026-11-10 — Alshat
+
+### Added
+- **Images can be cached for a year, by browsers and CDNs.** `GET /blobs/{uuid}?v=<version>` naming
+  a public blob's current version answers `public, max-age=31536000, immutable`
+  (`uploads.response.immutable_cache_control`). `Glueful\Uploader\BlobVersion::of($blob)` gives the
+  version, a short code that changes when the blob is replaced in place.
+  `UploadController::blobUrl()` adds it when given the blob row, and the upload and
+  `GET /blobs/{uuid}/info` responses report it as `version`. A missing or outdated `v` gets the
+  ordinary cache, so existing links keep working.
+
+### Fixed
+- **A private blob is never stored by a shared cache.** A blob served because the request was
+  signed in, or carried a signed URL, was sent `public, max-age=86400`, so a CDN or proxy caching
+  blob URLs could keep one person's private file and hand it to anyone. Such responses now carry
+  `private, no-cache` (`uploads.response.private_cache_control`): the browser keeps the file but
+  checks with the app each time, so a lost permission applies on the next view. This includes a
+  public blob your `BlobAccessPolicy` shows only to signed-in users.
+
+### Upgrade Notes
+- No configuration changes are needed. Private, signed and signed-in-only blob responses now carry
+  `private, no-cache` where they carried `public, max-age=86400`; browsers revalidate them with
+  their ETag (a 304) instead of reusing them for a day. Set `UPLOADS_PRIVATE_CACHE_CONTROL` to
+  change that, e.g. `private, max-age=3600`.
+- To have a CDN cache public blobs, link them at their version (`UploadController::blobUrl()` with
+  the blob row, or `?v=` from `BlobVersion::of()`) and, behind Cloudflare, add the cache rule in the
+  file uploads guide.
+
 ## [1.91.7] - 2026-11-05 — Alshain
 
 ### Fixed

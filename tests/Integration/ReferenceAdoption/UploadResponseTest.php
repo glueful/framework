@@ -93,11 +93,12 @@ final class UploadResponseTest extends TestCase
         $body = json_decode((string) $response->getContent(), true);
 
         // url is passed through resolveBlobUrl(); with no base_url configured the
-        // UrlGenerator returns the path unchanged. native_url is omitted (no policy).
+        // UrlGenerator returns the path unchanged. native_url is omitted (no policy); version
+        // (BlobVersion, for ?v= URLs) is appended last.
         self::assertSame([
             'success' => true,
             'message' => 'Blob metadata',
-            'data'    => self::BLOB,
+            'data'    => self::BLOB + ['version' => \Glueful\Uploader\BlobVersion::of(self::BLOB)],
         ], $body);
 
         // native_url MUST NOT appear when absent.
