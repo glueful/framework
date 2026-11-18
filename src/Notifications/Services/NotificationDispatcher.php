@@ -140,8 +140,13 @@ class NotificationDispatcher
                     continue;
                 }
 
-                // Get notification data
+                // Get notification data. Channels that need a headline (push titles, email
+                // subjects) read `subject`; it lives on the notification, not in its data, so it
+                // is passed along here unless the data already sets one.
                 $data = $notification->getData() ?? [];
+                if (!isset($data['subject'])) {
+                    $data['subject'] = $notification->getSubject();
+                }
                 $meta = is_array($data['_meta'] ?? null) ? $data['_meta'] : [];
                 $meta['delivery_idempotency_key'] = ($notification->getUuid() ?? '') . ':' . $channelName;
                 $data['_meta'] = $meta;
@@ -363,7 +368,7 @@ class NotificationDispatcher
         string $notificationType
     ): array {
         foreach ($this->extensions as $extension) {
-            if (in_array($notificationType, $extension->getSupportedNotificationTypes(), true)) {
+            if ($this->extensionHandles($extension, $notificationType)) {
                 $data = $extension->beforeSend($data, $notifiable, $channel);
             }
         }
@@ -389,10 +394,20 @@ class NotificationDispatcher
         string $notificationType
     ): void {
         foreach ($this->extensions as $extension) {
-            if (in_array($notificationType, $extension->getSupportedNotificationTypes(), true)) {
+            if ($this->extensionHandles($extension, $notificationType)) {
                 $extension->afterSend($data, $notifiable, $channel, $success);
             }
         }
+    }
+
+    /**
+     * Whether an extension takes part in this notification type. `'*'` means every type.
+     */
+    private function extensionHandles(NotificationExtension $extension, string $notificationType): bool
+    {
+        $types = $extension->getSupportedNotificationTypes();
+
+        return in_array('*', $types, true) || in_array($notificationType, $types, true);
     }
 
     /**

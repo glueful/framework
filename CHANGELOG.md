@@ -6,6 +6,25 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.92.1] - 2026-11-18 — Alshat
+
+### Fixed
+- **Notification extensions that ask for every type now run.** An extension returning `['*']`
+  from `getSupportedNotificationTypes()` was compared literally against the notification type, so
+  `beforeSend()` and `afterSend()` never ran for it. `'*'` now means every type; named types
+  still match exactly. Notiva declares `['*']`, so its push hook was being skipped.
+- **Channels receive the notification's subject.** The dispatcher handed channels the
+  notification's data without its subject, so a push channel had no title and, unless the
+  sender added text to the data, sent an empty push: FCM accepted it and the phone showed
+  nothing. The subject is now added to the channel data as `subject` unless the data already
+  sets one.
+
+### Upgrade Notes
+- No configuration changes. Extensions that declare `['*']` now take part in every notification,
+  as they always claimed to; with glueful/notiva this gives pushes a title from the subject. If you
+  worked around the empty title by setting `title` in the notification data, it is kept. Text set
+  in `body` now shows under the title, so drop it if it repeats the subject.
+
 ## [1.92.0] - 2026-11-10 — Alshat
 
 ### Added
