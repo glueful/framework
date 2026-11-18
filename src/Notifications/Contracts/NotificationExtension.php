@@ -32,7 +32,7 @@ interface NotificationExtension
     /**
      * Get the supported notification types.
      *
-     * @return array<string> List of notification types supported by this extension
+     * @return array<string> Notification types this extension handles, or `['*']` for every type
      */
     public function getSupportedNotificationTypes(): array;
 

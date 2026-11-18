@@ -21,6 +21,16 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.92.1 — Alshat (Released 2026-11-18)
+- **Wildcard notification extensions run** — an extension declaring `['*']` was compared literally
+  against the notification type and never ran; `'*'` now matches every type, named types still
+  match exactly.
+- **Channels receive the subject** — the dispatcher adds the notification's subject to channel data
+  as `subject` unless the data sets one, so push channels get a title instead of sending an empty
+  push.
+- Notes: patch; no configuration changes. Pair with glueful/notiva 1.13.1, which sends FCM data
+  values as strings.
+
 ### 1.92.0 — Alshat (Released 2026-11-10)
 - **Public blobs can be cached for a year** — `GET /blobs/{uuid}?v=<version>` at a public blob's
   current version answers `public, max-age=31536000, immutable`; `BlobVersion::of()` gives the
