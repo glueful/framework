@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Glueful\Controllers;
 
 use Glueful\Bootstrap\ApplicationContext;
-use Glueful\Cache\CacheStore;
 use Glueful\Controllers\DTOs\BlobDeletedData;
 use Glueful\Controllers\DTOs\BlobInfoData;
 use Glueful\Controllers\DTOs\SignedUrlData;
@@ -32,8 +31,11 @@ use Glueful\Uploader\Contracts\BlobCreatedHook;
 use Glueful\Uploader\Contracts\BlobPublicUrlProvider;
 use Glueful\Uploader\Contracts\NullBlobAccessPolicy;
 use Glueful\Uploader\Contracts\NullBlobCreatedHook;
+use Glueful\Uploader\BlobVariantRenderer;
+use Glueful\Uploader\BlobVariantStore;
 use Glueful\Uploader\BlobVersion;
 use Glueful\Uploader\FileUploader;
+use Glueful\Uploader\Jobs\GenerateBlobVariantsJob;
 use Glueful\Uploader\UploadException;
 use Glueful\Validation\ValidationException;
 use Glueful\Support\SignedUrl;
@@ -50,8 +52,6 @@ class UploadController extends BaseController
     private BlobRepository $blobs;
     private StorageManager $storage;
     private UrlGenerator $urls;
-    /** @var CacheStore<mixed>|null */
-    private ?CacheStore $cache;
     private BlobCreatedHook $createdHook;
     private BlobAccessPolicy $accessPolicy;
     private LoggerInterface $logger;
@@ -77,7 +77,6 @@ class UploadController extends BaseController
         $this->createdHook = $createdHook ?? new NullBlobCreatedHook();
         $this->accessPolicy = $accessPolicy ?? new NullBlobAccessPolicy();
         $this->logger = $logger ?? new NullLogger();
-        $this->cache = $this->resolveCache();
     }
 
     #[ApiOperation(
@@ -181,6 +180,11 @@ class UploadController extends BaseController
                     'Upload could not be attributed to a tenant',
                     Response::HTTP_INTERNAL_SERVER_ERROR,
                 );
+            }
+
+            // The image's resized copies, made by the queue ahead of the first request for them.
+            if (BlobVariantRenderer::formatFromMime((string) ($result['mime_type'] ?? '')) !== null) {
+                GenerateBlobVariantsJob::dispatchFor($this->getContext(), $blobUuid);
             }
 
             if ((bool) ($thumbCfg['enabled'] ?? true)) {
@@ -307,7 +311,8 @@ class UploadController extends BaseController
         if (!$allowed) {
             return Response::notFound('Blob not found');
         }
-        $cacheControl = $this->cacheControlFor($request, $blob, $signatureValid, $allowed);
+        $shareable = $this->isShareable($blob, $signatureValid, $allowed);
+        $cacheControl = $this->cacheControlFor($request, $blob, $shareable);
 
         $disk = $this->resolveDisk($blob);
         $path = (string) ($blob['url'] ?? '');
@@ -329,8 +334,7 @@ class UploadController extends BaseController
         ) {
             // The blob's size and last update version the variant: an image changed in place
             // keeps its uuid, and must not be answered from the old variant or its ETag.
-            $version = (string) ($blob['updated_at'] ?? '') . '|' . (string) ($blob['size'] ?? '');
-            return $this->serveResizedImage($request, $uuid, $disk, $path, $resize, $mime, $version, $cacheControl);
+            return $this->serveResizedImage($request, $blob, $resize, $cacheControl, $shareable);
         }
 
         // No media processor bound: width/height/quality fall through to serving
@@ -471,24 +475,23 @@ class UploadController extends BaseController
     }
 
     /**
+     * A resized copy: the stored one when there is one (BlobVariantStore), else rendered and stored.
+     * A stored copy anyone may see, on a disk that signs URLs, is a redirect to the store itself.
+     *
+     * @param array<string, mixed> $blob
      * @param array<string, int|string|null> $resize
      */
     private function serveResizedImage(
         Request $request,
-        string $uuid,
-        string $disk,
-        string $path,
+        array $blob,
         array $resize,
-        string $sourceMime,
-        string $version = '',
         ?string $cacheControl = null,
+        bool $shareable = false,
     ): Response|\Symfony\Component\HttpFoundation\Response {
-        $cacheEnabled = (bool) $this->getConfig('uploads.image_processing.cache_enabled', true);
+        $storeEnabled = (bool) $this->getConfig('uploads.image_processing.cache_enabled', true);
         $cacheTtl = (int) $this->getConfig('uploads.image_processing.cache_ttl', 604800);
-        $cacheKey = $this->buildCacheKey($uuid, $resize, $version);
         $allowedFormats = (array) $this->getConfig('uploads.image_processing.allowed_formats', []);
         $etagEnabled = (bool) $this->getConfig('uploads.response.enable_etag', true);
-        $maxVariantBytes = (int) $this->getConfig('uploads.image_processing.max_variant_bytes', 5 * 1024 * 1024);
         $cacheControl ??= $this->getCacheControl($cacheTtl);
 
         $format = $resize['format'] ?? null;
@@ -500,10 +503,11 @@ class UploadController extends BaseController
             return Response::error('Unsupported image format', Response::HTTP_BAD_REQUEST);
         }
 
-        // Generate ETag from cache key
-        $etag = '"' . md5($cacheKey) . '"';
+        // The blob's size and last update version the copy: an image changed in place keeps its
+        // uuid, and must not be answered from the old copy or its ETag.
+        $version = (string) ($blob['updated_at'] ?? '') . '|' . (string) ($blob['size'] ?? '');
+        $etag = '"' . md5($this->buildCacheKey((string) ($blob['uuid'] ?? ''), $resize, $version)) . '"';
 
-        // Check If-None-Match for 304 response
         if ($etagEnabled) {
             $ifNoneMatch = $request->headers->get('If-None-Match');
             if ($ifNoneMatch !== null && $ifNoneMatch === $etag) {
@@ -515,80 +519,57 @@ class UploadController extends BaseController
             }
         }
 
-        // Check server-side cache. The variant bytes are stored base64-encoded (see the set below),
-        // so decode before serving; a decode failure (legacy/corrupt entry) falls through to re-render.
-        if ($cacheEnabled && $this->cache !== null) {
-            try {
-                $cached = $this->cache->get($cacheKey);
-            } catch (\Throwable $e) {
-                // An entry the store cannot read back (a serializer size limit, a corrupt value) is a
-                // miss: render the variant again rather than fail every request after the first.
-                $this->logger->warning('Image variant cache read failed; rendering again', [
-                    'key' => $cacheKey,
-                    'error' => $e->getMessage(),
-                ]);
-                $cached = null;
-            }
-            if (is_array($cached) && isset($cached['data'], $cached['mime']) && is_string($cached['data'])) {
-                $decoded = base64_decode($cached['data'], true);
-                if ($decoded !== false) {
-                    return $this->binaryResponse(
-                        $decoded,
-                        (string) $cached['mime'],
-                        $cacheControl,
-                        $etagEnabled ? $etag : null
-                    );
-                }
-            }
+        $expected = BlobVariantRenderer::expectedMime((string) ($blob['mime_type'] ?? ''), $resize);
+        $store = $storeEnabled ? $this->variantStore() : null;
+        // A signed URL is good for anyone holding it, so only a copy anyone may see is sent there.
+        $signed = $shareable ? $store?->temporaryUrl($blob, $resize, $expected) : null;
+        if ($signed !== null && $store !== null) {
+            return new \Symfony\Component\HttpFoundation\RedirectResponse($signed, 302, [
+                // Half the URL's life, so a cache never hands out one that has expired.
+                'Cache-Control' => 'public, max-age=' . max(1, intdiv($store->redirectTtl(), 2)),
+                'X-Content-Type-Options' => 'nosniff',
+            ]);
+        }
+        $stored = $store?->get($blob, $resize, $expected);
+        if ($stored !== null) {
+            return $this->binaryResponse($stored, $expected, $cacheControl, $etagEnabled ? $etag : null);
         }
 
-        $temp = $this->readToTempFile($disk, $path);
+        // show() serves the original when the media seam is absent, so this path is unreachable
+        // with a null processor — but say so loudly if it happens.
+        if ($this->media === null) {
+            throw new \RuntimeException('serveResizedImage() requires the media processor seam.');
+        }
+        $renderer = BlobVariantRenderer::fromContext($this->getContext(), $this->media, $this->imageSecurity);
+        if ($renderer === null) {
+            throw new \RuntimeException('serveResizedImage() requires the media processor seam.');
+        }
         try {
-            try {
-                $this->validateVariantSource($temp, $sourceMime, $resize);
-            } catch (BusinessLogicException $e) {
-                return Response::error($e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
-            }
+            ['data' => $data, 'mime' => $mime] = $renderer->render($blob, $resize);
+        } catch (BusinessLogicException $e) {
+            return Response::error($e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
 
-            // show() serves the original when the media seam is absent, so this path
-            // is unreachable with a null processor — but say so loudly if it happens.
-            $media = $this->media;
-            if ($media === null) {
-                throw new \RuntimeException('serveResizedImage() requires the media processor seam.');
-            }
-            ['data' => $data, 'mime' => $mime] = $media->renderVariant(
-                $temp,
-                $this->buildVariantOptions($resize)
-            );
+        // A copy that came back in another type than asked for would be stored under a name nothing
+        // reads: it is served, not stored.
+        if ($store !== null && $mime === $expected) {
+            $store->put($blob, $resize, $mime, $data);
+        }
 
-            // Validate max_variant_bytes
-            if ($maxVariantBytes > 0 && strlen($data) > $maxVariantBytes) {
-                return Response::error(
-                    'Resized image exceeds maximum allowed size',
-                    Response::HTTP_UNPROCESSABLE_ENTITY
-                );
-            }
+        return $this->binaryResponse($data, $mime, $cacheControl, $etagEnabled ? $etag : null);
+    }
 
-            if ($cacheEnabled && $this->cache !== null) {
-                // Store base64-encoded: raw image bytes aren't valid UTF-8 and break JSON-based cache
-                // serializers (e.g. the Redis driver's SecureSerializer -> json_encode). A variant the
-                // store cannot hold is served uncached.
-                try {
-                    $this->cache->set($cacheKey, ['data' => base64_encode($data), 'mime' => $mime], $cacheTtl);
-                } catch (\Throwable $e) {
-                    $this->logger->warning('Image variant not cached', [
-                        'key' => $cacheKey,
-                        'error' => $e->getMessage(),
-                    ]);
-                }
-            }
-
-            return $this->binaryResponse($data, $mime, $cacheControl, $etagEnabled ? $etag : null);
-        } finally {
-            if (is_file($temp)) {
-                @unlink($temp);
+    private function variantStore(): BlobVariantStore
+    {
+        $container = $this->getContext()->getContainer();
+        if ($container->has(BlobVariantStore::class)) {
+            $store = $container->get(BlobVariantStore::class);
+            if ($store instanceof BlobVariantStore) {
+                return $store;
             }
         }
+
+        return BlobVariantStore::fromContext($this->getContext());
     }
 
     /**
@@ -763,68 +744,6 @@ class UploadController extends BaseController
         return true;
     }
 
-    /**
-     * Check a variant's source before decoding it.
-     *
-     * The requested size is capped by buildVariantOptions(), so a resize of a large source
-     * only has to be safe to decode. With no target size the variant keeps the source's
-     * dimensions, so the source itself must fit the limits.
-     *
-     * @param array<string, int|string|null> $resize
-     */
-    private function validateVariantSource(string $path, string $sourceMime, array $resize): void
-    {
-        $format = $this->formatFromMime($sourceMime);
-        if (($resize['width'] ?? null) === null && ($resize['height'] ?? null) === null) {
-            $this->imageSecurity?->validateImageFile($path, $format);
-            return;
-        }
-
-        $maxPixels = (int) $this->getConfig('uploads.image_processing.max_pixels', 25000000);
-        $this->imageSecurity?->validateResizeSource($path, $maxPixels, $format);
-    }
-
-    /**
-     * Assemble the option bag passed to MediaProcessorInterface::renderVariant().
-     *
-     * Merges the request's resize params (width/height/quality/format/fit) with
-     * the core-owned `uploads.image_processing.*` clamps/defaults. The width/height
-     * are clamped to max_width/max_height and quality defaults to default_quality.
-     * The actual resize/encode (fit semantics, format) is performed by the bound
-     * processor in the extension.
-     *
-     * @param array<string, int|string|null> $resize
-     * @return array<string, int|string|null>
-     */
-    private function buildVariantOptions(array $resize): array
-    {
-        $maxWidth = (int) $this->getConfig('uploads.image_processing.max_width', 2048);
-        $maxHeight = (int) $this->getConfig('uploads.image_processing.max_height', 2048);
-
-        $width = $resize['width'] ?? null;
-        $height = $resize['height'] ?? null;
-
-        if (is_int($width) && $width > $maxWidth) {
-            $width = $maxWidth;
-        }
-        if (is_int($height) && $height > $maxHeight) {
-            $height = $maxHeight;
-        }
-
-        $quality = $resize['quality'] ?? null;
-        if ($quality === null) {
-            $quality = (int) $this->getConfig('uploads.image_processing.default_quality', 85);
-        }
-
-        return [
-            'width' => $width,
-            'height' => $height,
-            'quality' => $quality,
-            'format' => $resize['format'] ?? null,
-            'fit' => $resize['fit'] ?? null,
-        ];
-    }
-
     private function binaryResponse(
         string $data,
         string $mime,
@@ -882,16 +801,8 @@ class UploadController extends BaseController
      *
      * @param array<string, mixed> $blob
      */
-    private function cacheControlFor(Request $request, array $blob, bool $signatureValid, bool $allowed): ?string
+    private function cacheControlFor(Request $request, array $blob, bool $shareable): ?string
     {
-        $anonymous = $this->authenticatedUserUuid() === null && !$signatureValid;
-        $shareable = (string) ($blob['visibility'] ?? 'private') === 'public'
-            && !$this->requiresAuthFor('retrieve')
-            && ($anonymous ? $allowed : $this->accessPolicy->authorizeAccess(
-                $blob,
-                new BlobAccessContext(BlobAction::VIEW, null, false),
-            ));
-
         if (!$shareable) {
             $private = $this->getConfig('uploads.response.private_cache_control');
             return is_string($private) && $private !== '' ? $private : 'private, no-cache';
@@ -904,6 +815,23 @@ class UploadController extends BaseController
         }
 
         return null;
+    }
+
+    /**
+     * Whether a blob's answer is one an anonymous, unsigned visitor would also get.
+     *
+     * @param array<string, mixed> $blob
+     */
+    private function isShareable(array $blob, bool $signatureValid, bool $allowed): bool
+    {
+        $anonymous = $this->authenticatedUserUuid() === null && !$signatureValid;
+
+        return (string) ($blob['visibility'] ?? 'private') === 'public'
+            && !$this->requiresAuthFor('retrieve')
+            && ($anonymous ? $allowed : $this->accessPolicy->authorizeAccess(
+                $blob,
+                new BlobAccessContext(BlobAction::VIEW, null, false),
+            ));
     }
 
     /**
@@ -1080,20 +1008,6 @@ class UploadController extends BaseController
         );
     }
 
-    /**
-     * @return CacheStore<mixed>|null
-     */
-    private function resolveCache(): ?CacheStore
-    {
-        try {
-            /** @var CacheStore<mixed> $cache */
-            $cache = container($this->getContext())->get(CacheStore::class);
-            return $cache;
-        } catch (\Throwable) {
-            return null;
-        }
-    }
-
     private function getConfig(string $key, mixed $default = null): mixed
     {
         return config($this->getContext(), $key, $default);
@@ -1251,18 +1165,6 @@ class UploadController extends BaseController
         };
     }
 
-    private function formatToMime(?string $format): string
-    {
-        $format = $format !== null ? strtolower($format) : '';
-        return match ($format) {
-            'jpeg', 'jpg' => 'image/jpeg',
-            'png' => 'image/png',
-            'gif' => 'image/gif',
-            'webp' => 'image/webp',
-            default => 'application/octet-stream',
-        };
-    }
-
     private function formatFromMime(string $mime): ?string
     {
         $mime = strtolower(trim(explode(';', $mime, 2)[0]));
@@ -1274,29 +1176,5 @@ class UploadController extends BaseController
             'image/webp' => 'webp',
             default => null,
         };
-    }
-
-    private function readToTempFile(string $disk, string $path): string
-    {
-        $stream = $this->storage->disk($disk)->readStream($path);
-        if (!is_resource($stream)) {
-            throw new \RuntimeException('File not found');
-        }
-
-        $temp = tempnam(sys_get_temp_dir(), 'blob_');
-        if ($temp === false) {
-            throw new \RuntimeException('Failed to create temp file');
-        }
-
-        $out = fopen($temp, 'w');
-        if ($out === false) {
-            throw new \RuntimeException('Failed to write temp file');
-        }
-
-        stream_copy_to_stream($stream, $out);
-        fclose($out);
-        fclose($stream);
-
-        return $temp;
     }
 }

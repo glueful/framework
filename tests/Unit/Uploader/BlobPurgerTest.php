@@ -8,6 +8,7 @@ use Glueful\Database\Connection;
 use Glueful\Storage\PathGuard;
 use Glueful\Storage\StorageManager;
 use Glueful\Uploader\BlobPurger;
+use Glueful\Uploader\BlobVariantStore;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -50,6 +51,24 @@ final class BlobPurgerTest extends TestCase
         self::assertFileExists($this->dir . '/disk/a/recent.png');
         self::assertFileExists($this->dir . '/disk/a/active.png');
         self::assertSame(['active000001', 'recent000001'], $this->uuids($db));
+    }
+
+    public function testAPurgedBlobLosesItsStoredCopiesToo(): void
+    {
+        [$db, $storage] = $this->setUpStore();
+        $this->seed($db, 'old000000001', 'deleted', 'a/old.png', deletedAt: '2020-01-01 00:00:00');
+        $this->seed($db, 'active000001', 'active', 'a/active.png', deletedAt: null);
+        foreach (['old000000001', 'active000001'] as $uuid) {
+            mkdir($this->dir . "/disk/_variants/{$uuid}/0123456789ab", 0755, true);
+            file_put_contents($this->dir . "/disk/_variants/{$uuid}/0123456789ab/c.webp", 'w');
+        }
+
+        $variants = new BlobVariantStore($storage, 'uploads');
+        $result = (new BlobPurger($db, $storage, 'uploads', null, $variants))->purgeDeletedOlderThan(30);
+
+        self::assertSame(['purged' => 1, 'failed' => 0], $result);
+        self::assertDirectoryDoesNotExist($this->dir . '/disk/_variants/old000000001');
+        self::assertFileExists($this->dir . '/disk/_variants/active000001/0123456789ab/c.webp');
     }
 
     public function testABlobWhoseFileCannotBeDeletedKeepsItsRow(): void

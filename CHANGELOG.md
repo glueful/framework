@@ -6,6 +6,51 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.93.0] - 2026-11-25 — Altais
+
+Resized images are made once and kept: each copy is a file beside its image until the image changes,
+and copies can be made at upload so no visitor waits for one.
+
+### Added
+- **Resized images are stored as files, kept until the image changes.** A copy made by
+  `GET /blobs/{uuid}?width=…` was base64 text in the app cache for `cache_ttl` (seven days), so it
+  was rendered again each week, and a request that found it gone waited about a second. Each copy
+  is now a file beside its image, on the image's own disk (local, S3, R2…), at
+  `_variants/{uuid}/{version}/{settings}.{ext}`, served from there until the image is replaced.
+  `uploads.image_processing.variant_disk` puts every copy on one disk instead;
+  `max_stored_variants` (32) caps the copies per image version, so arbitrary sizes cannot fill
+  the disk: past it a copy is served without being stored. A copy that cannot be stored is still
+  served. Responses, headers and ETags are unchanged. `BlobVariantStore` and
+  `BlobVariantRenderer` are the new services.
+- **Copies made at upload (opt-in).** With `uploads.image_processing.pregenerate.enabled`, an
+  uploaded image queues `GenerateBlobVariantsJob`, which makes each configured width in each
+  configured format ahead of the first request. A queue that is down leaves the upload standing.
+  `GenerateBlobVariantsJob::dispatchFor()` queues it for an image changed another way.
+- **Stored copies on cloud storage are fetched from the store (opt-in).** With
+  `uploads.image_processing.variant_redirect_ttl` above 0, a stored copy of a public image on a
+  disk that signs URLs (every cloud driver: `glueful/storage-s3` and its R2, MinIO, Spaces and
+  Wasabi presets, `glueful/storage-gcs`, `glueful/storage-azure`) is answered with a 302 to a
+  signed URL instead of being streamed through the app; caches keep the redirect for half that
+  time. A private image, or a disk that cannot sign (local), is streamed as before.
+  `StorageManager::temporaryUrl($path, $ttl, $disk)` signs any file on such a disk, or gives null.
+- **`blobs:variants:prune [--all]`** removes copies whose image is gone or has changed, including
+  copies on a disk images have moved off. Purging a deleted blob removes its copies too.
+
+### Changed
+- The app cache no longer holds image variants. Existing entries are not read and expire within
+  `cache_ttl`; nothing to migrate.
+
+### Upgrade Notes
+- Resized copies now take disk space beside your uploads (under `_variants/` on each image's disk)
+  instead of app cache memory. At most `max_stored_variants` (32) per image version; set
+  `variant_disk` to keep them elsewhere, or `cache_enabled` to `false` to store none.
+- Pre-generation is off by default. To turn it on, set `UPLOADS_PREGENERATE_VARIANTS=true`, list
+  `uploads.image_processing.pregenerate.widths` and run a queue worker on its queue.
+- Schedule or run `php glueful blobs:variants:prune` occasionally if images move between disks.
+- With images on cloud storage, set `UPLOADS_VARIANT_REDIRECT_TTL` (e.g. `3600`) so stored copies
+  are fetched from the store, not streamed through PHP. The browser then loads them from the
+  bucket's host, so a Content-Security-Policy `img-src` must allow it.
+
 ## [1.92.1] - 2026-11-18 — Alshat
 
 ### Fixed
