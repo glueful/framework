@@ -95,6 +95,48 @@ final class QueueWorkerTest extends TestCase
         self::assertSame(0, $this->queueSize('default'), 'job should be removed from the queue');
     }
 
+    public function testAJobAllowedOneAttemptFailsOnItsFirstFailure(): void
+    {
+        // DatabaseQueue reserved a job with attempts + 1 but handed the worker the row it had read
+        // (attempts 0), so 0 < min(1, tries) released a job allowed one attempt: it ran twice.
+        TestFailingJob::$ran = 0;
+        TestFailingJob::$max = 1;
+        $manager = $this->manager();
+        $manager->push(TestFailingJob::class, [], 'default');
+        $worker = new QueueWorker($manager, new SpyWorkerMonitor(), new NullLogger(), $this->context);
+
+        $worker->runOnce('database', ['default'], $this->options());
+
+        self::assertSame(1, TestFailingJob::$ran);
+        self::assertSame(0, $this->queueSize('default'), 'not released for another try');
+        self::assertCount(1, $this->failedRows());
+    }
+
+    public function testAJobIsDeliveredExactlyItsMaximumNumberOfTimes(): void
+    {
+        TestFailingJob::$ran = 0;
+        TestFailingJob::$max = 2;
+        $manager = $this->manager();
+        $manager->push(TestFailingJob::class, [], 'default');
+        $worker = new QueueWorker($manager, new SpyWorkerMonitor(), new NullLogger(), $this->context);
+
+        for ($i = 0; $i < 4 && $this->queueSize('default') > 0; $i++) {
+            Connection::fromContext($this->context)->table('queue_jobs')
+                ->where('queue', 'default')
+                ->update(['available_at' => date('Y-m-d H:i:s', time() - 5)]);
+            $worker->runOnce('database', ['default'], $this->options());
+        }
+
+        self::assertSame(2, TestFailingJob::$ran, 'two deliveries for a job allowed two attempts');
+        self::assertCount(1, $this->failedRows());
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function failedRows(): array
+    {
+        return Connection::fromContext($this->context)->table('queue_failed_jobs')->get();
+    }
+
     public function testRunOnceRejectsTamperedSignedPayload(): void
     {
         TestSuccessJob::$ran = 0;
@@ -471,6 +513,23 @@ final class TestSuccessJob extends Job
     public function handle(): void
     {
         self::$ran++;
+    }
+}
+
+final class TestFailingJob extends Job
+{
+    public static int $ran = 0;
+    public static int $max = 1;
+
+    public function handle(): void
+    {
+        self::$ran++;
+        throw new \RuntimeException('always fails');
+    }
+
+    public function getMaxAttempts(): int
+    {
+        return self::$max;
     }
 }
 

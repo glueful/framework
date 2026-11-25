@@ -6,6 +6,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+- **A database-queue job is delivered exactly its maximum number of times.** `DatabaseQueue`
+  counted a delivery's attempt in the table but handed the worker the row it had read before, so
+  every job ran one more time than its `maxAttempts`: a job allowed one attempt was retried once
+  after failing. The job now carries the attempt it is on, as the Redis driver's already did.
+
 ## [1.93.0] - 2026-11-25 — Altais
 
 Resized images are made once and kept: each copy is a file beside its image until the image changes,
