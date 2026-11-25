@@ -77,8 +77,28 @@ return [
         'default_fit' => env('UPLOADS_DEFAULT_FIT', 'contain'), // contain, cover, fill
         'allowed_formats' => ['jpeg', 'jpg', 'png', 'webp', 'gif'],
         'max_variant_bytes' => (int) env('UPLOADS_MAX_VARIANT_BYTES', 5 * 1024 * 1024), // 5MB max for resized
+        // Store each resized copy as a file and serve it from there, kept until its image changes
+        // (BlobVariantStore). Off: every copy is rendered on every request.
         'cache_enabled' => env('UPLOADS_CACHE_ENABLED', true),
+        // max-age for a copy asked for without `?v=` (a URL naming the version is immutable).
         'cache_ttl' => (int) env('UPLOADS_CACHE_TTL', 604800), // 7 days
+        // Where copies are stored: null beside each image, on its own disk (local, S3, R2…); or
+        // one disk for all of them, e.g. a local disk while the originals are in a bucket.
+        'variant_disk' => env('UPLOADS_VARIANT_DISK'),
+        // The folder on that disk: <prefix>/<uuid>/<version>/<settings>.<ext>
+        'variant_prefix' => '_variants',
+        // Copies kept per image version; a size asked for past this is served, not stored, so
+        // requests for arbitrary sizes cannot fill the disk.
+        'max_stored_variants' => (int) env('UPLOADS_MAX_STORED_VARIANTS', 32),
+        // Make copies when an image is uploaded, on the queue, so no visitor waits for one.
+        // Each width in each format (null = the image's own), for images of these types.
+        'pregenerate' => [
+            'enabled' => env('UPLOADS_PREGENERATE_VARIANTS', false),
+            'queue' => env('UPLOADS_PREGENERATE_QUEUE', 'default'),
+            'widths' => [],
+            'formats' => [null],
+            'mime_types' => ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+        ],
     ],
 
     // Auto-generate thumbnails on upload (disabled by default - use on-demand resize instead)

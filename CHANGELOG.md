@@ -6,6 +6,28 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Added
+- **Resized images are stored as files, kept until the image changes.** A copy made by
+  `GET /blobs/{uuid}?width=…` was base64 text in the app cache for `cache_ttl` (seven days), so it
+  was rendered again each week, and a request that found it gone waited about a second. Each copy
+  is now a file beside its image, on the image's own disk (local, S3, R2…), at
+  `_variants/{uuid}/{version}/{settings}.{ext}`, served from there until the image is replaced.
+  `uploads.image_processing.variant_disk` puts every copy on one disk instead;
+  `max_stored_variants` (32) caps the copies per image version, so arbitrary sizes cannot fill
+  the disk: past it a copy is served without being stored. A copy that cannot be stored is still
+  served. Responses, headers and ETags are unchanged. `BlobVariantStore` and
+  `BlobVariantRenderer` are the new services.
+- **Copies made at upload (opt-in).** With `uploads.image_processing.pregenerate.enabled`, an
+  uploaded image queues `GenerateBlobVariantsJob`, which makes each configured width in each
+  configured format ahead of the first request. A queue that is down leaves the upload standing.
+  `GenerateBlobVariantsJob::dispatchFor()` queues it for an image changed another way.
+- **`blobs:variants:prune [--all]`** removes copies whose image is gone or has changed, including
+  copies on a disk images have moved off. Purging a deleted blob removes its copies too.
+
+### Changed
+- The app cache no longer holds image variants. Existing entries are not read and expire within
+  `cache_ttl`; nothing to migrate.
+
 ## [1.92.1] - 2026-11-18 — Alshat
 
 ### Fixed

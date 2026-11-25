@@ -57,6 +57,7 @@ final class UploadControllerVariantTest extends TestCase
     private ApplicationContext $context;
     private string $blobUuid;
     private string $originalBytes;
+    private VariantRecordingQueue $queue;
 
     protected function setUp(): void
     {
@@ -99,7 +100,9 @@ final class UploadControllerVariantTest extends TestCase
         file_put_contents(
             $cfg . '/uploads.php',
             "<?php\nreturn ['enabled' => true, 'disk' => 'uploads', 'path_prefix' => '', 'access' => 'public', "
-            . "'allowed_types' => ['image/*', 'video/*', 'audio/*'], 'max_size' => 10485760];\n"
+            . "'allowed_types' => ['image/*', 'video/*', 'audio/*'], 'max_size' => 10485760, "
+            . "'image_processing' => ['pregenerate' => ['enabled' => true, 'queue' => 'images', "
+            . "'widths' => [100, 200], 'formats' => ['webp'], 'mime_types' => ['image/png']]]];\n"
         );
 
         $this->resetSharedConnection();
@@ -113,8 +116,13 @@ final class UploadControllerVariantTest extends TestCase
         $request->attributes->set('user', ['uuid' => 'usr123456789']);
         /** @var \Glueful\Container\Container $container */
         $container = $this->context->getContainer();
+        $this->queue = new VariantRecordingQueue();
         $container->load([
             'request' => new ValueDefinition('request', $request),
+            \Glueful\Queue\QueueManager::class => new ValueDefinition(
+                \Glueful\Queue\QueueManager::class,
+                $this->queue,
+            ),
         ]);
 
         // Seed a stored image file + a matching blob row.
@@ -249,7 +257,7 @@ final class UploadControllerVariantTest extends TestCase
         // An image optimized in place keeps its uuid: the variant cache and its ETag were keyed
         // on uuid and size parameters alone, so the old variant was served, and revalidated as
         // unchanged, for as long as the cache lived.
-        $fake = new VariantFakeMediaProcessor();
+        $fake = new VariantFakeMediaProcessor('image/png');
         $controller = $this->makeController($fake);
         $first = $controller->show(
             Request::create('/blobs/' . $this->blobUuid, 'GET', ['width' => 100]),
@@ -257,6 +265,9 @@ final class UploadControllerVariantTest extends TestCase
         );
         $staleEtag = (string) $first->headers->get('ETag');
         self::assertSame(1, $fake->renderCalls);
+        $controller->show(Request::create('/blobs/' . $this->blobUuid, 'GET', ['width' => 100]), $this->blobUuid);
+        self::assertSame(1, $fake->renderCalls, 'served from the stored copy');
+        $oldVersion = BlobVersion::of($this->blobRow());
 
         \Glueful\Database\Connection::fromContext($this->context)->table('blobs')
             ->where('uuid', '=', $this->blobUuid)
@@ -269,47 +280,76 @@ final class UploadControllerVariantTest extends TestCase
         self::assertSame(200, $response->getStatusCode(), 'the old ETag no longer matches');
         self::assertNotSame($staleEtag, $response->headers->get('ETag'));
         self::assertSame(2, $fake->renderCalls, 'the variant is rendered again, not read from the cache');
+        self::assertDirectoryDoesNotExist(
+            $this->uploadsRoot . '/_variants/' . $this->blobUuid . '/' . $oldVersion,
+            'the old version\'s copies are removed',
+        );
     }
 
-    /**
-     * A cached variant the cache cannot read back — the Redis driver's serializer refuses an entry
-     * over its size limit on the way out though it wrote it — is a miss: the variant is rendered
-     * again and served, never a 500 on every request after the first.
-     */
-    public function testAVariantTheCacheCannotReadBackIsRenderedAgain(): void
+    public function testAVariantIsStoredBesideTheImageAndServedFromThere(): void
     {
-        $this->useCache(new VariantUnreadableCache());
-        $fake = new VariantFakeMediaProcessor();
+        // Resized copies were base64 text in the app cache for seven days, rendered again each week.
+        // Now each is a file beside the image, under its version, kept until the image changes.
+        $fake = new VariantFakeMediaProcessor('image/png');
         $controller = $this->makeController($fake);
         $request = fn () => Request::create('/blobs/' . $this->blobUuid, 'GET', ['width' => 100]);
 
         $first = $controller->show($request(), $this->blobUuid);
+        $second = $this->makeController($fake)->show($request(), $this->blobUuid);
+
+        self::assertSame(1, $fake->renderCalls, 'the second request reads the stored copy');
+        self::assertSame(VariantFakeMediaProcessor::DATA, $this->bodyOf($second));
+        self::assertSame('image/png', $second->headers->get('Content-Type'));
+        self::assertSame($first->headers->get('ETag'), $second->headers->get('ETag'));
+        $stored = glob($this->uploadsRoot . '/_variants/' . $this->blobUuid . '/'
+            . BlobVersion::of($this->blobRow()) . '/*.png') ?: [];
+        self::assertCount(1, $stored);
+        self::assertSame(VariantFakeMediaProcessor::DATA, file_get_contents($stored[0]));
+    }
+
+    public function testAVariantInAnotherFormatThanAskedForIsServedButNotStored(): void
+    {
+        // The copy is named for the format it was asked in; one that came back otherwise would be
+        // stored under a name nothing reads.
+        $fake = new VariantFakeMediaProcessor();
+        $controller = $this->makeController($fake);
+        $request = fn () => Request::create('/blobs/' . $this->blobUuid, 'GET', ['width' => 100]);
+
+        $controller->show($request(), $this->blobUuid);
         $second = $controller->show($request(), $this->blobUuid);
 
-        self::assertSame(200, $first->getStatusCode());
-        self::assertSame(200, $second->getStatusCode());
-        self::assertSame(VariantFakeMediaProcessor::DATA, $this->bodyOf($second));
-        self::assertSame(2, $fake->renderCalls, 'rendered again, not answered from the unreadable entry');
+        self::assertSame(VariantFakeMediaProcessor::MIME, $second->headers->get('Content-Type'));
+        self::assertSame(2, $fake->renderCalls);
+        self::assertDirectoryDoesNotExist($this->uploadsRoot . '/_variants');
     }
 
-    /** A variant the cache cannot store is still served. */
-    public function testAVariantTheCacheCannotStoreIsStillServed(): void
+    public function testAVariantTheStoreCannotWriteIsStillServed(): void
     {
-        $this->useCache(new VariantUnwritableCache());
-        $response = $this->makeController(new VariantFakeMediaProcessor())->show(
-            Request::create('/blobs/' . $this->blobUuid, 'GET', ['width' => 100]),
-            $this->blobUuid,
-        );
-        self::assertSame(200, $response->getStatusCode());
-        self::assertSame(VariantFakeMediaProcessor::DATA, $this->bodyOf($response));
+        $this->useStore(new \Glueful\Uploader\BlobVariantStore(
+            $this->context->getContainer()->get(StorageManager::class),
+            'uploads',
+            'missing-disk',
+        ));
+        $fake = new VariantFakeMediaProcessor('image/png');
+        $request = fn () => Request::create('/blobs/' . $this->blobUuid, 'GET', ['width' => 100]);
+
+        $first = $this->makeController($fake)->show($request(), $this->blobUuid);
+        $second = $this->makeController($fake)->show($request(), $this->blobUuid);
+
+        self::assertSame(200, $first->getStatusCode());
+        self::assertSame(VariantFakeMediaProcessor::DATA, $this->bodyOf($second));
+        self::assertSame(2, $fake->renderCalls, 'rendered each time, never a 500');
     }
 
-    private function useCache(\Glueful\Cache\CacheStore $cache): void
+    private function useStore(\Glueful\Uploader\BlobVariantStore $store): void
     {
         /** @var \Glueful\Container\Container $container */
         $container = $this->context->getContainer();
         $container->load([
-            \Glueful\Cache\CacheStore::class => new ValueDefinition(\Glueful\Cache\CacheStore::class, $cache),
+            \Glueful\Uploader\BlobVariantStore::class => new ValueDefinition(
+                \Glueful\Uploader\BlobVariantStore::class,
+                $store,
+            ),
         ]);
     }
 
@@ -640,6 +680,97 @@ final class UploadControllerVariantTest extends TestCase
         self::assertMatchesRegularExpression('/^[a-f0-9]{12}$/', BlobVersion::of($row));
     }
 
+    public function testAnUploadedImageQueuesItsCopies(): void
+    {
+        // Copies made when an image is uploaded, so no visitor waits for one to be rendered.
+        $response = $this->makeController(null)->upload($this->uploadRequest());
+
+        self::assertSame(201, $response->getStatusCode());
+        $uuid = (string) (json_decode((string) $response->getContent(), true)['data']['blob_uuid'] ?? '');
+        self::assertCount(1, $this->queue->pushed);
+        self::assertSame(\Glueful\Uploader\Jobs\GenerateBlobVariantsJob::class, $this->queue->pushed[0]['job']);
+        self::assertSame('images', $this->queue->pushed[0]['queue']);
+        self::assertSame($uuid, $this->queue->pushed[0]['data']['blob_uuid']);
+    }
+
+    public function testAQueueThatFailsLeavesTheUploadStanding(): void
+    {
+        $this->queue->fail = true;
+        $response = $this->makeController(null)->upload($this->uploadRequest());
+
+        self::assertSame(201, $response->getStatusCode());
+    }
+
+    public function testTheJobStoresEachConfiguredCopyOnce(): void
+    {
+        $fake = new VariantFakeMediaProcessor('image/webp');
+        $this->bindMedia($fake);
+        $job = fn () => new \Glueful\Uploader\Jobs\GenerateBlobVariantsJob(
+            ['blob_uuid' => $this->blobUuid],
+            $this->context,
+        );
+
+        $job()->handle();
+        self::assertSame(2, $fake->renderCalls, 'one per configured width');
+        $job()->handle();
+        self::assertSame(2, $fake->renderCalls, 'a stored copy is not rendered again');
+
+        // The route finds them: same settings, same names.
+        $route = new VariantFakeMediaProcessor('image/webp');
+        $response = $this->makeController($route)->show(
+            Request::create('/blobs/' . $this->blobUuid, 'GET', ['width' => 200, 'format' => 'webp']),
+            $this->blobUuid,
+        );
+        self::assertSame(200, $response->getStatusCode());
+        self::assertSame(0, $route->renderCalls);
+    }
+
+    public function testTheJobLeavesImagesOfOtherTypesAlone(): void
+    {
+        $fake = new VariantFakeMediaProcessor('image/webp');
+        $this->bindMedia($fake);
+        \Glueful\Database\Connection::fromContext($this->context)->table('blobs')
+            ->where('uuid', '=', $this->blobUuid)
+            ->update(['mime_type' => 'image/gif']);
+
+        (new \Glueful\Uploader\Jobs\GenerateBlobVariantsJob(['blob_uuid' => $this->blobUuid], $this->context))
+            ->handle();
+
+        self::assertSame(0, $fake->renderCalls);
+    }
+
+    public function testThePruneCommandRemovesCopiesOfImagesThatAreGone(): void
+    {
+        $this->makeController(new VariantFakeMediaProcessor('image/png'))->show(
+            Request::create('/blobs/' . $this->blobUuid, 'GET', ['width' => 100]),
+            $this->blobUuid,
+        );
+        mkdir($this->uploadsRoot . '/_variants/gone00000001/0123456789ab', 0755, true);
+        file_put_contents($this->uploadsRoot . '/_variants/gone00000001/0123456789ab/a.webp', 'w');
+
+        $command = new \Glueful\Console\Commands\Storage\BlobVariantsPruneCommand(
+            $this->context->getContainer(),
+            $this->context,
+        );
+        $tester = new \Symfony\Component\Console\Tester\CommandTester($command);
+
+        self::assertSame(0, $tester->execute([]));
+        self::assertDirectoryDoesNotExist($this->uploadsRoot . '/_variants/gone00000001');
+        self::assertCount(1, glob($this->uploadsRoot . '/_variants/' . $this->blobUuid . '/*/*.png') ?: []);
+
+        self::assertSame(0, $tester->execute(['--all' => true]));
+        self::assertSame([], glob($this->uploadsRoot . '/_variants/*') ?: []);
+    }
+
+    private function bindMedia(MediaProcessorInterface $media): void
+    {
+        /** @var \Glueful\Container\Container $container */
+        $container = $this->context->getContainer();
+        $container->load([
+            MediaProcessorInterface::class => new ValueDefinition(MediaProcessorInterface::class, $media),
+        ]);
+    }
+
     private function asAnonymous(): void
     {
         $this->context->getContainer()->get('request')->attributes->remove('user');
@@ -791,6 +922,11 @@ final class VariantFakeMediaProcessor implements MediaProcessorInterface
 
     public int $renderCalls = 0;
 
+    /** @param string $mime the type it answers; the stored copy is kept only when it is the one asked for */
+    public function __construct(private readonly string $mime = self::MIME)
+    {
+    }
+
     public function extractMetadata(string $filepath, string $mimeType): MediaMetadata
     {
         return new MediaMetadata('image', 1, 1);
@@ -822,36 +958,28 @@ final class VariantFakeMediaProcessor implements MediaProcessorInterface
     {
         $this->renderCalls++;
 
-        return ['data' => self::DATA, 'mime' => self::MIME];
+        return ['data' => self::DATA, 'mime' => $this->mime];
     }
 }
 
-/**
- * A cache that stores what it is given and cannot read a variant back, as the Redis driver did for
- * any entry over its serializer's 1MB read limit.
- *
- * @extends \Glueful\Cache\Drivers\ArrayCacheDriver<mixed>
- */
-class VariantUnreadableCache extends \Glueful\Cache\Drivers\ArrayCacheDriver
+/** Records what is pushed instead of queueing it; set $fail to make every push throw. */
+final class VariantRecordingQueue extends \Glueful\Queue\QueueManager
 {
-    public function get(string $key, mixed $default = null): mixed
+    /** @var list<array{job: string, data: array<string, mixed>, queue: string|null}> */
+    public array $pushed = [];
+    public bool $fail = false;
+
+    public function __construct()
     {
-        if (parent::get($key) !== null) {
-            throw new \InvalidArgumentException('Serialized data exceeds maximum size limit');
+    }
+
+    public function push(string $job, array $data = [], ?string $queue = null, ?string $connection = null): string
+    {
+        if ($this->fail) {
+            throw new \RuntimeException('queue unavailable');
         }
-        return $default;
-    }
-}
+        $this->pushed[] = ['job' => $job, 'data' => $data, 'queue' => $queue];
 
-/**
- * A cache that refuses to store anything.
- *
- * @extends \Glueful\Cache\Drivers\ArrayCacheDriver<mixed>
- */
-class VariantUnwritableCache extends \Glueful\Cache\Drivers\ArrayCacheDriver
-{
-    public function set(string $key, mixed $value, null|int|\DateInterval $ttl = null): bool
-    {
-        throw new \RuntimeException('Serialization failed: Serialized data exceeds maximum size limit');
+        return 'job-' . count($this->pushed);
     }
 }

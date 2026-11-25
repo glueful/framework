@@ -13,9 +13,9 @@ use function config;
 
 /**
  * Removes blobs that were deleted more than a grace period ago: the stored file first, through the
- * disk the blob names, then the row. Deleting a blob only marks it, so without this its bytes stay
- * on the disk for good. A blob whose file cannot be deleted keeps its row, so a later run retries
- * instead of losing track of the file.
+ * disk the blob names, then its resized copies (BlobVariantStore), then the row. Deleting a blob
+ * only marks it, so without this its bytes stay on the disk for good. A blob whose file cannot be
+ * deleted keeps its row, so a later run retries instead of losing track of the file.
  */
 final class BlobPurger
 {
@@ -24,6 +24,7 @@ final class BlobPurger
         private readonly StorageManager $storage,
         private readonly string $defaultDisk,
         private readonly ?LoggerInterface $logger = null,
+        private readonly ?BlobVariantStore $variants = null,
     ) {
     }
 
@@ -37,6 +38,7 @@ final class BlobPurger
             $container->get(StorageManager::class),
             (string) config($context, 'uploads.disk', 'uploads'),
             $logger instanceof LoggerInterface ? $logger : null,
+            BlobVariantStore::fromContext($context),
         );
     }
 
@@ -79,6 +81,16 @@ final class BlobPurger
                     'error' => $e->getMessage(),
                 ]);
                 continue;
+            }
+            // Its resized copies too. One that cannot be removed does not keep the blob: nothing can
+            // reach it any more, and `blobs:variants:prune` finds it.
+            try {
+                $this->variants?->forget(['uuid' => $uuid, 'storage_type' => $disk]);
+            } catch (\Throwable $e) {
+                $this->logger?->warning('A purged blob\'s resized copies could not be removed.', [
+                    'blob_uuid' => $uuid,
+                    'error' => $e->getMessage(),
+                ]);
             }
             $this->db->table('blobs')->withTrashed()->where('uuid', '=', $uuid)->forceDelete();
             $purged++;
