@@ -263,15 +263,19 @@ class DatabaseQueue implements QueueDriverInterface, FailedJobStore
             // rows and moves on to the next candidate, so no two workers run one job. This holds
             // on every engine without row locks.
             foreach ($this->candidates($queue, 5) as $job) {
+                $claim = [
+                    'reserved_at' => date('Y-m-d H:i:s'),
+                    'attempts' => (int) $job['attempts'] + 1,
+                ];
                 $claimed = $this->db->table($this->table)
                     ->where('uuid', $job['uuid'])
                     ->whereNull('reserved_at')
-                    ->update([
-                        'reserved_at' => date('Y-m-d H:i:s'),
-                        'attempts' => $job['attempts'] + 1,
-                    ]);
+                    ->update($claim);
                 if ($claimed === 1) {
-                    return new DatabaseJob($this, $job, $queue, $this->context);
+                    // The job is handed the row as claimed, so its attempt count is the attempt it
+                    // is on: the worker's `attempts < maxAttempts` then allows exactly maxAttempts
+                    // deliveries, as the Redis driver already did.
+                    return new DatabaseJob($this, $claim + $job, $queue, $this->context);
                 }
             }
 

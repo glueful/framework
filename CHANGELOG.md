@@ -6,6 +6,21 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.93.1] - 2026-11-25 — Altais
+
+A database-queue job runs no more often than its `maxAttempts` allows.
+
+### Fixed
+- **A database-queue job is delivered exactly its maximum number of times.** `DatabaseQueue`
+  counted a delivery's attempt in the table but handed the worker the row it had read before, so
+  every job ran one more time than its `maxAttempts`: a job allowed one attempt was retried once
+  after failing. The job now carries the attempt it is on, as the Redis driver's already did.
+
+### Upgrade Notes
+- No configuration changes. On the database queue, a failing job now stops after `maxAttempts`
+  deliveries instead of one more: a job allowed three attempts runs three times, not four. A job
+  that leaned on the extra delivery should raise its `maxAttempts` (or the worker's `--tries`).
+
 ## [1.93.0] - 2026-11-25 — Altais
 
 Resized images are made once and kept: each copy is a file beside its image until the image changes,
