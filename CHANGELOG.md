@@ -6,6 +6,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [1.93.0] - 2026-11-25 — Altais
+
+Resized images are made once and kept: each copy is a file beside its image until the image changes,
+and copies can be made at upload so no visitor waits for one.
+
 ### Added
 - **Resized images are stored as files, kept until the image changes.** A copy made by
   `GET /blobs/{uuid}?width=…` was base64 text in the app cache for `cache_ttl` (seven days), so it
@@ -27,6 +32,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ### Changed
 - The app cache no longer holds image variants. Existing entries are not read and expire within
   `cache_ttl`; nothing to migrate.
+
+### Upgrade Notes
+- Resized copies now take disk space beside your uploads (under `_variants/` on each image's disk)
+  instead of app cache memory. At most `max_stored_variants` (32) per image version; set
+  `variant_disk` to keep them elsewhere, or `cache_enabled` to `false` to store none.
+- Pre-generation is off by default. To turn it on, set `UPLOADS_PREGENERATE_VARIANTS=true`, list
+  `uploads.image_processing.pregenerate.widths` and run a queue worker on its queue.
+- Schedule or run `php glueful blobs:variants:prune` occasionally if images move between disks.
 
 ## [1.92.1] - 2026-11-18 — Alshat
 

@@ -21,6 +21,18 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.93.0 — Altais (Released 2026-11-25)
+- **Resized images stored as files** — each copy made by `GET /blobs/{uuid}?width=…` is a file beside
+  its image (local, S3, R2…) at `_variants/{uuid}/{version}/…`, kept until the image changes,
+  instead of base64 in the app cache for seven days; `variant_disk` puts every copy on one disk.
+- **A cap per image** — `max_stored_variants` (32) copies per version, so arbitrary sizes cannot fill
+  the disk; past it a copy is served without being stored.
+- **Copies made at upload** — opt-in `pregenerate`: an upload queues `GenerateBlobVariantsJob` for the
+  configured widths and formats.
+- **Cleanup** — purging a blob removes its copies; `blobs:variants:prune [--all]` removes the rest.
+- Notes: minor; responses, headers and ETags unchanged. Copies now use disk instead of cache memory;
+  pre-generation is off by default.
+
 ### 1.92.1 — Alshat (Released 2026-11-18)
 - **Wildcard notification extensions run** — an extension declaring `['*']` was compared literally
   against the notification type and never ran; `'*'` now matches every type, named types still
