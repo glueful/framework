@@ -21,6 +21,11 @@ This roadmap tracks high‑level direction for the framework runtime (router, DI
 
 ## Milestones (subject to change)
 
+### 1.93.1 — Altais (Released 2026-11-25)
+- **Database-queue jobs run at most `maxAttempts` times** — the queue counted a delivery's attempt
+  after handing the worker the job, so every failing job ran once more than allowed; the job now
+  carries the attempt it is on, as the Redis driver's already did.
+
 ### 1.93.0 — Altais (Released 2026-11-25)
 - **Resized images stored as files** — each copy made by `GET /blobs/{uuid}?width=…` is a file beside
   its image (local, S3, R2…) at `_variants/{uuid}/{version}/…`, kept until the image changes,
