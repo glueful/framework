@@ -26,6 +26,13 @@ and copies can be made at upload so no visitor waits for one.
   uploaded image queues `GenerateBlobVariantsJob`, which makes each configured width in each
   configured format ahead of the first request. A queue that is down leaves the upload standing.
   `GenerateBlobVariantsJob::dispatchFor()` queues it for an image changed another way.
+- **Stored copies on cloud storage are fetched from the store (opt-in).** With
+  `uploads.image_processing.variant_redirect_ttl` above 0, a stored copy of a public image on a
+  disk that signs URLs (every cloud driver: `glueful/storage-s3` and its R2, MinIO, Spaces and
+  Wasabi presets, `glueful/storage-gcs`, `glueful/storage-azure`) is answered with a 302 to a
+  signed URL instead of being streamed through the app; caches keep the redirect for half that
+  time. A private image, or a disk that cannot sign (local), is streamed as before.
+  `StorageManager::temporaryUrl($path, $ttl, $disk)` signs any file on such a disk, or gives null.
 - **`blobs:variants:prune [--all]`** removes copies whose image is gone or has changed, including
   copies on a disk images have moved off. Purging a deleted blob removes its copies too.
 
@@ -40,6 +47,9 @@ and copies can be made at upload so no visitor waits for one.
 - Pre-generation is off by default. To turn it on, set `UPLOADS_PREGENERATE_VARIANTS=true`, list
   `uploads.image_processing.pregenerate.widths` and run a queue worker on its queue.
 - Schedule or run `php glueful blobs:variants:prune` occasionally if images move between disks.
+- With images on cloud storage, set `UPLOADS_VARIANT_REDIRECT_TTL` (e.g. `3600`) so stored copies
+  are fetched from the store, not streamed through PHP. The browser then loads them from the
+  bucket's host, so a Content-Security-Policy `img-src` must allow it.
 
 ## [1.92.1] - 2026-11-18 — Alshat
 

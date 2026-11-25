@@ -311,7 +311,8 @@ class UploadController extends BaseController
         if (!$allowed) {
             return Response::notFound('Blob not found');
         }
-        $cacheControl = $this->cacheControlFor($request, $blob, $signatureValid, $allowed);
+        $shareable = $this->isShareable($blob, $signatureValid, $allowed);
+        $cacheControl = $this->cacheControlFor($request, $blob, $shareable);
 
         $disk = $this->resolveDisk($blob);
         $path = (string) ($blob['url'] ?? '');
@@ -333,7 +334,7 @@ class UploadController extends BaseController
         ) {
             // The blob's size and last update version the variant: an image changed in place
             // keeps its uuid, and must not be answered from the old variant or its ETag.
-            return $this->serveResizedImage($request, $blob, $resize, $cacheControl);
+            return $this->serveResizedImage($request, $blob, $resize, $cacheControl, $shareable);
         }
 
         // No media processor bound: width/height/quality fall through to serving
@@ -475,6 +476,7 @@ class UploadController extends BaseController
 
     /**
      * A resized copy: the stored one when there is one (BlobVariantStore), else rendered and stored.
+     * A stored copy anyone may see, on a disk that signs URLs, is a redirect to the store itself.
      *
      * @param array<string, mixed> $blob
      * @param array<string, int|string|null> $resize
@@ -484,6 +486,7 @@ class UploadController extends BaseController
         array $blob,
         array $resize,
         ?string $cacheControl = null,
+        bool $shareable = false,
     ): Response|\Symfony\Component\HttpFoundation\Response {
         $storeEnabled = (bool) $this->getConfig('uploads.image_processing.cache_enabled', true);
         $cacheTtl = (int) $this->getConfig('uploads.image_processing.cache_ttl', 604800);
@@ -518,6 +521,15 @@ class UploadController extends BaseController
 
         $expected = BlobVariantRenderer::expectedMime((string) ($blob['mime_type'] ?? ''), $resize);
         $store = $storeEnabled ? $this->variantStore() : null;
+        // A signed URL is good for anyone holding it, so only a copy anyone may see is sent there.
+        $signed = $shareable ? $store?->temporaryUrl($blob, $resize, $expected) : null;
+        if ($signed !== null && $store !== null) {
+            return new \Symfony\Component\HttpFoundation\RedirectResponse($signed, 302, [
+                // Half the URL's life, so a cache never hands out one that has expired.
+                'Cache-Control' => 'public, max-age=' . max(1, intdiv($store->redirectTtl(), 2)),
+                'X-Content-Type-Options' => 'nosniff',
+            ]);
+        }
         $stored = $store?->get($blob, $resize, $expected);
         if ($stored !== null) {
             return $this->binaryResponse($stored, $expected, $cacheControl, $etagEnabled ? $etag : null);
@@ -789,16 +801,8 @@ class UploadController extends BaseController
      *
      * @param array<string, mixed> $blob
      */
-    private function cacheControlFor(Request $request, array $blob, bool $signatureValid, bool $allowed): ?string
+    private function cacheControlFor(Request $request, array $blob, bool $shareable): ?string
     {
-        $anonymous = $this->authenticatedUserUuid() === null && !$signatureValid;
-        $shareable = (string) ($blob['visibility'] ?? 'private') === 'public'
-            && !$this->requiresAuthFor('retrieve')
-            && ($anonymous ? $allowed : $this->accessPolicy->authorizeAccess(
-                $blob,
-                new BlobAccessContext(BlobAction::VIEW, null, false),
-            ));
-
         if (!$shareable) {
             $private = $this->getConfig('uploads.response.private_cache_control');
             return is_string($private) && $private !== '' ? $private : 'private, no-cache';
@@ -811,6 +815,23 @@ class UploadController extends BaseController
         }
 
         return null;
+    }
+
+    /**
+     * Whether a blob's answer is one an anonymous, unsigned visitor would also get.
+     *
+     * @param array<string, mixed> $blob
+     */
+    private function isShareable(array $blob, bool $signatureValid, bool $allowed): bool
+    {
+        $anonymous = $this->authenticatedUserUuid() === null && !$signatureValid;
+
+        return (string) ($blob['visibility'] ?? 'private') === 'public'
+            && !$this->requiresAuthFor('retrieve')
+            && ($anonymous ? $allowed : $this->accessPolicy->authorizeAccess(
+                $blob,
+                new BlobAccessContext(BlobAction::VIEW, null, false),
+            ));
     }
 
     /**

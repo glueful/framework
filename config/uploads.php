@@ -90,6 +90,11 @@ return [
         // Copies kept per image version; a size asked for past this is served, not stored, so
         // requests for arbitrary sizes cannot fill the disk.
         'max_stored_variants' => (int) env('UPLOADS_MAX_STORED_VARIANTS', 32),
+        // Seconds a redirect to a stored copy lasts. Above 0, a copy of a public image on a disk
+        // that signs URLs (every cloud driver: S3 and R2/MinIO/Spaces/Wasabi, GCS, Azure) is a
+        // 302 to a signed URL, fetched from the store instead of through the app; caches keep the
+        // redirect for half this. Keep the driver's max_signed_ttl at or above it. 0: streamed.
+        'variant_redirect_ttl' => (int) env('UPLOADS_VARIANT_REDIRECT_TTL', 0),
         // Make copies when an image is uploaded, on the queue, so no visitor waits for one.
         // Each width in each format (null = the image's own), for images of these types.
         'pregenerate' => [

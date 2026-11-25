@@ -6,6 +6,7 @@ namespace Glueful\Storage;
 
 use League\Flysystem\FilesystemOperator;
 use League\Flysystem\FilesystemException;
+use Glueful\Storage\Contracts\NativeSignedUrlProviderInterface;
 use Glueful\Storage\Contracts\StorageDriverRegistryInterface;
 use Glueful\Storage\Exceptions\UnsupportedStorageDriverException;
 use Glueful\Storage\Exceptions\StorageException;
@@ -89,6 +90,37 @@ class StorageManager
     public function drivers(): StorageDriverRegistryInterface
     {
         return $this->drivers;
+    }
+
+    /**
+     * A URL the file can be fetched from directly for `$ttl` seconds, signed by the disk's own
+     * driver: any object store whose factory implements NativeSignedUrlProviderInterface (S3 and
+     * the stores it covers, GCS, Azure…). Null when the disk cannot sign (local, memory), is not
+     * configured, or signing fails: the caller serves the file itself. The driver may clamp `$ttl`.
+     */
+    public function temporaryUrl(string $path, int $ttl, ?string $disk = null): ?string
+    {
+        $name = $disk ?? (string) ($this->config['default'] ?? '');
+        $config = $this->config['disks'][$name] ?? null;
+        if (!is_array($config)) {
+            return null;
+        }
+        $driver = (string) ($config['driver'] ?? '');
+        if (!$this->drivers->has($driver)) {
+            return null;
+        }
+        $factory = $this->drivers->get($driver);
+        if (!$factory instanceof NativeSignedUrlProviderInterface) {
+            return null;
+        }
+
+        try {
+            $url = $factory->temporaryUrl($this->pathGuard->validate($path), $ttl, $config);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return is_string($url) && $url !== '' ? $url : null;
     }
 
     /**

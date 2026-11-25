@@ -20,6 +20,10 @@ use function config;
  * order. At most `max_stored_variants` copies are kept per version, so arbitrary sizes asked of
  * the route cannot fill the disk: past that a copy is served without being stored.
  *
+ * With `variant_redirect_ttl` above 0, a stored copy on a disk that signs URLs (any cloud driver:
+ * S3 and the stores it covers, GCS, Azure) can be fetched straight from the store through
+ * temporaryUrl(), so the app does not stream it; a disk that cannot sign is served as before.
+ *
  * Storage trouble never fails a request: a read that fails is a miss, a write that fails is
  * reported (false) and logged, and the caller serves what it rendered.
  */
@@ -31,6 +35,7 @@ final class BlobVariantStore
         private readonly ?string $variantDisk = null,
         private readonly string $prefix = '_variants',
         private readonly int $maxPerVersion = 32,
+        private readonly int $redirectTtl = 0,
         private readonly ?LoggerInterface $logger = null,
     ) {
     }
@@ -48,6 +53,7 @@ final class BlobVariantStore
             is_string($variantDisk) && $variantDisk !== '' ? $variantDisk : null,
             $prefix !== '' ? $prefix : '_variants',
             (int) config($context, 'uploads.image_processing.max_stored_variants', 32),
+            max(0, (int) config($context, 'uploads.image_processing.variant_redirect_ttl', 0)),
             $logger instanceof LoggerInterface ? $logger : null,
         );
     }
@@ -121,6 +127,29 @@ final class BlobVariantStore
         } catch (\Throwable) {
             return false;
         }
+    }
+
+    /**
+     * A signed URL the stored copy can be fetched from for `variant_redirect_ttl` seconds. Null
+     * when redirects are off, no copy is stored, or its disk cannot sign URLs.
+     *
+     * @param array<string, mixed> $blob
+     * @param array<string, mixed> $resize
+     */
+    public function temporaryUrl(array $blob, array $resize, string $mime): ?string
+    {
+        if ($this->redirectTtl <= 0 || !$this->has($blob, $resize, $mime)) {
+            return null;
+        }
+        $path = $this->path($blob, $resize, $mime);
+
+        return $path === null ? null : $this->storage->temporaryUrl($path, $this->redirectTtl, $this->diskFor($blob));
+    }
+
+    /** How long a redirect's signed URL lasts; 0 when stored copies are always streamed. */
+    public function redirectTtl(): int
+    {
+        return $this->redirectTtl;
     }
 
     /**

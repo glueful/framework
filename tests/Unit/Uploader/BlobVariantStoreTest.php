@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Glueful\Tests\Unit\Uploader;
 
 use Glueful\Storage\PathGuard;
+use Glueful\Storage\StorageDriverRegistry;
 use Glueful\Storage\StorageManager;
+use Glueful\Tests\Unit\Storage\Fixtures\SigningMemoryDriverFactory;
 use Glueful\Uploader\BlobVariantStore;
 use Glueful\Uploader\BlobVersion;
 use PHPUnit\Framework\TestCase;
@@ -23,13 +25,17 @@ final class BlobVariantStoreTest extends TestCase
 
     protected function setUp(): void
     {
+        $registry = StorageDriverRegistry::withBuiltIns();
+        $registry->register('signing-memory', new SigningMemoryDriverFactory());
         $this->storage = new StorageManager(
             ['default' => 'uploads', 'disks' => [
                 'uploads' => ['driver' => 'memory'],
                 'bucket' => ['driver' => 'memory'],
                 'cache' => ['driver' => 'memory'],
+                'cloud' => ['driver' => 'signing-memory'],
             ]],
             new PathGuard(),
+            $registry,
         );
     }
 
@@ -42,6 +48,7 @@ final class BlobVariantStoreTest extends TestCase
             $options['variant_disk'] ?? null,
             '_variants',
             $options['max'] ?? 32,
+            $options['redirect_ttl'] ?? 0,
         );
     }
 
@@ -195,6 +202,50 @@ final class BlobVariantStoreTest extends TestCase
 
         self::assertNull($store->get($this->blob('gone'), self::WEBP_640, 'image/webp'));
         self::assertFalse($store->put($this->blob('gone'), self::WEBP_640, 'image/webp', 'X'));
+    }
+
+    public function testAStoredCopyOnADiskThatSignsUrlsGetsASignedUrl(): void
+    {
+        $store = $this->store(['redirect_ttl' => 300]);
+        $store->put($this->blob('cloud'), self::WEBP_640, 'image/webp', 'X');
+
+        $url = $store->temporaryUrl($this->blob('cloud'), self::WEBP_640, 'image/webp');
+
+        self::assertNotNull($url);
+        self::assertMatchesRegularExpression(
+            '~^https://bucket\.example/_variants/blob00000001/' . BlobVersion::of($this->blob('cloud'))
+                . '/[a-f0-9]{16}\.webp\?expires=300$~',
+            $url,
+        );
+    }
+
+    public function testNoSignedUrlWithoutAStoredCopyOrWithRedirectsOff(): void
+    {
+        $store = $this->store(['redirect_ttl' => 300]);
+        self::assertNull($store->temporaryUrl($this->blob('cloud'), self::WEBP_640, 'image/webp'));
+
+        $off = $this->store();
+        $off->put($this->blob('cloud'), self::WEBP_640, 'image/webp', 'X');
+        self::assertNull($off->temporaryUrl($this->blob('cloud'), self::WEBP_640, 'image/webp'));
+    }
+
+    public function testNoSignedUrlWhereTheDiskCannotSign(): void
+    {
+        $store = $this->store(['redirect_ttl' => 300]);
+        $store->put($this->blob(), self::WEBP_640, 'image/webp', 'X');
+
+        self::assertNull($store->temporaryUrl($this->blob(), self::WEBP_640, 'image/webp'));
+    }
+
+    public function testAVariantDiskThatSignsUrlsSignsCopiesOfImagesStoredAnywhere(): void
+    {
+        $store = $this->store(['variant_disk' => 'cloud', 'redirect_ttl' => 300]);
+        $store->put($this->blob(), self::WEBP_640, 'image/webp', 'X');
+
+        self::assertStringStartsWith(
+            'https://bucket.example/_variants/',
+            (string) $store->temporaryUrl($this->blob(), self::WEBP_640, 'image/webp'),
+        );
     }
 
     /** @return list<string> every file path on the disk */

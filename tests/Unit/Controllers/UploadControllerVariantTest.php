@@ -341,6 +341,73 @@ final class UploadControllerVariantTest extends TestCase
         self::assertSame(2, $fake->renderCalls, 'rendered each time, never a 500');
     }
 
+    public function testAPublicCopyOnACloudDiskIsARedirectToASignedUrl(): void
+    {
+        // A copy on a disk that signs URLs (S3 and its presets, GCS, Azure) is fetched from the
+        // store itself, not streamed through the app.
+        $this->useStore($this->cloudStore(redirectTtl: 300));
+        $fake = new VariantFakeMediaProcessor('image/png');
+        $request = fn () => Request::create('/blobs/' . $this->blobUuid, 'GET', ['width' => 100]);
+
+        $first = $this->makeController($fake)->show($request(), $this->blobUuid);
+        $second = $this->makeController($fake)->show($request(), $this->blobUuid);
+
+        self::assertSame(200, $first->getStatusCode(), 'the copy is made and served the first time');
+        self::assertSame(302, $second->getStatusCode());
+        self::assertMatchesRegularExpression(
+            '~^https://bucket\.example/_variants/' . $this->blobUuid . '/[^/]+/[a-f0-9]{16}\.png\?expires=300$~',
+            (string) $second->headers->get('Location'),
+        );
+        // A cache keeps the redirect for half the URL's life, so it never hands out an expired one.
+        self::assertSame('max-age=150, public', $second->headers->get('Cache-Control'));
+        self::assertSame(1, $fake->renderCalls);
+    }
+
+    public function testAPrivateCopyOnACloudDiskIsStreamedNotRedirected(): void
+    {
+        // A signed URL is good for anyone holding it: only a copy anyone may see is redirected.
+        \Glueful\Database\Connection::fromContext($this->context)->table('blobs')
+            ->where('uuid', '=', $this->blobUuid)->update(['visibility' => 'private']);
+        $this->useStore($this->cloudStore(redirectTtl: 300));
+        $fake = new VariantFakeMediaProcessor('image/png');
+        // The harness's request is signed in (see setUp), which a private blob needs.
+        $request = fn () => Request::create('/blobs/' . $this->blobUuid, 'GET', ['width' => 100]);
+
+        $this->makeController($fake)->show($request(), $this->blobUuid);
+        $second = $this->makeController($fake)->show($request(), $this->blobUuid);
+
+        self::assertSame(200, $second->getStatusCode());
+        self::assertSame(VariantFakeMediaProcessor::DATA, $this->bodyOf($second));
+        self::assertSame(1, $fake->renderCalls, 'still read from the stored copy');
+    }
+
+    public function testACloudCopyIsStreamedWhenRedirectsAreOff(): void
+    {
+        $this->useStore($this->cloudStore(redirectTtl: 0));
+        $fake = new VariantFakeMediaProcessor('image/png');
+        $request = fn () => Request::create('/blobs/' . $this->blobUuid, 'GET', ['width' => 100]);
+
+        $this->makeController($fake)->show($request(), $this->blobUuid);
+        $second = $this->makeController($fake)->show($request(), $this->blobUuid);
+
+        self::assertSame(200, $second->getStatusCode());
+        self::assertSame(VariantFakeMediaProcessor::DATA, $this->bodyOf($second));
+    }
+
+    /** Copies on a disk that signs URLs, the way every cloud driver does. */
+    private function cloudStore(int $redirectTtl): \Glueful\Uploader\BlobVariantStore
+    {
+        $registry = \Glueful\Storage\StorageDriverRegistry::withBuiltIns();
+        $registry->register('signing-memory', new \Glueful\Tests\Unit\Storage\Fixtures\SigningMemoryDriverFactory());
+        $storage = new StorageManager(
+            ['default' => 'uploads', 'disks' => ['cloud' => ['driver' => 'signing-memory']]],
+            new \Glueful\Storage\PathGuard(),
+            $registry,
+        );
+
+        return new \Glueful\Uploader\BlobVariantStore($storage, 'uploads', 'cloud', '_variants', 32, $redirectTtl);
+    }
+
     private function useStore(\Glueful\Uploader\BlobVariantStore $store): void
     {
         /** @var \Glueful\Container\Container $container */
